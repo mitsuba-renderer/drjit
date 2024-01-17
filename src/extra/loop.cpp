@@ -122,42 +122,15 @@ static bool ad_loop_symbolic(JitBackend backend, const char *name,
     return needs_ad;
 }
 
-static void ad_loop_evaluated(JitBackend backend, const char *name,
-                              void *payload,
-                              ad_loop_read read_cb, ad_loop_write write_cb,
-                              ad_loop_cond cond_cb, ad_loop_body body_cb) {
-    if (jit_flag(JitFlag::SymbolicScope))
-        jit_raise("Dr.Jit is currently recording symbolic computation and "
-                  "cannot execute a loop in *evaluated mode*. You will likely "
-                  "want to set the Jit flag dr.JitFlag.SymbolicLoops to True. "
-                  "Alternatively, you could also annotate the loop condition "
-                  "with dr.hint(.., symbolic=True) if it occurs inside a "
-                  "@dr.syntax-annotated function. Please review the Dr.Jit "
-                  "documentation of drjit.JitFlag.SymbolicLoops and "
-                  "drjit.while_loop() for general information on symbolic and "
-                  "evaluated loops, as well as their limitations.");
-
-    dr_index64_vector indices1, indices2;
+// Simple wavefront-style evaluated loop that masks inactive entries
+static size_t ad_loop_evaluated_mask(JitBackend backend, const char *name,
+                                     void *payload, ad_loop_read read_cb,
+                                     ad_loop_write write_cb,
+                                     ad_loop_cond cond_cb, ad_loop_body body_cb,
+                                     dr_index64_vector indices1,
+                                     JitVar active) {
+    dr_index64_vector indices2;
     size_t it = 0;
-
-    jit_log(LogLevel::InfoSym,
-            "ad_loop_evaluated(\"%s\"): evaluating initial loop state.", name);
-
-    /// Before the loop starts, make the loop state opaque to ensure proper kernel caching
-    read_cb(payload, indices1);
-    for (uint64_t &index: indices1) {
-        int unused = 0;
-        uint64_t index_new = ad_var_schedule_force(index, &unused);
-        ad_var_dec_ref(index);
-        index = index_new;
-    }
-    write_cb(payload, indices1);
-
-    // Evaluate the condition and merge it into 'active'
-    uint32_t active_initial = cond_cb(payload);
-    JitVar active = JitVar::steal(
-        jit_var_mask_apply(active_initial, (uint32_t) jit_var_size(active_initial)));
-    active.schedule_force_();
 
     while (true) {
         // Evaluate the loop state
@@ -200,6 +173,162 @@ static void ad_loop_evaluated(JitBackend backend, const char *name,
 
         active &= JitVar::borrow(cond_cb(payload));
         active.schedule_force_();
+    }
+
+    return it;
+}
+
+// Simple wavefront-style evaluated loop that progressively reduces the size
+// of the loop state to ignore inactive entries
+static size_t
+ad_loop_evaluated_compress(JitBackend backend, const char *name, void *payload,
+                           ad_loop_read read_cb, ad_loop_write write_cb,
+                           ad_loop_cond cond_cb, ad_loop_body body_cb,
+                           JitVar active) {
+    size_t size = active.size(), it = 0;
+
+    JitVar true_mask = JitVar::steal(jit_var_bool(backend, true)),
+           zero = JitVar::steal(jit_var_u32(backend, 0)),
+           idx = JitVar::steal(jit_var_counter(backend, size));
+
+    dr_index64_vector indices, out_indices;
+
+    while (true) {
+        // Increase an atomic counter to determine the position in the output array
+        uint32_t counter = jit_var_u32(backend, 0);
+
+        JitVar slot = JitVar::steal(
+            jit_var_scatter_inc(&counter, zero.index(), active.index()));
+
+        JitVar not_active = JitVar::steal(jit_var_not(active.index()));
+
+        read_cb(payload, indices);
+
+        for (size_t i = 0; i < indices.size(); ++i) {
+            if (!indices[i])
+                continue;
+
+            VarInfo info = jit_set_backend((uint32_t) indices[i]);
+            if (info.size != size)
+                continue;
+
+            if (it == 0)
+                out_indices.push_back_steal(
+                    jit_var_undefined(backend, info.type, size));
+
+            // Write finished entries to 'out_indices'
+            uint64_t f_index =
+                ad_var_scatter(out_indices[i], indices[i], idx.index(),
+                               not_active.index(), ReduceOp::None, true);
+
+            ad_var_dec_ref(out_indices[i]);
+            out_indices[i] = f_index;
+
+            // Write active entries into a new output buffer
+            uint64_t buffer = jit_var_undefined(backend, info.type, size),
+                     t_index =
+                         ad_var_scatter(buffer, indices[i], slot.index(),
+                                        active.index(), ReduceOp::None, true);
+            ad_var_dec_ref(buffer);
+            ad_var_dec_ref(indices[i]);
+            indices[i] = t_index;
+        }
+
+        uint32_t buffer = jit_var_undefined(backend, VarType::UInt32, size);
+        idx = JitVar::steal(jit_var_scatter(buffer, idx.index(), slot.index(),
+                                            active.index(), ReduceOp::None));
+        jit_var_dec_ref(buffer);
+
+        active = JitVar();
+        not_active = JitVar();
+
+        // Evaluate everything queued up to this point
+        jit_eval();
+        uint32_t size_next = 0;
+        jit_var_read(counter, 0, &size_next);
+        jit_var_dec_ref(counter);
+
+        if (size_next == 0)
+            break; // all done!
+
+        if (size != size_next) {
+            jit_log(LogLevel::InfoSym,
+                    "ad_loop_evaluated(\"%s\"): compressing loop state from %zu "
+                    "to %u entries.", name, size, size_next);
+            for (size_t i = 0; i < indices.size(); ++i)
+                ad_var_shrink(indices[i], size_next);
+            ad_var_shrink(idx.index(), size_next);
+        }
+
+        size = size_next;
+        write_cb(payload, indices);
+        indices.release();
+
+        jit_log(LogLevel::InfoSym,
+                "ad_loop_evaluated(\"%s\"): executing loop iteration %zu.", name, ++it);
+
+        // Execute the loop body
+        {
+            scoped_push_mask guard(backend, (uint32_t) true_mask.index());
+            body_cb(payload);
+        }
+
+        active = JitVar::borrow(cond_cb(payload));
+    }
+
+    if (it > 0)
+        write_cb(payload, out_indices);
+
+    return it;
+}
+
+static void ad_loop_evaluated(JitBackend backend, const char *name,
+                              void *payload, ad_loop_read read_cb,
+                              ad_loop_write write_cb,
+                              ad_loop_cond cond_cb,
+                              ad_loop_body body_cb,
+                              bool compress) {
+    dr_index64_vector indices;
+
+    jit_log(LogLevel::InfoSym,
+            "ad_loop_evaluated(\"%s\"): evaluating initial loop state.", name);
+
+    // Before the loop starts, make the loop state opaque to ensure proper kernel caching
+    read_cb(payload, indices);
+    for (uint64_t &index: indices) {
+        int unused = 0;
+        uint64_t index_new = ad_var_schedule_force(index, &unused);
+        ad_var_dec_ref(index);
+        index = index_new;
+    }
+    write_cb(payload, indices);
+
+    // Evaluate the condition and merge it into 'active'
+    uint32_t active_initial = cond_cb(payload);
+    JitVar active = JitVar::steal(
+        jit_var_mask_apply(active_initial, (uint32_t) jit_var_size(active_initial)));
+    active.schedule_force_();
+
+    size_t size = active.size();
+
+    if (compress && size == 1) {
+        jit_log(
+            LogLevel::Warn,
+            "ad_loop_evaluated(\"%s\"): loop state compression requires a "
+            "non-scalar loop condition, switching to the default masked mode!");
+        compress = false;
+    }
+
+    size_t it;
+    if (compress) {
+        indices.release();
+        it = ad_loop_evaluated_compress(backend, name, payload, read_cb,
+                                        write_cb, cond_cb, body_cb,
+                                        std::move(active));
+    } else {
+        it = ad_loop_evaluated_mask(backend, name, payload, read_cb, write_cb,
+                                    cond_cb, body_cb, std::move(indices),
+                                    std::move(active));
     }
 
     jit_log(LogLevel::Debug,
@@ -347,7 +476,7 @@ public:
             m_state.push_back_borrow(i.index);
 
         uint64_t zero = 0;
-        size_t ctr =0;
+        size_t ctr = 0;
         for (const Input &in : m_inputs) {
             if (!in.has_grad)
                 continue;
@@ -366,7 +495,7 @@ public:
             jit_fail("LoopOp::forward(): internal error!");
 
         ad_loop(
-            m_backend, 1, fwd_name.c_str(), this,
+            m_backend, 1, 0, fwd_name.c_str(), this,
             [](void *p, dr::dr_vector<uint64_t> &i) { ((LoopOp *) p)->read(i); },
             [](void *p, const dr::dr_vector<uint64_t> &i) { ((LoopOp *) p)->write(i); },
             [](void *p) { return ((LoopOp *) p)->fwd_cond(); },
@@ -411,9 +540,10 @@ private:
     size_t m_diff_count;
 };
 
-bool ad_loop(JitBackend backend, int symbolic, const char *name, void *payload,
-             ad_loop_read read_cb, ad_loop_write write_cb, ad_loop_cond cond_cb,
-             ad_loop_body body_cb, ad_loop_delete delete_cb, bool ad) {
+bool ad_loop(JitBackend backend, int symbolic, int compress, const char *name,
+             void *payload, ad_loop_read read_cb, ad_loop_write write_cb,
+             ad_loop_cond cond_cb, ad_loop_body body_cb,
+             ad_loop_delete delete_cb, bool ad) {
     try {
         if (name == nullptr)
             name = "unnamed";
@@ -424,9 +554,14 @@ bool ad_loop(JitBackend backend, int symbolic, const char *name, void *payload,
         if (symbolic == -1)
             symbolic = (int) jit_flag(JitFlag::SymbolicLoops);
 
+        if (compress == -1)
+            compress = (int) jit_flag(JitFlag::CompressLoops);
+
         if (symbolic != 0 && symbolic != 1)
             jit_raise("'symbolic' must equal 0, 1, or -1.");
 
+        if (compress != 0 && compress != 1)
+            jit_raise("'compress' must equal 0, 1, or -1.");
 
         if (symbolic) {
             dr_index64_vector indices_in;
@@ -471,9 +606,20 @@ bool ad_loop(JitBackend backend, int symbolic, const char *name, void *payload,
                 op->disable_deleter();
             }
         } else {
+            if (jit_flag(JitFlag::SymbolicScope))
+                jit_raise("Dr.Jit is currently recording symbolic computation and "
+                          "cannot execute a loop in *evaluated mode*. You will likely "
+                          "want to set the Jit flag dr.JitFlag.SymbolicLoops to True. "
+                          "Alternatively, you could also annotate the loop condition "
+                          "with dr.hint(.., symbolic=True) if it occurs inside a "
+                          "@dr.syntax-annotated function. Please review the Dr.Jit "
+                          "documentation of drjit.JitFlag.SymbolicLoops and "
+                          "drjit.while_loop() for general information on symbolic and "
+                          "evaluated loops, as well as their limitations.");
+
             scoped_isolation_boundary guard;
             ad_loop_evaluated(backend, name, payload, read_cb, write_cb,
-                              cond_cb, body_cb);
+                              cond_cb, body_cb, compress);
             guard.defuse();
         }
 

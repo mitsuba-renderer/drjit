@@ -156,7 +156,7 @@ class SyntaxVisitor(ast.NodeTransformer):
                 value = k.value
             hints[k.arg] = value
 
-        valid_keys = ["exclude", "include", "label", "mode", "max_iterations"]
+        valid_keys = ["exclude", "include", "label", "mode", "max_iterations", "compress"]
         for k in hints.keys():
             if k not in valid_keys:
                 self.raise_syntax_error(

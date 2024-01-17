@@ -83,8 +83,8 @@ StateD while_loop_impl(std::index_sequence<Is...>, State &&state_, Cond &&cond,
             new Payload{ std::forward<State>(state_), std::forward<Cond>(cond),
                          std::forward<Body>(body), Mask() };
 
-        bool rv = ad_loop(Mask::Backend, -1, name, payload, read_cb, write_cb,
-                          cond_cb, body_cb, delete_cb, true);
+        bool rv = ad_loop(Mask::Backend, -1, -1, name, payload, read_cb,
+                          write_cb, cond_cb, body_cb, delete_cb, true);
 
         StateD state = std::move(payload->state);
 
