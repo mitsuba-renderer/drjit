@@ -159,6 +159,9 @@ extern DRJIT_EXTRA_EXPORT uint64_t ad_var_scatter(uint64_t target,
                                                   JIT_ENUM ReduceOp reduce_op,
                                                   bool permute);
 
+/// Shrink a Dr.Jit variable *after* it has been created
+extern DRJIT_EXTRA_EXPORT void ad_var_shrink(uint64_t index, size_t size);
+
 extern DRJIT_EXTRA_EXPORT uint64_t ad_var_cast(uint64_t, VarType);
 extern DRJIT_EXTRA_EXPORT void ad_enqueue(drjit::ADMode, uint64_t);
 extern DRJIT_EXTRA_EXPORT void ad_traverse(drjit::ADMode, uint32_t);
@@ -313,6 +316,11 @@ typedef void (*ad_loop_delete)(void *payload);
  *     Set this to \c 0 for evaluated mode, \c 1 for symbolic mode, and \c -1
  *     to select the mode automatically.
  *
+ * \param compress
+ *     Set this to \c 1 for compress the state of evaluated loops at each
+ *     operation, \c 0 to use a simpler masking-based implementation, and \c -1
+ *     to select the mode automatically.
+ *
  * \param name
  *     A descriptive name used in debug message / GraphViz visualizations
  *
@@ -351,7 +359,7 @@ typedef void (*ad_loop_delete)(void *payload);
  * propagating an exception raised from a callable. In this case, the payload has
  * already been destroyed.
  */
-extern DRJIT_EXTRA_EXPORT bool ad_loop(JitBackend backend, int symbolic,
+extern DRJIT_EXTRA_EXPORT bool ad_loop(JitBackend backend, int symbolic, int compress,
                                        const char *name, void *payload,
                                        ad_loop_read read_cb, ad_loop_write write_cb,
                                        ad_loop_cond cond_cb, ad_loop_body body_cb,

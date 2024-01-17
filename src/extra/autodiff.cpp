@@ -1129,6 +1129,22 @@ Index ad_var_set_label(Index index, const char *label) {
     return combine(ad_index, jit_index);
 }
 
+void ad_var_shrink(Index index, size_t size) {
+    uint32_t jit_index = ::jit_index(index),
+             ad_index = ::ad_index(index);
+
+    jit_var_shrink(jit_index, size);
+
+    if (ad_index) {
+        ad_log("ad_var_shrink(): a%u.size = %zu", ad_index, size);
+
+        std::lock_guard<std::mutex> guard(state.mutex);
+        Variable *v = state[ad_index];
+        ad_assert(v->next_fwd == 0, "ad_var_shrink(): internal error!");
+        v->size = size;
+    }
+}
+
 
 // ==========================================================================
 // Enqueuing of variables and edges

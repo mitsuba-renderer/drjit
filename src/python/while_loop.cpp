@@ -16,6 +16,7 @@
 #include "detail.h"
 #include "apply.h"
 #include <nanobind/stl/vector.h>
+#include <nanobind/stl/optional.h>
 #include <nanobind/stl/string.h>
 #include <functional>
 #include <string>
@@ -315,7 +316,8 @@ static void while_loop_delete_cb(void *p) {
 nb::tuple while_loop(nb::tuple state, nb::callable cond, nb::callable body,
                      std::vector<std::string> &&state_labels,
                      const std::string &name,
-                     const std::string &mode) {
+                     const std::string &mode,
+                     std::optional<bool> compress) {
     try {
         JitBackend backend = JitBackend::None;
 
@@ -368,10 +370,11 @@ nb::tuple while_loop(nb::tuple state, nb::callable cond, nb::callable body,
             new LoopState(std::move(state), std::move(cond), std::move(body),
                           std::move(state_labels));
 
-        bool rv = ad_loop(backend, symbolic, name.c_str(), payload,
-                          while_loop_read_cb, while_loop_write_cb,
-                          while_loop_cond_cb, while_loop_body_cb,
-                          while_loop_delete_cb, true);
+        bool rv = ad_loop(backend, symbolic,
+                          compress.has_value() ? (int) compress.value() : -1,
+                          name.c_str(), payload, while_loop_read_cb,
+                          while_loop_write_cb, while_loop_cond_cb,
+                          while_loop_body_cb, while_loop_delete_cb, true);
 
         // Undo the prior copy operation for unchanged parts of the PyTree
         nb::tuple result = nb::borrow<nb::tuple>(uncopy(payload->state, copy_map));
@@ -398,5 +401,5 @@ nb::tuple while_loop(nb::tuple state, nb::callable cond, nb::callable body,
 void export_while_loop(nb::module_ &m) {
     m.def("while_loop", &while_loop, "state"_a, "cond"_a, "body"_a,
           "state_labels"_a = nb::make_tuple(), "label"_a = "unnamed",
-          "mode"_a = "auto", doc_while_loop);
+          "mode"_a = "auto", "compress"_a = nb::none(), doc_while_loop);
 }

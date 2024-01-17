@@ -528,26 +528,10 @@ struct DRJIT_TRIVIAL_ABI JitArray
     }
 
     auto compress_() const {
-        if constexpr (!is_mask_v<Value>) {
+        if constexpr (!is_mask_v<Value>)
             drjit_raise("Unsupported operand type");
-        } else {
-            uint32_t size_in = (uint32_t) size();
-            uint32_t *indices = (uint32_t *) jit_malloc(
-                Backend == JitBackend::CUDA ? AllocType::Device
-                                            : AllocType::HostAsync,
-                size_in * sizeof(uint32_t));
-
-            eval_();
-            uint32_t size_out = jit_compress(Backend, (const uint8_t *) data(),
-                                             size_in, indices);
-            if (size_out > 0) {
-                return uint32_array_t<JitArray>::steal(
-                    jit_var_mem_map(Backend, VarType::UInt32, indices, size_out, 1));
-            } else {
-                jit_free(indices);
-                return uint32_array_t<JitArray>();
-            }
-        }
+        else
+            return uint32_array_t<JitArray>::steal(jit_var_compress(m_index));
     }
 
     JitArray block_sum_(size_t block_size) {
