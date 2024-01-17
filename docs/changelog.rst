@@ -104,7 +104,7 @@ source-level compatibility.
   double, and half precision variables. Previously, there was a separate graph
   per type, and gradients did not propagate through casts between them.
 
-- **Multi-framework computations**: The :py:func:`@drjit.wrap_ad` decorator
+- **Multi-framework computations**: The :py:func:`@drjit.wrap` decorator
   provides a differentiable bridge to other AD frameworks. In this new release
   of Dr.Jit, its capabilities were significantly revamped. Besides PyTorch, it
   now also supports JAX, and it consistently handles both forward and backward

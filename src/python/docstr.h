@@ -2884,7 +2884,7 @@ data into a compatible form.
    resulting tensor into the automatic differentiation graph of the other 
    framework. This means that gradients won't correctly propagate through 
    programs combining multiple frameworks. Take a look at the function 
-   :py:func:`drjit.wrap_ad` for further information on how to accomplish this.
+   :py:func:`drjit.wrap` for further information on how to accomplish this.
 )";
 
 static const char *doc_jax = R"(
@@ -2901,7 +2901,7 @@ data into a compatible form.
    resulting tensor into the automatic differentiation graph of the other 
    framework. This means that gradients won't correctly propagate through 
    programs combining multiple frameworks. Take a look at the function 
-   :py:func:`drjit.wrap_ad` for further information on how to accomplish this.
+   :py:func:`drjit.wrap` for further information on how to accomplish this.
 )";
 
 static const char *doc_tf = R"(
@@ -2918,7 +2918,7 @@ data into a compatible form.
    resulting tensor into the automatic differentiation graph of the other 
    framework. This means that gradients won't correctly propagate through 
    programs combining multiple frameworks. Take a look at the function 
-   :py:func:`drjit.wrap_ad` for further information on how to accomplish this.
+   :py:func:`drjit.wrap` for further information on how to accomplish this.
 )";
 
 static const char *doc_detach = R"(

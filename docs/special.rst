@@ -573,4 +573,4 @@ ability to aggressively fuse operations into large kernels.
 
 We recommend the use of tensors mainly as storage representation of shaped data
 (images, volumes), and as a container to exchange data with other libraries,
-e.g. via :py:func:`drjit.wrap_ad`.
+e.g. via :py:func:`drjit.wrap`.

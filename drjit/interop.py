@@ -430,22 +430,21 @@ def create_torch_wrapper():
     return TorchWrapper
 
 
-def wrap_ad(source: typing.Union[str, types.ModuleType],
-            target: typing.Union[str, types.ModuleType]):
+def wrap(source: typing.Union[str, types.ModuleType],
+         target: typing.Union[str, types.ModuleType]):
     r'''
     Differentiable bridge between Dr.Jit and other array programming
     frameworks.
 
-    This function decorator enables the development of programs that combine
-    Dr.Jit with other array programming frameworks. Currently, only `PyTorch
+    This function wraps computation performed using one array programming
+    framework to expose it in another. Currently, `PyTorch
     <https://pytorch.org>`__ and `JAX <https://jax.readthedocs.io>`__ are
     supported, though other frameworks may be added in the future.
 
-    Annotating a function with :py:func:`@drjit.wrap_ad <wrap_ad>` adds code
+    Annotating a function with :py:func:`@drjit.wrap <wrap>` adds code
     that suitably converts arguments and return values. Furthermore, it
     stitches the operation into the *automatic differentiation* (AD) graph of
-    the other framework to ensure correct gradient propagation, which motivates
-    the name of the decorator.
+    the other framework to ensure correct gradient propagation.
 
     When exposing code written using another framework, the wrapped function
     can take and return any :ref:`PyTree <pytrees>` including flat or nested
@@ -505,7 +504,7 @@ def wrap_ad(source: typing.Union[str, types.ModuleType],
 
            .. code-block:: python
 
-              @dr.wrap_ad(source='drjit', target='jax')
+              @dr.wrap(source='drjit', target='jax')
               @jax.jit
 
            **Limitation**: The passed/returned :ref:`PyTrees <pytrees>` can
@@ -635,13 +634,13 @@ def wrap_ad(source: typing.Union[str, types.ModuleType],
     valid_types = ('drjit', 'torch', 'jax')
 
     if source not in valid_types:
-        raise Exception("drjit.wrap_ad(): unknown 'source' argument.")
+        raise Exception("drjit.wrap(): unknown 'source' argument.")
 
     if target not in valid_types:
-        raise Exception("drjit.wrap_ad(): unknown 'target' argument.")
+        raise Exception("drjit.wrap(): unknown 'target' argument.")
 
     if source != 'drjit' and target != 'drjit':
-        raise Exception("drjit.wrap_ad(): at least one of 'source' and "
+        raise Exception("drjit.wrap(): at least one of 'source' and "
                         "'target' must equal \"drjit\".")
 
     if source == target:
@@ -671,6 +670,6 @@ def wrap_ad(source: typing.Union[str, types.ModuleType],
 
         return wrapper
     else:
-        raise Exception("drjit.wrap_ad(): unsupported combination of 'source' and 'target'.")
+        raise Exception("drjit.wrap(): unsupported combination of 'source' and 'target'.")
 
     return None

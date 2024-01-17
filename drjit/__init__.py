@@ -17,8 +17,9 @@ with detail.scoped_rtld_deepbind():
         raise err
 
 from .ast import syntax, hint
-from .interop import wrap_ad
+from .interop import wrap
 import typing as _typing
+import warnings as _warnings
 
 # -------------------------------------------------------------------
 #  Predicates and comparison operations for floating point arrays
@@ -282,65 +283,62 @@ def clip(value, min, max):
 #     Deprecated wrappers for old Dr.Jit operations
 # -------------------------------------------------------------------
 
+def wrap_ad(*args, **kwargs):
+    _warnings.warn("@wrap_ad is deprecated, please use @wrap",
+                   DeprecationWarning, stacklevel=2)
+    return wrap(*args, **kwargs)
+
+
 def sqr(arg, /):
-    import warnings
-    warnings.warn("sqr() is deprecated, please use square(arg)",
+    _warnings.warn("sqr() is deprecated, please use square(arg)",
                   DeprecationWarning, stacklevel=2)
     return square(arg)
 
 
 def all_nested(arg, /):
-    import warnings
-    warnings.warn("all_nested() is deprecated, please use all(arg, axis=None)",
+    _warnings.warn("all_nested() is deprecated, please use all(arg, axis=None)",
                   DeprecationWarning, stacklevel=2)
     return all(arg, axis=None)
 
 
 def any_nested(arg, /):
-    import warnings
-    warnings.warn("any_nested() is deprecated, please use any(arg, axis=None)",
+    _warnings.warn("any_nested() is deprecated, please use any(arg, axis=None)",
                   DeprecationWarning, stacklevel=2)
     return any(arg, axis=None)
 
 
 def sum_nested(arg, /):
-    import warnings
-    warnings.warn("sum_nested() is deprecated, please use sum(arg, axis=None)",
+    _warnings.warn("sum_nested() is deprecated, please use sum(arg, axis=None)",
                   DeprecationWarning, stacklevel=2)
     return sum(arg, axis=None)
 
 
 def prod_nested(arg, /):
-    import warnings
-    warnings.warn("prod_nested() is deprecated, please use prod(arg, axis=None)",
+    _warnings.warn("prod_nested() is deprecated, please use prod(arg, axis=None)",
                   DeprecationWarning, stacklevel=2)
     return prod(arg, axis=None)
 
 
 def min_nested(arg, /):
-    import warnings
-    warnings.warn("min_nested() is deprecated, please use min(arg, axis=None)",
+    _warnings.warn("min_nested() is deprecated, please use min(arg, axis=None)",
                   DeprecationWarning, stacklevel=2)
     return min(arg, axis=None)
 
 
 def max_nested(arg, /):
-    import warnings
-    warnings.warn("max_nested() is deprecated, please use max(arg, axis=None)",
+    _warnings.warn("max_nested() is deprecated, please use max(arg, axis=None)",
                   DeprecationWarning, stacklevel=2)
     return max(arg, axis=None)
 
 
 def none_nested(arg, /):
-    import warnings
-    warnings.warn("none_nested() is deprecated, please use none(arg, axis=None)",
+    _warnings.warn("none_nested() is deprecated, please use none(arg, axis=None)",
                   DeprecationWarning, stacklevel=2)
     return none(arg, axis=None)
 
 
 def clamp(value, min, max, /):
-    import warnings
-    warnings.warn("clamp() is deprecated, please use clip(...)",
+    _warnings.warn("clamp() is deprecated, please use clip(...)",
                   DeprecationWarning, stacklevel=2)
     return clip(value, min, max)
 
