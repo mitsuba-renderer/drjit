@@ -47,12 +47,12 @@ def wrap(config):
     def wrapper(func):
         if config[2]:
             func = jax.jit(func)
-        return dr.wrap_ad(source='drjit', target=config[0])(func)
+        return dr.wrap(source='drjit', target=config[0])(func)
     return wrapper
 
 def wrap_flipped(config):
     def wrapper(func):
-        return dr.wrap_ad(target='drjit', source=config[0])(func)
+        return dr.wrap(target='drjit', source=config[0])(func)
     return wrapper
 
 def torch_dtype(t):
