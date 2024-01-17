@@ -158,7 +158,7 @@ source-level compatibility.
   :py:attr:`drjit.JitFlag.SymbolicCalls`). The former entries still exist as
   (deprecated) aliases.
 
-- Variable indices (:py:attr:`drjit.ArrayBase.index`,
+- **Index reuse**: variable indices (:py:attr:`drjit.ArrayBase.index`,
   :py:attr:`drjit.ArrayBase.index_ad`) used to monotonically increase as
   variables were being created. Internally, multiple hash tables were needed to
   associate these ever-growing indices with locations in an internal variable
@@ -187,6 +187,12 @@ source-level compatibility.
   surprising, so the behavior was changed so that :py:func:`drjit.empty`
   similarly delays allocation.
 
+- **Loop compression**: the implementation of evaluated loops (previously
+  referred to as wavefront mode) visits all entries of the loop state variables
+  at every iteration even when most of them have already finished executing the
+  loop. Dr.Jit now provides an optional ``compress=True`` parameter in
+  :py:func:`drjit.while_loop` to prune away inactive entries and accelerate
+  later loop iterations.
 
 Internals
 ---------

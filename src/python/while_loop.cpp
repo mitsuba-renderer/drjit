@@ -15,9 +15,9 @@
 #include "reduce.h"
 #include "detail.h"
 #include "apply.h"
+#include <nanobind/stl/string.h>
 #include <nanobind/stl/vector.h>
 #include <nanobind/stl/optional.h>
-#include <nanobind/stl/string.h>
 #include <functional>
 #include <string>
 
@@ -315,17 +315,18 @@ static void while_loop_delete_cb(void *p) {
 
 nb::tuple while_loop(nb::tuple state, nb::callable cond, nb::callable body,
                      std::vector<std::string> &&state_labels,
-                     const std::string &name,
-                     const std::string &mode,
+                     std::optional<std::string> name,
+                     std::optional<std::string> mode,
                      std::optional<bool> compress) {
     try {
         JitBackend backend = JitBackend::None;
 
-        bool scalar_loop = mode == "scalar",
-             auto_loop = mode == "auto";
-
         nb::object cond_val = tuple_call(cond, state);
-        if (auto_loop)
+
+        bool scalar_loop;
+        if (mode.has_value())
+            scalar_loop = mode == "scalar";
+        else
             scalar_loop = cond_val.type().is(&PyBool_Type);
 
         if (scalar_loop) {
@@ -356,15 +357,18 @@ nb::tuple while_loop(nb::tuple state, nb::callable cond, nb::callable body,
         // General case: call ad_loop() with a number of callbacks that
         // implement an interface to Python
         int symbolic = -1;
-        if (auto_loop)
+        if (!mode.has_value())
             symbolic = -1;
         else if (mode == "symbolic")
             symbolic = 1;
         else if (mode == "evaluated")
             symbolic = 0;
         else
-            nb::raise("invalid 'mode' argument (must equal \"auto\", "
+            nb::raise("invalid 'mode' argument (must equal None, "
                       "\"scalar\", \"symbolic\", or \"evaluated\").");
+
+        const char *name_cstr =
+            name.has_value() ? name.value().c_str() : "unnamed";
 
         LoopState *payload =
             new LoopState(std::move(state), std::move(cond), std::move(body),
@@ -372,7 +376,7 @@ nb::tuple while_loop(nb::tuple state, nb::callable cond, nb::callable body,
 
         bool rv = ad_loop(backend, symbolic,
                           compress.has_value() ? (int) compress.value() : -1,
-                          name.c_str(), payload, while_loop_read_cb,
+                          name_cstr, payload, while_loop_read_cb,
                           while_loop_write_cb, while_loop_cond_cb,
                           while_loop_body_cb, while_loop_delete_cb, true);
 
@@ -400,6 +404,6 @@ nb::tuple while_loop(nb::tuple state, nb::callable cond, nb::callable body,
 
 void export_while_loop(nb::module_ &m) {
     m.def("while_loop", &while_loop, "state"_a, "cond"_a, "body"_a,
-          "state_labels"_a = nb::make_tuple(), "label"_a = "unnamed",
-          "mode"_a = "auto", "compress"_a = nb::none(), doc_while_loop);
+          "state_labels"_a = nb::make_tuple(), "label"_a = nb::none(),
+          "mode"_a = nb::none(), "compress"_a = nb::none(), doc_while_loop);
 }

@@ -88,6 +88,7 @@ NB_MODULE(drjit_ext, m_) {
         .value("FastMath", JitFlag::FastMath, doc_JitFlag_FastMath)
         .value("SymbolicLoops", JitFlag::SymbolicLoops, doc_JitFlag_SymbolicLoops)
         .value("OptimizeLoops", JitFlag::OptimizeLoops, doc_JitFlag_OptimizeLoops)
+        .value("CompressLoops", JitFlag::CompressLoops, doc_JitFlag_CompressLoops)
         .value("SymbolicCalls", JitFlag::SymbolicCalls, doc_JitFlag_SymbolicCalls)
         .value("OptimizeCalls", JitFlag::OptimizeCalls, doc_JitFlag_OptimizeCalls)
         .value("MergeFunctions", JitFlag::MergeFunctions, doc_JitFlag_MergeFunctions)
