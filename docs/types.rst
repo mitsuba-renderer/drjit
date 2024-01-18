@@ -541,6 +541,8 @@ from the underlying flat array, while slice assignment turns into
 indices is performed by the function :py:func:`drjit.slice_index` that can also be
 used directly.
 
+.. _tensor_limitations:
+
 Limitations
 ^^^^^^^^^^^
 

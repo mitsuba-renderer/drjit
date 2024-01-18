@@ -355,6 +355,33 @@ nb::object trace_func(nb::handle frame, nb::handle, nb::handle) {
     return nb::borrow(trace_func_handle);
 }
 
+/**
+ * \brief Returns ``true`` if any of the values in the provided PyTree
+ * are symbolic variables.
+ */
+bool any_symbolic(nb::handle h) {
+    struct AnySymbolic : TraverseCallback {
+        bool result = false;
+
+        void operator()(nb::handle h) override {
+            const ArraySupplement &s = supp(h.type());
+            if (!s.index)
+                return;
+
+            uint32_t index = (uint32_t) s.index(inst_ptr(h));
+            if (!index)
+                return;
+
+            if (jit_var_state(index) == VarState::Symbolic)
+                result = true;
+        }
+    };
+
+    AnySymbolic as;
+    traverse("drjit.detail.any_symbolic()", as, h);
+    return as.result;
+}
+
 void enable_py_tracing() {
     nb::module_::import_("sys").attr("settrace")(trace_func_handle);
 }
@@ -413,7 +440,11 @@ void export_detail(nb::module_ &) {
                   flat,
                   cast_shape(shape)
               );
-          }, "tensor"_a, "ad"_a = false);
+          }, "tensor"_a, "ad"_a = false)
+
+     .def("any_symbolic", &any_symbolic, doc_detail_any_symbolic);
+
+
 
     trace_func_handle = d.attr("trace_func");
 }

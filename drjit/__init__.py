@@ -1176,6 +1176,152 @@ def meshgrid(*args, indexing='xy'):
     return tuple(result)
 
 
+def assert_true(
+    cond,
+    fmt: _typing.Optional[str] = None,
+    *args,
+    tb_depth: int = 3,
+    tb_skip: int = 0,
+    **kwargs,
+):
+    """
+    Generate an assertion failure message when any of the entries in ``cond``
+    are ``False``.
 
+    This function resembles the built-in ``assert`` keyword in that it raises
+    an ``AssertionError`` when the condition ``cond`` is ``False``. 
+
+    In contrast to the built-in keyword, it also works when ``cond`` is an
+    array of boolean values. In this case, the function raises an exception
+    when *any* entry of ``cond`` is ``False``.
+
+    The function accepts an optional format string along with positional and
+    keyword arguments, and it processes them like :py:func:`drjit.print`. When
+    only a subset of the entries of ``cond`` is ``False``, the function reduces
+    the generated output to only include the associated entries.
+
+    .. code-block:: python
+
+       >>> x = Float(1, -4, -2, 3)
+       >>> dr.assert_true(x >= 0, 'Found negative values: {}', x)
+
+    This function also works when some of the function inputs are *symbolic*.
+    In this case, the check is delayed and potential failures will be reported
+    asynchronously. In this case, :py:func:`drjit.assert_true` generates output
+    on ``sys.stderr`` instead of raising an exception, as the original
+    execution context no longer exists at that point.
+
+    Assertion checks carry a performance cost, hence they are disabled by
+    default. To enable them, set the JIT flag :py:attr:`dr.JitFlag.Debug`.
+
+    Args:
+        cond (bool | drjit.ArrayBase): The condition used to trigger the
+          assertion. This should be a scalar Python boolean or a 1D boolean
+          array.
+
+        fmt (str): An optional format string that will be appended to
+          the error message. It can reference positional or keyword
+          arguments specified via ``*args`` and ``**kwargs``.
+
+        *args (tuple): Optional variable-length positional arguments referenced
+          by ``fmt``, see :py:func:`drjit.print` for details on this.
+
+        tb_depth (int): Depth of the backtrace that should be appended to the
+          assertion message. This only applies to cases some of the inputs are
+          symbolic, and printing of the error message must be delayed.
+
+        tb_skip (int): The first ``tb_skip`` entries of the backtrace will be
+          removed. This only applies to cases some of the inputs are symbolic,
+          and printing of the error message must be delayed. This is helpful when
+          the assertion check is called from a helper function that should not be
+          shown.
+
+        **kwargs (dict): Optional variable-length keyword arguments referenced
+          by ``fmt``, see :py:func:`drjit.print` for details on this.
+    """
+
+    if not flag(JitFlag.Debug):
+        return
+
+    if cond is False or (not detail.any_symbolic(cond) and none(cond)):
+        return
+
+    import traceback, sys, types
+
+    active = not cond if isinstance(cond, bool) else ~cond
+
+    if detail.any_symbolic((active, args, kwargs)):
+        tb_frame = sys._getframe(tb_skip + 1)
+        tb = types.TracebackType(tb_next=None,
+                                 tb_frame=tb_frame,
+                                 tb_lasti=tb_frame.f_lasti,
+                                 tb_lineno=tb_frame.f_lineno)
+
+        tb_msg = "".join(traceback.format_tb(tb, limit=tb_depth))
+
+        # Note: this is not a regular print statement -- it maps to 'drjit.print'
+        print(
+            f"Assertion failure" + ((': ' + fmt) if fmt else '!') + "\n{tb_msg}",
+            *args,
+            tb_msg=tb_msg,
+            active=active,
+            file=sys.stderr,
+            **kwargs
+        )
+
+    else:
+        # Note: this is not a regular format statement -- it maps to 'drjit.format'
+        msg = format(
+            f"Assertion failure" + ((': ' + fmt) if fmt else '!'),
+            *args,
+            active=active,
+            **kwargs
+        )
+
+        raise AssertionError(msg)
+
+
+def assert_false(
+    cond,
+    fmt: _typing.Optional[str] = None,
+    *args,
+    tb_depth: int = 3,
+    tb_skip: int = 0,
+    **kwargs,
+):
+    """
+    Equivalent to :py:func:`assert_true` with a flipped condition ``cond``.
+    Please refer to the documentation of this function for further details.
+    """
+    return assert_true(
+        not cond if isinstance(cond, bool) else ~cond,
+        fmt,
+        *args,
+        tb_depth=tb_depth,
+        tb_skip=tb_skip+1,
+        **kwargs,
+    )
+
+def assert_equal(
+    arg0,
+    arg1,
+    fmt: _typing.Optional[str] = None,
+    *args,
+    limit: int = 3,
+    tb_skip: int = 0,
+    **kwargs,
+):
+    """
+    Equivalent to :py:func:`assert_true` with the condition ``arg0==arg1``.
+    Please refer to the documentation of this function for further details.
+    """
+    return assert_true(
+        arg0 == arg1,
+        fmt,
+        *args,
+        limit=limit,
+        tb_skip=tb_skip+1,
+        **kwargs,
+    )
 
 newaxis = None

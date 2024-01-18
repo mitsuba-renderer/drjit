@@ -30,3 +30,5 @@ extern nb::object unravel(const nb::type_object_t<ArrayBase> &dtype,
 
 extern nb::object scatter_inc(nb::handle_t<drjit::ArrayBase> target,
                               nb::object index, nb::object active);
+
+extern nb::object slice(nb::handle value, nb::handle index);

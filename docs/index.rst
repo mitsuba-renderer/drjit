@@ -7,17 +7,19 @@ Dr.Jit — A Just-In-Time-Compiler for Differentiable Rendering
 
    changelog
    general
-   special
+   types
    cflow
+   interop
    cpp
    textures
+   faq
 
 .. toctree::
    :maxdepth: 1
    :caption: Reference
 
    reference
-   array_types
+   type_ref
 
 
 Alternative layout:
@@ -28,7 +30,6 @@ Alternative layout:
  - memory operations
  - type traits
  - automatic differentiation
- - interoperability with other libraries
  - custom data structures
  - random number generation
  - debugging, printing, benchmarking, pitfalls

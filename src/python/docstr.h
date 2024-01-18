@@ -698,7 +698,7 @@ static const char *doc_prod = R"(
 Compute the product of the input array or tensor along one or multiple axes.
 
 This function performs horizontal product reduction by multiplying values of
-the input array, tensor, or Python sequence along one or multiple axes. 
+the input array, tensor, or Python sequence along one or multiple axes.
 
 By default, it multiplies along index ``0``, which refers to the outermost axis.
 Negative indices (e.g. ``-1``) count backwards from the innermost axis. The
@@ -850,6 +850,24 @@ Args:
 Returns:
     float | int | drjit.ArrayBase: 2-norm of the input)";
 
+static const char *doc_squared_norm = R"(
+Computes the squared 2-norm of a Dr.Jit array, tensor, or Python sequence.
+
+The operation is equivalent to
+
+.. code-block:: pycon
+
+   dr.dot(arg, arg)
+
+The :py:func:`dot` operation performs a horizontal reduction. Please see the
+section on :ref:`horizontal reductions <horizontal-reductions>` for details on
+their properties.
+
+Args:
+    arg (Sequence | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+
+Returns:
+    float | int | drjit.ArrayBase: squared 2-norm of the input)";
 
 static const char *doc_prefix_sum = R"(
 Compute an exclusive or inclusive prefix sum of the input array.
@@ -2873,51 +2891,51 @@ is already contiguous and a zero-copy approach is used instead.)";
 static const char *doc_torch = R"(
 Returns a PyTorch tensor representing the data in this array.
 
-For :ref:`flat arrays <flat_arrays>` and :ref:`tensors <tensors>`, Dr.Jit 
-performs a *zero-copy* conversion, which means that the created tensor provides 
-a *view* of the same data that will reflect later modifications to the Dr.Jit 
-array. :ref:`Nested arrays <nested_arrays>` require a temporary copy to rearrange 
+For :ref:`flat arrays <flat_arrays>` and :ref:`tensors <tensors>`, Dr.Jit
+performs a *zero-copy* conversion, which means that the created tensor provides
+a *view* of the same data that will reflect later modifications to the Dr.Jit
+array. :ref:`Nested arrays <nested_arrays>` require a temporary copy to rearrange
 data into a compatible form.
 
 .. warning::
-   This operation converts the numerical representation but does *not* embed the 
-   resulting tensor into the automatic differentiation graph of the other 
-   framework. This means that gradients won't correctly propagate through 
-   programs combining multiple frameworks. Take a look at the function 
+   This operation converts the numerical representation but does *not* embed the
+   resulting tensor into the automatic differentiation graph of the other
+   framework. This means that gradients won't correctly propagate through
+   programs combining multiple frameworks. Take a look at the function
    :py:func:`drjit.wrap` for further information on how to accomplish this.
 )";
 
 static const char *doc_jax = R"(
 Returns a JAX tensor representing the data in this array.
 
-For :ref:`flat arrays <flat_arrays>` and :ref:`tensors <tensors>`, Dr.Jit 
-performs a *zero-copy* conversion, which means that the created tensor provides 
-a *view* of the same data that will reflect later modifications to the Dr.Jit 
-array. :ref:`Nested arrays <nested_arrays>` require a temporary copy to rearrange 
+For :ref:`flat arrays <flat_arrays>` and :ref:`tensors <tensors>`, Dr.Jit
+performs a *zero-copy* conversion, which means that the created tensor provides
+a *view* of the same data that will reflect later modifications to the Dr.Jit
+array. :ref:`Nested arrays <nested_arrays>` require a temporary copy to rearrange
 data into a compatible form.
 
 .. warning::
-   This operation converts the numerical representation but does *not* embed the 
-   resulting tensor into the automatic differentiation graph of the other 
-   framework. This means that gradients won't correctly propagate through 
-   programs combining multiple frameworks. Take a look at the function 
+   This operation converts the numerical representation but does *not* embed the
+   resulting tensor into the automatic differentiation graph of the other
+   framework. This means that gradients won't correctly propagate through
+   programs combining multiple frameworks. Take a look at the function
    :py:func:`drjit.wrap` for further information on how to accomplish this.
 )";
 
 static const char *doc_tf = R"(
 Returns a TensorFlow tensor representing the data in this array.
 
-For :ref:`flat arrays <flat_arrays>` and :ref:`tensors <tensors>`, Dr.Jit 
-performs a *zero-copy* conversion, which means that the created tensor provides 
-a *view* of the same data that will reflect later modifications to the Dr.Jit 
-array. :ref:`Nested arrays <nested_arrays>` require a temporary copy to rearrange 
+For :ref:`flat arrays <flat_arrays>` and :ref:`tensors <tensors>`, Dr.Jit
+performs a *zero-copy* conversion, which means that the created tensor provides
+a *view* of the same data that will reflect later modifications to the Dr.Jit
+array. :ref:`Nested arrays <nested_arrays>` require a temporary copy to rearrange
 data into a compatible form.
 
 .. warning::
-   This operation converts the numerical representation but does *not* embed the 
-   resulting tensor into the automatic differentiation graph of the other 
-   framework. This means that gradients won't correctly propagate through 
-   programs combining multiple frameworks. Take a look at the function 
+   This operation converts the numerical representation but does *not* embed the
+   resulting tensor into the automatic differentiation graph of the other
+   framework. This means that gradients won't correctly propagate through
+   programs combining multiple frameworks. Take a look at the function
    :py:func:`drjit.wrap` for further information on how to accomplish this.
 )";
 
@@ -4253,7 +4271,7 @@ explain how this mode is automatically selected).
    later loop iterations don't run faster despite fewer elements being active.
 
    Alternatively, you may specify the parameter ``compress=True`` or set the
-   flag :py:attr:`drjit.JiitFlag.CompressLoops`, which causes the removal of
+   flag :py:attr:`drjit.JitFlag.CompressLoops`, which causes the removal of
    inactive elements after every iteration. This reorganization is not for free
    and does not benefit all use cases, which is why it isn't enabled by
    default.
@@ -4441,8 +4459,7 @@ Args:
       to enable or disable *loop state compression* in evaluated loops (see the
       text above for a description of this feature). The function
       queries the value of :py:attr:`drjit.JitFlag.CompressLoops` when the
-      parameter is not specified. Symbolic loops completely ignore this
-      parameter. 
+      parameter is not specified. Symbolic loops ignore this parameter.
 
     state_labels (list[str]): An optional list of labels associated with each
       ``state`` entry. Dr.Jit uses this to provide better error messages in
@@ -4951,7 +4968,11 @@ reduces tracing performance, and produce kernels that run slower. We recommend
 that you only use it periodically before a release, or when encountering a
 serious problem like a crashing kernel.
 
-In debug mode, Dr.Jit inserts additional checks to intercept out-of-bound reads
+First, debug mode enables assertion checks in user code such as those performed by
+:py:func:`drjit.assert_true`, :py:func:`drjit.assert_false`, and
+:py:func:`drjit.assert_equal`.
+
+Second, Dr.Jit inserts additional checks to intercept out-of-bound reads
 and writes performed by operations such as :py:func:`drjit.scatter`,
 :py:func:`drjit.gather`, :py:func:`drjit.scatter_reduce`,
 :py:func:`drjit.scatter_inc`, etc. It also detects calls to invalid callables
@@ -4963,12 +4984,12 @@ e.g.:
    :emphasize-lines: 2-3
 
    >>> dr.gather(dtype=UInt, source=UInt(1, 2, 3), index=UInt(0, 1, 100))
-   drjit.gather(): out-of-bounds read from position 100 in an array⏎
+   RuntimeWarning: drjit.gather(): out-of-bounds read from position 100 in an array⏎
    of size 3. (<stdin>:2)
 
-In debug mode, Dr.Jit also installs a
-`python tracing hook <https://docs.python.org/3/library/sys.html#sys.settrace>`__
-that associates all Jit variables with their Python source code location, and
+Finally, Dr.Jit also installs a `python tracing hook
+<https://docs.python.org/3/library/sys.html#sys.settrace>`__ that
+associates all Jit variables with their Python source code location, and
 this information is propagated all the way to the final intermediate
 representation (PTX, LLVM IR). This is useful for low-level debugging and
 development of Dr.Jit itself. You can query the source location
@@ -6087,8 +6108,8 @@ Args:
       from ``*args`` and ``**kwargs``.
 
     active (drjit.ArrayBase | bool): A mask argument that can be used to
-      disable a subset of the entries. Should only be specified when the
-      print statement uses symbolic evaluation (default: ``True``).
+      disable a subset of the entries. The print statement will be completely
+      suppressed when there is no output. (default: ``True``).
 
     end (str): This string will be appended to the format string. It is
       set to a newline character (``"\n"``) by default.
@@ -6289,7 +6310,7 @@ optimization.
 All operations sent to a device (including reads) are strictly ordered, so
 there is generally no reason to wait for this queue to empty. If you find
 that :py:func:`drjit.sync_thread` is needed for your program to run correctly,
-then you have found a bug. Please report it on the project's 
+then you have found a bug. Please report it on the project's
 `GitHub issue tracker <https://github.com/mitsuba-renderer/drjit>`__.)";
 
 static const char *doc_flush_malloc_cache = R"(
@@ -6336,7 +6357,7 @@ Dr.Jit can optionally capture performance-related metadata. To do so, set the
 
    with dr.scoped_set_flag(dr.JitFlag.KernelHistory):
       # .. computation to be analyzed ..
-   
+
    hist = dr.kernel_history()
 
 The :py:func:`drjit.kernel_history()` function returns a list of dictionaries
@@ -6392,6 +6413,29 @@ static const char *doc_kernel_history_clear = R"(Clear the kernel history.
 
 This operation clears the kernel history without returning any information
 about it. See :py:func:`drjit.kernel_history` for details.)";
+
+static const char *doc_detail_any_symbolic =
+    "Returns ``true`` if any of the values in the provided PyTree are symbolic "
+    "variables.";
+
+static const char *doc_slice = R"(
+Select a subset of the input array or PyTree along the trailing dynamic dimension.
+
+Given a Dr.Jit array ``value`` with shape ``(..., N)`` (where ``N`` represents
+a dynamically sized dimension), this operation effectively evaluates the
+expression ``value[..., index]``. It recursively traverses :ref:`PyTrees
+<pytrees>` and transforms each compatible array element. Other values are
+returned unchanged.
+
+The following properties of ``index`` determine the return type:
+
+- When ``index`` is a 1D integer array, the operation reduces to one or more
+  calls to :py:func:`drjit.gather`, and :py:func:`slice` returns a reduced
+  output object of the same type and structure.
+
+- When ``index`` is a scalar Python ``int``, the trailing dimension is entirely
+  removed, and the operation returns an array from the ``drjit.scalar``
+  namespace containing the extracted values.)";
 
 #if defined(__GNUC__)
 #  pragma GCC diagnostic pop

@@ -81,6 +81,7 @@ These operations are *horizontal* in the sense that [..]
 .. autofunction:: compress
 .. autofunction:: ravel
 .. autofunction:: unravel
+.. autofunction:: slice
 .. autofunction:: min
 .. autofunction:: max
 .. autofunction:: sum
@@ -88,6 +89,7 @@ These operations are *horizontal* in the sense that [..]
 .. autofunction:: prod
 .. autofunction:: dot
 .. autofunction:: abs_dot
+.. autofunction:: squared_norm
 .. autofunction:: norm
 .. autofunction:: all
 .. autofunction:: any
@@ -281,7 +283,11 @@ Just-in-time compilation
       that you only use it periodically before a release, or when encountering a
       serious problem like a crashing kernel.
 
-      In debug mode, Dr.Jit inserts additional checks to intercept out-of-bound reads
+      First, debug mode enables assertion checks in user code such as those performed by
+      :py:func:`drjit.assert_true`, :py:func:`drjit.assert_false`, and
+      :py:func:`drjit.assert_equal`.
+
+      Second, Dr.Jit inserts additional checks to intercept out-of-bound reads
       and writes performed by operations such as :py:func:`drjit.scatter`,
       :py:func:`drjit.gather`, :py:func:`drjit.scatter_reduce`,
       :py:func:`drjit.scatter_inc`, etc. It also detects calls to invalid callables
@@ -296,7 +302,7 @@ Just-in-time compilation
          RuntimeWarning: drjit.gather(): out-of-bounds read from position 100 in an array⏎
          of size 3. (<stdin>:2)
 
-      In debug mode, Dr.Jit also installs a `python tracing hook
+      Finally, Dr.Jit also installs a `python tracing hook
       <https://docs.python.org/3/library/sys.html#sys.settrace>`__ that
       associates all Jit variables with their Python source code location, and
       this information is propagated all the way to the final intermediate
@@ -1210,6 +1216,7 @@ Array base class
     .. automethod:: __eq__
     .. automethod:: __dlpack__
     .. automethod:: __array__
+    .. automethod:: numpy
     .. automethod:: torch
     .. automethod:: jax
     .. automethod:: tf
@@ -1228,11 +1235,16 @@ differentiation).
 .. autofunction:: whos_ad
 .. autofunction:: set_label
 
-Printing arrays
----------------
+Debugging
+---------
 
-.. autofunction:: format
+.. autofunction:: assert_true
+.. autofunction:: assert_false
+.. autofunction:: assert_equal
 .. autofunction:: print
+.. autofunction:: format
+.. autofunction:: log_level
+.. autofunction:: set_log_level
 
 Low-level bits
 --------------

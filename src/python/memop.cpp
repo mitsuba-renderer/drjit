@@ -686,6 +686,71 @@ nb::object unravel(const nb::type_object_t<ArrayBase> &dtype,
                              (int) ndim - index_dtype.is_valid());
 }
 
+nb::object slice(nb::handle h, nb::handle index) {
+    nb::handle tp = h.type();
+    nb::object result;
+
+    if (is_drjit_type(tp)) {
+        const ArraySupplement &s = supp(tp);
+        if (s.ndim > 0 && s.shape[s.ndim - 1] == DRJIT_DYNAMIC) {
+            if (index.type().is(&PyLong_Type)) {
+                if (s.ndim == 1)
+                    return h[index];
+
+                ArrayMeta m = s;
+                m.ndim -= 1;
+                m.backend = (uint16_t) JitBackend::None;
+                m.is_diff = false;
+
+                dr_vector<size_t> shape;
+                shape_impl(h, shape);
+                shape.resize(shape.size() - 1);
+
+                result = full("empty", meta_get_type(m), nb::handle(),
+                              shape.size(), shape.data());
+
+                for (size_t i = 0; i < shape[0]; ++i)
+                    result[i] = slice(h[i], index);
+            } else {
+                return gather(nb::borrow<nb::type_object>(tp), nb::borrow(h),
+                              nb::borrow(index), nb::bool_(true), false);
+            }
+        } else {
+            result = nb::borrow(h);
+        }
+    } else if (tp.is(&PyTuple_Type)) {
+        nb::tuple t = nb::borrow<nb::tuple>(h);
+        size_t size = nb::len(t);
+        result = nb::steal(PyTuple_New(size));
+        if (!result.is_valid())
+            nb::raise_python_error();
+        for (size_t i = 0; i < size; ++i)
+            NB_TUPLE_SET_ITEM(result.ptr(), i, slice(t[i], index).release().ptr());
+    } else if (tp.is(&PyList_Type)) {
+        nb::list tmp;
+        for (nb::handle item : nb::borrow<nb::list>(h))
+            tmp.append(slice(item, index));
+        result = std::move(tmp);
+    } else if (tp.is(&PyDict_Type)) {
+        nb::dict tmp;
+        for (auto [k, v] : nb::borrow<nb::dict>(h))
+            tmp[k] = slice(v, index);
+        result = std::move(tmp);
+    } else {
+        nb::object dstruct = nb::getattr(tp, "DRJIT_STRUCT", nb::handle());
+        if (dstruct.is_valid() && dstruct.type().is(&PyDict_Type)) {
+            nb::object tmp = tp();
+            for (auto [k, v] : nb::borrow<nb::dict>(dstruct))
+                nb::setattr(tmp, k, slice(nb::getattr(h, k), index));
+            result = std::move(tmp);
+        } else {
+            result = nb::borrow(h);
+        }
+    }
+
+    return result;
+}
+
 void export_memop(nb::module_ &m) {
     m.def("gather", &gather, "dtype"_a, "source"_a, "index"_a,
           "active"_a = true, "permute"_a = false, doc_gather)
@@ -711,5 +776,6 @@ void export_memop(nb::module_ &m) {
           [](const nb::type_object_t<ArrayBase> &dtype,
              nb::handle_t<ArrayBase> array,
              char order) { return unravel(dtype, array, order); },
-          "dtype"_a, "array"_a, "order"_a = 'A', doc_unravel);
+          "dtype"_a, "array"_a, "order"_a = 'A', doc_unravel)
+     .def("slice", &slice, "value"_a, "index"_a, doc_slice);
 }

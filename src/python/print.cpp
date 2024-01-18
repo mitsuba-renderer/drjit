@@ -17,6 +17,7 @@
 #include "shape.h"
 #include "eval.h"
 #include "apply.h"
+#include "reduce.h"
 #include <nanobind/stl/string.h>
 #include <drjit/autodiff.h>
 #include <memory>
@@ -24,13 +25,13 @@
 
 #include "../ext/nanobind/src/buffer.h"
 
-static nanobind::detail::Buffer buffer(128);
+using Buffer = nanobind::detail::Buffer;
 
 /// Convert a Dr.Jit array into a human-readable representation. Used by
 /// drjit.print(), drjit.format(), and drjit.ArrayBase.__repr__()
-static void repr_array(nb::handle h, size_t indent, size_t threshold,
-                       const dr_vector<size_t> &shape, size_t depth,
-                       nb::list &index) {
+static void repr_array(Buffer &buffer, nb::handle h, size_t indent,
+                       size_t threshold, const dr_vector<size_t> &shape,
+                       size_t depth, nb::list &index) {
     const ArraySupplement &s = supp(h.type());
 
     size_t ndim = shape.size();
@@ -92,7 +93,7 @@ static void repr_array(nb::handle h, size_t indent, size_t threshold,
                 buffer.fmt(".. %zu skipped ..", (size_t) (j2 - j + 1));
                 j = j2;
             } else if (!last_dim) {
-                repr_array(h, indent + 1, threshold, shape, depth + 1, index);
+                repr_array(buffer, h, indent + 1, threshold, shape, depth + 1, index);
             } else {
                 nb::object o = h[nb::tuple(index)];
 
@@ -122,8 +123,8 @@ static void repr_array(nb::handle h, size_t indent, size_t threshold,
 
 PyObject *tp_repr(PyObject *self) noexcept {
     try {
-        buffer.clear();
         dr_vector<size_t> shape;
+        Buffer buffer(128);
         if (!shape_impl(self, shape)) {
             buffer.put("[ragged array]");
         } else {
@@ -134,7 +135,7 @@ PyObject *tp_repr(PyObject *self) noexcept {
             if (!index.is_valid())
                 nb::raise_python_error();
             schedule(self);
-            repr_array(self, 0, 20, shape, 0, index);
+            repr_array(buffer, self, 0, 20, shape, 0, index);
         }
         return PyUnicode_FromString(buffer.get());
     } catch (nb::python_error &e) {
@@ -152,7 +153,7 @@ PyObject *tp_repr(PyObject *self) noexcept {
 }
 
 /// Convert a PyTree into a human-readable representation
-void repr_general(nb::handle h, size_t indent_, size_t threshold) {
+void repr_general(Buffer &buffer, nb::handle h, size_t indent_, size_t threshold) {
     nb::handle tp = h.type();
     size_t indent = indent_ + 2;
 
@@ -167,7 +168,7 @@ void repr_general(nb::handle h, size_t indent_, size_t threshold) {
                 index.append(zero);
             if (!index.is_valid())
                 nb::raise_python_error();
-            repr_array(h, indent_, threshold, shape, 0, index);
+            repr_array(buffer, h, indent_, threshold, shape, 0, index);
         }
     } else if (tp.is(&PyUnicode_Type)) {
         if (indent > 2)
@@ -189,7 +190,7 @@ void repr_general(nb::handle h, size_t indent_, size_t threshold) {
         buffer.put("(\n");
         buffer.put(' ', indent);
         for (size_t i = 0; i < size; ++i) {
-            repr_general(t[i], indent, threshold);
+            repr_general(buffer, t[i], indent, threshold);
             if (i + 1 < size)
                 buffer.put(',');
             buffer.put('\n');
@@ -208,7 +209,7 @@ void repr_general(nb::handle h, size_t indent_, size_t threshold) {
         buffer.put("[\n");
         buffer.put(' ', indent);
         for (size_t i = 0; i < size; ++i) {
-            repr_general(l[i], indent, threshold);
+            repr_general(buffer, l[i], indent, threshold);
             if (i + 1 < size)
                 buffer.put(',');
             buffer.put('\n');
@@ -227,9 +228,9 @@ void repr_general(nb::handle h, size_t indent_, size_t threshold) {
         buffer.put(' ', indent);
 
         for (auto [k, v] : nb::borrow<nb::dict>(h)) {
-            repr_general(k, indent, threshold);
+            repr_general(buffer, k, indent, threshold);
             buffer.put(": ");
-            repr_general(v, indent, threshold);
+            repr_general(buffer, v, indent, threshold);
             if (++i < size)
                 buffer.put(",");
             buffer.put('\n');
@@ -247,7 +248,7 @@ void repr_general(nb::handle h, size_t indent_, size_t threshold) {
             for (auto [k, v] : nb::borrow<nb::dict>(dstruct)) {
                 buffer.put_dstr(nb::str(k).c_str());
                 buffer.put('=');
-                repr_general(nb::getattr(h, k), indent, threshold);
+                repr_general(buffer, nb::getattr(h, k), indent, threshold);
                 if (++i < size)
                     buffer.put(",");
                 buffer.put('\n');
@@ -452,8 +453,9 @@ static nb::object format_impl(const char *name, const std::string &fmt,
             dr::suspend_grad suspend_guard;
             nb::object active = nb::inst_alloc(mask_tp);
 
-            uint32_t mask_1 = jit_var_bool(examine.backend, true);
-            uint32_t mask_2 = jit_var_mask_apply(mask_1, (uint32_t) examine.size);
+            uint32_t mask_1 = jit_var_bool(examine.backend, true),
+                     mask_2 = jit_var_mask_apply(mask_1, (uint32_t) examine.size);
+
             supp(active.type()).init_index(mask_2, inst_ptr(active));
             nb::inst_mark_ready(active);
             jit_var_dec_ref(mask_1);
@@ -510,7 +512,47 @@ static nb::object format_impl(const char *name, const std::string &fmt,
 
         schedule(args);
         schedule(kwargs);
-        buffer.clear();
+        Buffer buffer(128);
+
+        if (kwargs.contains("active")) {
+            nb::object active = kwargs["active"];
+            nb::del(kwargs["active"]);
+            nb::handle active_tp = active.type();
+
+            if (active_tp.is(&PyBool_Type)) {
+                if (nb::cast<bool>(active) == false)
+                    return nb::none();
+            } else if (is_drjit_type(active.type())) {
+                // Try to reduce the input
+                try {
+                    nb::object indices = ::compress(active);
+                    if (nb::len(indices) == 0)
+                        return nb::none();
+                    nb::list args2;
+                    nb::dict kwargs2;
+                    for (nb::handle h: args) {
+                        nb::object v = nb::borrow(h);
+                        try {
+                            v = ::slice(v, indices);
+                        } catch (...) { }
+                        args2.append(v);
+                    }
+                    for (nb::handle kv: kwargs.items()) {
+                        nb::object k = kv[0], v = kv[1];
+                        try {
+                            v = ::slice(v, indices);
+                        } catch (...) { }
+                        kwargs2[k] = v;
+                    }
+                    schedule(args2);
+                    schedule(kwargs2);
+                    args = nb::borrow<nb::args>(nb::tuple(args2));
+                    kwargs = nb::borrow<nb::kwargs>(std::move(kwargs2));
+                } catch (...) { }
+            } else {
+                nb::raise("The 'active' argument type is unsupported.");
+            }
+        }
 
         const char *start = fmt.c_str(), *p = start;
         size_t args_pos = 0, nargs = args.size();
@@ -589,7 +631,7 @@ static nb::object format_impl(const char *name, const std::string &fmt,
                         }
                     }
                 }
-                repr_general(value, 0, limit);
+                repr_general(buffer, value, 0, limit);
                 if (equal_sign)
                     p2++;
                 p = p2 + 1;

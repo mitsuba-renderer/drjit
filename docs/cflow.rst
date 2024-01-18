@@ -103,10 +103,7 @@ control flow primitive within Dr.Jit.
       a, b, c
    )
 
-There currently no syntax decorator support for automatically translating
-dynamic dispatch.
-
-See the section on :ref:`symbolic and evaluated modes <sym-eval>` for an
+See the next section on :ref:`symbolic and evaluated modes <sym-eval>` for an
 overview of how the system compiles such control flow statements. The reference
 of :py:func:`drjit.switch` and :py:func:`drjit.dispatch` explains these two
 operations in full detail.

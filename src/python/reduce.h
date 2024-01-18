@@ -21,3 +21,4 @@ extern nb::object sum(nb::handle, std::optional<int>);
 extern nb::object prod(nb::handle, std::optional<int>);
 extern nb::object min(nb::handle, std::optional<int>);
 extern nb::object max(nb::handle, std::optional<int>);
+extern nb::object compress(nb::handle_t<dr::ArrayBase> h);

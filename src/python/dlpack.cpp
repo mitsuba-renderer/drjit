@@ -231,6 +231,10 @@ void export_dlpack(nb::module_ &) {
            [](nb::handle_t<ArrayBase> h) {
                return nb::ndarray<nb::numpy>(dlpack(h, true).handle());
            }, doc_array)
+      .def("numpy",
+           [](nb::handle_t<ArrayBase> h) {
+               return nb::ndarray<nb::numpy>(dlpack(h, true).handle());
+           }, doc_array)
       .def("torch",
            [](nb::handle_t<ArrayBase> h) {
                 nb::module_ torch = nb::module_::import_("torch.utils.dlpack");
