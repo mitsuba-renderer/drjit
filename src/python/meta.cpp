@@ -400,13 +400,14 @@ void promote(nb::object *o, size_t n, bool select) {
 
 /// Look up the nanobind module associated with the given array metadata
 nb::handle meta_get_module(ArrayMeta meta) noexcept {
-    int index;
+    int index = 0;
     switch ((JitBackend) meta.backend) {
         case JitBackend::CUDA: index = 1; break;
         case JitBackend::LLVM: index = 3; break;
-        default: index = 0; break;
+        default: break;
     }
-    index += (int) meta.is_diff;
+    if ((JitBackend) meta.backend != JitBackend::None)
+        index += (int) meta.is_diff;
     return array_submodules[index];
 }
 

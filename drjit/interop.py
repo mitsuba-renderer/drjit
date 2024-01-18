@@ -460,7 +460,6 @@ def wrap(source: typing.Union[str, types.ModuleType],
 
     The following table lists the currently supported conversions:
 
-
     .. |nbsp| unicode:: 0xA0 
        :trim:
 
@@ -519,6 +518,9 @@ def wrap(source: typing.Union[str, types.ModuleType],
          - This direction is currently unsupported. We plan to add it in
            the future.
 
+    Please also refer to the documentation sections on :ref:`multi-framework
+    differentiation <interop_ad>` :ref:`associated caveats <interop_caveats>`.
+
     .. note::
 
        Types that have no equivalent on the other side (e.g. a quaternion
@@ -538,80 +540,6 @@ def wrap(source: typing.Union[str, types.ModuleType],
        - JAX `refuses to exchange
          <https://github.com/google/jax/issues/19352>`__ boolean-valued
          tensors with other frameworks.
-
-    .. warning::
-
-       Several widely used array programming frameworks are *extremely greedy*
-       in their use of resources especially when working with CUDA. They must
-       be reined in to build software that effectively combines multiple
-       frameworks. This is where things stand as of early 2024:
-
-       - Dr.Jit behaves nicely and only allocates memory on demand.
-
-       - PyTorch behaves nicely and only allocates memory on demand.
-
-       - JAX `preallocates 75% of the total GPU memory
-         <https://jax.readthedocs.io/en/latest/gpu_memory_allocation.html>`__
-         when the first JAX operation is run, which only leaves a small
-         remainder for Dr.Jit and the operating system.
-
-         To disable this behavior, you must set the environment variable
-         ``XLA_PYTHON_CLIENT_PREALLOCATE=false`` *before launching Python or
-         the Jupyter notebook*.
-
-         Alternatively, you can run
-
-         .. code-block:: python
-
-            import os
-            os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
-
-         before importing JAX.
-
-       - TensorFlow preallocates `"nearly all" of the GPU memory
-         <https://www.tensorflow.org/guide/gpu>`__ visible to the process,
-         which will likely prevent Dr.Jit from functioning correctly.
-
-         To disable this behavior, you must call the `set_memory_growth
-         <https://www.tensorflow.org/api_docs/python/tf/config/experimental/set_memory_growth>`__
-         function before using any other TensorFlow API, which will cause it to
-         use a less aggressive on-demand allocation policy.
-
-       Once they allocate memory, these frameworks also *keep it to
-       themselves*: for example, if your program temporarily creates a huge
-       PyTorch tensor that uses nearly all GPU memory, then that memory is
-       blocked from further use in Dr.Jit.
-
-       This behavior is technically justified: allocating and releasing memory
-       is a rather slow operation especially on CUDA, so every framework
-       (*including* Dr.Jit) implements some type of internal memory cache.
-       These caches can be manually freed if necessary. Here is how this can be
-       accomplished:
-
-       - Dr.Jit: call :py:func:`drjit.flush_malloc_cache()`.
-
-       - PyTorch: call `torch.cuda.empty_cache()
-         <https://pytorch.org/docs/stable/generated/torch.cuda.empty_cache.html>`__.
-
-       - JAX: there is `no way to do it
-         <https://github.com/google/jax/issues/1222>`__ besides setting
-         ``XLA_PYTHON_CLIENT_ALLOCATOR=platform`` *before launching Python or
-         the Jupyter notebook* or setting the variable via ``os.environ`` at
-         the beginning of the program/Jupyter notebook. This disables the JAX
-         memory cache, which may have a negative impact on performance.
-
-       - TensorFlow: there is `no way to do it
-         <https://github.com/tensorflow/tensorflow/issues/36465>`__ besides
-         setting ``TF_GPU_ALLOCATOR=cuda_malloc_async`` *before launching
-         Python or the Jupyter notebook* or setting the variable via
-         ``os.environ`` at the beginning of the program/Jupyter notebook. This
-         disables the TensorFlow memory cache, which may have a negative impact
-         on performance.
-
-       A side remark is that clearing such allocations caches is an expensive
-       operation in any of these frameworks. You likely don't want to do so
-       within a performance-sensitive program region (e.g., an optimization
-       loop).
 
     Args:
         source (str | module): The framework used *outside* of the wrapped

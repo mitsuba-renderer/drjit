@@ -377,6 +377,10 @@ void export_reduce(nb::module_ & m) {
               return array_module.attr("sqrt")(
                   array_module.attr("dot")(h, h));
           }, doc_norm)
+     .def("squared_norm",
+          [](nb::handle h) -> nb::object {
+              return array_module.attr("dot")(h, h);
+          }, doc_squared_norm)
      .def("prefix_sum", &prefix_sum,
           "value"_a, "exclusive"_a = true,
           "axis"_a.none() = 0, doc_prefix_sum)

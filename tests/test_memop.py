@@ -361,3 +361,40 @@ def test16_meshgrid(t):
     a, b, c = dr.meshgrid(t(1, 2), t(3, 4, 5), t(5, 6), indexing='ij')
     a_np, b_np, c_np = np.meshgrid((1, 2), (3, 4, 5), t(5, 6), indexing='ij')
     assert dr.all(a == a_np.ravel()) and dr.all(b == b_np.ravel()) and dr.all(c == c_np.ravel())
+
+@pytest.test_arrays('int32,shape=(*)')
+def test17_slice(t):
+    v = t([1,2,3])
+    v2 = dr.slice(v, 2)
+    assert type(v2) is int and v2 == 3
+
+    v2 = dr.slice(v, [1, 2])
+    assert type(v2) is t and dr.all(v2 == [2, 3])
+
+    # No-op for non-array types
+    v = [1,2,3]
+    v2 = dr.slice(v, 2)
+    assert type(v2) is list and v2 == v
+
+    # Pytree traversal
+    v = [t(1,2,3), t(3,4,5)]
+    v2 = dr.slice(v, 2)
+    assert type(v2) is list and len(v2) == 2 and type(v2[0]) is int and type(v2[1]) is int
+    assert v2[0] == 3 and v2[1] == 5
+
+    # Dimensionality reduction
+
+    if dr.is_jit_v(t):
+        import sys
+        mod = sys.modules[t.__module__]
+        v = mod.Array3i([[1,2], [3, 4], [5]])
+        v2 = dr.slice(v, 1)
+        assert type(v2) is dr.scalar.Array3i
+        assert dr.all(v2 == dr.scalar.Array3i(2, 4, 5))
+
+        v2 = dr.slice(v, [1,0])
+        assert type(v2) is mod.Array3i
+        ref = mod.Array3i([2, 1], [4, 3], [5, 5])
+        assert dr.all(v2 == ref, axis=None)
+
+

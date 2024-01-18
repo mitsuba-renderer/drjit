@@ -27,7 +27,7 @@ source-level compatibility.
     that binary wheels will work on future versions of Python without
     recompilation.
 
-- ⚠️ **Control flow**: You can now express vectorized loops and conditionals
+- **Control flow**: You can now express vectorized loops and conditionals
   using natural Python syntax. Consider the following snippet to compute an
   integer power of a floating point value:
 
@@ -66,8 +66,8 @@ source-level compatibility.
   the transformation is minimal and preserves other code along with line number
   information to aid debugging.
 
-  The old "recorded loop" syntax is no longer supported, and existing code will
-  adjustments to use :py:func:`drjit.while_lop`.
+  ⚠️ The old "recorded loop" syntax is no longer supported, and existing code will
+  adjustments to use :py:func:`drjit.while_loop`.
 
 - **Differentiable control flow**: symbolic control flow constructs (loops)
   previously failed with an error message when they detected differentiable
@@ -117,6 +117,13 @@ source-level compatibility.
   behavior. Enable it to catch out-of-bounds reads, writes, and calls to
   undefined callables. Such operations will trigger a warning that includes the
   responsible source code location.
+
+  The following built-in assertion checks are also active in debug mode. They
+  consistently support both regular arrays and symbolic inputs.
+
+  - :py:func:`drjit.assert_true`,
+  - :py:func:`drjit.assert_false`,
+  - :py:func:`drjit.assert_equal`.
 
 - **Symbolic print statement**: A new high-level *symbolic* print operation
   (:py:func:`drjit.print`) enables deferred printing from any symbolic context

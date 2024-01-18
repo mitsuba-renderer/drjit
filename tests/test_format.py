@@ -195,3 +195,27 @@ def test11_print_from_subroutine_complex(t):
     dr.eval()
     assert b1.value == 'in f1: tid=[0, 0, 1, 1, 2, 2], x=[1, 11, 2, 12, 3, 13]\n'
     assert b2.value == 'in f2: tid=[3, 4, 5], x=[4, 5, 6]\n'
+
+
+@pytest.test_arrays('shape=(*), uint32, jit')
+def test12_active_non_symbolic(t):
+    v = t(1, 2, 3, 1)
+    b = Buffer()
+    dr.print("{}", v, file=b, active=True)
+    assert b.value == '[1, 2, 3, 1]\n'
+    b.reset()
+
+    b = Buffer()
+    dr.print("{}", v, file=b, active=False)
+    assert b.value == None
+    b.reset()
+
+    b = Buffer()
+    dr.print("{}", v, file=b, active=v>100)
+    assert b.value == None
+    b.reset()
+
+    b = Buffer()
+    dr.print("{}", v, file=b, active=v>1)
+    assert b.value == '[2, 3]\n'
+    b.reset()
