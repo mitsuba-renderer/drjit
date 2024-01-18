@@ -126,7 +126,7 @@ NB_MODULE(drjit_ext, m_) {
         .value("Float64", VarType::Float64, doc_VarType_Float64);
 
     nb::enum_<ReduceOp>(m, "ReduceOp", doc_ReduceOp)
-        .value("None", ReduceOp::None, doc_ReduceOp_None)
+        .value("Identity", ReduceOp::Identity, doc_ReduceOp_Identity)
         .value("Add", ReduceOp::Add, doc_ReduceOp_Add)
         .value("Mul", ReduceOp::Mul, doc_ReduceOp_Mul)
         .value("Min", ReduceOp::Min, doc_ReduceOp_Min)

@@ -66,8 +66,8 @@ source-level compatibility.
   the transformation is minimal and preserves other code along with line number
   information to aid debugging.
 
-  ⚠️ The old "recorded loop" syntax is no longer supported, and existing code will
-  adjustments to use :py:func:`drjit.while_loop`.
+  ⚠️ The old "recorded loop" syntax is no longer supported. Existing code will
+  need adjustments to use :py:func:`drjit.while_loop`.
 
 - **Differentiable control flow**: symbolic control flow constructs (loops)
   previously failed with an error message when they detected differentiable

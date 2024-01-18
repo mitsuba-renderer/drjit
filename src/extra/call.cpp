@@ -418,7 +418,7 @@ static void ad_call_reduce(JitBackend backend, const char *domain,
         for (size_t j = 0; j < rv2.size(); ++j) {
             uint64_t r =
                 ad_var_scatter(rv[j], rv2[j], index2, memop_mask.index(),
-                               ReduceOp::None, true);
+                               ReduceOp::Identity, true);
             ad_var_dec_ref(rv[j]);
             rv[j] = r;
         }

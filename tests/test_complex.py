@@ -81,7 +81,6 @@ def test09_from_numpy(t):
     if dr.depth_v(t) == 1:
         assert dr.all(t(np.array(3+5j)) == t(3, 5))
     elif dr.depth_v(t) == 2:
-        print(t(np.array((3+5j, 4+5j))))
         assert dr.all(t(np.array((3+5j, 4+5j))) == t((3, 4), (5, 5)), axis=None)
     else:
         assert False

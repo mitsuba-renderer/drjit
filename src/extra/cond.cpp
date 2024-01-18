@@ -71,6 +71,7 @@ static void ad_cond_symbolic(JitBackend backend, const char *name,
 
     JitVar handle =
         JitVar::steal(jit_var_cond_start(name, symbolic, cond_t, cond_f));
+    JitVar true_mask = JitVar::steal(jit_var_bool(backend, true));
 
     dr_index64_vector args, true_idx, false_idx;
     args.reserve(args_.size());
@@ -89,7 +90,8 @@ static void ad_cond_symbolic(JitBackend backend, const char *name,
 
     // Execute 'true_fn'
     {
-        scoped_push_mask guard(backend, cond_t);
+        scoped_push_mask guard(
+            backend, backend == JitBackend::CUDA ? true_mask.index() : cond_t);
         body_cb(payload, true, args, true_idx);
     }
     false_idx.reserve(true_idx.size());
@@ -104,7 +106,8 @@ static void ad_cond_symbolic(JitBackend backend, const char *name,
 
     // Execute 'false_fn'
     {
-        scoped_push_mask guard(backend, cond_f);
+        scoped_push_mask guard(
+            backend, backend == JitBackend::CUDA ? true_mask.index() : cond_f);
         body_cb(payload, false, args, false_idx);
     }
 

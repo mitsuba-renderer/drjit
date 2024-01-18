@@ -38,7 +38,7 @@ These operations are *horizontal* in the sense that [..]
 
 .. autoclass:: ReduceOp
 
-   .. autoattribute:: None
+   .. autoattribute:: Identity
       :noindex:
       :annotation:
 
@@ -872,6 +872,8 @@ Operations for vectors and matrices
 .. autofunction:: diag
 .. autofunction:: trace
 .. autofunction:: matmul
+.. autofunction:: hypot
+.. autofunction:: normalize
 
 
 Operations for complex values and quaternions

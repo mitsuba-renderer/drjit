@@ -836,11 +836,11 @@ Computes the 2-norm of a Dr.Jit array, tensor, or Python sequence.
 
 The operation is equivalent to
 
-.. code-block:: pycon
+.. code-block:: python
 
    dr.sqrt(dr.dot(arg, arg))
 
-The :py:func:`dot` operation performs a horizontal reduction. Please see the
+The :py:func:`norm` operation performs a horizontal reduction. Please see the
 section on :ref:`horizontal reductions <horizontal-reductions>` for details on
 their properties.
 
@@ -855,11 +855,11 @@ Computes the squared 2-norm of a Dr.Jit array, tensor, or Python sequence.
 
 The operation is equivalent to
 
-.. code-block:: pycon
+.. code-block:: python
 
    dr.dot(arg, arg)
 
-The :py:func:`dot` operation performs a horizontal reduction. Please see the
+The :py:func:`squared_norm` operation performs a horizontal reduction. Please see the
 section on :ref:`horizontal reductions <horizontal-reductions>` for details on
 their properties.
 
@@ -3787,8 +3787,8 @@ static const char *doc_ReduceOp =
     "List of different atomic read-modify-write (RMW) operations "
     "supported by :py:func:`drjit.scatter_reduce()`.";
 
-static const char *doc_ReduceOp_None =
-    "Perform an ordinary scatter operation that ignores the current entry..";
+static const char *doc_ReduceOp_Identity =
+    "Perform an ordinary scatter operation that ignores the current entry.";
 
 static const char *doc_ReduceOp_Add = "Addition.";
 static const char *doc_ReduceOp_Mul = "Multiplication.";

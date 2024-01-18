@@ -130,6 +130,7 @@ static size_t ad_loop_evaluated_mask(JitBackend backend, const char *name,
                                      dr_index64_vector indices1,
                                      JitVar active) {
     dr_index64_vector indices2;
+    JitVar active_it;
     size_t it = 0;
 
     while (true) {
@@ -171,7 +172,9 @@ static size_t ad_loop_evaluated_mask(JitBackend backend, const char *name,
         indices1.release();
         indices1.swap(indices2);
 
-        active &= JitVar::borrow(cond_cb(payload));
+        active_it = JitVar::borrow(cond_cb(payload));
+        active_it.schedule_();
+        active &= active_it;
         active.schedule_force_();
     }
 
@@ -273,7 +276,7 @@ ad_loop_evaluated_compress(JitBackend backend, const char *name, void *payload,
                 // Write entries that have become inactive to 'out_indices'
                 uint64_t f_index =
                     ad_var_scatter(out_indices[i], indices[i], idx.index(),
-                                   not_active.index(), ReduceOp::None, true);
+                                   not_active.index(), ReduceOp::Identity, true);
                 ad_var_dec_ref(out_indices[i]);
                 out_indices[i] = f_index;
             }
@@ -307,7 +310,7 @@ ad_loop_evaluated_compress(JitBackend backend, const char *name, void *payload,
                 // Write entries that have become inactive to 'out_indices'
                 uint64_t f_index =
                     ad_var_scatter(out_indices[i], indices[i], idx.index(),
-                                   not_active.index(), ReduceOp::None, true);
+                                   not_active.index(), ReduceOp::Identity, true);
 
                 ad_var_dec_ref(out_indices[i]);
                 out_indices[i] = f_index;
@@ -317,14 +320,14 @@ ad_loop_evaluated_compress(JitBackend backend, const char *name, void *payload,
                     jit_var_undefined(backend, jit_var_type(indices[i]), size));
                 uint64_t t_index =
                     ad_var_scatter(buffer.index(), indices[i], slot.index(),
-                                   active.index(), ReduceOp::None, true);
+                                   active.index(), ReduceOp::Identity, true);
                 ad_var_dec_ref(indices[i]);
                 indices[i] = t_index;
             }
 
             JitVar buffer = JitVar::steal(jit_var_undefined(backend, VarType::UInt32, size));
             idx = JitVar::steal(jit_var_scatter(buffer.index(), idx.index(), slot.index(),
-                                                active.index(), ReduceOp::None));
+                                                active.index(), ReduceOp::Identity));
 
             // Evaluate everything queued up to this point
             jit_eval();

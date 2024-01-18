@@ -289,7 +289,7 @@ static void scatter_generic(const char *name, ReduceOp op, nb::object target,
 
 void scatter(nb::object target, nb::object value, nb::object index,
              nb::object active, bool permute) {
-    scatter_generic("scatter", ReduceOp::None, std::move(target),
+    scatter_generic("scatter", ReduceOp::Identity, std::move(target),
                     std::move(value), std::move(index), std::move(active),
                     permute);
 }
