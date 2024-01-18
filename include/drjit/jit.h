@@ -475,7 +475,7 @@ struct DRJIT_TRIVIAL_ABI JitArray
         static_assert(
             std::is_same_v<detached_t<Mask>, detached_t<mask_t<JitArray>>>);
         dst = steal(jit_var_scatter(dst.index(), m_index, index.index(),
-                                    mask.index(), ReduceOp::None));
+                                    mask.index(), ReduceOp::Identity));
     }
 
     template <typename Index, typename Mask>

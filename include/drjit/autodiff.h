@@ -480,10 +480,10 @@ struct DRJIT_TRIVIAL_ABI DiffArray
 
         if constexpr (IsFloat)
             dst = steal(ad_var_scatter(dst.m_index, m_index, index.m_index,
-                                       mask.m_index, ReduceOp::None, permute));
+                                       mask.m_index, ReduceOp::Identity, permute));
         else
             dst = steal(jit_var_scatter(dst.m_index, m_index, index.m_index,
-                                        mask.m_index, ReduceOp::None));
+                                        mask.m_index, ReduceOp::Identity));
     }
 
     template <typename Index, typename Mask>

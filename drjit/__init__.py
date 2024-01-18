@@ -1042,6 +1042,55 @@ def deg2rad(arg, /):
     '''
     return arg * (pi / 180.0)
 
+
+def normalize(arg, /):
+    '''
+    Normalize the input vector so that it has unit length and return the
+    result.
+
+    This operation is equivalent to
+
+    .. code-block:: python
+
+       arg * dr.rsqrt(dr.squared_norm(arg))
+
+    The :py:func:`normalize` operation performs a horizontal reduction. Please
+    see the section on :ref:`horizontal reductions <horizontal-reductions>` for
+    details on their properties.
+
+    Args:
+        arg (drjit.ArrayBase): A Dr.Jit array type
+
+    Returns:
+        drjit.ArrayBase: Unit-norm version of the input
+    '''
+
+    return arg * rsqrt(squared_norm(arg))
+
+
+def hypot(a, b):
+    '''
+    Computes :math:`\\sqrt{x^2+y^2}` while avoiding overflow and underflow.
+
+    Args:
+        arg (float | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+
+    Returns:
+        float | drjit.ArrayBase: The computed hypotenuse.
+    '''
+
+    a, b = abs(a), abs(b)
+    maxval = maximum(a, b)
+    minval = minimum(a, b)
+    ratio = minval / maxval
+
+    return select(
+        (a < inf) & (b < inf) & (ratio < inf),
+        maxval * sqrt(fma(ratio, ratio, 1)),
+        a + b
+    )
+
+
 def reverse(value, axis: int = 0):
     '''
     Reverses the given Dr.Jit array or Python sequence along the
@@ -1189,7 +1238,7 @@ def assert_true(
     are ``False``.
 
     This function resembles the built-in ``assert`` keyword in that it raises
-    an ``AssertionError`` when the condition ``cond`` is ``False``. 
+    an ``AssertionError`` when the condition ``cond`` is ``False``.
 
     In contrast to the built-in keyword, it also works when ``cond`` is an
     array of boolean values. In this case, the function raises an exception

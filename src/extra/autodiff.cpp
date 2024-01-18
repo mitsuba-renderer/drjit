@@ -1795,7 +1795,7 @@ struct Scatter : Special {
             target_grad.resize(target->size);
 
         MaskGuard guard(backend, mask_stack);
-        if (op != ReduceOp::None)
+        if (op != ReduceOp::Identity)
             dr::scatter_reduce(op, target_grad, source->grad, offset, mask);
         else
             dr::scatter(target_grad, source->grad, offset, mask);
@@ -2495,9 +2495,9 @@ Index ad_var_scatter(Index target, Index value, JitIndex offset,
 
         return combine(ad_index, result.release());
     } else {
-        if (reduce_op != ReduceOp::None && reduce_op != ReduceOp::Add)
+        if (reduce_op != ReduceOp::Identity && reduce_op != ReduceOp::Add)
             ad_raise("ad_var_scatter(): differentiable scatters with with "
-                     "reduce_op not in {ReduceOp::None, ReduceOp::Add} are "
+                     "reduce_op not in {ReduceOp::Identity, ReduceOp::Add} are "
                      "currently unsupported!");
 
         VarInfo info = jit_set_backend(jit_index(target));
@@ -2505,7 +2505,7 @@ Index ad_var_scatter(Index target, Index value, JitIndex offset,
         JitMask overwritten = dr::zeros<JitMask>(info.size);
 
         const char *name;
-        if (reduce_op == ReduceOp::None) {
+        if (reduce_op == ReduceOp::Identity) {
             if (permute) {
                 name = "scatter_permute";
             } else {

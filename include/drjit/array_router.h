@@ -1116,7 +1116,7 @@ void scatter_reduce(ReduceOp op, Target &target, const Value &value,
         if (mask) {
             auto func = [op](const Value &a, const Value &b) -> Value {
                 switch (op) {
-                    case ReduceOp::None: return b;
+                    case ReduceOp::Identity: return b;
                     case ReduceOp::Add:
                         if constexpr (!std::is_same_v<Value, bool>)
                             return a + b;
