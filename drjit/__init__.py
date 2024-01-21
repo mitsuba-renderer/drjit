@@ -448,10 +448,7 @@ def cross(arg0, arg1, /):
     if size_v(arg0) != 3 or size_v(arg1) != 3:
         raise Exception("cross(): requires 3D input arrays!")
 
-    ta, tb = type(arg0), type(arg1)
-
-    return fma(ta(arg0.y, arg0.z, arg0.x),  tb(arg1.z, arg1.x, arg1.y),
-              -ta(arg0.z, arg0.x, arg0.y) * tb(arg1.y, arg1.z, arg1.x))
+    return fma(arg0.yzx, arg1.zxy, -arg0.zxy * arg1.yzx)
 
 
 def det(arg, /):

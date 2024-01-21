@@ -292,6 +292,195 @@ static PyObject *tp_richcompare(PyObject *h0, PyObject *h1, int slot) noexcept {
                               std::make_index_sequence<2>(), h0, h1);
 }
 
+// The following function implements swizzling without having to
+// implement a huge number of properties.
+static NB_NOINLINE nb::handle tp_getattro_fallback(nb::handle h0, nb::handle h1) noexcept {
+    nb::object result;
+
+    {
+        nb::error_scope es;
+
+        const ArraySupplement &s0 = supp(h0.type());
+        const char *name = nb::borrow<nb::str>(h1).c_str();
+
+        if (s0.ndim && s0.shape[0] != DRJIT_DYNAMIC &&
+            (s0.is_vector || s0.is_quaternion)) {
+            size_t in_size      = s0.shape[0],
+                   swizzle_size = strlen(name);
+            bool valid = true;
+
+            for (size_t i = 0; i < swizzle_size; ++i) {
+                switch (name[i]) {
+                    case 'x': valid |= in_size >= 1; break;
+                    case 'y': valid |= in_size >= 2; break;
+                    case 'z': valid |= in_size >= 3; break;
+                    case 'w': valid |= in_size >= 4; break;
+                    default: valid = false; break;
+                }
+            }
+
+            if (valid && swizzle_size > 0) {
+                ArrayMeta m2 = s0;
+                m2.shape[0] = (uint8_t) (swizzle_size <= 4 ? swizzle_size
+                                                           : DRJIT_DYNAMIC);
+
+                try {
+                    nb::handle tp2 = meta_get_type(m2);
+                    const ArraySupplement &s2 = supp(tp2);
+
+                    ArraySupplement::Item item = s0.item;
+                    ArraySupplement::SetItem set_item = s2.set_item;
+
+                    nb::object o2 = nb::inst_alloc_zero(tp2);
+                    if (s2.shape[0] == DRJIT_DYNAMIC)
+                        s2.init(swizzle_size, inst_ptr(o2));
+
+                    for (size_t i = 0; i < swizzle_size; ++i) {
+                        Py_ssize_t swizzle_index;
+
+                        switch (name[i]) {
+                            default:
+                            case 'x': swizzle_index = 0; break;
+                            case 'y': swizzle_index = 1; break;
+                            case 'z': swizzle_index = 2; break;
+                            case 'w': swizzle_index = 3; break;
+                        }
+
+                        nb::object tmp = nb::steal(item(h0.ptr(), swizzle_index));
+                        if (!tmp.is_valid()) {
+                            PyErr_Clear();
+                            o2.reset();
+                            break;
+                        }
+
+                        if (set_item(o2.ptr(), (Py_ssize_t) i, tmp.ptr())) {
+                            PyErr_Clear();
+                            o2.reset();
+                            break;
+                        }
+                    }
+
+                    result = std::move(o2);
+                } catch (...) {
+                    // Existing AttributeError will be re-raised.
+                }
+            }
+        }
+    }
+
+    if (result.is_valid())
+        PyErr_Clear();
+
+    return result.release();
+}
+
+static NB_NOINLINE int tp_setattro_fallback(nb::handle h0, nb::handle h1, nb::handle h2) noexcept {
+    int rv = -1;
+    {
+        nb::error_scope es;
+
+        nb::handle tp0 = h0.type(), tp2 = h2.type();
+        const ArraySupplement &s0 = supp(tp0);
+        const char *name = nb::borrow<nb::str>(h1).c_str();
+
+        if (s0.ndim && s0.shape[0] != DRJIT_DYNAMIC &&
+            (s0.is_vector || s0.is_quaternion)) {
+            size_t dst_size     = s0.shape[0],
+                   swizzle_size = strlen(name);
+            bool valid = swizzle_size > 0;
+
+            for (size_t i = 0; i < swizzle_size; ++i) {
+                switch (name[i]) {
+                    case 'x': valid |= dst_size >= 1; break;
+                    case 'y': valid |= dst_size >= 2; break;
+                    case 'z': valid |= dst_size >= 3; break;
+                    case 'w': valid |= dst_size >= 4; break;
+                    default: valid = false; break;
+                }
+            }
+
+            valid &= swizzle_size > 0;
+
+            ArraySupplement::Item item = nullptr;
+
+            if (valid && is_drjit_type(tp2)) {
+                const ArraySupplement &s2 = supp(tp2);
+                if (s2.ndim && s2.shape[0] != DRJIT_DYNAMIC && s2.item)
+                    item = s2.item;
+
+                if (item && s2.shape[0] != swizzle_size) {
+                    rv = -2;
+                    valid = false;
+                }
+            }
+
+            if (valid) {
+                ArraySupplement::SetItem set_item = s0.set_item;
+
+                try {
+                    bool fail = false;
+                    for (size_t i = 0; i < swizzle_size; ++i) {
+                        Py_ssize_t swizzle_index;
+
+                        switch (name[i]) {
+                            default:
+                            case 'x': swizzle_index = 0; break;
+                            case 'y': swizzle_index = 1; break;
+                            case 'z': swizzle_index = 2; break;
+                            case 'w': swizzle_index = 3; break;
+                        }
+
+                        nb::object tmp =
+                            item ? nb::steal(item(h2.ptr(), (Py_ssize_t) i))
+                                 : nb::borrow(h2);
+
+                        if (!tmp.is_valid()) {
+                            PyErr_Clear();
+                            fail = true;
+                            break;
+                        }
+
+                        if (set_item(h0.ptr(), swizzle_index, tmp.ptr())) {
+                            PyErr_Clear();
+                            fail = true;
+                            break;
+                        }
+                    }
+
+                    if (!fail)
+                        rv = 0;
+                } catch (...) {
+                    // Existing AttributeError will be re-raised.
+                }
+            }
+        }
+    }
+
+    if (rv == -2) {
+        PyErr_Clear();
+        PyErr_SetString(PyExc_IndexError, "Mismatched sizes in swizzle assignment.");
+        rv = -1;
+    } if (rv == 0) {
+        PyErr_Clear();
+    }
+
+    return rv;
+}
+
+static PyObject *tp_getattro(PyObject *h0, PyObject *h1) noexcept {
+    PyObject *o = PyObject_GenericGetAttr(h0, h1);
+    if (NB_UNLIKELY(!o))
+        o = tp_getattro_fallback(h0, h1).ptr();
+    return o;
+}
+
+static int tp_setattro(PyObject *h0, PyObject *h1, PyObject *h2) noexcept {
+    int rv = PyObject_GenericSetAttr(h0, h1, h2);
+    if (NB_UNLIKELY(rv))
+        rv = tp_setattro_fallback(h0, h1, h2);
+    return rv;
+}
+
 static PyObject *tp_hash(PyObject *h) noexcept {
     return PyLong_FromSize_t((size_t) (((uintptr_t) h) / sizeof(void *)));
 }
@@ -478,6 +667,8 @@ static PyType_Slot array_base_slots[] = {
     DR_ARRAY_SLOT(nb_bool),
     DR_ARRAY_SLOT(mp_subscript),
     DR_ARRAY_SLOT(mp_ass_subscript),
+    DR_ARRAY_SLOT(tp_getattro),
+    DR_ARRAY_SLOT(tp_setattro),
 
     { 0, nullptr }
 };

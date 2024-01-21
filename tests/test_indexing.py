@@ -74,3 +74,50 @@ def test04_masked_assignment(t):
     assert v2 is v
 
     assert dr.all(v == t([3, 3, 3, 3, 4, 5, 6, 7, 8, 3]))
+
+
+@pytest.test_arrays('shape=(4, *), uint32')
+def test05_swizzle_access(t):
+    a = t(1,2,3,4)
+    b = a.xywz
+    assert type(b) is t
+    assert dr.all(b == [1, 2, 4, 3])
+
+    b = a.ww
+    assert dr.size_v(b) == 2 and dr.all(b == [4, 4])
+
+    b = a.wyzwwx
+    assert dr.size_v(b) == -1 and len(b) == 6 and dr.all(b == [4, 2, 3, 4, 4, 1])
+
+@pytest.test_arrays('shape=(4, *), uint32')
+def test06_swizzle_assignment(t):
+    a = t(1,2,3,4)
+    a.yz = 5
+    assert dr.all(a == [1, 5, 5, 4])
+
+    a = t(1,2,3,4)
+    a.yz = dr.value_t(t)(5)
+    assert dr.all(a == [1, 5, 5, 4])
+
+    a = t(1,2,3,4)
+    a.xyzw = a.xxyy
+    assert dr.all(a == [1, 1, 2, 2])
+
+    a = t(1,2,3,4)
+    a.xyw = a.yyx
+    assert dr.all(a == [2, 2, 3, 1])
+
+
+@pytest.test_arrays('shape=(3, *), uint32')
+def test06_bad_swizzle(t):
+    a = t(1,2,3)
+    with pytest.raises(AttributeError):
+        b = a.xw
+    with pytest.raises(AttributeError):
+        a.xw = 1
+    with pytest.raises(IndexError):
+        a = t(1,2,3)
+        a.xyw = a.yyxx
+    with pytest.raises(IndexError):
+        a = t(1,2,3)
+        a.xywx = a.yyx
