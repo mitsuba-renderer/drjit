@@ -9,10 +9,12 @@ DrJit 1.0.0 (TBA)
 -----------------
 
 The 1.0 release of Dr.Jit marks major new phase of this project. We addressed
-many long-standing limitations and thoroughly documented every part of Dr.Jit.
+long-standing limitations and thoroughly documented every part of Dr.Jit.
 Due to the magnitude of the changes, some incompatibilities are unavoidable:
 bullet points with an exclamation mark highlight changes with an impact on
 source-level compatibility.
+
+Here is what's new:
 
 - **Python bindings**: Dr.Jit comes with an all-new set of Python bindings
   created using the `nanobind <https://github.com/wjakob/nanobind>`__ library.
@@ -66,9 +68,6 @@ source-level compatibility.
   the transformation is minimal and preserves other code along with line number
   information to aid debugging.
 
-  ⚠️ The old "recorded loop" syntax is no longer supported. Existing code will
-  need adjustments to use :py:func:`drjit.while_loop`.
-
 - **Differentiable control flow**: symbolic control flow constructs (loops)
   previously failed with an error message when they detected differentiable
   variables. All symbolic operations (loops, function calls, and conditionals)
@@ -78,22 +77,6 @@ source-level compatibility.
   documentation that clearly specifies its behavior and accepted inputs. The
   behavior with respect to tensors, :ref:`PyTrees <pytrees>` was made
   consistent.
-
-- ⚠️ **Comparison operators**: The ``==`` and ``!=`` comparisons previously
-  reduced the result of to a single Python ``bool``. They now return an array
-  of component-wise comparisons to be more consistent with other array
-  programming frameworks. Use :py:func:`dr.all(a == b) <all>` or
-  :py:func:`dr.all(a == b, axis=None) <all>` to get the previous behavior.
-
-  The functions ``drjit.eq()`` and ``drjit.neq()`` for element-wise
-  equality and inequality tests were removed, as their behavior is now subsumed
-  by the builtin ``==`` and ``!=`` operators.
-
-- ⚠️ **Matrix layout**: The Dr.Jit matrix type switched from column-major to
-  row-major storage. Your code will need to be updated if it indexes into
-  matrices first by column and then row (``matrix[col][row]``) instead of
-  specifying the complete location ``matrix[row, col]``. The latter convention
-  is consistent between both versions.
 
 - **Half-precision arithmetic**: Dr.Jit now provides ``float16``-valued arrays
   and tensors on both the LLVM and CUDA backends (e.g.,
@@ -119,7 +102,7 @@ source-level compatibility.
   responsible source code location.
 
   The following built-in assertion checks are also active in debug mode. They
-  consistently support both regular arrays and symbolic inputs.
+  support both regular and symbolic inputs in a consistent fashion.
 
   - :py:func:`drjit.assert_true`,
   - :py:func:`drjit.assert_false`,
@@ -131,6 +114,14 @@ source-level compatibility.
   compatible with Jupyter notebooks and displays arbitrary :ref:`PyTrees
   <pytrees>` in a structured manner. This operation replaces the function
   ``drjit.print_async()`` provided in previous releases.
+
+- **Swizzling**: swizzle access and assignment operator are now provided. You
+  can use them to arbitrarily reorder, grow, or shrink the input array.
+
+  .. code-block:: python
+
+     a = Array4f(...), b = Array2f(...)
+     a.xyw = a.xzy + b.xyx
 
 - Reductions operations previously existed as *ordinary* (e.g.,
   :py:func:`drjit.all`) and *nested* (e.g. ``drjit.all_nested``) variants. Both
@@ -197,9 +188,40 @@ source-level compatibility.
 - **Loop compression**: the implementation of evaluated loops (previously
   referred to as wavefront mode) visits all entries of the loop state variables
   at every iteration even when most of them have already finished executing the
-  loop. Dr.Jit now provides an optional ``compress=True`` parameter in
+  loop. Dr.Jit now provides an optional``compress=True`` parameter in
   :py:func:`drjit.while_loop` to prune away inactive entries and accelerate
   later loop iterations.
+
+- **Fast math**: Dr.Jit now has an optimization flag named
+  :py:attr:`drjit.JitFlag.FastMath` that is reminiscent of ``-ffast-math`` in
+  C/C++ compilers. It enables program simplifications such as ``a*0 == 0`` that
+  are not always valid. For example, equality in this example breaks when ``a``
+  is infinite or equal to NaN. The flag is on by default since it can
+  considerably improve performance especially when targeting GPUs.
+
+Compatibility
+-------------
+
+  ⚠️ **Symbolic loop syntax**: the old "recorded loop" syntax is no longer
+  supported. Existing code will need adjustments to use
+  :py:func:`drjit.while_loop`.
+
+- ⚠️ **Comparison operators**: The ``==`` and ``!=`` comparisons previously
+  reduced the result of to a single Python ``bool``. They now return an array
+  of component-wise comparisons to be more consistent with other array
+  programming frameworks. Use :py:func:`dr.all(a == b) <all>` or
+  :py:func:`dr.all(a == b, axis=None) <all>` to get the previous behavior.
+
+  The functions ``drjit.eq()`` and ``drjit.neq()`` for element-wise
+  equality and inequality tests were removed, as their behavior is now subsumed
+  by the builtin ``==`` and ``!=`` operators.
+
+- ⚠️ **Matrix layout**: The Dr.Jit matrix type switched from column-major to
+  row-major storage. Your code will need to be updated if it indexes into
+  matrices first by column and then row (``matrix[col][row]``) instead of
+  specifying the complete location ``matrix[row, col]``. The latter convention
+  is consistent between both versions.
+
 
 Internals
 ---------
@@ -248,6 +270,14 @@ Python API.
     single top-level function (``ad_loop`` and ``ad_cond``) in
     ``libdrjit-extra.so``. This removes large amounts of template code and
     accelerates compilation.
+
+- Improvements to CUDA and LLVM backends kernel launch configurations that
+  more effectively use the available parallelism.
+
+- Significant improvements to the warp-local phase of atomic
+  scatter-reductions. These changes increase the performance of the
+  :py:func:`drjit.scatter_reduce` and :py:func:`drjit.scatter_add` operations
+  on the CUDA backend.
 
 - The packet mode backend (``include/drjit/packet.h``) now includes support
   for ``aarch64`` processors via NEON intrinsics. This is actually an old
