@@ -1250,6 +1250,11 @@ def assert_true(
 
        >>> x = Float(1, -4, -2, 3)
        >>> dr.assert_true(x >= 0, 'Found negative values: {}', x)
+       Traceback (most recent call last):
+         File "<stdin>", line 1, in <module>
+         File "drjit/__init__.py", line 1327, in assert_true
+           raise AssertionError(msg)
+       AssertionError: Assertion failure: Found negative values: [-4, -2]
 
     This function also works when some of the function inputs are *symbolic*.
     In this case, the check is delayed and potential failures will be reported
