@@ -1248,6 +1248,12 @@ Debugging
 .. autofunction:: log_level
 .. autofunction:: set_log_level
 
+Profiling
+---------
+
+.. autofunction:: profile_mark
+.. autofunction:: profile_range
+
 Low-level bits
 --------------
 

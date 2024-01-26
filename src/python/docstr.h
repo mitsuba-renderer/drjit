@@ -6437,6 +6437,39 @@ The following properties of ``index`` determine the return type:
   removed, and the operation returns an array from the ``drjit.scalar``
   namespace containing the extracted values.)";
 
+static const char *doc_profile_mark = R"(
+Mark an event on the timeline of profiling tools.
+
+Currently, this function uses `NVTX <https://github.com/NVIDIA/NVTX>`__ to report
+events that can be captured using `NVIDIA Nsight Systems
+<https://developer.nvidia.com/nsight-systems>`__. The operation is a no-op when
+no profile collection tool is attached.
+
+Note that this event will be recorded on the CPU timeline.)";
+
+static const char *doc_profile_range = R"(
+Context manager to mark a region (e.g. a function call) on the timeline of
+profiling tools.
+
+You can use this context manager to wrap parts of your code and track when and
+for how long it runs. Regions can be arbitrairly nested, which profiling tools
+visualize as a stack.
+
+.. code-block: python
+
+   with dr.profile_range("Costly preprocessing"):
+       init_data_structures()
+
+Note that this function tracks activity on the CPU timeline. If the wrapped
+region launches asynchronous GPU kernels, then those won't generally be
+included unless you use :py:func:`drjit.sync_thread` to wait for their
+completion (which is not advisable for performance reasons).
+
+Currently, this function uses `NVTX <https://github.com/NVIDIA/NVTX>`__ to report
+events that can be captured using `NVIDIA Nsight Systems
+<https://developer.nvidia.com/nsight-systems>`__. The operation is a no-op when
+no profile collection tool is attached.)";
+
 #if defined(__GNUC__)
 #  pragma GCC diagnostic pop
 #endif
