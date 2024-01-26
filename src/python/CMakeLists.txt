@@ -37,6 +37,7 @@ nanobind_add_module(
   if_stmt.h     if_stmt.cpp
   print.h       print.cpp
   history.h     history.cpp
+  profile.h     profile.cpp
 
   # Backends
   scalar.h      scalar.cpp
