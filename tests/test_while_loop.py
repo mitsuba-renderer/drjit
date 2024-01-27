@@ -218,7 +218,7 @@ def test12_scatter_v1(t, mode, optimize, drjit_verbose, capsys):
         while dr.hint(i < 10, mode=mode):
             i += 1
             j = j
-            dr.scatter_add(target=v, index=0, value=1)
+            dr.scatter_add(target=v, index=0, value=1, mode=dr.ReduceMode.Local)
 
         assert v[0] == 19
         assert dr.all(i == 10)
@@ -241,7 +241,7 @@ def test13_scatter_v2(t, mode, optimize, drjit_verbose, capsys):
 
         while dr.hint(i < 10, mode=mode, exclude=[v]):
             i += 1
-            dr.scatter_add(target=v, index=0, value=1)
+            dr.scatter_add(target=v, index=0, value=1, mode=dr.ReduceMode.Local)
 
         assert v[0] == 19
         assert dr.all(i == 10)

@@ -216,10 +216,10 @@ def test10_side_effect(t, mode, variant, capsys, drjit_verbose):
         buf = dr.zeros(t, 2)
 
     def true_fn():
-        dr.scatter_add(buf, index=0, value=1)
+        dr.scatter_add(buf, index=0, value=1, mode=dr.ReduceMode.Local)
 
     def false_fn():
-        dr.scatter_add(buf, index=1, value=1)
+        dr.scatter_add(buf, index=1, value=1, mode=dr.ReduceMode.Local)
 
     dr.if_stmt(
         args = (),
@@ -248,11 +248,11 @@ def test11_side_effect_v2(t, mode, variant, capsys, drjit_verbose):
         buf = dr.zeros(t, 2)
 
     def true_fn(buf):
-        dr.scatter_add(buf, index=0, value=1)
+        dr.scatter_add(buf, index=0, value=1, mode=dr.ReduceMode.Local)
         return buf
 
     def false_fn(buf):
-        dr.scatter_add(buf, index=1, value=1)
+        dr.scatter_add(buf, index=1, value=1, mode=dr.ReduceMode.Local)
         return buf
 
     buf = dr.if_stmt(

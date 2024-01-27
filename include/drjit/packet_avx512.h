@@ -274,7 +274,7 @@ template <bool IsMask_, typename Derived_> struct alignas(64)
     static DRJIT_INLINE Derived zero_(size_t) { return _mm512_setzero_ps(); }
 
     template <typename Index, typename Mask>
-    static DRJIT_INLINE Derived gather_(const void *ptr, const Index &index, const Mask &mask, bool) {
+    static DRJIT_INLINE Derived gather_(const void *ptr, const Index &index, const Mask &mask, ReduceMode) {
         if constexpr (sizeof(scalar_t<Index>) == 4) {
             return _mm512_mask_i32gather_ps(_mm512_setzero_ps(), mask.k, index.m, (const float *) ptr, 4);
         } else {
@@ -285,53 +285,12 @@ template <bool IsMask_, typename Derived_> struct alignas(64)
     }
 
     template <typename Index, typename Mask>
-    DRJIT_INLINE void scatter_(void *ptr, const Index &index, const Mask &mask, bool) const {
+    DRJIT_INLINE void scatter_(void *ptr, const Index &index, const Mask &mask, ReduceMode) const {
         if constexpr (sizeof(scalar_t<Index>) == 4) {
             _mm512_mask_i32scatter_ps(ptr, mask.k, index.m, m, 4);
         } else {
             _mm512_mask_i64scatter_ps(ptr, low(mask).k,   low(index).m,  low(derived()).m,  4);
             _mm512_mask_i64scatter_ps(ptr, high(mask).k, high(index).m, high(derived()).m, 4);
-        }
-    }
-
-    template <typename Index, typename Mask>
-    DRJIT_INLINE void scatter_reduce_(ReduceOp op, void *ptr, const Index &index_,
-                                      const Mask &active_, bool) const {
-        if (op != ReduceOp::Add)
-            drjit_raise("Packet scatter_reduce only support Add operation!");
-
-        if constexpr (sizeof(scalar_t<Index>) == 4) {
-            __m512i index = index_.m;
-            __mmask16 active = active_.k;
-            __m512 value = m;
-
-            __m512 value_orig = _mm512_mask_i32gather_ps(
-                _mm512_undefined(), active, index, ptr, 4);
-
-            __m512i conflicts = _mm512_and_si512(_mm512_conflict_epi32(index),
-                                                 _mm512_broadcastmw_epi32(active));
-
-            __mmask16 todo = _mm512_test_epi32_mask(conflicts, conflicts);
-
-            if (DRJIT_UNLIKELY(!_mm512_kortestz(todo, todo))) {
-                __m512i perm_idx = _mm512_sub_epi32(_mm512_set1_epi32(31),
-                                                    _mm512_lzcnt_epi32(conflicts)),
-                        all_ones = _mm512_set1_epi32(-1);
-                do {
-                    __m512 value_peer = _mm512_maskz_permutexvar_ps(todo, perm_idx, value);
-                    perm_idx = _mm512_mask_permutexvar_epi32(perm_idx, todo,
-                                                             perm_idx, perm_idx);
-                    value = _mm512_add_ps(value, value_peer);
-                    todo = _mm512_mask_cmp_epi32_mask(active, all_ones, perm_idx,
-                                                      _MM_CMPINT_NE);
-                } while (!_mm512_kortestz(todo, todo));
-            }
-
-            value = _mm512_add_ps(value, value_orig);
-
-            _mm512_mask_i32scatter_ps(ptr, active, index, value, 4);
-        } else {
-            scatter_reduce_(ptr, int32_array_t<Index>(index_), op, active_, false);
         }
     }
 
@@ -586,7 +545,7 @@ template <bool IsMask_, typename Derived_> struct alignas(64)
     static DRJIT_INLINE Derived empty_(size_t) { return _mm512_undefined_pd(); }
 
     template <typename Index, typename Mask>
-    static DRJIT_INLINE Derived gather_(const void *ptr, const Index &index, const Mask &mask, bool) {
+    static DRJIT_INLINE Derived gather_(const void *ptr, const Index &index, const Mask &mask, ReduceMode) {
         if constexpr (sizeof(scalar_t<Index>) == 4)
             return _mm512_mask_i32gather_pd(_mm512_setzero_pd(), mask.k, index.m, (const double *) ptr, 8);
         else
@@ -594,52 +553,11 @@ template <bool IsMask_, typename Derived_> struct alignas(64)
     }
 
     template <typename Index, typename Mask>
-    DRJIT_INLINE void scatter_(void *ptr, const Index &index, const Mask &mask, bool) const {
+    DRJIT_INLINE void scatter_(void *ptr, const Index &index, const Mask &mask, ReduceMode) const {
         if constexpr (sizeof(scalar_t<Index>) == 4)
             _mm512_mask_i32scatter_pd(ptr, mask.k, index.m, m, 8);
         else
             _mm512_mask_i64scatter_pd(ptr, mask.k, index.m, m, 8);
-    }
-
-    template <typename Index, typename Mask>
-    DRJIT_INLINE void scatter_reduce_(ReduceOp op, void *ptr, const Index &index_,
-                                      const Mask &active_, bool) const {
-        if (op != ReduceOp::Add)
-            drjit_raise("Packet scatter_reduce only supports the 'Add' operation!");
-
-        if constexpr (sizeof(scalar_t<Index>) == 8) {
-            __m512i index = index_.m;
-            __mmask8 active = active_.k;
-            __m512d value = m;
-
-            __m512d value_orig = _mm512_mask_i64gather_pd(
-                _mm512_undefined_pd(), active, index, ptr, 8);
-
-            __m512i conflicts = _mm512_and_si512(_mm512_conflict_epi64(index),
-                                                 _mm512_broadcastmb_epi64(active));
-
-            __mmask8 todo = _mm512_test_epi64_mask(conflicts, conflicts);
-
-            if (DRJIT_UNLIKELY(!_kortestz_mask8_u8(todo, todo))) {
-                __m512i perm_idx = _mm512_sub_epi64(_mm512_set1_epi64(63),
-                                                    _mm512_lzcnt_epi64(conflicts)),
-                        all_ones = _mm512_set1_epi64(-1);
-                do {
-                    __m512d value_peer = _mm512_maskz_permutexvar_pd(todo, perm_idx, value);
-                    perm_idx = _mm512_mask_permutexvar_epi64(perm_idx, todo,
-                                                             perm_idx, perm_idx);
-                    value = _mm512_add_pd(value, value_peer);
-                    todo = _mm512_mask_cmp_epi64_mask(active, all_ones, perm_idx,
-                                                      _MM_CMPINT_NE);
-                } while (!_kortestz_mask8_u8(todo, todo));
-            }
-
-            value = _mm512_add_pd(value, value_orig);
-
-            _mm512_mask_i64scatter_pd(ptr, active, index, value, 8);
-        } else {
-            scatter_reduce_(ptr, int64_array_t<Index>(index_), op, active_, false);
-        }
     }
 
     //! @}
@@ -879,7 +797,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(64)
     static DRJIT_INLINE Derived empty_(size_t) { return _mm512_undefined_epi32(); }
 
     template <typename Index, typename Mask>
-    static DRJIT_INLINE Derived gather_(const void *ptr, const Index &index, const Mask &mask, bool) {
+    static DRJIT_INLINE Derived gather_(const void *ptr, const Index &index, const Mask &mask, ReduceMode) {
         if constexpr (sizeof(scalar_t<Index>) == 4) {
             return _mm512_mask_i32gather_epi32(_mm512_setzero_si512(), mask.k, index.m, (const float *) ptr, 4);
         } else {
@@ -890,53 +808,12 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(64)
     }
 
     template <typename Index, typename Mask>
-    DRJIT_INLINE void scatter_(void *ptr, const Index &index, const Mask &mask, bool) const {
+    DRJIT_INLINE void scatter_(void *ptr, const Index &index, const Mask &mask, ReduceMode) const {
         if constexpr (sizeof(scalar_t<Index>) == 4) {
             _mm512_mask_i32scatter_epi32(ptr, mask.k, index.m, m, 4);
         } else {
             _mm512_mask_i64scatter_epi32(ptr, low(mask).k,   low(index).m,  low(derived()).m,  4);
             _mm512_mask_i64scatter_epi32(ptr, high(mask).k, high(index).m, high(derived()).m, 4);
-        }
-    }
-
-    template <typename Index, typename Mask>
-    DRJIT_INLINE void scatter_reduce_(ReduceOp op, void *ptr, const Index &index_,
-                                      const Mask &active_, bool) const {
-        if (op != ReduceOp::Add)
-            drjit_raise("Packet scatter_reduce only supports the 'Add' operation!");
-
-        if constexpr (sizeof(scalar_t<Index>) == 4) {
-            __m512i index = index_.m;
-            __mmask16 active = active_.k;
-            __m512i value = m;
-
-            __m512i value_orig = _mm512_mask_i32gather_epi32(
-                _mm512_undefined_epi32(), active, index, ptr, 4);
-
-            __m512i conflicts = _mm512_and_si512(_mm512_conflict_epi32(index),
-                                                 _mm512_broadcastmw_epi32(active));
-
-            __mmask16 todo = _mm512_test_epi32_mask(conflicts, conflicts);
-
-            if (DRJIT_UNLIKELY(!_mm512_kortestz(todo, todo))) {
-                __m512i perm_idx = _mm512_sub_epi32(_mm512_set1_epi32(31),
-                                                    _mm512_lzcnt_epi32(conflicts)),
-                        all_ones = _mm512_set1_epi32(-1);
-                do {
-                    __m512i value_peer = _mm512_maskz_permutexvar_epi32(todo, perm_idx, value);
-                    perm_idx = _mm512_mask_permutexvar_epi32(perm_idx, todo,
-                                                             perm_idx, perm_idx);
-                    value = _mm512_add_epi32(value, value_peer);
-                    todo = _mm512_mask_cmp_epi32_mask(active, all_ones, perm_idx,
-                                                      _MM_CMPINT_NE);
-                } while (!_mm512_kortestz(todo, todo));
-            }
-
-            value = _mm512_add_epi32(value, value_orig);
-
-            _mm512_mask_i32scatter_epi32(ptr, active, index, value, 4);
-        } else {
-            scatter_reduce_(ptr, int32_array_t<Index>(index_), op, active_, false);
         }
     }
 
@@ -1192,7 +1069,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(64)
     static DRJIT_INLINE Derived empty_(size_t) { return _mm512_undefined_epi32(); }
 
     template <typename Index, typename Mask>
-    static DRJIT_INLINE Derived gather_(const void *ptr, const Index &index, const Mask &mask, bool) {
+    static DRJIT_INLINE Derived gather_(const void *ptr, const Index &index, const Mask &mask, ReduceMode) {
         if constexpr (sizeof(scalar_t<Index>) == 4)
             return _mm512_mask_i32gather_epi64(_mm512_setzero_si512(), mask.k, index.m, (const float *) ptr, 8);
         else
@@ -1201,52 +1078,11 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(64)
 
 
     template <typename Index, typename Mask>
-    DRJIT_INLINE void scatter_(void *ptr, const Index &index, const Mask &mask, bool) const {
+    DRJIT_INLINE void scatter_(void *ptr, const Index &index, const Mask &mask, ReduceMode) const {
         if constexpr (sizeof(scalar_t<Index>) == 4)
             _mm512_mask_i32scatter_epi64(ptr, mask.k, index.m, m, 8);
         else
             _mm512_mask_i64scatter_epi64(ptr, mask.k, index.m, m, 8);
-    }
-
-    template <typename Index, typename Mask>
-    DRJIT_INLINE void scatter_reduce_(ReduceOp op, void *ptr, const Index &index_,
-                                      const Mask &active_, bool) const {
-        if (op != ReduceOp::Add)
-            drjit_raise("Packet scatter_reduce only supports the 'Add' operation!");
-
-        if constexpr (sizeof(scalar_t<Index>) == 8) {
-            __m512i index = index_.m;
-            __mmask8 active = active_.k;
-            __m512i value = m;
-
-            __m512i value_orig = _mm512_mask_i64gather_epi64(
-                _mm512_undefined_epi32(), active, index, ptr, 8);
-
-            __m512i conflicts = _mm512_and_si512(_mm512_conflict_epi64(index),
-                                                 _mm512_broadcastmb_epi64(active));
-
-            __mmask8 todo = _mm512_test_epi64_mask(conflicts, conflicts);
-
-            if (DRJIT_UNLIKELY(!_kortestz_mask8_u8(todo, todo))) {
-                __m512i perm_idx = _mm512_sub_epi64(_mm512_set1_epi64(63),
-                                                    _mm512_lzcnt_epi64(conflicts)),
-                        all_ones = _mm512_set1_epi64(-1);
-                do {
-                    __m512i value_peer = _mm512_maskz_permutexvar_epi64(todo, perm_idx, value);
-                    perm_idx = _mm512_mask_permutexvar_epi64(perm_idx, todo,
-                                                             perm_idx, perm_idx);
-                    value = _mm512_add_epi64(value, value_peer);
-                    todo = _mm512_mask_cmp_epi64_mask(active, all_ones, perm_idx,
-                                                      _MM_CMPINT_NE);
-                } while (!_kortestz_mask8_u8(todo, todo));
-            }
-
-            value = _mm512_add_epi64(value, value_orig);
-
-            _mm512_mask_i64scatter_epi64(ptr, active, index, value, 8);
-        } else {
-            scatter_reduce_(ptr, int64_array_t<Index>(index_), op, active_, false);
-        }
     }
 
     template <typename Mask>
@@ -1256,7 +1092,6 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(64)
 
     //! @}
     // -----------------------------------------------------------------------
-
 } DRJIT_MAY_ALIAS;
 
 DRJIT_INLINE float ldexp(float a1, float a2) {

@@ -149,7 +149,7 @@ extern DRJIT_EXTRA_EXPORT uint64_t ad_var_prefix_sum(uint64_t index,
 /// Perform a differentiable gather operation. See jit_var_gather for signature.
 extern DRJIT_EXTRA_EXPORT uint64_t ad_var_gather(uint64_t source,
                                                  uint32_t offset, uint32_t mask,
-                                                 bool permute);
+                                                 JIT_ENUM ReduceMode mode);
 
 /// Perform a differentiable scatter operation. See jit_var_scatter for
 /// signature.
@@ -157,7 +157,7 @@ extern DRJIT_EXTRA_EXPORT uint64_t ad_var_scatter(uint64_t target,
                                                   uint64_t value,
                                                   uint32_t index, uint32_t mask,
                                                   JIT_ENUM ReduceOp reduce_op,
-                                                  bool permute);
+                                                  JIT_ENUM ReduceMode reduce_mode);
 
 /// Shrink a Dr.Jit variable *after* it has been created
 extern DRJIT_EXTRA_EXPORT void ad_var_shrink(uint64_t index, size_t size);

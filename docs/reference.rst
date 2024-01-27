@@ -74,6 +74,111 @@ These operations are *horizontal* in the sense that [..]
 
       Binary OR operation
 
+.. autoclass:: ReduceMode
+
+   .. autoattribute:: Auto
+      :annotation:
+
+      Select the first valid option from the following list:
+
+      - use :py:attr:`drjit.ReduceMode.Expand` if the computation uses the LLVM
+        backend and the ``target`` array storage size (in MiB) is smaller or equal
+        than than the value given by :py:func:`drjit.expand_threshold`. This
+        threshold can be changed using the :py:func:`drjit.set_expand_threshold`
+        function.
+
+      - use :py:attr:`drjit.ReduceMode.Local` if
+        :py:attr:`drjit.JitFlag.ScatterReduceLocal` is set.
+
+      - fall back to :py:attr:`drjit.ReduceMode.Direct`.
+
+   .. autoattribute:: Direct
+      :annotation:
+
+      Insert an ordinary atomic reduction operation into the program.
+
+      This mode is ideal when no or little contention is expected, for example
+      because the target indices of scatters are well spread throughout the
+      target array. This mode generates a minimal amount of code, which can
+      help improve performance especially on GPU backends.
+
+   .. autoattribute:: Local
+      :annotation:
+
+      Locally pre-reduce operands.
+
+      In this mode, Dr.Jit adds extra code to the compiled program to examine
+      the target indices of atomic updates. CUDA programs run with an
+      instruction granularity referred to as a *warp*, which is a group of 32
+      threads. When all of these threads want to write to the same location,
+      the operands can be pre-reduced to turn 32 atomic memory transactions
+      into a single one.
+
+      On the CPU/LLVM backend, the same process works at the granularity of
+      *packets*. The details depends on the underlying instruction set---for
+      example, there are 16 threads per packet on a machine with AVX512, so
+      there is a potential for reducing atomic write traffic by that factor.
+      The implementation of this feature also partially coherent warps/packets.
+
+   .. autoattribute:: NoConflicts
+      :annotation:
+
+      Perform a non-atomic read-modify-write operation.
+
+      This mode is only safe in specific situations. The caller must guarantee
+      that there are no conflicts (i.e., scatters targeting the same elements).
+      If specified, Dr.Jit will generate a *non-atomic* read-modify-update
+      operation that potentially runs significantly faster, especially on the
+      LLVM backend.
+
+   .. autoattribute:: Expand
+      :annotation:
+
+      Expand the target array to avoid write conflicts, then scatter
+      non-atomically.
+
+      This feature is only supported on the LLVM backend. Other backends
+      interpret this flag as if :py:attr:`drjit.ReduceMode.Auto` had been
+      specified.
+
+      This mode internally expands the storage underlying the target array to a
+      much larger size that is proportional to the number of CPU cores. Scalar
+      (length-1) target arrays are expanded even further to ensure that each
+      CPU gets an entirely separate cache line.
+
+      Following this one-time expansion step, the array can then accommodate an
+      arbitrary sequence of scatter-reduction operations that the system will
+      internally perform using *non-atomic* read-modify-write operations (i.e.,
+      analogous to the :py:attr:`NoConflicts` mode). Subsequent read accesses
+      re-compress the array into the ordinary representation.
+
+      On bigger arrays and on machines with many cores, the storage costs
+      resulting from this mode can be prohibitive.
+
+   .. autoattribute:: Permute
+      :annotation:
+
+      In contrast to prior enumeration entries, this one modifies plain
+      (non-reductive) scatters and gathers. It exists to enable internal
+      optimizations that Dr.Jit uses when differentiating vectorized function
+      calls and compressed loops. You likely should not use it in your own code.
+
+      When setting this mode, the caller guarantees that there will be no
+      conflicts, and that every entry is written exactly single time using an
+      index vector representing a permutation (it's fine this permutation is
+      accomplished by multiple separate write operations, but there should be no
+      more than 1 write to each element).
+
+      Giving 'Permute' as an argument to a (nominally read-only) gather
+      operation is helpful because we then know that the reverse-mode derivative
+      of this operation can be a plain scatter instead of a more costly
+      atomic scatter-add.
+
+      Giving 'Permute' as an argument to a scatter operation is helpful
+      because we then know that the forward-mode derivative does not depend
+      on any prior derivative values associated with that array, as all
+      current entries will be overwritten.
+
 .. autofunction:: scatter_reduce
 .. autofunction:: scatter_add
 .. autofunction:: scatter_add_kahan
@@ -687,31 +792,41 @@ Just-in-time compilation
 
       This flag has a severe performance impact and is *disabled* by default.
 
-   .. autoattribute:: AtomicReduceLocal
+   .. autoattribute:: ScatterReduceLocal
       :annotation:
 
       .. For Sphinx-related technical reasons, the below comment is replicated
          in docstr.h. Please keep the two in sync when making changes.
 
-      Reduce locally before performing atomic memory operations.
+      Reduce locally before performing atomic scatter-reductions.
 
-      Atomic operations targeting global memory can be very expensive,
-      especially when many writes target the same memory address leading to
-      *contention*.
+      Atomic memory operations are expensive when many writes target the same
+      region of memory. This leads to a phenomenon called *contention* that is
+      normally associated with significant slowdowns (10-100x aren't unusual).
 
-      This is a common problem when automatically differentiating computation
-      in *reverse mode* (e.g. :py:func:`drjit.backward`), since this
-      transformation turns differentiable global memory reads into atomic
-      scatter-additions.
+      This issue is particularly common when automatically differentiating
+      computation in *reverse mode* (e.g. :py:func:`drjit.backward`), since
+      this transformation turns differentiable global memory reads into atomic
+      scatter-additions. A differentiable scalar read is all it takes to create
+      such an atomic memory bottleneck.
 
-      To reduce this cost, Dr.Jit can optionally perform a local reduction that
+      To reduce this cost, Dr.Jit can perform a *local reduction* that
       uses cooperation between SIMD/warp lanes to resolve all requests
       targeting the same address and then only issuing a single atomic memory
-      transaction per unique target. This can reduce atomic memory traffic by
-      up to a factor of 32 (CUDA) or 16 (LLVM backend with AVX512).
+      transaction per unique target. This can reduce atomic memory traffic
+      32-fold on the GPU (CUDA) and 16-fold on the CPU (AVX512).
 
-      This operation only affects the behavior of the :py:func:`scatter_reduce`
-      function (and the reverse-mode derivative of :py:func:`gather`).
+      The section on :ref:`optimizations <reduce-local>` presents plots that
+      demonstrate the impact of this optimization.
+
+      The JIT flag :py:attr:`drjit.JitFlag.ScatterReduceLocal` affects the
+      behavior of :py:func:`scatter_add`, :py:func:`scatter_reduce` along with
+      the reverse-mode derivative of :py:func:`gather`.
+      Setting the flag to ``True`` will usually cause a ``mode=`` argument
+      value of :py:attr:`drjit.ReduceOp.Auto` to be interpreted as
+      :py:attr:`drjit.ReduceOp.Local`. Another LLVM-specific optimization
+      takes precedence in certain sitatuations,
+      refer to the discussion of this flag for details.
 
       This flag is *enabled* by default.
 
@@ -746,7 +861,7 @@ Just-in-time compilation
       - :py:attr:`drjit.JitFlag.OptimizeCalls`,
       - :py:attr:`drjit.JitFlag.SymbolicConditionals`,
       - :py:attr:`drjit.JitFlag.ReuseIndices`, and
-      - :py:attr:`drjit.JitFlag.AtomicReduceLocal`.
+      - :py:attr:`drjit.JitFlag.ScatterReduceLocal`.
 
 .. autofunction:: set_flag
 .. autofunction:: flag
@@ -859,7 +974,6 @@ Standard mathematical functions
 .. autofunction:: floor
 .. autofunction:: trunc
 .. autofunction:: round
-.. autofunction:: hypot
 .. autofunction:: sign
 .. autofunction:: copysign
 .. autofunction:: mulsign
@@ -1264,5 +1378,7 @@ Low-level bits
 .. autofunction:: flush_malloc_cache
 .. autofunction:: block_size
 .. autofunction:: set_block_size
+.. autofunction:: expand_threshold
+.. autofunction:: set_expand_threshold
 .. autofunction:: kernel_history
 .. autofunction:: kernel_history_clear

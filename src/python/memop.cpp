@@ -15,7 +15,7 @@
 #include "shape.h"
 
 nb::object gather(nb::type_object dtype, nb::object source,
-                  nb::object index, nb::object active, bool permute) {
+                  nb::object index, nb::object active, ReduceMode mode) {
     nb::handle source_tp = source.type();
 
     bool is_drjit_source_1d = is_drjit_type(source_tp);
@@ -31,7 +31,7 @@ nb::object gather(nb::type_object dtype, nb::object source,
             nb::list result;
             for (nb::handle value : source)
                 result.append(gather(nb::borrow<nb::type_object>(value.type()),
-                                     nb::borrow(value), index, active, permute));
+                                     nb::borrow(value), index, active, mode));
 
             if (!dtype.is(&PyList_Type))
                 return dtype(result);
@@ -41,7 +41,7 @@ nb::object gather(nb::type_object dtype, nb::object source,
             nb::dict result;
             for (auto [k, v] : nb::borrow<nb::dict>(source))
                 result[k] = gather(nb::borrow<nb::type_object>(v.type()),
-                                   nb::borrow(v), index, active, permute);
+                                   nb::borrow(v), index, active, mode);
 
             return result;
         } else {
@@ -54,7 +54,7 @@ nb::object gather(nb::type_object dtype, nb::object source,
                     if (!v.is_type())
                         throw nb::type_error("DRJIT_STRUCT invalid, expected types!");
                     nb::type_object sub_dtype = nb::borrow<nb::type_object>(v);
-                    out[k] = gather(sub_dtype, nb::getattr(source, k), index, active, permute);
+                    out[k] = gather(sub_dtype, nb::getattr(source, k), index, active, mode);
                 }
 
                 return dtype(**out);
@@ -110,11 +110,11 @@ nb::object gather(nb::type_object dtype, nb::object source,
         nb::object result = nb::inst_alloc(dtype);
 
         source_supp.gather(
+            mode,
             inst_ptr(source),
             inst_ptr(index),
             inst_ptr(active),
-            inst_ptr(result),
-            permute
+            inst_ptr(result)
         );
 
         nb::inst_mark_ready(result);
@@ -136,8 +136,8 @@ nb::object gather(nb::type_object dtype, nb::object source,
         nb::int_ sub_size(m.shape[0]);
 
         for (size_t i = 0; i < m.shape[0]; ++i)
-            result[i] =
-                gather(sub_tp, source, index * sub_size + nb::int_(i), active ,permute);
+            result[i] = gather(sub_tp, source, index * sub_size + nb::int_(i),
+                               active, mode);
 
         return result;
     }
@@ -147,7 +147,7 @@ nb::object gather(nb::type_object dtype, nb::object source,
 
 static void scatter_generic(const char *name, ReduceOp op, nb::object target,
                             nb::object value, nb::object index,
-                            nb::object active, bool permute) {
+                            nb::object active, ReduceMode mode) {
     nb::handle target_tp = target.type(),
                 value_tp = value.type();
 
@@ -175,13 +175,13 @@ static void scatter_generic(const char *name, ReduceOp op, nb::object target,
         if (is_seq) {
             for (size_t i = 0, l = len; i < l; ++i)
                 scatter_generic(name, op, target[i], value[i], index, active,
-                                permute);
+                                mode);
             return;
         }
 
         if (is_dict) {
             for (nb::handle k : nb::borrow<nb::dict>(value).keys())
-                scatter_generic(name, op, target[k], value[k], index, active, permute);
+                scatter_generic(name, op, target[k], value[k], index, active, mode);
             return;
         }
 
@@ -191,7 +191,7 @@ static void scatter_generic(const char *name, ReduceOp op, nb::object target,
 
             for (auto [k, v] : dstruct_dict)
                 scatter_generic(name, op, nb::getattr(target, k),
-                                nb::getattr(value, k), index, active, permute);
+                                nb::getattr(value, k), index, active, mode);
 
             return;
         }
@@ -256,8 +256,8 @@ static void scatter_generic(const char *name, ReduceOp op, nb::object target,
     }
 
     if (value_meta == target_meta) {
-        target_supp.scatter_reduce(op, inst_ptr(value), inst_ptr(index),
-                                   inst_ptr(active), inst_ptr(target), permute);
+        target_supp.scatter_reduce(op, mode, inst_ptr(value), inst_ptr(index),
+                                   inst_ptr(active), inst_ptr(target));
         return;
     }
 
@@ -275,7 +275,7 @@ static void scatter_generic(const char *name, ReduceOp op, nb::object target,
         nb::int_ sub_size(m.shape[0]);
         for (size_t i = 0; i < m.shape[0]; ++i)
             scatter_generic(name, op, target, value[i],
-                            index * sub_size + nb::int_(i), active, permute);
+                            index * sub_size + nb::int_(i), active, mode);
         return;
     }
 
@@ -288,21 +288,22 @@ static void scatter_generic(const char *name, ReduceOp op, nb::object target,
 }
 
 void scatter(nb::object target, nb::object value, nb::object index,
-             nb::object active, bool permute) {
+             nb::object active, ReduceMode mode) {
     scatter_generic("scatter", ReduceOp::Identity, std::move(target),
                     std::move(value), std::move(index), std::move(active),
-                    permute);
+                    mode);
 }
 
 void scatter_reduce(ReduceOp op, nb::object target, nb::object value,
-                    nb::object index, nb::object active) {
+                    nb::object index, nb::object active, ReduceMode mode) {
     scatter_generic("scatter_reduce", op, std::move(target), std::move(value),
-                    std::move(index), std::move(active), false);
+                    std::move(index), std::move(active), mode);
 }
 
-void scatter_add(nb::object target, nb::object value, nb::object index, nb::object active) {
+void scatter_add(nb::object target, nb::object value, nb::object index,
+                 nb::object active, ReduceMode mode) {
     scatter_generic("scatter_add", ReduceOp::Add, std::move(target), std::move(value),
-                    std::move(index), std::move(active), false);
+                    std::move(index), std::move(active), mode);
 }
 
 nb::object scatter_inc(nb::handle_t<dr::ArrayBase> target, nb::object index,
@@ -449,7 +450,7 @@ static void ravel_recursive(nb::handle result, nb::handle value,
             nb::object index =
                 arange(nb::borrow<nb::type_object_t<ArrayBase>>(index_dtype), offset,
                        offset + strides[depth] * shape[depth], strides[depth]);
-            scatter(nb::borrow(result), nb::borrow(value), index, nb::cast(true), false);
+            ::scatter(nb::borrow(result), nb::borrow(value), index, nb::cast(true));
         } else {
             result[offset] = value;
         }
@@ -586,7 +587,7 @@ static nb::object unravel_recursive(nb::handle dtype,
                 nb::borrow<nb::type_object_t<ArrayBase>>(index_dtype),
                 offset, offset + strides[depth] * shape[depth], strides[depth]);
             return gather(nb::borrow<nb::type_object>(dtype), nb::borrow(value),
-                          index, nb::cast(true), false);
+                          index, nb::cast(true));
         } else {
             return value[offset];
         }
@@ -713,7 +714,7 @@ nb::object slice(nb::handle h, nb::handle index) {
                     result[i] = slice(h[i], index);
             } else {
                 return gather(nb::borrow<nb::type_object>(tp), nb::borrow(h),
-                              nb::borrow(index), nb::bool_(true), false);
+                              nb::borrow(index), nb::bool_(true));
             }
         } else {
             result = nb::borrow(h);
@@ -753,14 +754,18 @@ nb::object slice(nb::handle h, nb::handle index) {
 
 void export_memop(nb::module_ &m) {
     m.def("gather", &gather, "dtype"_a, "source"_a, "index"_a,
-          "active"_a = true, "permute"_a = false, doc_gather)
+          "active"_a = true, "mode"_a = ReduceMode::Auto,
+          doc_gather)
      .def("scatter", &scatter, "target"_a, "value"_a, "index"_a,
-          "active"_a = true, "permute"_a = false, doc_scatter)
-     .def("scatter_reduce", &scatter_reduce, "reduce_op"_a,
+          "active"_a = true, "mode"_a = ReduceMode::Auto,
+          doc_scatter)
+     .def("scatter_reduce", &scatter_reduce, "op"_a,
           "target"_a, "value"_a, "index"_a, "active"_a = true,
+          "mode"_a = ReduceMode::Auto,
           doc_scatter_reduce)
      .def("scatter_add", &scatter_add,
           "target"_a, "value"_a, "index"_a, "active"_a = true,
+          "mode"_a = ReduceMode::Auto,
           doc_scatter_add)
      .def("scatter_inc", &scatter_inc,
           "target"_a, "index"_a, "active"_a = true,

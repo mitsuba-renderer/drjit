@@ -781,7 +781,8 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
     // -----------------------------------------------------------------------
 
     template <typename Source, typename Index, typename Mask>
-    static Derived gather_(Source &&source, const Index &index, const Mask &mask, bool permute) {
+    static Derived gather_(Source &&source, const Index &index,
+                           const Mask &mask, ReduceMode mode) {
         DRJIT_CHKSCALAR("gather_");
         Derived result;
 
@@ -799,26 +800,26 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
 
         for (size_t i = 0; i < sr; ++i)
             result.entry(i) =
-                gather<Value>(source, index.entry(i), mask.entry(i), permute);
+                gather<Value>(source, index.entry(i), mask.entry(i), mode);
 
         return result;
     }
 
     template <typename Target, typename Index, typename Mask>
-    void scatter_(Target &&target, const Index &index, const Mask &mask, bool permute) const {
+    void scatter_(Target &&target, const Index &index, const Mask &mask,
+                  ReduceMode mode) const {
         DRJIT_CHKSCALAR("scatter_");
 
         size_t sa = derived().size(), sb = index.size(), sc = mask.size(),
                sd = sa > sb ? sa : sb, sr = sc > sd ? sc : sd;
 
         for (size_t i = 0; i < sr; ++i)
-            scatter(target, derived().entry(i), index.entry(i), mask.entry(i),
-                    permute);
+            scatter(target, derived().entry(i), index.entry(i), mask.entry(i), mode);
     }
 
     template <typename Target, typename Index, typename Mask>
-    void scatter_reduce_(ReduceOp op, Target &&target, const Index &index,
-                         const Mask &mask, bool permute) const {
+    void scatter_reduce_(Target &&target, const Index &index, const Mask &mask,
+                         ReduceOp op, ReduceMode mode) const {
         DRJIT_CHKSCALAR("scatter_reduce_");
 
         size_t sa = derived().size(), sb = index.size(), sc = mask.size(),
@@ -826,7 +827,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
 
         for (size_t i = 0; i < sr; ++i)
             scatter_reduce(op, target, derived().entry(i), index.entry(i),
-                           mask.entry(i), permute);
+                           mask.entry(i), mode);
     }
 
     static Derived load_aligned_(const void *mem, size_t size) {
