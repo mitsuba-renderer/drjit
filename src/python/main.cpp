@@ -97,7 +97,7 @@ NB_MODULE(drjit_ext, m_) {
         .value("PrintIR", JitFlag::PrintIR, doc_JitFlag_PrintIR)
         .value("KernelHistory", JitFlag::KernelHistory, doc_JitFlag_KernelHistory)
         .value("LaunchBlocking", JitFlag::LaunchBlocking, doc_JitFlag_LaunchBlocking)
-        .value("AtomicReduceLocal", JitFlag::AtomicReduceLocal, doc_JitFlag_AtomicReduceLocal)
+        .value("ScatterReduceLocal", JitFlag::ScatterReduceLocal, doc_JitFlag_ScatterReduceLocal)
         .value("SymbolicConditionals", JitFlag::SymbolicConditionals, doc_JitFlag_SymbolicConditionals)
         .value("SymbolicScope", JitFlag::SymbolicScope, doc_JitFlag_SymbolicScope)
         .value("Default", JitFlag::Default, doc_JitFlag_Default)
@@ -135,6 +135,14 @@ NB_MODULE(drjit_ext, m_) {
         .value("And", ReduceOp::And, doc_ReduceOp_And)
         .value("Or", ReduceOp::Or, doc_ReduceOp_Or);
 
+    nb::enum_<ReduceMode>(m, "ReduceMode", doc_ReduceMode)
+        .value("Auto", ReduceMode::Auto, doc_ReduceMode_Auto)
+        .value("Direct", ReduceMode::Direct, doc_ReduceMode_Direct)
+        .value("Local", ReduceMode::Local, doc_ReduceMode_Local)
+        .value("NoConflicts", ReduceMode::NoConflicts, doc_ReduceMode_NoConflicts)
+        .value("Permute", ReduceMode::Permute, doc_ReduceMode_Permute)
+        .value("Expand", ReduceMode::Expand, doc_ReduceMode_Expand);
+
     nb::enum_<VarState>(m, "VarState", doc_VarState)
         .value("Invalid", VarState::Invalid, doc_VarState_Invalid)
         .value("Literal", VarState::Literal, doc_VarState_Literal)
@@ -162,7 +170,9 @@ NB_MODULE(drjit_ext, m_) {
      .def("thread_count", &jit_llvm_thread_count, doc_thread_count)
      .def("set_thread_count", &jit_llvm_set_thread_count, doc_set_thread_count)
      .def("block_size", &jit_llvm_block_size, doc_block_size)
-     .def("set_block_size", &jit_llvm_set_block_size, doc_set_block_size);
+     .def("set_block_size", &jit_llvm_set_block_size, doc_set_block_size)
+     .def("expand_threshold", &jit_llvm_expand_threshold, doc_expand_threshold)
+     .def("set_expand_threshold", &jit_llvm_set_expand_threshold, doc_set_expand_threshold);
 
     m.def("flag", &jit_flag, doc_flag);
     m.def("set_flag", &set_flag_py, doc_set_flag);

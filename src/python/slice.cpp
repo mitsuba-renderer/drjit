@@ -167,7 +167,8 @@ slice_index(const nb::type_object_t<ArrayBase> &dtype,
                 index_val = fma(index_rem, dtype(uint32_t(c.step * size_out)),
                                 dtype(uint32_t(c.start * size_out)));
             else
-                index_val = gather(dtype, c.object, index_rem, active, false) *
+                index_val = gather(dtype, c.object, index_rem, active,
+                                   ReduceMode::Auto) *
                             dtype(uint32_t(size_out));
 
             index_out += index_val;
@@ -211,7 +212,7 @@ PyObject *mp_subscript(PyObject *self, PyObject *key) noexcept {
             nb::object source = nb::steal(s.tensor_array(self));
 
             nb::object out = gather(nb::borrow<nb::type_object>(s.array),
-                                    source, out_index, nb::borrow(Py_True), false);
+                                    source, out_index, nb::borrow(Py_True));
 
             return self_tp("array"_a = out, "shape"_a = out_shape)
                 .release().ptr();
@@ -296,8 +297,7 @@ int mp_ass_subscript(PyObject *self, PyObject *key, PyObject *value) noexcept {
                 nb::borrow<nb::tuple>(shape(self)), key2);
 
             nb::object target = nb::steal(s.tensor_array(self));
-
-            scatter(target, nb::borrow(value), out_index, nb::borrow(Py_True), false);
+            scatter(target, nb::borrow(value), out_index, nb::borrow(Py_True));
 
             return 0;
         }
@@ -333,7 +333,8 @@ int mp_ass_subscript(PyObject *self, PyObject *key, PyObject *value) noexcept {
             }
 
             return 0;
-        } else if (key == Py_None || key_tp.is(&PyEllipsis_Type) || key_tp.is(&PySlice_Type) || key_is_array) {
+        } else if (key == Py_None || key_tp.is(&PyEllipsis_Type) ||
+                   key_tp.is(&PySlice_Type) || key_is_array) {
             complex_case = true;
         }
 

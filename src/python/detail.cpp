@@ -12,6 +12,7 @@
 #include "apply.h"
 #include "shape.h"
 #include "base.h"
+#include "meta.h"
 #include "init.h"
 #include "traits.h"
 
@@ -187,6 +188,21 @@ void stash_ref(nb::handle h, std::vector<StashRef> &v) {
 
     StashRefOp vo(v);
     traverse("drjit.detail.stash_ref", vo, h);
+}
+
+nb::object reduce_identity(JitBackend backend, VarType vt, ReduceOp op) {
+    ArrayMeta m { };
+    m.backend = (uint16_t) backend;
+    m.ndim = 1;
+    m.type = (uint16_t) vt;
+    m.shape[0] = DRJIT_DYNAMIC;
+    nb::handle tp = meta_get_type(m);
+    nb::object result = nb::inst_alloc(tp);
+    uint32_t index = jit_var_reduce_identity(backend, vt, op);
+    supp(tp).init_index(index, inst_ptr(result));
+    nb::inst_mark_ready(result);
+    jit_var_dec_ref(index);
+    return result;
 }
 
 /**
@@ -442,9 +458,9 @@ void export_detail(nb::module_ &) {
               );
           }, "tensor"_a, "ad"_a = false)
 
-     .def("any_symbolic", &any_symbolic, doc_detail_any_symbolic);
-
-
+     .def("any_symbolic", &any_symbolic, doc_detail_any_symbolic)
+     .def("reduce_identity", &reduce_identity)
+     .def("cuda_compute_capability", &jit_cuda_compute_capability);
 
     trace_func_handle = d.attr("trace_func");
 }

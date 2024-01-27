@@ -15,10 +15,11 @@
 extern void export_memop(nb::module_ &);
 
 extern nb::object gather(nb::type_object dtype, nb::object source,
-                         nb::object index, nb::object active, bool permute);
+                         nb::object index, nb::object active,
+                         ReduceMode mode = ReduceMode::Auto);
 
 extern void scatter(nb::object target, nb::object value, nb::object index,
-                    nb::object active, bool permute = false);
+                    nb::object active, ReduceMode mode = ReduceMode::Auto);
 
 extern nb::object ravel(nb::handle h, char order,
                         dr_vector<size_t> *shape_out = nullptr,

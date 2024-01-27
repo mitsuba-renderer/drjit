@@ -266,7 +266,8 @@ ad_loop_evaluated_compress(JitBackend backend, const char *name, void *payload,
             jit_eval();
 
             // Reduce the array to the remaining active entries
-            JitVar active_index = JitVar::steal(jit_var_compress(active.index()));
+            JitVar active_index =
+                JitVar::steal(jit_var_compress(active.index()));
             size_next = (uint32_t) active_index.size();
 
             for (size_t i = 0; i < indices.size(); ++i) {
@@ -274,9 +275,11 @@ ad_loop_evaluated_compress(JitBackend backend, const char *name, void *payload,
                     continue;
 
                 // Write entries that have become inactive to 'out_indices'
-                uint64_t f_index =
-                    ad_var_scatter(out_indices[i], indices[i], idx.index(),
-                                   not_active.index(), ReduceOp::Identity, true);
+                uint64_t f_index = ad_var_scatter(
+                    out_indices[i],
+                    indices[i], idx.index(), not_active.index(),
+                    ReduceOp::Identity,
+                    ReduceMode::Permute);
                 ad_var_dec_ref(out_indices[i]);
                 out_indices[i] = f_index;
             }
@@ -285,16 +288,17 @@ ad_loop_evaluated_compress(JitBackend backend, const char *name, void *payload,
 
             for (size_t i = 0; i < indices.size(); ++i) {
                 // Gather remaining active entries. We always do this even when
-                // the loop state was not compressed, to generate identical code
-                // in each iteration and benefit from kernel caching.
-                uint32_t t_index = ad_var_gather(indices[i], active_index.index(),
-                                                 true_mask.index(), true);
+                // the loop state was not compressed, which ensures identical code
+                // generation in each iteration to benefit from kernel caching.
+                uint32_t t_index =
+                    ad_var_gather(indices[i], active_index.index(),
+                                  true_mask.index(), ReduceMode::Permute);
                 ad_var_dec_ref(indices[i]);
                 indices[i] = t_index;
             }
 
             idx = JitVar::steal(ad_var_gather(idx.index(), active_index.index(),
-                                              true_mask.index(), true));
+                                              true_mask.index(), ReduceMode::Permute));
             dr::schedule(idx);
         } else {
             // Increase an atomic counter to determine the position in the output array
@@ -308,9 +312,9 @@ ad_loop_evaluated_compress(JitBackend backend, const char *name, void *payload,
                     continue;
 
                 // Write entries that have become inactive to 'out_indices'
-                uint64_t f_index =
-                    ad_var_scatter(out_indices[i], indices[i], idx.index(),
-                                   not_active.index(), ReduceOp::Identity, true);
+                uint64_t f_index = ad_var_scatter(
+                    out_indices[i], indices[i], idx.index(), not_active.index(),
+                    ReduceOp::Identity, ReduceMode::Permute);
 
                 ad_var_dec_ref(out_indices[i]);
                 out_indices[i] = f_index;
@@ -318,16 +322,17 @@ ad_loop_evaluated_compress(JitBackend backend, const char *name, void *payload,
                 // Write remaining active entries into a new output buffer
                 JitVar buffer = JitVar::steal(
                     jit_var_undefined(backend, jit_var_type(indices[i]), size));
-                uint64_t t_index =
-                    ad_var_scatter(buffer.index(), indices[i], slot.index(),
-                                   active.index(), ReduceOp::Identity, true);
+                uint64_t t_index = ad_var_scatter(
+                    buffer.index(), indices[i], slot.index(), active.index(),
+                    ReduceOp::Identity, ReduceMode::Permute);
                 ad_var_dec_ref(indices[i]);
                 indices[i] = t_index;
             }
 
             JitVar buffer = JitVar::steal(jit_var_undefined(backend, VarType::UInt32, size));
-            idx = JitVar::steal(jit_var_scatter(buffer.index(), idx.index(), slot.index(),
-                                                active.index(), ReduceOp::Identity));
+            idx = JitVar::steal(jit_var_scatter(
+                buffer.index(), idx.index(), slot.index(), active.index(),
+                ReduceOp::Identity, ReduceMode::Permute));
 
             // Evaluate everything queued up to this point
             jit_eval();

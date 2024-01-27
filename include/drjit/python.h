@@ -258,11 +258,11 @@ struct ArraySupplement : ArrayMeta {
     using Cast = void (*)(const ArrayBase *, VarType, bool reinterpret, ArrayBase *);
     using Index = uint64_t (*)(const ArrayBase *) noexcept;
     using Data = void *(*)(const ArrayBase *) noexcept;
-    using Gather = void (*)(const ArrayBase *, const ArrayBase *,
-                            const ArrayBase *, ArrayBase *, bool);
-    using ScatterReduce = void (*)(ReduceOp, const ArrayBase *,
+    using Gather = void (*)(ReduceMode, const ArrayBase *, const ArrayBase *,
+                            const ArrayBase *, ArrayBase *);
+    using ScatterReduce = void (*)(ReduceOp, ReduceMode, const ArrayBase *,
                                    const ArrayBase *, const ArrayBase *,
-                                   const ArrayBase *, bool);
+                                   const ArrayBase *);
     using ScatterInc = void (*)(const ArrayBase *, ArrayBase *, ArrayBase *, ArrayBase *);
     using ScatterAddKahan = void (*)(const ArrayBase *, const ArrayBase *,
                                      const ArrayBase *, ArrayBase *,
@@ -789,13 +789,13 @@ template <typename T> void bind_memop(ArrayBinding &b) {
     using Scalar = scalar_t<T>;
 
     b.gather = (ArraySupplement::Gather)
-        +[](const T *a, const UInt32 *b, const Mask *c, T *d, bool permute) {
-            new (d) T(gather<T>(*a, *b, *c, permute));
+        +[](ReduceMode mode, const T *a, const UInt32 *b, const Mask *c, T *d) {
+            new (d) T(gather<T>(*a, *b, *c, mode));
         };
 
     b.scatter_reduce = (ArraySupplement::ScatterReduce)
-        +[](ReduceOp op, const T *a, const UInt32 *b, const Mask *c, T *d, bool permute) {
-            scatter_reduce(op, *d, *a, *b, *c, permute);
+        +[](ReduceOp op, ReduceMode mode, const T *a, const UInt32 *b, const Mask *c, T *d) {
+            scatter_reduce(op, *d, *a, *b, *c, mode);
         };
 
     if constexpr (std::is_same_v<scalar_t<T>, uint32_t> && is_jit_v<T>) {

@@ -308,13 +308,13 @@ def test15_scatter_add_kahan(t):
     buf2 = dr.zeros(t, 2)
     buf3 = dr.zeros(t, 2)
     ti = dr.uint32_array_t(t)
-    with dr.scoped_set_flag(dr.JitFlag.AtomicReduceLocal, False):
-        dr.scatter_add_kahan(
-            buf1,
-            buf2,
-            t(1, dr.epsilon(t), dr.epsilon(t)),
-            dr.full(ti, 1, 3)
-        )
+    dr.scatter_add_kahan(
+        buf1,
+        buf2,
+        t(1, dr.epsilon(t), dr.epsilon(t)),
+        dr.full(ti, 1, 3)
+    )
+    with dr.scoped_set_flag(dr.JitFlag.ScatterReduceLocal, False):
         dr.scatter_add(
             buf3,
             t(1, dr.epsilon(t), dr.epsilon(t)),
@@ -397,4 +397,93 @@ def test17_slice(t):
         ref = mod.Array3i([2, 1], [4, 3], [5, 5])
         assert dr.all(v2 == ref, axis=None)
 
+def versiontuple(v):
+    return tuple(map(int, (v.split("."))))
 
+@pytest.mark.parametrize('op',
+    [int(dr.ReduceOp.Add), int(dr.ReduceOp.Min), int(dr.ReduceOp.Max),
+     int(dr.ReduceOp.And), int(dr.ReduceOp.Or)])
+@pytest.test_arrays('-bool,jit,-diff,shape=(*)')
+def test_scatter_reduce(t, op):
+    import sys
+    mod = sys.modules[t.__module__]
+    op = dr.ReduceOp(op)
+    size = 100000
+
+    if op == dr.ReduceOp.And or \
+       op == dr.ReduceOp.Or:
+        if dr.is_float_v(t):
+            return
+        size = 100
+
+    backend = dr.backend_v(t)
+    tp = dr.type_v(t)
+
+    if backend == dr.JitBackend.LLVM and \
+       (op == dr.ReduceOp.Min or
+        op == dr.ReduceOp.Max) and \
+       versiontuple(dr.detail.llvm_version()) < (15, 0, 0):
+        return # unsupported in older LLVM versions
+
+    if backend == dr.JitBackend.CUDA and \
+       (tp == dr.VarType.Float32 or
+        tp == dr.VarType.Float64) and \
+       (op == dr.ReduceOp.Min or
+        op == dr.ReduceOp.Max):
+        return # unsupported in hardware
+
+    if tp == dr.VarType.Float16:
+        # Support for float16 atomics is still kind of spotty
+        size = 100
+
+        if backend == dr.JitBackend.LLVM:
+            # Don't test float16 LLVM atomics on older LLVM versions
+            if versiontuple(dr.detail.llvm_version()) < (16, 0, 0) or \
+               op != dr.ReduceOp.Add:
+                return
+
+        if backend == dr.JitBackend.CUDA:
+            ccap = dr.detail.cuda_compute_capability()
+
+            if op == dr.ReduceOp.Min or op == dr.ReduceOp.Max and ccap < 90:
+                return
+
+    identity = dr.detail.reduce_identity(backend, tp, op)
+
+    for k in range(0, 10):
+        k = 2**k
+
+        rng = mod.PCG32(size)
+        j = t(rng.next_uint32())
+        i = rng.next_uint32_bounded(k)
+        l = dr.arange(t, size)
+        if dr.type_v(t) == dr.VarType.Float16:
+            j = dr.full(t, 1, size)
+
+        buf_1 = dr.full(t, identity[0], k)
+        dr.scatter_reduce(op, buf_1, index=i, value=j, mode=dr.ReduceMode.Direct)
+        dr.eval(buf_1)
+
+        #  dr.set_flag(dr.JitFlag.PrintIR ,True)
+        buf_2 = dr.full(t, identity[0], k)
+        dr.scatter_reduce(op, buf_2, index=i, value=j, mode=dr.ReduceMode.Expand)
+        dr.eval(buf_2)
+
+        if dr.is_float_v(t):
+            assert dr.allclose(buf_1, buf_2)
+        else:
+            assert dr.all(buf_1 == buf_2)
+
+        if k == 1:
+            v = None
+            if op == dr.ReduceOp.Add:
+                v = dr.sum(j)
+            elif op == dr.ReduceOp.Min:
+                v = dr.min(j)
+            elif op == dr.ReduceOp.Max:
+                v = dr.max(j)
+            if v is not None:
+                if dr.is_float_v(t):
+                    assert dr.allclose(buf_1, v)
+                else:
+                    assert dr.all(buf_1 == v)

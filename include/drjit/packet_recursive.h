@@ -319,24 +319,17 @@ struct StaticArrayImpl<Value_, Size_, IsMask_, Derived_,
     }
 
     template <typename Index, typename Mask>
-    static DRJIT_INLINE Derived gather_(const void *ptr, const Index &index, const Mask &mask, bool permute) {
+    static DRJIT_INLINE Derived gather_(const void *ptr, const Index &index, const Mask &mask, ReduceMode mode) {
         return Derived(
-            gather<Array1>(ptr, low(index), low(mask), permute),
-            gather<Array2>(ptr, high(index), high(mask), permute)
+            gather<Array1>(ptr, low(index), low(mask), mode),
+            gather<Array2>(ptr, high(index), high(mask), mode)
         );
     }
 
     template <typename Index, typename Mask>
-    DRJIT_INLINE void scatter_(void *ptr, const Index &index, const Mask &mask, bool permute) const {
-        scatter(ptr, a1, low(index), low(mask), permute);
-        scatter(ptr, a2, high(index), high(mask), permute);
-    }
-
-    template <typename Index, typename Mask>
-    DRJIT_INLINE void scatter_reduce_(ReduceOp op, void *ptr, const Index &index,
-                                      const Mask &mask, bool permute) const {
-        scatter_reduce(op, ptr, a1, low(index), low(mask), permute);
-        scatter_reduce(op, ptr, a2, high(index), high(mask), permute);
+    DRJIT_INLINE void scatter_(void *ptr, const Index &index, const Mask &mask, ReduceMode mode) const {
+        scatter(ptr, a1, low(index), low(mask), mode);
+        scatter(ptr, a2, high(index), high(mask), mode);
     }
 
     static DRJIT_INLINE Derived zero_(size_t) {
