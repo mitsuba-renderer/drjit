@@ -325,7 +325,7 @@ struct DelayedPrint {
                 void operator()(nb::handle h1, nb::handle h2) override {
                     nb::object o =
                         gather(nb::borrow<nb::type_object>(h1.type()),
-                               nb::borrow(h1), perm_o, nb::cast(true), false);
+                               nb::borrow(h1), perm_o, nb::cast(true));
                     nb::inst_replace_move(h2, o);
                 }
             };

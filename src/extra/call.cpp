@@ -386,8 +386,8 @@ static void ad_call_reduce(JitBackend backend, const char *domain,
         scoped_set_mask mask_guard(
             backend, jit_var_mask_default(backend, wavefront_size));
         for (size_t j = 0; j < args.size(); ++j)
-            args2.push_back_steal(
-                ad_var_gather(args[j], index2, memop_mask.index(), true));
+            args2.push_back_steal(ad_var_gather(
+                args[j], index2, memop_mask.index(), ReduceMode::Permute));
 
         // Populate 'rv2' with function return values. This may raise an
         // exception, in which case everything should be properly cleaned up in
@@ -405,8 +405,8 @@ static void ad_call_reduce(JitBackend backend, const char *domain,
             ptr = (void *) (uintptr_t) callable_index;
         }
 
-        JitVar instance_id = JitVar::steal(
-            (uint32_t) ad_var_gather(index.index(), index2, memop_mask.index(), false));
+        JitVar instance_id = JitVar::steal((uint32_t) ad_var_gather(
+            index.index(), index2, memop_mask.index(), ReduceMode::Auto));
 
         scoped_set_self set_self(backend, (uint32_t) i + 1, instance_id.index());
         func(payload, ptr, args2, rv2);
@@ -418,7 +418,7 @@ static void ad_call_reduce(JitBackend backend, const char *domain,
         for (size_t j = 0; j < rv2.size(); ++j) {
             uint64_t r =
                 ad_var_scatter(rv[j], rv2[j], index2, memop_mask.index(),
-                               ReduceOp::Identity, true);
+                               ReduceOp::Identity, ReduceMode::Permute);
             ad_var_dec_ref(rv[j]);
             rv[j] = r;
         }

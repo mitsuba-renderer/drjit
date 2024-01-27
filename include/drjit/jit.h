@@ -448,51 +448,28 @@ struct DRJIT_TRIVIAL_ABI JitArray
     // -----------------------------------------------------------------------
 
     template <typename Index, typename Mask>
-    static JitArray gather_(const void * /*src*/, const Index & /*index*/,
-                            const Mask & /*mask*/, bool /* permute */) {
-        drjit_raise("Not implemented, please use gather() variant that takes "
-                    "an array source argument.");
-    }
-
-    template <typename Index, typename Mask>
     static JitArray gather_(const JitArray &src, const Index &index,
-                            const Mask &mask, bool /* permute */) {
+                            const Mask &mask, ReduceMode /* mode */) {
         static_assert(
             std::is_same_v<detached_t<Mask>, detached_t<mask_t<JitArray>>>);
         return steal(jit_var_gather(src.index(), index.index(), mask.index()));
     }
 
     template <typename Index, typename Mask>
-    void scatter_(void * /* dst */, const Index & /*index*/,
-                  const Mask & /*mask*/, bool /* permute */) const {
-        drjit_raise("Not implemented, please use scatter() variant that takes "
-                    "an array target argument.");
-    }
-
-    template <typename Index, typename Mask>
-    void scatter_(JitArray &dst, const Index &index, const Mask &mask,
-                  bool /* permute */) const {
+    void scatter_(JitArray &dst, const Index &index, const Mask &mask, ReduceMode mode) const {
         static_assert(
             std::is_same_v<detached_t<Mask>, detached_t<mask_t<JitArray>>>);
         dst = steal(jit_var_scatter(dst.index(), m_index, index.index(),
-                                    mask.index(), ReduceOp::Identity));
+                                    mask.index(), ReduceOp::Identity, mode));
     }
 
     template <typename Index, typename Mask>
-    void scatter_reduce_(ReduceOp /*op*/, void * /*dst*/,
-                         const Index & /*index*/,
-                         const Mask & /* mask */, bool /* permute */) const {
-        drjit_raise("Not implemented, please use scatter_reduce() variant that "
-                    "takes an array target argument.");
-    }
-
-    template <typename Index, typename Mask>
-    void scatter_reduce_(ReduceOp op, JitArray &dst, const Index &index,
-                         const Mask &mask, bool /* permute */) const {
+    void scatter_reduce_(JitArray &dst, const Index &index, const Mask &mask,
+                         ReduceOp op, ReduceMode mode) const {
         static_assert(
             std::is_same_v<detached_t<Mask>, detached_t<mask_t<JitArray>>>);
         dst = steal(jit_var_scatter(dst.index(), m_index, index.index(),
-                                    mask.index(), op));
+                                    mask.index(), op, mode));
     }
 
     template <typename Index, typename Mask>

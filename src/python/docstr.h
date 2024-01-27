@@ -2384,11 +2384,13 @@ Args:
       specifying active components. Dr.Jit will attempt an implicit conversion
       if another type is provided. The default is ``True``.
 
-    permute (bool): You can leave this flag at its default value (``False``).
-      It exists to slightly improve the efficiency of a special case where an
-      array is fully read by differentiable gathers without duplicate reads
-      from any particular entry. (i.e., the gather indices are a permutation).
-      This case arises in the implementation of evaluated array method calls.
+    mode (drjit.ReduceMode): The reverse-mode derivative of a gather is
+      an atomic scatter-reduction. The execution of such atomics can be
+      rather performance-sensitive (see the discussion of
+      :py:class:`drjit.ReduceMode` for details), hence Dr.Jit offers a few
+      different compilation strategies to realize them. Specifying this
+      parameter selects a strategy for the derivative of a particular
+      gather operation. The default is :py:attr:`drjit.ReduceMode.Auto`.
 )";
 
 static const char *doc_scatter = R"(
@@ -2491,12 +2493,6 @@ Args:
       :py:class:`drjit.scalar.ArrayXb` or :py:class:`drjit.cuda.Bool`)
       specifying active components. Dr.Jit will attempt an implicit conversion
       if another type is provided. The default is ``True``.
-
-    permute (bool): You can leave this flag at its default value (``False``).
-      It exists to slightly improve the efficiency of a special case where a
-      zero-initialized array is fully initialized by differentiable scatters
-      without duplicate writes to an entry. (i.e., the scatter indices are a
-      permutation). This case arises in the implementation of array method calls.
 )";
 
 static const char *doc_scatter_add = R"(
@@ -2510,11 +2506,31 @@ exists for reasons of convenience. Please refer to
 static const char *doc_scatter_reduce = R"(
 Atomically update values in a flat array or nested data structure.
 
-This operation performs a *scatter-reduction* (i.e., an atomic
-read-modify-write operation) using the ``value`` parameter to update the
-``target`` array at position ``index``. The optional ``active`` argument can be
-used to disable some of the individual RMW operations, which is useful when not
-all provided values or indices are valid.
+This function performs an atomic *scatter-reduction*, which is a
+read-modify-write operation that applies one of several possible mathematical
+functions to selected entries of an array. The following are supported:
+
+- :py:attr:`drjit.ReduceOp.Add`: ``a=a+b``.
+- :py:attr:`drjit.ReduceOp.Max`: ``a=max(a, b)``.
+- :py:attr:`drjit.ReduceOp.Min`: ``a=min(a, b)``.
+- :py:attr:`drjit.ReduceOp.Or`: ``a=a | b`` (integer arrays only).
+- :py:attr:`drjit.ReduceOp.And`: ``a=a & b`` (integer arrays only).
+
+Here, ``a`` refers to an entry of ``target`` selected by ``index``, and ``b``
+denotes the associated element of ``value``. The operation resolves potential
+conflicts arising due to the parallel execution of this operation.
+
+The optional ``active`` argument can be used to disable some of the updates,
+e.g., when not all provided values or indices are valid.
+
+Atomic scatter-reductions can have a *significant* detrimental impact on
+performance. When many threads in a parallel computation attempt to modify the
+same element, this can lead to *contention*---essentially a fight over which
+part of the processor **owns** the associated memory region, which can slow
+down a computation by many orders of magnitude. Dr.Jit provides several
+different compilation strategies to reduce these costs, which can be selected
+via the ``mode`` parameter. The documentation of :py:class:`drjit.ReduceMode`
+provides more detail and performance plots.
 
 This operation can be used in the following different ways:
 
@@ -2636,6 +2652,13 @@ Args:
       :py:class:`drjit.scalar.ArrayXb` or :py:class:`drjit.cuda.Bool`)
       specifying active components. Dr.Jit will attempt an implicit conversion
       if another type is provided. The default is ``True``.
+
+    mode (drjit.ReduceMode):  Dr.Jit offers several different strategies to
+      implement atomic scatter-reductions that can be selected via this
+      parameter. They achieve different best/worst case performance and, in
+      the case of :py:attr:`drjit.ReduceMode.Expand`, involve additional
+      memory storage overheads. The default is
+      :py:attr:`drjit.ReduceMode.Auto`.
 )";
 
 static const char *doc_ravel = R"(
@@ -5320,24 +5343,38 @@ This flag has a severe performance impact and is *disabled* by default.)";
 
 // For Sphinx-related technical reasons, this comment is replicated in
 // reference.rst. Please keep them in sync when making changes
-static const char *doc_JitFlag_AtomicReduceLocal = R"(
-Reduce locally before performing atomic memory operations.
+static const char *doc_JitFlag_ScatterReduceLocal = R"(
+Reduce locally before performing atomic scatter-reductions.
 
-Atomic operations targeting global memory can be very expensive, especially
-when many writes target the same memory address leading to *contention*.
+Atomic memory operations are expensive when many writes target the same
+region of memory. This leads to a phenomenon called *contention* that is
+normally associated with significant slowdowns (10-100x aren't unusual).
 
-This is a common problem when automatically differentiating computation in
-*reverse mode* (e.g. :py:func:`drjit.backward`), since this transformation
-turns differentiable global memory reads into atomic scatter-additions.
+This issue is particularly common when automatically differentiating
+computation in *reverse mode* (e.g. :py:func:`drjit.backward`), since
+this transformation turns differentiable global memory reads into atomic
+scatter-additions. A differentiable scalar read is all it takes to create
+such an atomic memory bottleneck.
 
-To reduce this cost, Dr.Jit can optionally perform a local reduction that uses
-cooperation between SIMD/warp lanes to resolve all requests targeting the same
-address and then only issuing a single atomic memory transaction per unique
-target. This can reduce atomic memory traffic by up to a factor of 32 (CUDA) or
-16 (LLVM backend with AVX512).
+To reduce this cost, Dr.Jit can perform a *local reduction* that
+uses cooperation between SIMD/warp lanes to resolve all requests
+targeting the same address and then only issuing a single atomic memory
+transaction per unique target. This can reduce atomic memory traffic
+32-fold on the GPU (CUDA) and 16-fold on the CPU (AVX512).
+On the CUDA backend, local reduction is currently only supported for
+32-bit operands (signed/unsigned integers and single precision variables).
 
-This operation only affects the behavior of the :py:func:`scatter_reduce`
-function (and the reverse-mode derivative of :py:func:`gather`).
+The section on :ref:`optimizations <reduce-local>` presents plots that
+demonstrate the impact of this optimization.
+
+The JIT flag :py:attr:`drjit.JitFlag.ScatterReduceLocal` affects the
+behavior of :py:func:`scatter_add`, :py:func:`scatter_reduce` along with
+the reverse-mode derivative of :py:func:`gather`.
+Setting the flag to ``True`` will usually cause a ``mode=`` argument
+value of :py:attr:`drjit.ReduceOp.Auto` to be interpreted as
+:py:attr:`drjit.ReduceOp.Local`. Another LLVM-specific optimization
+takes precedence in certain sitatuations,
+refer to the discussion of this flag for details.
 
 This flag is *enabled* by default.)";
 
@@ -6460,15 +6497,161 @@ visualize as a stack.
    with dr.profile_range("Costly preprocessing"):
        init_data_structures()
 
-Note that this function tracks activity on the CPU timeline. If the wrapped
-region launches asynchronous GPU kernels, then those won't generally be
-included unless you use :py:func:`drjit.sync_thread` to wait for their
-completion (which is not advisable for performance reasons).
+Note that this function is intended to track activity on the CPU timeline. If
+the wrapped region launches asynchronous GPU kernels, then those won't
+generally be included in the length of the range unless
+:py:func:`drjit.sync_thread` or some other type of synchronization operation
+waits for their completion (which is generally not advisable, since keeping CPU
+and GPU asynchronous with respect to each other improves performance).
 
 Currently, this function uses `NVTX <https://github.com/NVIDIA/NVTX>`__ to report
 events that can be captured using `NVIDIA Nsight Systems
 <https://developer.nvidia.com/nsight-systems>`__. The operation is a no-op when
 no profile collection tool is attached.)";
+
+static const char *doc_ReduceMode = R"(
+Compilation strategy for atomic scatter-reductions.
+
+Elements of of this enumeration determine how Dr.Jit executes *atomic
+scatter-reductions*, which refers to indirect writes that update an existing
+element in an array, while avoiding problems arising due to concurrency.
+
+Atomic scatter-reductions can have a *significant* detrimental impact on
+performance. When many threads in a parallel computation attempt to modify the
+same element, this can lead to *contention*---essentially a fight over which
+part of the processor **owns** the associated memory region, which can slow
+down a computation by many orders of magnitude.
+
+This parameter also plays an important role for :py:func:`drjit.gather`, which
+is nominally a read-only operation. This is because the reverse-mode derivative
+of a gather turns it into an atomic scatter-addition, where further context on
+how to compile the operation is needed.
+
+Dr.Jit implements several strategies to address contention, which can be
+selected by passing the optional ``mode`` parameter to
+:py:func:`drjit.scatter_reduce`, :py:func:`drjit.scatter_add`, and
+:py:func:`drjit.gather`.
+
+If you find that a part of your program is bottlenecked by atomic writes, then
+it may be worth explicitly specifying some of the strategies below to see which
+one performs best.)";
+
+static const char *doc_ReduceMode_Auto = R"(
+Select the first valid option from the following list:
+
+- use :py:attr:`drjit.ReduceMode.Expand` if the computation uses the LLVM
+  backend and the ``target`` array storage size is smaller or equal
+  than than the value given by :py:func:`drjit.expand_threshold`. This
+  threshold can be changed using the :py:func:`drjit.set_expand_threshold`
+  function.
+
+- use :py:attr:`drjit.ReduceMode.Local` if
+  :py:attr:`drjit.JitFlag.ScatterReduceLocal` is set.
+
+- fall back to :py:attr:`drjit.ReduceMode.Direct`.)";
+
+static const char *doc_ReduceMode_Direct = R"(
+Insert an ordinary atomic reduction operation into the program.
+
+This mode is ideal when no or little contention is expected, for example
+because the target indices of scatters are well spread throughout the target
+array. This mode generates a minimal amount of code, which can help improve
+performance especially on GPU backends.)";
+
+static const char *doc_ReduceMode_Local = R"(
+Locally pre-reduce operands.
+
+In this mode, Dr.Jit adds extra code to the compiled program to examine
+the target indices of atomic updates. CUDA programs run with an
+instruction granularity referred to as a *warp*, which is a group of 32
+threads. When all of these threads want to write to the same location,
+the operands can be pre-reduced to turn 32 atomic memory transactions
+into a single one.
+
+On the CPU/LLVM backend, the same process works at the granularity of
+*packets*. The details depends on the underlying instruction set---for
+example, there are 16 threads per packet on a machine with AVX512, so
+there is a potential for reducing atomic write traffic by that factor.
+The implementation of this feature also partially coherent warps/packets.)";
+
+static const char *doc_ReduceMode_NoConflicts = R"(
+Perform a non-atomic read-modify-write operation.
+
+This mode is only safe in specific situations. The caller must guarantee that
+there are no conflicts (i.e., scatters targeting the same elements). If
+specified, Dr.Jit will generate a *non-atomic* read-modify-update operation
+that potentially runs significantly faster, especially on the LLVM backend.)";
+
+static const char *doc_ReduceMode_Expand = R"(
+Expand the target array to avoid write conflicts, then scatter non-atomically.
+
+This feature is only supported on the LLVM backend. Other backends interpret
+this flag as if :py:attr:`drjit.ReduceMode.Auto` had been specified.
+
+This mode internally expands the storage underlying the target array to a much
+larger size that is proportional to the number of CPU cores. Scalar (length-1)
+target arrays are expanded even further to ensure that each CPU gets an
+entirely separate cache line.
+
+Following this one-time expansion step, the array can then accommodate an
+arbitrary sequence of scatter-reduction operations that the system will
+internally perform using *non-atomic* read-modify-write operations (i.e.,
+analogous to the :py:attr:`NoConflicts` mode). Dr.Jit automatically
+re-compress the array into the ordinary representation.
+
+On bigger arrays and on machines with many cores, the storage costs resulting
+from this mode can be prohibitive.)";
+
+static const char *doc_ReduceMode_Permute = R"(
+In contrast to prior enumeration entries, this one modifies plain
+(non-reductive) scatters and gathers. It exists to enable internal
+optimizations that Dr.Jit uses when differentiating vectorized function
+calls and compressed loops. You likely should not use it in your own code.
+
+When setting this mode, the caller guarantees that there will be no
+conflicts, and that every entry is written exactly single time using an
+index vector representing a permutation (it's fine this permutation is
+accomplished by multiple separate write operations, but there should be no
+more than 1 write to each element).
+
+Giving 'Permute' as an argument to a (nominally read-only) gather
+operation is helpful because we then know that the reverse-mode derivative
+of this operation can be a plain scatter instead of a more costly
+atomic scatter-add.
+
+Giving 'Permute' as an argument to a scatter operation is helpful
+because we then know that the forward-mode derivative does not depend
+on any prior derivative values associated with that array, as all
+current entries will be overwritten.)";
+
+static const char *doc_set_expand_threshold = R"(
+Set the threshold for performing scatter-reductions via expansion.
+
+The documentation of :py:class:`drjit.ReduceOp` explains the cost of atomic
+scatter-reductions and introduces various optimization strategies.
+
+One particularly effective optimization (the section on :ref:`optimizations
+<reduce-local>` for plots) named :py:attr:`drjit.ReduceOp.Expand` is specific
+to the LLVM backend. It replicates the target array to avoid write conflicts
+altogether, which enables the use of non-atomic memory operations. This is
+*significantly* faster but also *very memory-intensive*. The storage cost of an
+1MB array targeted by a :py:func:`drjit.scatter_reduce` operation now grows to
+``N`` megabytes, where ``N`` is the number of cores.
+
+For this reason, Dr.Jit implements a user-controllable threshold exposed via
+the functions :py:func:`drjit.expand_threshold` and
+:py:func:`drjit.set_expand_threshold`. When the array has more entries than the
+value specified here, the :py:attr:`drjit.ReduceOp.Expand` strategy will *not* be used
+unless specifically requested via the ``mode=`` parameter of operations like
+:py:func:`drjit.scatter_reduce`, :py:func:`drjit.scatter_add`, and
+:py:func:`drjit.gather`.
+
+The default value of this parameter is `1000000` (1 million entries).)";
+
+static const char *doc_expand_threshold = R"(
+Query the threshold for performing scatter-reductions via expansion.
+
+Getter for the quantity set in :py:func:`drjit.set_expand_threshold()`)";
 
 #if defined(__GNUC__)
 #  pragma GCC diagnostic pop

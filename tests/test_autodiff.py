@@ -746,8 +746,8 @@ def test034_scatter_fwd_permute(t):
     idx_0 = dr.arange(m.UInt, 5)
     idx_1 = dr.arange(m.UInt, 5) + 5
 
-    dr.scatter(buf, values_0, idx_0, permute=True)
-    dr.scatter(buf, values_1, idx_1, permute=True)
+    dr.scatter(buf, values_0, idx_0, mode=dr.ReduceMode.Permute)
+    dr.scatter(buf, values_1, idx_1, mode=dr.ReduceMode.Permute)
 
     ref = [4.0, 12.0, 20.0, 28.0, 36.0, 44.0, 52.0, 60.0, 68.0, 76.0]
     assert dr.allclose(buf, ref)
