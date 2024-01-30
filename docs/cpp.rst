@@ -47,13 +47,21 @@ Python interface to C++.
 The short-hand notation provided through the :py:func:`@drjit.syntax
 <drjit.syntax>` decorator is not available in C++.
 
+This syntax can be cumbersome when the loop state consists of many variables,
+since the associated type and argument names must be repeated several times. In
+this case, it can be preferable to locally define a custom ``struct``
+representing the entirety of the loop state. See the explanation of
+:ref:`custom traversable types <custom_types_cpp>` for details.
+Dr.Jit optimizes away superfluous loop state variables, so there isn't any
+harm in specifying loop state that isn't actually modified by the loop.
+
 The detailed interface of this function is as follows:
 
 .. cpp:function:: template <typename State, typename Cond, typename Body> std::decay_t<State> while_loop(State&& state, Cond &&cond, Body &&body, const char * label = nullptr)
 
    This function takes an instance ``state`` of the tuple type ``State`` (which
    could be a ``std::pair``, ``std::tuple``, or the lighter-weight alternative
-   :cpp:class:`drjit::dr_tuple` created via :cpp:func:`drjit::make_tuple`).
+   :cpp:class:`drjit::tuple` created via :cpp:func:`drjit::make_tuple`).
 
    It invokes the loop body ``body`` with an unpacked version of the tuple elements
    (i.e., ``body(std::get<0>(state), ...)``) until the *loop condition*
@@ -135,13 +143,19 @@ Python interface to C++.
        }
    );
 
-The argument ``args`` must always be a tuple that will be unpacked and passed as
-arguments of ``true_fn`` and ``false_fn``. The return value of these function
-can be any tree of arbitrarily nested arrays, tuples, and other :ref:`custom
-data structures <custom_types_cpp>`.
+The argument ``args`` must always be a tuple that will be unpacked and passed
+as arguments of ``true_fn`` and ``false_fn``. The return value of these
+function can be any tree of arbitrarily nested arrays, tuples, and other
+:ref:`custom data structures <custom_types_cpp>`. 
 
 The short-hand notation provided through the :py:func:`@drjit.syntax
 <drjit.syntax>` decorator is not available in C++.
+
+As with the loop, the C++ syntax can be cumbersome when there are many
+input/output variables, in which case it is preferable to locally define custom
+``struct`` types representing all inputs/outputs, or both. Dr.Jit later
+optimizes away superfluous variables of :py:func:`drjit.if_stmt`, so there
+isn't any harm in being redundant.
 
 The detailed interface of this function is as follows:
 
@@ -149,7 +163,7 @@ The detailed interface of this function is as follows:
 
    This function takes an instance ``args`` of the tuple type ``Args`` (which
    could be a ``std::pair``, ``std::tuple``, or the lighter-weight alternative
-   :cpp:class:`drjit::dr_tuple` created via :cpp:func:`drjit::make_tuple`).
+   :cpp:class:`drjit::tuple` created via :cpp:func:`drjit::make_tuple`).
 
    It invokes ``true_fn`` and ``false_fn`` with an unpacked version of the
    tuple elements (i.e., ``true_fn(std::get<0>(state), ...)``) and combines
@@ -405,8 +419,8 @@ and append the following binding declarations:
 Custom data structures
 ----------------------
 
-The ability to traverse through members of custom data structures
-was previously discussed :ref:`here in the context of Python <custom_types_py>`.
+The ability to traverse through members of custom data structures was
+previously discussed :ref:`here in the context of Python <custom_types_py>`.
 
 This feature also exists on the C++ side. For this, you must include the header
 file
@@ -429,7 +443,36 @@ to list the available fields.
        DRJIT_STRUCT(x, y);
    };
 
-The ``DRJIT_STRUCT`` macro inserts several template functions to aid the
-auto-traversal mechanism. One implication of this is that such data structures
-cannot be declared locally (e.g., at the function scope. This is a limitation
-of the C++ language, which it does not permit templates within functions).
+Custom data structures can be defined globally, locally, and they can be
+arbitrarily nested. Dr.Jit static arrays, tuples (:cpp:class:`drjit.tuple`),
+STL ``std::tuple<...>`` and ``std::pair<T1, T2>`` are all automatically
+traversable.
+
+It is also easy to define custom functions that recursively process arbitrary
+trees:
+
+.. code-block:: cpp
+
+    template <typename T> void visit_jit_pairs(T &v0, T &v1) {
+        if constexpr (dr::is_jit_v<T> && dr::depth_v<T> == 1) {
+            /// Do something with 'v0' and 'v1'
+        } else if constexpr (dr::is_traversable_v<T>) {
+            /// Recurse and try again if the object is traversable
+            dr::traverse_2(
+                /// Extract the fields of 'v0' and 'v1'
+                dr::fields(v0), dr::fields(v1),
+                // .. and call the following lambda function on them
+                [&](auto &x, auto &y) { visit_jit_pairs(x, y); }
+            );
+        }
+    }
+
+The type trait :cpp:var:`dr::is_traversable\<T\> <drjit::is_traversable_v>`
+checks if an instance of a particular type type can be traversed.
+
+The helper functions :cpp:func:`drjit::traverse_1`
+:cpp:func:`drjit::traverse_2`, :cpp:func:`drjit::traverse_3`, respectively
+traverse individual objects, pairs, or triples, at the same time. They take an
+arbitrary stateless or stateful lambda function and simply apply it to the
+input tuples that can be extracted using the function :cpp:func:`drjit::fields`
+that takes a traversable as input.

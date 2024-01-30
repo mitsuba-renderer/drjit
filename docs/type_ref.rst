@@ -1244,6 +1244,18 @@ Scalars
     :show-inheritance:
 .. autoclass:: ArrayXb
     :show-inheritance:
+.. autoclass:: Array0f16
+    :show-inheritance:
+.. autoclass:: Array1f16
+    :show-inheritance:
+.. autoclass:: Array2f16
+    :show-inheritance:
+.. autoclass:: Array3f16
+    :show-inheritance:
+.. autoclass:: Array4f16
+    :show-inheritance:
+.. autoclass:: ArrayXf16
+    :show-inheritance:
 .. autoclass:: Array0f
     :show-inheritance:
 .. autoclass:: Array1f
@@ -1325,6 +1337,12 @@ Scalars
     :show-inheritance:
 .. autoclass:: Array44b
     :show-inheritance:
+.. autoclass:: Array22f16
+    :show-inheritance:
+.. autoclass:: Array33f16
+    :show-inheritance:
+.. autoclass:: Array44f16
+    :show-inheritance:
 .. autoclass:: Array22f
     :show-inheritance:
 .. autoclass:: Array33f
@@ -1344,9 +1362,17 @@ Special (complex numbers, etc.)
     :show-inheritance:
 .. autoclass:: Complex2f64
     :show-inheritance:
+.. autoclass:: Quaternion4f16
+    :show-inheritance:
 .. autoclass:: Quaternion4f
     :show-inheritance:
 .. autoclass:: Quaternion4f64
+    :show-inheritance:
+.. autoclass:: Matrix2f16
+    :show-inheritance:
+.. autoclass:: Matrix3f16
+    :show-inheritance:
+.. autoclass:: Matrix4f16
     :show-inheritance:
 .. autoclass:: Matrix2f
     :show-inheritance:
@@ -1364,6 +1390,8 @@ Special (complex numbers, etc.)
 Tensors
 ^^^^^^^
 .. autoclass:: TensorXb
+    :show-inheritance:
+.. autoclass:: TensorXf16
     :show-inheritance:
 .. autoclass:: TensorXf
     :show-inheritance:
@@ -1438,6 +1466,18 @@ Scalars
     :show-inheritance:
 .. autoclass:: ArrayXb
     :show-inheritance:
+.. autoclass:: Array0f16
+    :show-inheritance:
+.. autoclass:: Array1f16
+    :show-inheritance:
+.. autoclass:: Array2f16
+    :show-inheritance:
+.. autoclass:: Array3f16
+    :show-inheritance:
+.. autoclass:: Array4f16
+    :show-inheritance:
+.. autoclass:: ArrayXf16
+    :show-inheritance:
 .. autoclass:: Array0f
     :show-inheritance:
 .. autoclass:: Array1f
@@ -1519,6 +1559,12 @@ Scalars
     :show-inheritance:
 .. autoclass:: Array44b
     :show-inheritance:
+.. autoclass:: Array22f16
+    :show-inheritance:
+.. autoclass:: Array33f16
+    :show-inheritance:
+.. autoclass:: Array44f16
+    :show-inheritance:
 .. autoclass:: Array22f
     :show-inheritance:
 .. autoclass:: Array33f
@@ -1538,9 +1584,17 @@ Special (complex numbers, etc.)
     :show-inheritance:
 .. autoclass:: Complex2f64
     :show-inheritance:
+.. autoclass:: Quaternion4f16
+    :show-inheritance:
 .. autoclass:: Quaternion4f
     :show-inheritance:
 .. autoclass:: Quaternion4f64
+    :show-inheritance:
+.. autoclass:: Matrix2f16
+    :show-inheritance:
+.. autoclass:: Matrix3f16
+    :show-inheritance:
+.. autoclass:: Matrix4f16
     :show-inheritance:
 .. autoclass:: Matrix2f
     :show-inheritance:
@@ -1558,6 +1612,8 @@ Special (complex numbers, etc.)
 Tensors
 ^^^^^^^
 .. autoclass:: TensorXb
+    :show-inheritance:
+.. autoclass:: TensorXf16
     :show-inheritance:
 .. autoclass:: TensorXf
     :show-inheritance:

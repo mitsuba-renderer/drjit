@@ -29,9 +29,9 @@ Here is what's new:
     that binary wheels will work on future versions of Python without
     recompilation.
 
-- **Control flow**: You can now express vectorized loops and conditionals
-  using natural Python syntax. Consider the following snippet to compute an
-  integer power of a floating point value:
+- **Natural syntax**: vectorized loops and conditionals can now be expressed
+  using natural Python syntax. To see what this means, consider the following
+  function that computes an integer power of a floating point array:
 
   .. code-block:: python
 
@@ -49,24 +49,19 @@ Here is what's new:
 
          return result
 
-  This function processes arrays---it is likely that the condition of the
-  ``if`` statement will disagree among elements, and that each element will
-  furthermore require a different number of loop operations. Needless to say,
-  this is not supported by stock Python.
+  Given that this function processes arrays, we expect that condition of the
+  ``if`` statement may disagree among elements. Also, each element may need a
+  different number of loop iterations. However, such component-wise
+  conditionals and loops aren't supported by stock Python. Previously, Dr.Jit
+  provided ways of expressing such code using masking and a special
+  ``dr.cuda.Loop`` object, but this was rather tedious.
 
-  Handling such constraints previously required the construction of a special
-  ``dr.cuda.Loop`` object along with masked assignments to imitate conditional
-  execution (e.g., ``result[dr.neq(n&1, 0)] *= x``). The natural notation shown
-  above improves readability and even efficiency, as Dr.Jit is now able to
-  retain conditional statements and translate them into conditional jumps in
-  the generated CPU/GPU program.
-
-  Note the presence of the :py:func:`@drjit.syntax <drjit.syntax>`
-  decorator, which transforms the ``while`` loop into a call to the
-  array-compatible function :py:func:`drjit.while_loop` and the ``if``
-  statement into a call to :py:func:`drjit.if_stmt`. Besides these two effects,
-  the transformation is minimal and preserves other code along with line number
-  information to aid debugging.
+  The new :py:func:`@drjit.syntax <drjit.syntax>` decorator greatly simplifies
+  the development of programs with complex control flow. It performs an
+  automatic source code transformation that replaces conditionals and loops
+  with array-compatible variants (:py:func:`drjit.while_loop`,
+  :py:func:`drjit.if_stmt`). The transformation leaves everything else as-is,
+  including line number information that is relevant for debugging.
 
 - **Differentiable control flow**: symbolic control flow constructs (loops)
   previously failed with an error message when they detected differentiable
@@ -75,8 +70,8 @@ Here is what's new:
 
 - **Documentation**: every Dr.Jit function now comes with extensive reference
   documentation that clearly specifies its behavior and accepted inputs. The
-  behavior with respect to tensors, :ref:`PyTrees <pytrees>` was made
-  consistent.
+  behavior with respect to tensors and arbitrary object graphs (referred to as
+  :ref:`"PyTrees" <pytrees>`) was made consistent.
 
 - **Half-precision arithmetic**: Dr.Jit now provides ``float16``-valued arrays
   and tensors on both the LLVM and CUDA backends (e.g.,
@@ -87,7 +82,7 @@ Here is what's new:
   double, and half precision variables. Previously, there was a separate graph
   per type, and gradients did not propagate through casts between them.
 
-- **Multi-framework computations**: The :py:func:`@drjit.wrap` decorator
+- **Multi-framework computations**: The :py:func:`@drjit.wrap <drjit.wrap>` decorator
   provides a differentiable bridge to other AD frameworks. In this new release
   of Dr.Jit, its capabilities were significantly revamped. Besides PyTorch, it
   now also supports JAX, and it consistently handles both forward and backward
@@ -109,7 +104,7 @@ Here is what's new:
   - :py:func:`drjit.assert_equal`.
 
 - **Symbolic print statement**: A new high-level *symbolic* print operation
-  (:py:func:`drjit.print`) enables deferred printing from any symbolic context
+  :py:func:`drjit.print` enables deferred printing from any symbolic context
   (i.e., within symbolic loops, conditionals, and function calls). It is
   compatible with Jupyter notebooks and displays arbitrary :ref:`PyTrees
   <pytrees>` in a structured manner. This operation replaces the function
@@ -136,6 +131,24 @@ Here is what's new:
 
   Aliases for the ``_nested`` function variants still exist to facilitate
   porting but are deprecated and will be removed in a future release.
+
+- The performance of atomic scatter-reductions
+  (:py:func:`drjit.scatter_reduce`, :py:func:`drjit.scatter_add`) has been
+  *significantly* improved. Both functions now provide a ``mode=`` parameter to
+  select between different implementation strategies. The new strategy
+  :py:attr:`drjit.ReduceMode.Expand` offers a speedup of *over 10×* on the LLVM
+  backend compared to the previously used local reduction strategy.
+  Furthermore, improved code generation for :py:attr:`drjit.ReduceMode.Local`
+  brings a roughly 20-40% speedup on the CUDA backend. See the documentation
+  section on :ref:`atomic reductions <reduce-local>` for details and
+  benchmarks with plots.
+
+- **Loop compression**: the implementation of evaluated loops (previously
+  referred to as wavefront mode) visits all entries of the loop state variables
+  at every iteration, even when most of them have already finished executing the
+  loop. Dr.Jit now provides an optional``compress=True`` parameter in
+  :py:func:`drjit.while_loop` to prune away inactive entries and accelerate
+  later loop iterations.
 
 - The new release has a strong focus on error resilience and leak avoidance.
   Exceptions raised in custom operations, function dispatch, symbolic loops,
@@ -185,13 +198,6 @@ Here is what's new:
   surprising, so the behavior was changed so that :py:func:`drjit.empty`
   similarly delays allocation.
 
-- **Loop compression**: the implementation of evaluated loops (previously
-  referred to as wavefront mode) visits all entries of the loop state variables
-  at every iteration even when most of them have already finished executing the
-  loop. Dr.Jit now provides an optional``compress=True`` parameter in
-  :py:func:`drjit.while_loop` to prune away inactive entries and accelerate
-  later loop iterations.
-
 - **Fast math**: Dr.Jit now has an optimization flag named
   :py:attr:`drjit.JitFlag.FastMath` that is reminiscent of ``-ffast-math`` in
   C/C++ compilers. It enables program simplifications such as ``a*0 == 0`` that
@@ -199,14 +205,14 @@ Here is what's new:
   is infinite or equal to NaN. The flag is on by default since it can
   considerably improve performance especially when targeting GPUs.
 
-Compatibility
--------------
+⚠️ Compatibility ⚠️
+------------------
 
-  ⚠️ **Symbolic loop syntax**: the old "recorded loop" syntax is no longer
+- **Symbolic loop syntax**: the old "recorded loop" syntax is no longer
   supported. Existing code will need adjustments to use
   :py:func:`drjit.while_loop`.
 
-- ⚠️ **Comparison operators**: The ``==`` and ``!=`` comparisons previously
+- **Comparison operators**: The ``==`` and ``!=`` comparisons previously
   reduced the result of to a single Python ``bool``. They now return an array
   of component-wise comparisons to be more consistent with other array
   programming frameworks. Use :py:func:`dr.all(a == b) <all>` or
@@ -216,7 +222,7 @@ Compatibility
   equality and inequality tests were removed, as their behavior is now subsumed
   by the builtin ``==`` and ``!=`` operators.
 
-- ⚠️ **Matrix layout**: The Dr.Jit matrix type switched from column-major to
+- **Matrix layout**: The Dr.Jit matrix type switched from column-major to
   row-major storage. Your code will need to be updated if it indexes into
   matrices first by column and then row (``matrix[col][row]``) instead of
   specifying the complete location ``matrix[row, col]``. The latter convention
@@ -273,11 +279,6 @@ Python API.
 
 - Improvements to CUDA and LLVM backends kernel launch configurations that
   more effectively use the available parallelism.
-
-- Significant improvements to the warp-local phase of atomic
-  scatter-reductions. These changes increase the performance of the
-  :py:func:`drjit.scatter_reduce` and :py:func:`drjit.scatter_add` operations
-  on the CUDA backend.
 
 - The packet mode backend (``include/drjit/packet.h``) now includes support
   for ``aarch64`` processors via NEON intrinsics. This is actually an old
