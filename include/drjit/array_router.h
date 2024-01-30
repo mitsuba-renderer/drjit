@@ -1739,33 +1739,57 @@ auto grad(const T &value) {
     }
 }
 
-template <typename T, typename T2>
-void set_grad(T &value, const T2 &grad) {
+template <typename T>
+void clear_grad(T &value) {
     if constexpr (is_diff_v<T>) {
-        if constexpr (is_tensor_v<T2>) {
-            set_grad(value.array(), grad.array());
+        if constexpr (is_tensor_v<T>) {
+            clear_grad(value.array());
         } else if constexpr (depth_v<T> > 1) {
             for (size_t i = 0; i < value.size(); ++i)
-                set_grad(value.entry(i), grad.entry(i));
+                clear_grad(value.entry(i));
+        } else {
+            value.clear_grad_();
+        }
+    } else if constexpr (is_drjit_struct_v<T>) {
+        struct_support_t<T>::apply_1(
+            value,
+            [](auto &x1) DRJIT_INLINE_LAMBDA {
+                clear_grad(x1);
+            });
+    }
+}
+
+template <typename T, typename T2>
+void accum_grad(T &value, const T2 &grad) {
+    if constexpr (is_diff_v<T>) {
+        if constexpr (is_tensor_v<T>) {
+            accum_grad(value.array(), grad);
+        } else if constexpr (is_tensor_v<T2>) {
+            accum_grad(value, grad.array());
+        } else if constexpr (depth_v<T> > 1) {
+            for (size_t i = 0; i < value.size(); ++i)
+                accum_grad(value.entry(i), grad.entry(i));
         } else {
             if constexpr(!std::is_same_v<T, T2>) {
                 T grad_ = T(grad);
-                value.set_grad_(grad_.index());
+                value.accum_grad_(grad_.index());
             } else {
-                value.set_grad_(grad.index());
+                value.accum_grad_(grad.index());
             }
         }
     } else if constexpr (is_drjit_struct_v<T>) {
         struct_support_t<T>::apply_2(
             value, grad,
             [](auto &x1, auto &x2) DRJIT_INLINE_LAMBDA {
-                set_grad(x1, x2);
+                accum_grad(x1, x2);
             });
     }
 }
 
-template <typename T, typename T2> void accum_grad(T &value, const T2 &grad) {
-    set_grad<true>(value, grad);
+template <typename T, typename T2>
+void set_grad(T &value, const T2 &grad) {
+    clear_grad(value);
+    accum_grad(value, grad);
 }
 
 enum class ADScope { Invalid = 0, Suspend = 1, Resume = 2, Isolate = 3 };
