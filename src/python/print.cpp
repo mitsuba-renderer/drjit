@@ -27,6 +27,16 @@
 
 using Buffer = nanobind::detail::Buffer;
 
+struct suspend_grad_simple {
+    suspend_grad_simple() {
+        ad_scope_enter(dr::ADScope::Suspend, 0, nullptr);
+    }
+
+    ~suspend_grad_simple() {
+        ad_scope_leave(true);
+    }
+};
+
 /// Convert a Dr.Jit array into a human-readable representation. Used by
 /// drjit.print(), drjit.format(), and drjit.ArrayBase.__repr__()
 static void repr_array(Buffer &buffer, nb::handle h, size_t indent,
@@ -450,7 +460,7 @@ static nb::object format_impl(const char *name, const std::string &fmt,
                 mask_tp = meta_get_type(m);
             }
 
-            dr::suspend_grad suspend_guard;
+            suspend_grad_simple suspend_guard;
             nb::object active = nb::inst_alloc(mask_tp);
 
             uint32_t mask_1 = jit_var_bool(examine.backend, true),

@@ -745,6 +745,10 @@ namespace detail {
 template <typename T> struct suspend_grad {
     static constexpr bool Enabled =
         is_diff_v<T> && std::is_floating_point_v<scalar_t<T>>;
+    suspend_grad() : condition(true) {
+        if constexpr (Enabled)
+            ad_scope_enter(ADScope::Suspend, 0, nullptr);
+    }
     template <typename... Args>
     suspend_grad(bool when, const Args &... args) : condition(when) {
         if constexpr (Enabled) {
