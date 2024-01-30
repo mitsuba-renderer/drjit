@@ -1205,7 +1205,7 @@ decltype(auto) migrate(const T &value, TargetType target) {
 }
 
 template <typename ResultType = void, typename T>
-decltype(auto) slice(const T &value, size_t index = -1) {
+decltype(auto) slice(const T &value, size_t index = 0) {
     schedule(value);
     if constexpr (depth_v<T> > 1) {
         using Value = std::decay_t<decltype(slice(value.entry(0), index))>;
@@ -1227,18 +1227,11 @@ decltype(auto) slice(const T &value, size_t index = -1) {
             });
         return result;
     } else if constexpr (is_dynamic_array_v<T>) {
-        if (index == (size_t) -1) {
-            if (width(value) > 1)
-                drjit_raise("slice(): variable contains more than a single entry!");
-            index = 0;
-        }
-        return scalar_t<T>(value.entry(index));
-    } else if constexpr (is_diff_v<T>) { // Handle DiffArray<float> case
-        if (index != (size_t) -1 && index > 0)
+        if (index >= width(value))
             drjit_raise("slice(): index out of bound!");
-        return value.detach_();
+        return scalar_t<T>(value.entry(index));
     } else {
-        if (index != (size_t) -1 && index > 0)
+        if (index > 0)
             drjit_raise("slice(): index out of bound!");
         return value;
     }
