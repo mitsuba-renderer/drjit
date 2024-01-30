@@ -174,7 +174,8 @@ Index binary_search(scalar_t<Index> start_, scalar_t<Index> end_,
     scalar_t<Index> iterations = (start_ < end_) ?
         (log2i(end_ - start_) + 1) : 0;
 
-    Index start(start_), end(end_);
+    Index start = opaque<Index>(start_);
+    Index end = opaque<Index>(end_);
 
     using Mask = mask_t<Index>;
 
@@ -185,15 +186,11 @@ Index binary_search(scalar_t<Index> start_, scalar_t<Index> end_,
         using Mask1 = mask_t<Index1>;
 
         if (iterations >= 2 && jit_flag(JitFlag::LoopRecord)) {
-            char title[80];
-            snprintf(title, sizeof(title),
-                     "dr::binary_search(size=%zu, iterations=%zu)",
-                     (size_t)(end_ - start_), (size_t) iterations);
-
             Index1 index = zeros<Index1>(width(pred(start)));
-            Loop<Mask1> loop(title, start, end, index);
+            Index1 iterations1 = opaque<Index1>(iterations);
+            Loop<Mask1> loop("dr::binary_search()", start, end, index);
 
-            while (loop(index < iterations)) {
+            while (loop(index < iterations1)) {
                 Index middle = sr<1>(start + end);
                 Mask cond = detach(pred(middle));
 
