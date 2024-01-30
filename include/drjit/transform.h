@@ -20,8 +20,11 @@ NAMESPACE_BEGIN(drjit)
 
 template <typename Matrix>
 Matrix translate(const Array<entry_t<Matrix>, size_v<Matrix> - 1> &v) {
+    size_t N = size_v<Matrix>;
     Matrix trafo = identity<Matrix>();
-    trafo.entry(size_v<Matrix> - 1) = concat(v, Array<entry_t<Matrix>, 1>(1));
+    for (size_t i = 0; i < N - 1; ++i)
+        trafo(N - 1, i) = v.entry(i);
+    trafo(N - 1, N - 1) = 1;
     return transpose(trafo);
 }
 
