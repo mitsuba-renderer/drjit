@@ -279,6 +279,35 @@ def clip(value, min, max):
     '''
     return maximum(minimum(value, max), min)
 
+
+def lerp(a, b, t):
+    '''
+    Linearly blend between two values.
+
+    This function computes
+
+    .. math::
+
+       \mathrm{lerp}(t) = (1-t) a + t b
+
+    In other words, it linearly blends between :math:`a` and :math:`b` based on
+    the value :math:`t` that is typically on the interval :math:`[0, 1]`.
+
+    It does so using two fused multiply-additions (:py:func:`drjit.fma`) to
+    improve performance and avoid numerical errors.
+
+    Args:
+        value (int | float | drjit.ArrayBase): A Python or Dr.Jit type
+        min (int | float | drjit.ArrayBase): A Python or Dr.Jit type
+        max (int | float | drjit.ArrayBase): A Python or Dr.Jit type
+
+    Returns:
+        float | drjit.ArrayBase: Interpolated result
+    '''
+
+    return fma(b, t, fma(a, -t, a));
+
+
 # -------------------------------------------------------------------
 #     Deprecated wrappers for old Dr.Jit operations
 # -------------------------------------------------------------------
