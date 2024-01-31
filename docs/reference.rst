@@ -988,6 +988,7 @@ Operations for vectors and matrices
 .. autofunction:: matmul
 .. autofunction:: hypot
 .. autofunction:: normalize
+.. autofunction:: lerp
 
 
 Operations for complex values and quaternions
