@@ -281,7 +281,7 @@ def clip(value, min, max):
 
 
 def lerp(a, b, t):
-    '''
+    r'''
     Linearly blend between two values.
 
     This function computes
