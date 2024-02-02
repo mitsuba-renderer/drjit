@@ -169,8 +169,6 @@ NB_MODULE(drjit_ext, m_) {
      .def("flush_malloc_cache", &jit_flush_malloc_cache, doc_flush_malloc_cache)
      .def("thread_count", &jit_llvm_thread_count, doc_thread_count)
      .def("set_thread_count", &jit_llvm_set_thread_count, doc_set_thread_count)
-     .def("block_size", &jit_llvm_block_size, doc_block_size)
-     .def("set_block_size", &jit_llvm_set_block_size, doc_set_block_size)
      .def("expand_threshold", &jit_llvm_expand_threshold, doc_expand_threshold)
      .def("set_expand_threshold", &jit_llvm_set_expand_threshold, doc_set_expand_threshold);
 

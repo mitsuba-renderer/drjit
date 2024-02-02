@@ -38,8 +38,8 @@ private:
 };
 
 /// Index vector that decreases JIT refcounts when destructed
-struct dr_index32_vector : drjit::dr_vector<uint32_t> {
-    using Base = drjit::dr_vector<uint32_t>;
+struct dr_index32_vector : drjit::vector<uint32_t> {
+    using Base = drjit::vector<uint32_t>;
     using Base::Base;
 
     dr_index32_vector(dr_index32_vector &&a) : Base(std::move(a)) { }
@@ -63,8 +63,8 @@ struct dr_index32_vector : drjit::dr_vector<uint32_t> {
 };
 
 /// Index vector that decreases JIT + AD refcounts when destructed
-struct dr_index64_vector : drjit::dr_vector<uint64_t> {
-    using Base = drjit::dr_vector<uint64_t>;
+struct dr_index64_vector : drjit::vector<uint64_t> {
+    using Base = drjit::vector<uint64_t>;
     using Base::Base;
     dr_index64_vector(dr_index64_vector &&a) : Base(std::move(a)) { }
     dr_index64_vector &operator=(dr_index64_vector &&a) {

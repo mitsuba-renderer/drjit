@@ -2,6 +2,9 @@
     drjit/array_fallbacks.h -- Scalar utility functions used by Dr.Jit's
     array classes
 
+    (This file isn't meant to be included as-is. Please use 'drjit/array.h',
+     which bundles all the 'array_*' headers in the right order.)
+
     Dr.Jit is a C++ template library for efficient vectorization and
     differentiation of numerical kernels on modern processor architectures.
 
@@ -13,14 +16,7 @@
 
 #pragma once
 
-#include <drjit/array_traits.h>
-
-#include <stdlib.h>
-#include <stdio.h>
-#include <stdarg.h>
-#include <string.h>
-
-#include <exception>
+#define drjit_fail(...) do { __builtin_printf(__VA_ARGS__); abort(); } while(0)
 
 NAMESPACE_BEGIN(drjit)
 
@@ -314,47 +310,4 @@ DRJIT_INLINE T mulhi_(T x, T y) {
 }
 
 NAMESPACE_END(detail)
-
-#if defined(__cpp_exceptions)
-#  if defined(_MSC_VER)
-#    define DRJIT_STRDUP _strdup
-#  else
-#    define DRJIT_STRDUP strdup
-#  endif
-
-class Exception : public std::exception {
-public:
-    Exception(const char* msg) : m_msg(DRJIT_STRDUP(msg)) { }
-    Exception(const Exception& e) : m_msg(DRJIT_STRDUP(e.m_msg)) { }
-    Exception(Exception&& e) noexcept : m_msg(e.m_msg) { e.m_msg = nullptr; }
-    Exception& operator=(const Exception&) = delete;
-    Exception& operator=(Exception&&) = delete;
-    virtual const char* what() const noexcept { return m_msg; }
-    virtual ~Exception() { free(m_msg); }
-private:
-    char *m_msg;
-};
-
-#  undef DRJIT_STRDUP
-#endif
-
-#if !defined(_MSC_VER)
-__attribute__((noreturn,noinline))
-#else
-__declspec(noreturn,noinline)
-#endif
-inline void drjit_raise(const char *fmt, ...) {
-    char msg[256];
-    va_list args;
-    va_start(args, fmt);
-    vsnprintf(msg, sizeof(msg), fmt, args);
-    va_end(args);
-#if defined(__cpp_exceptions)
-    throw drjit::Exception(msg);
-#else
-    fprintf(stderr, "%s\n", msg);
-    abort();
-#endif
-}
-
 NAMESPACE_END(drjit)

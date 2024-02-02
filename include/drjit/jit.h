@@ -343,7 +343,7 @@ struct DRJIT_TRIVIAL_ABI JitArray
 
     auto count_() const {
         if constexpr (!is_mask_v<Value>)
-            drjit_raise("Unsupported operand type");
+            drjit_fail("Unsupported operand type");
 
         if (!m_index)
             return uint32_array_t<JitArray>(0);
@@ -495,7 +495,7 @@ struct DRJIT_TRIVIAL_ABI JitArray
 
     std::pair<CallBucket *, uint32_t> vcall_() const {
         if constexpr (!IsClass) {
-            drjit_raise("Unsupported operand type");
+            drjit_fail("Unsupported operand type");
         } else {
             uint32_t bucket_count = 0;
             CallBucket *buckets = jit_var_call_reduce(
@@ -506,7 +506,7 @@ struct DRJIT_TRIVIAL_ABI JitArray
 
     auto compress_() const {
         if constexpr (!is_mask_v<Value>)
-            drjit_raise("Unsupported operand type");
+            drjit_fail("Unsupported operand type");
         else
             return uint32_array_t<JitArray>::steal(jit_var_compress(m_index));
     }
@@ -516,7 +516,7 @@ struct DRJIT_TRIVIAL_ABI JitArray
                block_count = input_size / block_size;
 
         if (block_count * block_size != input_size)
-            drjit_raise("block_sum(): input size must be a multiple of block_size!");
+            drjit_fail("block_sum(): input size must be a multiple of block_size!");
 
         JitArray output = empty_(block_count);
 
@@ -602,8 +602,8 @@ struct DRJIT_TRIVIAL_ABI JitArray
         return uint32_array_t<JitArray>::steal(jit_var_counter(Backend, size));
     }
 
-	void set_label_(const char *label) {
-        Index index = jit_var_set_label(m_index, label);
+    template <typename... Ts> void set_label_(const Ts*... args) {
+        Index index = jit_var_set_label(m_index, sizeof...(Ts), args...);
         jit_var_dec_ref(m_index);
         m_index = index;
 	}

@@ -54,8 +54,7 @@
 #include <drjit/math.h>
 #include <drjit-core/traits.h>
 #include <drjit-core/half.h>
-#include <nanobind/nanobind.h>
-#include <nanobind/ndarray.h>
+#include <drjit-core/python.h>
 #include <nanobind/stl/array.h>
 
 NAMESPACE_BEGIN(drjit)
@@ -66,37 +65,6 @@ NAMESPACE_END(drjit)
 /// Publish a Dr.Jit type binding in Python
 extern nanobind::object bind(const drjit::ArrayBinding &);
 #endif
-
-NAMESPACE_BEGIN(NB_NAMESPACE)
-
-NAMESPACE_BEGIN(detail)
-
-template <> struct type_caster<drjit::half> {
-    bool from_python(handle src, uint8_t flags, cleanup_list *) noexcept {
-        float f;
-        bool success = detail::load_f32(src.ptr(), flags, &f);
-        value = drjit::half(f);
-        return success;
-    }
-
-    static handle from_cpp(drjit::half src, rv_policy, cleanup_list *) noexcept {
-        return PyFloat_FromDouble((double) src);
-    }
-
-    NB_TYPE_CASTER(drjit::half, const_name("half"))
-};
-
-NAMESPACE_END(detail)
-
-template <> struct ndarray_traits <drjit::half> {
-    static constexpr bool is_complex = false;
-    static constexpr bool is_float   = true;
-    static constexpr bool is_bool    = false;
-    static constexpr bool is_int     = false;
-    static constexpr bool is_signed  = true;
-};
-
-NAMESPACE_END(NB_NAMESPACE)
 
 NAMESPACE_BEGIN(drjit)
 
@@ -271,7 +239,7 @@ struct ArraySupplement : ArrayMeta {
     using BinaryOp = void (*)(const ArrayBase *, const ArrayBase *, ArrayBase *);
     using PrefixSum = void (*)(const ArrayBase *, bool, ArrayBase *);
 
-    using TensorShape = dr_vector<size_t> & (*) (ArrayBase *) noexcept;
+    using TensorShape = vector<size_t> & (*) (ArrayBase *) noexcept;
     using TensorArray = PyObject * (*) (PyObject *) noexcept;
 
     // Pointer to the associated array, mask, and element type
@@ -697,7 +665,7 @@ template <typename T>
 void bind_tensor(ArrayBinding &b) {
     namespace nb = nanobind;
 
-    b.tensor_shape = (ArrayBinding::TensorShape) +[](T *o) noexcept -> dr_vector<size_t> & {
+    b.tensor_shape = (ArrayBinding::TensorShape) +[](T *o) noexcept -> vector<size_t> & {
         return o->shape();
     };
 
@@ -1002,6 +970,30 @@ template <typename T> void bind_all(ArrayBinding &b) {
     bind_array<Tensor<int64_array_t<T2>>>(b);
     bind_array<Tensor<uint32_array_t<T2>>>(b);
     bind_array<Tensor<uint64_array_t<T2>>>(b);
+}
+
+// Expose already existing object tree traversal callbacks (T::traverse_1_..) in Python.
+// This functionality is needed to traverse custom/opaque C++ classes and correctly
+// update their members when they are used in vectorized loops, function calls, etc.
+template <typename T, typename... Args> auto& bind_traverse(nanobind::class_<T, Args...> &cls) {
+    namespace nb = nanobind;
+    struct Payload { nb::callable c; };
+
+    cls.def("_traverse_1_cb_ro", [](const T *self, nb::callable c) {
+        Payload payload{ std::move(c) };
+        self->traverse_1_cb_ro((void *) &payload, [](void *p, uint64_t index) {
+            ((Payload *) p)->c(index);
+        });
+    });
+
+    cls.def("_traverse_1_cb_rw", [](T *self, nb::callable c) {
+        Payload payload{ std::move(c) };
+        self->traverse_1_cb_rw((void *) &payload, [](void *p, uint64_t index) {
+            return nb::cast<uint64_t>(((Payload *) p)->c(index));
+        });
+    });
+
+    return cls;
 }
 
 NAMESPACE_END(drjit)

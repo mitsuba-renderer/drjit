@@ -51,7 +51,13 @@ extern nb::object apply_ret_pair(ArrayOp op, const char *name,
 
 /// Callback for the ``traverse()`` operation below
 struct TraverseCallback {
+    // Recursively called on leaf arrays
     virtual void operator()(nb::handle h) = 0;
+
+    // Type-erased form which is needed in some cases to traverse into opaque
+    // C++ code. This one just gets called with Jit/AD variable indices, an
+    // associated Python/ instance/type is not available.
+    virtual void operator()(uint64_t index);
 };
 
 /// Callback for the ``traverse_pair()`` operation below
@@ -61,9 +67,22 @@ struct TraversePairCallback {
 
 /// Callback for the ``transform()`` operation below
 struct TransformCallback {
+    // Into what type should the input array be transformed? Identity by default.
     virtual nb::handle transform_type(nb::handle tp) const;
+
+    // How should unknown (non-array) types be transformed? Should directly
+    // return the output object Identity by default.
     virtual nb::object transform_unknown(nb::handle h) const;
+
+    /// Initialize 'h2' (already allocated) based on 'h1'
     virtual void operator()(nb::handle h1, nb::handle h2) = 0;
+
+    // Type-erased form which is needed in some cases to traverse into opaque
+    // C++ code. This one just gets called with Jit/AD variable indices, an
+    // associated Python/ instance/type is not available.
+    virtual uint64_t operator()(uint64_t index);
+
+    // Optional postprocess handler, called on every constructed object
     virtual void postprocess(nb::handle h1, nb::handle h2);
 };
 

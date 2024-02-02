@@ -28,5 +28,5 @@ extern nb::object full(const char *name, nb::handle dtype, nb::handle value,
                        const std::vector<size_t> &shape, bool opaque = false);
 
 extern nb::object import_ndarray(ArrayMeta m, PyObject *arg,
-                                 dr_vector<size_t> *shape = nullptr,
+                                 vector<size_t> *shape = nullptr,
                                  bool force_ad = false);

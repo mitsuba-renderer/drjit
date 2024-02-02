@@ -335,8 +335,8 @@ PyObject *apply(ArrayOp op, Slot slot, std::index_sequence<Is...> is,
 
 // Broadcast a tensor to a desired shape
 void tensor_broadcast(nb::object &tensor, nb::object &array,
-                      const dr_vector<size_t> &shape_src,
-                      const dr_vector<size_t> &shape_dst) {
+                      const vector<size_t> &shape_src,
+                      const vector<size_t> &shape_dst) {
     size_t ndim = shape_src.size();
     if (ndim == 0 || memcmp(shape_src.data(), shape_dst.data(), sizeof(size_t) * ndim) == 0)
         return;
@@ -400,7 +400,7 @@ NB_NOINLINE PyObject *apply_tensor(ArrayOp op, Slot slot,
             nb::steal(s[Is]->tensor_array(o[Is].ptr()))...
         };
 
-        const dr_vector<size_t> *shapes[N] = {
+        const vector<size_t> *shapes[N] = {
             &s[Is]->tensor_shape(inst_ptr(o[Is]))...
         };
 
@@ -413,7 +413,7 @@ NB_NOINLINE PyObject *apply_tensor(ArrayOp op, Slot slot,
                 compatible = false;
         }
 
-        dr_vector<size_t> shape(ndim, 0);
+        vector<size_t> shape(ndim, 0);
 
         if (compatible) {
             for (size_t i = 0; i < ndim; ++i) {
@@ -565,6 +565,8 @@ struct recursion_guard {
     ~recursion_guard() { recursion_level--; }
 };
 
+void TraverseCallback::operator()(uint64_t) { }
+
 /// Invoke the given callback on leaf elements of the pytree 'h'
 void traverse(const char *op, TraverseCallback &tc, nb::handle h) {
     nb::handle tp = h.type();
@@ -599,7 +601,12 @@ void traverse(const char *op, TraverseCallback &tc, nb::handle h) {
             if (dstruct.is_valid() && dstruct.type().is(&PyDict_Type)) {
                 for (auto [k, v] : nb::borrow<nb::dict>(dstruct))
                     traverse(op, tc, nb::getattr(h, k));
+                return;
             }
+
+            nb::object traverse_cb = nb::getattr(tp, "_traverse_1_cb_ro", nb::handle());
+            if (traverse_cb.is_valid())
+                traverse_cb(h, nb::cpp_function([&](uint64_t index) { tc(index); }));
         }
     } catch (nb::python_error &e) {
         nb::raise_from(e, PyExc_RuntimeError,
@@ -836,9 +843,16 @@ nb::object transform(const char *op, TransformCallback &tc, nb::handle h) {
                 for (auto [k, v] : nb::borrow<nb::dict>(dstruct))
                     nb::setattr(tmp, k, transform(op, tc, nb::getattr(h, k)));
                 result = std::move(tmp);
-            } else {
-                result = tc.transform_unknown(h);
             }
+
+            if (!result.is_valid()) {
+                nb::object traverse_cb = nb::getattr(tp, "_traverse_1_cb_rw", nb::handle());
+                if (traverse_cb.is_valid())
+                    traverse_cb(h, nb::cpp_function([&](uint64_t index) { return tc(index); }));
+            }
+
+            if (!result.is_valid())
+                result = tc.transform_unknown(h);
         }
         tc.postprocess(h, result);
         return result;
@@ -857,6 +871,8 @@ nb::object transform(const char *op, TransformCallback &tc, nb::handle h) {
 nb::handle TransformPairCallback::transform_type(nb::handle tp) const {
     return tp;
 }
+
+uint64_t TransformCallback::operator()(uint64_t index) { return index; }
 
 /// Transform a pair of input pytrees 'h1' and 'h2' into an output pytree, potentially of a different type
 nb::object transform_pair(const char *op, TransformPairCallback &tc,

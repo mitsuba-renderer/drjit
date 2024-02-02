@@ -61,7 +61,7 @@ void set_label(nb::handle h, nb::str label) {
             return;
         if (s.ndim == 1) {
             uint64_t new_index =
-                ad_var_set_label(s.index(inst_ptr(h)), label.c_str());
+                ad_var_set_label(s.index(inst_ptr(h)), 1, label.c_str());
             nb::object tmp = nb::inst_alloc(tp);
             s.init_index(new_index, inst_ptr(tmp));
             nb::inst_mark_ready(tmp);

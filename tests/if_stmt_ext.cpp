@@ -1,4 +1,3 @@
-#include <tuple>
 #include <nanobind/stl/pair.h>
 #include <drjit/packet.h>
 #include <drjit/if_stmt.h>
@@ -13,7 +12,7 @@ template <typename UInt> UInt simple_cond() {
          j = 5;
 
     UInt k = dr::if_stmt(
-        std::make_tuple(i, j),
+        drjit::make_tuple(i, j),
 
         i < j,
 

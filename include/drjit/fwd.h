@@ -13,9 +13,7 @@
 
 #pragma once
 
-#include <stddef.h>
-#include <drjit-core/jit.h>
-#include <drjit-core/half.h>
+#include <cstdint>
 
 #if defined(_MSC_VER)
 #  define DRJIT_NOINLINE               __declspec(noinline)
@@ -107,7 +105,7 @@
 # define DRJIT_DISABLE_VECTORIZATION 1
 #endif
 
-# if !defined(DRJIT_DISABLE_VECTORIZATION)
+# if !defined(DRJIT_DISABLE_VECTORIZATION) && !defined(DRJIT_DISABLE_AVX512)
 #  if defined(__AVX512F__) && defined(__AVX512CD__) && defined(__AVX512VL__) && defined(__AVX512DQ__) && defined(__AVX512BW__)
 #    define DRJIT_X86_AVX512 1
 #  endif
@@ -117,6 +115,9 @@
 #  if defined(__AVX512VPOPCNTDQ__)
 #    define DRJIT_X86_AVX512VPOPCNTDQ 1
 #  endif
+#endif
+
+# if !defined(DRJIT_DISABLE_VECTORIZATION)
 #  if defined(__AVX2__)
 #    define DRJIT_X86_AVX2 1
 #  endif
@@ -267,24 +268,3 @@ namespace detail {
 enum class ADMode { Primal, Forward, Backward };
 
 NAMESPACE_END(drjit)
-
-// Common JIT functions that are called from Dr.Jit headers besides jit.h
-
-extern "C" {
-    enum class JitFlag : uint32_t;
-
-    /// Evaluate all computation that is scheduled on the current stream
-    extern DRJIT_IMPORT void jit_eval();
-    /// Set the active CUDA device
-    extern DRJIT_IMPORT void jit_cuda_set_device(int32_t device);
-    /// Wait for all computation on the current stream to finish
-    extern DRJIT_IMPORT void jit_sync_thread();
-    /// Wait for all computation on the current device to finish
-    extern DRJIT_IMPORT void jit_sync_device();
-    /// Wait for all computation on the *all devices* to finish
-    extern DRJIT_IMPORT void jit_sync_all_devices();
-    /// Return a GraphViz representation of queued computation
-    extern DRJIT_IMPORT const char *jit_var_graphviz();
-    /// Retrieve the JIT compiler status flags (see \ref JitFlags)
-    extern DRJIT_IMPORT uint32_t jit_flags();
-};

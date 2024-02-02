@@ -316,7 +316,7 @@ static bool array_init_from_seq(PyObject *self, const ArraySupplement &s, PyObje
 
         if (!s.is_class) {
             size_t byte_size = jit_type_size((VarType) s.type) * (size_t) size;
-            dr::dr_unique_ptr<uint8_t[]> storage(new uint8_t[byte_size]);
+            dr::unique_ptr<uint8_t[]> storage(new uint8_t[byte_size]);
             switch ((VarType) s.type) {
                 case VarType::Bool:    FROM_SEQ_IMPL(bool);     break;
                 case VarType::Float16: FROM_SEQ_IMPL(dr::half); break;
@@ -332,7 +332,7 @@ static bool array_init_from_seq(PyObject *self, const ArraySupplement &s, PyObje
             s.init_data((size_t) size, storage.get(), inst_ptr(self));
         } else {
             const std::type_info &cpp_type = nb::type_info(s.value);
-            dr::dr_unique_ptr<void*[]> storage((new void*[size]));
+            dr::unique_ptr<void*[]> storage((new void*[size]));
 
             for (Py_ssize_t i = 0; i < size; ++i) {
                 nb::object o = nb::steal(sq_item(seq, i));
@@ -378,7 +378,7 @@ static void ndarray_keep_alive(JitBackend backend, uint32_t index,
                                nb::detail::ndarray_handle *p);
 
 nb::object import_ndarray(ArrayMeta m, PyObject *arg,
-                          dr_vector<size_t> *shape_out, bool force_ad) {
+                          vector<size_t> *shape_out, bool force_ad) {
     size_t shape[4];
     nb::detail::ndarray_req req { };
     req.ndim = m.ndim;
@@ -634,7 +634,7 @@ int tp_init_tensor(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
         }
 
         nb::detail::nb_inst_zero(self);
-        dr_vector<size_t> &shape_vec = s.tensor_shape(inst_ptr(self));
+        vector<size_t> &shape_vec = s.tensor_shape(inst_ptr(self));
 
         nb::object args_2;
         if (!shape) {
@@ -737,7 +737,7 @@ nb::object full(const char *name, nb::handle dtype, nb::handle value,
                     size *= shape[i];
 
                 nb::tuple shape_tuple =
-                    cast_shape(dr_vector<size_t>(shape, shape + ndim));
+                    cast_shape(vector<size_t>(shape, shape + ndim));
 
                 return dtype(full(name, s.array, value, 1, &size, opaque), shape_tuple);
             }

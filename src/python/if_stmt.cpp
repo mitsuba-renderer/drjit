@@ -40,8 +40,8 @@ struct IfState {
 };
 
 static void if_stmt_body_cb(void *p, bool value,
-                            const dr_vector<uint64_t> &args_i,
-                            dr_vector<uint64_t> &rv_i) {
+                            const vector<uint64_t> &args_i,
+                            vector<uint64_t> &rv_i) {
     IfState *is = (IfState *) p;
     nb::gil_scoped_acquire guard;
 

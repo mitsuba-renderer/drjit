@@ -19,7 +19,7 @@
 #include "common.h"
 
 namespace dr = drjit;
-using dr::dr_vector;
+using dr::vector;
 
 /// RAII helper to temporarily push a mask onto the Dr.Jit mask stack
 struct scoped_set_mask {
@@ -60,19 +60,19 @@ using JitVar = GenericArray<void>;
 // Forward declaration of a helper function full of checks (used by all strategies)
 static void ad_call_check_rv(JitBackend backend, size_t size,
                              size_t callable_index,
-                             dr_vector<uint64_t> &rv,
-                             const dr_vector<uint64_t> &rv2);
+                             vector<uint64_t> &rv,
+                             const vector<uint64_t> &rv2);
 
 // Strategy 1: this is a getter. turn the call into a gather operation
 static void ad_call_getter(JitBackend backend, const char *domain,
                            const char *name, size_t size, uint32_t index,
                            uint32_t mask_, size_t callable_count,
-                           const dr_vector<uint64_t> args,
-                           dr_vector<uint64_t> &rv, dr_vector<bool> &rv_ad,
+                           const vector<uint64_t> args,
+                           vector<uint64_t> &rv, vector<bool> &rv_ad,
                            ad_call_func func, void *payload) {
 
     dr_index64_vector args2; // unused
-    dr_vector<uint64_t> rv2;
+    vector<uint64_t> rv2;
     dr_index32_vector rv3;
     dr_index32_vector cleanup;
     (void) args;
@@ -231,8 +231,8 @@ static void ad_call_getter(JitBackend backend, const char *domain,
 static void ad_call_symbolic(JitBackend backend, const char *domain,
                              const char *name, size_t size, uint32_t index,
                              uint32_t mask_, size_t callable_count,
-                             const dr_vector<uint64_t> args,
-                             dr_vector<uint64_t> &rv, dr_vector<bool> &rv_ad,
+                             const vector<uint64_t> args,
+                             vector<uint64_t> &rv, vector<bool> &rv_ad,
                              ad_call_func func, void *payload) {
     (void) domain;
     (void) size;
@@ -244,7 +244,7 @@ static void ad_call_symbolic(JitBackend backend, const char *domain,
         mask = JitVar::steal(jit_var_bool(backend, true));
 
     dr_index64_vector args2;
-    dr_vector<uint64_t> rv2;
+    vector<uint64_t> rv2;
 
     dr_index32_vector args3, rv3;
 
@@ -254,7 +254,7 @@ static void ad_call_symbolic(JitBackend backend, const char *domain,
     if (domain && combined.find("::") == std::string::npos)
         combined = std::string(domain) + "::" + combined;
 
-    dr_vector<uint32_t> checkpoints(callable_count + 1, 0),
+    vector<uint32_t> checkpoints(callable_count + 1, 0),
                             inst_id(callable_count, 0);
 
     {
@@ -318,7 +318,7 @@ static void ad_call_symbolic(JitBackend backend, const char *domain,
             checkpoints[callable_count_final] = rec.checkpoint_and_rewind();
         }
 
-        dr_vector<uint32_t> rv4;
+        vector<uint32_t> rv4;
         rv4.resize(rv.size());
 
         jit_var_call(
@@ -339,8 +339,8 @@ static void ad_call_symbolic(JitBackend backend, const char *domain,
 static void ad_call_reduce(JitBackend backend, const char *domain,
                             const char *name, size_t size, uint32_t index_,
                             uint32_t mask, size_t callable_count,
-                            const dr_vector<uint64_t> args,
-                            dr_vector<uint64_t> &rv,
+                            const vector<uint64_t> args,
+                            vector<uint64_t> &rv,
                             ad_call_func func, void *payload) {
     (void) name; // unused
     const char *domain_or_empty = domain ? domain : "",
@@ -363,7 +363,7 @@ static void ad_call_reduce(JitBackend backend, const char *domain,
     dr_index64_vector args2(args.size(), 0);
     args2.clear();
 
-    dr_vector<uint64_t> rv2;
+    vector<uint64_t> rv2;
     size_t last_size = 0;
     JitVar memop_mask = JitVar::steal(jit_var_bool(backend, true));
 
@@ -433,8 +433,8 @@ static void ad_call_reduce(JitBackend backend, const char *domain,
 // Helper function full of checks (used by all strategies)
 static void ad_call_check_rv(JitBackend backend, size_t size,
                               size_t callable_index,
-                              dr_vector<uint64_t> &rv,
-                              const dr_vector<uint64_t> &rv2) {
+                              vector<uint64_t> &rv,
+                              const vector<uint64_t> &rv2) {
     // Examine return values
     if (rv.size() != rv2.size()) {
         if (!rv.empty())
@@ -484,7 +484,7 @@ struct CallOp : public dr::detail::CustomOpBase {
 public:
     CallOp(JitBackend backend, std::string &&name, const char *domain,
             uint32_t index, uint32_t mask, size_t callable_count,
-            const dr_vector<uint64_t> &args, size_t rv_size, void *payload,
+            const vector<uint64_t> &args, size_t rv_size, void *payload,
             ad_call_func func, ad_call_cleanup cleanup)
         : m_name(std::move(name)), m_domain(domain), m_index(index), m_mask(mask),
           m_callable_count(callable_count), m_payload(payload),
@@ -536,8 +536,8 @@ public:
         ad_call(
             m_backend, m_domain, m_callable_count, name.c_str(), false, m_index,
             m_mask, args, rv, this,
-            [](void *ptr, void *self, const dr_vector<uint64_t> &args,
-               dr_vector<uint64_t> &rv) {
+            [](void *ptr, void *self, const vector<uint64_t> &args,
+               vector<uint64_t> &rv) {
                 ((CallOp *) ptr)->forward_cb(self, args, rv);
             },
             nullptr, false);
@@ -569,8 +569,8 @@ public:
         ad_call(
             m_backend, m_domain, m_callable_count, name.c_str(), false, m_index,
             m_mask, args, rv, this,
-            [](void *ptr, void *self, const dr_vector<uint64_t> &args,
-               dr_vector<uint64_t> &rv) {
+            [](void *ptr, void *self, const vector<uint64_t> &args,
+               vector<uint64_t> &rv) {
                 ((CallOp *) ptr)->backward_cb(self, args, rv);
             },
             nullptr, false);
@@ -586,8 +586,8 @@ public:
     }
 
     /// Forward AD callback (invoked by forward() once per callable)
-    void forward_cb(void *self, const dr_vector<uint64_t> &args,
-                    dr_vector<uint64_t> &rv) {
+    void forward_cb(void *self, const vector<uint64_t> &args,
+                    vector<uint64_t> &rv) {
         m_args2.release();
         for (size_t i = 0; i < m_args.size(); ++i)
             m_args2.push_back_borrow(args[i]);
@@ -623,8 +623,8 @@ public:
     }
 
     /// Backward AD callback (invoked by backward() once per callable)
-    void backward_cb(void *self, const dr_vector<uint64_t> &args,
-                     dr_vector<uint64_t> &rv) {
+    void backward_cb(void *self, const vector<uint64_t> &args,
+                     vector<uint64_t> &rv) {
         m_args2.release();
         for (size_t i = 0; i < m_args.size(); ++i)
             m_args2.push_back_borrow(args[i]);
@@ -682,10 +682,10 @@ private:
     dr_index32_vector m_args;
     dr_index64_vector m_args2;
     dr_index64_vector m_rv;
-    dr_vector<uint64_t> m_rv2;
+    vector<uint64_t> m_rv2;
     dr_index32_vector m_temp;
-    dr_vector<uint32_t> m_input_offsets;
-    dr_vector<uint32_t> m_output_offsets;
+    vector<uint32_t> m_input_offsets;
+    vector<uint32_t> m_output_offsets;
     void *m_payload;
     ad_call_func m_func;
     ad_call_cleanup m_cleanup;
@@ -694,7 +694,7 @@ private:
 // Generic checks, then forward either to ad_call_symbolic or ad_call_reduce
 bool ad_call(JitBackend backend, const char *domain, size_t callable_count,
              const char *name, bool is_getter, uint32_t index, uint32_t mask,
-             const dr_vector<uint64_t> &args, dr_vector<uint64_t> &rv,
+             const vector<uint64_t> &args, vector<uint64_t> &rv,
              void *payload, ad_call_func func, ad_call_cleanup cleanup,
              bool ad) {
     try {
@@ -749,8 +749,8 @@ bool ad_call(JitBackend backend, const char *domain, size_t callable_count,
             return true;
         }
 
-        dr_vector<bool> rv_ad;
-        dr_vector<uint32_t> implicit_in;
+        vector<bool> rv_ad;
+        vector<uint32_t> implicit_in;
 
         if (is_getter) {
             scoped_isolation_boundary guard;

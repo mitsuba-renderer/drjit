@@ -13,12 +13,11 @@
 #pragma once
 
 #include <drjit/autodiff.h>
-#include <drjit/struct.h> // to traverse std::tuple
 
 NAMESPACE_BEGIN(drjit)
 NAMESPACE_BEGIN(detail)
 
-struct ref_vec : dr_vector<uint64_t> {
+struct ref_vec : vector<uint64_t> {
     ref_vec() = default;
     ~ref_vec() {
         for (size_t i = 0; i < m_size; ++i)
@@ -30,36 +29,38 @@ template <size_t... Is, typename Args, typename Mask, typename TrueFn,
           typename FalseFn>
 auto if_stmt_impl(std::index_sequence<Is...>, Args &&args, const Mask &cond,
                   TrueFn &&true_fn, FalseFn &&false_fn, const char *name) {
+    using namespace std; // for ADL lookup to drjit::get<I> or std::get<I>
+
     if constexpr (std::is_same_v<Mask, bool>) {
         // This is a scalar conditional statement
         DRJIT_MARK_USED(name);
 
         if (cond)
-            return true_fn(dr_get<Is>(args)...);
+            return true_fn(get<Is>(args)...);
         else
-            return false_fn(dr_get<Is>(args)...);
+            return false_fn(get<Is>(args)...);
     } else if constexpr (is_array_v<Mask> && !is_jit_v<Mask>) {
         // This is a packet-based conditional statement
         DRJIT_MARK_USED(name);
 
-        using Result = decltype(true_fn(dr_get<Is>(args)...));
+        using Result = decltype(true_fn(get<Is>(args)...));
 
         Result result;
 
         if (any(cond))
-            result = true_fn(dr_get<Is>(args)...);
+            result = true_fn(get<Is>(args)...);
 
         Mask cond2 = !cond;
 
         if (any(cond2))
-            result = select(cond2, false_fn(dr_get<Is>(args)...), result);
+            result = select(cond2, false_fn(get<Is>(args)...), result);
 
         return result;
     } else {
         // This is a JIT-compiled conditional statement
 
         using Return = std::decay_t<decltype(std::declval<TrueFn>()(
-              dr_get<Is>(args)...))>;
+              get<Is>(args)...))>;
 
         struct IfStmtData {
             std::decay_t<Args> args;
@@ -70,16 +71,16 @@ auto if_stmt_impl(std::index_sequence<Is...>, Args &&args, const Mask &cond,
         };
 
         ad_cond_body body_cb = [](void *p, bool value,
-                                  const dr_vector<uint64_t> &args_i,
-                                  dr_vector<uint64_t> &rv_i) {
+                                  const vector<uint64_t> &args_i,
+                                  vector<uint64_t> &rv_i) {
             IfStmtData *isd = (IfStmtData *) p;
 
             detail::update_indices(isd->args, args_i);
 
             if (value)
-                isd->rv = isd->true_fn(dr_get<Is>(isd->args)...);
+                isd->rv = isd->true_fn(get<Is>(isd->args)...);
             else
-                isd->rv = isd->false_fn(dr_get<Is>(isd->args)...);
+                isd->rv = isd->false_fn(get<Is>(isd->args)...);
 
             detail::collect_indices<true>(isd->rv, rv_i);
         };

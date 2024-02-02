@@ -17,65 +17,57 @@
 #  error Dr.Jit requires compilation in C++17 mode!
 #endif
 
-/// Clang-specific workaround: don't pull in all of <math.h> when including <stdlib.h>.
-#if !defined(_LIBCPP_STDLIB_H)
-#  define __need_malloc_and_calloc
-#  include <stdlib.h>
-#  undef __need_malloc_and_calloc
-#  define _LIBCPP_STDLIB_H
+// libc++: only include what is truly requested
+#if defined(_LIBCPP_VERSION) && !defined(_LIBCPP_REMOVE_TRANSITIVE_INCLUDES)
+#  define _LIBCPP_REMOVE_TRANSITIVE_INCLUDES
 #endif
 
+// Core C headers needed by Dr.Jit
+#include <cstdlib>
+#include <cstring>
+#include <cstdint>
+
+// Core C++ headers needed by Dr.Jit
+// On libc++, include <utility> without pulling in the entire C/C++ math library
+#if defined(_LIBCPP_CMATH) || !defined(_LIBCPP_VERSION)
+#  include <utility>
+#else
+#  define _LIBCPP_CMATH
+#    include <utility>
+#  undef _LIBCPP_CMATH
+#endif
+
+#define _LIBCPP_CMATH_BACKUP _LIBCPP_CMATH
+#include <type_traits>
+
+// Tiny self-contained subset of STL-like classes for internal use
+#include <drjit-core/nanostl.h>
+
+// Dr.Jit containers and compiler API (relevant when JIT-ted types are used)
+#include <drjit-core/jit.h>
+
+// Type traits for the JIT layer
+#include <drjit-core/traits.h>
+
+// Forward declarations of this project
+#include <drjit/fwd.h>
+
+// Type traits to detect/convert between various array types
+#include <drjit/array_traits.h>
+
+// Scalar fallbacks for various mathematical functions
+#include <drjit/array_utils.h>
+
+// Central constants ('pi', 'e', etc.)
+#include <drjit/array_constants.h>
+
+// Functionality to traverse custom data structures
+#include <drjit/array_traverse.h>
+
+// Routing layer that dispatches operations to the right array endpoints
+#include <drjit/array_router.h>
+#include <drjit/array_base.h>
+#include <drjit/array_static.h>
 #include <drjit/array_generic.h>
 #include <drjit/array_mask.h>
-
-NAMESPACE_BEGIN(drjit)
-
-template <typename Value_, size_t Size_>
-struct Array : StaticArrayImpl<Value_, Size_, false, Array<Value_, Size_>> {
-    using Base = StaticArrayImpl<Value_, Size_, false, Array<Value_, Size_>>;
-
-    using ArrayType = Array;
-    using MaskElement =
-        std::conditional_t<drjit::detail::is_scalar_v<Value_>, Value_, mask_t<Value_>>;
-    using MaskType = Mask<MaskElement, Size_>;
-
-    /// Type alias for creating a similar-shaped array over a different type
-    template <typename T> using ReplaceValue = Array<T, Size_>;
-
-    DRJIT_ARRAY_IMPORT(Array, Base)
-};
-
-template <typename Value_, size_t Size_>
-struct Mask : MaskBase<Value_, Size_, Mask<Value_, Size_>> {
-    using Base = MaskBase<Value_, Size_, Mask<Value_, Size_>>;
-
-    using MaskType = Mask;
-    using ArrayType = Array<array_t<Value_>, Size_>;
-    using Value = Value_;
-    using Scalar = scalar_t<Value_>;
-
-    /// Type alias for creating a similar-shaped array over a different type
-    template <typename T> using ReplaceValue = Mask<T, Size_>;
-
-    DRJIT_ARRAY_IMPORT(Mask, Base)
-};
-
-template <typename Value_, size_t Size_>
-struct Array<detail::MaskedArray<Value_>, Size_>
-    : detail::MaskedArray<Array<Value_, Size_>> {
-    using Base = detail::MaskedArray<Array<Value_, Size_>>;
-    using Base::Base;
-    using Base::operator=;
-    Array(const Base &b) : Base(b) { }
-};
-
-template <typename Value_, size_t Size_>
-struct Mask<detail::MaskedArray<Value_>, Size_>
-    : detail::MaskedArray<Mask<Value_, Size_>> {
-    using Base = detail::MaskedArray<Mask<Value_, Size_>>;
-    using Base::Base;
-    using Base::operator=;
-    Mask(const Base &b) : Base(b) { }
-};
-
-NAMESPACE_END(drjit)
+#include <drjit/array_iface.h>

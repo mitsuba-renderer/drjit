@@ -2,6 +2,9 @@
     drjit/array_router.h -- Helper functions which route function calls
     in the drjit namespace to the intended recipients
 
+    (This file isn't meant to be included as-is. Please use 'drjit/array.h',
+     which bundles all the 'array_*' headers in the right order.)
+
     Dr.Jit is a C++ template library for efficient vectorization and
     differentiation of numerical kernels on modern processor architectures.
 
@@ -12,12 +15,7 @@
 */
 
 #pragma once
-
-#include <drjit/array_traits.h>
-#include <drjit/array_utils.h>
-#include <drjit/array_constants.h>
-#include <drjit-core/containers.h>
-#include <drjit-core/traits.h>
+#include <typeinfo>
 
 #if defined(min) || defined(max)
 #  error min/max are defined as preprocessor symbols! Define NOMINMAX on MSVC.
@@ -95,7 +93,7 @@ NAMESPACE_BEGIN(drjit)
 
 #define DRJIT_ROUTE_BINARY_SHIFT(name, func)                                   \
     template <typename T1, typename T2,                                        \
-              enable_if_t<drjit::is_arithmetic_v<scalar_t<T1>>> = 0,             \
+              enable_if_t<is_arithmetic_v<scalar_t<T1>>> = 0,                  \
               enable_if_array_any_t<T1, T2> = 0>                               \
     DRJIT_INLINE auto name(const T1 &a1, const T2 &a2) {                       \
         using E = expr_t<T1, T2>;                                              \
@@ -224,7 +222,7 @@ DRJIT_INLINE auto operator/(const T1 &a1, const T2 &a2) {
 
     if constexpr (std::is_same_v<T1, E> && std::is_same_v<T2, E>)
         return a1.derived().div_(a2.derived());
-    else if constexpr (drjit::is_floating_point_v<scalar_t<E>> &&
+    else if constexpr (is_floating_point_v<scalar_t<E>> &&
                        depth_v<T1> > depth_v<T2>) // reciprocal approximation
         return static_cast<ref_cast_t<T1, E>>(a1) *
                rcp(static_cast<ref_cast_t<T1, E2>>(a2));
@@ -253,16 +251,16 @@ template <typename T> DRJIT_INLINE T zeros(size_t size = 1);
 
 template <typename M, typename T, typename F>
 DRJIT_INLINE auto select(const M &m, const T &t, const F &f) {
-    if constexpr (is_drjit_struct_v<T> && std::is_same_v<T, F>) {
+    if constexpr (!is_array_v<F> && is_traversable_v<F> && std::is_same_v<T, F>) {
         T result;
-        struct_support_t<T>::apply_3(
-            t, f, result,
-            [&m](auto const &x1, auto const &x2, auto &x3) DRJIT_INLINE_LAMBDA {
-                using X = std::decay_t<decltype(x3)>;
-                if constexpr (is_array_v<M> && !(is_array_v<X> || is_drjit_struct_v<X>))
-                    x3 = zeros<X>();
+        traverse_3(
+            fields(t), fields(f), fields(result),
+            [&m](auto &vt, auto &vf, auto &r) {
+                using R = std::decay_t<decltype(r)>;
+                if constexpr (is_array_v<M> && !(is_array_v<R> || is_drjit_struct_v<R>))
+                    r = zeros<R>();
                 else
-                    x3 = select(m, x1, x2);
+                    r = select(m, vt, vf);
             });
         return result;
     } else {
@@ -302,7 +300,7 @@ DRJIT_INLINE decltype(auto) reinterpret_array(const Source &src) {
         return src;
     } else if constexpr (is_array_v<Target>) {
         return Target(src, detail::reinterpret_flag());
-    } else if constexpr (drjit::detail::is_scalar_v<Source> && drjit::detail::is_scalar_v<Target>) {
+    } else if constexpr (detail::is_scalar_v<Source> && detail::is_scalar_v<Target>) {
         if constexpr (sizeof(Source) == sizeof(Target)) {
             return memcpy_cast<Target>(src);
         } else {
@@ -324,7 +322,13 @@ DRJIT_INLINE bool reinterpret_array(const detail::MaskBit<Source> &src) {
     return (bool) src;
 }
 
-template <typename T> DRJIT_INLINE auto sqr(const T &value) {
+template <typename T>
+[[deprecated("drjit::sqr was replaced by drjit::square (to be consistent with NumPy and to avoid typos/mixups with drjit::sqrt).")]]
+DRJIT_INLINE auto sqr(const T &value) {
+    return value * value;
+}
+
+template <typename T> DRJIT_INLINE auto square(const T &value) {
     return value * value;
 }
 
@@ -341,76 +345,82 @@ template <typename T> DRJIT_INLINE auto isfinite(const T &a) {
 }
 
 /// Linearly interpolate between 'a' and 'b', using 't'
-template <typename Value1, typename Value2, typename Value3>
-auto lerp(const Value1 &a, const Value2 &b, const Value3 &t) {
+template <typename T1, typename T2, typename T3>
+auto lerp(const T1 &a, const T2 &b, const T3 &t) {
     return fmadd(b, t, fnmadd(a, t, a));
 }
 
-/// Clamp the value 'value' to the range [min, max]
-template <typename Value1, typename Value2, typename Value3>
-auto clamp(const Value1 &value, const Value2 &min, const Value3 &max) {
+/// Clip the value 'value' to the range [min, max]
+template <typename T1, typename T2, typename T3>
+auto clip(const T1 &value, const T2 &min, const T3 &max) {
     return maximum(minimum(value, max), min);
 }
 
-namespace detail {
-    template <typename T> using has_zero   = decltype(T().zero_(0));
-    template <typename T> using has_schedule_force = decltype(T().schedule_force_());
+template <typename T1, typename T2, typename T3>
+[[deprecated("drjit::clamp was replaced by drjit::clip (to be consistent with NumPy).")]]
+auto clamp(const T1 &value, const T2 &min, const T3 &max) {
+    return clip(value, min, max);
+}
 
-    template <typename Array> DRJIT_INLINE Array sign_mask() {
-        using Scalar = scalar_t<Array>;
+namespace detail {
+    template <typename T> using det_zero   = decltype(T().zero_(0));
+    template <typename T> using det_schedule_force = decltype(T().schedule_force_());
+
+    template <typename T> DRJIT_INLINE T sign_mask() {
+        using Scalar = scalar_t<T>;
         using UInt = uint_array_t<Scalar>;
-        return Array(memcpy_cast<Scalar, UInt>(UInt(1) << (sizeof(UInt) * 8 - 1)));
+        return T(memcpy_cast<Scalar, UInt>(UInt(1) << (sizeof(UInt) * 8 - 1)));
     }
 }
 
-template <typename Array> DRJIT_INLINE Array sign(const Array &v) {
-    if constexpr (drjit::is_floating_point_v<scalar_t<Array>> && !is_diff_v<Array>)
-        return detail::or_(Array(1), detail::and_(detail::sign_mask<Array>(), v));
+template <typename T> DRJIT_INLINE T sign(const T &v) {
+    if constexpr (is_floating_point_v<scalar_t<T>> && !is_diff_v<T>)
+        return detail::or_(T(1), detail::and_(detail::sign_mask<T>(), v));
     else
-        return select(v >= 0, Array(1), Array(-1));
+        return select(v >= 0, T(1), T(-1));
 }
 
-template <typename Array1, typename Array2>
-DRJIT_INLINE Array1 copysign(const Array1 &v1, const Array2 &v2) {
-    if constexpr (drjit::is_floating_point_v<scalar_t<Array2>> && !is_diff_v<Array2>) {
-        return detail::or_(abs(v1), detail::and_(detail::sign_mask<Array2>(), v2));
+template <typename T1, typename T2>
+DRJIT_INLINE T1 copysign(const T1 &v1, const T2 &v2) {
+    if constexpr (is_floating_point_v<scalar_t<T2>> && !is_diff_v<T2>) {
+        return detail::or_(abs(v1), detail::and_(detail::sign_mask<T2>(), v2));
     } else {
-        Array1 v1_a = abs(v1);
+        T1 v1_a = abs(v1);
         return select(v2 >= 0, v1_a, -v1_a);
     }
 }
 
-template <typename Array1, typename Array2>
-DRJIT_INLINE Array1 copysign_neg(const Array1 &v1, const Array2 &v2) {
-    if constexpr (drjit::is_floating_point_v<scalar_t<Array2>> && !is_diff_v<Array2>) {
-        return detail::or_(abs(v1), detail::andnot_(detail::sign_mask<Array2>(), v2));
+template <typename T1, typename T2>
+DRJIT_INLINE T1 copysign_neg(const T1 &v1, const T2 &v2) {
+    if constexpr (is_floating_point_v<scalar_t<T2>> && !is_diff_v<T2>) {
+        return detail::or_(abs(v1), detail::andnot_(detail::sign_mask<T2>(), v2));
     } else {
-        Array1 v1_a = abs(v1);
+        T1 v1_a = abs(v1);
         return select(v2 >= 0, -v1_a, v1_a);
     }
 }
 
-template <typename Array1, typename Array2>
-DRJIT_INLINE Array1 mulsign(const Array1 &v1, const Array2 &v2) {
-    if constexpr (drjit::is_floating_point_v<scalar_t<Array2>> && !is_diff_v<Array2>) {
-        return detail::xor_(v1, detail::and_(detail::sign_mask<Array2>(), v2));
+template <typename T1, typename T2>
+DRJIT_INLINE T1 mulsign(const T1 &v1, const T2 &v2) {
+    if constexpr (is_floating_point_v<scalar_t<T2>> && !is_diff_v<T2>) {
+        return detail::xor_(v1, detail::and_(detail::sign_mask<T2>(), v2));
     } else {
         return select(v2 >= 0, v1, -v1);
     }
 }
 
-template <typename Array1, typename Array2>
-DRJIT_INLINE Array1 mulsign_neg(const Array1 &v1, const Array2 &v2) {
+template <typename T1, typename T2>
+DRJIT_INLINE T1 mulsign_neg(const T1 &v1, const T2 &v2) {
     // TODO add support for binary op for floats
-    // if constexpr (drjit::is_floating_point_v<scalar_t<Array2>> && !is_diff_v<Array2>) {
-    //     return detail::xor_(v1, detail::andnot_(detail::sign_mask<Array2>(), v2));
+    // if constexpr (drjit::is_floating_point_v<scalar_t<T2>> && !is_diff_v<T2>) {
+    //     return detail::xor_(v1, detail::andnot_(detail::sign_mask<T2>(), v2));
     // } else {
         return select(v2 >= 0, -v1, v1);
     // }
 }
 
 /// Fast implementation to compute ``floor(log2(value))`` for integer ``value``
-template <typename T> DRJIT_INLINE T log2i(T value) {
+template <typename T> DRJIT_INLINE T log2i(const T &value) {
     return scalar_t<T>(sizeof(scalar_t<T>) * 8 - 1) - lzcnt(value);
 }
 
@@ -438,9 +448,9 @@ template <typename A, typename B> expr_t<A, B> hypot(const A &a, const B &b) {
     }
 }
 
-template <typename Value>
-DRJIT_INLINE Value prev_float(const Value &value) {
-    using Int = int_array_t<Value>;
+template <typename T>
+DRJIT_INLINE T prev_float(const T &value) {
+    using Int = int_array_t<T>;
     using IntMask = mask_t<Int>;
     using IntScalar = scalar_t<Int>;
 
@@ -463,12 +473,12 @@ DRJIT_INLINE Value prev_float(const Value &value) {
     Int j1 = i + select(is_gt_0, Int(-1), Int(1)),
         j2 = select(is_pos_0, pos_denorm, i);
 
-    return reinterpret_array<Value>(select(is_special, j2, j1));
+    return reinterpret_array<T>(select(is_special, j2, j1));
 }
 
-template <typename Value>
-DRJIT_INLINE Value next_float(const Value &value) {
-    using Int = int_array_t<Value>;
+template <typename T>
+DRJIT_INLINE T next_float(const T &value) {
+    using Int = int_array_t<T>;
     using IntMask = mask_t<Int>;
     using IntScalar = scalar_t<Int>;
 
@@ -491,7 +501,7 @@ DRJIT_INLINE Value next_float(const Value &value) {
     Int j1 = i + select(is_gt_0, Int(1), Int(-1)),
         j2 = select(is_neg_0, Int(1), i);
 
-    return reinterpret_array<Value>(select(is_special, j2, j1));
+    return reinterpret_array<T>(select(is_special, j2, j1));
 }
 
 template <typename X, typename Y> expr_t<X, Y> fmod(const X &x, const Y &y) {
@@ -633,7 +643,7 @@ template <typename T> DRJIT_INLINE auto squared_norm(const T &v) {
     if constexpr (depth_v<T> == 1 || size_v<T> == 0) {
         return sum(v * v);
     } else {
-        value_t<T> result = sqr(v.x());
+        value_t<T> result = square(v.x());
         for (size_t i = 1; i < v.size(); ++i)
             result = fmadd(v.entry(i), v.entry(i), result);
         return result;
@@ -654,7 +664,7 @@ DRJIT_INLINE auto cross(const T1 &v1, const T2 &v2) {
             "cross(): requires 3D input arrays!");
 
 #if defined(DRJIT_ARM_32) || defined(DRJIT_ARM_64)
-    return fnmadd(shuffle<2, 0, 1>(v1), shuffle<1, 2, 0>(v2),
+    return fnmadd(shuffle<2, 0, 1>(v1),  shuffle<1, 2, 0>(v2),
                   shuffle<1, 2, 0>(v1) * shuffle<2, 0, 1>(v2));
 #else
     return fmsub(shuffle<1, 2, 0>(v1),  shuffle<2, 0, 1>(v2),
@@ -729,8 +739,8 @@ bool allclose(const T1 &a, const T2 &b, float rtol = 1e-5f, float atol = 1e-8f,
               bool equal_nan = false) {
     auto cond = abs(a - b) <= abs(b) * rtol + atol;
 
-    if constexpr (drjit::is_floating_point_v<scalar_t<T1>> &&
-                  drjit::is_floating_point_v<scalar_t<T2>>) {
+    if constexpr (is_floating_point_v<scalar_t<T1>> &&
+                  is_floating_point_v<scalar_t<T2>>) {
         if (equal_nan)
             cond |= isnan(a) & isnan(b);
     }
@@ -746,7 +756,6 @@ bool allclose(const T1 &a, const T2 &b, float rtol = 1e-5f, float atol = 1e-8f,
 // -----------------------------------------------------------------------
 
 /// Forward declarations
-template <bool PreserveType = true, typename T> decltype(auto) detach(T &&);
 template <typename T, typename... Ts> size_t width(const T &, const Ts& ...);
 template <typename T> bool schedule(const T &value);
 
@@ -756,18 +765,17 @@ template <typename T> DRJIT_INLINE T zeros(size_t size) {
         return nullptr;
     } else if constexpr (is_array_v<T>) {
         return T::Derived::zero_(size);
-    } else if constexpr (is_drjit_struct_v<T>) {
+    } else if constexpr (is_traversable_v<T>) {
         T result;
-        struct_support_t<T>::apply_1(
-            result,
-            [size](auto &x) DRJIT_INLINE_LAMBDA {
-                using X = std::decay_t<decltype(x)>;
-                x = zeros<X>(size);
+        traverse_1(
+            fields(result),
+            [size](auto &x) {
+                x = zeros<std::decay_t<decltype(x)>>(size);
             });
-        if constexpr (is_detected_v<detail::has_zero, T>)
+        if constexpr (is_detected_v<detail::det_zero, T>)
             result.zero_(size);
         return result;
-    } else if constexpr (drjit::detail::is_scalar_v<T>) {
+    } else if constexpr (detail::is_scalar_v<T>) {
         return T(0);
     } else {
         return T();
@@ -783,16 +791,15 @@ template <typename T> DRJIT_INLINE T empty(size_t size = 1) {
     DRJIT_MARK_USED(size);
     if constexpr (is_array_v<T>) {
         return T::Derived::empty_(size);
-    } else if constexpr (is_drjit_struct_v<T>) {
+    } else if constexpr (is_traversable_v<T>) {
         T result;
-        struct_support_t<T>::apply_1(
-            result,
-            [size](auto &x) DRJIT_INLINE_LAMBDA {
-                using X = std::decay_t<decltype(x)>;
-                x = empty<X>(size);
+        traverse_1(
+            fields(result),
+            [size](auto &x) {
+                x = empty<std::decay_t<decltype(x)>>(size);
             });
         return result;
-    } else if constexpr (drjit::detail::is_scalar_v<T>) {
+    } else if constexpr (detail::is_scalar_v<T>) {
         return T(0);
     } else {
         return T();
@@ -817,20 +824,13 @@ DRJIT_INLINE T opaque(const T2 &value, size_t size = 1) {
     DRJIT_MARK_USED(size);
     if constexpr (!is_jit_v<T>) {
         return full<T>(value, size);
-    } else if constexpr (is_static_array_v<T>) {
-        T result;
-        for (size_t i = 0; i < T::Size; ++i)
-            result.entry(i) = opaque<typename T::Value>(value, size);
-        return result;
-    } else if constexpr (is_diff_v<T>) {
-        return opaque<detached_t<T>>(value, size);
     } else if constexpr (is_jit_v<T>) {
         return T::Derived::opaque_(scalar_t<T>(value), size);
-    } else if constexpr (is_drjit_struct_v<T>) {
+    } else if constexpr (is_traversable_v<T>) {
         T result;
-        struct_support_t<T>::apply_2(
-            result, value,
-            [=](auto &x1, auto &x2) {
+        traverse_2(
+            fields(result), fields(value),
+            [size](auto &x1, auto &x2) {
                 x1 = opaque(x2, size);
             });
         return result;
@@ -880,7 +880,7 @@ DRJIT_INLINE Array arange(ssize_t start, ssize_t end, ssize_t step = 1) {
 template <typename T> DRJIT_INLINE T load_aligned(const void *ptr, size_t size = 1) {
 #if !defined(NDEBUG)
     if (DRJIT_UNLIKELY((uintptr_t) ptr % alignof(T) != 0))
-        drjit_raise("load_aligned(): pointer %p is misaligned (alignment = %zu)!", ptr, alignof(T));
+        drjit_fail("load_aligned(): pointer %p is misaligned (alignment = %zu)!", ptr, alignof(T));
 #endif
     DRJIT_MARK_USED(size);
     if constexpr (is_array_v<T>)
@@ -909,7 +909,7 @@ template <typename T> DRJIT_INLINE T load(const void *ptr, size_t size = 1) {
 template <typename T> DRJIT_INLINE void store_aligned(void *ptr, const T &value) {
 #if !defined(NDEBUG)
     if (DRJIT_UNLIKELY((uintptr_t) ptr % alignof(T) != 0))
-        drjit_raise("store_aligned(): pointer %p is misaligned (alignment = %zu)!", ptr, alignof(T));
+        drjit_fail("store_aligned(): pointer %p is misaligned (alignment = %zu)!", ptr, alignof(T));
 #endif
 
     if constexpr (is_array_v<T>)
@@ -965,8 +965,7 @@ Target gather(Source &&source, const Index &index, const Mask &mask_ = true,
                 source.entry(i), index2.entry(i), mask2.entry(i), mode);
         return result;
     } else if constexpr (is_array_v<Target>) {
-        static_assert(std::is_pointer_v<std::decay_t<Source>> ||
-                          depth_v<Source> == 1,
+        static_assert(std::is_pointer_v<std::decay_t<Source>> || depth_v<Source> == 1,
                       "Source argument of gather operation must either be a "
                       "pointer address or a flat array!");
         if constexpr (!is_array_v<Index>) {
@@ -981,11 +980,11 @@ Target gather(Source &&source, const Index &index, const Mask &mask_ = true,
                     // Case 2.0.1: gather<Target>(const void *, size_t, ...)
                     return select(mask, load<Target>((const uint8_t *)source + offset), 0);
                 } else {
-#if !defined(NDEBUG)
-                    if (DRJIT_UNLIKELY((size_t) index >= source.size()))
-                        drjit_raise("gather(): out of range access (offset=%zu, size=%zu)!",
-                                    (size_t) offset, source.size());
-#endif
+                    #if !defined(NDEBUG)
+                        if (DRJIT_UNLIKELY((size_t) index >= source.size()))
+                            drjit_fail("gather(): out of range access (offset=%zu, size=%zu)!",
+                                        (size_t) offset, source.size());
+                    #endif
                     // Case 2.0.2: gather<Target>(const FloatP&, size_t, ...)
                     return select(mask, load<Target>((const uint8_t *)source.data() + offset), Target(0));
                 }
@@ -1009,16 +1008,16 @@ Target gather(Source &&source, const Index &index, const Mask &mask_ = true,
         static_assert(is_drjit_struct_v<Source>,
                       "Source must also be a custom data structure!");
         Target result;
-        struct_support_t<Target>::apply_2(
-            source, result,
-            [&index, &mask, mode](auto const &x1, auto &x2) DRJIT_INLINE_LAMBDA {
-                using X2 = std::decay_t<decltype(x2)>;
-                x2 = gather<X2>(x1, index, mask, mode);
+        traverse_2(
+            fields(source),
+            fields(result),
+            [&index, &mask, mode](auto &x1, auto &x2) {
+                x2 = gather<std::decay_t<decltype(x2)>>(x1, index, mask, mode);
             });
         return result;
     } else {
         // Case 4: gather<float>(const float *, ...)
-        static_assert(drjit::is_integral_v<Index> && drjit::detail::is_scalar_v<Target>,
+        static_assert(is_integral_v<Index> && detail::is_scalar_v<Target>,
                       "gather(): unsupported inputs -- did you forget to "
                       "include 'drjit/struct.h' or provide a suitable "
                       "DRJIT_STRUCT() declaration?");
@@ -1068,13 +1067,14 @@ void scatter(Target &target, const Value &value, const Index &index,
     } else if constexpr (is_drjit_struct_v<Value>) {
         static_assert(is_drjit_struct_v<Target>,
                       "Target must also be a custom data structure!");
-        struct_support_t<Value>::apply_2(
-            target, value,
-            [&index, &mask, mode](auto &x1, const auto &x2) DRJIT_INLINE_LAMBDA {
+        traverse_2(
+            fields(target),
+            fields(value),
+            [&index, &mask, mode](auto &x1, auto &x2) {
                 scatter(x1, x2, index, mask, mode);
             });
     } else {
-        static_assert(is_integral_v<Index> && drjit::detail::is_scalar_v<Value>,
+        static_assert(is_integral_v<Index> && detail::is_scalar_v<Value>,
                       "scatter(): unsupported inputs -- did you forget to "
                       "include 'drjit/struct.h' or provide a suitable "
                       "DRJIT_STRUCT() declaration?");
@@ -1112,7 +1112,7 @@ void scatter_reduce(ReduceOp op, Target &target, const Value &value,
             scatter_reduce(op, target, value,
                            detail::broadcast_index<TargetIndex>(index), mask, mode);
         }
-    } else if constexpr (drjit::is_integral_v<Index> && drjit::detail::is_arithmetic_v<scalar_t<Value>>) {
+    } else if constexpr (is_integral_v<Index> && detail::is_arithmetic_v<scalar_t<Value>>) {
         if (mask) {
             auto func = [op](const Value &a, const Value &b) -> Value {
                 switch (op) {
@@ -1128,18 +1128,18 @@ void scatter_reduce(ReduceOp op, Target &target, const Value &value,
                     case ReduceOp::Min: return minimum(a, b);
                     case ReduceOp::Max: return maximum(a, b);
                     case ReduceOp::And:
-                        if constexpr (drjit::is_integral_v<Value>)
+                        if constexpr (is_integral_v<Value>)
                             return a & b;
                         break;
                     case ReduceOp::Or:
-                        if constexpr (drjit::is_integral_v<Value>)
+                        if constexpr (is_integral_v<Value>)
                             return a | b;
                         break;
                     default:
                         break;
                 }
 
-                drjit_raise("Reduce operation not supported");
+                drjit_fail("Reduce operation not supported");
             };
 
             if constexpr (is_array_v<Target>)
@@ -1192,9 +1192,10 @@ decltype(auto) migrate(const T &value, TargetType target) {
     } else if constexpr (is_drjit_struct_v<T>) {
         T result;
 
-        struct_support_t<T>::apply_2(
-            value, result,
-            [target](auto const &x1, auto &x2) DRJIT_INLINE_LAMBDA {
+        traverse_2(
+            fields(value),
+            fields(result),
+            [target](auto &x1, auto &x2) {
                 x2 = migrate(x1, target);
             });
 
@@ -1207,32 +1208,32 @@ decltype(auto) migrate(const T &value, TargetType target) {
 template <typename ResultType = void, typename T>
 decltype(auto) slice(const T &value, size_t index = 0) {
     schedule(value);
+
     if constexpr (depth_v<T> > 1) {
         using Value = std::decay_t<decltype(slice(value.entry(0), index))>;
         using Result = typename T::template ReplaceValue<Value>;
         Result result;
         if constexpr (Result::Size == Dynamic)
             result = empty<Result>(value.size());
+
         for (size_t i = 0; i < value.size(); ++i)
             result.set_entry(i, slice(value.entry(i), index));
+
         return result;
     } else if constexpr (is_drjit_struct_v<T>) {
         static_assert(!std::is_same_v<ResultType, void>,
-                      "slice(): return type should be specified for drjit struct!");
+                      "slice(): return type must be specified when used with "
+                      "custom data structures!");
         ResultType result;
-        struct_support_t<T>::apply_2(
+        traverse_2(
             value, result,
-            [index](auto const &x1, auto &x2) DRJIT_INLINE_LAMBDA {
+            [index](auto &x1, auto &x2) {
                 x2 = slice(x1, index);
             });
         return result;
     } else if constexpr (is_dynamic_array_v<T>) {
-        if (index >= width(value))
-            drjit_raise("slice(): index out of bound!");
-        return scalar_t<T>(value.entry(index));
+        return scalar_t<T>(value[index]);
     } else {
-        if (index > 0)
-            drjit_raise("slice(): index out of bound!");
         return value;
     }
 }
@@ -1332,7 +1333,7 @@ template <typename T> T erfinv(const T &a);
 #define DRJIT_INNER_REDUCTION(red)                                             \
     template <bool Reduce = false, typename Array>                             \
     DRJIT_INLINE auto red##_inner(const Array &a) {                            \
-        if constexpr (depth_v<Array> <= 1) {                             \
+        if constexpr (depth_v<Array> <= 1) {                                   \
             if constexpr (Reduce)                                              \
                 return red(a);                                                 \
             else                                                               \
@@ -1342,7 +1343,7 @@ template <typename T> T erfinv(const T &a);
             using Result = typename Array::template ReplaceValue<Value>;       \
             Result result;                                                     \
             if constexpr (Result::Size == Dynamic)                             \
-                result = drjit::empty<Result>(a.size());                       \
+                result = empty<Result>(a.size());                              \
             for (size_t i = 0; i < a.size(); ++i)                              \
                 result.set_entry(i, red##_inner<true>(a.entry(i)));            \
             return result;                                                     \
@@ -1365,24 +1366,12 @@ DRJIT_INNER_REDUCTION(mean)
 // -----------------------------------------------------------------------
 
 template <typename T> DRJIT_INLINE bool schedule(const T &value) {
-    if constexpr (is_jit_v<T>) {
-        if constexpr (depth_v<T> > 1) {
-            bool result = false;
-            for (size_t i = 0; i < value.derived().size(); ++i)
-                result |= schedule(value.derived().entry(i));
-            return result;
-        } else if constexpr (is_tensor_v<T>) {
-            return schedule(value.array());
-        } else {
-            return value.derived().schedule_();
-        }
-    } else if constexpr (is_drjit_struct_v<T>) {
+    if constexpr (is_jit_v<T> && depth_v<T> == 1) {
+        return value.derived().schedule_();
+    } else if constexpr (is_traversable_v<T>) {
         bool result = false;
-        struct_support_t<T>::apply_1(
-            value,
-            [&](auto const &x) DRJIT_INLINE_LAMBDA {
-                result |= schedule(x);
-            });
+        traverse_1(fields(value),
+                   [&](auto &x) { result |= schedule(x); });
         return result;
     } else {
         return false;
@@ -1412,26 +1401,15 @@ DRJIT_INLINE void eval(const Ts&... values) {
 
 namespace detail {
     template <typename T> DRJIT_INLINE bool schedule_force(T &value) {
-        if constexpr (is_jit_v<T>) {
-            if constexpr (depth_v<T> > 1) {
-                bool result = false;
-                for (size_t i = 0; i < value.derived().size(); ++i)
-                    result |= schedule_force(value.derived().entry(i));
-                return result;
-            } else if constexpr (is_tensor_v<T>) {
-                return schedule_force(value.array());
-            } else {
-                return value.derived().schedule_force_();
-            }
-        } else if constexpr (is_drjit_struct_v<T>) {
+        if constexpr (is_jit_v<T> && depth_v<T> == 1) {
+            return value.derived().schedule_force_();
+        } else if constexpr (is_traversable_v<T>) {
             bool result = false;
-            struct_support_t<T>::apply_1(
-                value,
-                [&](auto &x) DRJIT_INLINE_LAMBDA {
-                    result |= schedule_force(x);
-                });
+            traverse_1(fields(value), [&](auto const &x) {
+                result |= schedule_force(x);
+            });
             return result;
-        } else if constexpr (is_detected_v<detail::has_schedule_force, T>) {
+        } else if constexpr (is_detected_v<detail::det_schedule_force, T>) {
             return value.schedule_force_();
         } else {
             return false;
@@ -1490,27 +1468,19 @@ DRJIT_INLINE void sync_all_devices() {
     jit_sync_all_devices();
 }
 
-template <typename T, typename... Ts> DRJIT_INLINE size_t width(const T &value, const Ts& ...values) {
+template <typename T, typename... Ts> size_t width(const T &value, const Ts& ...values) {
     DRJIT_MARK_USED(value);
     size_t result = 0;
     if constexpr (size_v<T> == 0) {
         ;
-    } if constexpr (depth_v<T> > 1) {
-        for (size_t i = 0; i < value.derived().size(); ++i) {
-            size_t w = width(value.derived().entry(i));
+    } else if constexpr (is_array_v<T> && depth_v<T> == 1) {
+        result = value.derived().size();
+    } else if constexpr (is_traversable_v<T>) {
+        traverse_1(fields(value), [&](auto &x) {
+            size_t w = width(x);
             if (w > result)
                 result = w;
-        }
-    } else if constexpr (is_array_v<T>) {
-        result = value.derived().size();
-    } else if constexpr (is_drjit_struct_v<T>) {
-        struct_support_t<T>::apply_1(
-            value,
-            [&](auto const &x) DRJIT_INLINE_LAMBDA {
-                size_t w = width(x);
-                if (w > result)
-                    result = w;
-            });
+        });
     } else {
         result = 1;
     }
@@ -1524,73 +1494,35 @@ template <typename T, typename... Ts> DRJIT_INLINE size_t width(const T &value, 
     return result;
 }
 
-template <typename T> DRJIT_INLINE void resize(T &value, size_t size) {
+template <typename T> void resize(T &value, size_t size) {
     DRJIT_MARK_USED(value);
     DRJIT_MARK_USED(size);
 
-    if constexpr (depth_v<T> > 1) {
-        for (size_t i = 0; i < value.size(); ++i)
-            resize(value.entry(i), size);
-    } else if constexpr (is_jit_v<T>) {
+    if constexpr (is_jit_v<T> && depth_v<T> == 1) {
         value.resize(size);
-    } else if constexpr (is_drjit_struct_v<T>) {
-        struct_support_t<T>::apply_1(
-            value,
-            [size](auto &x) DRJIT_INLINE_LAMBDA {
-                resize(x, size);
-            });
+    } else if constexpr (is_traversable_v<T>) {
+        traverse_1(fields(value), [size](auto &x) { resize(x, size); });
     }
 }
 
-template <typename T> void set_label(T &value, const char *label) {
-    DRJIT_MARK_USED(value);
-    DRJIT_MARK_USED(label);
-
-    if constexpr (is_diff_v<T> || is_jit_v<T>) {
-        if constexpr (depth_v<T> > 1) {
-            size_t bufsize = strlen(label) + 11;
-            char *buf = (char *) alloca(bufsize);
-            for (size_t i = 0; i < value.size(); ++i) {
-                snprintf(buf, bufsize, "%s_%zu", label, i);
-                set_label(value.entry(i), buf);
-            }
-        } else {
-            value.derived().set_label_(label);
-        }
-    } else if constexpr (is_drjit_struct_v<T>) {
-        size_t bufsize = strlen(label) + 128;
-        char *buf = (char *) alloca(bufsize);
-
-        struct_support_t<T>::apply_label(
-            value,
-            [buf, bufsize, label](const char *label_2, auto &x) DRJIT_INLINE_LAMBDA {
-                snprintf(buf, bufsize, "%s_%s", label, label_2);
-                set_label(x, buf);
-            });
+template <typename T, typename... Labels>
+void set_label(T &value, Labels... prefix) {
+    if constexpr (is_jit_v<T> && depth_v<T> == 1) {
+        value.derived().set_label_(prefix...);
+    } else if constexpr (is_traversable_v<T>) {
+        traverse_2(
+            fields(value), labels<T>(),
+            [&](auto &x, const char *l) {
+            set_label(x, prefix..., l); });
     }
 }
 
 template <typename T> bool grad_enabled(const T &value) {
-    if constexpr (is_diff_v<T>) {
-        if constexpr (depth_v<T> > 1) {
-            bool result = false;
-            for (size_t i = 0; i < value.size(); ++i)
-                result |= grad_enabled(value.entry(i));
-            return result;
-        } else if constexpr (is_tensor_v<T>) {
-            return grad_enabled(value.array());
-        } else {
-            return value.derived().grad_enabled_();
-        }
-    } else if constexpr (is_drjit_struct_v<T>) {
+    if constexpr (is_diff_v<T> && depth_v<T> == 1) {
+        return value.derived().grad_enabled_();
+    } else if constexpr (is_traversable_v<T>) {
         bool result = false;
-
-        struct_support_t<T>::apply_1(
-            value,
-            [&](auto const &x) DRJIT_INLINE_LAMBDA {
-                result |= grad_enabled(x);
-            });
-
+        traverse_1(fields(value), [&](auto &x) { result |= grad_enabled(x); });
         return result;
     } else {
         DRJIT_MARK_USED(value);
@@ -1598,57 +1530,15 @@ template <typename T> bool grad_enabled(const T &value) {
     }
 }
 
-template <typename T> T replace_grad(const T &a, const T &b) {
-    static_assert(is_diff_v<T>, "Type does not support gradients!");
-    size_t sa = a.size(), sb = b.size(), sr = sa > sb ? sa : sb;
-
-    if ((sa != sr && sa != 1) || (sb != sr && sb != 1))
-        drjit_raise("replace_grad() : incompatible input sizes "
-                    "(%zu and %zu)", sa, sb);
-
-    if constexpr (depth_v<T> > 1) {
-        T result;
-        if constexpr (T::Size == Dynamic)
-            result = drjit::empty<T>(sr);
-
-        for (size_t i = 0; i < sr; ++i)
-            result.entry(i) = replace_grad(a.entry(i), b.entry(i));
-
-        return result;
-    } else {
-        T va = a, vb = b;
-        if (sa != sb) {
-            if (sa == 1)
-                va += zeros<T>(sb);
-            else if (sb == 1)
-                vb += zeros<T>(sa);
-            else
-                drjit_raise("replace_grad(): internal error!");
-        }
-
-        return T::borrow(a.index() | (((uint64_t) b.index_ad()) << 32));
-    }
-}
-
 template <typename T> void set_grad_enabled(T &value, bool state) {
     DRJIT_MARK_USED(value);
     DRJIT_MARK_USED(state);
 
-    if constexpr (is_diff_v<T>) {
-        if constexpr (depth_v<T> > 1) {
-            for (size_t i = 0; i < value.size(); ++i)
-                set_grad_enabled(value.entry(i), state);
-        } else if constexpr (is_tensor_v<T>) {
-            set_grad_enabled(value.array(), state);
-        } else {
-            value.set_grad_enabled_(state);
-        }
-    } else if constexpr (is_drjit_struct_v<T>) {
-        struct_support_t<T>::apply_1(
-            value,
-            [state](auto &x) DRJIT_INLINE_LAMBDA {
-                set_grad_enabled(x, state);
-            });
+    if constexpr (is_diff_v<T> && depth_v<T> == 1) {
+        value.set_grad_enabled_(state);
+    } else if constexpr (is_traversable_v<T>) {
+        traverse_1(fields(value),
+                   [state](auto &x) { set_grad_enabled(x, state); });
     }
 }
 
@@ -1665,39 +1555,58 @@ template <typename... Ts> void disable_grad(Ts&... ts) {
     (set_grad_enabled(ts, false), ...);
 }
 
-template <bool PreserveType, typename T>
-decltype(auto) detach(T &&value) {
-    using Result = std::decay_t<std::conditional_t<PreserveType, T, detached_t<T>>>;
+template <typename T> T replace_grad(const T &a, const T &b) {
+    static_assert(is_diff_v<T>, "Type does not support gradients!");
+    size_t sa = a.size(), sb = b.size(), sr = sa > sb ? sa : sb;
 
-    if constexpr (is_diff_v<T>) {
-        if constexpr (depth_v<T> > 1) {
-            Result result;
-            if constexpr (Result::Size == Dynamic)
-                result = empty<Result>(value.size());
+    if ((sa != sr && sa != 1) || (sb != sr && sb != 1))
+        drjit_fail("replace_grad() : incompatible input sizes "
+                    "(%zu and %zu)", sa, sb);
 
-            for (size_t i = 0; i < value.size(); ++i)
-                result.entry(i) = detach<PreserveType>(value.entry(i));
+    if constexpr (depth_v<T> > 1) {
+        T result;
+        if constexpr (T::Size == Dynamic)
+            result = empty<T>(sr);
 
-            return result;
-        } else {
-            if constexpr (is_tensor_v<T>)
-                return Result(detach<PreserveType>(value.array()),
-                              value.ndim(), value.shape());
-            else
-                return Result::borrow(value.index());
-        }
-    } else if constexpr (is_drjit_struct_v<T>) {
-        Result result;
-
-        struct_support_t<T>::apply_2(
-            value, result,
-            [](auto const &x1, auto &x2) DRJIT_INLINE_LAMBDA {
-                x2 = detach<PreserveType>(x1);
-            });
+        for (size_t i = 0; i < sr; ++i)
+            result.entry(i) = replace_grad(a.entry(i), b.entry(i));
 
         return result;
     } else {
-        return std::forward<T>(value);
+        T va = a, vb = b;
+        if (sa != sb) {
+            if (sa == 1)
+                va += zeros<T>(sb);
+            else if (sb == 1)
+                vb += zeros<T>(sa);
+            else
+                drjit_fail("replace_grad(): internal error!");
+        }
+
+        return T::borrow(a.index() | (((uint64_t) b.index_ad()) << 32));
+    }
+}
+
+template <bool PreserveType = true, typename T> decltype(auto) detach(const T &value) {
+    using Result = std::decay_t<std::conditional_t<PreserveType, T, detached_t<T>>>;
+
+    if constexpr (is_diff_v<T> && depth_v<T> > 1) {
+        return Result::borrow(value.index());
+    } else if constexpr (is_diff_v<T> && is_tensor_v<T>) {
+        return Result(detach<PreserveType>(value.array()),
+                      value.ndim(), value.shape());
+    } else if constexpr (is_traversable_v<T>) {
+        Result result;
+
+        traverse_2(
+            fields(value),
+            fields(result),
+            [](auto &v, auto &r) { r = detach<PreserveType>(v); }
+        );
+
+        return result;
+    } else {
+        return value;
     }
 }
 
@@ -1705,33 +1614,19 @@ template <bool PreserveType = true, typename T>
 auto grad(const T &value) {
     using Result = std::conditional_t<PreserveType, T, detached_t<T>>;
 
-    if constexpr (is_diff_v<T>) {
-        if constexpr (is_tensor_v<T>) {
-            return Result(grad<PreserveType>(value.array()),
-                          value.ndim(), value.shape());
-        } else if constexpr (depth_v<T> > 1) {
-            Result result;
-            if constexpr (Result::Size == Dynamic)
-                result = empty<Result>(value.size());
-
-            for (size_t i = 0; i < value.size(); ++i)
-                result.entry(i) = grad<PreserveType>(value.entry(i));
-
-            return result;
-        } else {
-            if constexpr (PreserveType)
-                return Result(value.derived().grad_());
-            else
-                return value.derived().grad_();
-        }
-    } else if constexpr (is_drjit_struct_v<T>) {
+    if constexpr (is_diff_v<T> && depth_v<T> == 1) {
+        return Result(value.derived().grad_());
+    } else if constexpr (is_diff_v<T> && is_tensor_v<T>) {
+        return Result(grad<PreserveType>(value.array()),
+                      value.ndim(), value.shape());
+    } else if constexpr (is_traversable_v<T>) {
         Result result;
 
-        struct_support_t<T>::apply_2(
-            value, result,
-            [](auto const &x1, auto &x2) DRJIT_INLINE_LAMBDA {
-                x2 = grad<PreserveType>(x1);
-            });
+        traverse_2(
+            fields(value),
+            fields(result),
+            [](auto &v, auto &r) { r = grad<PreserveType>(v); }
+        );
 
         return result;
     } else {
@@ -1739,50 +1634,24 @@ auto grad(const T &value) {
     }
 }
 
-template <typename T>
-void clear_grad(T &value) {
-    if constexpr (is_diff_v<T>) {
-        if constexpr (is_tensor_v<T>) {
-            clear_grad(value.array());
-        } else if constexpr (depth_v<T> > 1) {
-            for (size_t i = 0; i < value.size(); ++i)
-                clear_grad(value.entry(i));
-        } else {
-            value.clear_grad_();
-        }
-    } else if constexpr (is_drjit_struct_v<T>) {
-        struct_support_t<T>::apply_1(
-            value,
-            [](auto &x1) DRJIT_INLINE_LAMBDA {
-                clear_grad(x1);
-            });
-    }
+template <typename T> void clear_grad(T &value) {
+    if constexpr (is_diff_v<T> && depth_v<T> == 1)
+        value.clear_grad_();
+    else if constexpr (is_traversable_v<T>)
+        traverse_1(fields(value), [](auto &v) { clear_grad(v); });
+    else
+        (void) value;
 }
 
-template <typename T, typename T2>
-void accum_grad(T &value, const T2 &grad) {
-    if constexpr (is_diff_v<T>) {
-        if constexpr (is_tensor_v<T>) {
-            accum_grad(value.array(), grad);
-        } else if constexpr (is_tensor_v<T2>) {
-            accum_grad(value, grad.array());
-        } else if constexpr (depth_v<T> > 1) {
-            for (size_t i = 0; i < value.size(); ++i)
-                accum_grad(value.entry(i), grad.entry(i));
-        } else {
-            if constexpr(!std::is_same_v<T, T2>) {
-                T grad_ = T(grad);
-                value.accum_grad_(grad_.index());
-            } else {
-                value.accum_grad_(grad.index());
-            }
-        }
-    } else if constexpr (is_drjit_struct_v<T>) {
-        struct_support_t<T>::apply_2(
-            value, grad,
-            [](auto &x1, auto &x2) DRJIT_INLINE_LAMBDA {
-                accum_grad(x1, x2);
-            });
+template <typename T, typename T2> void accum_grad(T &value, const T2 &grad) {
+    if constexpr (is_diff_v<T> && depth_v<T> == 1) {
+        if constexpr (!std::is_same_v<T, T2>)
+            value.accum_grad_(T(grad).index());
+        else
+            value.accum_grad_(grad.index());
+    } else if constexpr (is_traversable_v<T>) {
+        traverse_2(fields(value), fields(grad),
+                   [](auto &v1, auto &v2) { accum_grad(v1, v2); });
     }
 }
 
@@ -1929,14 +1798,15 @@ NAMESPACE_END(detail)
 
 template <typename T, typename Mask>
 DRJIT_INLINE auto masked(T &value, const Mask &mask) {
-    if constexpr (is_array_v<T> || drjit::detail::is_scalar_v<Mask>) {
+    if constexpr (is_array_v<T> || detail::is_scalar_v<Mask>) {
         return detail::MaskedArray<T>{ value, mask };
-    } else if constexpr (is_drjit_struct_v<T>) {
+    } else if constexpr (is_traversable_v<T>) {
         masked_t<T> result;
 
-        struct_support_t<T>::apply_2(
-            value, result,
-            [&mask](auto &x1, auto &x2) DRJIT_INLINE_LAMBDA {
+        traverse_2(
+            fields(value),
+            fields(result),
+            [&mask](auto &x1, auto &x2) {
                 x2 = masked(x1, mask);
             });
 

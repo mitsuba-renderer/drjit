@@ -15,7 +15,6 @@
 #pragma once
 
 #include <drjit/autodiff.h>
-#include <drjit/struct.h>
 
 NAMESPACE_BEGIN(drjit)
 
@@ -66,17 +65,17 @@ private:                                                                       \
         using CallStateT = detail::CallState<Ret2, Args...>;                   \
                                                                                \
         ad_call_func callback = [](void *state_p, void *self,                  \
-                                   const dr_vector<uint64_t> &args_i,          \
-                                   dr_vector<uint64_t> &rv_i) {                \
+                                   const vector<uint64_t> &args_i,             \
+                                   vector<uint64_t> &rv_i) {                   \
             CallStateT *state = (CallStateT *) state_p;                        \
             state->update_args(args_i);                                        \
             if constexpr (std::is_same_v<Ret, void>) {                         \
                 if (self)                                                      \
-                    ((Class *) self)->Name(state->args.template get<Is>()...); \
+                    ((Class *) self)->Name(drjit::get<Is>(state->args)...);    \
             } else {                                                           \
                 if (self)                                                      \
                     state->rv = ((Class *) self)                               \
-                                    ->Name(state->args.template get<Is>()...); \
+                                    ->Name(drjit::get<Is>(state->args)...);    \
                 else                                                           \
                     state->rv = zeros<Ret2>();                                 \
                 state->collect_rv(rv_i);                                       \
@@ -95,8 +94,8 @@ public:                                                                        \
         using CallStateT = detail::CallState<Ret, Mask>;                       \
                                                                                \
         ad_call_func callback = [](void *state_p, void *self,                  \
-                                   const dr_vector<uint64_t> &,                \
-                                   dr_vector<uint64_t> &rv_i) {                \
+                                   const vector<uint64_t> &,                   \
+                                   vector<uint64_t> &rv_i) {                   \
             CallStateT *state = (CallStateT *) state_p;                        \
             if (self)                                                          \
                 state->rv = ((Class *) self)->Name();                          \
@@ -115,12 +114,12 @@ using vectorize_rv_t =
 NAMESPACE_BEGIN(detail)
 
 template <typename Mask, typename ... Args>
-Mask extract_mask(dr_tuple<Args...> &t) {
+Mask extract_mask(drjit::tuple<Args...> &t) {
     constexpr size_t N = sizeof...(Args);
     Mask result = true;
 
     if constexpr (N > 0) {
-        auto &last = t.template get<N-1>();
+        auto &last = drjit::get<N-1>(t);
         if constexpr (is_mask_v<decltype(last)>)
             std::swap(result, last);
     }
@@ -129,7 +128,7 @@ Mask extract_mask(dr_tuple<Args...> &t) {
 }
 
 template <typename Ret, typename... Args> struct CallState {
-    dr_tuple<Args...> args;
+    drjit::tuple<Args...> args;
     Ret rv;
 
     CallState(const Args &...arg) : args(arg...) { }
@@ -138,17 +137,17 @@ template <typename Ret, typename... Args> struct CallState {
         delete (CallState *) p;
     }
 
-    void update_args(const dr_vector<uint64_t> &indices) {
+    void update_args(const vector<uint64_t> &indices) {
         update_indices(args, indices);
     }
 
-    void collect_rv(dr_vector<uint64_t> &indices) const {
+    void collect_rv(vector<uint64_t> &indices) const {
         collect_indices<false>(rv, indices);
     }
 };
 
-struct dr_index_vector : dr_vector<uint64_t> {
-    using Base = dr_vector<uint64_t>;
+struct dr_index_vector : vector<uint64_t> {
+    using Base = vector<uint64_t>;
     using Base::Base;
     ~dr_index_vector() {
         for (size_t i = 0; i < size(); ++i)
@@ -194,18 +193,18 @@ auto dispatch_impl(std::index_sequence<Is...>, const Self &self, const Func &fun
     using CallStateT = detail::CallState<Ret2, Func, Args...>;
 
     ad_call_func callback = [](void *state_p, void *self,
-                               const dr_vector<uint64_t> &args_i,
-                               dr_vector<uint64_t> &rv_i) {
+                               const vector<uint64_t> &args_i,
+                               vector<uint64_t> &rv_i) {
         CallStateT *state = (CallStateT *) state_p;
         state->update_args(args_i);
-        const Func &func = state->args.template get<0>();
+        const Func &func = drjit::get<0>(state->args);
 
         if constexpr (std::is_same_v<Ret, void>) {
             if (self)
-                func((Ptr) self, state->args.template get<1 + Is>()...);
+                func((Ptr) self, drjit::get<1 + Is>(state->args)...);
         } else {
             if (self)
-                state->rv = func((Ptr) self, state->args.template get<1 + Is>()...);
+                state->rv = func((Ptr) self, drjit::get<1 + Is>(state->args)...);
             else
                 state->rv = zeros<Ret2>();
             state->collect_rv(rv_i);

@@ -167,8 +167,7 @@ extern DRJIT_EXTRA_EXPORT void ad_enqueue(drjit::ADMode, uint64_t);
 extern DRJIT_EXTRA_EXPORT void ad_traverse(drjit::ADMode, uint32_t);
 
 /// Label a variable (useful for debugging via graphviz etc.)
-extern DRJIT_EXTRA_EXPORT uint64_t ad_var_set_label(uint64_t index,
-                                                    const char *label);
+extern DRJIT_EXTRA_EXPORT uint64_t ad_var_set_label(uint64_t index, size_t argc, ...);
 
 /// Return the label associated with a variable
 extern DRJIT_EXTRA_EXPORT const char *ad_var_label(uint64_t index);
@@ -204,7 +203,7 @@ extern DRJIT_EXTRA_EXPORT bool ad_custom_op(drjit::detail::CustomOpBase *);
 extern DRJIT_EXTRA_EXPORT bool ad_release_one_output(drjit::detail::CustomOpBase *);
 
 /// VCall implementation: get a list of observed implicit dependencies
-extern DRJIT_EXTRA_EXPORT void ad_copy_implicit_deps(drjit::dr_vector<uint32_t>&);
+extern DRJIT_EXTRA_EXPORT void ad_copy_implicit_deps(drjit::vector<uint32_t>&);
 
 /// Kahan-compensated floating point atomic scatter-addition
 extern DRJIT_EXTRA_EXPORT void
@@ -216,8 +215,8 @@ extern void ad_var_check_implicit(uint64_t index);
 
 // Callbacks used by \ref ad_call() below. See the interface for details
 typedef void (*ad_call_func)(void *payload, void *self,
-                             const drjit::dr_vector<uint64_t> &args_i,
-                             drjit::dr_vector<uint64_t> &rv_i);
+                             const drjit::vector<uint64_t> &args_i,
+                             drjit::vector<uint64_t> &rv_i);
 typedef void (*ad_call_cleanup)(void*);
 
 /**
@@ -288,13 +287,13 @@ typedef void (*ad_call_cleanup)(void*);
 extern DRJIT_EXTRA_EXPORT bool
 ad_call(JitBackend backend, const char *domain, size_t callable_count,
         const char *name, bool is_getter, uint32_t index, uint32_t mask,
-        const drjit::dr_vector<uint64_t> &args, drjit::dr_vector<uint64_t> &rv,
+        const drjit::vector<uint64_t> &args, drjit::vector<uint64_t> &rv,
         void *payload, ad_call_func callback, ad_call_cleanup cleanup,
         bool ad);
 
 // Callbacks used by \ref ad_loop() below. See the interface for details
-typedef void (*ad_loop_read)(void *payload, drjit::dr_vector<uint64_t> &);
-typedef void (*ad_loop_write)(void *payload, const drjit::dr_vector<uint64_t> &);
+typedef void (*ad_loop_read)(void *payload, drjit::vector<uint64_t> &);
+typedef void (*ad_loop_write)(void *payload, const drjit::vector<uint64_t> &);
 typedef uint32_t (*ad_loop_cond)(void *payload);
 typedef void (*ad_loop_body)(void *payload);
 typedef void (*ad_loop_delete)(void *payload);
@@ -367,8 +366,8 @@ extern DRJIT_EXTRA_EXPORT bool ad_loop(JitBackend backend, int symbolic, int com
 
 // Callbacks used by \ref ad_cond() below. See the interface for details
 typedef void (*ad_cond_body)(void *payload, bool value,
-                             const drjit::dr_vector<uint64_t> &args_i,
-                             drjit::dr_vector<uint64_t> &rv_i);
+                             const drjit::vector<uint64_t> &args_i,
+                             drjit::vector<uint64_t> &rv_i);
 typedef void (*ad_cond_delete)(void *payload);
 
 /**
@@ -421,8 +420,8 @@ typedef void (*ad_cond_delete)(void *payload);
  */
 extern DRJIT_EXTRA_EXPORT bool
 ad_cond(JitBackend backend, int symbolic, const char *name, void *payload,
-        uint32_t cond, const drjit::dr_vector<uint64_t> &args,
-        drjit::dr_vector<uint64_t> &rv, ad_cond_body body_cb,
+        uint32_t cond, const drjit::vector<uint64_t> &args,
+        drjit::vector<uint64_t> &rv, ad_cond_body body_cb,
         ad_cond_delete delete_cb, bool ad);
 
 
