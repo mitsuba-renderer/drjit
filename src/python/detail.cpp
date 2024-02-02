@@ -221,18 +221,21 @@ nb::object reduce_identity(JitBackend backend, VarType vt, ReduceOp op) {
  * (Note: this explanation is also part of src/python/docstr.h -- please keep
  * them in sync in case you make a change here)
 */
-void collect_indices(nb::handle h, dr::dr_vector<uint64_t> &indices, bool inc_ref) {
-    struct CollectIndices : TraverseCallback {
-        dr::dr_vector<uint64_t> &result;
+void collect_indices(nb::handle h, dr::vector<uint64_t> &indices, bool inc_ref) {
+    struct CollectIndices final : TraverseCallback {
+        dr::vector<uint64_t> &result;
         bool inc_ref;
-        CollectIndices(dr::dr_vector<uint64_t> &result, bool inc_ref)
+
+        CollectIndices(dr::vector<uint64_t> &result, bool inc_ref)
             : result(result), inc_ref(inc_ref) { }
 
         void operator()(nb::handle h) override {
             auto index_fn = supp(h.type()).index;
-            if (!index_fn)
-                return;
-            uint64_t index = index_fn(inst_ptr(h));
+            if (index_fn)
+                operator()(index_fn(inst_ptr(h)));
+        }
+
+        void operator()(uint64_t index) override {
             if (inc_ref)
                 ad_var_inc_ref(index);
             result.push_back(index);
@@ -270,37 +273,34 @@ void collect_indices(nb::handle h, dr::dr_vector<uint64_t> &indices, bool inc_re
  * (Note: this explanation is also part of src/python/docstr.h -- please keep
  * them in sync in case you make a change here)
  */
-nb::object update_indices(nb::handle h, const dr::dr_vector<uint64_t> &indices,
+nb::object update_indices(nb::handle h, const dr::vector<uint64_t> &indices,
                           CopyMap *copy_map, bool preserve_dirty) {
-    struct UpdateIndicesOp : TransformCallback {
-        const dr::dr_vector<uint64_t> &indices;
+    struct UpdateIndicesOp final : TransformCallback {
+        const dr::vector<uint64_t> &indices;
         CopyMap *copy_map;
         bool preserve_dirty;
         size_t counter;
 
-        UpdateIndicesOp(const dr::dr_vector<uint64_t> &indices,
+        UpdateIndicesOp(const dr::vector<uint64_t> &indices,
                         CopyMap *copy_map, bool preserve_dirty)
             : indices(indices), copy_map(copy_map),
               preserve_dirty(preserve_dirty), counter(0) { }
 
         void operator()(nb::handle h1, nb::handle h2) override {
             const ArraySupplement &s = supp(h1.type());
-            if (!s.index)
-                return;
+            if (s.index)
+                s.init_index(operator()(s.index(inst_ptr(h1))), inst_ptr(h2));
+        }
+
+        uint64_t operator()(uint64_t index) override {
             if (counter >= indices.size())
                 nb::raise("too few (%zu) indices provided", indices.size());
 
-            uint64_t index = indices[counter];
+            uint64_t new_index = indices[counter++];
+            if (preserve_dirty && jit_var_is_dirty((uint32_t) index))
+                new_index = index;
 
-            if (preserve_dirty) {
-                uint64_t index2 = s.index(inst_ptr(h1));
-                if (jit_var_is_dirty((uint32_t) index2))
-                    index = index2;
-            }
-
-            s.init_index(index, inst_ptr(h2));
-
-            counter++;
+            return new_index;
         }
 
         void postprocess(nb::handle h1, nb::handle h2) override {
@@ -414,7 +414,7 @@ void export_detail(nb::module_ &) {
 
     d.def("collect_indices",
           [](nb::handle h) {
-              dr::dr_vector<uint64_t> result;
+              dr::vector<uint64_t> result;
               collect_indices(h, result);
               return result;
           },
@@ -450,7 +450,7 @@ void export_detail(nb::module_ &) {
 
      .def("import_tensor",
           [](nb::handle h, bool ad) {
-              dr::dr_vector<size_t> shape;
+              dr::vector<size_t> shape;
               nb::object flat = import_ndarray(ArrayMeta{}, h.ptr(), &shape, ad);
               return tensor_t(flat.type())(
                   flat,

@@ -25,7 +25,7 @@ using dr::ArraySupplement;
 using dr::ArrayBinding;
 using dr::ArrayOp;
 using dr::ArrayBase;
-using dr::dr_vector;
+using dr::vector;
 
 inline const ArraySupplement &supp(nb::handle h) {
     return nb::type_supplement<ArraySupplement>(h);
@@ -38,8 +38,8 @@ inline ArrayBase* inst_ptr(nb::handle h) {
 NAMESPACE_BEGIN(NB_NAMESPACE)
 NAMESPACE_BEGIN(detail)
 
-template <typename T> struct type_caster<dr::dr_vector<T>>
- : list_caster<drjit::dr_vector<T>, T> { };
+template <typename T> struct type_caster<dr::vector<T>>
+ : list_caster<drjit::vector<T>, T> { };
 
 NAMESPACE_END(detail)
 NAMESPACE_END(NB_NAMESPACE)
@@ -53,8 +53,8 @@ inline nb::object tuple_call(nb::handle callable, nb::handle tuple) {
     return result;
 }
 
-struct dr_index_vector : dr::dr_vector<uint64_t> {
-    using Base = dr::dr_vector<uint64_t>;
+struct dr_index_vector : dr::vector<uint64_t> {
+    using Base = dr::vector<uint64_t>;
     using Base::Base;
     ~dr_index_vector() {
         for (size_t i = 0; i < size(); ++i)

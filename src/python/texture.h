@@ -2,7 +2,6 @@
 
 #include "common.h"
 #include <drjit/texture.h>
-#include <tuple>
 
 template <typename Type, size_t Dimension>
 void bind_texture(nb::module_ &m, const char *name) {
@@ -10,7 +9,7 @@ void bind_texture(nb::module_ &m, const char *name) {
     using PosType = typename Tex::PosType;
 
     auto tex = nb::class_<Tex>(m, name)
-        .def("__init__", [](Tex* t, const dr_vector<size_t>& shape,
+        .def("__init__", [](Tex* t, const vector<size_t>& shape,
                          size_t channels, bool use_accel,
                          dr::FilterMode filter_mode, dr::WrapMode wrap_mode) {
                  new (t) Tex(shape.data(), channels, use_accel, filter_mode, wrap_mode); },

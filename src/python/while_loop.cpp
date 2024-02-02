@@ -242,12 +242,29 @@ private:
             }
         } else {
             nb::object dstruct = nb::getattr(tp, "DRJIT_STRUCT", nb::handle());
+            nb::object traverse_cb = nb::getattr(
+                tp, Write ? "_traverse_1_cb_rw" : "_traverse_1_cb_ro",
+                nb::handle());
+
             if (dstruct.is_valid() && dstruct.type().is(&PyDict_Type)) {
                 for (auto [k, v] : nb::borrow<nb::dict>(dstruct)) {
                     name += "."; name += nb::str(k).c_str();
                     traverse<Write>(nb::getattr(h, k), indices);
                     name.resize(name_size);
                 }
+            } else if (traverse_cb.is_valid()) {
+                nb::object cb_py = nb::cpp_function([&](uint64_t index) {
+                    if constexpr (Write) {
+                        if (indices_pos >= indices.size())
+                            nb::raise("traverse(): internal error, "
+                                      "ran out of indices.");
+                        return indices[indices_pos++];
+                    } else {
+                        ad_var_inc_ref(index);
+                        indices.push_back(index);
+                    }
+                });
+                traverse_cb(h, cb_py);
             }
         }
         stack.pop_back();
@@ -295,13 +312,13 @@ static void while_loop_body_cb(void *p) {
     lp->state = check_state("body", tuple_call(lp->body, lp->state), lp->state);
 };
 
-static void while_loop_read_cb(void *p, dr::dr_vector<uint64_t> &indices) {
+static void while_loop_read_cb(void *p, dr::vector<uint64_t> &indices) {
     nb::gil_scoped_acquire guard;
     ((LoopState *) p)->traverse<false>(indices);
 }
 
 static void while_loop_write_cb(void *p,
-                                const dr::dr_vector<uint64_t> &indices) {
+                                const dr::vector<uint64_t> &indices) {
     nb::gil_scoped_acquire guard;
     ((LoopState *) p)->traverse<true>(indices);
 }

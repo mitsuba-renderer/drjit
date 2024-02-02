@@ -1,14 +1,33 @@
-#include <nanobind/nanobind.h>
 #define NB_INTRUSIVE_EXPORT NB_IMPORT
+
+#include <nanobind/nanobind.h>
 #include <nanobind/intrusive/counter.h>
 #include <nanobind/stl/pair.h>
 #include <drjit/call.h>
 #include <drjit/python.h>
+#include <drjit/random.h>
 
 namespace nb = nanobind;
 namespace dr = drjit;
 
 using namespace nb::literals;
+
+template <typename T>
+struct Sampler {
+    Sampler(size_t size) : rng(size) { }
+
+    T next() { return rng.next_float32(); }
+
+    void traverse_1_cb_ro(void *payload, void (*fn)(void *, uint64_t)) const {
+        traverse_1_fn_ro(rng, payload, fn);
+    }
+
+    void traverse_1_cb_rw(void *payload, uint64_t (*fn)(void *, uint64_t)) {
+        traverse_1_fn_rw(rng, payload, fn);
+    }
+
+    dr::PCG32<dr::uint64_array_t<T>> rng;
+};
 
 template <typename Float> struct Base : nb::intrusive_base {
     using Mask = dr::mask_t<Float>;
@@ -22,11 +41,13 @@ template <typename Float> struct Base : nb::intrusive_base {
     virtual Float constant_getter() = 0;
     virtual std::pair<Float, dr::uint32_array_t<Float>> complex_getter() = 0;
     virtual dr::replace_value_t<Float, Base<Float>*> get_self() const = 0;
+    virtual std::pair<Sampler<Float> *, Float> sample(Sampler<Float> *) = 0;
 
     Base() {
         if constexpr (dr::is_jit_v<Float>)
             jit_registry_put(dr::backend_v<Float>, "Base", this);
     }
+
 
     virtual ~Base() { jit_registry_remove(this); }
 };
@@ -48,6 +69,10 @@ template <typename Float> struct A : Base<Float> {
         return value;
     }
 
+    virtual std::pair<Sampler<Float> *, Float> sample(Sampler<Float> *s) override {
+        return { s, s->next() };
+    }
+
     virtual void dummy() override { }
     virtual float scalar_getter() override { return 1.f; }
     virtual Float opaque_getter() override { return opaque; }
@@ -61,7 +86,6 @@ template <typename Float> struct A : Base<Float> {
     Float value;
     Float opaque = dr::opaque<Float>(1.f);
 };
-
 
 template <typename Float> struct B : Base<Float> {
     using Mask = dr::mask_t<Float>;
@@ -78,6 +102,10 @@ template <typename Float> struct B : Base<Float> {
 
     virtual Float g(Float x, Mask) override {
         return value*x;
+    }
+
+    virtual std::pair<Sampler<Float> *, Float> sample(Sampler<Float> *s) override {
+        return { s, 0 };
     }
 
     virtual void dummy() override { }
@@ -99,12 +127,14 @@ DRJIT_CALL_TEMPLATE_BEGIN(Base)
     DRJIT_CALL_METHOD(f_masked)
     DRJIT_CALL_METHOD(dummy)
     DRJIT_CALL_METHOD(g)
+    DRJIT_CALL_METHOD(sample)
     DRJIT_CALL_GETTER(scalar_getter)
     DRJIT_CALL_GETTER(opaque_getter)
     DRJIT_CALL_GETTER(complex_getter)
     DRJIT_CALL_GETTER(constant_getter)
     DRJIT_CALL_METHOD(get_self)
 DRJIT_CALL_END(Base)
+
 
 template <JitBackend Backend>
 void bind(nb::module_ &m) {
@@ -113,11 +143,20 @@ void bind(nb::module_ &m) {
     using AT = A<Float>;
     using BT = B<Float>;
     using Mask = dr::mask_t<Float>;
+    using Sampler = ::Sampler<Float>;
+
+    auto sampler = nb::class_<Sampler>(m, "Sampler")
+        .def(nb::init<size_t>())
+        .def("next", &Sampler::next)
+        .def_rw("rng", &Sampler::rng);
+
+    bind_traverse(sampler);
 
     nb::class_<BaseT, nb::intrusive_base>(m, "Base")
         .def("f", &BaseT::f)
         .def("f_masked", &BaseT::f_masked)
-        .def("g", &BaseT::g);
+        .def("g", &BaseT::g)
+        .def("sample", &BaseT::sample);
 
     nb::class_<AT, BaseT>(m, "A")
         .def(nb::init<>())
@@ -160,6 +199,9 @@ void bind(nb::module_ &m) {
         .def("constant_getter", [](BaseArray &self, Mask m) {
                 return self->constant_getter(m);
              }, "mask"_a = true)
+        .def("sample", [](BaseArray &self, Sampler *sampler) {
+                return self->sample(sampler);
+             }, "sampler"_a)
         .def("get_self", [](BaseArray &self) { return self->get_self(); });
 }
 

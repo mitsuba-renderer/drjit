@@ -16,7 +16,7 @@
 
 #include <drjit/autodiff.h>
 #include <drjit/extra.h>
-#include <drjit-core/containers.h>
+#include <drjit-core/nanostl.h>
 
 #include <nanobind/intrusive/counter.h>
 #include <nanobind/intrusive/ref.h>
@@ -90,8 +90,8 @@ protected:
     uint32_t m_outputs_alive;
     uint64_t m_counter_offset;
 
-    dr_vector<uint32_t> m_input_indices;
-    dr_vector<uint32_t> m_output_indices;
+    vector<uint32_t> m_input_indices;
+    vector<uint32_t> m_output_indices;
 };
 
 template <typename T>
@@ -152,7 +152,7 @@ class CustomOp : public detail::CustomOpBase {
 
 public:
     using Base     = detail::CustomOpBase;
-    using Inputs   = dr_tuple<Input_...>;
+    using Inputs   = drjit::tuple<Input_...>;
     using Output   = Output_;
 
     CustomOp(const Input_ &...in)

@@ -495,3 +495,89 @@ def test05_dispatch(t, symbolic):
         xo, yo = pkg.dispatch_f(c, xi, yi)
     assert dr.all(xo == t(10, 12, 0, 21, 24))
     assert dr.all(yo == t(-1, -2, 0, 3, 4))
+
+
+@pytest.mark.parametrize("symbolic", [True, False])
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+def test06_test_ptr(t, symbolic):
+    pkg = get_pkg(t)
+
+    sampler_old = pkg.Sampler(3)
+    sampler = pkg.Sampler(3)
+    assert dr.all(sampler.rng-sampler_old.rng == [0, 0, 0])
+
+    A, B, Base, BasePtr = pkg.A, pkg.B, pkg.Base, pkg.BasePtr
+    a, b = A(), B()
+
+    with dr.scoped_set_flag(dr.JitFlag.SymbolicCalls, symbolic):
+        c = BasePtr(a, b, None)
+        sampler_out, value = c.sample(sampler)
+        assert sampler_out is sampler
+
+        diff = sampler.rng-sampler_old.rng
+        sampler_old.rng.state[2] = 0
+        sampler_old.rng.inc[2] = 0
+        assert dr.all(sampler.rng-sampler_old.rng == [1, 0, 0])
+
+
+@pytest.mark.parametrize("symbolic", [True, False])
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+def test07_test_ptr_py_dispatch(t, symbolic):
+    pkg = get_pkg(t)
+
+    sampler_old = pkg.Sampler(3)
+    sampler = pkg.Sampler(3)
+    assert dr.all(sampler.rng-sampler_old.rng == [0, 0, 0])
+
+    A, B, Base, BasePtr = pkg.A, pkg.B, pkg.Base, pkg.BasePtr
+    a, b = A(), B()
+
+    with dr.scoped_set_flag(dr.JitFlag.SymbolicCalls, symbolic):
+        c = BasePtr(a, b, None)
+
+        def fn(inst, sampler):
+            if inst is a:
+                return sampler, sampler.next()
+            else:
+                return sampler, t(0)
+
+        sampler_out, value = dr.dispatch(
+            c,
+            fn,
+            sampler
+        )
+
+        assert sampler_out is sampler
+
+        diff = sampler.rng-sampler_old.rng
+        sampler_old.rng.state[2] = 0
+        sampler_old.rng.inc[2] = 0
+        assert dr.all(sampler.rng-sampler_old.rng == [1, 0, 0])
+
+
+@pytest.mark.parametrize("symbolic", [True, False])
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+def test08_test_ptr_py_loop(t, symbolic):
+    # This test is technically about loops. It is located in test_call_ext.py
+    # since reuses some of the infrastruture
+    pkg = get_pkg(t)
+
+    sampler_old = pkg.Sampler(3)
+    sampler = pkg.Sampler(3)
+
+    i = dr.arange(dr.int32_array_t(t), 3)
+
+    def cond(i, sampler):
+        return i < 3
+
+    def body(i, sampler):
+        i += 1
+        sampler.next()
+        return i, sampler
+
+    i, sampler = dr.while_loop((i, sampler), cond, body)
+    diff = sampler.rng-sampler_old.rng
+    print(diff)
+
+    assert dr.all(i == [3,3,3])
+    assert dr.all(diff == [3,2,1])

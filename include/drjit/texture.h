@@ -10,8 +10,7 @@
     license that can be found in the LICENSE file.
 */
 
-#include <array>
-#include <utility>
+#include <drjit/array.h>
 #include <drjit-core/half.h>
 #include <drjit-core/texture.h>
 #include <drjit/dynamic.h>
@@ -120,7 +119,7 @@ public:
             FilterMode filter_mode = FilterMode::Linear,
             WrapMode wrap_mode = WrapMode::Clamp) {
         if (tensor.ndim() != Dimension + 1)
-            drjit_raise("Texture::Texture(): tensor dimension must equal "
+            drjit_fail("Texture::Texture(): tensor dimension must equal "
                         "texture dimension plus one.");
         init(tensor.shape().data(), tensor.shape(Dimension), use_accel,
              filter_mode, wrap_mode);
@@ -190,7 +189,7 @@ public:
      */
     void set_value(const Storage &value, bool migrate=false) {
         if (value.size() != m_size)
-            drjit_raise("Texture::set_value(): unexpected array size!");
+            drjit_fail("Texture::set_value(): unexpected array size!");
 
         drjit::eval(value);
 
@@ -234,7 +233,7 @@ public:
      */
     void set_tensor(const TensorXf &tensor, bool migrate=false) {
         if (tensor.ndim() != Dimension + 1)
-            drjit_raise("Texture::set_tensor(): tensor dimension must equal "
+            drjit_fail("Texture::set_tensor(): tensor dimension must equal "
                         "texture dimension plus one (channels).");
 
         bool is_inplace_update = (&tensor == &m_value);
@@ -737,7 +736,7 @@ public:
         auto compute_weight_coord = [&](uint32_t dim) -> Array3 {
             const Value integ = (Value) pos_i[dim];
             const Value alpha = (Value) pos_a[dim];
-            Value alpha2 = sqr(alpha),
+            Value alpha2 = square(alpha),
                   alpha3 = alpha2 * alpha;
             Value multiplier = Value(1.f / 6.f);
             // four basis functions, transformed to take as input the fractional part
@@ -870,7 +869,7 @@ public:
         const auto compute_weight = [&pos_a](uint32_t dim,
                                              bool is_grad) -> Array4 {
             const Value alpha = Value(pos_a[dim]);
-            Value alpha2 = sqr(alpha);
+            Value alpha2 = square(alpha);
             Value multiplier = Value(1.f / 6.f);
             if (!is_grad) {
                 Value alpha3 = alpha2 * alpha;
@@ -1002,7 +1001,7 @@ public:
 
         const auto compute_weight = [&pos_a](uint32_t dim) -> Array4 {
             const Value alpha = Value(pos_a[dim]);
-            Value alpha2 = sqr(alpha),
+            Value alpha2 = square(alpha),
                   alpha3 = alpha2 * alpha;
             Value multiplier = Value(1.f / 6.f);
             return multiplier * Array4(
@@ -1014,7 +1013,7 @@ public:
 
         const auto compute_weight_gradient = [&pos_a](uint32_t dim) -> Array4 {
             const Value alpha = Value(pos_a[dim]);
-            Value alpha2 = sqr(alpha);
+            Value alpha2 = square(alpha);
             Value multiplier = Value(1.f / 6.f);
             return multiplier * Array4(
                     Value(-3.f * alpha2 + 6.f * alpha - 3.f),
@@ -1166,7 +1165,7 @@ public:
 
         Array<Int32, Dimension> shape = m_shape_opaque;
         if (m_wrap_mode == WrapMode::Clamp) {
-            return clamp(pos, 0, shape - 1);
+            return clip(pos, 0, shape - 1);
         } else {
             T value_shift_neg = select(pos < 0, pos + 1, pos);
 
@@ -1192,7 +1191,7 @@ protected:
               FilterMode filter_mode, WrapMode wrap_mode,
               bool init_tensor = true) {
         if (channels == 0)
-            drjit_raise("Texture::Texture(): must have at least 1 channel!");
+            drjit_fail("Texture::Texture(): must have at least 1 channel!");
 
         m_size = channels;
         size_t tensor_shape[Dimension + 1]{};

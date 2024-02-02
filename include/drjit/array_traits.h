@@ -1,6 +1,9 @@
 /*
     drjit/array_traits.h -- Type traits for Dr.Jit arrays
 
+    (This file isn't meant to be included as-is. Please use 'drjit/array.h',
+     which bundles all the 'array_*' headers in the right order.)
+
     Dr.Jit is a C++ template library for efficient vectorization and
     differentiation of numerical kernels on modern processor architectures.
 
@@ -11,11 +14,6 @@
 */
 
 #pragma once
-
-#include <drjit-core/traits.h>
-#include <drjit/fwd.h>
-#include <utility>
-#include <stdint.h>
 
 NAMESPACE_BEGIN(drjit)
 
@@ -75,7 +73,7 @@ using enable_if_int64_t = enable_if_t<sizeof(T) == 8 && detail::is_integral_ext_
 template <typename... Ts> using identity_t = typename detail::identity<Ts...>::type;
 
 template <template<typename> class Op, typename Arg>
-constexpr bool is_detected_v = detail::detector<void, Op, Arg>::value;
+constexpr bool is_detected_v = detail::detector<void, Op, std::decay_t<Arg>>::value;
 
 constexpr size_t Dynamic = (size_t) -1;
 
@@ -106,96 +104,93 @@ namespace detail {
     template <typename T> using is_tensor_det          = std::enable_if_t<T::Derived::IsTensor>;
     template <typename T> using is_special_det         = std::enable_if_t<T::Derived::IsSpecial>;
     template <typename T> using is_dynamic_det         = std::enable_if_t<T::IsDynamic>;
-    template <typename T> using is_drjit_struct_det    = std::enable_if_t<T::IsDrJitStruct>;
+    template <typename T> using has_fields_det         = std::enable_if_t<!std::is_void_v<decltype(std::declval<T>().fields_())>>;
 }
 
 template <typename T> using enable_if_scalar_t = enable_if_t<drjit::detail::is_scalar_v<T>>;
 
 template <typename T>
-constexpr bool is_array_v = is_detected_v<detail::is_array_det, std::decay_t<T>>;
+constexpr bool is_array_v = is_detected_v<detail::is_array_det, T>;
 template <typename T> using enable_if_array_t = enable_if_t<is_array_v<T>>;
 template <typename T> using enable_if_not_array_t = enable_if_t<!is_array_v<T>>;
 
 template <typename T>
-constexpr bool is_masked_array_v = is_detected_v<detail::is_masked_array_det, std::decay_t<T>>;
+constexpr bool is_masked_array_v = is_detected_v<detail::is_masked_array_det, T>;
 template <typename T> using enable_if_masked_array_t = enable_if_t<is_masked_array_v<T>>;
 
 template <typename T>
-constexpr bool is_static_array_v = is_detected_v<detail::is_static_array_det, std::decay_t<T>>;
+constexpr bool is_static_array_v = is_detected_v<detail::is_static_array_det, T>;
 template <typename T> using enable_if_static_array_t = enable_if_t<is_static_array_v<T>>;
 
 template <typename T>
-constexpr bool is_dynamic_array_v = is_detected_v<detail::is_dynamic_array_det, std::decay_t<T>>;
+constexpr bool is_dynamic_array_v = is_detected_v<detail::is_dynamic_array_det, T>;
 template <typename T> using enable_if_dynamic_array_t = enable_if_t<is_dynamic_array_v<T>>;
 
 template <typename T>
-constexpr bool is_dynamic_v = is_detected_v<detail::is_dynamic_det, std::decay_t<T>>;
+constexpr bool is_dynamic_v = is_detected_v<detail::is_dynamic_det, T>;
 template <typename T> using enable_if_dynamic_t = enable_if_t<is_dynamic_v<T>>;
 
 template <typename T>
-constexpr bool is_packed_array_v = is_detected_v<detail::is_packed_array_det, std::decay_t<T>>;
+constexpr bool is_packed_array_v = is_detected_v<detail::is_packed_array_det, T>;
 template <typename T> using enable_if_packed_array_t = enable_if_t<is_packed_array_v<T>>;
 
 template <typename T>
-constexpr bool is_cuda_v = is_detected_v<detail::is_cuda_det, std::decay_t<T>>;
+constexpr bool is_cuda_v = is_detected_v<detail::is_cuda_det, T>;
 template <typename T> using enable_if_cuda_array_t = enable_if_t<is_cuda_v<T>>;
 
 template <typename T>
-constexpr bool is_llvm_v = is_detected_v<detail::is_llvm_det, std::decay_t<T>>;
+constexpr bool is_llvm_v = is_detected_v<detail::is_llvm_det, T>;
 template <typename T> using enable_if_llvm_array_t = enable_if_t<is_llvm_v<T>>;
 
 template <typename T>
-constexpr bool is_jit_v = is_detected_v<detail::is_jit_det, std::decay_t<T>>;
+constexpr bool is_jit_v = is_detected_v<detail::is_jit_det, T>;
 template <typename T> using enable_if_jit_array_t = enable_if_t<is_jit_v<T>>;
 
 template <typename T>
-constexpr bool is_diff_v = is_detected_v<detail::is_diff_det, std::decay_t<T>>;
+constexpr bool is_diff_v = is_detected_v<detail::is_diff_det, T>;
 template <typename T> using enable_if_diff_array_t = enable_if_t<is_diff_v<T>>;
 
 template <typename T>
-constexpr bool is_recursive_array_v = is_detected_v<detail::is_recursive_array_det, std::decay_t<T>>;
+constexpr bool is_recursive_array_v = is_detected_v<detail::is_recursive_array_det, T>;
 template <typename T> using enable_if_recursive_array_t = enable_if_t<is_recursive_array_v<T>>;
 
 template <typename T>
-constexpr bool is_mask_v = std::is_same_v<T, bool> || is_detected_v<detail::is_mask_det, std::decay_t<T>>;
+constexpr bool is_mask_v = std::is_same_v<T, bool> || is_detected_v<detail::is_mask_det, T>;
 template <typename T>
-constexpr bool is_kmask_v = is_detected_v<detail::is_kmask_det, std::decay_t<T>>;
+constexpr bool is_kmask_v = is_detected_v<detail::is_kmask_det, T>;
 template <typename T> using enable_if_mask_t = enable_if_t<is_mask_v<T>>;
 
 template <typename... Ts> constexpr bool is_array_any_v = (is_array_v<Ts> || ...);
 template <typename... Ts> using enable_if_array_any_t = enable_if_t<is_array_any_v<Ts...>>;
 
 template <typename T>
-constexpr bool is_complex_v = is_detected_v<detail::is_complex_det, std::decay_t<T>>;
+constexpr bool is_complex_v = is_detected_v<detail::is_complex_det, T>;
 template <typename T> using enable_if_complex_t = enable_if_t<is_complex_v<T>>;
 
 template <typename T>
-constexpr bool is_matrix_v = is_detected_v<detail::is_matrix_det, std::decay_t<T>>;
+constexpr bool is_matrix_v = is_detected_v<detail::is_matrix_det, T>;
 template <typename T> using enable_if_matrix_t = enable_if_t<is_matrix_v<T>>;
 
 template <typename T>
-constexpr bool is_vector_v = is_detected_v<detail::is_vector_det, std::decay_t<T>>;
+constexpr bool is_vector_v = is_detected_v<detail::is_vector_det, T>;
 template <typename T> using enable_if_vector_t = enable_if_t<is_vector_v<T>>;
 
 template <typename T>
-constexpr bool is_quaternion_v = is_detected_v<detail::is_quaternion_det, std::decay_t<T>>;
+constexpr bool is_quaternion_v = is_detected_v<detail::is_quaternion_det, T>;
 template <typename T> using enable_if_quaternion_t = enable_if_t<is_quaternion_v<T>>;
 
 template <typename T>
-constexpr bool is_tensor_v = is_detected_v<detail::is_tensor_det, std::decay_t<T>>;
+constexpr bool is_tensor_v = is_detected_v<detail::is_tensor_det, T>;
 template <typename T> using enable_if_tensor_t = enable_if_t<is_tensor_v<T>>;
 
 template <typename T>
-constexpr bool is_special_v = is_detected_v<detail::is_special_det, std::decay_t<T>>;
+constexpr bool is_special_v = is_detected_v<detail::is_special_det, T>;
 template <typename T> using enable_if_special_t = enable_if_t<is_special_v<T>>;
 
-template <typename T> struct struct_support {
-    using type = T;
-    static constexpr bool Defined =
-        is_detected_v<detail::is_drjit_struct_det, type>;
-};
+template <typename T>
+using struct_support_t = struct_support<std::decay_t<T>>;
 
-template <typename T> constexpr bool is_drjit_struct_v = struct_support<std::decay_t<T>>::Defined;
+template <typename T> static constexpr bool is_drjit_struct_v = is_detected_v<detail::has_fields_det, T>;
 template <typename T> using enable_if_drjit_struct_t = enable_if_t<is_drjit_struct_v<T>>;
 
 namespace detail {
@@ -289,9 +284,6 @@ template <typename T> using array_t = typename detail::array<T>::type;
 
 /// Type trait to access the plain array type underlying an special array
 template <typename T> using plain_t = typename detail::plain<T>::type;
-
-template <typename T>
-using struct_support_t = typename struct_support<std::decay_t<T>>::type;
 
 namespace detail {
     template <typename T, typename = int> struct backend {

@@ -40,7 +40,7 @@ struct suspend_grad_simple {
 /// Convert a Dr.Jit array into a human-readable representation. Used by
 /// drjit.print(), drjit.format(), and drjit.ArrayBase.__repr__()
 static void repr_array(Buffer &buffer, nb::handle h, size_t indent,
-                       size_t threshold, const dr_vector<size_t> &shape,
+                       size_t threshold, const vector<size_t> &shape,
                        size_t depth, nb::list &index) {
     const ArraySupplement &s = supp(h.type());
 
@@ -133,7 +133,7 @@ static void repr_array(Buffer &buffer, nb::handle h, size_t indent,
 
 PyObject *tp_repr(PyObject *self) noexcept {
     try {
-        dr_vector<size_t> shape;
+        vector<size_t> shape;
         Buffer buffer(128);
         if (!shape_impl(self, shape)) {
             buffer.put("[ragged array]");
@@ -168,7 +168,7 @@ void repr_general(Buffer &buffer, nb::handle h, size_t indent_, size_t threshold
     size_t indent = indent_ + 2;
 
     if (is_drjit_type(tp)) {
-        dr_vector<size_t> shape;
+        vector<size_t> shape;
         if (!shape_impl(h, shape)) {
             buffer.put("[ragged array]");
         } else {

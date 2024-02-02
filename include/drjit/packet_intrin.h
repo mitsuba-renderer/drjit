@@ -13,15 +13,7 @@
 
 #pragma once
 
-#if !defined(_MSC_VER)
-#  if defined(DRJIT_ARM_NEON)
-#    include <arm_neon.h>
-#  else
-#    include <immintrin.h>
-#  endif
-#else
-#  include <intrin.h>
-#endif
+#include <drjit-core/intrin.h>
 
 // -----------------------------------------------------------------------
 //! @{ \name Available instruction sets
@@ -272,7 +264,7 @@ template <typename T> DRJIT_INLINE T tzcnt(T v) {
 #if defined(NDEBUG)
 #  define DRJIT_PACKET_INIT(Name) Name() = default;
 #else
-#  define DRJIT_PACKET_INIT(Name) Name() : Name(DebugInitialization<Value>) { }
+#  define DRJIT_PACKET_INIT(Name) Name() : Name(DebugInit<Value>) { }
 #endif
 
 #define DRJIT_PACKET_TYPE(Type, Size_, Register)                               \

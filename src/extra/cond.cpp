@@ -15,17 +15,16 @@
 #include "common.h"
 #include <drjit/custom.h>
 #include <string>
-#include <vector>
 
 namespace dr = drjit;
-using dr::dr_vector;
+using dr::vector;
 
 using JitVar = GenericArray<void>;
 
 static void ad_cond_evaluated(JitBackend backend, const char *name,
                               void *payload, uint32_t cond_t, uint32_t cond_f,
-                              const dr_vector<uint64_t> &args,
-                              dr_vector<uint64_t> &rv, ad_cond_body body_cb) {
+                              const vector<uint64_t> &args,
+                              vector<uint64_t> &rv, ad_cond_body body_cb) {
     jit_log(LogLevel::InfoSym,
             "ad_cond_evaluated(\"%s\"): executing conditional expression.",
             name);
@@ -61,10 +60,10 @@ static void ad_cond_evaluated(JitBackend backend, const char *name,
 
 static void ad_cond_symbolic(JitBackend backend, const char *name,
                              void *payload, uint32_t cond_t, uint32_t cond_f,
-                             const dr_vector<uint64_t> &args_,
-                             dr_vector<uint64_t> &rv, ad_cond_body body_cb,
-                             std::vector<size_t> &input_offsets,
-                             std::vector<size_t> &output_offsets, bool ad) {
+                             const vector<uint64_t> &args_,
+                             vector<uint64_t> &rv, ad_cond_body body_cb,
+                             dr::vector<size_t> &input_offsets,
+                             dr::vector<size_t> &output_offsets, bool ad) {
     bool symbolic = jit_flag(JitFlag::SymbolicScope);
 
     scoped_record record_guard(backend);
@@ -97,7 +96,7 @@ static void ad_cond_symbolic(JitBackend backend, const char *name,
     false_idx.reserve(true_idx.size());
     rv.reserve(true_idx.size());
 
-    std::vector<uint32_t> tmp(true_idx.size());
+    dr::vector<uint32_t> tmp(true_idx.size());
     for (size_t i = 0; i < true_idx.size(); ++i)
         tmp[i] = (uint32_t) true_idx[i];
 
@@ -139,8 +138,8 @@ struct CondOp : public dr::detail::CustomOpBase {
 public:
     CondOp(JitBackend backend, const char *name, void *payload, uint32_t cond,
            ad_cond_body body_cb, ad_cond_delete delete_cb,
-           const dr_vector<uint64_t> &args, dr_vector<uint64_t> &rv,
-           std::vector<size_t> &&input_offsets, std::vector<size_t> &&output_offsets)
+           const vector<uint64_t> &args, vector<uint64_t> &rv,
+           dr::vector<size_t> &&input_offsets, dr::vector<size_t> &&output_offsets)
         : m_backend(backend), m_name(name), m_payload(payload), m_cond(cond),
           m_body_cb(body_cb), m_delete_cb(delete_cb),
           m_input_offsets(std::move(input_offsets)), m_output_offsets(std::move(output_offsets)) {
@@ -190,8 +189,8 @@ public:
 
         ad_cond(
             m_backend, 1, name.c_str(), this, m_cond, args, rv,
-            [](void *p, bool value, const dr_vector<uint64_t> &args,
-               dr_vector<uint64_t> &rv) {
+            [](void *p, bool value, const vector<uint64_t> &args,
+               vector<uint64_t> &rv) {
                 ((CondOp *) p)->forward_cb(value, args, rv);
             },
             nullptr, false);
@@ -216,8 +215,8 @@ public:
 
         ad_cond(
             m_backend, 1, name.c_str(), this, m_cond, args, rv,
-            [](void *p, bool value, const dr_vector<uint64_t> &args,
-               dr_vector<uint64_t> &rv) {
+            [](void *p, bool value, const vector<uint64_t> &args,
+               vector<uint64_t> &rv) {
                 ((CondOp *) p)->backward_cb(value, args, rv);
             },
             nullptr, false);
@@ -228,8 +227,8 @@ public:
             ad_accum_grad(combine(m_input_indices[i]), (uint32_t) rv[i]);
     }
 
-    void forward_cb(bool value, const dr_vector<uint64_t> &args,
-                    dr_vector<uint64_t> &rv) {
+    void forward_cb(bool value, const vector<uint64_t> &args,
+                    vector<uint64_t> &rv) {
         dr_index64_vector args2, rv2;
 
         args2.reserve(m_args.size());
@@ -263,8 +262,8 @@ public:
             rv.push_back(ad_grad(rv2[m_output_offsets[i]]));
     }
 
-    void backward_cb(bool value, const dr_vector<uint64_t> &args,
-                    dr_vector<uint64_t> &rv) {
+    void backward_cb(bool value, const vector<uint64_t> &args,
+                    vector<uint64_t> &rv) {
         dr_index64_vector args2, rv2;
 
         args2.reserve(m_args.size());
@@ -296,7 +295,7 @@ public:
             rv.push_back(ad_grad(args2[m_input_offsets[i]]));
     }
 
-    void disable(dr_vector<uint64_t> &rv) {
+    void disable(vector<uint64_t> &rv) {
         m_delete_cb = nullptr;
 
         for (size_t i = 0; i < rv.size(); ++i) {
@@ -321,13 +320,13 @@ private:
     ad_cond_delete m_delete_cb;
     dr_index64_vector m_args;
     dr_index64_vector m_rv;
-    std::vector<size_t> m_input_offsets;
-    std::vector<size_t> m_output_offsets;
+    dr::vector<size_t> m_input_offsets;
+    dr::vector<size_t> m_output_offsets;
 };
 
 bool ad_cond(JitBackend backend, int symbolic, const char *name, void *payload,
-             uint32_t cond, const drjit::dr_vector<uint64_t> &args,
-             drjit::dr_vector<uint64_t> &rv, ad_cond_body body_cb,
+             uint32_t cond, const drjit::vector<uint64_t> &args,
+             drjit::vector<uint64_t> &rv, ad_cond_body body_cb,
              ad_cond_delete delete_cb, bool ad) {
     try {
         if (name == nullptr)
@@ -357,8 +356,8 @@ bool ad_cond(JitBackend backend, int symbolic, const char *name, void *payload,
                false_mask = JitVar::steal(jit_var_mask_apply(neg_mask.index(), (uint32_t) size));
 
         if (symbolic) {
-            std::vector<size_t> input_offsets, output_offsets;
-            dr_vector<uint32_t> implicit_in;
+            dr::vector<size_t> input_offsets, output_offsets;
+            vector<uint32_t> implicit_in;
             {
                 scoped_isolation_boundary guard;
                 ad_cond_symbolic(backend, name, payload, true_mask.index(),

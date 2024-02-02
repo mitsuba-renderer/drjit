@@ -341,7 +341,7 @@ template <typename T> struct PCG32 {
             }
         );
 
-        return PCG32(initialize_state(), acc_mult * state + acc_plus, inc);
+        return PCG32(initialize_state{}, acc_mult * state + acc_plus, inc);
     }
 
     PCG32 operator-(const Int64 &delta) const {
@@ -407,6 +407,7 @@ template <typename T> struct PCG32 {
     UInt64 state;  // RNG state.  All values are possible.
     UInt64 inc;    // Controls which RNG sequence (stream) is selected. Must *always* be odd.
 
+    DRJIT_STRUCT(state, inc)
 private:
     struct initialize_state { };
     PCG32(initialize_state, const UInt64 &state, const UInt64 &inc)
