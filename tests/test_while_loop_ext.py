@@ -30,3 +30,10 @@ def test03_jit_loop(t, symbolic):
         i, z = pkg.simple_loop()
         assert dr.all(i == t(5, 5, 5, 5, 5, 5, 6))
         assert dr.all(z == t(9, 9, 9, 9, 9, 0, 0))
+
+@pytest.mark.parametrize('symbolic', [True, False])
+@pytest.test_arrays('uint32,is_diff,shape=(*)')
+def test04_loop_with_rng(t, symbolic):
+    with dr.scoped_set_flag(dr.JitFlag.SymbolicLoops, symbolic):
+        pkg = get_pkg(t)
+        assert dr.all(pkg.loop_with_rng() == [3, 2, 1])

@@ -4177,6 +4177,9 @@ mechanism. It takes three main input arguments:
 1. ``state``, a tuple of *state variables* that are modified by the loop
    iteration,
 
+   Dr.Jit optimizes away superfluous state variables, so there isn't any harm
+   in specifying variables that aren't actually modified by the loop.
+
 2. ``cond``, a function that takes the state variables as input and uses them to
    evaluate and return the loop condition in the form of a boolean array,
 
@@ -4563,6 +4566,10 @@ Lambda functions are convenient when ``true_fn`` and ``false_fn`` are simple
 enough to fit onto a single line. In general you may prefer to define local
 functions (``def true_fn(i, x, y): ...``) and pass them to the ``true_fn`` and
 ``false_fn`` arguments.
+
+Dr.Jit later optimizes away superfluous inputs/outputs of
+:py:func:`drjit.if_stmt`, so there isn't any harm in, e.g., specifying an
+identical element of a return value in both ``true_fn`` and ``false_fn``.
 
 Dr.Jit also provides the :py:func:`@drjit.syntax <drjit.syntax>` decorator,
 which automatically rewrites standard Python control flow constructs into the
@@ -6177,18 +6184,6 @@ underlying `nanothread <https://github.com/mitsuba-renderer/nanothread>`__
 thread pool library will also be affected by changes performed using by this
 function. It is legal to call it even while parallel computation is currently
 ongoing.)";
-
-static const char *doc_block_size = R"(
-Set the number of SIMD packets constituting a parallel work item in the LLVM backend.)";
-
-static const char *doc_set_block_size = R"(
-Set the number of SIMD packets constituting a parallel work item in the LLVM backend.
-
-Dr.Jit automatically vectorizes and parallelizes computation when using the
-LLVM backend (see the section on :ref:`optimizations <optimizations>` for
-details). One important decision is how many SIMD packets constitute a
-sufficient amount of work to hand over to the parallelization layer. This
-function can be used to tune this setting (the default is 1024 packets).)";
 
 static const char *doc_intrusive_base =
     "Base class with intrusive combined C++/Python reference counting.";

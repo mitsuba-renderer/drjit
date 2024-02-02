@@ -60,7 +60,7 @@ nb::object reduce(const char *name, ArrayOp op_id, nb::handle h,
         }
 
         int axis_value = axis.value();
-        dr_vector<size_t> shape;
+        vector<size_t> shape;
 
         if (axis_value != 0 && s) {
             shape_impl(h, shape);
@@ -304,7 +304,7 @@ nb::object prefix_sum(nb::handle_t<dr::ArrayBase> h, bool exclusive,
             return tp(result, shape(h));
         }
 
-        dr_vector<size_t> shape;
+        vector<size_t> shape;
         if (!shape_impl(h, shape))
             nb::raise("input array is ragged!");
 

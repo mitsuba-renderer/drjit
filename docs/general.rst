@@ -36,15 +36,14 @@ available. For example, when the machine supports the `AVX512
 instruction processes a *packet* of 16 values, which means that a total of 625
 packets need to be evaluated.
 
-When there are more than 1K packets (the default), each successive group of 1K
-packets forms a *block* for parallel processing using the built-in `nanothread
-<https://github.com/mitsuba-renderer/nanothread>`__ thread pool. In this case,
-there is not enough work for multi-core parallelism, and the computation
-immediately runs on the calling thread.
+The system uses the built-in `nanothread
+<https://github.com/mitsuba-renderer/nanothread>`__ thread pool to distribute
+packets to be processed among the available processor cores. In this simple
+example, there is not enough work to truly benefit from multi-core parallelism,
+but this approach pays off in more complex examples.
 
 You can use the functions :py:func:`drjit.thread_count`,
-:py:func:`drjit.set_thread_count`, :py:func:`drjit.block_size`,
-:py:func:`drjit.set_block_size` to fine-tune this process.
+:py:func:`drjit.set_thread_count` to specify the number of threads used for parallel processing.
 
 On the CUDA backend, the system automatically determines a number of *threads*
 that maximize occupancy along with a suitable number of *blocks* and then

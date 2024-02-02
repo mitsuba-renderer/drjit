@@ -464,8 +464,8 @@ static void ravel_recursive(nb::handle result, nb::handle value,
 }
 
 nb::object ravel(nb::handle h, char order,
-                 dr_vector<size_t> *shape_out,
-                 dr_vector<int64_t> *strides_out,
+                 vector<size_t> *shape_out,
+                 vector<int64_t> *strides_out,
                  const VarType *vt_in) {
 
     nb::handle tp = h.type();
@@ -481,7 +481,7 @@ nb::object ravel(nb::handle h, char order,
                 throw std::runtime_error("drjit.ravel(): tensors do not "
                                          "support F-style ordering for now.");
 
-            const dr_vector<size_t> &shape = s.tensor_shape(inst_ptr(h));
+            const vector<size_t> &shape = s.tensor_shape(inst_ptr(h));
             if (shape_out)
                 *shape_out = shape;
 
@@ -518,8 +518,8 @@ nb::object ravel(nb::handle h, char order,
         vt = (VarType) *vt_in;
     }
 
-    dr_vector<size_t> shape;
-    dr_vector<int64_t> strides;
+    vector<size_t> shape;
+    vector<int64_t> strides;
     if (!shape_impl(h, shape))
         throw std::runtime_error("drjit.ravel(): ragged input not allowed.");
     strides.resize(shape.size());
@@ -703,7 +703,7 @@ nb::object slice(nb::handle h, nb::handle index) {
                 m.backend = (uint16_t) JitBackend::None;
                 m.is_diff = false;
 
-                dr_vector<size_t> shape;
+                vector<size_t> shape;
                 shape_impl(h, shape);
                 shape.resize(shape.size() - 1);
 

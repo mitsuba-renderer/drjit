@@ -2,6 +2,9 @@
     drjit/array_mask.h -- Infrastructure for dealing with the special case of
     mask arrays
 
+    (This file isn't meant to be included as-is. Please use 'drjit/array.h',
+     which bundles all the 'array_*' headers in the right order.)
+
     Dr.Jit is a C++ template library for efficient vectorization and
     differentiation of numerical kernels on modern processor architectures.
 
@@ -10,10 +13,6 @@
     All rights reserved. Use of this source code is governed by a BSD-style
     license that can be found in the LICENSE file.
 */
-
-#pragma once
-
-#include <drjit/array_generic.h>
 
 NAMESPACE_BEGIN(drjit)
 NAMESPACE_BEGIN(detail)

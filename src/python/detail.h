@@ -69,9 +69,9 @@ struct StashRef {
 // See misc.cpp for documentation of these functions
 extern nb::object copy(nb::handle h, CopyMap *copy_map = nullptr);
 extern nb::object uncopy(nb::handle h, CopyMap &copy_map);
-extern void collect_indices(nb::handle, dr::dr_vector<uint64_t> &,
+extern void collect_indices(nb::handle, dr::vector<uint64_t> &,
                             bool inc_ref = false);
-extern nb::object update_indices(nb::handle, const dr::dr_vector<uint64_t> &,
+extern nb::object update_indices(nb::handle, const dr::vector<uint64_t> &,
                                  CopyMap *copy_map = nullptr,
                                  bool preserve_dirty = false);
 extern void check_compatibility(nb::handle, nb::handle, const char *name);

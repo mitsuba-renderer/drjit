@@ -697,6 +697,11 @@ struct DRJIT_TRIVIAL_ABI DiffArray
         a.m_index = index;
     }
 
+    template <typename... Ts> void set_label_(const Ts*... args) {
+        Index index = (Index) ad_var_set_label(m_index, sizeof...(Ts), args...);
+        ad_var_dec_ref(m_index);
+        m_index = index;
+	}
 
 private:
     Index m_index = 0;
@@ -706,20 +711,10 @@ template <typename Value> using CUDADiffArray = DiffArray<JitBackend::CUDA, Valu
 template <typename Value> using LLVMDiffArray = DiffArray<JitBackend::LLVM, Value>;
 
 template <typename T> void enqueue(ADMode mode, const T &value) {
-    if constexpr (is_diff_v<T>) {
-        if constexpr (depth_v<T> > 1) {
-            for (size_t i = 0; i < value.size(); ++i)
-                enqueue(mode, value.entry(i));
-        } else {
-            ad_enqueue(mode, value.index_combined());
-        }
-    } else if constexpr (is_drjit_struct_v<T>) {
-        struct_support_t<T>::apply_1(
-            value,
-            [mode](auto const &x) DRJIT_INLINE_LAMBDA {
-                enqueue(mode, x);
-            });
-    }
+    if constexpr (is_diff_v<T> && depth_v<T> == 1)
+        ad_enqueue(mode, value.index_combined());
+    else if constexpr (is_traversable_v<T>)
+        traverse_1(fields(value), [mode](auto const &x) { enqueue(mode, x); });
     DRJIT_MARK_USED(mode);
     DRJIT_MARK_USED(value);
 }
@@ -739,7 +734,7 @@ void traverse(ADMode mode, uint32_t flags = (uint32_t) ADFlag::Default) {
 
 namespace detail {
     template <bool IncRef, typename T>
-    void collect_indices(const T &value, dr_vector<uint64_t> &indices);
+    void collect_indices(const T &value, vector<uint64_t> &indices);
 }
 
 template <typename T> struct suspend_grad {
@@ -753,7 +748,7 @@ template <typename T> struct suspend_grad {
     suspend_grad(bool when, const Args &... args) : condition(when) {
         if constexpr (Enabled) {
             if (condition) {
-                dr_vector<uint64_t> indices;
+                vector<uint64_t> indices;
                 (detail::collect_indices<false>(args, indices), ...);
                 ad_scope_enter(ADScope::Suspend, indices.size(), indices.data());
             }
@@ -776,7 +771,7 @@ namespace detail {
     template <typename T>
     void check_grad_enabled(const char *name, const T &value) {
         if (!grad_enabled(value))
-            drjit_raise(
+            drjit_fail(
                 "drjit::%s(): the argument does not depend on the input "
                 "variable(s) being differentiated. Throwing an exception since "
                 "this is usually indicative of a bug (for example, you may "
@@ -836,45 +831,40 @@ NAMESPACE_BEGIN(detail)
 /// Internal operations for traversing nested data structures and fetching or
 /// storing indices. Used in ``call.h`` and ``loop.h``.
 
-template <bool IncRef, typename T>
-void collect_indices(const T &value, dr_vector<uint64_t> &indices) {
-    if constexpr (depth_v<T> > 1) {
-        for (size_t i = 0; i < value.derived().size(); ++i)
-            collect_indices<IncRef>(value.derived().entry(i), indices);
-    } else if constexpr (is_tensor_v<T>) {
-        collect_indices<IncRef>(value.array(), indices);
-    } else if constexpr (is_jit_v<T>) {
-        uint64_t index = value.index_combined();
-        if constexpr (IncRef)
-            ad_var_inc_ref(index);
-        indices.push_back(index);
-    } else if constexpr (is_drjit_struct_v<T>) {
-        struct_support_t<T>::apply_1(
-            value, [&](const auto &x) { collect_indices<IncRef>(x, indices); });
-    }
+template <bool IncRef> void collect_indices_fn(void *p, uint64_t index) {
+    vector<uint64_t> &indices = *(vector<uint64_t> *) p;
+    if constexpr (IncRef)
+        ad_var_inc_ref(index);
+    indices.push_back(index);
 }
 
-template <typename T>
-void update_indices(T &value, const dr_vector<uint64_t> &indices, size_t &pos) {
-    if constexpr (depth_v<T> > 1) {
-        for (size_t i = 0; i < value.derived().size(); ++i)
-            update_indices(value.derived().entry(i), indices, pos);
-    } else if constexpr (is_tensor_v<T>) {
-        update_indices(value.array(), indices, pos);
-    } else if constexpr (is_jit_v<T>) {
-        value = T::borrow((typename T::Index) indices[pos++]);
-    } else if constexpr (is_drjit_struct_v<T>) {
-        struct_support_t<T>::apply_1(
-            value, [&](auto &x) { update_indices(x, indices, pos); });
-    }
+struct update_indices_payload {
+    const vector<uint64_t> &indices;
+    size_t &pos;
+};
+
+inline uint64_t update_indices_fn(void *p, uint64_t) {
+    update_indices_payload &payload = *(update_indices_payload *) p;
+    return payload.indices[payload.pos++];
 }
 
-template <typename T> void update_indices(T &value, const dr_vector<uint64_t> &indices) {
+template <bool IncRef, typename Value>
+void collect_indices(const Value &value, vector<uint64_t> &indices) {
+    traverse_1_fn_ro(value, (void *) &indices, collect_indices_fn<IncRef>);
+}
+
+template <typename Value>
+void update_indices(Value &value, const vector<uint64_t> &indices, size_t &pos) {
+    update_indices_payload payload { indices, pos };
+    traverse_1_fn_rw(value, (void *) &payload, update_indices_fn);
+}
+
+template <typename T> void update_indices(T &value, const vector<uint64_t> &indices) {
     size_t pos = 0;
     update_indices(value, indices, pos);
 #if !defined(NDEBUG)
     if (pos != indices.size())
-        throw std::runtime_error("update_indices(): did not consume the expected number of indices!");
+        drjit_fail("update_indices(): did not consume the expected number of indices!");
 #endif
 }
 NAMESPACE_END(detail)

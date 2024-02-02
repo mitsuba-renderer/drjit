@@ -1377,8 +1377,6 @@ Low-level bits
 .. autofunction:: sync_thread
 .. autofunction:: flush_kernel_cache
 .. autofunction:: flush_malloc_cache
-.. autofunction:: block_size
-.. autofunction:: set_block_size
 .. autofunction:: expand_threshold
 .. autofunction:: set_expand_threshold
 .. autofunction:: kernel_history

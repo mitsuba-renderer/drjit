@@ -86,8 +86,8 @@ nb::object switch_impl(nb::handle index_, nb::sequence targets,
                  "unsigned integer array");
 
         ad_call_func func = [](void *ptr, void *self,
-                               const dr::dr_vector<uint64_t> &args_i,
-                               dr::dr_vector<uint64_t> &rv_i) {
+                               const dr::vector<uint64_t> &args_i,
+                               dr::vector<uint64_t> &rv_i) {
             nb::gil_scoped_acquire guard;
             State &state = *(State *) ptr;
             state.args_o =
@@ -114,7 +114,7 @@ nb::object switch_impl(nb::handle index_, nb::sequence targets,
             delete (State *) ptr;
         };
 
-        dr_vector<uint64_t> args_i;
+        vector<uint64_t> args_i;
         dr_index_vector rv_i;
         collect_indices(state->args_o, args_i);
 
@@ -172,8 +172,8 @@ nb::object dispatch_impl(nb::handle_t<dr::ArrayBase> instances,
         nb::object mask = extract_mask(args, kwargs);
 
         ad_call_func func_cb = [](void *ptr, void *self,
-                               const dr::dr_vector<uint64_t> &args_i,
-                               dr::dr_vector<uint64_t> &rv_i) {
+                               const dr::vector<uint64_t> &args_i,
+                               dr::vector<uint64_t> &rv_i) {
             nb::gil_scoped_acquire guard;
             State &state = *(State *) ptr;
             state.args_o =
@@ -201,7 +201,7 @@ nb::object dispatch_impl(nb::handle_t<dr::ArrayBase> instances,
             delete (State *) ptr;
         };
 
-        dr_vector<uint64_t> args_i;
+        vector<uint64_t> args_i;
         dr_index_vector rv_i;
         collect_indices(state->args_o, args_i);
 

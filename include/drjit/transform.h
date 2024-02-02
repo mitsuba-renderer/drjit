@@ -14,7 +14,6 @@
 
 #include <drjit/matrix.h>
 #include <drjit/quaternion.h>
-#include <tuple>
 
 NAMESPACE_BEGIN(drjit)
 
@@ -180,7 +179,7 @@ Matrix look_at(const Array<entry_t<Matrix>, 3> &origin,
 }
 
 template <typename Value>
-std::tuple<Matrix<Value, 3>, Quaternion<Value>, Array<Value, 3>>
+drjit::tuple<Matrix<Value, 3>, Quaternion<Value>, Array<Value, 3>>
 transform_decompose(const Matrix<Value, 4> &a, size_t it = 10) {
     auto [Q, P] = polar_decomp(Matrix<Value, 3>(a), it);
     Q[isnan(Q(0, 0))] = identity<Matrix<Value, 3>>();
@@ -189,7 +188,7 @@ transform_decompose(const Matrix<Value, 4> &a, size_t it = 10) {
     Q = mulsign(Q, sign_q);
     P = mulsign(P, sign_q);
 
-    return std::make_tuple(P, matrix_to_quat(Q), head<3>(transpose(a).entry(3)));
+    return drjit::make_tuple(P, matrix_to_quat(Q), head<3>(transpose(a).entry(3)));
 }
 
 template <typename Matrix4>

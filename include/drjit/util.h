@@ -96,7 +96,7 @@ template <typename Target, typename Source> Target unravel(const Source &source)
         size *= shape[i];
 
     if (size == 0 || source_size % size != 0)
-        drjit_raise("unravel(): input array length not divisible by stride");
+        drjit_fail("unravel(): input array length not divisible by stride");
 
     using Index = uint32_array_t<Source>;
     Index indices = arange<Index>(source_size / size);
@@ -192,8 +192,8 @@ Index binary_search(scalar_t<Index> start_, scalar_t<Index> end_,
 
             Index1 index = zeros<Index1>(width(pred(start)));
 
-            drjit::dr_tuple(start, end, index) = drjit::while_loop(
-                drjit::dr_tuple(start, end, index),
+            tuple(start, end, index) = drjit::while_loop(
+                tuple(start, end, index),
                 [iterations](const Index&, const Index&, const Index1& index) {
                     return index < iterations;
                 },
@@ -254,8 +254,8 @@ IndexN binary_search(typename std::enable_if_t<is_jit_v<Index1>, Index1> start_,
     if (jit_flag(JitFlag::Recording))
         jit_set_flag(JitFlag::LoopRecord, true);
 
-    drjit::dr_tuple(start, end, index) = drjit::while_loop(
-        drjit::dr_tuple(start, end, index),
+    tuple(start, end, index) = drjit::while_loop(
+        tuple(start, end, index),
         [iterations](const IndexN&, const IndexN&, const Index1& index) {
             return index < iterations;
         },

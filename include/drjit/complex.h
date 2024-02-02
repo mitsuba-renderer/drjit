@@ -216,12 +216,12 @@ template <typename T> Complex<T> cot(const Complex<T> &z) {
 
 template <typename T>
 Complex<T> asin(const Complex<T> &z) {
-    Complex<T> tmp = log(Complex<T>(-imag(z), real(z)) + sqrt(1.f - sqr(z)));
+    Complex<T> tmp = log(Complex<T>(-imag(z), real(z)) + sqrt(1.f - square(z)));
     return { imag(tmp), -real(tmp) };
 }
 
 template <typename T> Complex<T> acos(const Complex<T> &z) {
-    Complex<T> tmp = sqrt(1.f - sqr(z));
+    Complex<T> tmp = sqrt(1.f - square(z));
     tmp = log(z + Complex<T>(-imag(tmp), real(tmp)));
     return Complex<T>{ imag(tmp), -real(tmp) };
 }
@@ -263,7 +263,7 @@ Complex<T> tanh(const Complex<T> &z) {
 
 template <typename T>
 Complex<T> asinh(const Complex<T> &z) {
-    return log(z + sqrt(sqr(z) + 1.f));
+    return log(z + sqrt(square(z) + 1.f));
 }
 
 template <typename T>

@@ -17,7 +17,7 @@ Py_ssize_t sq_length(PyObject *o) noexcept {
 
     Py_ssize_t length = s.shape[0];
     if (s.is_tensor) {
-        const dr_vector<size_t> &shape = s.tensor_shape(inst_ptr(o));
+        const vector<size_t> &shape = s.tensor_shape(inst_ptr(o));
         return shape.size() == 0 ? 0 : (Py_ssize_t) shape[0];
     } else if (length == DRJIT_DYNAMIC) {
         length = (Py_ssize_t) s.len(inst_ptr(o));
@@ -91,7 +91,7 @@ static bool shape_traverse(nb::handle h, size_t ndim, size_t *shape) {
     return true;
 }
 
-bool shape_impl(nb::handle h, dr_vector<size_t> &result) {
+bool shape_impl(nb::handle h, vector<size_t> &result) {
     nb::handle tp = h.type();
 
     if (is_drjit_type(tp)) {
@@ -101,7 +101,7 @@ bool shape_impl(nb::handle h, dr_vector<size_t> &result) {
             result = s.tensor_shape(inst_ptr(h));
             return true;
         }
-        result = dr_vector<size_t>(s.ndim, 0);
+        result = vector<size_t>(s.ndim, 0);
     } else {
         nb::object o = nb::borrow(h);
         size_t ndim = 0;
@@ -118,13 +118,13 @@ bool shape_impl(nb::handle h, dr_vector<size_t> &result) {
             o = o[0];
         }
 
-        result = dr_vector<size_t>(ndim, 0);
+        result = vector<size_t>(ndim, 0);
     }
 
     return shape_traverse(h, result.size(), result.data());
 }
 
-nb::tuple cast_shape(const dr_vector<size_t> &shape) {
+nb::tuple cast_shape(const vector<size_t> &shape) {
     nb::tuple o = nb::steal<nb::tuple>(PyTuple_New((Py_ssize_t) shape.size()));
     if (!o.is_valid())
         nb::raise_python_error();
@@ -140,7 +140,7 @@ nb::tuple cast_shape(const dr_vector<size_t> &shape) {
 }
 
 nb::object shape(nb::handle h) {
-    dr_vector<size_t> result;
+    vector<size_t> result;
 
     if (!shape_impl(h, result))
         return nb::none();

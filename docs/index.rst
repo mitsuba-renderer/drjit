@@ -33,6 +33,7 @@ Alternative layout:
  - custom data structures
  - random number generation
  - debugging, printing, benchmarking, pitfalls
+ - how to clear the cache for benchmarking
  - faq
 
 Indices and tables

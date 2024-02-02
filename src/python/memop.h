@@ -22,8 +22,8 @@ extern void scatter(nb::object target, nb::object value, nb::object index,
                     nb::object active, ReduceMode mode = ReduceMode::Auto);
 
 extern nb::object ravel(nb::handle h, char order,
-                        dr_vector<size_t> *shape_out = nullptr,
-                        dr_vector<int64_t> *strides_out = nullptr,
+                        vector<size_t> *shape_out = nullptr,
+                        vector<int64_t> *strides_out = nullptr,
                         const VarType *vt_in = nullptr);
 
 extern nb::object unravel(const nb::type_object_t<ArrayBase> &dtype,

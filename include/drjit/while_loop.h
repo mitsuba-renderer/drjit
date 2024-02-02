@@ -13,7 +13,6 @@
 #pragma once
 
 #include <drjit/autodiff.h>
-#include <drjit/struct.h> // to traverse std::tuple
 
 NAMESPACE_BEGIN(drjit)
 NAMESPACE_BEGIN(detail)
@@ -22,14 +21,16 @@ template <typename StateD, size_t... Is, typename State, typename Cond,
           typename Body>
 StateD while_loop_impl(std::index_sequence<Is...>, State &&state_, Cond &&cond,
                        Body &&body, const char *name) {
-    using Mask = std::decay_t<decltype(cond(dr_get<Is>(state_)...))>;
+    using namespace std; // for ADL lookup to drjit::get<I> or std::get<I>
+
+    using Mask = std::decay_t<decltype(cond(get<Is>(state_)...))>;
 
     if constexpr (std::is_same_v<Mask, bool>) {
         // This is a simple scalar loop
         DRJIT_MARK_USED(name);
         StateD state(std::forward<State>(state_));
-        while (cond(dr_get<Is>(state)...))
-            body(dr_get<Is>(state)...);
+        while (cond(get<Is>(state)...))
+            body(get<Is>(state)...);
 
         return state;
     } else if constexpr (is_array_v<Mask> && !is_jit_v<Mask>) {
@@ -39,12 +40,12 @@ StateD while_loop_impl(std::index_sequence<Is...>, State &&state_, Cond &&cond,
         Mask active = true;
 
         while (true) {
-            active &= cond(dr_get<Is>(state)...);
+            active &= cond(get<Is>(state)...);
             if (none(active))
                 break;
 
             StateD backup(state);
-            body(dr_get<Is>(state)...);
+            body(get<Is>(state)...);
             state = select(active, state, backup);
         }
 
@@ -58,23 +59,23 @@ StateD while_loop_impl(std::index_sequence<Is...>, State &&state_, Cond &&cond,
             Mask active;
         };
 
-        ad_loop_read read_cb = [](void *p, dr_vector<uint64_t> &indices) {
+        ad_loop_read read_cb = [](void *p, vector<uint64_t> &indices) {
             detail::collect_indices<true>(((Payload *) p)->state, indices);
         };
 
-        ad_loop_write write_cb = [](void *p, const dr_vector<uint64_t> &indices) {
+        ad_loop_write write_cb = [](void *p, const vector<uint64_t> &indices) {
             detail::update_indices(((Payload *) p)->state, indices);
         };
 
         ad_loop_cond cond_cb = [](void *p) -> uint32_t {
             Payload *payload = (Payload *) p;
-            payload->active = payload->cond(dr_get<Is>(payload->state)...);
+            payload->active = payload->cond(get<Is>(payload->state)...);
             return payload->active.index();
         };
 
         ad_loop_body body_cb = [](void *p) {
             Payload *payload = (Payload *) p;
-            payload->body(dr_get<Is>(payload->state)...);
+            payload->body(get<Is>(payload->state)...);
         };
 
         ad_loop_delete delete_cb = [](void *p) { delete (Payload *) p; };

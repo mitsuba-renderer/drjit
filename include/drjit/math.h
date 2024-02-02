@@ -37,7 +37,7 @@ Value estrin_impl(const Value &x, const Value (&coeff)[n]) {
     if constexpr (n_rec == 0)
         return coeff_rec[0];
     else
-        return estrin_impl(sqr(x), coeff_rec);
+        return estrin_impl(square(x), coeff_rec);
 }
 
 template <typename Value, size_t n>
@@ -145,7 +145,7 @@ namespace detail {
                    - y * Scalar(2.69515142907905952645e-15);
         }
 
-        Value z = sqr(y), s, c;
+        Value z = square(y), s, c;
         z = detail::or_(z, xa == Infinity<Value>);
 
         if constexpr (Single) {
@@ -389,7 +389,7 @@ template <typename Value, bool Native> Value asin(const Value &x) {
                       "asin(): requires a regular scalar/array argument!");
 
         Value xa = abs(x),
-              x2 = sqr(x),
+              x2 = square(x),
               r;
 
         if constexpr (Single) {
@@ -484,7 +484,7 @@ template <typename Value, bool Native> Value acos(const Value &x) {
                       "acos(): requires a regular scalar/array argument!");
 
         if constexpr (Single) {
-            Value xa = abs(x), x2 = sqr(x);
+            Value xa = abs(x), x2 = square(x);
 
             Mask mask_big = xa > Scalar(0.5);
 
@@ -554,7 +554,7 @@ template <typename Y, typename X, bool Native> expr_t<Y, X> atan2(const Y &y, co
               min_val    = minimum(abs_y, abs_x),
               max_val    = maximum(abs_x, abs_y),
               scaled_min = min_val / max_val,
-              z          = sqr(scaled_min);
+              z          = square(scaled_min);
 
         // How to find these:
         // f[x_] = MiniMaxApproximation[ArcTan[Sqrt[x]]/Sqrt[x],
@@ -731,13 +731,13 @@ template <typename Value, bool Native> Value exp(const Value &x) {
         y = fmadd(n, Scalar(nlog2_hi), y);
         y = fmadd(n, Scalar(nlog2_lo), y);
 
-        Value z = sqr(y);
+        Value z = square(y);
 
         if constexpr (Single) {
             z = estrin(y, 5.0000001201e-1, 1.6666665459e-1,
                           4.1665795894e-2, 8.3334519073e-3,
                           1.3981999507e-3, 1.9875691500e-4);
-            z = fmadd(z, sqr(y), y + Scalar(1));
+            z = fmadd(z, square(y), y + Scalar(1));
         } else {
             /* Rational approximation for exponential
                of the fractional part:
@@ -813,7 +813,7 @@ template <typename Value, bool Native> Value exp2(const Value &x) {
             /* Rational approximation for exponential
                of the fractional part:
                   e^x = 1 + 2y P(y^2) / (Q(y^2) - P(y^2)) */
-            Value y2 = sqr(y);
+            Value y2 = square(y);
             Value p = estrin(y2, 1.51390680115615096133e+3,
                                  2.02020656693165307700e+1,
                                  2.30933477057345225087e-2) * y;
@@ -890,7 +890,7 @@ template <typename Value, bool Native> Value log(const Value &x) {
                            1.00000000000000000000e0);
         }
 
-        Value z = sqr(xm);
+        Value z = square(xm);
         y *= xm * z;
         y = fmadd(e, Scalar(-2.121944400546905827679e-4), y);
 
@@ -969,7 +969,7 @@ template <typename Value, bool Native> Value log2(const Value &x) {
                            1.00000000000000000000e0);
         }
 
-        Value z = sqr(xm);
+        Value z = square(xm);
         y *= xm * z;
 
         Value r = xm + fmadd(Scalar(-.5), z, y);
@@ -1073,7 +1073,7 @@ template <typename Value, bool Native> Value sinh(const Value &x) {
         }
 
         if (!all_nested_or<false>(mask_big)) {
-            Value x2 = sqr(x), y;
+            Value x2 = square(x), y;
 
             if constexpr (Single) {
                 y = estrin(x2, 1.66667160211e-1,
@@ -1148,7 +1148,7 @@ template <typename Value, bool Native> std::pair<Value, Value> sincosh(const Val
             r_big = (exp0 - exp1) * Scalar(0.5);
 
         if (!all_nested_or<false>(mask_big)) {
-            Value x2 = sqr(x), y;
+            Value x2 = square(x), y;
 
             if constexpr (Single) {
                 y = estrin(x2, 1.66667160211e-1,
@@ -1210,7 +1210,7 @@ template <typename Value, bool Native> Value tanh(const Value &x) {
         }
 
         if (!all_nested_or<false>(mask_big)) {
-            Value x2 = sqr(x);
+            Value x2 = square(x);
 
             if constexpr (Single) {
                 r_small = estrin(x2, -3.33332819422e-1,
@@ -1261,7 +1261,7 @@ template <typename Value, bool Native> Value asinh(const Value &x) {
         using Mask = mask_t<Value>;
         constexpr bool Single = std::is_same_v<Scalar, float>;
 
-        Value x2 = sqr(x), xa = abs(x), r_big, r_small;
+        Value x2 = square(x), xa = abs(x), r_big, r_small;
 
         Mask mask_big  = xa >= Scalar(Single ? 0.51 : 0.533),
              mask_huge = xa >= Scalar(Single ? 1e10 : 1e20);
@@ -1393,7 +1393,7 @@ template <typename Value, bool Native> Value atanh(const Value &x) {
         Mask mask_big = xa >= Scalar(0.5);
 
         if (!all_nested_or<false>(mask_big)) {
-            Value x2 = sqr(x);
+            Value x2 = square(x);
 
             if constexpr (Single) {
                 r_small = estrin(x2, 3.33337300303e-1,
@@ -1484,10 +1484,10 @@ template <typename Value, bool Native> Value cbrt(const Value &x) {
         r = mulsign(r, x);
 
         // Newton iteration
-        r -= (r - (x / sqr(r))) * third;
+        r -= (r - (x / square(r))) * third;
 
         if constexpr (!Single)
-            r -= (r - (x / sqr(r))) * third;
+            r -= (r - (x / square(r))) * third;
 
         return select(isfinite(x), r, x);
     }
@@ -1504,7 +1504,7 @@ template <typename Value, bool Native> Value erf(const Value &x) {
         //  - single precision: avg = 0.231 ulp, max = 3.80 ulp
         //  - double precision: avg = 0.306 ulp, max = 3.59 ulp
 
-        Value xa = abs(x), x2 = sqr(x), c0, c1;
+        Value xa = abs(x), x2 = square(x), c0, c1;
 
         if constexpr (std::is_same_v<Value, float>) {
             // max = 1.98 ulp, avg = 0.495 ulp on [0, 1]

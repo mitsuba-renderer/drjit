@@ -16,7 +16,7 @@ extern Py_ssize_t sq_length(PyObject *o) noexcept;
 extern Py_ssize_t mp_length(PyObject *o) noexcept;
 
 extern nb::object shape(nb::handle h);
-extern bool shape_impl(nb::handle h, dr_vector<size_t> &result);
+extern bool shape_impl(nb::handle h, vector<size_t> &result);
 
 /// Return the number of dimensions of the given array/tensor
 extern size_t ndim(nb::handle_t<ArrayBase> h) noexcept;
@@ -24,8 +24,8 @@ extern size_t ndim(nb::handle_t<ArrayBase> h) noexcept;
 /// Return the vectorization width of the given input array or PyTree
 extern size_t width(nb::handle h);
 
-/// Convert dr_vector<size_t> into a python tuple
-extern nb::tuple cast_shape(const dr_vector<size_t> &shape);
+/// Convert vector<size_t> into a python tuple
+extern nb::tuple cast_shape(const vector<size_t> &shape);
 
 /// Publish the drjit.shape() function
 extern void export_shape(nb::module_&);

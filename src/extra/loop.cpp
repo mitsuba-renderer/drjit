@@ -26,7 +26,7 @@ static bool ad_loop_symbolic(JitBackend backend, const char *name,
                              ad_loop_cond cond_cb, ad_loop_body body_cb,
                              dr_index64_vector &backup) {
     dr_index64_vector indices1;
-    dr::dr_vector<uint32_t> indices2;
+    dr::vector<uint32_t> indices2;
 
     // Read the loop state variables
     read_cb(payload, indices1);
@@ -198,7 +198,7 @@ ad_loop_evaluated_compress(JitBackend backend, const char *name, void *payload,
     dr::schedule(idx);
 
     dr_index64_vector out_indices;
-    dr::dr_vector<bool> skip;
+    dr::vector<bool> skip;
 
     skip.reserve(indices.size());
     out_indices.reserve(indices.size());
@@ -484,12 +484,12 @@ public:
             m_rv.push_back_borrow((index >> 32) << 32);
     }
 
-    void read(dr::dr_vector<uint64_t> &indices) {
+    void read(dr::vector<uint64_t> &indices) {
         for (uint64_t index : m_state)
             indices.push_back(ad_var_inc_ref(index));
     }
 
-    void write(const dr::dr_vector<uint64_t> &indices) {
+    void write(const dr::vector<uint64_t> &indices) {
         if (indices.size() != m_state.size())
             jit_fail("LoopOp::write(): internal error!");
 
@@ -593,8 +593,8 @@ public:
 
         ad_loop(
             m_backend, 1, 0, fwd_name.c_str(), this,
-            [](void *p, dr::dr_vector<uint64_t> &i) { ((LoopOp *) p)->read(i); },
-            [](void *p, const dr::dr_vector<uint64_t> &i) { ((LoopOp *) p)->write(i); },
+            [](void *p, dr::vector<uint64_t> &i) { ((LoopOp *) p)->read(i); },
+            [](void *p, const dr::vector<uint64_t> &i) { ((LoopOp *) p)->write(i); },
             [](void *p) { return ((LoopOp *) p)->fwd_cond(); },
             [](void *p) { return ((LoopOp *) p)->fwd_body(); }, nullptr, false);
 
@@ -618,7 +618,7 @@ private:
         bool has_grad_in = false;
         uint32_t grad_offset = 0;
     };
-    dr::dr_vector<Input> m_inputs;
+    dr::vector<Input> m_inputs;
 
     JitBackend m_backend;
     std::string m_name;

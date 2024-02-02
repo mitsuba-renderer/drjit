@@ -1,6 +1,9 @@
 /*
     drjit/array_base.h -- Base class of all Dr.Jit arrays
 
+    (This file isn't meant to be included as-is. Please use 'drjit/array.h',
+     which bundles all the 'array_*' headers in the right order.)
+
     Dr.Jit is a C++ template library for efficient vectorization and
     differentiation of numerical kernels on modern processor architectures.
 
@@ -9,11 +12,6 @@
     All rights reserved. Use of this source code is governed by a BSD-style
     license that can be found in the LICENSE file.
 */
-
-#pragma once
-
-#include <drjit/array_router.h>
-#include <drjit/array_constants.h>
 
 NAMESPACE_BEGIN(drjit)
 
@@ -72,13 +70,13 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
     static constexpr bool IsMask = IsMask_;
 
     /// Is this an array of values that can be added, multiplied, etc.?
-    static constexpr bool IsArithmetic = drjit::is_arithmetic_v<Scalar> && !IsMask;
+    static constexpr bool IsArithmetic = is_arithmetic_v<Scalar> && !IsMask;
 
     /// Is this an array of signed or unsigned integer values?
-    static constexpr bool IsIntegral = drjit::is_integral_v<Scalar> && !IsMask;
+    static constexpr bool IsIntegral = is_integral_v<Scalar> && !IsMask;
 
     /// Is this an array of floating point values?
-    static constexpr bool IsFloat = drjit::is_floating_point_v<Scalar> && !IsMask;
+    static constexpr bool IsFloat = is_floating_point_v<Scalar> && !IsMask;
 
     /// Does this array map operations onto packed vector instructions?
     static constexpr bool IsPacked = false;
@@ -179,7 +177,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
     DRJIT_INLINE decltype(auto) operator[](size_t i) {
         #if !defined(NDEBUG) && !defined(DRJIT_DISABLE_RANGE_CHECK)
         if (i >= derived().size())
-            drjit_raise("ArrayBase: out of range access (tried to "
+            drjit_fail("ArrayBase: out of range access (tried to "
                         "access index %zu in an array of size %zu)",
                         i, derived().size());
         #endif
@@ -190,7 +188,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
     DRJIT_INLINE decltype(auto) operator[](size_t i) const {
         #if !defined(NDEBUG) && !defined(DRJIT_DISABLE_RANGE_CHECK)
         if (i >= derived().size())
-            drjit_raise("ArrayBase: out of range access (tried to "
+            drjit_fail("ArrayBase: out of range access (tried to "
                         "access index %zu in an array of size %zu)",
                         i, derived().size());
         #endif
@@ -262,7 +260,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
                                                                              \
                 return result;                                               \
             } else {                                                         \
-                drjit_raise(#name "_(): invalid operand type!");             \
+                drjit_fail(#name "_(): invalid operand type!");              \
             }                                                                \
         }
 
@@ -288,7 +286,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
                                                                              \
                 return result;                                               \
             } else {                                                         \
-                drjit_raise(#name "_(): invalid operand type!");             \
+                drjit_fail(#name "_(): invalid operand type!");              \
             }                                                                \
         }
 
@@ -314,7 +312,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
                 return std::pair<Derived, Derived>(std::move(result_1),      \
                                                    std::move(result_2));     \
             } else {                                                         \
-                drjit_raise(#name "_(): invalid operand type!");             \
+                drjit_fail(#name "_(): invalid operand type!");              \
             }                                                                \
         }
 
@@ -323,8 +321,8 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
             DRJIT_CHKSCALAR(#name "_");                                      \
                                                                              \
             if constexpr (!IsFloat) {                                        \
-                drjit_raise(#name "_(): invalid operand type!");             \
-            } else if constexpr (!drjit::detail::is_scalar_v<Value>) {               \
+                drjit_fail(#name "_(): invalid operand type!");              \
+            } else if constexpr (!detail::is_scalar_v<Value>) {              \
                 size_t sa = derived().size();                                \
                                                                              \
                 T result;                                                    \
@@ -352,7 +350,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
                 Derived result;                                              \
                 if constexpr (Derived::Size == Dynamic) {                    \
                     if ((sa != sr && sa != 1) || (sb != sr && sb != 1))      \
-                        drjit_raise(#name "_() : incompatible input sizes "  \
+                        drjit_fail(#name "_() : incompatible input sizes "   \
                                    "(%zu and %zu)", sa, sb);                 \
                     result = drjit::empty<Derived>(sr);                      \
                 }                                                            \
@@ -365,7 +363,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
                                                                              \
                 return result;                                               \
             } else {                                                         \
-                drjit_raise(#name "_(): invalid operand type!");             \
+                drjit_fail(#name "_(): invalid operand type!");              \
             }                                                                \
         }
 
@@ -384,7 +382,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
             Derived result;                                                  \
             if constexpr (Derived::Size == Dynamic) {                        \
                 if ((sa != sr && sa != 1) || (sb != sr && sb != 1))          \
-                    drjit_raise(#name "_() : incompatible input sizes "      \
+                    drjit_fail(#name "_() : incompatible input sizes "       \
                                "(%zu and %zu)", sa, sb);                     \
                 result = drjit::empty<Derived>(sr);                          \
             }                                                                \
@@ -408,7 +406,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
             mask_t<Derived> result;                                          \
             if constexpr (Derived::Size == Dynamic) {                        \
                 if ((sa != sr && sa != 1) || (sb != sr && sb != 1))          \
-                    drjit_raise(#name "_() : incompatible input sizes "      \
+                    drjit_fail(#name "_() : incompatible input sizes "       \
                                "(%zu and %zu)", sa, sb);                     \
                 result = drjit::empty<mask_t<Derived>>(sr);                  \
             }                                                                \
@@ -427,7 +425,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
             DRJIT_CHKSCALAR(#name "_");                                      \
                                                                              \
             if constexpr (!cond) {                                           \
-                drjit_raise(#name "_(): invalid operand type!");             \
+                drjit_fail(#name "_(): invalid operand type!");              \
             } else if constexpr (!is_special_v<Derived>) {                   \
                 size_t sa = derived().size(), sb = v1.size(), sc = v2.size(),\
                        sd = sa > sb ? sa : sb, sr = sc > sd ? sc : sd;       \
@@ -436,7 +434,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
                 if constexpr (Derived::Size == Dynamic) {                    \
                     if ((sa != sr && sa != 1) || (sb != sr && sb != 1) ||    \
                         (sc != sr && sc != 1))                               \
-                        drjit_raise(#name "_() : incompatible input sizes "  \
+                        drjit_fail(#name "_() : incompatible input sizes "   \
                                    "(%zu, %zu, and %zu)", sa, sb, sc);       \
                     result = drjit::empty<Derived>(sr);                      \
                 }                                                            \
@@ -563,7 +561,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
         if constexpr (Derived::Size == Dynamic) {
             if ((sm != sr && sm != 1) || (st != sr && st != 1) ||
                 (sf != sr && sf != 1))
-                drjit_raise("select_() : incompatible input sizes "
+                drjit_fail("select_() : incompatible input sizes "
                            "(%zu, %zu, and %zu)", sm, st, sf);
             result = drjit::empty<Derived>(sr);
         }
@@ -603,14 +601,14 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
 
                 if constexpr (Derived::Size == Dynamic) {
                     if ((sa != sr && sa != 1) || (sb != sr && sb != 1))
-                        drjit_raise("dot_() : incompatible input sizes "
+                        drjit_fail("dot_() : incompatible input sizes "
                                     "(%zu and %zu)", sa, sb);
                     else if (sr == 0)
                         return Value(0);
                 }
 
                 Value result = derived().entry(0) * a.entry(0);
-				if constexpr (drjit::is_floating_point_v<Scalar>) {
+				if constexpr (is_floating_point_v<Scalar>) {
                     for (size_t i = 1; i < sr; ++i)
                         result = fmadd(derived().entry(i), a.entry(i), result);
                 } else {
@@ -636,7 +634,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
                 value += derived().entry(i);
             return value;
         } else {
-            drjit_raise("sum_(): invalid operand type!");
+            drjit_fail("sum_(): invalid operand type!");
         }
     }
 
@@ -652,7 +650,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
                 value *= derived().entry(i);
             return value;
         } else {
-            drjit_raise("prod_(): invalid operand type!");
+            drjit_fail("prod_(): invalid operand type!");
         }
     }
 
@@ -660,7 +658,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
         if constexpr (IsArithmetic) {
             if constexpr (Derived::Size == Dynamic) {
                 if (empty())
-                    drjit_raise("min_(): zero-sized array!");
+                    drjit_fail("min_(): zero-sized array!");
             }
 
             Value value = derived().entry(0);
@@ -668,7 +666,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
                 value = minimum(value, derived().entry(i));
             return value;
         } else {
-            drjit_raise("min_(): invalid operand type!");
+            drjit_fail("min_(): invalid operand type!");
         }
     }
 
@@ -676,7 +674,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
         if constexpr (IsArithmetic) {
             if constexpr (Derived::Size == Dynamic) {
                 if (empty())
-                    drjit_raise("max_(): zero-sized array!");
+                    drjit_fail("max_(): zero-sized array!");
             }
 
             Value value = derived().entry(0);
@@ -684,7 +682,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
                 value = maximum(value, derived().entry(i));
             return value;
         } else {
-            drjit_raise("max_(): invalid operand type!");
+            drjit_fail("max_(): invalid operand type!");
         }
     }
 
@@ -700,7 +698,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
                 value = value && derived().entry(i);
             return value;
         } else {
-            drjit_raise("all_(): invalid operand type!");
+            drjit_fail("all_(): invalid operand type!");
         }
     }
 
@@ -716,7 +714,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
                 value = value || derived().entry(i);
             return value;
         } else {
-            drjit_raise("any_(): invalid operand type!");
+            drjit_fail("any_(): invalid operand type!");
         }
     }
 
@@ -732,7 +730,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
                 value += select(derived().entry(i), 1, 0);
             return value;
         } else {
-            drjit_raise("count_(): invalid operand type!");
+            drjit_fail("count_(): invalid operand type!");
         }
     }
 
@@ -755,7 +753,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
             }
             return result;
         } else {
-            drjit_raise("prefix_sum_(): invalid operand type!");
+            drjit_fail("prefix_sum_(): invalid operand type!");
         }
     }
 
@@ -793,7 +791,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
             if (sa == 0 && sb == 1)
                 sr = 0;
             else if ((sa != sr && sa != 1) || (sb != sr && sb != 1))
-                drjit_raise("gather_() : incompatible input sizes "
+                drjit_fail("gather_() : incompatible input sizes "
                             "(%zu and %zu)", sa, sb);
             result = drjit::empty<Derived>(sr);
         }

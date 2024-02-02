@@ -54,7 +54,6 @@
 #include <nanobind/intrusive/counter.inl>
 #include <queue>
 #include <mutex>
-#include <memory>
 
 namespace dr = drjit;
 
@@ -63,6 +62,7 @@ namespace dr = drjit;
 #define NB_NOINLINE DRJIT_NOINLINE
 #include "../ext/nanobind/src/buffer.h"
 using drjit::detail::Buffer;
+static Buffer buffer;
 
 using dr::ADScope;
 
@@ -173,7 +173,7 @@ struct Edge {
     EdgeIndex next_bwd = 0;
 
     /// Special edge handler
-    std::unique_ptr<Special> special;
+    dr::unique_ptr<Special> special;
 
     /// Edge weight
     JitVar weight;
@@ -806,7 +806,7 @@ struct SpecialArg {
     void release() { special.release(); }
 
     ADIndex ad_index;
-    std::unique_ptr<Special> special;
+    dr::unique_ptr<Special> special;
 };
 
 struct Arg;
@@ -1093,16 +1093,48 @@ void ad_accum_grad(Index index, JitIndex value) {
     v->accum(value_v, size_in);
 }
 
-Index ad_var_set_label(Index index, const char *label) {
+Index ad_var_set_label(Index index, size_t argc, ...) {
+    std::lock_guard<std::mutex> guard(state.mutex);
+
+    // First, turn the variable-length argument list into a usable label
+    va_list ap;
+    va_start(ap, argc);
+
+    const char *label = nullptr;
+    if (argc == 1) {
+        label = va_arg(ap, const char *);
+    } else if (argc > 1) {
+        buffer.clear();
+
+        for (size_t i = 0; i < argc; ++i) {
+            const char *s = va_arg(ap, const char *);
+            bool isnum = s[0] >= '0' || s[1] <= '9';
+
+            if (isnum) {
+                buffer.put('[');
+                buffer.put(s, strlen(s));
+                buffer.put(']');
+            } else {
+                if (i > 0)
+                    buffer.put('.');
+                buffer.put(s, strlen(s));
+            }
+        }
+        label = buffer.get();
+    }
+    va_end(ap);
+
     uint32_t jit_index = ::jit_index(index),
              ad_index = ::ad_index(index);
-    jit_index = jit_var_set_label(jit_index, label);
 
+    // Set the label at the JIT level
+    jit_index = jit_var_set_label(jit_index, 1, label);
+
+    // If this is an AD variable, also set it here
     if (ad_index) {
         ad_log("ad_var_set_label(a%u): \"%s\"", ad_index,
                label ? label : "(null)");
 
-        std::lock_guard<std::mutex> guard(state.mutex);
         Variable *v = state[ad_index];
 
         if (v->flags & (uint8_t) VariableFlags::FreeLabel)
@@ -1953,7 +1985,7 @@ Index ad_var_div(Index i0, Index i1) {
         JitVar v0 = JitVar::borrow(jit_index(i0)),
                v1 = JitVar::borrow(jit_index(i1)),
                w0 = dr::rcp(v1),
-               w1 = -v0 * dr::sqr(w0);
+               w1 = -v0 * dr::square(w0);
 
         return ad_var_new("div", std::move(result),
                           Arg(i0, std::move(w0)),
@@ -2008,7 +2040,7 @@ Index ad_var_rcp(Index i0) {
     if (is_detached(i0)) {
         return result.release();
     } else {
-        JitVar w0 = -dr::sqr(result);
+        JitVar w0 = -dr::square(result);
         return ad_var_new("rcp", std::move(result),
                           Arg(i0, std::move(w0)));
     }
@@ -2022,7 +2054,7 @@ Index ad_var_rsqrt(Index i0) {
     if (is_detached(i0)) {
         return result.release();
     } else {
-        JitVar w0 = dr::sqr(result) * result * scalar(i0, -.5);
+        JitVar w0 = dr::square(result) * result * scalar(i0, -.5);
         return ad_var_new("rsqrt", std::move(result), Arg(i0, std::move(w0)));
     }
 }
@@ -2035,7 +2067,7 @@ Index ad_var_cbrt(Index i0) {
     if (is_detached(i0)) {
         return result.release();
     } else {
-        JitVar w0 = dr::sqr(dr::rcp(result)) * scalar(i0, 1.0 / 3.f);
+        JitVar w0 = dr::square(dr::rcp(result)) * scalar(i0, 1.0 / 3.f);
         return ad_var_new("cbrt", std::move(result), Arg(i0, std::move(w0)));
     }
 }
@@ -2050,7 +2082,7 @@ Index ad_var_erf(Index i0) {
     } else {
         JitVar v0 = JitVar::borrow(jit_index(i0)),
                w0 = scalar(i0, 2.0 * dr::InvSqrtPi<double>) *
-                    dr::exp(-dr::sqr(v0));
+                    dr::exp(-dr::square(v0));
         return ad_var_new("erf", std::move(result), Arg(i0, std::move(w0)));
     }
 }
@@ -2108,7 +2140,7 @@ Index ad_var_tan(Index i0) {
     } else {
         JitVar v0 = JitVar::borrow(jit_index(i0));
         return ad_var_new("tan", std::move(result),
-                          Arg(i0, dr::sqr(dr::rcp(dr::cos(v0)))));
+                          Arg(i0, dr::square(dr::rcp(dr::cos(v0)))));
     }
 }
 
@@ -2164,7 +2196,7 @@ Index ad_var_atan2(Index i0, Index i1) {
     } else {
         JitVar y = JitVar::borrow(jit_index(i0)),
                x = JitVar::borrow(jit_index(i1)),
-               s = dr::rcp(dr::fmadd(x, x, sqr(y)));
+               s = dr::rcp(dr::fmadd(x, x, square(y)));
 
         return ad_var_new("atan2", std::move(result),
                           Arg(i0, s * x),
@@ -2275,7 +2307,7 @@ Index ad_var_tanh(Index i0) {
         return result.release();
     } else {
         JitVar v0 = JitVar::borrow(jit_index(i0));
-        return ad_var_new("tanh", std::move(result), Arg(i0, dr::sqr(dr::rcp(dr::cosh(v0)))));
+        return ad_var_new("tanh", std::move(result), Arg(i0, dr::square(dr::rcp(dr::cosh(v0)))));
     }
 }
 
@@ -2582,8 +2614,6 @@ Index ad_var_prefix_sum(Index index, int exclusive) {
 // ==========================================================================
 // Debugging: GraphViz, variable listing
 // ==========================================================================
-
-static Buffer buffer;
 
 static const char *type_name_short[(int) VarType::Count] {
     "void ", "msk", "i8",  "u8",  "i16", "u16", "i32",
@@ -2893,7 +2923,7 @@ uint32_t ad_record_implicit_dependence(LocalState &ls, ReleaseHelper &rh,
         v->next_bwd = edge_index_new;
         v_source->next_fwd = edge_index_new;
         edge.next_bwd = 0;
-        edge.special = std::make_unique<Gather>(GenericArray<uint32_t>(0), JitMask(true));
+        edge.special = dr::make_unique<Gather>(GenericArray<uint32_t>(0), JitMask(true));
         ad_var_inc_ref_int(source, v_source);
         ad_var_inc_ref_int(source, v_source);
         ad_log(
@@ -2909,7 +2939,7 @@ uint32_t ad_record_implicit_dependence(LocalState &ls, ReleaseHelper &rh,
     return source;
 }
 
-void ad_copy_implicit_deps(drjit::dr_vector<uint32_t>& result) {
+void ad_copy_implicit_deps(drjit::vector<uint32_t>& result) {
     std::vector<Scope> &scopes = local_state.scopes;
     if (scopes.empty())
         return;
@@ -3098,7 +3128,7 @@ struct CustomOp : Special {
 };
 
 void ad_add_special(uint32_t v0i, uint32_t v1i, bool is_custom,
-                    std::unique_ptr<Special> special) {
+                    dr::unique_ptr<Special> special) {
     Variable *v0 = state[v0i], *v1 = state[v1i];
 
     if (v0->counter >= v1->counter)
@@ -3124,7 +3154,7 @@ void ad_add_special(uint32_t v0i, uint32_t v1i, bool is_custom,
 }
 
 bool ad_custom_op(dr::detail::CustomOpBase *op) {
-    const dr::dr_vector<uint32_t> &inputs  = op->m_input_indices,
+    const dr::vector<uint32_t> &inputs  = op->m_input_indices,
                                   &outputs = op->m_output_indices;
 
     if (inputs.empty() || outputs.empty() || op->m_counter_offset == 0)
@@ -3169,7 +3199,7 @@ bool ad_custom_op(dr::detail::CustomOpBase *op) {
 
             flags_ref |= (uint8_t) VariableFlags::Visited;
             ad_log(" - in: a%u", i);
-            ad_add_special(i, v0i, false, std::make_unique<CopyGrad>());
+            ad_add_special(i, v0i, false, dr::make_unique<CopyGrad>());
         }
     }
 
@@ -3199,7 +3229,7 @@ bool ad_custom_op(dr::detail::CustomOpBase *op) {
             flags_ref |= (uint8_t) VariableFlags::Visited;
 
             ad_log(" - out: a%u", o);
-            ad_add_special(v1i, o, false, std::make_unique<CopyGrad>());
+            ad_add_special(v1i, o, false, dr::make_unique<CopyGrad>());
             Variable *vo = state[o];
 
             vo->flags |= VariableFlags::CustomOpOutput;
@@ -3223,7 +3253,7 @@ bool ad_custom_op(dr::detail::CustomOpBase *op) {
     }
 
     ad_add_special(v0i, v1i, true,
-                   std::make_unique<CustomOp>(op, std::move(scope)));
+                   dr::make_unique<CustomOp>(op, std::move(scope)));
 
     Variable *v0 = state[v0i], *v1 = state[v1i];
 

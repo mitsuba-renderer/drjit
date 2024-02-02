@@ -90,8 +90,8 @@ static nb::ndarray<> dlpack(nb::handle_t<ArrayBase> h, bool force_cpu, nb::handl
 
     nb::dlpack::dtype dtype = drjit_type_to_dlpack((VarType) s.type);
 
-    dr_vector<size_t> shape;
-    dr_vector<int64_t> strides;
+    vector<size_t> shape;
+    vector<int64_t> strides;
 
     int32_t device_id = 0, device_type = nb::device::cpu::value;
     void *ptr;

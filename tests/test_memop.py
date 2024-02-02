@@ -464,15 +464,24 @@ def test_scatter_reduce(t, op):
         dr.scatter_reduce(op, buf_1, index=i, value=j, mode=dr.ReduceMode.Direct)
         dr.eval(buf_1)
 
-        #  dr.set_flag(dr.JitFlag.PrintIR ,True)
         buf_2 = dr.full(t, identity[0], k)
-        dr.scatter_reduce(op, buf_2, index=i, value=j, mode=dr.ReduceMode.Expand)
+        dr.scatter_reduce(op, buf_2, index=i, value=j, mode=dr.ReduceMode.Local)
         dr.eval(buf_2)
 
         if dr.is_float_v(t):
             assert dr.allclose(buf_1, buf_2)
         else:
             assert dr.all(buf_1 == buf_2)
+
+        if backend == dr.JitBackend.LLVM:
+            buf_3 = dr.full(t, identity[0], k)
+            dr.scatter_reduce(op, buf_3, index=i, value=j, mode=dr.ReduceMode.Expand)
+            dr.eval(buf_3)
+
+            if dr.is_float_v(t):
+                assert dr.allclose(buf_1, buf_3)
+            else:
+                assert dr.all(buf_1 == buf_3)
 
         if k == 1:
             v = None

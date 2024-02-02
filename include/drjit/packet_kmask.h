@@ -77,7 +77,7 @@ struct KMaskBase : StaticArrayBase<Value_, Size_, true, Derived_> {
         else if constexpr (Size == 2)
             value = _mm_cvtsi32_si128((int) *((const short *) data));
         else
-            drjit_raise("KMaskBase: unsupported number of elements!");
+            drjit_fail("KMaskBase: unsupported number of elements!");
 
         return (Register) _mm_test_epi8_mask(value, _mm_set1_epi8((char) 0xFF));
     }
