@@ -285,7 +285,7 @@ static bool check_grad_enabled(const char *name, nb::handle h, uint32_t flags) {
 
 static void forward_from(nb::handle_t<dr::ArrayBase> h, uint32_t flags) {
     if (check_grad_enabled("drjit.forward_from", h, flags)) {
-        clear_grad(h);
+        ::clear_grad(h);
         ::accum_grad(h, nb::float_(1.0));
         enqueue_impl(dr::ADMode::Forward, h);
         nb::gil_scoped_release r;
@@ -295,7 +295,7 @@ static void forward_from(nb::handle_t<dr::ArrayBase> h, uint32_t flags) {
 
 static void backward_from(nb::handle_t<dr::ArrayBase> h, uint32_t flags) {
     if (check_grad_enabled("drjit.backward_from", h, flags)) {
-        clear_grad(h);
+        ::clear_grad(h);
         ::accum_grad(h, nb::float_(1.0));
         enqueue_impl(dr::ADMode::Backward, h);
         nb::gil_scoped_release r;
