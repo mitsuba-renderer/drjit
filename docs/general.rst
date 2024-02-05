@@ -128,7 +128,7 @@ Atomic memory operations can be a bottleneck when they encounter *write
 contention*, which refers to a situation where many threads attempt to write to
 the same array element at once.
 
-For example, the following operation causes 1000'000 threads to write to
+For example, the following operation causes 1'000'000 threads to write to
 ``a[0]``.
 
 .. code-block:: pycon
@@ -139,7 +139,8 @@ For example, the following operation causes 1000'000 threads to write to
 Since Dr.Jit vectorizes the program during execution, the computation is
 grouped into *packets* that typically contain 16 to 32 elements. By locally
 pre-accumulating the values within each packet and then only performing 31-62K
-atomic memory operations, performance can be considerably improved.
+atomic memory operations (instead of 1'000'000), performance can be
+considerably improved.
 
 This issue is particularly important when automatically differentiating
 computation in *reverse mode* (e.g. :py:func:`drjit.backward`), since
@@ -155,12 +156,13 @@ left, since this involves a large number of writes to only a few elements. The
 behavior of GPU and CPU atomics are somewhat different, hence we look at them
 in turn starting with the CUDA backend.
 
-The :py:attr:`drjit.ReduceMode.Direct` strategy generally performs badly except
-for two special cases: when writing to a scalar array, the NVIDIA compiler
-detects this and performs a specialized optimization (that is, however, quite
-specific to this microbenchmark and unlikely to work in general). Towards the
-right, there is essentially no contention and multiple writes to the same
-destination are unlikely to appear within the same warp, hence
+The :py:attr:`drjit.ReduceMode.Direct` strategy generates a plain atomic
+operation without additional handling. This generally performs badly except for
+two special cases: when writing to a scalar array, the NVIDIA compiler detects
+this and performs a specialized optimization (that is, however, quite specific
+to this microbenchmark and unlikely to work in general). Towards the right,
+there is essentially no contention and multiple writes to the same destination
+are unlikely to appear within the same warp, hence
 :py:attr:`drjit.ReduceMode.Direct` outperforms the other methods.
 
 .. image:: https://rgl.s3.eu-central-1.amazonaws.com/media/uploads/wjakob/2024/01/scatter_add_cuda.svg
@@ -169,18 +171,15 @@ destination are unlikely to appear within the same warp, hence
 .. image:: https://rgl.s3.eu-central-1.amazonaws.com/media/uploads/wjakob/2024/01/scatter_add_cuda_dark.svg
   :class: only-dark
 
-The :py:attr:`drjit.ReduceMode.Local` strategy in the above plot actually refers to two
-different variants: a `butterfly reduction
-<https://en.wikipedia.org/wiki/Butterfly_network>`__ (``[bfly]``) and a faster
-hardware-accelerated reduction (``redux.sync``) for integer operations on newer
-hardware. Dr.Jit automatically chooses between them as appropriate. On the CUDA
-backend, the local strategy is the default since it significantly reduces the
-danger of encountering severe atomic memory contention.
+The :py:attr:`drjit.ReduceMode.Local` strategy in the above plot performs a
+`butterfly reduction <https://en.wikipedia.org/wiki/Butterfly_network>`__ to
+locally pre-reduce writes targeting the same region of memory, which
+significantly reduces the dangers of atomic memory contention.
 
-On the CPU/LLVM backend, :py:attr:`Direct` mode can so slow that this
+On the CPU (LLVM) backend, :py:attr:`Direct` mode can become so slow that this
 essentially breaks the program. The :py:attr:`Local` strategy is analogous to
 the CUDA backend and improves performance by an order of magnitude when many
-writes target the same element. In this bechmark, that becomes less likely as
+writes target the same element. In this benchmark, that becomes less likely as
 the target array grows, and the optimization becomes ineffective.
 
 .. image:: https://rgl.s3.eu-central-1.amazonaws.com/media/uploads/wjakob/2024/01/scatter_add_llvm.svg
@@ -192,9 +191,9 @@ the target array grows, and the optimization becomes ineffective.
 The :py:attr:`drjit.ReduceMode.Expand` strategy produces a near-flat profile.
 It replicates the target array to avoid write conflicts altogether, which
 enables the use of non-atomic memory operations. This is *significantly* faster
-but also *very memory-intensive*, as the storage cost of an 1MB array targeted
-by a :py:func:`drjit.scatter_reduce` operation now grows to ``N`` megabytes,
-where ``N`` is the number of cores. The functions :py:func:`expand_threshold`
+but also *very memory-intensive*, as the storage cost of an 1 MiB array targeted
+by a :py:func:`drjit.scatter_reduce` operation now grows to *N* MiB,
+where *N* is the number of cores. The functions :py:func:`expand_threshold`
 and :py:func:`set_expand_threshold` can be used to set thresholds that
 determine when Dr.Jit is willing to automatically use this strategy.
 
