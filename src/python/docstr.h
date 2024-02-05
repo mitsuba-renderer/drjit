@@ -6556,18 +6556,17 @@ performance especially on GPU backends.)";
 static const char *doc_ReduceMode_Local = R"(
 Locally pre-reduce operands.
 
-In this mode, Dr.Jit adds extra code to the compiled program to examine
-the target indices of atomic updates. CUDA programs run with an
+In this mode, Dr.Jit adds extra code to the compiled program to examine the
+target indices of atomic updates. For example, CUDA programs run with an
 instruction granularity referred to as a *warp*, which is a group of 32
-threads. When all of these threads want to write to the same location,
-the operands can be pre-reduced to turn 32 atomic memory transactions
-into a single one.
+threads. When some of these threads want to write to the same location, then
+those operands can be pre-processed to reduce the total number of neccessary
+atomic memory transactions (potentially to just a single one!)
 
 On the CPU/LLVM backend, the same process works at the granularity of
 *packets*. The details depends on the underlying instruction set---for
 example, there are 16 threads per packet on a machine with AVX512, so
-there is a potential for reducing atomic write traffic by that factor.
-The implementation of this feature also partially coherent warps/packets.)";
+there is a potential for reducing atomic write traffic by that factor.)";
 
 static const char *doc_ReduceMode_NoConflicts = R"(
 Perform a non-atomic read-modify-write operation.
