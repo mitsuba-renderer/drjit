@@ -302,6 +302,10 @@ Removals
   non-JIT-compiled type (e.g., ``dr::DiffArray<float>``) was removed. This was
   in any case too inefficient to be useful besides debugging.
 
+- The ``drjit.kernel_history*``  functions were replaced with a new API to
+  address shortcomings. You can read about it in the documentation section on
+  :ref:`profiling <profiling>`.
+
 Other minor technical improvements
 ----------------------------------
 
