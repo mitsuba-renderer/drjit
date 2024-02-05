@@ -320,6 +320,30 @@ struct DRJIT_TRIVIAL_ABI DiffArray
             return steal(jit_var_fma(m_index, a.m_index, b.m_index));
     }
 
+    DiffArray fmsub_(const DiffArray &a, const DiffArray &b) const {
+        DiffArray neg_b = -b;
+        if constexpr (IsFloat)
+            return steal(ad_var_fma(m_index, a.m_index, neg_b.m_index));
+        else
+            return steal(jit_var_fma(m_index, a.m_index, neg_b.m_index));
+    }
+
+    DiffArray fnmadd_(const DiffArray &a, const DiffArray &b) const {
+        DiffArray neg_a = -a;
+        if constexpr (IsFloat)
+            return steal(ad_var_fma(m_index, neg_a.m_index, b.m_index));
+        else
+            return steal(jit_var_fma(m_index, neg_a.m_index, b.m_index));
+    }
+
+    DiffArray fnmsub_(const DiffArray &a, const DiffArray &b) const {
+        DiffArray neg_a = -a, neg_b = -b;
+        if constexpr (IsFloat)
+            return steal(ad_var_fma(m_index, neg_a.m_index, neg_b.m_index));
+        else
+            return steal(jit_var_fma(m_index, neg_a.m_index, neg_b.m_index));
+    }
+
     static DiffArray select_(const MaskType m,
                              const DiffArray &t,
                              const DiffArray &f) {
