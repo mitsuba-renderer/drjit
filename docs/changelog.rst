@@ -146,7 +146,7 @@ Here is what's new:
 - **Loop compression**: the implementation of evaluated loops (previously
   referred to as wavefront mode) visits all entries of the loop state variables
   at every iteration, even when most of them have already finished executing the
-  loop. Dr.Jit now provides an optional``compress=True`` parameter in
+  loop. Dr.Jit now provides an optional ``compress=True`` parameter in
   :py:func:`drjit.while_loop` to prune away inactive entries and accelerate
   later loop iterations.
 
@@ -311,7 +311,7 @@ Other minor technical improvements
 - There is a new C++ interface named :cpp:func:`drjit::dispatch` that works
   analogously to the Python version.
 
-- the ``drjit.reinterpret_array_v`` function was renamed to
+- The ``drjit.reinterpret_array_v`` function was renamed to
   :py:func:`drjit.reinterpret_array`.
 
 - The :py:func:`drjit.llvm.PCG32.seed` function (and other backend variants)
