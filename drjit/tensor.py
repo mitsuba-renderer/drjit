@@ -2,12 +2,13 @@ from typing import Type
 import drjit as _dr
 from collections.abc import Sequence as _Sequence
 
-def upsample(t, shape=None, scale_factor=None):
+def upsample(t, shape=None, scale_factor=None, align_corners=False):
     '''
-    upsample(source, shape=None, scale_factor=None)
+    upsample(source, shape=None, scale_factor=None, align_corners=False)
     Up-sample the input tensor or texture according to the provided shape.
 
-    Alternatively to specifying the target shape, a scale factor can be provided.
+    Alternatively to specifying the target shape, a scale factor can be
+    provided.
 
     The behavior of this function depends on the type of ``source``:
 
@@ -17,18 +18,25 @@ def upsample(t, shape=None, scale_factor=None):
 
     2. When ``source`` is a Dr.Jit texture type, the up-sampling will be
     performed according to the filter mode set on the input texture. Target
-    ``shape`` values are not required to be multiples of the source shape values.
-    When `scale_factor` is used, its values must be integers.
+    ``shape`` values are not required to be multiples of the source shape
+    values. When `scale_factor` is used, its values must be integers.
 
     Args:
         source (object): A Dr.Jit tensor or texture type.
 
         shape (list): The target shape (optional)
 
-        scale_factor (list): The scale factor to apply to the current shape (optional)
+        scale_factor (list): The scale factor to apply to the current shape
+        (optional)
+
+        align_corners (bool): If True, the corner pixels of the input and output
+        tensors are aligned, and thus preserving the values at the corner
+        pixels. This only has effect when ``source`` is a Dr.Jit texture type
+        performing linear interpolation. (default: False)
 
     Returns:
-        object: the up-sampled tensor or texture object. The type of the output will be the same as the type of the source.
+        object: the up-sampled tensor or texture object. The type of the output
+        will be the same as the type of the source.
     '''
     if  not getattr(t, 'IsTexture', False) and not _dr.is_tensor_v(t):
         raise TypeError("upsample(): unsupported input type, expected Dr.Jit "
@@ -90,17 +98,22 @@ def upsample(t, shape=None, scale_factor=None):
         if t.shape[dim] != shape[dim]:
             raise TypeError("upsample(): channel counts doesn't match input texture!")
 
-         # Create the query coordinates
+        # Create the query coordinates
         coords = list(_dr.meshgrid(*[
-                _dr.linspace(value_type, 0.0, 1.0, shape[i], endpoint=False)
+                _dr.linspace(value_type, 0.0, 1.0, shape[i], endpoint=align_corners)
                 for i in range(dim)
             ],
             indexing='ij'
         ))
 
         # Offset coordinates by half a voxel to hit the center of the new voxels
-        for i in range(dim):
-            coords[i] += 0.5 / shape[i]
+        if align_corners:
+            for i in range(dim):
+                coords[i] *= (1 - 1 / t.shape[i])
+                coords[i] += 0.5 / t.shape[i]
+        else:
+            for i in range(dim):
+                coords[i] += 0.5 / shape[i]
 
         # Reverse coordinates order according to dr.Texture convention
         coords.reverse()
