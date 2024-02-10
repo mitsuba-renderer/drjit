@@ -66,8 +66,17 @@
 
 // Routing layer that dispatches operations to the right array endpoints
 #include <drjit/array_router.h>
+
+// Formatter to convert a Dr.Jit array into a string.
+#include <drjit/array_format.h>
+
+// Implementations of drjit::ArrayBase and drjit::ArrayBaseT
 #include <drjit/array_base.h>
+
+// Fallback functionality for static arrays
 #include <drjit/array_static.h>
+
+// Generic catch-all array implementation
 #include <drjit/array_generic.h>
 #include <drjit/array_mask.h>
 #include <drjit/array_iface.h>
