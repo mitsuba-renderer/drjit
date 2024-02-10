@@ -15,7 +15,6 @@
 */
 
 #pragma once
-#include <typeinfo>
 
 #if defined(min) || defined(max)
 #  error min/max are defined as preprocessor symbols! Define NOMINMAX on MSVC.
@@ -1019,8 +1018,7 @@ Target gather(Source &&source, const Index &index, const Mask &mask_ = true,
         // Case 4: gather<float>(const float *, ...)
         static_assert(is_integral_v<Index> && detail::is_scalar_v<Target>,
                       "gather(): unsupported inputs -- did you forget to "
-                      "include 'drjit/struct.h' or provide a suitable "
-                      "DRJIT_STRUCT() declaration?");
+                      "provide a suitable DRJIT_STRUCT() declaration?");
 
         if constexpr (is_array_v<Source>)
             return mask ? source[index] : Target(0);
@@ -1076,8 +1074,7 @@ void scatter(Target &target, const Value &value, const Index &index,
     } else {
         static_assert(is_integral_v<Index> && detail::is_scalar_v<Value>,
                       "scatter(): unsupported inputs -- did you forget to "
-                      "include 'drjit/struct.h' or provide a suitable "
-                      "DRJIT_STRUCT() declaration?");
+                      "provide a suitable DRJIT_STRUCT() declaration?");
 
         if (mask) {
             if constexpr (is_array_v<Target>)

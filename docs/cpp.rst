@@ -7,6 +7,30 @@ The C++ and Python interfaces of Python are designed to be as similar as
 possible. The following subsections explain how to translate from one language
 to the other along with a few unavoidable differences.
 
+Use as a header library
+-----------------------
+
+By default, Dr.Jit operates as a header-only library without further
+dependencies.
+
+
+.. code-block:: cpp
+
+   #include <drjit/array.h>
+
+   namespace dr = drjit;
+
+   using Array3f  = drjit::Array<float, 3>;
+   using Matrix3f = drjit::Matrix<float, 3>;
+
+   int main(int, char**) {
+       Array3f x(1, 2, 3),
+               y(1, 0, 1);
+
+       Array3f z = dr::normalize(dr::cross(x, y)) * .5f;
+       printf("Result = %s\n", dr::to_string(z).c_str());
+   }
+
 Vectorized loops
 ----------------
 
