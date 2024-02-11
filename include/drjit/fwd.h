@@ -29,6 +29,7 @@
 #  define DRJIT_IMPORT                 __declspec(dllimport)
 #  define DRJIT_EXPORT                 __declspec(dllexport)
 #  define DRJIT_TRIVIAL_ABI
+#  define DRJIT_NO_UBSAN
 #else
 #  define DRJIT_NOINLINE               __attribute__ ((noinline))
 #  define DRJIT_INLINE                 __attribute__ ((always_inline)) inline
@@ -47,6 +48,7 @@
 #  endif
 #  define DRJIT_IMPORT                 __attribute__ ((visibility("default")))
 #  define DRJIT_EXPORT                 __attribute__ ((visibility("default")))
+#  define DRJIT_NO_UBSAN               __attribute__ ((no_sanitize("undefined")))
 #endif
 
 #define DRJIT_MARK_USED(x) (void) x
