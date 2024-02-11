@@ -11,7 +11,6 @@
 #pragma once
 
 #include <drjit/python.h>
-#include <nanobind/stl/vector.h>
 #include <nanobind/stl/pair.h>
 #include "docstr.h"
 
@@ -34,15 +33,6 @@ inline const ArraySupplement &supp(nb::handle h) {
 inline ArrayBase* inst_ptr(nb::handle h) {
     return nb::inst_ptr<ArrayBase>(h);
 }
-
-NAMESPACE_BEGIN(NB_NAMESPACE)
-NAMESPACE_BEGIN(detail)
-
-template <typename T> struct type_caster<dr::vector<T>>
- : list_caster<drjit::vector<T>, T> { };
-
-NAMESPACE_END(detail)
-NAMESPACE_END(NB_NAMESPACE)
 
 /// Helper function to perform a tuple-based function call directly using the
 /// CPython API. nanobind lacks a nice abstraction for this.

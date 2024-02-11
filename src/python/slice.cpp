@@ -15,6 +15,7 @@
 #include "shape.h"
 #include "base.h"
 #include "slice.h"
+#include <vector>
 
 /// Holds metadata about slicing component
 struct Component {

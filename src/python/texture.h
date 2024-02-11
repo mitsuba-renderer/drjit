@@ -9,7 +9,7 @@ void bind_texture(nb::module_ &m, const char *name) {
     using PosType = typename Tex::PosType;
 
     auto tex = nb::class_<Tex>(m, name)
-        .def("__init__", [](Tex* t, const vector<size_t>& shape,
+        .def("__init__", [](Tex* t, const dr::vector<size_t>& shape,
                          size_t channels, bool use_accel,
                          dr::FilterMode filter_mode, dr::WrapMode wrap_mode) {
                  new (t) Tex(shape.data(), channels, use_accel, filter_mode, wrap_mode); },
@@ -43,7 +43,7 @@ void bind_texture(nb::module_ &m, const char *name) {
                 [](const Tex &texture, const dr::Array<PosType, Dimension> &pos,
                    const dr::mask_t<Type> active) {
                     size_t channels = texture.shape()[Dimension];
-                    std::vector<Type> result(channels);
+                    dr::vector<Type> result(channels);
                     texture.eval(pos, result.data(), active);
 
                     return result;
@@ -55,10 +55,9 @@ void bind_texture(nb::module_ &m, const char *name) {
                     size_t channels = texture.shape()[Dimension];
 
                     dr::Array<Type *, ResultSize> result_ptrs;
-                    std::array<std::vector<Type>, ResultSize> result;
+                    dr::vector<dr::vector<Type>> result(ResultSize);
                     for (size_t i = 0; i < ResultSize; ++i) {
-                        std::vector<Type> result_i(channels);
-                        result[i] = std::move(result_i);
+                        result[i].resize(channels);
                         result_ptrs[i] = result[i].data();
                     }
                     texture.eval_fetch(pos, result_ptrs, active);
@@ -69,7 +68,7 @@ void bind_texture(nb::module_ &m, const char *name) {
                 [](const Tex &texture, const dr::Array<PosType, Dimension> &pos,
                    const dr::mask_t<Type> active, bool force_drjit) {
                     size_t channels = texture.shape()[Dimension];
-                    std::vector<Type> result(channels);
+                    dr::vector<Type> result(channels);
                     texture.eval_cubic(pos, result.data(), active, force_drjit);
 
                     return result;
@@ -78,8 +77,8 @@ void bind_texture(nb::module_ &m, const char *name) {
                 [](const Tex &texture, const dr::Array<PosType, Dimension> &pos,
                    const dr::mask_t<Type> active) {
                     size_t channels = texture.shape()[Dimension];
-                    std::vector<Type> value(channels);
-                    std::vector<dr::Array<Type, Dimension>> gradient(channels);
+                    dr::vector<Type> value(channels);
+                    dr::vector<dr::Array<Type, Dimension>> gradient(channels);
                     texture.eval_cubic_grad(pos, value.data(), gradient.data(), active);
 
                     return nb::make_tuple(value, gradient);
@@ -89,9 +88,9 @@ void bind_texture(nb::module_ &m, const char *name) {
                    const dr::mask_t<Type> active) {
                     size_t channels = texture.shape()[Dimension];
 
-                    std::vector<Type> value(channels);
-                    std::vector<dr::Array<Type, Dimension>> gradient(channels);
-                    std::vector<dr::Matrix<Type, Dimension>> hessian(channels);
+                    dr::vector<Type> value(channels);
+                    dr::vector<dr::Array<Type, Dimension>> gradient(channels);
+                    dr::vector<dr::Matrix<Type, Dimension>> hessian(channels);
                     texture.eval_cubic_hessian(pos, value.data(), gradient.data(),
                                                hessian.data(), active);
 
@@ -102,7 +101,7 @@ void bind_texture(nb::module_ &m, const char *name) {
                    const dr::mask_t<Type> active) {
                     size_t channels = texture.shape()[Dimension];
 
-                    std::vector<Type> result(channels);
+                    dr::vector<Type> result(channels);
                     texture.eval_cubic_helper(pos, result.data(), active);
                     return result;
                 }, "pos"_a, "active"_a = true, doc_Texture_eval_cubic_helper);

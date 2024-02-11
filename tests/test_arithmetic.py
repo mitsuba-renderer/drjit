@@ -271,7 +271,6 @@ def test12_div_via_rcp(t, drjit_verbose, capsys):
     x = dr.opaque(t, 3)
     x / dr.opaque(dr.value_t(t), 4)
     transcript = capsys.readouterr().out
-    print(transcript)
     assert transcript.count('= mul(') == 3
     assert transcript.count('= div(') + transcript.count('= rcp(') + transcript.count('= div.approx(') + transcript.count('= rcp.approx(') == 1
 

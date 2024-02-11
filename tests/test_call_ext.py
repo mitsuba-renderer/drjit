@@ -577,7 +577,6 @@ def test08_test_ptr_py_loop(t, symbolic):
 
     i, sampler = dr.while_loop((i, sampler), cond, body)
     diff = sampler.rng-sampler_old.rng
-    print(diff)
 
     assert dr.all(i == [3,3,3])
     assert dr.all(diff == [3,2,1])

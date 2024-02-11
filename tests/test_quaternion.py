@@ -59,7 +59,6 @@ def test06_sqrt(t):
 
 @pytest.test_arrays('quaternion')
 def test07_rsqrt(t):
-    print(dr.rsqrt(t(1, 2, 3, 4)))
     assert dr.allclose(dr.sqrt(t(1, 2, 3, 4)),
                        t(0.229691, 0.459382, 0.689074, 2.17684))
 

@@ -157,7 +157,8 @@ size_t width(nb::handle h) {
             size_t value = len(h);
             if (width != 1 && value != 1 && width != value)
                 ragged = true;
-            width = std::max(value, width);
+            if (value > width)
+                width = value;
         }
     };
 

@@ -75,7 +75,7 @@ extern nb::object update_indices(nb::handle, const dr::vector<uint64_t> &,
                                  CopyMap *copy_map = nullptr,
                                  bool preserve_dirty = false);
 extern void check_compatibility(nb::handle, nb::handle, const char *name);
-extern void stash_ref(nb::handle h, std::vector<StashRef> &);
+extern void stash_ref(nb::handle h, dr::vector<StashRef> &);
 
 extern nb::object reset(nb::handle h);
 extern void enable_py_tracing();

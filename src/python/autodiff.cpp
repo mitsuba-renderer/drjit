@@ -11,6 +11,7 @@
 #include <drjit/autodiff.h>
 #include <drjit/custom.h>
 #include <nanobind/trampoline.h>
+#include <vector>
 #include "autodiff.h"
 #include "apply.h"
 #include "meta.h"
@@ -608,7 +609,7 @@ void export_autodiff(nb::module_ &m) {
     struct NullContextManager { };
     struct ADContextManager {
         drjit::ADScope scope;
-        std::vector<uint64_t> indices;
+        dr::vector<uint64_t> indices;
     };
 
     nb::class_<NullContextManager>(detail, "NullContextManager")
@@ -618,7 +619,7 @@ void export_autodiff(nb::module_ &m) {
              }, nb::arg().none(), nb::arg().none(), nb::arg().none());
 
     nb::class_<ADContextManager>(detail, "ADContextManager")
-        .def(nb::init<dr::ADScope, std::vector<uint64_t>>())
+        .def(nb::init<dr::ADScope, dr::vector<uint64_t>>())
         .def("__enter__",
              [](ADContextManager &m) {
                  ad_scope_enter(m.scope, m.indices.size(), m.indices.data());

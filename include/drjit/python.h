@@ -52,8 +52,6 @@
 #include <drjit/quaternion.h>
 #include <drjit/tensor.h>
 #include <drjit/math.h>
-#include <drjit-core/traits.h>
-#include <drjit-core/half.h>
 #include <drjit-core/python.h>
 #include <nanobind/stl/array.h>
 

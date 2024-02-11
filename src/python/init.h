@@ -25,8 +25,8 @@ extern nb::object full(const char *name, nb::handle dtype, nb::handle value,
 extern nb::object full(const char *name, nb::handle dtype, nb::handle value,
                        size_t size, bool opaque = false);
 extern nb::object full(const char *name, nb::handle dtype, nb::handle value,
-                       const std::vector<size_t> &shape, bool opaque = false);
+                       const dr::vector<size_t> &shape, bool opaque = false);
 
 extern nb::object import_ndarray(ArrayMeta m, PyObject *arg,
-                                 vector<size_t> *shape = nullptr,
+                                 dr::vector<size_t> *shape = nullptr,
                                  bool force_ad = false);

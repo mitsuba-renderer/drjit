@@ -330,13 +330,9 @@ def test17_simple_diff_loop(t, optimize, mode):
     dr.enable_grad(j)
     dr.set_grad(j, 1.1)
 
-    print("%i %i"% (i.index, j.index))
     while dr.hint(i < 5, mode=mode):
         j = j * 2
         i += 1
-        print("%i %i"% (i.index, j.index))
-    print(i)
-    print(j)
 
     assert dr.allclose(dr.forward_to(j), 32*1.1)
 

@@ -17,6 +17,7 @@
 #include "shape.h"
 #include "init.h"
 #include <algorithm>
+#include <vector>
 
 static const char *op_names[] = {
     // Unary operations
