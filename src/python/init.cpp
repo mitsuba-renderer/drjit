@@ -693,13 +693,13 @@ int tp_init_tensor(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
 
 // Forward declaration
 nb::object full(const char *name, nb::handle dtype, nb::handle value,
-                const std::vector<size_t> &shape, bool opaque) {
+                const dr::vector<size_t> &shape, bool opaque) {
     return full(name, dtype, value, shape.size(), shape.data(), opaque);
 }
 
 nb::object full(const char *name, nb::handle dtype, nb::handle value,
                 size_t size, bool opaque) {
-    std::vector<size_t> shape;
+    dr::vector<size_t> shape;
 
     if (is_drjit_type(dtype)) {
         const ArraySupplement &s = supp(dtype);
@@ -921,7 +921,7 @@ void export_init(nb::module_ &m) {
               return full("empty", dtype, nb::handle(), size);
           }, "dtype"_a, "shape"_a = 1, doc_empty)
      .def("empty",
-          [](nb::type_object dtype, std::vector<size_t> shape) {
+          [](nb::type_object dtype, dr::vector<size_t> shape) {
               return full("empty", dtype, nb::handle(), shape);
           }, "dtype"_a, "shape"_a)
      .def("zeros",
@@ -929,7 +929,7 @@ void export_init(nb::module_ &m) {
               return full("zeros", dtype, nb::int_(0), size);
           }, "dtype"_a, "shape"_a = 1, doc_zeros)
      .def("zeros",
-          [](nb::type_object dtype, std::vector<size_t> shape) {
+          [](nb::type_object dtype, dr::vector<size_t> shape) {
               return full("zeros", dtype, nb::int_(0), shape);
           }, "dtype"_a, "shape"_a)
      .def("ones",
@@ -937,7 +937,7 @@ void export_init(nb::module_ &m) {
               return full("ones", dtype, nb::int_(1), size);
           }, "dtype"_a, "shape"_a = 1, doc_ones)
      .def("ones",
-          [](nb::type_object dtype, std::vector<size_t> shape) {
+          [](nb::type_object dtype, dr::vector<size_t> shape) {
               return full("ones", dtype, nb::int_(1), shape);
           }, "dtype"_a, "shape"_a)
      .def("full",
@@ -945,7 +945,7 @@ void export_init(nb::module_ &m) {
               return full("full", dtype, value, size);
           }, "dtype"_a, "value"_a, "shape"_a = 1, doc_full)
      .def("full",
-          [](nb::type_object dtype, nb::handle value, std::vector<size_t> shape) {
+          [](nb::type_object dtype, nb::handle value, dr::vector<size_t> shape) {
               return full("full", dtype, value, shape);
           }, "dtype"_a, "value"_a, "shape"_a)
      .def("opaque",
@@ -953,7 +953,7 @@ void export_init(nb::module_ &m) {
               return full("opaque", dtype, value, size, true);
           }, "dtype"_a, "value"_a, "shape"_a = 1, doc_opaque)
      .def("opaque",
-          [](nb::type_object dtype, nb::handle value, std::vector<size_t> shape) {
+          [](nb::type_object dtype, nb::handle value, dr::vector<size_t> shape) {
               return full("opaque", dtype, value, shape, true);
           }, "dtype"_a, "value"_a, "shape"_a)
      .def("arange",

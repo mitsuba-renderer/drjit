@@ -174,10 +174,10 @@ nb::object uncopy(nb::handle h, CopyMap &copy_map) {
     return uncopy_impl(h, nb::handle(), copy_map, changed_parent);
 }
 
-void stash_ref(nb::handle h, std::vector<StashRef> &v) {
+void stash_ref(nb::handle h, dr::vector<StashRef> &v) {
     struct StashRefOp : TraverseCallback {
-        std::vector<StashRef> &v;
-        StashRefOp(std::vector<StashRef> &v) : v(v) { }
+        dr::vector<StashRef> &v;
+        StashRefOp(dr::vector<StashRef> &v) : v(v) { }
         void operator()(nb::handle h) override {
             auto index_fn = supp(h.type()).index;
             if (!index_fn)

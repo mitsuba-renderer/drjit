@@ -15,8 +15,6 @@
 #include "apply.h"
 #include "base.h"
 #include "shape.h"
-#include <nanobind/stl/string.h>
-#include <nanobind/stl/vector.h>
 #include <nanobind/stl/optional.h>
 
 /// State object passed to callbacks that implement the Python interface around ad_cond().
@@ -24,12 +22,12 @@ struct IfState {
     nb::object args;
     nb::callable true_fn, false_fn;
     nb::object rv;
-    std::vector<std::string> rv_labels;
+    dr::vector<dr::string> rv_labels;
     CopyMap copy_map;
-    std::vector<StashRef> sr;
+    dr::vector<StashRef> sr;
 
     IfState(nb::object &&args, nb::callable &&true_fn, nb::callable &&false_fn,
-            std::vector<std::string> &&rv_labels)
+            dr::vector<dr::string> &&rv_labels)
         : args(std::move(args)), true_fn(std::move(true_fn)),
           false_fn(std::move(false_fn)), rv_labels(std::move(rv_labels)) { }
 
@@ -93,8 +91,8 @@ static void if_stmt_delete_cb(void *p) {
 }
 
 nb::object if_stmt(nb::tuple args, nb::handle cond, nb::callable true_fn,
-                   nb::callable false_fn, std::vector<std::string> &&rv_labels,
-                   std::optional<std::string> name, std::optional<std::string> mode) {
+                   nb::callable false_fn, dr::vector<dr::string> &&rv_labels,
+                   std::optional<dr::string> name, std::optional<dr::string> mode) {
     try {
         (void) rv_labels;
         JitBackend backend = JitBackend::None;
