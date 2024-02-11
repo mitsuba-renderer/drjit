@@ -163,7 +163,7 @@ DRJIT_ROUTE_BINARY(operator!=, neq)
 DRJIT_ROUTE_BINARY_SHIFT(operator<<, sl)
 DRJIT_ROUTE_BINARY_SHIFT(operator>>, sr)
 
-DRJIT_ROUTE_UNARY_IMM_FALLBACK(sl, sl, a << Imm)
+DRJIT_ROUTE_UNARY_IMM_FALLBACK(sl, sl, (T) (std::make_unsigned_t<T>(a) << Imm))
 DRJIT_ROUTE_UNARY_IMM_FALLBACK(sr, sr, a >> Imm)
 
 DRJIT_ROUTE_BINARY_BITOP(operator&,  and)

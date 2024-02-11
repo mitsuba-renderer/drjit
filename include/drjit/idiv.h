@@ -150,7 +150,7 @@ template <typename T> struct divisor<T, enable_if_t<std::is_unsigned_v<T>>> {
     }
 
     template <typename Value>
-    DRJIT_INLINE Value operator()(const Value &value) const {
+    DRJIT_INLINE DRJIT_NO_UBSAN Value operator()(const Value &value) const {
         /* Division by +/-1 is not supported by the
            precomputation-based approach */
         if (div == 1)
@@ -161,6 +161,7 @@ template <typename T> struct divisor<T, enable_if_t<std::is_unsigned_v<T>>> {
                 return value >> (shift + 1);
         }
 
+        // ubsan must be locally turned off for this line (overflows)
         Value q = mulhi(multiplier, value);
         Value t = sr<1>(value - q) + q;
         return t >> shift;
@@ -196,12 +197,13 @@ struct divisor<T, enable_if_t<std::is_signed_v<T>>> {
         }
     }
 
-    template <typename Value> DRJIT_INLINE Value operator()(const Value &value) const {
+    template <typename Value> DRJIT_INLINE DRJIT_NO_UBSAN Value operator()(const Value &value) const {
         /* Division by +/-1 is not supported by the
            precomputation-based approach */
         if (div == 1)
             return value;
 
+        // ubsan must be locally turned off for this line (overflows)
         Value q = mulhi(multiplier, value) + value;
         Value q_sign = sr<sizeof(T) * 8 - 1>(q);
         q = q + (q_sign & ((T(1) << shift) - (multiplier == 0 ? 1 : 0)));
