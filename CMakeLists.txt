@@ -13,11 +13,17 @@ else()
   set(DRJIT_ENABLE_CUDA_DEFAULT ON)
 endif()
 
-option(DRJIT_ENABLE_LLVM          "Build the Dr.Jit LLVM backend?" ON)
-option(DRJIT_ENABLE_CUDA          "Build the Dr.Jit CUDA backend?" ${DRJIT_ENABLE_CUDA_DEFAULT})
-option(DRJIT_ENABLE_AUTODIFF      "Build Dr.Jit automatic differentation library?" ON)
-option(DRJIT_ENABLE_PYTHON        "Build Python extension library?" ON)
-option(DRJIT_ENABLE_TESTS         "Build Dr.Jit test suite? (Warning, this takes *very* long to compile)" OFF)
+option(DRJIT_ENABLE_LLVM      "Build the Dr.Jit LLVM backend?" ON)
+option(DRJIT_ENABLE_CUDA      "Build the Dr.Jit CUDA backend?" ${DRJIT_ENABLE_CUDA_DEFAULT})
+option(DRJIT_ENABLE_AUTODIFF  "Build Dr.Jit automatic differentation library?" ON)
+option(DRJIT_ENABLE_PYTHON    "Build Python extension library?" ON)
+option(DRJIT_ENABLE_TESTS     "Build Dr.Jit test suite? (Warning, this takes *very* long to compile)" OFF)
+
+if (NOT MSVC)
+  option(DRJIT_SANITIZE_UBSAN   "Enable the address sanitizer (GCC, Clang)" OFF)
+  option(DRJIT_SANITIZE_ASAN    "Enable the undefined behavior sanitizer (GCC, Clang)" OFF)
+  option(DRJIT_SANITIZE_INTENSE "Add costly internal instrumentation to catch undefined behavior." OFF)
+endif()
 
 # ----------------------------------------------------------
 #  Check if submodules have been checked out, or fail early
@@ -139,6 +145,26 @@ if (DRJIT_ENABLE_TESTS)
   endif()
 
   add_subdirectory(tests)
+endif()
+
+if (DRJIT_SANITIZE_UBSAN)
+  list(APPEND DRJIT_SANITIZE "undefined")
+endif()
+
+if (DRJIT_SANITIZE_ASAN)
+  list(APPEND DRJIT_SANITIZE "address")
+endif()
+
+if (DRJIT_SANITIZE_INTENSE)
+  target_compile_definitions(drjit-core PRIVATE -DDRJIT_SANITIZE_INTENSE)
+endif()
+
+if (DRJIT_SANITIZE)
+  string (REPLACE ";" "," DRJIT_SANITIZE "${DRJIT_SANITIZE}")
+  target_compile_options(drjit INTERFACE -fsanitize=${DRJIT_SANITIZE})
+  target_link_options (drjit INTERFACE -fsanitize=${DRJIT_SANITIZE})
+  target_compile_options(drjit-core PRIVATE -fsanitize=${DRJIT_SANITIZE})
+  target_link_options (drjit-core PRIVATE -fsanitize=${DRJIT_SANITIZE})
 endif()
 
 # Build the documentation
