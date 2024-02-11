@@ -95,5 +95,5 @@ def test3_binop_promote_misc():
 
     a + 2**10
     with pytest.raises(RuntimeError) as ei:
-        print(a + 2**100)
+        a + 2**100
     assert "drjit.scalar.Array3i.__add__(): Encountered an unsupported argument of type 'int' (must be a Dr.Jit array or a type that can be converted into one)" in str(ei.value)

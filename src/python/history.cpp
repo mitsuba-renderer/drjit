@@ -14,7 +14,7 @@ void export_history(nb::module_ &m) {
     nb::object io = nb::module_::import_("io").attr("StringIO");
     m.def(
         "kernel_history",
-        [io](std::vector<KernelType> types) {
+        [io](dr::vector<KernelType> types) {
             KernelHistoryEntry *data  = jit_kernel_history();
             KernelHistoryEntry *entry = data;
             nb::list history;

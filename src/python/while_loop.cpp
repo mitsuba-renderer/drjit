@@ -15,11 +15,8 @@
 #include "reduce.h"
 #include "detail.h"
 #include "apply.h"
-#include <nanobind/stl/string.h>
-#include <nanobind/stl/vector.h>
 #include <nanobind/stl/optional.h>
 #include <functional>
-#include <string>
 
 /**
  * \brief This data structure is responsible for capturing and updating the
@@ -34,26 +31,26 @@ struct LoopState {
     /// Function to evolve the loop state
     nb::callable body;
     /// Variable labels to provide nicer error messages
-    std::vector<std::string> state_labels;
+    dr::vector<dr::string> state_labels;
 
     /// Holds a temporary reference to the loop condition
     nb::object active;
 
     struct Entry {
-        std::string name;
+        dr::string name;
         nb::handle type;
         uint64_t id;
         size_t size;
-        Entry(const std::string &name, nb::handle type, uint64_t id, size_t size)
+        Entry(const dr::string &name, nb::handle type, uint64_t id, size_t size)
             : name(name), type(nb::borrow(type)), id(id), size(size) { }
     };
 
     // Post-processed version of 'state'
-    std::vector<Entry> entries;
+    dr::vector<Entry> entries;
     /// Temporary stack to avoid infinite recursion
-    std::vector<PyObject*> stack;
+    dr::vector<PyObject*> stack;
     /// Temporary to assemble a per-variable name
-    std::string name;
+    dr::string name;
     /// This variable is 'true' when traverse() is called for the first time
     bool first_time = true;
     /// Index into the 'entries' array when traverse() is called in later iterations
@@ -64,7 +61,7 @@ struct LoopState {
     size_t loop_size = 1;
 
     LoopState(nb::tuple &&state, nb::callable &&cond, nb::callable &&body,
-              std::vector<std::string> &&state_labels)
+              dr::vector<dr::string> &&state_labels)
         : state(std::move(state)), cond(std::move(cond)), body(std::move(body)),
           state_labels(std::move(state_labels)), first_time(true) { }
 
@@ -81,7 +78,7 @@ struct LoopState {
         entry_pos = 0;
         stack.clear();
         for (size_t i = 0; i < l1; ++i) {
-            name = l2 ? state_labels[i] : ("arg" + std::to_string(i));
+            name = l2 ? state_labels[i] : ("arg" + dr::string(i));
             traverse<Write>(state[i], indices);
         }
 
@@ -158,7 +155,7 @@ private:
                     len = s.len(inst_ptr(h));
 
                 for (Py_ssize_t i = 0; i < len; ++i) {
-                    name += "[" + std::to_string(i) + "]";
+                    name += "[" + dr::string(i) + "]";
                     traverse<Write>(nb::steal(s.item(h.ptr(), i)), indices);
                     name.resize(name_size);
                 }
@@ -217,14 +214,14 @@ private:
         } else if (tp.is(&PyList_Type)) {
             size_t ctr = 0;
             for (nb::handle v: nb::borrow<nb::list>(h)) {
-                name += "[" + std::to_string(ctr++) + "]";
+                name += "[" + dr::string(ctr++) + "]";
                 traverse<Write>(v, indices);
                 name.resize(name_size);
             }
         } else if (tp.is(&PyTuple_Type)) {
             size_t ctr = 0;
             for (nb::handle v: nb::borrow<nb::tuple>(h)) {
-                name += "[" + std::to_string(ctr++) + "]";
+                name += "[" + dr::string(ctr++) + "]";
                 traverse<Write>(v, indices);
                 name.resize(name_size);
             }
@@ -236,7 +233,7 @@ private:
                 if (stack.size() == 1)
                     name = nb::borrow<nb::str>(k).c_str();
                 else
-                    name += "['" + std::string(nb::borrow<nb::str>(k).c_str()) + "']";
+                    name += "['" + dr::string(nb::borrow<nb::str>(k).c_str()) + "']";
                 traverse<Write>(v, indices);
                 name.resize(name_size);
             }
@@ -331,9 +328,9 @@ static void while_loop_delete_cb(void *p) {
 }
 
 nb::tuple while_loop(nb::tuple state, nb::callable cond, nb::callable body,
-                     std::vector<std::string> &&state_labels,
-                     std::optional<std::string> name,
-                     std::optional<std::string> mode,
+                     dr::vector<dr::string> &&state_labels,
+                     std::optional<dr::string> name,
+                     std::optional<dr::string> mode,
                      std::optional<bool> compress) {
     try {
         JitBackend backend = JitBackend::None;
@@ -361,7 +358,7 @@ nb::tuple while_loop(nb::tuple state, nb::callable cond, nb::callable body,
         // Temporarily stash the reference counts of inputs. This influences the
         // behavior of copy-on-write (COW) operations like dr.scatter performed
         // within the symbolic region
-        std::vector<StashRef> sr;
+        dr::vector<StashRef> sr;
         stash_ref(state, sr);
 
         // Copy the loop inputs so that they cannot be mutated
