@@ -1,9 +1,10 @@
 import drjit as dr
 import pytest
 
+
 def get_pkg(t):
     with dr.detail.scoped_rtld_deepbind():
-        m = pytest.importorskip('custom_type_ext')
+        m = pytest.importorskip("custom_type_ext")
     backend = dr.backend_v(t)
     if backend == dr.JitBackend.LLVM:
         return m.llvm
@@ -11,7 +12,7 @@ def get_pkg(t):
         return m.cuda
 
 
-@pytest.test_arrays('float32,-diff,shape=(*),jit')
+@pytest.test_arrays("float32,-diff,shape=(*),jit")
 def test01_custom_type(t):
     pkg = get_pkg(t)
 
@@ -33,3 +34,24 @@ def test01_custom_type(t):
     assert str(w) == "[[4, 8, 6],\n [20, 8, 6]]"
     assert type(w) is pkg.Color3f
 
+
+def test02_struct_to_string():
+    with dr.detail.scoped_rtld_deepbind():
+        m = pytest.importorskip("custom_type_ext")
+    s = m.struct_to_string()
+
+    assert (
+        s
+        == """Ray[
+  time=[0, 0, 0, 0],
+  o=[[0, 0, 0],
+     [0, 0, 0],
+     [0, 3, 0],
+     [0, 0, 0]],
+  d=[[0, 0, 0],
+     [0, 0, 0],
+     [0, 0, 0],
+     [0, 0, 0]],
+  has_ray_differentials=1
+]"""
+    )

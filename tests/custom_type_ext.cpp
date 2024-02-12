@@ -1,5 +1,6 @@
 #include <drjit/python.h>
 #include <drjit/autodiff.h>
+#include <drjit/packet.h>
 
 namespace nb = nanobind;
 namespace dr = drjit;
@@ -28,7 +29,6 @@ struct Color : dr::StaticArrayImpl<Value_, 3, false, Color<Value_>> {
     DRJIT_ARRAY_IMPORT(Color, Base)
 };
 
-
 template <JitBackend Backend> void bind(nb::module_ &m) {
     dr::ArrayBinding b;
     using Float = dr::DiffArray<Backend, float>;
@@ -56,4 +56,24 @@ NB_MODULE(custom_type_ext, m) {
     nb::module_ cuda = m.def_submodule("cuda");
     bind<JitBackend::CUDA>(cuda);
 #endif
+
+    // Tests: DRJIT_STRUCT, traversal mechanism, array/struct stringification
+    m.def("struct_to_string", []{
+        using Float = dr::Packet<float, 4>;
+        using Array3f = dr::Array<Float, 3>;
+
+        struct Ray {
+            Float time;
+            Array3f o, d;
+            bool has_ray_differentials;
+
+            DRJIT_STRUCT(Ray, time, o, d, has_ray_differentials)
+        };
+
+        Ray x = dr::zeros<Ray>();
+
+        x.has_ray_differentials = true;
+        x.o.y()[2] = 3;
+        return dr::string(x);
+    });
 }

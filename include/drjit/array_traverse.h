@@ -15,10 +15,15 @@
 
 #pragma once
 
-#define DRJIT_STRUCT(...)                                                      \
-    auto fields_() { return drjit::tie(__VA_ARGS__); }                         \
+#define DRJIT_STRUCT(Name, ...)                                                \
+    DRJIT_INLINE auto fields_() { return drjit::tie(__VA_ARGS__); }            \
     DRJIT_INLINE auto fields_() const { return drjit::tie(__VA_ARGS__); }      \
-    static constexpr auto labels_ = drjit::detail::make_labels(#__VA_ARGS__);
+    const char *name_() const { return #Name; }                                \
+    auto labels_() const {                                                     \
+        return drjit::detail::unpack_labels(                                   \
+            #__VA_ARGS__,                                                      \
+            std::make_index_sequence<decltype(fields_())::Size>());            \
+    }
 
 NAMESPACE_BEGIN(drjit)
 
@@ -47,35 +52,21 @@ DRJIT_INLINE void traverse_3(T1 &&v1, T2 &&v2, T3 &&v3, F &&f) {
 }
 
 namespace detail {
-    // Helper class to generate numeric strings at compile time
-    template <unsigned Value, unsigned... D>
-    struct itoa : itoa<Value / 10, Value % 10, D...> { };
-    template <unsigned... D> struct itoa<0, D...> {
-        static constexpr char value[] = { (char) ('0' + D)..., '\0' };
-    };
-    template <> struct itoa<0> : itoa<0, 0> { };
-
     // Traversal helper for objects that cannot be traversed
     template <typename T, typename SFINAE = int> struct traversable {
         static constexpr bool value = false;
         template <typename Tv> static tuple<> fields(Tv&) { return { }; }
-        static tuple<> labels() { return { }; }
+        template <typename Tv> static tuple<> labels(const Tv&) { return { }; }
     };
 
     // Traversal helper for DRJIT_STRUCT(..) instances
     template <typename T> struct traversable<T, enable_if_drjit_struct_t<T>> {
         static constexpr bool value = true;
         template <typename Tv> static DRJIT_INLINE auto fields(Tv &v) { return v.fields_(); }
-        static auto labels() {
-            constexpr size_t size = decltype(std::declval<T>().fields_())::Size;
-            return labels_impl(std::make_index_sequence<size>());
-        }
-        template <size_t... Is> static auto labels_impl(std::index_sequence<Is...>) {
-            return make_tuple(T::labels_[Is]...);
-        }
+        template <typename Tv> static auto labels(const Tv &v) { return v.labels_(); }
     };
 
-    // Traversal helper for tuple<...> and std::tuple<...>
+    // Traversal helper for drjit::tuple<...> and std::tuple<...>
     template <typename T> struct traversable<T, enable_if_t<(std::tuple_size<T>::value > 0)>> {
         static constexpr bool value = true;
         static constexpr size_t Size = std::tuple_size<T>::value;
@@ -84,18 +75,19 @@ namespace detail {
             return fields_impl<Tv>(v, std::make_index_sequence<Size>());
         }
 
-        static auto labels() {
+        template <typename Tv> static auto labels(const Tv &) {
             return labels_impl(std::make_index_sequence<Size>());
         }
 
         template <typename Tv, size_t... Is>
         static DRJIT_INLINE auto fields_impl(Tv &v, std::index_sequence<Is...>) {
             using namespace std;
+            using namespace drjit;
             return tie(get<Is>(v)...);
         }
 
         template <size_t... Is> static auto labels_impl(std::index_sequence<Is...>) {
-            return make_tuple(detail::itoa<Is>::value...);
+            return make_tuple(drjit::string(Is)...);
         }
     };
 
@@ -107,7 +99,7 @@ namespace detail {
             return fields_impl<Tv>(v, std::make_index_sequence<size_v<T>>());
         }
 
-        static auto labels() {
+        template <typename Tv> static auto labels(const Tv &) {
             return labels_impl(std::make_index_sequence<size_v<T>>());
         }
 
@@ -117,7 +109,7 @@ namespace detail {
         }
 
         template <size_t... Is> static auto labels_impl(std::index_sequence<Is...>) {
-            return make_tuple(detail::itoa<Is>::value...);
+            return make_tuple(drjit::string(Is)...);
         }
     };
 
@@ -127,36 +119,10 @@ namespace detail {
         template <typename Tv> static DRJIT_INLINE auto fields(Tv &v) {
             return tie(v.array());
         }
-        static auto labels() { return make_tuple("array"); }
-    };
-
-    /// Constexpr string representation for DR_STRUCT field labels
-    template <size_t N> struct struct_labels {
-        char s[N + 1];
-
-        template <size_t... Is>
-        constexpr struct_labels(char const (&s)[N], std::index_sequence<Is...>)
-            : s{ (skip(s[Is]) ? '\0' : s[Is])..., '\0' } { }
-
-        static constexpr bool skip(char c) {
-            return c == ' ' || c == '\r' || c == '\n' || c == '\t' || c == ',';
-        }
-
-        constexpr const char *operator[](size_t i) const {
-            for (size_t j = 0, k = 0; j < N; ++j) {
-                if (s[j] != '\0' && (j == 0 || s[j - 1] == '\0')) {
-                    if (k++ == i)
-                        return s + j;
-                }
-            }
-
-            return nullptr;
+        template <typename Tv> static auto labels(const Tv &) {
+            return make_tuple(drjit::string("array"));
         }
     };
-
-    template <size_t N> constexpr struct_labels<N> make_labels(char const (&s)[N]) {
-        return { s, std::make_index_sequence<N>() };
-    }
 
     template <typename T>
     using det_traverse_1_cb_ro =
@@ -165,6 +131,29 @@ namespace detail {
     template <typename T>
     using det_traverse_1_cb_rw =
         decltype(T(nullptr)->traverse_1_cb_rw(nullptr, nullptr));
+
+    inline drjit::string get_label(const char *s, size_t i) {
+        auto skip = [](char c) {
+            return c == ' ' || c == '\r' || c == '\n' || c == '\t' || c == ',';
+        };
+
+        const char *start = nullptr, *end = nullptr;
+
+        for (size_t j = 0; j <= i; ++j) {
+            while (skip(*s))
+                s++;
+            start = s;
+            while (!skip(*s) && *s != '\0')
+                s++;
+            end = s;
+        }
+
+        return drjit::string(start, end - start);
+    }
+
+    template <size_t... Is> auto unpack_labels(const char *s, std::index_sequence<Is...>) {
+        return drjit::make_tuple(get_label(s, Is)...);
+    }
 };
 
 template <typename T> using traversable_t = detail::traversable<std::decay_t<T>>;
@@ -175,8 +164,8 @@ template <typename T> DRJIT_INLINE auto fields(T &&v) {
     return traversable_t<T>::fields(v);
 }
 
-template <typename T> auto labels() {
-    return traversable_t<T>::labels();
+template <typename T> auto labels(const T &v) {
+    return traversable_t<T>::labels(v);
 }
 
 template <typename Value>

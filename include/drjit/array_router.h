@@ -1508,9 +1508,9 @@ void set_label(T &value, Labels... prefix) {
         value.derived().set_label_(prefix...);
     } else if constexpr (is_traversable_v<T>) {
         traverse_2(
-            fields(value), labels<T>(),
-            [&](auto &x, const char *l) {
-            set_label(x, prefix..., l); });
+            fields(value), labels(value),
+            [&](auto &x, auto &l) {
+            set_label(x, prefix..., l.c_str()); });
     }
 }
 

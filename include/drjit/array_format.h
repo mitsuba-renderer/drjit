@@ -115,7 +115,7 @@ void format_array(Buffer &buf, const Array &v, size_t indent, const size_t *shap
 
 template <typename Array> struct formatter<Array, enable_if_array_t<Array>> {
     static size_t bound(size_t indent, const Array &v) {
-        detail::dummy_string d;
+        dummy_string d;
         format(d, indent, 0, v);
         return d.size();
     }
@@ -130,12 +130,49 @@ template <typename Array> struct formatter<Array, enable_if_array_t<Array>> {
     }
 };
 
+template <typename T> struct formatter<T, enable_if_t<is_traversable_v<T> && !is_array_v<T>>> {
+    static constexpr size_t Size = decltype(drjit::fields(std::declval<T>()))::Size;
+
+    static size_t bound(size_t indent, const T &v) {
+        dummy_string d;
+        format(d, indent, 0, v);
+        return d.size();
+    }
+
+    template <typename Buffer>
+    static void format(Buffer &s, size_t indent, size_t, const T &v) {
+        format_impl(s, indent, v, std::make_index_sequence<Size>());
+    }
+
+    template <typename Buffer, size_t... Is>
+    static void format_impl(Buffer &s, size_t indent, const T &v,
+                            std::index_sequence<Is...>) {
+        auto v_fields = fields(v);
+        auto v_labels = labels(v);
+
+        s.put(v.name_());
+        s.put_unchecked("[\n", 2);
+        (format_field(s, indent + 2, drjit::get<Is>(v_labels),
+                      drjit::get<Is>(v_fields), Is == Size - 1),
+         ...);
+        s.put_unchecked("]", 1);
+    }
+
+    template <typename Buffer, typename T2>
+    static void format_field(Buffer &s, size_t indent, const drjit::string &label,
+                             const T2 &value, bool is_last) {
+        s.indent(indent);
+        s.iput(indent + label.length() + 1, label, "=", value,
+               is_last ? "\n" : ",\n");
+    }
+};
+
 NAMESPACE_END(detail)
 
 template <typename Stream, typename Sentry = typename Stream::sentry,
-          typename Array, enable_if_array_t<Array> = 0>
-Stream &operator<<(Stream &stream, const Array &array) {
-    stream << drjit::string(array);
+          typename T, enable_if_t<is_array_v<T> || is_traversable_v<T>> = 0>
+Stream &operator<<(Stream &stream, const T &value) {
+    stream << drjit::string(value);
     return stream;
 }
 

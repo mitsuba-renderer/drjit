@@ -407,7 +407,7 @@ template <typename T> struct PCG32 {
     UInt64 state;  // RNG state.  All values are possible.
     UInt64 inc;    // Controls which RNG sequence (stream) is selected. Must *always* be odd.
 
-    DRJIT_STRUCT(state, inc)
+    DRJIT_STRUCT(PCG32, state, inc)
 private:
     struct initialize_state { };
     PCG32(initialize_state, const UInt64 &state, const UInt64 &inc)
