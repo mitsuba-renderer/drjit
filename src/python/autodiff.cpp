@@ -11,7 +11,6 @@
 #include <drjit/autodiff.h>
 #include <drjit/custom.h>
 #include <nanobind/trampoline.h>
-#include <vector>
 #include "autodiff.h"
 #include "apply.h"
 #include "meta.h"
