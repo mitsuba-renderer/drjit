@@ -17,7 +17,6 @@
 #include "shape.h"
 #include "init.h"
 #include <algorithm>
-#include <vector>
 
 static const char *op_names[] = {
     // Unary operations
@@ -623,7 +622,7 @@ void traverse(const char *op, TraverseCallback &tc, nb::handle h) {
 
 void traverse_pair_impl(const char *op, TraversePairCallback &tc, nb::handle h1,
                         nb::handle h2, std::string &name,
-                        std::vector<PyObject *> &stack,
+                        dr::vector<PyObject *> &stack,
                         bool report_inconsistencies) {
     if (std::find(stack.begin(), stack.end(), h1.ptr()) != stack.end()) {
         PyErr_Format(PyExc_RecursionError, "detected a cycle in field '%s'.",
@@ -752,7 +751,7 @@ void traverse_pair_impl(const char *op, TraversePairCallback &tc, nb::handle h1,
 void traverse_pair(const char *op, TraversePairCallback &tc, nb::handle h1,
                    nb::handle h2, const char *name_, bool report_inconsistencies) {
     std::string name = name_;
-    std::vector<PyObject *> stack;
+    dr::vector<PyObject *> stack;
 
     try {
         traverse_pair_impl(op, tc, h1, h2, name, stack, report_inconsistencies);
