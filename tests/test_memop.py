@@ -577,6 +577,16 @@ def test22_repeat(t):
     y = dr.repeat(x, 3)
     assert dr.all(y == [1, 1, 1, 2, 2, 2])
 
+@pytest.test_arrays('jit,float32,shape=(*)')
+def test23_block_sum(t):
+    x = t(1, 2, 3, 4, 5, 6)
+    assert dr.all(dr.block_sum(x, 1) == x)
+    assert dr.all(dr.block_sum(x, 2) == [3, 7, 11])
+    assert dr.all(dr.block_sum(x, 3) == [6, 15])
+    assert dr.all(dr.block_sum(x, 6) == [21])
+    with pytest.raises(RuntimeError, match=r"array size is not a multiple of the block size \(size=6, block_size=4\)"):
+        dr.block_sum(x, 4)
+
 #if defined(__GNUC__)
 #  pragma GCC diagnostic pop
 #endif

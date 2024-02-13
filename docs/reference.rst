@@ -203,6 +203,7 @@ These operations are *horizontal* in the sense that [..]
 .. autofunction:: none
 .. autofunction:: count
 .. autofunction:: prefix_sum
+.. autofunction:: block_sum
 .. autofunction:: cumsum
 .. autofunction:: reverse
 
