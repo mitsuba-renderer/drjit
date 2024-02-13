@@ -185,6 +185,7 @@ These operations are *horizontal* in the sense that [..]
 .. autofunction:: compress
 .. autofunction:: ravel
 .. autofunction:: unravel
+.. autofunction:: reshape
 .. autofunction:: slice
 .. autofunction:: min
 .. autofunction:: max

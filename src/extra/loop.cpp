@@ -342,9 +342,11 @@ ad_loop_evaluated_compress(JitBackend backend, const char *name, void *payload,
                 for (size_t i = 0; i < indices.size(); ++i) {
                     if (skip[i])
                         continue;
-                    ad_var_shrink(indices[i], size_next);
+                    uint64_t new_index = ad_var_shrink(indices[i], size_next);
+                    ad_var_dec_ref(indices[i]);
+                    indices[i] = new_index;
                 }
-                ad_var_shrink(idx.index(), size_next);
+                idx = JitVar::steal(ad_var_shrink(idx.index(), size_next));
             }
         }
 

@@ -1701,3 +1701,21 @@ def test111_custom_op_args_kwargs(t):
     y.grad = 200
     dr.forward_to(a, b)
     assert a.grad == 100 and b.grad == 200
+
+@pytest.test_arrays('is_diff,float32,shape=(*)')
+def test112_shrink_fwd(t):
+    x = t(1, 2, 3, 4, 5)
+    dr.enable_grad(x)
+    y = dr.reshape(t, x, 3, shrink=True)
+    x.grad = [10, 20, 30, 40, 50]
+    dr.forward_to(y)
+    assert dr.all(y.grad == [10, 20, 30])
+
+@pytest.test_arrays('is_diff,float32,shape=(*)')
+def test113_shrink_bwd(t):
+    x = t(1, 2, 3, 4, 5)
+    dr.enable_grad(x)
+    y = dr.reshape(t, x, 3, shrink=True)
+    y.grad = [10, 20, 30]
+    dr.backward_to(x)
+    assert dr.all(x.grad == [10, 20, 30, 0, 0])

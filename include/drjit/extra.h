@@ -159,8 +159,8 @@ extern DRJIT_EXTRA_EXPORT uint64_t ad_var_scatter(uint64_t target,
                                                   JIT_ENUM ReduceOp reduce_op,
                                                   JIT_ENUM ReduceMode reduce_mode);
 
-/// Shrink a Dr.Jit variable *after* it has been created
-extern DRJIT_EXTRA_EXPORT void ad_var_shrink(uint64_t index, size_t size);
+/// Create a view of an existing variable that has a smaller size
+extern DRJIT_EXTRA_EXPORT uint64_t ad_var_shrink(uint64_t index, size_t size);
 
 extern DRJIT_EXTRA_EXPORT uint64_t ad_var_cast(uint64_t, VarType);
 extern DRJIT_EXTRA_EXPORT void ad_enqueue(drjit::ADMode, uint64_t);

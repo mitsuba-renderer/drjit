@@ -502,6 +502,8 @@ surprise here is that this changes the output of operations like
    >>> t.shape
    (3, 2)
 
+.. _nested_array_transpose:
+
 This is intentional and merely cosmetic: the string conversion of non-tensor
 arrays actually prints the *transpose*, which rearranges the data so that all
 information associated with one thread of the parallel program is shown next to
