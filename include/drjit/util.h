@@ -185,11 +185,6 @@ Index binary_search(scalar_t<Index> start_, scalar_t<Index> end_,
         using Mask1 = mask_t<Index1>;
 
         if (iterations >= 2 && jit_flag(JitFlag::LoopRecord)) {
-            char title[80];
-            snprintf(title, sizeof(title),
-                     "dr::binary_search(size=%zu, iterations=%zu)",
-                     (size_t)(end_ - start_), (size_t) iterations);
-
             Index1 index = zeros<Index1>(width(pred(start)));
 
             tuple(start, end, index) = drjit::while_loop(

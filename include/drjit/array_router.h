@@ -1402,7 +1402,7 @@ namespace detail {
             return value.derived().schedule_force_();
         } else if constexpr (is_traversable_v<T>) {
             bool result = false;
-            traverse_1(fields(value), [&](auto const &x) {
+            traverse_1(fields(value), [&](auto &x) {
                 result |= schedule_force(x);
             });
             return result;
@@ -1587,7 +1587,7 @@ template <typename T> T replace_grad(const T &a, const T &b) {
 template <bool PreserveType = true, typename T> decltype(auto) detach(const T &value) {
     using Result = std::decay_t<std::conditional_t<PreserveType, T, detached_t<T>>>;
 
-    if constexpr (is_diff_v<T> && depth_v<T> > 1) {
+    if constexpr (is_diff_v<T> && depth_v<T> == 1) {
         return Result::borrow(value.index());
     } else if constexpr (is_diff_v<T> && is_tensor_v<T>) {
         return Result(detach<PreserveType>(value.array()),
@@ -1716,11 +1716,11 @@ template <typename Value> DRJIT_INLINE Value safe_cbrt(const Value &a) {
 }
 
 template <typename Value> DRJIT_INLINE Value safe_asin(const Value &a) {
-    Value result = asin(clamp(a, -1, 1));
+    Value result = asin(clip(a, -1, 1));
 
     if constexpr (is_diff_v<Value>) {
         if (grad_enabled(a))
-            result = replace_grad(result, asin(clamp(a, -OneMinusEpsilon<Value>,
+            result = replace_grad(result, asin(clip(a, -OneMinusEpsilon<Value>,
                                                      OneMinusEpsilon<Value>)));
     }
 
@@ -1728,11 +1728,11 @@ template <typename Value> DRJIT_INLINE Value safe_asin(const Value &a) {
 }
 
 template <typename Value> DRJIT_INLINE Value safe_acos(const Value &a) {
-    Value result = acos(clamp(a, -1, 1));
+    Value result = acos(clip(a, -1, 1));
 
     if constexpr (is_diff_v<Value>) {
         if (grad_enabled(a))
-            result = replace_grad(result, acos(clamp(a, -OneMinusEpsilon<Value>,
+            result = replace_grad(result, acos(clip(a, -OneMinusEpsilon<Value>,
                                                      OneMinusEpsilon<Value>)));
     }
 
