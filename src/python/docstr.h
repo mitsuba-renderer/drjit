@@ -6802,6 +6802,59 @@ Returns:
     object: The reshaped array or PyTree.
 )";
 
+
+static const char *doc_tile = R"(
+Tile the input array ``count`` times along the trailing dimension.
+
+This function replicates the input ``count`` times along the trailing dynamic
+dimension. It recursively threads through nested arrays and :ref:`PyTree
+<pytrees>`. Static arrays and tensors currently aren't supported.
+
+An example is shown below:
+
+.. code-block:
+
+   from drjit.cuda import Float
+
+   >>> x = Float(1, 2)
+   >>> drjit.tile(x, 3)
+   [1, 2, 1, 2, 1, 2]
+
+Args:
+    value (drjit.ArrayBase): A Dr.Jit type or :ref:`PyTree <pytrees>`.
+
+    count (int): Number of repetitions
+
+Returns:
+    object: The tiled input as described above. The return type matches that of ``value``.
+)";
+
+static const char *doc_repeat = R"(
+Repeat each successive entry of the input ``count`` times along the trailing dimension.
+
+This function replicates the input ``count`` times along the trailing dynamic
+dimension. It recursively threads through nested arrays and :ref:`PyTree
+<pytrees>`. Static arrays and tensors currently aren't supported.
+
+An example is shown below:
+
+.. code-block:
+
+   from drjit.cuda import Float
+
+   >>> x = Float(1, 2)
+   >>> drjit.tile(x, 3)
+   [1, 1, 1, 2, 2, 2]
+
+Args:
+    value (drjit.ArrayBase): A Dr.Jit type or :ref:`PyTree <pytrees>`.
+
+    count (int): Number of repetitions
+
+Returns:
+    object: The repeated input as described above. The return type matches that of ``value``.
+)";
+
 #if defined(__GNUC__)
 #  pragma GCC diagnostic pop
 #endif

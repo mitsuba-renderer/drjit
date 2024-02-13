@@ -13,6 +13,7 @@
 #include "meta.h"
 #include "init.h"
 #include "shape.h"
+#include "apply.h"
 
 nb::object gather(nb::type_object dtype, nb::object source,
                   nb::object index, nb::object active, ReduceMode mode) {
@@ -844,7 +845,8 @@ static nb::object reshape(nb::type_object dtype, nb::handle value,
 
                         dr::vector<Py_ssize_t> target_shape_2;
                         if (target_shape.size() > 1)
-                            target_shape_2 = dr::vector<Py_ssize_t>(target_shape.begin() + 1, target_shape.end());
+                            target_shape_2 = dr::vector<Py_ssize_t>(
+                                target_shape.begin() + 1, target_shape.end());
                         else
                             target_shape_2.push_back(target_shape[0]);
 
@@ -926,6 +928,45 @@ static nb::object reshape_2(nb::type_object dtype, nb::handle value,
     return reshape(dtype, value, shape_vec, order, shrink);
 }
 
+static nb::object repeat_or_tile(nb::handle h, size_t count, bool tile) {
+    struct RepeatOrTile : TransformCallback {
+        size_t count;
+        bool tile;
+
+        RepeatOrTile(size_t count, bool tile) : count(count), tile(tile) { }
+        void operator()(nb::handle h1, nb::handle h2) override {
+            const ArraySupplement &s = supp(h1.type());
+            if (!s.index)
+                nb::raise("Unsupported input type!");
+            size_t size     = s.len(inst_ptr(h1)),
+                   combined = count * size;
+
+            if (combined) {
+                ArrayMeta m = s;
+                m.type = (uint16_t) VarType::UInt32;
+
+                nb::object index = arange(
+                    nb::borrow<nb::type_object_t<ArrayBase>>(meta_get_type(m)),
+                    0, (Py_ssize_t) combined, 1),
+                    divisor_o = nb::int_(tile ? size : count);
+
+                nb::object result = gather(
+                    nb::borrow<nb::type_object>(h1.type()),
+                    nb::borrow(h1),
+                    tile ? (index % divisor_o) : index.floor_div(divisor_o),
+                    nb::bool_(true),
+                    ReduceMode::Auto
+                );
+
+                nb::inst_replace_move(h2, result);
+            }
+        }
+    };
+
+    RepeatOrTile r(count, tile);
+    return transform(tile ? "drjit.tile" : "drjit.repeat", r, h);
+}
+
 void export_memop(nb::module_ &m) {
     m.def("gather", &gather, "dtype"_a, "source"_a, "index"_a,
           "active"_a = true, "mode"_a = ReduceMode::Auto,
@@ -960,5 +1001,13 @@ void export_memop(nb::module_ &m) {
      .def("reshape", &reshape, "dtype"_a, "value"_a,
           "shape"_a, "order"_a = 'A', "shrink"_a = false, nb::raw_doc(doc_reshape))
      .def("reshape", &reshape_2, "dtype"_a, "value"_a,
-          "shape"_a, "order"_a = 'A', "shrink"_a = false);
+          "shape"_a, "order"_a = 'A', "shrink"_a = false)
+     .def("tile",
+          [](nb::handle h, size_t count) {
+              return repeat_or_tile(h, count, true);
+          }, "value"_a, "count"_a, doc_tile)
+     .def("repeat",
+          [](nb::handle h, size_t count) {
+              return repeat_or_tile(h, count, false);
+          }, "value"_a, "count"_a, doc_repeat);
 }
