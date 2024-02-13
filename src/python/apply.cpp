@@ -178,6 +178,7 @@ PyObject *apply(ArrayOp op, Slot slot, std::index_sequence<Is...> is,
 
         ArraySupplement::Item item = s.item, item_mask = nullptr;
         ArraySupplement::SetItem set_item;
+        ArraySupplement::Init init;
         nb::handle result_type;
 
         if constexpr (Mode == RichCompare) {
@@ -188,14 +189,18 @@ PyObject *apply(ArrayOp op, Slot slot, std::index_sequence<Is...> is,
                      "arithmetic arrays. They are suppressed for complex "
                      "arrays, quaternions, matrices, and arrays of pointers.");
             result_type = s.mask;
-            set_item = supp(result_type).set_item;
+            const ArraySupplement &s2 = supp(result_type);
+            set_item = s2.set_item;
+            init = s2.init;
         } else if constexpr (Mode == Select) {
             result_type = tp;
             set_item = s.set_item;
             item_mask = supp(o[0].type()).item;
+            init = s.init;
         } else {
             result_type = tp;
             set_item = s.set_item;
+            init = s.init;
         }
         (void) item_mask;
 
@@ -248,7 +253,7 @@ PyObject *apply(ArrayOp op, Slot slot, std::index_sequence<Is...> is,
                     move = false; // can directly construct output into o[0]
                 } else {
                     result = nb::inst_alloc(result_type);
-                    s.init(lr, inst_ptr(result));
+                    init(lr, inst_ptr(result));
                     nb::inst_mark_ready(result);
                 }
             }
