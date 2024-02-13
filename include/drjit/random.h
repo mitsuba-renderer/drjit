@@ -44,7 +44,8 @@ template <typename T> struct PCG32 {
     PCG32(size_t size = 1,
           const UInt64 &initstate = PCG32_DEFAULT_STATE,
           const UInt64 &initseq   = PCG32_DEFAULT_STREAM) {
-        seed(size, initstate, initseq);
+        UInt64 counter = arange<UInt64>(size);
+        seed(initstate + counter, initseq + counter);
     }
 
     /**
@@ -53,12 +54,10 @@ template <typename T> struct PCG32 {
      * Specified in two parts: a state initializer and a sequence selection
      * constant (a.k.a. stream id)
      */
-    void seed(size_t size = 1,
-              const UInt64 &initstate = PCG32_DEFAULT_STATE,
+    void seed(const UInt64 &initstate = PCG32_DEFAULT_STATE,
               const UInt64 &initseq   = PCG32_DEFAULT_STREAM) {
-        UInt64 counter = arange<UInt64>(size);
-        state = counter;
-        inc = sl<1>(initseq + counter) | 1u;
+        state = zeros<UInt64>();
+        inc = sl<1>(initseq) | 1u;
         next_uint32();
         state += initstate;
         next_uint32();

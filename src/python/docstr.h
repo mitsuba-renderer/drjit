@@ -5518,24 +5518,24 @@ static const char *doc_PCG32_PCG32 = R"(
 Initialize a random number generator that generates ``size`` variates in parallel.
 
 The ``initstate`` and ``initseq`` inputs determine the initial state and increment
-of the linear congruential generator. Their values are the defaults from the
-original implementation. All parameters are directly forwarded to the
-:py:func:`seed` function.
+of the linear congruential generator. Their defaults values are based on the
+original implementation.
 
-A second overload copy-constructs a new PCG32 instance from an existing instance.)";
+The implementation of this routine internally calls py:func:`seed`, with one
+small twist. When multiple random numbers are being generated in parallel, the
+constructor adds an offset equal to :py:func:`drjit.arange(UInt64, size)
+<drjit.arange>` to both ``initstate`` and ``initseq`` to de-correlate the
+generated sequences.)";
+
+static const char *doc_PCG32_PCG32_2 =
+    "Copy-construct a new PCG32 instance from an existing instance.";
 
 static const char *doc_PCG32_seed = R"(
-Seed the random number generator so that it generates ``size`` variates in
-parallel.
+Seed the random number generator with the given initial state and sequence ID.
 
 The ``initstate`` and ``initseq`` inputs determine the initial state and increment
 of the linear congruential generator. Their values are the defaults from the
-original implementation.
-
-The implementation of this routine follows the official PCG32 implementation
-except for one aspect: when multiple random numbers are being generated in
-parallel, an offset equal to :py:func:`drjit.arange(UInt64, size) <drjit.arange>` is added
-to both ``initstate`` and ``initseq`` to de-correlate the generated sequences.)";
+original implementation.)";
 
 static const char *doc_PCG32_next_uint32 = R"(
 Generate a uniformly distributed unsigned 32-bit random number
@@ -6734,14 +6734,14 @@ This function supports the following behaviors:
           size = dr.width(loop_state)
 
           # Run the following loop until no work is left
-          while True:
+          while size > 0:
               # 1-element array used as an atomic counter
               queue_index = UInt(0)
 
               # Preallocate memory for the queue. The necessary
               # amount of memory is task-dependent
               queue_size = size
-              queue = dr.empty(dtype=type(state), size=queue_size)
+              queue = dr.empty(dtype=type(state), shape=queue_size)
 
               while not stopping_criterion(state):
                   # This line represents the loop body that processes work
@@ -6769,12 +6769,8 @@ This function supports the following behaviors:
                  raise RuntimeError('Preallocated queue was too small: tried to store '
                                     f'{size} elements in a queue of size {queue_size}')
 
-             if size == 0: # All done!
-                break;
-
              # Reshape the queue and re-run the loop
-             state = dr.reshape(dtype=type(state), value=queue,
-                                shape=size, shrink=True)
+             state = dr.reshape(dtype=type(state), value=queue, shape=size, shrink=True)
 
 Args:
     dtype (type): Desired output type of the reshaped array. This could

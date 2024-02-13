@@ -14,8 +14,8 @@ void bind_pcg32(nb::module_ &m) {
              "size"_a = 1,
              "initstate"_a = PCG32_DEFAULT_STATE,
              "initseq"_a = PCG32_DEFAULT_STREAM, doc_PCG32_PCG32)
-        .def(nb::init<const PCG32 &>())
-        .def("seed", &PCG32::seed, "size"_a = 1,
+        .def(nb::init<const PCG32 &>(), doc_PCG32_PCG32_2)
+        .def("seed", &PCG32::seed,
              "initstate"_a = PCG32_DEFAULT_STATE,
              "initseq"_a = PCG32_DEFAULT_STREAM, doc_PCG32_seed)
         .def("next_uint32", nb::overload_cast<>(&PCG32::next_uint32), doc_PCG32_next_uint32)
