@@ -37,7 +37,7 @@ NAMESPACE_BEGIN(drjit)
 
 template <typename T1, typename F>
 DRJIT_INLINE void traverse_1(T1 &&v1, F &&f) {
-    if constexpr (!!std::decay_t<T1>::Size) {
+    if constexpr (std::decay_t<T1>::Size != 0) {
         f(v1.value);
         traverse_1(v1.base(), f);
     }
@@ -45,7 +45,7 @@ DRJIT_INLINE void traverse_1(T1 &&v1, F &&f) {
 
 template <typename T1, typename T2, typename F>
 DRJIT_INLINE void traverse_2(T1 &&v1, T2 &&v2, F &&f) {
-    if constexpr (!!std::decay_t<T1>::Size) {
+    if constexpr (std::decay_t<T1>::Size != 0) {
         f(v1.value, v2.value);
         traverse_2(v1.base(), v2.base(), f);
     }
@@ -53,7 +53,7 @@ DRJIT_INLINE void traverse_2(T1 &&v1, T2 &&v2, F &&f) {
 
 template <typename T1, typename T2, typename T3, typename F>
 DRJIT_INLINE void traverse_3(T1 &&v1, T2 &&v2, T3 &&v3, F &&f) {
-    if constexpr (!!std::decay_t<T1>::Size) {
+    if constexpr (std::decay_t<T1>::Size != 0) {
         f(v1.value, v2.value, v3.value);
         traverse_3(v1.base(), v2.base(), v3.base(), f);
     }
