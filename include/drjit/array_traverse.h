@@ -15,7 +15,11 @@
 
 #pragma once
 
-#define DRJIT_STRUCT(Name, ...)                                                \
+#define DRJIT_STRUCT_NODEF(Name, ...)                                          \
+    Name(const Name &) = default;                                              \
+    Name(Name &&) = default;                                                   \
+    Name &operator=(const Name &) = default;                                   \
+    Name &operator=(Name &&) = default;                                        \
     DRJIT_INLINE auto fields_() { return drjit::tie(__VA_ARGS__); }            \
     DRJIT_INLINE auto fields_() const { return drjit::tie(__VA_ARGS__); }      \
     const char *name_() const { return #Name; }                                \
@@ -24,6 +28,10 @@
             #__VA_ARGS__,                                                      \
             std::make_index_sequence<decltype(fields_())::Size>());            \
     }
+
+#define DRJIT_STRUCT(Name, ...)                                                \
+    Name() = default;                                                          \
+    DRJIT_STRUCT_NODEF(Name, __VA_ARGS__)
 
 NAMESPACE_BEGIN(drjit)
 
