@@ -929,11 +929,11 @@ static nb::object reshape_2(nb::type_object dtype, nb::handle value,
 }
 
 static nb::object repeat_or_tile(nb::handle h, size_t count, bool tile) {
-    struct RepeatOrTile : TransformCallback {
+    struct RepeatOrTileOp : TransformCallback {
         size_t count;
         bool tile;
 
-        RepeatOrTile(size_t count, bool tile) : count(count), tile(tile) { }
+        RepeatOrTileOp(size_t count, bool tile) : count(count), tile(tile) { }
         void operator()(nb::handle h1, nb::handle h2) override {
             const ArraySupplement &s = supp(h1.type());
             if (!s.index)
@@ -963,8 +963,54 @@ static nb::object repeat_or_tile(nb::handle h, size_t count, bool tile) {
         }
     };
 
-    RepeatOrTile r(count, tile);
+    if (count == 1)
+        return nb::borrow(h);
+
+    RepeatOrTileOp r(count, tile);
     return transform(tile ? "drjit.tile" : "drjit.repeat", r, h);
+}
+
+static nb::object block_sum(nb::handle h, size_t block_size) {
+    struct BlockSumOp : TransformCallback {
+        size_t block_size;
+
+        BlockSumOp(size_t block_size) : block_size(block_size) { }
+        void operator()(nb::handle h1, nb::handle h2) override {
+            const ArraySupplement &s = supp(h1.type());
+            if (!s.index)
+                nb::raise("Unsupported input type!");
+
+            size_t size     = s.len(inst_ptr(h1)),
+                   reduced  = size / block_size;
+
+            if (size == 0)
+                return;
+
+            if (reduced * block_size != size)
+                nb::raise("array size is not a multiple of the block size "
+                          "(size=%zu, block_size=%zu).", size, block_size);
+
+            ArrayMeta m = s;
+            m.type = (uint16_t) VarType::UInt32;
+
+            nb::object index = arange(
+                nb::borrow<nb::type_object_t<ArrayBase>>(meta_get_type(m)),
+                0, (Py_ssize_t) size, 1).floor_div(nb::int_(block_size));
+
+            nb::object result = full("zeros", h1.type(), nb::int_(0), reduced);
+            scatter_add(result, nb::borrow(h1), index, nb::bool_(true),
+                        ReduceMode::Auto);
+            nb::inst_replace_move(h2, result);
+        }
+    };
+
+    if (block_size == 0)
+        nb::raise("drjit.block_sum(): block size must be nonzero!");
+    if (block_size == 1)
+        return nb::borrow(h);
+
+    BlockSumOp r(block_size);
+    return transform("drjit.block_sum", r, h);
 }
 
 void export_memop(nb::module_ &m) {
@@ -1009,5 +1055,7 @@ void export_memop(nb::module_ &m) {
      .def("repeat",
           [](nb::handle h, size_t count) {
               return repeat_or_tile(h, count, false);
-          }, "value"_a, "count"_a, doc_repeat);
+          }, "value"_a, "count"_a, doc_repeat)
+     .def("block_sum", &block_sum, "value"_a,
+          "block_size"_a, doc_block_sum);
 }

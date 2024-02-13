@@ -6851,6 +6851,29 @@ Returns:
     object: The repeated input as described above. The return type matches that of ``value``.
 )";
 
+static const char *doc_block_sum = R"(
+Sum over elements within blocks
+
+This function adds all elements within contiguous blocks of size ``block_size``
+along the trailing dimension of the input array ``value`` and returns a new a
+new array containing these sums.
+
+For example, a sum with ``block_size=2`` of ``a, b, c, d, e, f`` produces
+``a+b, c+d, e+f``. The length of the input array must be a multiple of
+``block_size``.
+
+The function recursively threads through nested arrays and :ref:`PyTree
+<pytrees>`. Static arrays and tensors currently aren't supported.
+
+
+Args:
+    arg (drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+
+    block_size (int): size of the block
+
+Returns:
+    Sum over elements within blocks)";
+
 #if defined(__GNUC__)
 #  pragma GCC diagnostic pop
 #endif
