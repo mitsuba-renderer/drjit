@@ -5794,6 +5794,11 @@ When following this approach, be sure to provide the same mask value to the
 :py:func:`drjit.scatter_inc()` and subsequent :py:func:`drjit.scatter()`
 operations.
 
+The function :py:func:`drjit.reshape` can be used to resize the resulting
+arrays to their compacted size. Please refer to the documentation of this
+function, specifically the code example illustrating the use of the
+``shrink=True`` argument.
+
 The function :py:func:`drjit.scatter_inc()` exhibits the following unusual
 behavior compared to regular Dr.Jit operations: the return value references the
 instantaneous state during a potentially large sequence of atomic operations.
@@ -6646,6 +6651,156 @@ static const char *doc_expand_threshold = R"(
 Query the threshold for performing scatter-reductions via expansion.
 
 Getter for the quantity set in :py:func:`drjit.set_expand_threshold()`)";
+
+static const char *doc_reshape = R"(
+reshape(dtype: type, value: object, shape: int, order: str = 'A', shrink: bool = False) -> object
+reshape(dtype: type, value: object, shape: tuple[int], order: str = 'A', shrink: bool = False) -> object
+
+Converts ``value`` into an array of type ``dtype`` by rearranging the contents
+according to the specified shape.
+
+The parameter ``shape`` may contain a single ``-1``-valued target dimension, in
+which case its value is inferred from the remaining shape entries and the size
+of the input. When ``shape`` is of type ``int``, it is interpreted as a
+1-tuple ``(shape,)``.
+
+This function supports the following behaviors:
+
+1. **Reshaping tensors**: Dr.Jit :ref:`tensors <tensors>` admit arbitrary
+   shapes. The :py:func:`drjit.reshape` can convert between them as long as the
+   total number of elements remains unchanged.
+
+   .. code-block:: pycon
+
+      >>> from drjit.llvm.ad import TensorXf
+      >>> value = dr.arange(TensorXf, 6)
+      >>> dr.reshape(dtype=TensorXf, value=value, shape=(3, -1))
+      [[0, 1]
+       [2, 3]
+       [4, 5]]
+
+2. **Reshaping nested arrays**: The function can ravel and unravel nested
+   arrays (which have some static dimensions). This provides a high-level
+   interface that subsumes the functions :py:func:`drjit.ravel` and
+   :py:func:`drjit.unravel`.
+
+   .. code-block:: pycon
+
+      >>> from drjit.llvm.ad import Array2f, Array3f
+      >>> value = Array2f([1, 2, 3], [4, 5, 6])
+      >>> dr.reshape(dtype=Array3f, value=value, shape=(3, -1), order='C')
+      [[1, 4, 2],
+       [5, 3, 6]]
+      >>> dr.reshape(dtype=Array3f, value=value, shape=(3, -1), order='F')
+      [[1, 3, 5],
+       [2, 4, 6]]
+
+   (By convention, Dr.Jit nested arrays are :ref:`always printed in transposed
+   <nested_array_transpose>` form, which explains the difference in output
+   compared to the identically shaped Tensor example just above.)
+
+   The ``order`` argument can be used to specify C (``"C"``) or Fortran
+   (``"F"``)-style ordering when rearranging the array. The default value
+   ``"A"`` corresponds to Fortran-style ordering.
+
+3. **PyTrees**: When ``value`` is a :ref:`PyTree <pytrees>`, the operation
+   recursively threads through the tree's elements.
+
+3. **Stream compression and loops that fork recursive work**. When called with
+   ``shrink=True``, the function creates a view of the original data that
+   potentially has a smaller number of elements. 
+
+   The main use of this feature is to implement loops that process large
+   numbers of elements in parallel, and which need to occasionally "fork"
+   some recursive work. On modern compute accelerators, an efficient way
+   to handle this requirement is to append this work into a queue that is
+   processed in a subsequent pass until no work is left. The reshape operation
+   with ``shrink=True`` then resizes the preallocated queue to the actual
+   number of collected items, which are the input of the next iteration.
+
+   Please refer to the following example  that illustrates how
+   :py:func:`drjit.scatter_inc`, :py:func:`drjit.scatter`, and
+   :py:func:`drjit.reshape(..., shrink=True) <drjit.reshape>` can be combined
+   to realize a parallel loop with a fork condition
+
+   .. code-block:: python
+
+      @drjit.syntax
+      def f():
+          # Loop state variables (an arbitrary array or PyTree)
+          state = ...
+
+          # Determine how many elements should be processed
+          size = dr.width(loop_state)
+
+          # Run the following loop until no work is left
+          while True:
+              # 1-element array used as an atomic counter
+              queue_index = UInt(0)
+
+              # Preallocate memory for the queue. The necessary
+              # amount of memory is task-dependent
+              queue_size = size
+              queue = dr.empty(dtype=type(state), size=queue_size)
+
+              while not stopping_criterion(state):
+                  # This line represents the loop body that processes work
+                  state = loop_body(state)
+
+                  # if the condition 'fork' is True, spawn a new work item that
+                  # will be handled in a future iteration of the parent loop.
+
+                  if fork(state):
+                      # Atomically reserve a slot in 'queue'
+                      slot = dr.scatter_inc(target=queue_index, index=0)
+
+                      # Work item for the next iteration, task dependent
+                      todo = state
+
+                      # Be careful not to write beyond the end of the queue
+                      valid = slot < queue_size
+
+                      # Write 'todo' into the reserved slot
+                      dr.scatter(target=queue, index=slot, value=todo, active=valid)
+
+             # Determine how many fork operations took place
+             size = queue_index[0]
+             if size > queue_size:
+                 raise RuntimeError('Preallocated queue was too small: tried to store '
+                                    f'{size} elements in a queue of size {queue_size}')
+
+             if size == 0: # All done!
+                break;
+
+             # Reshape the queue and re-run the loop
+             state = dr.reshape(dtype=type(state), value=queue,
+                                shape=size, shrink=True)
+
+Args:
+    dtype (type): Desired output type of the reshaped array. This could
+      equal ``type(value)`` or refer to an entirely different array type.
+
+    value (object): An arbitrary Dr.Jit array, tensor, or :ref:`PyTree
+      <pytrees>`. The function returns unknown objects of other types
+      unchanged.
+
+    shape (int|tuple[int]): The target shape.
+
+    order (str): A single character indicating the index order used to
+      reinterpret the input. ``'F'`` indicates column-major/Fortran-style
+      ordering, in which case the first index changes at the highest frequency.
+      The alternative ``'C'`` specifies row-major/C-style ordering, in which
+      case the last index changes at the highest frequency. The default value
+      ``'A'`` (automatic) will use F-style ordering for arrays and C-style
+      ordering for tensors.
+
+    shrink (bool): Cheaply construct a view of the input that potentially
+        has a smaller number of elements. The main use case of this method
+        is explained above.
+
+Returns:
+    object: The reshaped array or PyTree.
+)";
 
 #if defined(__GNUC__)
 #  pragma GCC diagnostic pop

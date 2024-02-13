@@ -1161,22 +1161,6 @@ Index ad_var_set_label(Index index, size_t argc, ...) {
     return combine(ad_index, jit_index);
 }
 
-void ad_var_shrink(Index index, size_t size) {
-    uint32_t jit_index = ::jit_index(index),
-             ad_index = ::ad_index(index);
-
-    jit_var_shrink(jit_index, size);
-
-    if (ad_index) {
-        ad_log("ad_var_shrink(): a%u.size = %zu", ad_index, size);
-
-        std::lock_guard<std::mutex> guard(state.mutex);
-        Variable *v = state[ad_index];
-        ad_assert(v->next_fwd == 0, "ad_var_shrink(): internal error!");
-        v->size = size;
-    }
-}
-
 
 // ==========================================================================
 // Enqueuing of variables and edges
@@ -1869,6 +1853,36 @@ struct PrefixSumEdge : Special {
     bool m_exclusive;
 };
 
+struct ShrinkEdge : Special {
+    void forward(const Variable *source, Variable *target) override {
+        JitVar value = source->grad;
+        if (value.size() != source->size)
+            value.resize(source->size);
+
+        target->accum(
+            JitVar::steal(jit_var_shrink(value.index(), target->size)),
+            target->size);
+    }
+
+    void backward(Variable *source, const Variable *target) override {
+        JitVar value = target->grad;
+        if (!value.valid())
+            return;
+
+        if (value.size() != target->size)
+            value.resize(target->size);
+
+        JitBackend backend = (JitBackend) source->backend;
+
+        JitVar ctr = JitVar::steal(jit_var_counter(backend, source->size)),
+               bound = JitVar::steal(jit_var_u32(backend, target->size)),
+               valid = JitVar::steal(jit_var_lt(ctr.index(), bound.index())),
+               expanded = JitVar::steal(
+                   jit_var_gather(value.index(), ctr.index(), valid.index()));
+
+        source->accum(expanded, source->size);
+    }
+};
 
 Index ad_var_new(JitIndex i0) {
     if (i0 == 0)
@@ -2609,6 +2623,16 @@ Index ad_var_prefix_sum(Index index, int exclusive) {
     else
         return ad_var_new("prefix_sum", std::move(result),
                           SpecialArg(index, new PrefixSumEdge(exclusive != 0)));
+}
+
+Index ad_var_shrink(Index i0, size_t size) {
+    JitVar result = JitVar::steal(jit_var_shrink(jit_index(i0), size));
+
+    if (likely(is_detached(i0)))
+        return result.release();
+    else
+        return ad_var_new("shrink", std::move(result),
+                          SpecialArg(i0, new ShrinkEdge()));
 }
 
 // ==========================================================================

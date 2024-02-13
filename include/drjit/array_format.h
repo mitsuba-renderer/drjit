@@ -126,6 +126,8 @@ template <typename Array> struct formatter<Array, enable_if_array_t<Array>> {
         size_t shape[Depth] { }, indices[Depth];
         if (!put_shape(&v, shape))
             s.put_unchecked("[ragged array]", 14);
+        if constexpr (is_jit_v<Array>)
+            schedule(v);
         format_array<Buffer, Array, 0, 0>(s, v, indent + 1, shape, indices);
     }
 };

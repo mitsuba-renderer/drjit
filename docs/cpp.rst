@@ -468,7 +468,7 @@ to list the available fields.
    };
 
 Custom data structures can be defined globally, locally, and they can be
-arbitrarily nested. Dr.Jit static arrays, tuples (:cpp:class:`drjit.tuple`),
+arbitrarily nested. Dr.Jit static arrays, tuples (:cpp:class:`drjit::tuple`),
 STL ``std::tuple<...>`` and ``std::pair<T1, T2>`` are all automatically
 traversable.
 

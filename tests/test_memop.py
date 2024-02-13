@@ -404,7 +404,7 @@ def versiontuple(v):
     [int(dr.ReduceOp.Add), int(dr.ReduceOp.Min), int(dr.ReduceOp.Max),
      int(dr.ReduceOp.And), int(dr.ReduceOp.Or)])
 @pytest.test_arrays('-bool,jit,-diff,shape=(*)')
-def test_scatter_reduce(t, op):
+def test18_scatter_reduce(t, op):
     import sys
     mod = sys.modules[t.__module__]
     op = dr.ReduceOp(op)
@@ -496,3 +496,70 @@ def test_scatter_reduce(t, op):
                     assert dr.allclose(buf_1, v)
                 else:
                     assert dr.all(buf_1 == v)
+
+
+@pytest.test_arrays('jit,tensor,float32')
+def test19_reshape_tensor(t):
+    value = dr.arange(t, 6)
+    value2 = dr.reshape(dtype=t, value=value, shape=(3, -1))
+    value3 = dr.reshape(dtype=t, value=value, shape=(-1, 2))
+    ref = t([[0, 1], [2, 3], [4, 5]])
+    assert dr.all(value2 == ref, axis=None)
+    assert dr.all(value3 == ref, axis=None)
+
+    with pytest.raises(RuntimeError, match="only a single 'shape' entry may be equal to -1"):
+        dr.reshape(dtype=t, value=value, shape=(-1, -1))
+
+    with pytest.raises(RuntimeError, match="cannot infer a compatible shape"):
+        dr.reshape(dtype=t, value=value, shape=(4, -1))
+
+    with pytest.raises(RuntimeError, match=r"mismatched array sizes \(input: 6, target: 20\)"):
+        dr.reshape(dtype=t, value=value, shape=(4, 5))
+
+    pytree_in = { 'a' : (value, )}
+    pytree_out = dr.reshape(dtype=dict, value=pytree_in, shape=(3, -1))
+    assert type(pytree_out) is dict and len(pytree_out) == 1 and 'a' in pytree_out
+    val = pytree_out["a"]
+    assert type(val) is tuple and len(val) == 1
+    val = val[0]
+    assert type(val) is t and dr.all(val == value2, axis=None)
+
+
+@pytest.test_arrays('jit,float32,shape=(2, *)')
+def test20_reshape_nested(t):
+    import sys
+    mod = sys.modules[t.__module__]
+    t2 = mod.Array3f
+
+    value = t([1, 2, 3], [4, 5, 6])
+    value_c = dr.reshape(dtype=t2, value=value, shape=(3, -1), order='C')
+    value_f = dr.reshape(dtype=t2, value=value, shape=(3, -1), order='F')
+    value_a = dr.reshape(dtype=t2, value=value, shape=(3, -1), order='A')
+
+    assert dr.all(value_a == value_f, axis=None)
+    assert dr.all(value_c == t2([1, 2], [3, 4], [5, 6]), axis=None)
+    assert dr.all(value_f == t2([1, 5], [4, 3], [2, 6]), axis=None)
+
+    with pytest.raises(RuntimeError, match="only a single 'shape' entry may be equal to -1"):
+        dr.reshape(dtype=t2, value=value, shape=(-1, -1))
+
+    with pytest.raises(RuntimeError, match="cannot infer a compatible shape"):
+        dr.reshape(dtype=t2, value=value, shape=(4, -1))
+
+    with pytest.raises(RuntimeError, match=r"mismatched array sizes \(input: 6, target: 20\)"):
+        dr.reshape(dtype=t2, value=value, shape=(4, 5))
+
+
+@pytest.test_arrays('jit,float32,shape=(2, *)')
+def test21_reshape_shrink(t):
+    t2 = dr.value_t(t)
+    v = dr.arange(t2, 10)
+    dr.eval(v)
+    vs = dr.reshape(t2, v, 5, shrink=True)
+    assert len(vs) == 5
+    assert dr.all(vs == [0, 1, 2, 3, 4])
+
+    v = t(v, v)
+    vs = dr.reshape(t, v, 5, shrink=True)
+    assert len(vs) == 2 and len(vs[0]) == 5 and len(vs[1]) == 5
+    assert dr.all(vs[0] == [0, 1, 2, 3, 4])

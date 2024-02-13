@@ -752,6 +752,180 @@ nb::object slice(nb::handle h, nb::handle index) {
     return result;
 }
 
+static void conform_shape(
+        const dr::vector<size_t> &input_shape,
+        const dr::vector<Py_ssize_t> &target_shape,
+        dr::vector<size_t> &out_shape, bool shrink = false) {
+    size_t in_size = 1;
+    for (size_t s: input_shape)
+        in_size *= s;
+
+    out_shape.reserve(target_shape.size());
+    size_t target_size = 1, infer = (size_t) -1;
+    for (size_t i = 0; i < target_shape.size(); ++i) {
+        Py_ssize_t s = target_shape[i];
+        if (s >= 0) {
+            target_size *= (size_t) s;
+        } else {
+            if (s != -1)
+                nb::raise("invalid 'shape' entry (must be nonzero or -1).");
+            if (infer != (size_t) -1)
+                nb::raise("only a single 'shape' entry may be equal to -1.");
+            infer = i;
+            s = 0;
+        }
+        out_shape.push_back((size_t) s);
+    }
+
+    if (infer != (size_t) -1 && target_size != 0) {
+        size_t scale = in_size / target_size;
+        target_size *= scale;
+        out_shape[infer] = scale;
+    }
+
+    if (target_size != in_size) {
+        if (infer != (size_t) -1)
+            nb::raise("cannot infer a compatible shape.");
+        else if (!shrink)
+            nb::raise("mismatched array sizes (input: %zu, target: %zu).", in_size, target_size);
+    }
+}
+
+static nb::object reshape(nb::type_object dtype, nb::handle value,
+                          const dr::vector<Py_ssize_t> &target_shape, char order,
+                          bool shrink) {
+    try {
+        if (order != 'A' && order != 'F' && order != 'C')
+            nb::raise("'order' argument must equal \"A\", \"F\", or \"C\"!");
+
+        nb::handle tp = value.type();
+        if (tp.is(dtype)) {
+            if (is_drjit_type(tp)) {
+                vector<size_t> input_shape, new_shape;
+                shape_impl(value, input_shape);
+                conform_shape(input_shape, target_shape, new_shape, shrink);
+
+                if (new_shape == input_shape)
+                    return nb::borrow(value);
+
+                const ArraySupplement &s = supp(tp);
+                if (s.is_tensor) {
+                    if (order != 'C' && order != 'A')
+                        nb::raise("tensor reshaping only supports 'order' "
+                                  "equal to \"C\" or \"A\" at the moment");
+                    return tp(nb::steal(s.tensor_array(value.ptr())),
+                              cast_shape(new_shape));
+                } else if (!shrink) {
+                    nb::raise("incompatible layout");
+                }
+
+                if ((JitBackend) s.backend != JitBackend::None) {
+                    if (s.ndim == 1) {
+                        nb::object result = nb::inst_alloc(tp);
+                        if (new_shape[0] == 0)
+                            return tp();
+                        uint64_t new_index = ad_var_shrink(
+                            s.index(inst_ptr(value)), new_shape[0]);
+                        s.init_index(new_index, inst_ptr(result));
+                        ad_var_dec_ref(new_index);
+                        nb::inst_mark_ready(result);
+                        return result;
+                    } else {
+                        Py_ssize_t lr = s.shape[0];
+                        nb::object result;
+                        if (lr == DRJIT_DYNAMIC) {
+                            result = nb::inst_alloc(tp);
+                            lr = (Py_ssize_t) s.len(inst_ptr(value));
+                            s.init(lr, inst_ptr(result));
+                            nb::inst_mark_ready(result);
+                        } else {
+                            result = nb::inst_alloc_zero(tp);
+                        }
+
+                        dr::vector<Py_ssize_t> target_shape_2;
+                        if (target_shape.size() > 1)
+                            target_shape_2 = dr::vector<Py_ssize_t>(target_shape.begin() + 1, target_shape.end());
+                        else
+                            target_shape_2.push_back(target_shape[0]);
+
+                        for (Py_ssize_t i = 0; i < lr; ++i) {
+                            nb::object entry = value[i];
+                            result[i] = reshape(
+                                nb::borrow<nb::type_object>(entry.type()),
+                                entry, target_shape_2, order, shrink);
+                        }
+                        return result;
+                    }
+                }
+
+                nb::raise("unsupported input.");
+            } else if (tp.is(&PyList_Type)) {
+                nb::list tmp;
+                for (nb::handle item : nb::borrow<nb::list>(value))
+                    tmp.append(reshape(nb::borrow<nb::type_object>(item.type()),
+                                       item, target_shape, order, shrink));
+                return tmp;
+            } else if (tp.is(&PyTuple_Type)) {
+                nb::list tmp;
+                for (nb::handle item : nb::borrow<nb::tuple>(value))
+                    tmp.append(reshape(nb::borrow<nb::type_object>(item.type()),
+                                       item, target_shape, order, shrink));
+                return nb::tuple(tmp);
+            } else if (tp.is(&PyDict_Type)) {
+                nb::dict tmp;
+                for (auto [k, v] : nb::borrow<nb::dict>(value))
+                    tmp[k] = reshape(nb::borrow<nb::type_object>(v.type()), v,
+                                     target_shape, order, shrink);
+                return tmp;
+            } else {
+                nb::object dstruct = nb::getattr(tp, "DRJIT_STRUCT", nb::handle());
+                if (dstruct.is_valid() && dstruct.type().is(&PyDict_Type)) {
+                    nb::object tmp = tp();
+                    for (auto [k, v] : nb::borrow<nb::dict>(dstruct)) {
+                        nb::object v2 = nb::getattr(value, k);
+                        nb::setattr(
+                            tmp, k,
+                            reshape(nb::borrow<nb::type_object>(v2.type()), v2,
+                                    target_shape, order, shrink));
+                    }
+                    return tmp;
+                }
+
+                return nb::borrow(value);
+            }
+        } else { /* !tp.is(dtype) */
+            if (!is_drjit_type(dtype))
+                nb::raise("when 'dtype' and 'type(value)' disagree, 'dtype' "
+                          "must refer to a Dr.Jit array type.");
+
+            vector<size_t> input_shape, new_shape;
+            shape_impl(value, input_shape);
+            conform_shape(input_shape, target_shape, new_shape);
+
+            if (new_shape == input_shape)
+                return nb::borrow(value);
+
+            nb::object raveled = ravel(value, order);
+            return unravel(nb::borrow<nb::type_object_t<ArrayBase>>(dtype),
+                           raveled, order);
+        }
+    } catch (nb::python_error &e) {
+        nb::raise_from(e, PyExc_RuntimeError,
+                       "drjit.reshape(<%U>, <%U>): failed (see above).",
+                       nb::type_name(dtype).ptr(), nb::inst_name(value).ptr());
+    } catch (const std::exception &e) {
+        nb::chain_error(PyExc_RuntimeError, "drjit.reshape(<%U>, <%U>): %s",
+                     nb::type_name(dtype).ptr(), nb::inst_name(value).ptr(), e.what());
+        nb::raise_python_error();
+    }
+}
+
+static nb::object reshape_2(nb::type_object dtype, nb::handle value,
+                            Py_ssize_t shape, char order, bool shrink) {
+    dr::vector<Py_ssize_t> shape_vec(1, shape);
+    return reshape(dtype, value, shape_vec, order, shrink);
+}
+
 void export_memop(nb::module_ &m) {
     m.def("gather", &gather, "dtype"_a, "source"_a, "index"_a,
           "active"_a = true, "mode"_a = ReduceMode::Auto,
@@ -782,5 +956,9 @@ void export_memop(nb::module_ &m) {
              nb::handle_t<ArrayBase> array,
              char order) { return unravel(dtype, array, order); },
           "dtype"_a, "array"_a, "order"_a = 'A', doc_unravel)
-     .def("slice", &slice, "value"_a, "index"_a, doc_slice);
+     .def("slice", &slice, "value"_a, "index"_a, doc_slice)
+     .def("reshape", &reshape, "dtype"_a, "value"_a,
+          "shape"_a, "order"_a = 'A', "shrink"_a = false, nb::raw_doc(doc_reshape))
+     .def("reshape", &reshape_2, "dtype"_a, "value"_a,
+          "shape"_a, "order"_a = 'A', "shrink"_a = false);
 }
