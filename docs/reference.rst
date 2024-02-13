@@ -187,6 +187,8 @@ These operations are *horizontal* in the sense that [..]
 .. autofunction:: unravel
 .. autofunction:: reshape
 .. autofunction:: slice
+.. autofunction:: tile
+.. autofunction:: repeat
 .. autofunction:: min
 .. autofunction:: max
 .. autofunction:: sum

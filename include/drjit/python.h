@@ -418,7 +418,7 @@ template <typename T> NB_INLINE void bind_base(ArrayBinding &b) {
                     value, nb::rv_policy::reference_internal, &cleanup);
             } catch (const std::exception &e) {
                 nb::str tp_name = nb::inst_name(o);
-                PyErr_Format(PyExc_RuntimeError, "%U.__getitem__(): %s.",
+                PyErr_Format(PyExc_RuntimeError, "%U.__getitem__(): %s",
                              tp_name.ptr(), e.what());
             }
             assert(!cleanup.used());

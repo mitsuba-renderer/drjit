@@ -563,3 +563,21 @@ def test21_reshape_shrink(t):
     vs = dr.reshape(t, v, 5, shrink=True)
     assert len(vs) == 2 and len(vs[0]) == 5 and len(vs[1]) == 5
     assert dr.all(vs[0] == [0, 1, 2, 3, 4])
+
+
+@pytest.test_arrays('jit,float32,shape=(*)')
+def test22_tile(t):
+    x = t(1, 2)
+    y = dr.tile(x, 3)
+    assert dr.all(y == [1, 2, 1, 2, 1, 2])
+
+@pytest.test_arrays('jit,float32,shape=(*)')
+def test22_repeat(t):
+    x = t(1, 2)
+    y = dr.repeat(x, 3)
+    assert dr.all(y == [1, 1, 1, 2, 2, 2])
+
+#if defined(__GNUC__)
+#  pragma GCC diagnostic pop
+#endif
+
