@@ -393,20 +393,6 @@ namespace detail {
     struct detached<Base<T, S>, enable_if_drjit_struct_t<Base<T, S>>> {
         using type = Base<typename detached<T>::type, S>;
     };
-
-    template <typename T, typename = int> struct masked {
-        using type = MaskedArray<T>;
-    };
-
-    template <template <typename...> typename Base, typename... Ts>
-    struct masked<Base<Ts...>, enable_if_drjit_struct_t<Base<Ts...>>> {
-        using type = Base<typename masked<Ts>::type...>;
-    };
-
-    template <template <typename, size_t> typename Base, typename T, size_t S>
-    struct masked<Base<T, S>, enable_if_drjit_struct_t<Base<T, S>>> {
-        using type = Base<typename masked<T>::type, S>;
-    };
 };
 
 /// Convert a non-differentiable array type into a differentiable one
@@ -416,10 +402,6 @@ using diff_array_t = typename detail::diff_array<T>::type;
 /// Convert a differentiable array type into a non-differentiable one
 template <typename T>
 using detached_t = typename detail::detached<std::decay_t<T>>::type;
-
-/// Get the type of the masked(..) expression
-template <typename T>
-using masked_t = typename detail::masked<std::decay_t<T>>::type;
 
 //! @}
 // -----------------------------------------------------------------------
