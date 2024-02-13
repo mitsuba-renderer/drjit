@@ -1791,6 +1791,17 @@ struct MaskedArray : ArrayBaseT<value_t<T>, is_mask_v<T>, MaskedArray<T>> {
     Mask m = false;
 };
 
+template <typename T, typename Mask> struct MaskedTraversable {
+    MaskedTraversable(T &value, Mask mask) : value(value), mask(mask) { }
+
+    void operator=(const T &value_2) {
+        value = select(mask, value_2, value);
+    }
+
+    T &value;
+    Mask mask;
+};
+
 NAMESPACE_END(detail)
 
 template <typename T, typename Mask>
@@ -1798,16 +1809,7 @@ DRJIT_INLINE auto masked(T &value, const Mask &mask) {
     if constexpr (is_array_v<T> || detail::is_scalar_v<Mask>) {
         return detail::MaskedArray<T>{ value, mask };
     } else if constexpr (is_traversable_v<T>) {
-        masked_t<T> result;
-
-        traverse_2(
-            fields(value),
-            fields(result),
-            [&mask](auto &x1, auto &x2) {
-                x2 = masked(x1, mask);
-            });
-
-        return result;
+        return detail::MaskedTraversable<T, Mask> { value, mask };
     } else {
         static_assert(
             detail::false_v<T, Mask>,
