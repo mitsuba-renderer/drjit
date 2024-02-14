@@ -119,7 +119,7 @@ public:
             FilterMode filter_mode = FilterMode::Linear,
             WrapMode wrap_mode = WrapMode::Clamp) {
         if (tensor.ndim() != Dimension + 1)
-            drjit_fail("Texture::Texture(): tensor dimension must equal "
+            jit_raise("Texture::Texture(): tensor dimension must equal "
                         "texture dimension plus one.");
         init(tensor.shape().data(), tensor.shape(Dimension), use_accel,
              filter_mode, wrap_mode);
@@ -189,7 +189,7 @@ public:
      */
     void set_value(const Storage &value, bool migrate=false) {
         if (value.size() != m_size)
-            drjit_fail("Texture::set_value(): unexpected array size!");
+            jit_raise("Texture::set_value(): unexpected array size!");
 
         drjit::eval(value);
 
@@ -233,7 +233,7 @@ public:
      */
     void set_tensor(const TensorXf &tensor, bool migrate=false) {
         if (tensor.ndim() != Dimension + 1)
-            drjit_fail("Texture::set_tensor(): tensor dimension must equal "
+            jit_raise("Texture::set_tensor(): tensor dimension must equal "
                         "texture dimension plus one (channels).");
 
         bool is_inplace_update = (&tensor == &m_value);
@@ -1191,7 +1191,7 @@ protected:
               FilterMode filter_mode, WrapMode wrap_mode,
               bool init_tensor = true) {
         if (channels == 0)
-            drjit_fail("Texture::Texture(): must have at least 1 channel!");
+            jit_raise("Texture::Texture(): must have at least 1 channel!");
 
         m_size = channels;
         size_t tensor_shape[Dimension + 1]{};
