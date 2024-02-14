@@ -338,7 +338,8 @@ public:
                 for (size_t i = 0; i < Dimension; ++i)
                     pos_idx[i] = pos[i].index();
 
-                jit_cuda_tex_lookup(Dimension, m_handle, pos_idx, out_idx);
+                jit_cuda_tex_lookup(Dimension, m_handle, pos_idx,
+                                    active.index(), out_idx);
 
                 for (size_t ch = 0; ch < channels; ++ch)
                     out[ch] = Value::steal(out_idx[ch]);
@@ -492,7 +493,7 @@ public:
                         pos_idx[i] = pos[i].index();
 
                     jit_cuda_tex_bilerp_fetch(Dimension, m_handle, pos_idx,
-                                              out_idx);
+                                              active.index(), out_idx);
 
                     for (size_t ch = 0; ch < channels; ++ch) {
                         out[2][ch] = Value::steal(out_idx[ch*4 + 0]);
@@ -1215,8 +1216,9 @@ protected:
             if (m_use_accel) {
                 size_t tex_shape[Dimension];
                 reverse_tensor_shape(tex_shape, false);
-                m_handle = jit_cuda_tex_create(Dimension, tex_shape, channels,
-                                               (int) CudaFormat, (int) filter_mode, (int) wrap_mode);
+                m_handle = jit_cuda_tex_create(
+                    Dimension, tex_shape, channels, (int) CudaFormat,
+                    (int) filter_mode, (int) wrap_mode);
             }
         }
     }
