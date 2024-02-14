@@ -73,6 +73,14 @@ def test01_interp_1d(t, wrap_mode, force_optix, texture_type):
             output = tex.eval(pos)
             assert dr.allclose(output, ref)
 
+            # Also check that masks are correctly handled
+            active = dr.opaque(dr.mask_t(t), False)
+            pos = dr.linspace(t, 1.75, 1.25, N)
+            output = tex_no_accel.eval(pos, active=active)
+            assert dr.allclose(output, 0)
+            output = tex.eval(pos, active=active)
+            assert dr.allclose(output, 0)
+
 @pytest.mark.parametrize("wrap_mode", wrap_modes)
 @pytest.mark.parametrize("texture_type", ['Texture1f', 'Texture1f16'])
 @pytest.test_arrays("is_jit, float32, shape=(*)")
