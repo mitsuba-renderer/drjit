@@ -1,5 +1,6 @@
 import drjit as dr
 import pytest
+import sys
 
 
 @pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
@@ -449,3 +450,100 @@ def test22_compress(t, mode, compress):
         it_count += 1
 
     assert dr.sum(it_count) == 849666
+
+
+@pytest.test_arrays('uint32,is_jit,shape=(*)')
+def test23_loop_with_fork(t):
+
+    @dr.syntax
+    def f(t):
+        m = sys.modules[t.__module__]
+        UInt32 = t
+        Bool = m.Bool
+        Float = m.Float
+        Array2f = m.Array2f
+        PCG32 = m.PCG32
+        size = 1000
+        sizes = []
+
+        class Particle:
+            DRJIT_STRUCT = {
+                'index' : UInt32,
+                'weight': Float
+            }
+
+            def __init__(self, index=None, weight=None):
+                self.index = index
+                self.weight = weight
+
+
+        # Create an initial set of particles with weight 1
+        state = Particle(
+            index=dr.arange(UInt32, size),
+            weight=dr.full(Float, 1, size)
+        )
+
+        while size > 0:
+            # Initialize the random number generator for each particle
+            rng = PCG32()
+            rng.seed(initstate=state.index)
+
+            # Create an 1-element array that will be used as an atomic index into a queue
+            queue_index = UInt32(0)
+
+            # Preallocate memory for the queue. The necessary amount of memory is
+            # task-dependent (how many splits there are)
+            queue_size = int(1.1*size)
+            queue = dr.empty(dtype=Particle, shape=queue_size)
+
+            # Initially, all particles are active
+            active = dr.full(Bool, True, size)
+
+            while active:
+                # Some update process that modifies the particle weight
+                weight_factor = dr.fma(rng.next_float32(), 0.125, 1-0.125/2)
+                state.weight *= weight_factor
+
+                # Russian roulette
+                if state.weight < .5:
+                    if rng.next_float32() > state.weight:
+                        active = Bool(False)
+
+                # Random split if the energy exceeds a given threshold
+                if state.weight > 1.5:
+                    # Spawn a new particle to be handled in a future iteration of
+                    # the parent loop, so that current and new particle each have
+                    # 50% of the original weight. For this process to be consistent
+                    # across runs, set an ID based on this particle's random number
+                    # generator state
+
+                    new_state = Particle(
+                        index=rng.next_uint32(),
+                        weight=state.weight / 2
+                    )
+
+                    state.weight /= 2
+
+                    # Atomically reserve a slot in 'queue'
+                    slot = dr.scatter_inc(queue_index, index=0)
+
+                    # Be careful not to write beyond the end of the queue
+                    valid = slot < queue_size
+
+                    # Write 'new_state' into the reserved slot
+                    dr.scatter(target=queue, value=new_state, index=slot, active=valid)
+
+            next_size = queue_index[0]
+
+            if next_size > queue_size:
+                print('Warning: Preallocated queue was too small: tried to store '
+                      f'{next_size} elements in a queue of size {queue_size}')
+                next_size = queue_size
+
+            state = dr.reshape(type(state), value=queue, shape=next_size, shrink=True)
+            size = next_size
+            sizes.append(size)
+        return sizes
+
+    sizes = f(t)
+    assert sizes == [706, 269, 100, 28, 9, 1, 0]

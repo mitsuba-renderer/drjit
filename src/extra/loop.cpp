@@ -50,7 +50,7 @@ static bool ad_loop_symbolic(JitBackend backend, const char *name,
         indices1.release();
         for (uint32_t i : indices2)
             indices1.push_back_steal(i);
-        write_cb(payload, indices1);
+        write_cb(payload, indices1, false);
         indices1.release();
         indices2.clear();
 
@@ -63,7 +63,7 @@ static bool ad_loop_symbolic(JitBackend backend, const char *name,
                 jit_log(LogLevel::InfoSym,
                         "ad_loop_symbolic(\"%s\"): optimized away (loop "
                         "condition is 'false').", name);
-                write_cb(payload, backup);
+                write_cb(payload, backup, false);
                 break;
             }
 
@@ -95,7 +95,7 @@ static bool ad_loop_symbolic(JitBackend backend, const char *name,
             indices1.release();
             for (uint32_t i : indices2)
                 indices1.push_back_steal(i);
-            write_cb(payload, indices1);
+            write_cb(payload, indices1, rv == false);
             indices1.release();
             indices2.clear();
 
@@ -109,7 +109,7 @@ static bool ad_loop_symbolic(JitBackend backend, const char *name,
     } catch (...) {
         // Restore all loop state variables to their original state
         try {
-            write_cb(payload, backup);
+            write_cb(payload, backup, true);
         } catch (...) {
             /* This happens when the user changed a variable type in Python (so
              * writing back the original variable ID isn't possible). The error
@@ -168,7 +168,7 @@ static size_t ad_loop_evaluated_mask(JitBackend backend, const char *name,
             ad_var_dec_ref(i3);
         }
 
-        write_cb(payload, indices2);
+        write_cb(payload, indices2, false);
         indices1.release();
         indices1.swap(indices2);
 
@@ -361,7 +361,7 @@ ad_loop_evaluated_compress(JitBackend backend, const char *name, void *payload,
                     "to %u entries.", name, size, size_next);
 
         size = size_next;
-        write_cb(payload, indices);
+        write_cb(payload, indices, false);
         indices.release();
 
         jit_log(LogLevel::InfoSym,
@@ -378,7 +378,7 @@ ad_loop_evaluated_compress(JitBackend backend, const char *name, void *payload,
     }
 
     if (it > 0)
-        write_cb(payload, out_indices);
+        write_cb(payload, out_indices, false);
 
     return it;
 }
@@ -402,7 +402,7 @@ static void ad_loop_evaluated(JitBackend backend, const char *name,
         ad_var_dec_ref(index);
         index = index_new;
     }
-    write_cb(payload, indices);
+    write_cb(payload, indices, false);
 
     // Evaluate the condition and merge it into 'active'
     uint32_t active_initial = cond_cb(payload);
@@ -443,7 +443,8 @@ public:
            const dr_index64_vector &state)
         : m_backend(backend), m_name(name), m_payload(payload),
           m_read_cb(read_cb), m_write_cb(write_cb), m_cond_cb(cond_cb),
-          m_body_cb(body_cb), m_delete_cb(delete_cb), m_diff_count(0) {
+          m_body_cb(body_cb), m_delete_cb(delete_cb), m_diff_count(0),
+          m_restart(true) {
         m_name_op = "Loop: " + m_name;
 
         m_inputs.reserve(state.size());
@@ -519,7 +520,8 @@ public:
         for (size_t i = 0; i < m_inputs.size(); ++i)
             m_state2.push_back_borrow(m_state[i]);
 
-        m_write_cb(m_payload, m_state2);
+        m_write_cb(m_payload, m_state2, m_restart);
+        m_restart = false;
         m_state2.release();
         return m_cond_cb(m_payload);
     }
@@ -537,7 +539,8 @@ public:
         }
 
         // Run the loop body
-        m_write_cb(m_payload, m_state2);
+        m_write_cb(m_payload, m_state2, m_restart);
+        m_restart = false;
         m_body_cb(m_payload);
 
         // AD forward propagation pass
@@ -596,7 +599,7 @@ public:
         ad_loop(
             m_backend, 1, 0, fwd_name.c_str(), this,
             [](void *p, dr::vector<uint64_t> &i) { ((LoopOp *) p)->read(i); },
-            [](void *p, const dr::vector<uint64_t> &i) { ((LoopOp *) p)->write(i); },
+            [](void *p, const dr::vector<uint64_t> &i, bool) { ((LoopOp *) p)->write(i); },
             [](void *p) { return ((LoopOp *) p)->fwd_cond(); },
             [](void *p) { return ((LoopOp *) p)->fwd_body(); }, nullptr, false);
 
@@ -637,6 +640,7 @@ private:
     dr_index64_vector m_state2;
     dr_index64_vector m_rv;
     size_t m_diff_count;
+    bool m_restart;
 };
 
 bool ad_loop(JitBackend backend, int symbolic, int compress, const char *name,
@@ -696,7 +700,7 @@ bool ad_loop(JitBackend backend, int symbolic, int compress, const char *name,
                 }
 
                 if (ad_custom_op(op.get())) {
-                    write_cb(payload, indices_out);
+                    write_cb(payload, indices_out, false);
                     // LoopOp will eventually call delete_cb()
                     return false;
                 }
