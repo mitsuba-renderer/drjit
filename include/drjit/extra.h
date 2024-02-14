@@ -293,7 +293,7 @@ ad_call(JitBackend backend, const char *domain, size_t callable_count,
 
 // Callbacks used by \ref ad_loop() below. See the interface for details
 typedef void (*ad_loop_read)(void *payload, drjit::vector<uint64_t> &);
-typedef void (*ad_loop_write)(void *payload, const drjit::vector<uint64_t> &);
+typedef void (*ad_loop_write)(void *payload, const drjit::vector<uint64_t> &, bool restart);
 typedef uint32_t (*ad_loop_cond)(void *payload);
 typedef void (*ad_loop_body)(void *payload);
 typedef void (*ad_loop_delete)(void *payload);

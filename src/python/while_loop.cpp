@@ -59,6 +59,8 @@ struct LoopState {
     size_t indices_pos = 0;
     /// Size of variables used by the loop
     size_t loop_size = 1;
+    /// Have we already executed the loop body?
+    bool body_executed = false;
 
     LoopState(nb::tuple &&state, nb::callable &&cond, nb::callable &&body,
               dr::vector<dr::string> &&state_labels)
@@ -182,7 +184,7 @@ private:
                               "explained in the Dr.Jit documentation.",
                               name.c_str(), nb::inst_name(h).c_str(), s1, s2);
 
-                if (loop_size != s2 && i1 != i2 && !jit_var_is_dirty((uint32_t) i2)) {
+                if (body_executed && loop_size != s2 && i1 != i2 && !jit_var_is_dirty((uint32_t) i2)) {
                     if (loop_size != 1 && s2 != 1)
                         nb::raise("The body of this loop operates on arrays of "
                                   "size %zu. Loop state variable '%s' has an "
@@ -307,6 +309,7 @@ static void while_loop_body_cb(void *p) {
     nb::gil_scoped_acquire guard;
     LoopState *lp = (LoopState *) p;
     lp->state = check_state("body", tuple_call(lp->body, lp->state), lp->state);
+    lp->body_executed = true;
 };
 
 static void while_loop_read_cb(void *p, dr::vector<uint64_t> &indices) {
@@ -315,9 +318,13 @@ static void while_loop_read_cb(void *p, dr::vector<uint64_t> &indices) {
 }
 
 static void while_loop_write_cb(void *p,
-                                const dr::vector<uint64_t> &indices) {
+                                const dr::vector<uint64_t> &indices,
+                                bool restart) {
     nb::gil_scoped_acquire guard;
-    ((LoopState *) p)->traverse<true>(indices);
+    LoopState *state = (LoopState *) p;
+    if (restart)
+        state->body_executed = false;
+    state->traverse<true>(indices);
 }
 
 static void while_loop_delete_cb(void *p) {

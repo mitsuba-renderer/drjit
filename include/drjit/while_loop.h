@@ -63,7 +63,7 @@ StateD while_loop_impl(std::index_sequence<Is...>, State &&state_, Cond &&cond,
             detail::collect_indices<true>(((Payload *) p)->state, indices);
         };
 
-        ad_loop_write write_cb = [](void *p, const vector<uint64_t> &indices) {
+        ad_loop_write write_cb = [](void *p, const vector<uint64_t> &indices, bool) {
             detail::update_indices(((Payload *) p)->state, indices);
         };
 
