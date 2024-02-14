@@ -510,8 +510,8 @@ namespace detail {
         using T1 = typename deepest<Args...>::type;
 
         // Give precedence to differentiable arrays
-        static constexpr size_t D0 = depth_v<T0> * 2 + (is_diff_v<T0> ? 1 : 0);
-        static constexpr size_t D1 = depth_v<T1> * 2 + (is_diff_v<T1> ? 1 : 0);
+        static constexpr size_t D0 = depth_v<T0> * 2 + is_diff_v<T0> + is_tensor_v<T0>;
+        static constexpr size_t D1 = depth_v<T1> * 2 + is_diff_v<T1> + is_tensor_v<T0>;
 
     public:
         using type = std::conditional_t<(D1 > D0 || D0 == 0), T1, T0>;
