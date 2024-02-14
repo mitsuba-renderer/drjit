@@ -217,7 +217,7 @@ Value trace(const Matrix<Value, Size> &m) {
 
 template <typename Value, size_t Size>
 Value frob(const Matrix<Value, Size> &m) {
-    Array<Value, Size> result = sqr(m.entry(0));
+    Array<Value, Size> result = square(m.entry(0));
     for (size_t i = 1; i < Size; ++i)
         result = fmadd(m.entry(i), m.entry(i), result);
     return sum(result);
