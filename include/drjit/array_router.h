@@ -1223,7 +1223,7 @@ decltype(auto) slice(const T &value, size_t index = 0) {
                       "custom data structures!");
         ResultType result;
         traverse_2(
-            value, result,
+            fields(value), fields(result),
             [index](auto &x1, auto &x2) {
                 x2 = slice(x1, index);
             });
