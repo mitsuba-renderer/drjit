@@ -29,10 +29,11 @@ def upsample(t, shape=None, scale_factor=None, align_corners=False):
         scale_factor (list): The scale factor to apply to the current shape
         (optional)
 
-        align_corners (bool): If True, the corner pixels of the input and output
-        tensors are aligned, and thus preserving the values at the corner
-        pixels. This only has effect when ``source`` is a Dr.Jit texture type
-        performing linear interpolation. (default: False)
+        align_corners (bool): Defines whether or not the corner pixels of the
+        input and output should be aligned. This allows the values at the
+        corners to be preserved. This flag is only relevant when ``source`` is
+        a Dr.Jit texture type performing linear interpolation. The default is
+        `False`.
 
     Returns:
         object: the up-sampled tensor or texture object. The type of the output
