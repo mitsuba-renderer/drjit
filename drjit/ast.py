@@ -752,7 +752,9 @@ def syntax(
     new_code = next(
         (x for x in new_code.co_consts if isinstance(x, types.CodeType)), None
     )
-    return types.FunctionType(new_code, f.__globals__)
+    new_func = types.FunctionType(new_code, f.__globals__)
+    new_func.__defaults__ = f.__defaults__
+    return new_func
 
 
 def hint(
