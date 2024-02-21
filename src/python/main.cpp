@@ -77,7 +77,7 @@ NB_MODULE(drjit_ext, m_) {
     m.attr("__version__") = DRJIT_VERSION;
 
     nb::enum_<JitBackend>(m, "JitBackend", doc_JitBackend)
-        .value("None", JitBackend::None, doc_JitBackend_None)
+        .value("Invalid", JitBackend::None, doc_JitBackend_Invalid)
         .value("CUDA", JitBackend::CUDA, doc_JitBackend_CUDA)
         .value("LLVM", JitBackend::LLVM, doc_JitBackend_LLVM);
 
@@ -197,8 +197,6 @@ NB_MODULE(drjit_ext, m_) {
         .def("__enter__", &scoped_set_flag_py::__enter__)
         .def("__exit__", &scoped_set_flag_py::__exit__, nb::arg().none(),
              nb::arg().none(), nb::arg().none());
-
-    m.attr("None") = nb::none();
 
     // Intrusive reference counting
     nb::intrusive_init(

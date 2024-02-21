@@ -3773,7 +3773,7 @@ static const char *doc_JitBackend =
 
 // For Sphinx-related technical reasons, this comment is replicated in
 // reference.rst. Please keep them in sync when making changes
-static const char *doc_JitBackend_None =
+static const char *doc_JitBackend_Invalid =
     "Indicates that a type is not handled by a Dr.Jit backend (e.g., a scalar type)";
 
 // For Sphinx-related technical reasons, this comment is replicated in
