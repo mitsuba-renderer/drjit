@@ -547,3 +547,13 @@ def test23_loop_with_fork(t):
 
     sizes = f(t)
     assert sizes == [706, 269, 100, 28, 9, 1, 0]
+
+@pytest.test_arrays('uint32,is_jit,shape=(*)')
+def test24_dr_syntax_default_args(t):
+    @dr.syntax(print_ast=True)
+    def f(t, limit = 10):
+        i = t(0, 0)
+        while i < limit:
+            i += 1
+        return i
+    assert dr.all(f(t) == [10, 10])
