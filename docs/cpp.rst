@@ -432,7 +432,7 @@ and append the following binding declarations:
 
 .. code-block:: cpp
 
-    using FooPtr = dr::DiffPtr<JitBackend::CUDA, Foo *>;
+    using FooPtr = dr::CUDADiffArray<Foo *>;
 
     dr::ArrayBinding b;
     auto base_ptr = dr::bind_array_t<FooPtr>(b, m, "FooPtr")

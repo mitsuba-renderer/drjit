@@ -442,8 +442,11 @@ template <typename T> NB_INLINE void bind_base(ArrayBinding &b) {
             bool success = value != Py_None && in.from_python(
                 value, (uint8_t) nb::detail::cast_flags::convert, &cleanup);
             if (success) {
-                using Out = std::conditional_t<std::is_pointer_v<Value>, Value, Value &>;
-                inst->set_entry(i, in.operator Out());
+                using Intrinsic = nb::detail::intrinsic_t<Value>;
+                using Out = std::conditional_t<std::is_pointer_v<Value>, Intrinsic*, Intrinsic &>;
+
+                Out out = in.operator Out();
+                inst->set_entry(i, (value_t<T>) out);
             }
             cleanup.release();
 
