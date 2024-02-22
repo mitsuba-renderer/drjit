@@ -131,7 +131,7 @@ nanobind_add_stub(
   drjit-stub-scalar
   PYTHON_PATH ${DRJIT_OUTPUT_DIRECTORY}/..
   MODULE drjit.scalar
-  OUTPUT ${CMAKE_BINARY_DIR}/drjit/scalar.pyi
+  OUTPUT ${CMAKE_BINARY_DIR}/drjit/scalar/__init__.pyi
   DEPENDS drjit-python ${PY_FILES_OUT}
 )
 
