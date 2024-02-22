@@ -1,5 +1,6 @@
 import sys as _sys
 from .config import CXX_COMPILER as _CXX_COMPILER
+from .config import PYTHON_VERSION as _PYTHON_VERSION
 import drjit
 
 if _sys.version_info < (3, 8):
