@@ -61,18 +61,18 @@ NB_MODULE(drjit_ext, m_) {
 #if defined(DRJIT_ENABLE_LLVM)
     backends |= (uint32_t) JitBackend::LLVM;
 
-    nb::module_ llvm = m.def_submodule("llvm"),
-                llvm_ad = llvm.def_submodule("ad");
+    nb::module_ llvm    = nb::module_::import_("drjit.llvm"),
+                llvm_ad = nb::module_::import_("drjit.llvm.ad");
 #endif
 
 #if defined(DRJIT_ENABLE_CUDA)
     backends |= (uint32_t) JitBackend::CUDA;
 
-    nb::module_ cuda = m.def_submodule("cuda"),
-                cuda_ad = cuda.def_submodule("ad");
+    nb::module_ cuda    = nb::module_::import_("drjit.cuda"),
+                cuda_ad = nb::module_::import_("drjit.cuda.ad");
 #endif
     nb::module_ detail = m.attr("detail"),
-                scalar = m.def_submodule("scalar");
+                scalar = nb::module_::import_("drjit.scalar");
 
     m.attr("__version__") = DRJIT_VERSION;
 
