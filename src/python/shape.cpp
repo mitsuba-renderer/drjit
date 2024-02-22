@@ -175,7 +175,7 @@ size_t width(nb::handle h) {
 extern size_t width(nb::handle h);
 
 void export_shape(nb::module_ &m) {
-    m.def("shape", &shape, nb::raw_doc(doc_shape));
+    m.def("shape", &shape, doc_shape);
     m.def("width", &width, doc_width)
      .def("width", [](nb::args args) { return width(args); });
 }

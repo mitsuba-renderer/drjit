@@ -65,6 +65,9 @@ drjit_ext.abi3.*
 /drjitConfig.cmake
 /drjitConfigVersion.cmake
 drjit/config.py
+*\.pyi
+/drjit/llvm
+/drjit/cuda
 
 # Documentation
 /html

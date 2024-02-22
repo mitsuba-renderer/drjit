@@ -1,12 +1,11 @@
 import ast
-import types
-import inspect
-import linecache
-import warnings
-from typing import Callable, Optional, List
+import types as _types
+import linecache as _linecache
+import inspect as _inspect
+from typing import Callable as _Callable, Optional as _Optional, List as _List, Any as _Any
 
 
-class SyntaxVisitor(ast.NodeTransformer):
+class _SyntaxVisitor(ast.NodeTransformer):
     def __init__(self, recursive, filename, line_offset):
         super().__init__()
 
@@ -44,11 +43,10 @@ class SyntaxVisitor(ast.NodeTransformer):
                 for o2 in o1:
                     self.var_w.add(o2.arg)
 
-            node = self.generic_visit(node)
-
+            result = self.generic_visit(node)
             self.var_r, self.var_w = var_r, var_w
-
             self.depth -= 1
+            return result
 
         return node
 
@@ -60,7 +58,7 @@ class SyntaxVisitor(ast.NodeTransformer):
         s.offset = node.col_offset
         s.end_offset = node.end_col_offset
         s.filename = self.filename
-        s.text = linecache.getline(self.filename, s.lineno)
+        s.text = _linecache.getline(self.filename, s.lineno)
         raise s
 
     def raise_forbidden_stmt_error(self, node: ast.AST, op_name):
@@ -134,7 +132,7 @@ class SyntaxVisitor(ast.NodeTransformer):
         hints = {}
         for k in node.keywords:
             if k.arg == "exclude" or k.arg == "include":
-                value = set()
+                value: _Any = set()
                 if isinstance(k.value, ast.List):
                     for e in k.value.elts:
                         if isinstance(e, ast.Name):
@@ -178,6 +176,7 @@ class SyntaxVisitor(ast.NodeTransformer):
             par_w |= s
 
         # Extract hints, if available
+        assert isinstance(node, ast.If) or isinstance(node, ast.While)
         node.test, hints = self.extract_hints(node.test)
         mode = hints.get("mode", None)
         is_scalar = isinstance(mode, ast.Constant) and mode.value == "scalar"
@@ -512,11 +511,11 @@ class SyntaxVisitor(ast.NodeTransformer):
 
 
 # Counts how many times the @drjit.syntax decorator has been used
-syntax_counter = 0
+_syntax_counter = 0
 
 
 def syntax(
-    f: Callable = None,
+    f: _Optional[_Callable] = None,
     recursive: bool = False,
     print_ast: bool = False,
     print_code: bool = False,
@@ -696,7 +695,7 @@ def syntax(
     merely rewrites the syntax of certain loop and conditional expressions and
     has no further effect following the function definition.
     """
-    global syntax_counter
+    global _syntax_counter
 
     if f is None:
         def wrapper(f2):
@@ -705,8 +704,9 @@ def syntax(
         return wrapper
 
     # Warn if this function is used many times
-    syntax_counter += 1
-    if syntax_counter > 1000:
+    _syntax_counter += 1
+    if _syntax_counter > 1000:
+        import warnings
         warnings.warn(
             'The AST-transforming decorator @drjit.syntax was called more than '
             '1000 times by your program. Since transforming and recompiling '
@@ -716,7 +716,7 @@ def syntax(
             RuntimeWarning
         )
 
-    source = inspect.getsource(f)
+    source = _inspect.getsource(f)
 
     if source[0].isspace():
         from textwrap import dedent
@@ -733,7 +733,7 @@ def syntax(
     if print_code:
         print(f"Input code\n----------\n{ast.unparse(old_ast)}\n")
 
-    new_ast = SyntaxVisitor(recursive, filename, line_offset).visit(old_ast)
+    new_ast = _SyntaxVisitor(recursive, filename, line_offset).visit(old_ast)
     new_ast = ast.fix_missing_locations(new_ast)
 
     if print_ast:
@@ -750,9 +750,9 @@ def syntax(
             "@drjit.syntax could not be compiled:\n\n%s" % ast.unparse(new_ast)
         ) from e
     new_code = next(
-        (x for x in new_code.co_consts if isinstance(x, types.CodeType)), None
+        (x for x in new_code.co_consts if isinstance(x, _types.CodeType)), None
     )
-    new_func = types.FunctionType(new_code, f.__globals__)
+    new_func = _types.FunctionType(new_code, f.__globals__)
     new_func.__defaults__ = f.__defaults__
     return new_func
 
@@ -761,11 +761,11 @@ def hint(
     arg: object,
     /,
     *,
-    mode: Optional[str] = None,
-    max_iterations: Optional[int] = None,
-    label: Optional[str] = None,
-    include: Optional[List[object]] = None,
-    exclude: Optional[List[object]] = None,
+    mode: _Optional[str] = None,
+    max_iterations: _Optional[int] = None,
+    label: _Optional[str] = None,
+    include: _Optional[_List[object]] = None,
+    exclude: _Optional[_List[object]] = None,
 ) -> object:
     """
     Within ordinary Python code, this function is unremarkable: it returns the

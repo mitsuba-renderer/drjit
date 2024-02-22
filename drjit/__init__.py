@@ -2,7 +2,7 @@ from . import detail
 
 with detail.scoped_rtld_deepbind():
     try:
-        from . import drjit_ext
+        from . import drjit_ext as _drjit_ext
     except ImportError as e:
         import platform
         py_ver_pkg = detail.PYTHON_VERSION
@@ -1149,7 +1149,7 @@ def reverse(value, axis: int = 0):
         return result
 
 
-def mean(value, axis: _typing.Optional[None] = 0):
+def mean(value, axis: _typing.Optional[int] = 0):
     """
     Compute the mean of the input array or tensor along one or multiple axes.
 
