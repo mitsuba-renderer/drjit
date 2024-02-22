@@ -44,20 +44,20 @@
     m.def(#name, [](nb::handle_t<ArrayBase> h0) {                              \
         return nb::steal(apply<Normal>(                                        \
             op, #name, std::make_index_sequence<1>(), h0.ptr()));              \
-    }, nb::raw_doc(doc_##name));                                               \
+    }, doc_##name);                                                            \
     m.def(#name, [](double v0) { return dr::name(v0); });
 
 #define DR_MATH_UNOP_UINT32(name, op)                                          \
     m.def(#name, [](nb::handle_t<ArrayBase> h0) {                              \
         return nb::steal(apply<Normal>(                                        \
             op, #name, std::make_index_sequence<1>(), h0.ptr()));              \
-    }, nb::raw_doc(doc_##name));                                               \
+    }, doc_##name);                                                            \
     m.def(#name, [](uint32_t v0) { return dr::name(v0); });
 
 #define DR_MATH_UNOP_PAIR(name, op)                                            \
     m.def(#name, [](nb::handle_t<ArrayBase> h0) {                              \
         return apply_ret_pair(op, #name, h0);                                  \
-    }, nb::raw_doc(doc_##name));                                               \
+    }, doc_##name);                                                            \
     m.def(#name, [](double v0) { return dr::name(v0); });
 
 #define DR_MATH_BINOP(name, op)                                                \
@@ -66,7 +66,7 @@
             throw nb::next_overload();                                         \
         return nb::steal(apply<Normal>(                                        \
             op, #name, std::make_index_sequence<2>(), h0.ptr(), h1.ptr()));    \
-    }, nb::raw_doc(doc_##name));                                               \
+    }, doc_##name);                                                            \
     m.def(#name, [](double v0, double v1) { return dr::name(v0, v1); });
 
 #define DR_MATH_TERNOP(name, op)                                               \
@@ -78,7 +78,7 @@
               return nb::steal(apply<Normal>(op, #name,                        \
                                              std::make_index_sequence<3>(),    \
                                              h0.ptr(), h1.ptr(), h2.ptr()));   \
-          }, nb::raw_doc(doc_##name));                                         \
+          }, doc_##name);                                                      \
     m.def(#name, [](double v0, double v1, double v2) {                         \
         return dr::name(v0, v1, v2);                                           \
     });
@@ -932,9 +932,9 @@ void export_base(nb::module_ &m) {
         return meta_str(supp(tp));
     });
 
-    ab.def_prop_ro("state", &get_state, nb::raw_doc(doc_ArrayBase_state));
-    ab.def_prop_ro("ndim", &ndim, nb::raw_doc(doc_ArrayBase_ndim));
-    ab.def_prop_ro("shape", &shape, nb::raw_doc(doc_ArrayBase_shape));
+    ab.def_prop_ro("state", &get_state, doc_ArrayBase_state);
+    ab.def_prop_ro("ndim", &ndim, doc_ArrayBase_ndim);
+    ab.def_prop_ro("shape", &shape, doc_ArrayBase_shape);
     ab.def_prop_ro(
         "array",
         [](nb::handle_t<ArrayBase> h) -> nb::object {
@@ -946,28 +946,22 @@ void export_base(nb::module_ &m) {
             else
                 return nb::borrow(h);
         },
-        nb::raw_doc(doc_ArrayBase_array));
+        doc_ArrayBase_array);
 
-    ab.def_prop_rw("x", xyzw_getter<0>, xyzw_setter<0>,
-                   nb::raw_doc(doc_ArrayBase_x));
-    ab.def_prop_rw("y", xyzw_getter<1>, xyzw_setter<1>,
-                   nb::raw_doc(doc_ArrayBase_y));
-    ab.def_prop_rw("z", xyzw_getter<2>, xyzw_setter<2>,
-                   nb::raw_doc(doc_ArrayBase_z));
-    ab.def_prop_rw("w", xyzw_getter<3>, xyzw_setter<3>,
-                   nb::raw_doc(doc_ArrayBase_w));
+    ab.def_prop_rw("x", xyzw_getter<0>, xyzw_setter<0>, doc_ArrayBase_x);
+    ab.def_prop_rw("y", xyzw_getter<1>, xyzw_setter<1>, doc_ArrayBase_y);
+    ab.def_prop_rw("z", xyzw_getter<2>, xyzw_setter<2>, doc_ArrayBase_z);
+    ab.def_prop_rw("w", xyzw_getter<3>, xyzw_setter<3>, doc_ArrayBase_w);
 
-    ab.def_prop_rw("real", complex_getter<0>, complex_setter<0>,
-                   nb::raw_doc(doc_ArrayBase_real));
-    ab.def_prop_rw("imag", complex_getter<1>, complex_setter<1>,
-                   nb::raw_doc(doc_ArrayBase_imag));
+    ab.def_prop_rw("real", complex_getter<0>, complex_setter<0>, doc_ArrayBase_real);
+    ab.def_prop_rw("imag", complex_getter<1>, complex_setter<1>, doc_ArrayBase_imag);
 
-    ab.def_prop_ro("T", transpose_getter, nb::raw_doc(doc_ArrayBase_T));
+    ab.def_prop_ro("T", transpose_getter, doc_ArrayBase_T);
 
     ab.def_prop_rw(
         "grad", [](nb::handle_t<ArrayBase> h) { return ::grad(h); },
         [](nb::handle_t<ArrayBase> h, nb::handle h2) { ::set_grad(h, h2); },
-        nb::raw_doc(doc_ArrayBase_grad));
+        doc_ArrayBase_grad);
 
     ab.def_prop_rw("label",
         [](nb::handle_t<dr::ArrayBase> h) -> nb::object {
@@ -980,7 +974,7 @@ void export_base(nb::module_ &m) {
             return nb::none();
         },
         &set_label,
-        nb::raw_doc(doc_ArrayBase_label)
+        doc_ArrayBase_label
     );
 
     ab.def_prop_ro(
@@ -991,7 +985,7 @@ void export_base(nb::module_ &m) {
                 return 0;
             return (uint32_t) s.index(inst_ptr(h));
         },
-        nb::raw_doc(doc_ArrayBase_index));
+        doc_ArrayBase_index);
 
     ab.def_prop_ro(
         "index_ad",
@@ -1001,19 +995,19 @@ void export_base(nb::module_ &m) {
                 return 0;
             return s.index(inst_ptr(h)) >> 32;
         },
-        nb::raw_doc(doc_ArrayBase_index_ad));
+        doc_ArrayBase_index_ad);
 
     m.def("abs", [](Py_ssize_t v) { return dr::abs(v); })
      .def("abs", [](double v) { return dr::abs(v); })
      .def("abs", [](nb::handle_t<ArrayBase> h0) {
                      return nb::steal(nb_absolute(h0.ptr()));
-                 }, nb::raw_doc(doc_abs)
+                 }, doc_abs
      );
 
     DR_MATH_UNOP(sqrt, ArrayOp::Sqrt);
 
     m.def("rcp", [](double v0) { return dr::rcp(v0); })
-     .def("rcp", ::rcp, nb::raw_doc(doc_rcp));
+     .def("rcp", ::rcp, doc_rcp);
 
     DR_MATH_UNOP(rsqrt, ArrayOp::Rsqrt);
     DR_MATH_UNOP(cbrt, ArrayOp::Cbrt);
@@ -1069,7 +1063,7 @@ void export_base(nb::module_ &m) {
     m.def("fma",
           [](Py_ssize_t a, Py_ssize_t b, Py_ssize_t c) {
               return dr::fma(a, b, c);
-          }, nb::raw_doc(doc_fma))
+          }, doc_fma)
      .def("fma",
           [](double a, double b, double c) {
               return dr::fma(a, b, c);
@@ -1078,7 +1072,7 @@ void export_base(nb::module_ &m) {
 
     m.def("select",
           nb::overload_cast<nb::handle, nb::handle, nb::handle>(&select),
-          nb::raw_doc(doc_select));
+          doc_select);
 
     m.def("select",
           [](bool mask, nb::handle a, nb::handle b) {

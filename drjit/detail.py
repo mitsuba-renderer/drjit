@@ -1,9 +1,8 @@
-import sys
-import os
-from .config import CXX_COMPILER, PYTHON_VERSION
+import sys as _sys
+from .config import CXX_COMPILER as _CXX_COMPILER
 import drjit
 
-if sys.version_info < (3, 8):
+if _sys.version_info < (3, 8):
     raise ImportError("Dr.Jit requires Python >= 3.8")
 
 # On Clang/Linux, dynamic module loading can lead to an issue where libc++
@@ -24,15 +23,16 @@ if sys.version_info < (3, 8):
 # process is not compiled with -fPIC. Hopefully we can remove all of this
 # in a couple of years.
 
-use_deepbind = sys.platform == "linux" and "Clang" in CXX_COMPILER
+_use_deepbind = _sys.platform == "linux" and "Clang" in _CXX_COMPILER
 
 class scoped_rtld_deepbind:
     '''Python context manager to import extensions with RTLD_DEEPBIND if needed'''
     def __enter__(self):
-        if use_deepbind:
-            self.backup = sys.getdlopenflags()
-            sys.setdlopenflags(os.RTLD_LAZY | os.RTLD_LOCAL | os.RTLD_DEEPBIND)
+        if _use_deepbind:
+            import os
+            self.backup = _sys.getdlopenflags()
+            _sys.setdlopenflags(os.RTLD_LAZY | os.RTLD_LOCAL | os.RTLD_DEEPBIND)
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        if use_deepbind:
-            sys.setdlopenflags(self.backup)
+        if _use_deepbind:
+            _sys.setdlopenflags(self.backup)

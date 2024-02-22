@@ -312,30 +312,6 @@ Returns:
     bool: ``True`` if the test was successful, and ``False`` otherwise.
 )";
 
-static const char *doc_is_cuda_v = R"(
-is_cuda_v(arg, /)
-Check whether the input is a Dr.Jit CUDA array instance or type.
-
-Args:
-    arg (object): An arbitrary Python object
-
-Returns:
-    bool: ``True`` if ``arg`` represents an array type from the
-    ``drjit.cuda.*`` namespace, and ``False`` otherwise.
-)";
-
-static const char *doc_is_llvm_v = R"(
-is_llvm_v(arg, /)
-Check whether the input is a Dr.Jit LLVM array instance or type.
-
-Args:
-    arg (object): An arbitrary Python object
-
-Returns:
-    bool: ``True`` if ``arg`` represents an array type from the
-    ``drjit.llvm.*`` namespace, and ``False`` otherwise.
-)";
-
 static const char *doc_is_diff_v = R"(
 Check whether the input is a differentiable Dr.Jit array instance or type.
 
@@ -447,7 +423,6 @@ Returns:
 )";
 
 static const char *doc_is_special_v = R"(
-is_special_v(arg, /)
 Check whether the input is a *special* Dr.Jit array instance or type.
 
 A *special* array type requires precautions when performing arithmetic
@@ -461,7 +436,6 @@ Returns:
 )";
 
 static const char *doc_select = R"(
-select(arg0, arg1, arg2, /)
 Select elements from inputs based on a condition
 
 This function uses a first mask argument to select between the subsequent
@@ -487,7 +461,6 @@ Returns:
     float | int | drjit.ArrayBase: Component-wise result of the selection operation)";
 
 static const char *doc_abs = R"(
-abs(arg, /)
 Compute the absolute value of the provided input.
 
 This function evaluates the component-wise absolute value of the input
@@ -501,7 +474,6 @@ Returns:
     int | float | drjit.ArrayBase: Absolute value of the input)";
 
 static const char *doc_maximum = R"(
-maximum(arg0, arg1, /)
 Compute the element-wise maximum value of the provided inputs.
 
 This function returns a result of the type ``type(arg0 + arg1)`` (i.e.,
@@ -515,7 +487,6 @@ Returns:
     int | float | drjit.ArrayBase: Maximum of the input(s))";
 
 static const char *doc_minimum = R"(
-minimum(arg0, arg1, /)
 Compute the element-wise minimum value of the provided inputs.
 
 This function returns a result of the type ``type(arg0 + arg1)`` (i.e.,
@@ -913,7 +884,6 @@ Returns:
     drjit.ArrayBase: An array of the same type containing the computed prefix sum.)";
 
 static const char *doc_sqrt = R"(
-sqrt(arg, /)
 Evaluate the square root of the provided input.
 
 This function evaluates the component-wise square root of the input
@@ -937,7 +907,6 @@ Returns:
 
 
 static const char *doc_cbrt = R"(
-cbrt(arg, /)
 Evaluate the cube root of the provided input.
 
 This function is currently only implemented for real-valued inputs.
@@ -950,7 +919,6 @@ Returns:
 
 
 static const char *doc_rcp = R"(
-rcp(arg, /)
 Evaluate the reciprocal (1 / arg) of the provided input.
 
 When ``arg`` is a CUDA single precision array, the operation is implemented
@@ -970,7 +938,6 @@ Returns:
     float | drjit.ArrayBase: Reciprocal of the input)";
 
 static const char *doc_rsqrt = R"(
-rsqrt(arg, /)
 Evaluate the reciprocal square root (1 / sqrt(arg)) of the provided input.
 
 This function evaluates the component-wise reciprocal square root of the input
@@ -990,7 +957,6 @@ Returns:
     float | drjit.ArrayBase: Reciprocal square root of the input)";
 
 static const char *doc_ceil = R"(
-ceil(arg, /)
 Evaluate the ceiling, i.e. the smallest integer >= arg.
 
 The function does not convert the type of the input array. A separate
@@ -1004,7 +970,6 @@ Returns:
 
 
 static const char *doc_floor = R"(
-floor(arg, /)
 Evaluate the floor, i.e. the largest integer <= arg.
 
 The function does not convert the type of the input array. A separate
@@ -1018,7 +983,6 @@ Returns:
 
 
 static const char *doc_trunc = R"(
-trunc(arg, /)
 Truncates arg to the nearest integer by towards zero.
 
 The function does not convert the type of the input array. A separate
@@ -1032,7 +996,6 @@ Returns:
 
 
 static const char *doc_round = R"(
-round(arg, /)
 Rounds the input to the nearest integer using Banker's rounding for half-way
 values.
 
@@ -1049,7 +1012,6 @@ Returns:
 
 
 static const char *doc_log = R"(
-log(arg, /)
 Evaluate the natural logarithm.
 
 This function evaluates the component-wise natural logarithm of the input
@@ -1070,7 +1032,6 @@ Returns:
     float | drjit.ArrayBase: Natural logarithm of the input)";
 
 static const char *doc_log2 = R"(
-log2(arg, /)
 Evaluate the base-2 logarithm.
 
 This function evaluates the component-wise base-2 logarithm of the input
@@ -1091,7 +1052,6 @@ Returns:
     float | drjit.ArrayBase: Base-2 logarithm of the input)";
 
 static const char *doc_exp = R"(
-exp(arg, /)
 Evaluate the natural exponential function.
 
 This function evaluates the component-wise natural exponential function of the
@@ -1111,7 +1071,6 @@ Returns:
     float | drjit.ArrayBase: Natural exponential of the input)";
 
 static const char *doc_exp2 = R"(
-exp2(arg, /)
 Evaluate ``2`` raised to a given power.
 
 This function evaluates the component-wise base-2 exponential function of the
@@ -1131,7 +1090,6 @@ Returns:
     float | drjit.ArrayBase: Base-2 exponential of the input)";
 
 static const char *doc_erf = R"(
-erf(arg, /)
 Evaluate the error function.
 
 The `error function <https://en.wikipedia.org/wiki/Error_function>` is
@@ -1153,7 +1111,6 @@ Returns:
     float | drjit.ArrayBase: :math:`\mathrm{erf}(\textt{arg})`)";
 
 static const char *doc_erfinv = R"(
-erf(arg, /)
 Evaluate the inverse error function.
 
 This function evaluates the inverse of :py:func:`drjit.erf()`. Its
@@ -1169,7 +1126,6 @@ Returns:
     float | drjit.ArrayBase: :math:`\mathrm{erf}^{-1}(\textt{arg})`)";
 
 static const char *doc_lgamma = R"(
-lgamma(arg, /)
 Evaluate the natural logarithm of the absolute value the gamma function.
 
 The implementation of this function is based on the CEPHES library. See the
@@ -1185,7 +1141,6 @@ Returns:
     float | drjit.ArrayBase: :math:`\log|\Gamma(\texttt{arg})|`)";
 
 static const char *doc_sin = R"(
-sin(arg, /)
 Evaluate the sine function.
 
 This function evaluates the component-wise sine of the input scalar, array, or
@@ -1208,7 +1163,6 @@ Returns:
     float | drjit.ArrayBase: Sine of the input)";
 
 static const char *doc_cos = R"(
-cos(arg, /)
 Evaluate the cosine function.
 
 This function evaluates the component-wise cosine of the input scalar, array,
@@ -1232,7 +1186,6 @@ Returns:
 
 
 static const char *doc_sincos = R"(
-sincos(arg, /)
 Evaluate both sine and cosine functions at the same time.
 
 This function simultaneously evaluates the component-wise sine and cosine of
@@ -1258,7 +1211,6 @@ Returns:
     (float, float) | (drjit.ArrayBase, drjit.ArrayBase): Sine and cosine of the input)";
 
 static const char *doc_tan = R"(
-tan(arg, /)
 Evaluate the tangent function.
 
 This function evaluates the component-wise tangent function associated with
@@ -1282,7 +1234,6 @@ Returns:
     float | drjit.ArrayBase: Tangent of the input)";
 
 static const char *doc_asin = R"(
-asin(arg, /)
 Evaluate the arcsine function.
 
 This function evaluates the component-wise arcsine of the input scalar, array,
@@ -1311,7 +1262,6 @@ Returns:
 
 
 static const char *doc_acos = R"(
-acos(arg, /)
 Evaluate the arccosine function.
 
 This function evaluates the component-wise arccosine of the input scalar, array,
@@ -1340,7 +1290,6 @@ Returns:
 
 
 static const char *doc_atan = R"(
-atan(arg, /)
 Evaluate the arctangent function.
 
 This function evaluates the component-wise arctangent of the input scalar, array,
@@ -1358,7 +1307,6 @@ Returns:
     float | drjit.ArrayBase: Arctangent of the input)";
 
 static const char *doc_atan2 = R"(
-atan2(y, x, /)
 Evaluate the four-quadrant arctangent function.
 
 This function is currently only implemented for real-valued inputs.
@@ -1375,7 +1323,6 @@ Returns:
     determine the quadrant of the return value)";
 
 static const char *doc_ldexp = R"(
-ldexp(x, n, /)
 Multiply x by 2 taken to the power of n
 
 Args:
@@ -1386,7 +1333,6 @@ Returns:
     float | drjit.ArrayBase: The result of ``x`` multiplied by 2 taken to the power ``n``.)";
 
 static const char *doc_sinh = R"(
-sinh(arg, /)
 Evaluate the hyperbolic sine function.
 
 This function evaluates the component-wise hyperbolic sine of the input scalar,
@@ -1405,7 +1351,6 @@ Returns:
 
 
 static const char *doc_cosh = R"(
-cosh(arg, /)
 Evaluate the hyperbolic cosine function.
 
 This function evaluates the component-wise hyperbolic cosine of the input
@@ -1424,7 +1369,6 @@ Returns:
 
 
 static const char *doc_sincosh = R"(
-sincosh(arg, /)
 Evaluate both hyperbolic sine and cosine functions at the same time.
 
 This function simultaneously evaluates the component-wise hyperbolic sine and
@@ -1444,7 +1388,6 @@ Returns:
     (float, float) | (drjit.ArrayBase, drjit.ArrayBase): Hyperbolic sine and cosine of the input)";
 
 static const char *doc_tanh = R"(
-tanh(arg, /)
 Evaluate the hyperbolic tangent function.
 
 This function evaluates the component-wise hyperbolic tangent of the input
@@ -1463,7 +1406,6 @@ Returns:
 
 
 static const char *doc_asinh = R"(
-asinh(arg, /)
 Evaluate the hyperbolic arcsine function.
 
 This function evaluates the component-wise hyperbolic arcsine of the input
@@ -1482,7 +1424,6 @@ Returns:
 
 
 static const char *doc_acosh = R"(
-acosh(arg, /)
 Hyperbolic arccosine approximation.
 
 This function evaluates the component-wise hyperbolic arccosine of the input
@@ -1501,7 +1442,6 @@ Returns:
 
 
 static const char *doc_atanh = R"(
-atanh(arg, /)
 Evaluate the hyperbolic arctangent function.
 
 This function evaluates the component-wise hyperbolic arctangent of the input
@@ -1519,7 +1459,6 @@ Returns:
     float | drjit.ArrayBase: Hyperbolic arctangent of the input)";
 
 static const char *doc_frexp = R"(
-frexp(arg, /)
 Break the given floating point number into normalized fraction and power of 2
 
 Args:
@@ -1532,7 +1471,6 @@ Returns:
 
 
 static const char *doc_fma = R"(
-fma(arg0, arg1, arg2, /)
 Perform a *fused multiply-addition* (FMA) of the inputs.
 
 Given arguments ``arg0``, ``arg1``, and ``arg2``, this operation computes
@@ -1825,7 +1763,6 @@ Returns:
 )";
 
 static const char *doc_shape = R"(
-shape(arg, /)
 Return a tuple describing dimension and shape of the provided Dr.Jit array,
 tensor, or standard sequence type.
 
@@ -2015,7 +1952,6 @@ Returns:
 
 
 static const char *doc_float_array_t = R"(
-float_array_t(arg, /)
 Converts the provided Dr.Jit array/tensor type into a *floating point*
 version with the same element size.
 
@@ -3238,8 +3174,6 @@ Args:
 )";
 
 static const char *doc_forward_from = R"(
-forward_from(arg: drjit.ArrayBase, flags: drjit.ADFlag | int = drjit.ADFlag.Default)
-
 Forward-propagate gradients from the provided Dr.Jit array or tensor.
 
 This function sets the gradient of the provided Dr.Jit array or tensor ``arg``
@@ -3279,8 +3213,6 @@ Args:
 )";
 
 static const char *doc_forward_to = R"(
-forward_to(*args, *, flags: drjit.ADFlag | int = drjit.ADFlag.Default)
-
 Forward-propagate gradients to the provided set of Dr.Jit arrays/tensors.
 
 .. code-block:: python
@@ -3327,8 +3259,6 @@ Returns:
 )";
 
 static const char *doc_forward = R"(
-forward(arg: drjit.ArrayBase, flags: drjit.ADFlag | int = drjit.ADFlag.Default)
-
 Forward-propagate gradients from the provided Dr.Jit array or tensor
 
 This function is an alias of :py:func:`drjit.forward_from()`. Please refer to
@@ -3342,8 +3272,6 @@ Args:
 )";
 
 static const char *doc_backward_from = R"(
-backward_from(arg: drjit.ArrayBase, flags: drjit.ADFlag | int = drjit.ADFlag.Default)
-
 Backpropagate gradients from the provided Dr.Jit array or tensor.
 
 This function sets the gradient of the provided Dr.Jit array or tensor ``arg``
@@ -3383,8 +3311,6 @@ Args:
 )";
 
 static const char *doc_backward_to = R"(
-backward_to(*args, *, flags: drjit.ADFlag | int = drjit.ADFlag.Default)
-
 Backpropagate gradients to the provided set of Dr.Jit arrays/tensors.
 
 .. code-block:: python
@@ -3431,8 +3357,6 @@ Returns:
 )";
 
 static const char *doc_backward = R"(
-backward(arg: drjit.ArrayBase, flags: drjit.ADFlag | int = drjit.ADFlag.Default)
-
 Backpropgate gradients from the provided Dr.Jit array or tensor.
 
 This function is an alias of :py:func:`drjit.backward_from()`. Please refer to
@@ -3528,7 +3452,6 @@ Returns:
 )";
 
 static const char *doc_suspend_grad = R"(
-suspend_grad(*args, when = True)
 Context manager for temporally suspending derivative tracking.
 
 Dr.Jit's AD layer keeps track of a set of variables for which derivative
@@ -3596,7 +3519,6 @@ Args:
 )";
 
 static const char *doc_resume_grad = R"(
-resume_grad(*args, when = True)
 Context manager for temporally resume derivative tracking.
 
 Dr.Jit's AD layer keeps track of a set of variables for which derivative
@@ -4036,8 +3958,6 @@ such a custom operation.
 )";
 
 static const char *doc_switch = R"(
-switch(index: int | drjit.ArrayBase, targets: Sequence[Callable], *args, **kwargs) -> object
-
 Selectively invoke functions based on a provided index array.
 
 When called with a *scalar* ``index`` (of type ``int``), this function
@@ -4507,8 +4427,6 @@ Returns:
     termination of the loop.)";
 
 static const char *doc_if_stmt = R"(
-if_stmt(args: tuple, cond: bool|drjit.ArrayBase, true_fn: Callable, false_fn: Callable, rv_labels: list[str] = (), label: Optional[str] = None, Optional[mode]: str = None) -> tuple
-
 Conditionally execute code.
 
 .. rubric:: Motivation
@@ -5887,9 +5805,6 @@ the error compensation of the primal computation. This limitation is of no
 relevance for backward derivatives.)";
 
 static const char *doc_format = R"(
-format(fmt: str, *args, limit: int = 20, **kwargs) -> str
-format(arg, /, limit: int = 20) -> str
-
 Return a formatted string representation.
 
 This function generates a formatted string representation as specified by a
@@ -5964,9 +5879,6 @@ Returns:
     str: The formatted string representation created as specified above.)";
 
 static const char *doc_print = R"(
-print(fmt: str, *args, active: drjit.ArrayBase | bool = True, end: str = '\n', file: object = None, limit: int = 20, mode='auto', **kwargs) -> None
-print(arg: str, /, active: drjit.ArrayBase | bool = True, end: str = '\n', file: object = None, limit: int = 20, mode='auto', **kwargs) -> None
-
 Generate a formatted string representation and print it immediately or
 in a delayed fashion (if any of the inputs are symbolic).
 
@@ -6193,17 +6105,16 @@ ongoing.)";
 static const char *doc_intrusive_base =
     "Base class with intrusive combined C++/Python reference counting.";
 
-static const char *doc_detail_clear_registry =
-    "Clear all instances that are currently registered with Dr.Jit's instance "
-    "registry. This is may be needed in a very specific corner case: when a "
-    "large program (e.g., a test suite) dispatches function calls via instance "
-    "arrays, and when such a test suite raises exceptions internally and holds "
-    "on to them (which is e.g., what PyTest does to report errors all the way "
-    "at the end), then the referenced instances may remain alive beyond their "
-    "usual lifetime. This can have an unintended negative effect by "
-    "influencing subsequent tests that must now also consider the code "
-    "generated by these instances (in particular, failures due to "
-    "unimplemented functions)";
+static const char *doc_detail_clear_registry = R"(
+Clear all instances that are currently registered with Dr.Jit's instance
+registry. This is may be needed in a very specific corner case: when a large
+program (e.g., a test suite) dispatches function calls via instance arrays, and
+when such a test suite raises exceptions internally and holds on to them (which
+is e.g., what PyTest does to report errors all the way at the end), then the
+referenced instances may remain alive beyond their usual lifetime. This can
+have an unintended negative effect by influencing subsequent tests that must
+now also consider the code generated by these instances (in particular,
+failures due to unimplemented functions)";
 
 
 static const char *doc_width = R"(
@@ -6653,9 +6564,6 @@ Query the threshold for performing scatter-reductions via expansion.
 Getter for the quantity set in :py:func:`drjit.set_expand_threshold()`)";
 
 static const char *doc_reshape = R"(
-reshape(dtype: type, value: object, shape: int, order: str = 'A', shrink: bool = False) -> object
-reshape(dtype: type, value: object, shape: tuple[int], order: str = 'A', shrink: bool = False) -> object
-
 Converts ``value`` into an array of type ``dtype`` by rearranging the contents
 according to the specified shape.
 

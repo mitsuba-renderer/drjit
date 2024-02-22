@@ -3,6 +3,29 @@ if (SKBUILD)
   set(DRJIT_DIST_FLAGS LTO STABLE_ABI)
 endif()
 
+# ------------------- Copy Python resources -------------------
+configure_file(
+  ../../resources/config.py.in
+  ${CMAKE_BINARY_DIR}/drjit/config.py
+)
+
+set(PY_FILES __init__.py ast.py config.py detail.py interop.py)
+set(PY_FILES_OUT "${CMAKE_BINARY_DIR}/drjit/config.py")
+foreach(PY_FILE IN LISTS PY_FILES)
+  set(IN_FILE "${CMAKE_SOURCE_DIR}/drjit/${PY_FILE}")
+  if (CMAKE_SOURCE_DIR STREQUAL CMAKE_BINARY_DIR)
+    set(OUT_FILE "${IN_FILE}")
+  else()
+    set(OUT_FILE "${CMAKE_BINARY_DIR}/drjit/${PY_FILE}")
+    add_custom_command(
+      DEPENDS "${IN_FILE}" OUTPUT "${OUT_FILE}"
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different ${IN_FILE} ${OUT_DIR})
+  endif()
+  list(APPEND PY_FILES_OUT ${OUT_FILE})
+endforeach()
+
+# ---------------- Build the main module ----------------
+
 nanobind_add_module(
   drjit-python
 
@@ -59,15 +82,6 @@ if (MSVC)
   target_compile_options(drjit-python PRIVATE /wd4714) # function marked as __forceinline not inlined
 endif()
 
-configure_file(
-  ../../resources/config.py.in
-  ${CMAKE_CURRENT_BINARY_DIR}/../../drjit/config.py
-)
-
-foreach (FNAME IN ITEMS __init__.py ast.py detail.py)
-  configure_file(../../drjit/${FNAME} ${CMAKE_CURRENT_BINARY_DIR}/../../drjit/${FNAME} COPYONLY)
-endforeach()
-
 target_link_libraries(drjit-python PRIVATE drjit drjit-core drjit-extra)
 
 if (DRJIT_ENABLE_LLVM)
@@ -76,4 +90,85 @@ endif()
 
 if (DRJIT_ENABLE_CUDA)
   target_compile_definitions(drjit-python PRIVATE -DDRJIT_ENABLE_CUDA)
+endif()
+
+# ------------------- Stub generation -------------------
+
+nanobind_add_stub(
+  drjit-stub-main
+  PYTHON_PATH ${DRJIT_OUTPUT_DIRECTORY}/..
+  MODULE drjit
+  OUTPUT ${CMAKE_BINARY_DIR}/drjit/__init__.pyi
+  MARKER_FILE ${CMAKE_BINARY_DIR}/drjit/py.typed
+  DEPENDS drjit-python ${PY_FILES_OUT}
+)
+
+nanobind_add_stub(
+  drjit-stub-ast
+  PYTHON_PATH ${DRJIT_OUTPUT_DIRECTORY}/..
+  MODULE drjit.ast
+  OUTPUT ${CMAKE_BINARY_DIR}/drjit/ast.pyi
+  DEPENDS drjit-python ${PY_FILES_OUT}
+)
+
+nanobind_add_stub(
+  drjit-stub-interop
+  PYTHON_PATH ${DRJIT_OUTPUT_DIRECTORY}/..
+  MODULE drjit.interop
+  OUTPUT ${CMAKE_BINARY_DIR}/drjit/interop.pyi
+  DEPENDS drjit-python ${PY_FILES_OUT}
+)
+
+nanobind_add_stub(
+  drjit-stub-detail
+  PYTHON_PATH ${DRJIT_OUTPUT_DIRECTORY}/..
+  MODULE drjit.detail
+  OUTPUT ${CMAKE_BINARY_DIR}/drjit/detail.pyi
+  DEPENDS drjit-python ${PY_FILES_OUT}
+)
+
+nanobind_add_stub(
+  drjit-stub-scalar
+  PYTHON_PATH ${DRJIT_OUTPUT_DIRECTORY}/..
+  MODULE drjit.scalar
+  OUTPUT ${CMAKE_BINARY_DIR}/drjit/scalar.pyi
+  DEPENDS drjit-python ${PY_FILES_OUT}
+)
+
+if (DRJIT_ENABLE_LLVM)
+  nanobind_add_stub(
+    drjit-stub-llvm
+    PYTHON_PATH ${DRJIT_OUTPUT_DIRECTORY}/..
+    MARKER_FILE ${CMAKE_BINARY_DIR}/drjit/llvm/py.typed
+    MODULE drjit.llvm
+    OUTPUT ${CMAKE_BINARY_DIR}/drjit/llvm/__init__.pyi
+    DEPENDS drjit-python ${PY_FILES_OUT}
+  )
+
+  nanobind_add_stub(
+    drjit-stub-llvm-ad
+    PYTHON_PATH ${DRJIT_OUTPUT_DIRECTORY}/..
+    MODULE drjit.llvm.ad
+    OUTPUT ${CMAKE_BINARY_DIR}/drjit/llvm/ad.pyi
+    DEPENDS drjit-python ${PY_FILES_OUT}
+  )
+endif()
+
+if (DRJIT_ENABLE_CUDA)
+  nanobind_add_stub(
+    drjit-stub-cuda
+    PYTHON_PATH ${DRJIT_OUTPUT_DIRECTORY}/..
+    MARKER_FILE ${CMAKE_BINARY_DIR}/drjit/cuda/py.typed
+    MODULE drjit.cuda
+    OUTPUT ${CMAKE_BINARY_DIR}/drjit/cuda/__init__.pyi
+    DEPENDS drjit-python ${PY_FILES_OUT}
+  )
+
+  nanobind_add_stub(
+    drjit-stub-cuda-ad
+    PYTHON_PATH ${DRJIT_OUTPUT_DIRECTORY}/..
+    MODULE drjit.cuda.ad
+    OUTPUT ${CMAKE_BINARY_DIR}/drjit/cuda/ad.pyi
+    DEPENDS drjit-python ${PY_FILES_OUT}
+  )
 endif()

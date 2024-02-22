@@ -190,5 +190,9 @@ nb::object if_stmt(nb::tuple args, nb::handle cond, nb::callable true_fn,
 void export_if_stmt(nb::module_ &m) {
     m.def("if_stmt", &if_stmt, "args"_a, "cond"_a, "true_fn"_a, "false_fn"_a,
           "rv_labels"_a = nb::make_tuple(), "label"_a = nb::none(),
-          "mode"_a = nb::none(), nb::raw_doc(doc_if_stmt));
+          "mode"_a = nb::none(), doc_if_stmt,
+          nb::signature(
+              "if_stmt(args: tuple, cond: bool | drjit.ArrayBase, true_fn: "
+              "Callable, false_fn: Callable, rv_labels: Sequence[str] = (), label: "
+              "Optional[str] = None, mode: Optional[str] = None) -> tuple"));
 }

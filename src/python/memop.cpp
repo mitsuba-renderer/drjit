@@ -1045,7 +1045,7 @@ void export_memop(nb::module_ &m) {
           "dtype"_a, "array"_a, "order"_a = 'A', doc_unravel)
      .def("slice", &slice, "value"_a, "index"_a, doc_slice)
      .def("reshape", &reshape, "dtype"_a, "value"_a,
-          "shape"_a, "order"_a = 'A', "shrink"_a = false, nb::raw_doc(doc_reshape))
+          "shape"_a, "order"_a = 'A', "shrink"_a = false)
      .def("reshape", &reshape_2, "dtype"_a, "value"_a,
           "shape"_a, "order"_a = 'A', "shrink"_a = false)
      .def("tile",
