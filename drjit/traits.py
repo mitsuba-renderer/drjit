@@ -546,7 +546,7 @@ def float_array_t(arg):
         type: Result of the conversion as described above.
     '''
     if not is_array_v(arg):
-        return int
+        return float
 
     size = arg.Type.Size
     if size == 2:
