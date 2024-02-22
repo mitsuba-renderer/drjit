@@ -9,7 +9,7 @@ configure_file(
   ${CMAKE_BINARY_DIR}/drjit/config.py
 )
 
-set(PY_FILES __init__.py ast.py config.py detail.py interop.py)
+set(PY_FILES __init__.py ast.py config.py detail.py interop.py llvm/ad.py cuda/ad.py)
 set(PY_FILES_OUT "${CMAKE_BINARY_DIR}/drjit/config.py")
 foreach(PY_FILE IN LISTS PY_FILES)
   set(IN_FILE "${CMAKE_SOURCE_DIR}/drjit/${PY_FILE}")
@@ -19,7 +19,7 @@ foreach(PY_FILE IN LISTS PY_FILES)
     set(OUT_FILE "${CMAKE_BINARY_DIR}/drjit/${PY_FILE}")
     add_custom_command(
       DEPENDS "${IN_FILE}" OUTPUT "${OUT_FILE}"
-      COMMAND ${CMAKE_COMMAND} -E copy_if_different ${IN_FILE} ${OUT_DIR})
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different ${IN_FILE} ${OUT_FILE})
   endif()
   list(APPEND PY_FILES_OUT ${OUT_FILE})
 endforeach()
