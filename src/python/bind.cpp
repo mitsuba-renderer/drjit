@@ -185,7 +185,14 @@ nb::object bind(const ArrayBinding &b) {
 
     d.base_py = (PyTypeObject *) base_o.ptr();
 
-    // Create the type and update its supplemental information
+    // Type was already bound, let's create an alias
+    nb::handle existing = nb::detail::nb_type_lookup(b.array_type);
+    if (existing) {
+        nb::handle(d.scope).attr(name.c_str()) = existing;
+        return nb::borrow(existing);
+    }
+
+    // Create a new type and update its supplemental information
     nb::object tp = nb::steal(nb::detail::nb_type_new(&d));
     ArraySupplement &s = nb::type_supplement<ArraySupplement>(tp);
     s = b;
