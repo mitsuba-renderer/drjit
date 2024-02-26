@@ -65,7 +65,7 @@ int tp_init_array(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
                     // Potentially convert AD <-> non-AD arrays
                     ArrayMeta m_temp = s_arg;
                     m_temp.is_diff = m_self.is_diff;
-                    if (m_temp == m_self && m_self.ndim == 1) {
+                    if (m_temp == m_self && m_self.ndim == 1 && s_arg.index) {
                         uint32_t index = (uint32_t) s_arg.index(inst_ptr(arg));
                         s.init_index(index, inst_ptr(self));
                         nb::inst_mark_ready(self);
