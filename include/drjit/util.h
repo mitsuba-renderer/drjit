@@ -187,8 +187,8 @@ Index binary_search(scalar_t<Index> start_, scalar_t<Index> end_,
         if (iterations >= 2 && jit_flag(JitFlag::LoopRecord)) {
             Index1 index = zeros<Index1>(width(pred(start)));
 
-            tuple(start, end, index) = drjit::while_loop(
-                tuple(start, end, index),
+            drjit::tie(start, end, index) = drjit::while_loop(
+                drjit::make_tuple(start, end, index),
                 [iterations](const Index&, const Index&, const Index1& index) {
                     return index < iterations;
                 },
@@ -249,8 +249,8 @@ IndexN binary_search(typename std::enable_if_t<is_jit_v<Index1>, Index1> start_,
     if (jit_flag(JitFlag::Recording))
         jit_set_flag(JitFlag::LoopRecord, true);
 
-    tuple(start, end, index) = drjit::while_loop(
-        tuple(start, end, index),
+    drjit::tie(start, end, index) = drjit::while_loop(
+        drjit::make_tuple(start, end, index),
         [iterations](const IndexN&, const IndexN&, const Index1& index) {
             return index < iterations;
         },
