@@ -978,7 +978,7 @@ def copysign(arg0, arg1, /):
     Returns:
         float | int | drjit.ArrayBase: The values of ``arg0`` with the sign of ``arg1``
     '''
-    arg0_a = abs(a)
+    arg0_a = abs(arg0)
     return select(arg1 >= 0, arg0_a, -arg0_a)
 
 
