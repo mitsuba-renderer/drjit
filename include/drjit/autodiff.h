@@ -239,6 +239,9 @@ struct DRJIT_TRIVIAL_ABI DiffArray
     }
 
     template <typename T> DiffArray and_(const T &v) const {
+        if constexpr (is_mask_v<T> && !is_mask_v<DiffArray>)
+            return select(v, *this, zeros<DiffArray>(size()));
+
         if (grad_enabled_())
             jit_raise("DiffArray::and_(): not permitted on attached variables!");
         return steal(jit_var_and((uint32_t) m_index, (uint32_t) v.m_index));
