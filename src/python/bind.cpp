@@ -25,6 +25,8 @@ nb::object bind(const ArrayBinding &b) {
                     vt == VarType::Float32 ||
                     vt == VarType::Float64;
 
+    nb::object self_type_py = nb::str(name.c_str());
+
     // Look up the scalar type underlying the array
     nb::object scalar_type_py;
     if (is_bool)
@@ -47,10 +49,10 @@ nb::object bind(const ArrayBinding &b) {
         scalar_type_py = nb::borrow(scalar_t(value_type_py));
     }
 
-    // Cache a reference to the associated mask type for use in the bindings
+    // Look up the mask type resulting from comparisons involving this type
     nb::object mask_type_py;
     if (is_bool) {
-        mask_type_py = nb::str(name.c_str()); // reference self
+        mask_type_py = self_type_py; // reference self
     } else {
         ArrayMeta m2 = b;
         m2.type = (uint16_t) VarType::Bool;
@@ -59,10 +61,16 @@ nb::object bind(const ArrayBinding &b) {
         mask_type_py = nb::borrow(meta_get_type(m2));
     }
 
+    // Determine what other types 'b' are acceptable in an arithmetic operation
+    // like 'a + b' or 'a | b' so that the result clearly has type 'a'
+    nb::object compat_type_py = value_type_py;
+    if (!scalar_type_py.is(value_type_py))
+        compat_type_py = compat_type_py | scalar_type_py;
+
     // Determine the type of reduction operations that potentially strip the outermost dimension
     nb::object reduce_type_py;
     if (b.ndim == 1 && (JitBackend) b.backend != JitBackend::None)
-        reduce_type_py = nb::str(name.c_str()); // reference self
+        reduce_type_py = self_type_py; // reference self
     else
         reduce_type_py = value_type_py;
 
@@ -114,7 +122,8 @@ nb::object bind(const ArrayBinding &b) {
 
     // Parameterize generic base class
     nb::object base_py =
-        array_base[nb::make_tuple(value_type_py, scalar_type_py, mask_type_py, reduce_type_py)];
+        array_base[nb::make_tuple(self_type_py, value_type_py, compat_type_py,
+                                  mask_type_py, reduce_type_py)];
 
     d.base_py = (PyTypeObject *) base_py.ptr();
 
