@@ -365,9 +365,9 @@ void export_reduce(nb::module_ & m) {
      .def("prod", &prod, "value"_a, "axis"_a.none() = 0, doc_prod)
      .def("min", &min, "value"_a, "axis"_a.none() = 0, doc_min)
      .def("max", &max, "value"_a, "axis"_a.none() = 0, doc_max)
-     .def("dot", &dot, doc_dot)
-     .def("dot", [](double d1, double d2) { return d1 * d2; })
      .def("dot", [](Py_ssize_t d1, Py_ssize_t d2) { return d1 * d2; })
+     .def("dot", [](double d1, double d2) { return d1 * d2; })
+     .def("dot", &dot, doc_dot)
      .def("abs_dot",
           [](nb::handle h0, nb::handle h1) -> nb::object {
               return array_module.attr("abs")(

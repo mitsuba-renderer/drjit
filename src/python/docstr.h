@@ -6786,7 +6786,18 @@ static const char *doc_ArrayBase = R"(
 This is the base class of all Dr.Jit arrays and tensors. It provides an
 abstract version of the array API that becomes usable when the type is extended
 by a concrete specialization. :py:class:`ArrayBase` itself cannot be
-instantiated.)";
+instantiated.
+
+The :py:class:`ArrayBase` class is an abstract + generic Python type
+parameterized by several auxiliary type parameters. They help static type
+checkers like MyPy and PyRight make sense how subclasses of this type transform
+when passed to various builtin operations. These auxiliary parameters are:
+
+- ``SelfT``:   the type of the array subclass
+- ``ItemT``:   the type of an individual array item
+- ``UnionT``:  union of the item type, its item type, etc.
+- ``RedT``:    type following reduction by 'dr.sum' or 'dr.all'
+- ``MaskT``:   type produced by comparisons such as '__eq__')";
 
 static const char *doc_ArrayBase_init = R"(
 Construct a Dr.Jit array.
