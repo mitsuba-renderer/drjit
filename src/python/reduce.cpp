@@ -97,7 +97,8 @@ nb::object reduce(const char *name, ArrayOp op_id, nb::handle h,
 
             size_t i = 0;
             for (nb::handle h2 : h)
-                result[i++] = reduce(name, op_id, h2, axis_value - 1, reduce_skip, reduce_init, reduce_combine);
+                result[i++] = reduce(name, op_id, h2, axis_value - 1,
+                                     reduce_skip, reduce_init, reduce_combine);
 
             return result;
         }

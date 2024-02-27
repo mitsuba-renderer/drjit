@@ -924,9 +924,32 @@ static VarState get_state(nb::handle h_) {
 }
 
 void export_base(nb::module_ &m) {
+    m.attr("ScalarT") = nb::type_var("ScalarT");
+    m.attr("ValueT") = nb::type_var("ValueT");
+    m.attr("MaskT") = nb::type_var("MaskT");
+    m.attr("ReduceT") = nb::type_var("ReduceT");
+    m.attr("SelfT") = nb::type_var("SelfT", "bound"_a = "ArrayBase");
+    m.attr("ArrayT") = nb::type_var("ArrayT", "bound"_a = "ArrayBase");
+
     nb::class_<ArrayBase> ab(m, "ArrayBase",
-                                 nb::type_slots(array_base_slots),
-                                 nb::supplement<ArraySupplement>());
+                             nb::type_slots(array_base_slots),
+                             nb::supplement<ArraySupplement>(),
+                             nb::sig("class ArrayBase(typing.Generic[ValueT, ScalarT, MaskT, ReduceT])"),
+                             nb::is_generic(),
+                             doc_ArrayBase);
+
+    ab.def("__init__",
+           [](ArrayBase &, nb::handle) {
+                nb::raise("drjit.ArrayBase is not constructible.");
+           }, nb::sig("def __init__(self, *args) -> None"),
+           doc_ArrayBase_init
+    );
+
+    ab.def("__init__",
+           [](ArrayBase &, nb::handle, nb::handle) {
+                nb::raise("drjit.ArrayBase is not constructible.");
+           }, nb::sig("def __init__(self, array : object, shape: tuple[int]) -> None"),
+           doc_ArrayBase_init_2);
 
     ab.def_prop_ro_static("__meta__", [](nb::type_object_t<ArrayBase> tp) {
         return meta_str(supp(tp));
@@ -948,20 +971,36 @@ void export_base(nb::module_ &m) {
         },
         doc_ArrayBase_array);
 
-    ab.def_prop_rw("x", xyzw_getter<0>, xyzw_setter<0>, doc_ArrayBase_x);
-    ab.def_prop_rw("y", xyzw_getter<1>, xyzw_setter<1>, doc_ArrayBase_y);
-    ab.def_prop_rw("z", xyzw_getter<2>, xyzw_setter<2>, doc_ArrayBase_z);
-    ab.def_prop_rw("w", xyzw_getter<3>, xyzw_setter<3>, doc_ArrayBase_w);
+    ab.def_prop_rw("x", xyzw_getter<0>, xyzw_setter<0>, doc_ArrayBase_x,
+                   nb::for_getter(nb::sig("def x(self, /) -> ValueT")),
+                   nb::for_setter(nb::sig("def x(self, value: ValueT | ScalarT, /) -> None")));
 
-    ab.def_prop_rw("real", complex_getter<0>, complex_setter<0>, doc_ArrayBase_real);
-    ab.def_prop_rw("imag", complex_getter<1>, complex_setter<1>, doc_ArrayBase_imag);
+    ab.def_prop_rw("y", xyzw_getter<1>, xyzw_setter<1>, doc_ArrayBase_y,
+                   nb::for_getter(nb::sig("def y(self, /) -> ValueT")),
+                   nb::for_setter(nb::sig("def y(self, value: ValueT | ScalarT, /) -> None")));
+    ab.def_prop_rw("z", xyzw_getter<2>, xyzw_setter<2>, doc_ArrayBase_z,
+                   nb::for_getter(nb::sig("def z(self, /) -> ValueT")),
+                   nb::for_setter(nb::sig("def z(self, value: ValueT | ScalarT, /) -> None")));
+    ab.def_prop_rw("w", xyzw_getter<3>, xyzw_setter<3>, doc_ArrayBase_w,
+                   nb::for_getter(nb::sig("def w(self, /) -> ValueT")),
+                   nb::for_setter(nb::sig("def w(self, value: ValueT | ScalarT, /) -> None")));
 
-    ab.def_prop_ro("T", transpose_getter, doc_ArrayBase_T);
+    ab.def_prop_rw("real", complex_getter<0>, complex_setter<0>, doc_ArrayBase_real,
+                   nb::for_getter(nb::sig("def real(self, /) -> ValueT")),
+                   nb::for_setter(nb::sig("def real(self, value: ValueT | ScalarT, /) -> None")));
+    ab.def_prop_rw("imag", complex_getter<1>, complex_setter<1>, doc_ArrayBase_imag,
+                   nb::for_getter(nb::sig("def imag(self, /) -> ValueT")),
+                   nb::for_setter(nb::sig("def imag(self, value: ValueT | ScalarT, /) -> None")));
+
+    ab.def_prop_ro("T", transpose_getter, doc_ArrayBase_T, nb::sig("def T(self: SelfT, /) -> SelfT"));
 
     ab.def_prop_rw(
         "grad", [](nb::handle_t<ArrayBase> h) { return ::grad(h); },
         [](nb::handle_t<ArrayBase> h, nb::handle h2) { ::set_grad(h, h2); },
-        doc_ArrayBase_grad);
+        doc_ArrayBase_grad,
+        nb::for_getter(nb::sig("def grad(self: SelfT, /) -> SelfT")),
+        nb::for_setter(nb::sig("def grad(self: SelfT, value: SelfT | ValueT | ScalarT, /) -> None"))
+    );
 
     ab.def_prop_rw("label",
         [](nb::handle_t<dr::ArrayBase> h) -> nb::object {

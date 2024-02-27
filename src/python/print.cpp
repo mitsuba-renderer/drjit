@@ -698,17 +698,17 @@ void export_print(nb::module_ &m) {
                                  kwargs);
           },
           "fmt"_a.noconvert(), "args"_a, "kwargs"_a, doc_format,
-          nb::signature("format(fmt: str, *args, limit: int = 20, **kwargs)"))
+          nb::sig("def format(fmt: str, *args, limit: int = 20, **kwargs)"))
       .def("format",
            [](nb::handle value, nb::kwargs kwargs) {
                return format_impl("drjit.format", "{}", nb::handle(),
                                   nb::borrow<nb::args>(nb::make_tuple(value)),
                                   kwargs);
            }, "value"_a, "kwargs"_a,
-          nb::signature("format(value: object, *, limit: int = 20, **kwargs)"))
+          nb::sig("def format(value: object, *, limit: int = 20, **kwargs)"))
       .def("print", &print_impl, "fmt"_a.noconvert(), "args"_a, "kwargs"_a,
            doc_print,
-           nb::signature("print(fmt: str, *args, active: drjit.ArrayBase | "
+           nb::sig("def print(fmt: str, *args, active: drjit.ArrayBase | "
                          "bool = True, end: str = '\\n', file: object = None, "
                          "limit: int = 20, mode='auto', **kwargs) -> None"))
       .def(
@@ -717,7 +717,7 @@ void export_print(nb::module_ &m) {
               print_impl("{}", nb::borrow<nb::args>(nb::make_tuple(value)), kwargs);
           },
           "value"_a, "kwargs"_a,
-          nb::signature("print(value: object, /, active: drjit.ArrayBase | "
+          nb::sig("def print(value: object, /, active: drjit.ArrayBase | "
                         "bool = True, end: str = '\\n', file: object = None, "
                         "limit: int = 20, mode='auto', **kwargs) -> None"));
 }

@@ -231,7 +231,7 @@ nb::object dispatch_impl(nb::handle_t<dr::ArrayBase> instances,
 void export_switch(nb::module_&m) {
     m.def("switch", &switch_impl, doc_switch, "index"_a,
           "targets"_a, "args"_a, "kwargs"_a,
-          nb::signature("switch(index: int | drjit.ArrayBase, targets: Sequence[Callable], *args, **kwargs) -> object"))
+          nb::sig("def switch(index: int | drjit.ArrayBase, targets: Sequence[Callable], *args, **kwargs) -> object"))
      .def("dispatch", &dispatch_impl, doc_dispatch, "instances"_a,
           "func"_a, "args"_a, "kwargs"_a);
 }

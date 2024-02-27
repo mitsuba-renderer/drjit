@@ -60,8 +60,9 @@ nanothread.dll
 libnanobind-drjit.dylib
 libnanobind-drjit.so
 nanobind-drjit.dll
-drjit_ext.cp*
-drjit_ext.abi3.*
+_drjit_ext.cp*
+_drjit_ext.abi3.*
+py\.typed
 /drjitConfig.cmake
 /drjitConfigVersion.cmake
 drjit/config.py

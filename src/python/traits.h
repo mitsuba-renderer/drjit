@@ -21,3 +21,4 @@ extern bool is_matrix_v(nb::handle h);
 extern bool is_complex_v(nb::handle h);
 extern bool is_quaternion_v(nb::handle h);
 extern nb::object tensor_t(nb::handle h);
+extern nb::handle scalar_t(nb::handle h);

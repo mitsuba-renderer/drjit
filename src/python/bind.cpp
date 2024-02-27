@@ -13,11 +13,58 @@
 #include "base.h"
 #include "init.h"
 #include "slice.h"
+#include "traits.h"
 
 nb::object bind(const ArrayBinding &b) {
-    const char *name = b.name;
-    if (!name)
-        name = meta_get_name(b);
+    // Compute the name of the type if not provided
+    dr::string name = b.name ? b.name : meta_get_name(b);
+
+    VarType vt = (VarType) b.type;
+    bool is_bool  = vt == VarType::Bool;
+    bool is_float = vt == VarType::Float16 ||
+                    vt == VarType::Float32 ||
+                    vt == VarType::Float64;
+
+    // Look up the scalar type underlying the array
+    nb::object scalar_type_py;
+    if (is_bool)
+        scalar_type_py = nb::borrow(&PyBool_Type);
+    else if (is_float)
+        scalar_type_py = nb::borrow(&PyFloat_Type);
+    else
+        scalar_type_py = nb::borrow(&PyLong_Type);
+
+    // Look up the value type underlying the array
+    nb::object value_type_py;
+    if (!b.value_type) {
+        value_type_py = scalar_type_py;
+    } else {
+        value_type_py = nb::borrow(nb::detail::nb_type_lookup(b.value_type));
+        if (!value_type_py.is_valid())
+            nb::detail::raise(
+                "nanobind.detail.bind(\"%s\"): element type \"%s\" not found.",
+                name.c_str(), b.value_type->name());
+        scalar_type_py = nb::borrow(scalar_t(value_type_py));
+    }
+
+    // Cache a reference to the associated mask type for use in the bindings
+    nb::object mask_type_py;
+    if (is_bool) {
+        mask_type_py = nb::str(name.c_str()); // reference self
+    } else {
+        ArrayMeta m2 = b;
+        m2.type = (uint16_t) VarType::Bool;
+        m2.is_vector = m2.is_complex = m2.is_quaternion =
+            m2.is_matrix = false;
+        mask_type_py = nb::borrow(meta_get_type(m2));
+    }
+
+    // Determine the type of reduction operations that potentially strip the outermost dimension
+    nb::object reduce_type_py;
+    if (b.ndim == 1 && (JitBackend) b.backend != JitBackend::None)
+        reduce_type_py = nb::str(name.c_str()); // reference self
+    else
+        reduce_type_py = value_type_py;
 
     nb::detail::type_init_data d;
 
@@ -46,7 +93,7 @@ nb::object bind(const ArrayBinding &b) {
 
     d.align = b.talign;
     d.size = b.tsize_rel * b.talign;
-    d.name = name;
+    d.name = name.c_str();
     d.type = b.array_type;
     d.supplement = (uint32_t) sizeof(ArraySupplement);
 
@@ -59,11 +106,17 @@ nb::object bind(const ArrayBinding &b) {
 
     d.type_slots = slots;
     d.type_slots_callback = nullptr;
+
     if (b.scope.is_valid())
         d.scope = b.scope.ptr();
     else
         d.scope = meta_get_module(b).ptr();
-    d.base_py = (PyTypeObject *) array_base.ptr();
+
+    // Parameterize generic base class
+    nb::object base_py =
+        array_base[nb::make_tuple(value_type_py, scalar_type_py, mask_type_py, reduce_type_py)];
+
+    d.base_py = (PyTypeObject *) base_py.ptr();
 
     // Create the type and update its supplemental information
     nb::object tp = nb::steal(nb::detail::nb_type_new(&d));
@@ -102,43 +155,6 @@ nb::object bind(const ArrayBinding &b) {
 
     nb::detail::implicitly_convertible(pred, b.array_type);
 
-    VarType vt = (VarType) b.type;
-    bool is_bool  = vt == VarType::Bool;
-    bool is_float = vt == VarType::Float16 ||
-                    vt == VarType::Float32 ||
-                    vt == VarType::Float64;
-
-    // Cache a reference to the underlying value type for use in the bindings
-    nb::handle value_type_py;
-    if (!b.value_type) {
-        if (is_bool)
-            value_type_py = &PyBool_Type;
-        else if (is_float)
-            value_type_py = &PyFloat_Type;
-        else
-            value_type_py = &PyLong_Type;
-    } else {
-        value_type_py = nb::detail::nb_type_lookup(b.value_type);
-        if (!value_type_py.is_valid())
-            nb::detail::fail(
-                "nanobind.detail.bind(%s): element type '%s' not found.",
-                d.type->name(), b.value_type->name());
-    }
-    s.value = value_type_py.ptr();
-
-    // Cache a reference to the associated mask type for use in the bindings
-    nb::handle mask_type_py;
-    if (is_bool) {
-        mask_type_py = tp;
-    } else {
-        ArrayMeta m2 = b;
-        m2.type = (uint16_t) VarType::Bool;
-        m2.is_vector = m2.is_complex = m2.is_quaternion =
-            m2.is_matrix = false;
-        mask_type_py = meta_get_type(m2);
-    }
-    s.mask = mask_type_py.ptr();
-
     // Cache a reference to the associated array type (for special types like matrices)
     nb::handle array_type_py;
     if (!s.is_tensor && !s.is_complex && !s.is_quaternion && !s.is_matrix) {
@@ -159,6 +175,8 @@ nb::object bind(const ArrayBinding &b) {
         }
     }
 
+    s.value = value_type_py.ptr();
+    s.mask = is_bool ? tp.ptr() : mask_type_py.ptr();
     s.array = array_type_py.ptr();
 
     return tp;

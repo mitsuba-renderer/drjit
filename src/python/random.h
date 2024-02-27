@@ -12,22 +12,22 @@ void bind_pcg32(nb::module_ &m) {
     auto pcg32 = nb::class_<PCG32>(m, "PCG32", doc_PCG32)
         .def(nb::init<size_t, const UInt64 &, const UInt64 &>(),
              "size"_a = 1,
-             "initstate"_a = PCG32_DEFAULT_STATE,
-             "initseq"_a = PCG32_DEFAULT_STREAM, doc_PCG32_PCG32)
+             "initstate"_a.sig("UInt64(0x853c49e6748fea9b)") = PCG32_DEFAULT_STATE,
+             "initseq"_a.sig("UInt64(0xda3e39cb94b95bdb)") = PCG32_DEFAULT_STREAM, doc_PCG32_PCG32)
         .def(nb::init<const PCG32 &>(), doc_PCG32_PCG32_2)
         .def("seed", &PCG32::seed,
-             "initstate"_a = PCG32_DEFAULT_STATE,
-             "initseq"_a = PCG32_DEFAULT_STREAM, doc_PCG32_seed)
+             "initstate"_a.sig("UInt64(0x853c49e6748fea9b)")  = PCG32_DEFAULT_STATE,
+             "initseq"_a.sig("UInt64(0xda3e39cb94b95bdb)") = PCG32_DEFAULT_STREAM, doc_PCG32_seed)
         .def("next_uint32", nb::overload_cast<>(&PCG32::next_uint32), doc_PCG32_next_uint32)
         .def("next_uint32",
              nb::overload_cast<const dr::mask_t<UInt64> &>(&PCG32::next_uint32))
         .def("next_uint32_bounded", &PCG32::next_uint32_bounded, "bound"_a,
-             "mask"_a = true, doc_PCG32_next_uint32_bounded)
+             "mask"_a.sig("Bool(True)") = true, doc_PCG32_next_uint32_bounded)
         .def("next_uint64", nb::overload_cast<>(&PCG32::next_uint64), doc_PCG32_next_uint64)
         .def("next_uint64",
              nb::overload_cast<const dr::mask_t<UInt64> &>(&PCG32::next_uint64))
         .def("next_uint64_bounded", &PCG32::next_uint64_bounded, "bound"_a,
-             "mask"_a = true, doc_PCG32_next_uint64_bounded)
+             "mask"_a.sig("Bool(True)") = true, doc_PCG32_next_uint64_bounded)
         .def("next_float32", nb::overload_cast<>(&PCG32::next_float32))
         .def("next_float32", nb::overload_cast<const dr::mask_t<UInt64> &>(
                                  &PCG32::next_float32), doc_PCG32_next_float32)

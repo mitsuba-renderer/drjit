@@ -568,13 +568,15 @@ template <typename T> void bind_arithmetic(ArrayBinding &b) {
 
     };
 
-    b[ArrayOp::Sum] = (void *) +[](const T *a, T *b) { new (b) T(a->sum_()); };
-    b[ArrayOp::Prod] = (void *) +[](const T *a, T *b) { new (b) T(a->prod_()); };
-    b[ArrayOp::Min] = (void *) +[](const T *a, T *b) { new (b) T(a->min_()); };
-    b[ArrayOp::Max] = (void *) +[](const T *a, T *b) { new (b) T(a->max_()); };
-    b[ArrayOp::PrefixSum] = (void *) +[](const T *a, bool exclusive, T *b) {
-        new (b) T(a->prefix_sum_(exclusive));
-    };
+    if constexpr (is_jit_v<T>) {
+        b[ArrayOp::Sum] = (void *) +[](const T *a, T *b) { new (b) T(a->sum_()); };
+        b[ArrayOp::Prod] = (void *) +[](const T *a, T *b) { new (b) T(a->prod_()); };
+        b[ArrayOp::Min] = (void *) +[](const T *a, T *b) { new (b) T(a->min_()); };
+        b[ArrayOp::Max] = (void *) +[](const T *a, T *b) { new (b) T(a->max_()); };
+        b[ArrayOp::PrefixSum] = (void *) +[](const T *a, bool exclusive, T *b) {
+            new (b) T(a->prefix_sum_(exclusive));
+        };
+    }
 }
 
 inline void disable_arithmetic(ArrayBinding &b) {
@@ -680,11 +682,13 @@ void bind_tensor(ArrayBinding &b) {
 }
 
 template <typename T> void bind_mask_reductions(ArrayBinding &b) {
-    b[ArrayOp::All] = (void *) +[](const T *a, T *b) { new (b) T(a->all_()); };
-    b[ArrayOp::Any] = (void *) +[](const T *a, T *b) { new (b) T(a->any_()); };
-    b[ArrayOp::Count] = (void *) +[](const T *a, uint32_array_t<T> *b) {
-        new (b) uint32_array_t<T>(a->count_());
-    };
+    if constexpr (is_jit_v<T>) {
+        b[ArrayOp::All] = (void *) +[](const T *a, T *b) { new (b) T(a->all_()); };
+        b[ArrayOp::Any] = (void *) +[](const T *a, T *b) { new (b) T(a->any_()); };
+        b[ArrayOp::Count] = (void *) +[](const T *a, uint32_array_t<T> *b) {
+            new (b) uint32_array_t<T>(a->count_());
+        };
+    }
 
     b.compress =
         (ArraySupplement::UnaryOp) +

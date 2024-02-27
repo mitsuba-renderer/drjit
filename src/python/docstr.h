@@ -1847,8 +1847,8 @@ This member plays multiple roles:
   of the tensor in the form of a linearized dynamic 1D array.
 
 - When ``self`` is a special arithmetic object (matrix, quaternion, or complex
-  number), ``array`` provides an ordinary copy of the same data with ordinary
-  array semantics.
+  number), ``array`` provides an copy of the same data with ordinary array
+  semantics.
 
 - In all other cases, ``array`` is simply a reference to ``self``.
 
@@ -6781,6 +6781,38 @@ Args:
 
 Returns:
     Sum over elements within blocks)";
+
+static const char *doc_ArrayBase = R"(
+This is the base class of all Dr.Jit arrays and tensors. It provides an
+abstract version of the array API that becomes usable when the type is extended
+by a concrete specialization. :py:class:`ArrayBase` itself cannot be
+instantiated.)";
+
+static const char *doc_ArrayBase_init = R"(
+Construct a Dr.Jit array.
+
+Arrays can be constructed ..
+
+- from a sequence: ``Array3f([1, 2, 3])``
+- from individual components: ``Array3f(1, 2, 3)``
+- from a convertible type: ``Array3f(Array3i(1, 2, 3))``
+- from an tensor in another framework like NumPy, PyTorch, etc: ``Array3f(np.array([1, 2, 3]))``
+- via a broadcast: ``Array3f(1)`` (equivalent to ``Array3f(1, 1, 1)``)
+
+Note that this constructor is only available in *subclasses* of the
+:py:class:`drjit.ArrayBase` type.
+)";
+
+
+static const char *doc_ArrayBase_init_2 = R"(
+Construct a Dr.Jit tensor.
+
+The function expects a linearized 1D array (in C-style order) and a shape
+descriptor as inputs.
+
+Note that this constructor is only available in *tensor subclasses* of the
+:py:class:`drjit.ArrayBase` type.
+)";
 
 #if defined(__GNUC__)
 #  pragma GCC diagnostic pop
