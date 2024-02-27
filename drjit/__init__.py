@@ -2,7 +2,7 @@ from . import detail
 
 with detail.scoped_rtld_deepbind():
     try:
-        from . import drjit_ext as _drjit_ext
+        from . import _drjit_ext as _drjit_ext
     except ImportError as e:
         import platform
         py_ver_pkg = detail._PYTHON_VERSION

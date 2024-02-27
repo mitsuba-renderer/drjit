@@ -13,7 +13,7 @@
 #include "base.h"
 #include "meta.h"
 
-static nb::handle scalar_t(nb::handle h) {
+nb::handle scalar_t(nb::handle h) {
     nb::handle tp = h.is_type() ? h : h.type();
     while (is_drjit_type(tp))
         tp = supp(tp).value;

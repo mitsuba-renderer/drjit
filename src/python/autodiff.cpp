@@ -575,31 +575,31 @@ void export_autodiff(nb::module_ &m) {
      .def("traverse", &ad_traverse,
           "mode"_a, "flags"_a = dr::ADFlag::Default,
           doc_traverse,
-          nb::signature("traverse(mode: drjit.ADMode, flags: drjit.ADFlag | int = drjit.ADFlag.Default)"))
+          nb::sig("def traverse(mode: drjit.ADMode, flags: drjit.ADFlag | int = drjit.ADFlag.Default)"))
      .def("forward_from", &::forward_from,
           "arg"_a, "flags"_a = dr::ADFlag::Default,
           doc_forward_from,
-          nb::signature("forward_from(arg: drjit.ArrayBase, flags: drjit.ADFlag | int = drjit.ADFlag.Default)"))
+          nb::sig("def forward_from(arg: drjit.ArrayBase, flags: drjit.ADFlag | int = drjit.ADFlag.Default)"))
      .def("forward", &::forward_from,
           "arg"_a, "flags"_a = dr::ADFlag::Default,
           doc_forward,
-          nb::signature("forward(arg: drjit.ArrayBase, flags: drjit.ADFlag | int = drjit.ADFlag.Default)"))
+          nb::sig("def forward(arg: drjit.ArrayBase, flags: drjit.ADFlag | int = drjit.ADFlag.Default)"))
      .def("backward_from", &::backward_from,
           "arg"_a, "flags"_a = dr::ADFlag::Default,
           doc_backward_from,
-          nb::signature("backward_from(arg: drjit.ArrayBase, flags: drjit.ADFlag | int = drjit.ADFlag.Default)"))
+          nb::sig("def backward_from(arg: drjit.ArrayBase, flags: drjit.ADFlag | int = drjit.ADFlag.Default)"))
      .def("backward", &::backward_from,
           "arg"_a, "flags"_a = dr::ADFlag::Default,
           doc_backward,
-          nb::signature("backward(arg: drjit.ArrayBase, flags: drjit.ADFlag | int = drjit.ADFlag.Default)"))
+          nb::sig("def backward(arg: drjit.ArrayBase, flags: drjit.ADFlag | int = drjit.ADFlag.Default)"))
      .def("forward_to", &::forward_to,
           "arg"_a, "flags"_a = dr::ADFlag::Default,
           doc_forward_to,
-          nb::signature("forward_to(*args, flags: drjit.ADFlag | int = drjit.ADFlag.Default)"))
+          nb::sig("def forward_to(*args, flags: drjit.ADFlag | int = drjit.ADFlag.Default)"))
      .def("backward_to", &::backward_to,
           "arg"_a, "flags"_a = dr::ADFlag::Default,
           doc_backward_to,
-          nb::signature("backward_to(*args, flags: drjit.ADFlag | int = drjit.ADFlag.Default)"))
+          nb::sig("def backward_to(*args, flags: drjit.ADFlag | int = drjit.ADFlag.Default)"))
      .def("forward_to", &forward_to_2, "args"_a, "kwargs"_a)
      .def("backward_to", &backward_to_2, "args"_a, "kwargs"_a);
 

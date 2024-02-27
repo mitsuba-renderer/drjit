@@ -70,7 +70,7 @@ nanobind_add_module(
 
 set_target_properties(drjit-python
   PROPERTIES
-  OUTPUT_NAME drjit_ext ${DRJIT_OUTPUT_DIRECTORY})
+  OUTPUT_NAME _drjit_ext ${DRJIT_OUTPUT_DIRECTORY})
 
 target_include_directories(drjit-python
   PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../ext/nanobind/ext/robin_map/include
@@ -94,81 +94,78 @@ endif()
 
 # ------------------- Stub generation -------------------
 
+set(STUB_ARGS
+  PYTHON_PATH ${CMAKE_CURRENT_BINARY_DIR}/../..
+  PATTERN_FILE  ${CMAKE_CURRENT_SOURCE_DIR}/../../drjit/stubs.pat
+  DEPENDS drjit-python ${PY_FILES_OUT}
+)
+
 nanobind_add_stub(
   drjit-stub-main
-  PYTHON_PATH ${DRJIT_OUTPUT_DIRECTORY}/..
   MODULE drjit
   OUTPUT ${CMAKE_BINARY_DIR}/drjit/__init__.pyi
   MARKER_FILE ${CMAKE_BINARY_DIR}/drjit/py.typed
-  DEPENDS drjit-python ${PY_FILES_OUT}
+  ${STUB_ARGS}
 )
 
 nanobind_add_stub(
   drjit-stub-ast
-  PYTHON_PATH ${DRJIT_OUTPUT_DIRECTORY}/..
   MODULE drjit.ast
   OUTPUT ${CMAKE_BINARY_DIR}/drjit/ast.pyi
-  DEPENDS drjit-python ${PY_FILES_OUT}
+  ${STUB_ARGS}
 )
 
 nanobind_add_stub(
   drjit-stub-interop
-  PYTHON_PATH ${DRJIT_OUTPUT_DIRECTORY}/..
   MODULE drjit.interop
   OUTPUT ${CMAKE_BINARY_DIR}/drjit/interop.pyi
-  DEPENDS drjit-python ${PY_FILES_OUT}
+  ${STUB_ARGS}
 )
 
 nanobind_add_stub(
   drjit-stub-detail
-  PYTHON_PATH ${DRJIT_OUTPUT_DIRECTORY}/..
   MODULE drjit.detail
   OUTPUT ${CMAKE_BINARY_DIR}/drjit/detail.pyi
-  DEPENDS drjit-python ${PY_FILES_OUT}
+  ${STUB_ARGS}
 )
 
 nanobind_add_stub(
   drjit-stub-scalar
-  PYTHON_PATH ${DRJIT_OUTPUT_DIRECTORY}/..
   MODULE drjit.scalar
   OUTPUT ${CMAKE_BINARY_DIR}/drjit/scalar/__init__.pyi
-  DEPENDS drjit-python ${PY_FILES_OUT}
+  ${STUB_ARGS}
 )
 
 if (DRJIT_ENABLE_LLVM)
   nanobind_add_stub(
     drjit-stub-llvm
-    PYTHON_PATH ${DRJIT_OUTPUT_DIRECTORY}/..
     MARKER_FILE ${CMAKE_BINARY_DIR}/drjit/llvm/py.typed
     MODULE drjit.llvm
     OUTPUT ${CMAKE_BINARY_DIR}/drjit/llvm/__init__.pyi
-    DEPENDS drjit-python ${PY_FILES_OUT}
+    ${STUB_ARGS}
   )
 
   nanobind_add_stub(
     drjit-stub-llvm-ad
-    PYTHON_PATH ${DRJIT_OUTPUT_DIRECTORY}/..
     MODULE drjit.llvm.ad
     OUTPUT ${CMAKE_BINARY_DIR}/drjit/llvm/ad.pyi
-    DEPENDS drjit-python ${PY_FILES_OUT}
+    ${STUB_ARGS}
   )
 endif()
 
 if (DRJIT_ENABLE_CUDA)
   nanobind_add_stub(
     drjit-stub-cuda
-    PYTHON_PATH ${DRJIT_OUTPUT_DIRECTORY}/..
     MARKER_FILE ${CMAKE_BINARY_DIR}/drjit/cuda/py.typed
     MODULE drjit.cuda
     OUTPUT ${CMAKE_BINARY_DIR}/drjit/cuda/__init__.pyi
-    DEPENDS drjit-python ${PY_FILES_OUT}
+    ${STUB_ARGS}
   )
 
   nanobind_add_stub(
     drjit-stub-cuda-ad
-    PYTHON_PATH ${DRJIT_OUTPUT_DIRECTORY}/..
     MODULE drjit.cuda.ad
     OUTPUT ${CMAKE_BINARY_DIR}/drjit/cuda/ad.pyi
-    DEPENDS drjit-python ${PY_FILES_OUT}
+    ${STUB_ARGS}
   )
 endif()

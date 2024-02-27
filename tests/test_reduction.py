@@ -35,17 +35,16 @@ def test01_all_any_scalar():
     assert dr.none(Array2b(True, True)) == False
     assert dr.none(Array2b(True, False)) == False
     assert dr.none(Array2b(False, False)) == True
-    assert type(dr.all(ArrayXb(True, True))) is ArrayXb
-    assert len(dr.all(ArrayXb(True, True))) == 1
-    assert dr.all(ArrayXb(True, True))[0] == True
-    assert dr.all(ArrayXb(True, False))[0] == False
-    assert dr.all(ArrayXb(False, False))[0] == False
-    assert dr.any(ArrayXb(True, True))[0] == True
-    assert dr.any(ArrayXb(True, False))[0] == True
-    assert dr.any(ArrayXb(False, False))[0] == False
-    assert dr.none(ArrayXb(True, True))[0] == False
-    assert dr.none(ArrayXb(True, False))[0] == False
-    assert dr.none(ArrayXb(False, False))[0] == True
+    assert type(dr.all(ArrayXb(True, True))) is bool
+    assert dr.all(ArrayXb(True, True)) == True
+    assert dr.all(ArrayXb(True, False)) == False
+    assert dr.all(ArrayXb(False, False)) == False
+    assert dr.any(ArrayXb(True, True)) == True
+    assert dr.any(ArrayXb(True, False)) == True
+    assert dr.any(ArrayXb(False, False)) == False
+    assert dr.none(ArrayXb(True, True)) == False
+    assert dr.none(ArrayXb(True, False)) == False
+    assert dr.none(ArrayXb(False, False)) == True
 
 
 # Tests dr.{any/all}[_nested] and implicit conversion to 'bool'

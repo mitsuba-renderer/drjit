@@ -47,7 +47,7 @@ void bind_texture(nb::module_ &m, const char *name) {
                     texture.eval(pos, result.data(), active);
 
                     return result;
-                }, "pos"_a, "active"_a = true, doc_Texture_eval)
+                }, "pos"_a, "active"_a.sig("Bool(True)") = true, doc_Texture_eval)
         .def("eval_fetch",
                 [](const Tex &texture, const dr::Array<PosType, Dimension> &pos,
                    const dr::mask_t<Type> active) {
@@ -63,7 +63,7 @@ void bind_texture(nb::module_ &m, const char *name) {
                     texture.eval_fetch(pos, result_ptrs, active);
 
                     return result;
-                }, "pos"_a, "active"_a = true, doc_Texture_eval_fetch)
+                }, "pos"_a, "active"_a.sig("Bool(True)") = true, doc_Texture_eval_fetch)
         .def("eval_cubic",
                 [](const Tex &texture, const dr::Array<PosType, Dimension> &pos,
                    const dr::mask_t<Type> active, bool force_drjit) {
@@ -72,7 +72,7 @@ void bind_texture(nb::module_ &m, const char *name) {
                     texture.eval_cubic(pos, result.data(), active, force_drjit);
 
                     return result;
-                }, "pos"_a, "active"_a = true, "force_drjit"_a = false, doc_Texture_eval_cubic)
+                }, "pos"_a, "active"_a.sig("Bool(True)") = true, "force_drjit"_a = false, doc_Texture_eval_cubic)
         .def("eval_cubic_grad",
                 [](const Tex &texture, const dr::Array<PosType, Dimension> &pos,
                    const dr::mask_t<Type> active) {
@@ -82,7 +82,7 @@ void bind_texture(nb::module_ &m, const char *name) {
                     texture.eval_cubic_grad(pos, value.data(), gradient.data(), active);
 
                     return nb::make_tuple(value, gradient);
-                }, "pos"_a, "active"_a = true, doc_Texture_eval_cubic_grad)
+                }, "pos"_a, "active"_a.sig("Bool(True)") = true, doc_Texture_eval_cubic_grad)
         .def("eval_cubic_hessian",
                 [](const Tex &texture, const dr::Array<PosType, Dimension> &pos,
                    const dr::mask_t<Type> active) {
@@ -95,7 +95,7 @@ void bind_texture(nb::module_ &m, const char *name) {
                                                hessian.data(), active);
 
                     return nb::make_tuple(value, gradient, hessian);
-                }, "pos"_a, "active"_a = true, doc_Texture_eval_cubic_hessian)
+                }, "pos"_a, "active"_a.sig("Bool(True)") = true, doc_Texture_eval_cubic_hessian)
         .def("eval_cubic_helper",
                 [](const Tex &texture, const dr::Array<PosType, Dimension> &pos,
                    const dr::mask_t<Type> active) {
@@ -104,7 +104,7 @@ void bind_texture(nb::module_ &m, const char *name) {
                     dr::vector<Type> result(channels);
                     texture.eval_cubic_helper(pos, result.data(), active);
                     return result;
-                }, "pos"_a, "active"_a = true, doc_Texture_eval_cubic_helper);
+                }, "pos"_a, "active"_a.sig("Bool(True)") = true, doc_Texture_eval_cubic_helper);
 
     tex.attr("IsTexture") = true;
 }

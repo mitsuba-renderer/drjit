@@ -232,7 +232,7 @@ the expression ``a[0] + a[1] + a[2]`` of type :py:class:`drjit.cuda.Float`.
 Dr.Jit can trace this operation and include it in the generated kernel (i.e.,
 it is *symbolic*).
 
-Reductions of dynamic 1D arrays (e.g., :py:class:`drjit.cuda.Float`) are an
+Reductions of JIT-compiled 1D arrays (e.g., :py:class:`drjit.cuda.Float`) are an
 important special case. Since each value of such an array represents a
 different execution thread of a parallel program, Dr.Jit must first invoke
 :py:func:`drjit.eval` to evaluate and store the array in memory and then launch
@@ -244,14 +244,15 @@ in execution contexts where evaluation is forbidden, e.g., while capturing
 symbolic loops and function calls. Atomic operations like
 :py:func:`drjit.scatter_add` can be an interesting alternative in such cases.
 
-Furthermore Dr.Jit does *not* reduce dynamic 1D arrays to their element type
-(e.g., a standard Python `float`). Instead, it returns a dynamic array of the
-same type, containing only a single element. This is intentional--unboxing the
-array into a Python scalar would require transferring the value to the CPU,
-which would incur GPU<->CPU synchronization overheads. You must explicitly
-index into the result (``result[0]``) to obtain a value with the underlying
-element type. Boolean arrays define a ``__bool__`` method so that such indexing
-can be avoided. For example, the following works as expected:
+Furthermore Dr.Jit does *not* reduce such JIT-compiled 1D arrays to their
+element type (e.g., a standard Python `float`). Instead, it returns a dynamic
+array of the same type, containing only a single element. This is
+intentional--unboxing the array into a Python scalar would require transferring
+the value to the CPU, which would incur GPU<->CPU synchronization overheads.
+You must explicitly index into the result (``result[0]``) to obtain a value
+with the underlying element type. Boolean arrays define a ``__bool__`` method
+so that such indexing can be avoided. For example, the following works as
+expected:
 
 .. code-block:: python
 
