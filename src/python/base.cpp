@@ -22,7 +22,7 @@
 #include "autodiff.h"
 #include "reduce.h"
 #include <cmath>
-#include <nanobind/stl/string.h>
+#include <nanobind/typing.h>
 
 #define DR_NB_UNOP(name, op)                                                   \
     static PyObject *nb_##name(PyObject *h0) noexcept {                        \
@@ -44,14 +44,14 @@
     m.def(#name, [](nb::handle_t<ArrayBase> h0) {                              \
         return nb::steal(apply<Normal>(                                        \
             op, #name, std::make_index_sequence<1>(), h0.ptr()));              \
-    }, doc_##name);                                                            \
+    }, doc_##name, nb::sig("def " #name "(arg: _ArrayT, /) -> _ArrayT"));      \
     m.def(#name, [](double v0) { return dr::name(v0); });
 
 #define DR_MATH_UNOP_UINT32(name, op)                                          \
     m.def(#name, [](nb::handle_t<ArrayBase> h0) {                              \
         return nb::steal(apply<Normal>(                                        \
             op, #name, std::make_index_sequence<1>(), h0.ptr()));              \
-    }, doc_##name);                                                            \
+    }, doc_##name, nb::sig("def " #name "(arg: _ArrayT, /) -> _ArrayT"));      \
     m.def(#name, [](uint32_t v0) { return dr::name(v0); });
 
 #define DR_MATH_UNOP_PAIR(name, op)                                            \
@@ -63,7 +63,7 @@
 #define DR_MATH_BINOP(name, op)                                                \
     m.def(#name, [](nb::handle h0, nb::handle h1) {                            \
         if (NB_UNLIKELY(!is_drjit_array(h0) && !is_drjit_array(h1)))           \
-            throw nb::next_overload();                                         \
+            return nb::steal(NB_NEXT_OVERLOAD);                                \
         return nb::steal(apply<Normal>(                                        \
             op, #name, std::make_index_sequence<2>(), h0.ptr(), h1.ptr()));    \
     }, doc_##name);                                                            \
@@ -74,7 +74,7 @@
           [](nb::handle h0, nb::handle h1, nb::handle h2) {                    \
               if (!is_drjit_array(h0) && !is_drjit_array(h1) &&                \
                   !is_drjit_array(h2))                                         \
-                  throw nb::next_overload();                                   \
+                  return nb::steal(NB_NEXT_OVERLOAD);                          \
               return nb::steal(apply<Normal>(op, #name,                        \
                                              std::make_index_sequence<3>(),    \
                                              h0.ptr(), h1.ptr(), h2.ptr()));   \
@@ -681,7 +681,7 @@ namespace drjit {
 
 nb::object fma(nb::handle h0, nb::handle h1, nb::handle h2) {
     if (!is_drjit_array(h0) && !is_drjit_array(h1) && !is_drjit_array(h2))
-        throw nb::next_overload();
+        return nb::steal(NB_NEXT_OVERLOAD);
 
     PyObject *o =
         apply<Normal>(ArrayOp::Fma, "fma", std::make_index_sequence<3>(),
@@ -852,7 +852,7 @@ nb::object matmul(nb::handle h0, nb::handle h1) {
 nb::object select(nb::handle h0, nb::handle h1, nb::handle h2) {
     if (NB_UNLIKELY(!is_drjit_array(h0) && !is_drjit_array(h1) &&
                     !is_drjit_array(h2)))
-        throw nb::next_overload();
+        return nb::steal(NB_NEXT_OVERLOAD);
 
     PyObject *o =
         apply<Select>(ArrayOp::Select, "select", std::make_index_sequence<3>(),
@@ -926,6 +926,10 @@ static VarState get_state(nb::handle h_) {
 void export_base(nb::module_ &m) {
     // Generic type variable used in many places
     m.attr("_T") = nb::type_var("_T");
+
+    #if PY_VERSION_HEX >= 0x030B0000 // TypeVarTuple was introduced in v3.11
+       m.attr("_Ts") = nb::type_var_tuple("_Ts");
+    #endif
 
     // Type variable referring specifically to an array subclass
     m.attr("_ArrayT") = nb::type_var("_ArrayT", "bound"_a = "ArrayBase");
@@ -1060,17 +1064,18 @@ void export_base(nb::module_ &m) {
         },
         doc_ArrayBase_index_ad);
 
-    m.def("abs", [](Py_ssize_t v) { return dr::abs(v); })
-     .def("abs", [](double v) { return dr::abs(v); })
-     .def("abs", [](nb::handle_t<ArrayBase> h0) {
-                     return nb::steal(nb_absolute(h0.ptr()));
-                 }, doc_abs
-     );
+    m.def("abs",
+          [](nb::handle_t<ArrayBase> h0) {
+              return nb::steal(nb_absolute(h0.ptr()));
+          }, doc_abs,
+          nb::sig("def abs(arg: _ArrayT, /) -> _ArrayT"))
+     .def("abs", [](Py_ssize_t v) { return dr::abs(v); })
+     .def("abs", [](double v) { return dr::abs(v); });
 
     DR_MATH_UNOP(sqrt, ArrayOp::Sqrt);
 
-    m.def("rcp", [](double v0) { return dr::rcp(v0); })
-     .def("rcp", ::rcp, doc_rcp);
+    m.def("rcp", ::rcp, doc_rcp, nb::sig("def rcp(arg: _ArrayT, /) -> _ArrayT"))
+     .def("rcp", [](double v0) { return dr::rcp(v0); });
 
     DR_MATH_UNOP(rsqrt, ArrayOp::Rsqrt);
     DR_MATH_UNOP(cbrt, ArrayOp::Cbrt);
@@ -1110,7 +1115,8 @@ void export_base(nb::module_ &m) {
     DR_MATH_UNOP_PAIR(sincos, ArrayOp::Sincos);
     DR_MATH_UNOP_PAIR(sincosh, ArrayOp::Sincosh);
 
-    m.def("square", [](nb::handle h) { return h*h; }, doc_square);
+    m.def("square", [](nb::handle h) { return h * h; }, doc_square,
+          nb::sig("def square(arg: _T, /) -> _T"));
     m.def("matmul", &matmul, doc_matmul);
 
     m.def("minimum",
@@ -1123,15 +1129,15 @@ void export_base(nb::module_ &m) {
 
     DR_MATH_BINOP(atan2, ArrayOp::Atan2);
 
-    m.def("fma",
+    m.def("fma", (nb::object (*)(nb::handle, nb::handle, nb::handle)) fma)
+     .def("fma",
           [](Py_ssize_t a, Py_ssize_t b, Py_ssize_t c) {
               return dr::fma(a, b, c);
           }, doc_fma)
      .def("fma",
           [](double a, double b, double c) {
               return dr::fma(a, b, c);
-          })
-     .def("fma", (nb::object (*)(nb::handle, nb::handle, nb::handle)) fma);
+          });
 
     m.def("select",
           nb::overload_cast<nb::handle, nb::handle, nb::handle>(&select),
@@ -1151,7 +1157,7 @@ void export_base(nb::module_ &m) {
     m.def("power",
           [](nb::handle h0, nb::handle h1) {
               if (NB_UNLIKELY(!is_drjit_array(h0) && !is_drjit_array(h1)))
-                  throw nb::next_overload();
+                  return nb::steal(NB_NEXT_OVERLOAD);
               return nb::steal(nb_power(h0.ptr(), h1.ptr()));
           }
     );

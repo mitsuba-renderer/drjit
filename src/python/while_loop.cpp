@@ -426,5 +426,16 @@ nb::tuple while_loop(nb::tuple state, nb::callable cond, nb::callable body,
 void export_while_loop(nb::module_ &m) {
     m.def("while_loop", &while_loop, "state"_a, "cond"_a, "body"_a,
           "state_labels"_a = nb::make_tuple(), "label"_a = nb::none(),
-          "mode"_a = nb::none(), "compress"_a = nb::none(), doc_while_loop);
+          "mode"_a = nb::none(), "compress"_a = nb::none(), doc_while_loop,
+          // Complicated signature to type-check while_loop via TypeVarTuple
+          nb::sig(
+            "def while_loop(state: tuple[*_Ts], "
+                           "cond: Callable[[*_Ts], ArrayBase | bool], "
+                           "body: Callable[[*_Ts], tuple[*_Ts]], "
+                           "state_labels: Sequence[str] = (), "
+                           "label: str | None = None, "
+                           "mode: str | None = None, "
+                           "compress: bool | None = None) "
+            "-> tuple[*_Ts]"
+    ));
 }

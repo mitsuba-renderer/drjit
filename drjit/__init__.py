@@ -18,7 +18,7 @@ with detail.scoped_rtld_deepbind():
 
 from .ast import syntax, hint
 from .interop import wrap
-import typing as _typing
+from typing import overload, Optional
 import warnings as _warnings
 
 # -------------------------------------------------------------------
@@ -69,7 +69,7 @@ def isfinite(arg, /):
     return abs(arg) < float('inf')
 
 
-def allclose(a, b, rtol: _typing.Optional[float] = None, atol: _typing.Optional[float] = None, equal_nan: bool = False):
+def allclose(a, b, rtol: Optional[float] = None, atol: Optional[float] = None, equal_nan: bool = False):
     r'''
     Returns ``True`` if two arrays are element-wise equal within a given error
     tolerance.
@@ -197,7 +197,7 @@ def allclose(a, b, rtol: _typing.Optional[float] = None, atol: _typing.Optional[
 #   "Safe" functions that avoid domain errors due to rounding
 # -------------------------------------------------------------------
 
-def safe_sqrt(arg, /):
+def safe_sqrt(arg: _T, /) -> _T:
     '''
     Safely evaluate the square root of the provided input avoiding domain errors.
 
@@ -217,7 +217,7 @@ def safe_sqrt(arg, /):
     return result
 
 
-def safe_asin(arg, /):
+def safe_asin(arg: _T, /) -> _T:
     '''
     Safe wrapper around :py:func:`drjit.asin` that avoids domain errors.
 
@@ -238,7 +238,7 @@ def safe_asin(arg, /):
     return result
 
 
-def safe_acos(arg, /):
+def safe_acos(arg: _T, /) -> _T:
     '''
     Safe wrapper around :py:func:`drjit.acos` that avoids domain errors.
 
@@ -258,6 +258,16 @@ def safe_acos(arg, /):
         result = replace_grad(result, alt)
     return result
 
+
+# Typing information for the clip function below
+@overload
+def clip(value: ArrayBase[_SelfT, _ItemT, _UnionT, _MaskT, _RedT], min: _UnionT | _SelfT, max: _UnionT | _SelfT) -> _SelfT: ...
+@overload
+def clip(value: _UnionT | _SelfT, min: ArrayBase[_SelfT, _ItemT, _UnionT, _MaskT, _RedT], max: _UnionT | _SelfT) -> _SelfT: ...
+@overload
+def clip(value: _UnionT | _SelfT, min: _UnionT | _SelfT, max: ArrayBase[_SelfT, _ItemT, _UnionT, _MaskT, _RedT]) -> _SelfT: ...
+@overload
+def clip(value: _T, min: _T, max: _T) -> _T: ...
 
 def clip(value, min, max):
     '''
@@ -915,7 +925,7 @@ def isolate_grad(when=True):
 #      Miscellaneous
 # -------------------------------------------------------------------
 
-def copy(arg, /):
+def copy(arg: _T, /) -> _T:
     """
     Create a deep copy of a PyTree
 
@@ -1021,7 +1031,7 @@ def hypot(a, b, /):
         a + b
     )
 
-def log2i(arg, /):
+def log2i(arg: _T, /) -> _T:
     '''
     Return the floor of the base-2 logarithm.
 
@@ -1043,7 +1053,7 @@ def log2i(arg, /):
     return (sz * 8 - 1) - lzcnt(arg)
 
 
-def rad2deg(arg, /):
+def rad2deg(arg: _T, /) -> _T:
     '''
     Convert angles from radians to degrees.
 
@@ -1056,7 +1066,7 @@ def rad2deg(arg, /):
     return arg * (180.0 / pi)
 
 
-def deg2rad(arg, /):
+def deg2rad(arg: _T, /) -> _T:
     '''
     Convert angles from degrees to radians.
 
@@ -1149,7 +1159,7 @@ def reverse(value, axis: int = 0):
         return result
 
 
-def mean(value, axis: _typing.Optional[int] = 0):
+def mean(value, axis: Optional[int] = 0):
     """
     Compute the mean of the input array or tensor along one or multiple axes.
 
@@ -1253,7 +1263,7 @@ def meshgrid(*args, indexing='xy'):
 
 def assert_true(
     cond,
-    fmt: _typing.Optional[str] = None,
+    fmt: Optional[str] = None,
     *args,
     tb_depth: int = 3,
     tb_skip: int = 0,
@@ -1363,7 +1373,7 @@ def assert_true(
 
 def assert_false(
     cond,
-    fmt: _typing.Optional[str] = None,
+    fmt: Optional[str] = None,
     *args,
     tb_depth: int = 3,
     tb_skip: int = 0,
@@ -1385,7 +1395,7 @@ def assert_false(
 def assert_equal(
     arg0,
     arg1,
-    fmt: _typing.Optional[str] = None,
+    fmt: Optional[str] = None,
     *args,
     limit: int = 3,
     tb_skip: int = 0,
@@ -1405,3 +1415,5 @@ def assert_equal(
     )
 
 newaxis = None
+
+del overload, Optional

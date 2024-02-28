@@ -25,54 +25,56 @@ nb::object bind(const ArrayBinding &b) {
                     vt == VarType::Float32 ||
                     vt == VarType::Float64;
 
-    nb::object self_type_py = nb::str(name.c_str());
+    nb::object self_type_o = nb::str(name.c_str());
 
     // Look up the scalar type underlying the array
-    nb::object scalar_type_py;
+    nb::object scalar_type_o;
     if (is_bool)
-        scalar_type_py = nb::borrow(&PyBool_Type);
+        scalar_type_o = nb::borrow(&PyBool_Type);
     else if (is_float)
-        scalar_type_py = nb::borrow(&PyFloat_Type);
+        scalar_type_o = nb::borrow(&PyFloat_Type);
     else
-        scalar_type_py = nb::borrow(&PyLong_Type);
+        scalar_type_o = nb::borrow(&PyLong_Type);
 
     // Look up the value type underlying the array
-    nb::object value_type_py;
+    nb::object value_type_o;
     if (!b.value_type) {
-        value_type_py = scalar_type_py;
+        value_type_o = scalar_type_o;
     } else {
-        value_type_py = nb::borrow(nb::detail::nb_type_lookup(b.value_type));
-        if (!value_type_py.is_valid())
+        value_type_o = nb::borrow(nb::detail::nb_type_lookup(b.value_type));
+        if (!value_type_o.is_valid())
             nb::detail::raise(
                 "nanobind.detail.bind(\"%s\"): element type \"%s\" not found.",
                 name.c_str(), b.value_type->name());
-        scalar_type_py = nb::borrow(scalar_t(value_type_py));
+        scalar_type_o = nb::borrow(scalar_t(value_type_o));
     }
 
     // Look up the mask type resulting from comparisons involving this type
-    nb::object mask_type_py;
+    nb::object mask_type_o;
     if (is_bool) {
-        mask_type_py = self_type_py; // reference self
+        mask_type_o = self_type_o; // reference self
     } else {
         ArrayMeta m2 = b;
         m2.type = (uint16_t) VarType::Bool;
         m2.is_vector = m2.is_complex = m2.is_quaternion =
             m2.is_matrix = false;
-        mask_type_py = nb::borrow(meta_get_type(m2));
+        mask_type_o = nb::borrow(meta_get_type(m2));
     }
 
     // Determine what other types 'b' are acceptable in an arithmetic operation
     // like 'a + b' or 'a | b' so that the result clearly has type 'a'
-    nb::object compat_type_py = value_type_py;
-    if (!scalar_type_py.is(value_type_py))
-        compat_type_py = compat_type_py | scalar_type_py;
+    nb::object compat_type_o = value_type_o, tmp_o = value_type_o;
+    while (is_drjit_type(tmp_o)) {
+        tmp_o = nb::borrow(supp(tmp_o).value);
+        compat_type_o = compat_type_o | tmp_o;
+    }
 
     // Determine the type of reduction operations that potentially strip the outermost dimension
-    nb::object reduce_type_py;
+    nb::object reduce_type_o;
     if (b.ndim == 1 && (JitBackend) b.backend != JitBackend::None)
-        reduce_type_py = self_type_py; // reference self
+        reduce_type_o = self_type_o; // reference self
     else
-        reduce_type_py = value_type_py;
+        reduce_type_o = value_type_o;
 
     nb::detail::type_init_data d;
 
@@ -121,11 +123,11 @@ nb::object bind(const ArrayBinding &b) {
         d.scope = meta_get_module(b).ptr();
 
     // Parameterize generic base class
-    nb::object base_py =
-        array_base[nb::make_tuple(self_type_py, value_type_py, compat_type_py,
-                                  mask_type_py, reduce_type_py)];
+    nb::object base_o =
+        array_base[nb::make_tuple(self_type_o, value_type_o, compat_type_o,
+                                  mask_type_o, reduce_type_o)];
 
-    d.base_py = (PyTypeObject *) base_py.ptr();
+    d.base_py = (PyTypeObject *) base_o.ptr();
 
     // Create the type and update its supplemental information
     nb::object tp = nb::steal(nb::detail::nb_type_new(&d));
@@ -165,9 +167,9 @@ nb::object bind(const ArrayBinding &b) {
     nb::detail::implicitly_convertible(pred, b.array_type);
 
     // Cache a reference to the associated array type (for special types like matrices)
-    nb::handle array_type_py;
+    nb::handle array_type_o;
     if (!s.is_tensor && !s.is_complex && !s.is_quaternion && !s.is_matrix) {
-        array_type_py = tp;
+        array_type_o = tp;
     } else {
         ArrayMeta m2 = s;
         if (m2.is_tensor) {
@@ -176,7 +178,7 @@ nb::object bind(const ArrayBinding &b) {
         }
         m2.is_vector = m2.is_complex = m2.is_quaternion = m2.is_matrix =
             m2.is_tensor = false;
-        array_type_py = meta_get_type(m2);
+        array_type_o = meta_get_type(m2);
 
         if (s.is_tensor) {
             m2.type = (uint32_t) VarType::UInt32;
@@ -184,9 +186,9 @@ nb::object bind(const ArrayBinding &b) {
         }
     }
 
-    s.value = value_type_py.ptr();
-    s.mask = is_bool ? tp.ptr() : mask_type_py.ptr();
-    s.array = array_type_py.ptr();
+    s.value = value_type_o.ptr();
+    s.mask = is_bool ? tp.ptr() : mask_type_o.ptr();
+    s.array = array_type_o.ptr();
 
     return tp;
 }

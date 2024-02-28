@@ -53,26 +53,16 @@ drjit.ArrayBase.__((?:r|i|)pow)__:
     def __\1__(self: _UnionT2, arg: ArrayBase[_SelfT2, _ItemT2, _UnionT2, _MaskT2, _RedT2], mod=None, /) -> _SelfT2: ...
 
 # ----------------------- dr.* functions -----------------------
-#
-# Typed unary operations
-drjit.(abs|square|sqr)$:
-    @overload
-    def \1(arg: _ArrayT, /) -> _ArrayT:
-        \doc
-    @overload
-    def \1(arg: int, /) -> int: ...
-    @overload
-    def \1(arg: float, /) -> float: ...
 
-drjit.(sqrt|rsqrt|exp|exp2|log|log2|cos|sin|tan|acos|asin|atan|sinh|cosh|tanh|acosh|asinh|atanh|erf|erfinv|rad2deg|deg2rad)$:
+drjit.(imag|real)$:
     @overload
-    def \1(arg: _ArrayT, /) -> _ArrayT:
+    def \1(arg: ArrayBase[_SelfT, _ItemT, _UnionT, _MaskT, _RedT], /) -> _ItemT:
         \doc
     @overload
-    def \1(arg: float, /) -> float: ...
+    def \1(arg: complex, /) -> float: ...
 
 # Improve the types of reduction operations
-drjit.(sum|prod|min|max|norm)$:
+drjit.(sum|prod|min|max|norm|squared_norm)$:
     \from typing import Literal
     @overload
     def \1(value: ArrayBase[_SelfT, _ItemT, _UnionT, _MaskT, _RedT], axis: Literal[0] = 0) -> _RedT:
@@ -112,16 +102,23 @@ drjit.(atan2|minimum|maximum)$:
     def \1(arg0: _T, arg1: _T, /) -> _T: ...
 
 drjit.(empty|zeros)$:
-    def \1(dtype: type[_T], shape: int | Sequence[int]) -> _T:
+    def \1(dtype: type[_T], shape: int | Sequence[int] = 1) -> _T:
         \doc
+
+drjit.(full|opaque)$:
+    @overload
+    def \1(dtype: type[ArrayBase[_SelfT, _ItemT, _UnionT, _MaskT, _RedT]], value: _UnionT, shape: int | Sequence[int] = 1) -> _SelfT:
+        \doc
+    @overload
+    def \1(dtype: type[_T], value: _T, shape: int | Sequence[int]) -> _T: ...
 
 drjit.fma$:
     @overload
-    def fma(arg0: ArrayBase[_SelfT, _ItemT, _UnionT, _MaskT, _RedT], arg1: _UnionT | _SelfT, arg2: _UnionT | _SelfT) -> _SelfT: ...
+    def fma(arg0: ArrayBase[_SelfT, _ItemT, _UnionT, _MaskT, _RedT], arg1: _UnionT | _SelfT, arg2: _UnionT | _SelfT, /) -> _SelfT: ...
     @overload
-    def fma(arg0: _UnionT | _SelfT, arg1: ArrayBase[_SelfT, _ItemT, _UnionT, _MaskT, _RedT], arg2: _UnionT | _SelfT) -> _SelfT: ...
+    def fma(arg0: _UnionT | _SelfT, arg1: ArrayBase[_SelfT, _ItemT, _UnionT, _MaskT, _RedT], arg2: _UnionT | _SelfT, /) -> _SelfT: ...
     @overload
-    def fma(arg0: _UnionT | _SelfT, arg1: _UnionT | _SelfT, arg2: ArrayBase[_SelfT, _ItemT, _UnionT, _MaskT, _RedT]) -> _SelfT: ...
+    def fma(arg0: _UnionT | _SelfT, arg1: _UnionT | _SelfT, arg2: ArrayBase[_SelfT, _ItemT, _UnionT, _MaskT, _RedT], /) -> _SelfT: ...
     @overload
     def fma(arg0: _T, arg1: _T, arg2: _T) -> _T:
         \doc
