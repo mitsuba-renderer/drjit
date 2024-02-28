@@ -17,7 +17,7 @@
 extern bool meta_check(ArrayMeta m) noexcept;
 
 /// Convert a metadata record into a string representation (for debugging)
-extern std::string meta_str(ArrayMeta m);
+extern dr::string meta_str(ArrayMeta m);
 
 /// Compute the metadata type of an operation combinining 'a' and 'b'
 extern ArrayMeta meta_promote(ArrayMeta a, ArrayMeta b) noexcept;

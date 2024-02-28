@@ -38,8 +38,8 @@ static const char *type_suffix[] = {
 };
 
 /// Convert a metadata record into a string representation (for debugging)
-std::string meta_str(ArrayMeta m) {
-    std::string result = "ArrayMeta[";
+dr::string meta_str(ArrayMeta m) {
+    dr::string result = "ArrayMeta[";
 
     if (m.is_valid) {
         result += "\n  type=";
@@ -83,7 +83,7 @@ std::string meta_str(ArrayMeta m) {
             if (m.shape[i] == DRJIT_DYNAMIC)
                 result += "*";
             else
-                result += std::to_string(m.shape[i]);
+                result += dr::string(m.shape[i]);
         }
         result += ")\n";
     } else {
