@@ -1016,7 +1016,11 @@ static nb::object block_sum(nb::handle h, size_t block_size) {
 void export_memop(nb::module_ &m) {
     m.def("gather", &gather, "dtype"_a, "source"_a, "index"_a,
           "active"_a = true, "mode"_a = ReduceMode::Auto,
-          doc_gather)
+          doc_gather,
+          nb::sig("def gather(dtype: type[T], source: object, "
+                             "index: Union[AnyArray, Sequence[int], int], "
+                             "active: Union[AnyArray, Sequence[bool], bool] = True, "
+                             "mode: drjit.ReduceMode = drjit.ReduceMode.Auto) -> T"))
      .def("scatter", &scatter, "target"_a, "value"_a, "index"_a,
           "active"_a = true, "mode"_a = ReduceMode::Auto,
           doc_scatter)
@@ -1045,7 +1049,7 @@ void export_memop(nb::module_ &m) {
           "dtype"_a, "array"_a, "order"_a = 'A', doc_unravel)
      .def("slice", &slice, "value"_a, "index"_a, doc_slice)
      .def("reshape", &reshape, "dtype"_a, "value"_a,
-          "shape"_a, "order"_a = 'A', "shrink"_a = false)
+          "shape"_a, "order"_a = 'A', "shrink"_a = false, doc_reshape)
      .def("reshape", &reshape_2, "dtype"_a, "value"_a,
           "shape"_a, "order"_a = 'A', "shrink"_a = false)
      .def("tile",

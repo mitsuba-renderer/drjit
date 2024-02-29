@@ -310,3 +310,15 @@ def test18_lgamma_erfinv(t):
     assert dr.allclose(dr.lgamma(-1.2), 1.57918)
     assert dr.allclose(dr.erfinv(.3), 0.272463)
     assert dr.allclose(dr.erfinv(.8), 0.906194)
+
+@pytest.test_arrays('float, shape=(3, *)')
+def test19_incompatible(t):
+    v = dr.value_t(t)
+    with pytest.raises(RuntimeError) as e:
+        v(1, 2, 3) + v()
+    msg = 'operands have incompatible sizes'
+    assert msg in str(e.value)
+    with pytest.raises(RuntimeError) as e:
+        t(1, 2, 3) + t()
+    assert msg in str(e.value.__cause__)
+

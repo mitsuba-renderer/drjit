@@ -316,14 +316,15 @@ PyObject *apply(ArrayOp op, Slot slot, std::index_sequence<Is...> is,
 
         return result.release().ptr();
     } catch (nb::python_error &e) {
+        e.restore();
         if constexpr (std::is_same_v<Slot, const char *>)
-            nb::raise_from(e, PyExc_RuntimeError,
-                           "drjit.%s(<%U>): failed (see above)!",
-                           op_names[(int) op], nb::type_name(tp).ptr());
+            nb::chain_error(PyExc_RuntimeError,
+                            "drjit.%s(<%U>): failed (see above)!",
+                            op_names[(int) op], nb::type_name(tp).ptr());
         else
-            nb::raise_from(e, PyExc_RuntimeError,
-                           "%U.%s(): failed (see above)!",
-                           nb::type_name(tp).ptr(), op_names[(int) op]);
+            nb::chain_error(PyExc_RuntimeError,
+                            "%U.%s(): failed (see above)!",
+                            nb::type_name(tp).ptr(), op_names[(int) op]);
     } catch (const std::exception &e) {
         if constexpr (std::is_same_v<Slot, const char *>)
             nb::chain_error(PyExc_RuntimeError, "drjit.%s(<%U>): %s",
@@ -621,7 +622,7 @@ void traverse(const char *op, TraverseCallback &tc, nb::handle h) {
         nb::chain_error(PyExc_RuntimeError,
                         "%s(): error encountered while processing an argument "
                         "of type '%U': %s", op, nb::type_name(tp).ptr(), e.what());
-        throw nb::python_error();
+        nb::raise_python_error();
     }
 }
 
@@ -869,7 +870,7 @@ nb::object transform(const char *op, TransformCallback &tc, nb::handle h) {
         nb::chain_error(PyExc_RuntimeError,
                         "%s(): error encountered while processing an argument "
                         "of type '%U': %s", op, nb::type_name(tp).ptr(), e.what());
-        throw nb::python_error();
+        nb::raise_python_error();
     }
 }
 
@@ -1005,7 +1006,7 @@ nb::object transform_pair(const char *op, TransformPairCallback &tc,
                         "of type '%U' and '%U': %s",
                         op, nb::type_name(tp1).ptr(), nb::type_name(tp2).ptr(),
                         e.what());
-        throw nb::python_error();
+        nb::raise_python_error();
     }
 }
 

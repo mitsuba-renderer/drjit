@@ -1,9 +1,8 @@
 import ast
-import types as _types
-import linecache as _linecache
-import inspect as _inspect
-from typing import Callable as _Callable, Optional as _Optional, List as _List, Any as _Any
-
+import types
+import inspect
+import linecache
+from typing import Any, Optional, List, TypeVar, Callable, overload
 
 class _SyntaxVisitor(ast.NodeTransformer):
     def __init__(self, recursive, filename, line_offset):
@@ -58,7 +57,7 @@ class _SyntaxVisitor(ast.NodeTransformer):
         s.offset = node.col_offset
         s.end_offset = node.end_col_offset
         s.filename = self.filename
-        s.text = _linecache.getline(self.filename, s.lineno)
+        s.text = linecache.getline(self.filename, s.lineno)
         raise s
 
     def raise_forbidden_stmt_error(self, node: ast.AST, op_name):
@@ -132,7 +131,7 @@ class _SyntaxVisitor(ast.NodeTransformer):
         hints = {}
         for k in node.keywords:
             if k.arg == "exclude" or k.arg == "include":
-                value: _Any = set()
+                value: Any = set()
                 if isinstance(k.value, ast.List):
                     for e in k.value.elts:
                         if isinstance(e, ast.Name):
@@ -154,7 +153,14 @@ class _SyntaxVisitor(ast.NodeTransformer):
                 value = k.value
             hints[k.arg] = value
 
-        valid_keys = ["exclude", "include", "label", "mode", "max_iterations", "compress"]
+        valid_keys = [
+            "exclude",
+            "include",
+            "label",
+            "mode",
+            "max_iterations",
+            "compress",
+        ]
         for k in hints.keys():
             if k not in valid_keys:
                 self.raise_syntax_error(
@@ -513,13 +519,12 @@ class _SyntaxVisitor(ast.NodeTransformer):
 # Counts how many times the @drjit.syntax decorator has been used
 _syntax_counter = 0
 
+T = TypeVar("T")
 
+@overload
 def syntax(
-    f: _Optional[_Callable] = None,
-    recursive: bool = False,
-    print_ast: bool = False,
-    print_code: bool = False,
-):
+    *, recursive: bool = False, print_ast: bool = False, print_code: bool = False
+) -> Callable[[T], T]:
     """
     Syntax decorator for vectorized loops and conditionals.
 
@@ -695,11 +700,18 @@ def syntax(
     merely rewrites the syntax of certain loop and conditional expressions and
     has no further effect following the function definition.
     """
+
+
+@overload
+def syntax(f: T, /) -> T: ...
+
+def syntax(f=None, *, recursive: bool = False, print_ast: bool = False, print_code: bool = False):
     global _syntax_counter
 
     if f is None:
+
         def wrapper(f2):
-            return syntax(f2, recursive, print_ast, print_code)
+            return syntax(f2, recursive=recursive, print_ast=print_ast, print_code=print_code)
 
         return wrapper
 
@@ -707,19 +719,21 @@ def syntax(
     _syntax_counter += 1
     if _syntax_counter > 1000:
         import warnings
+
         warnings.warn(
-            'The AST-transforming decorator @drjit.syntax was called more than '
-            '1000 times by your program. Since transforming and recompiling '
-            'Python code is a relatively expensive operation, it should not '
-            'be used within loops or subroutines. Please move the function to '
-            'be transformed to the top program level and decorate it there.',
-            RuntimeWarning
+            "The AST-transforming decorator @drjit.syntax was called more than "
+            "1000 times by your program. Since transforming and recompiling "
+            "Python code is a relatively expensive operation, it should not "
+            "be used within loops or subroutines. Please move the function to "
+            "be transformed to the top program level and decorate it there.",
+            RuntimeWarning,
         )
 
-    source = _inspect.getsource(f)
+    source = inspect.getsource(f)
 
     if source[0].isspace():
         from textwrap import dedent
+
         source = dedent(source)
 
     old_ast = ast.parse(source)
@@ -750,26 +764,26 @@ def syntax(
             "@drjit.syntax could not be compiled:\n\n%s" % ast.unparse(new_ast)
         ) from e
     new_code = next(
-        (x for x in new_code.co_consts if isinstance(x, _types.CodeType)), None
+        (x for x in new_code.co_consts if isinstance(x, types.CodeType)), None
     )
-    new_func = _types.FunctionType(new_code, f.__globals__)
+    new_func = types.FunctionType(new_code, f.__globals__)
     new_func.__defaults__ = f.__defaults__
     return new_func
 
 
 def hint(
-    arg: object,
+    arg: T,
     /,
     *,
-    mode: _Optional[str] = None,
-    max_iterations: _Optional[int] = None,
-    label: _Optional[str] = None,
-    include: _Optional[_List[object]] = None,
-    exclude: _Optional[_List[object]] = None,
-) -> object:
+    mode: Optional[str] = None,
+    max_iterations: Optional[int] = None,
+    label: Optional[str] = None,
+    include: Optional[List[object]] = None,
+    exclude: Optional[List[object]] = None,
+) -> T:
     """
     Within ordinary Python code, this function is unremarkable: it returns the
-    positional-only argument `arg` while ignoring any specified keyword
+    positional-only argument ``arg`` while ignoring any specified keyword
     arguments.
 
     The main purpose of :py:func:`drjit.hint()` is to provide *hints* that

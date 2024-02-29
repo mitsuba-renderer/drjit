@@ -1777,7 +1777,7 @@ Args:
     arg (drjit.ArrayBase | Sequence): an arbitrary Dr.Jit array or tensor
 
 Returns:
-    tuple | NoneType: A tuple describing the dimension and shape of the
+    tuple | None: A tuple describing the dimension and shape of the
     provided Dr.Jit input array or tensor. When the input array is *ragged*
     (i.e., when it contains components with mismatched sizes), the function
     returns ``None``.
@@ -1833,7 +1833,7 @@ property equals ``None``.
 
 The expressions ``drjit.shape(arg)`` and ``arg.shape`` are equivalent.
 
-:type: tuple | NoneType)";
+:type: tuple | None)";
 
 static const char *doc_ArrayBase_ndim = R"(
 This property represents the dimension of the provided Dr.Jit array or tensor.
@@ -2206,7 +2206,7 @@ Args:
 
     shape (tuple[int, ...]): The shape of the tensor to be sliced.
 
-    indices (tuple[int|slice|ellipsis|NoneType|dr.ArrayBase, ...]):
+    indices (tuple[int|slice|ellipsis|None|dr.ArrayBase, ...]):
         A set of indices used to slice the tensor. Its entries can be ``slice``
         instances, integers, integer arrays, ``...`` (ellipsis) or ``None``.
 
@@ -3430,7 +3430,7 @@ Args:
         ``None``. (Default: ``False``)
 
 Returns:
-    NoneType | str: a human-readable list (if requested).
+    None | str: a human-readable list (if requested).
 )";
 
 static const char *doc_whos_ad = R"(
@@ -3448,7 +3448,7 @@ Args:
         ``None``. (Default: ``False``)
 
 Returns:
-    NoneType | str: a human-readable list (if requested).
+    None | str: a human-readable list (if requested).
 )";
 
 static const char *doc_suspend_grad = R"(
@@ -6688,7 +6688,7 @@ Args:
       <pytrees>`. The function returns unknown objects of other types
       unchanged.
 
-    shape (int|tuple[int]): The target shape.
+    shape (int|tuple[int, ...]): The target shape.
 
     order (str): A single character indicating the index order used to
       reinterpret the input. ``'F'`` indicates column-major/Fortran-style
@@ -6788,16 +6788,9 @@ abstract version of the array API that becomes usable when the type is extended
 by a concrete specialization. :py:class:`ArrayBase` itself cannot be
 instantiated.
 
-The :py:class:`ArrayBase` class is an abstract + generic Python type
-parameterized by several auxiliary type parameters. They help static type
-checkers like MyPy and PyRight make sense how subclasses of this type transform
-when passed to various builtin operations. These auxiliary parameters are:
-
-- ``SelfT``:   the type of the array subclass
-- ``ValT``:    the value type (i.e. type of an array entry)
-- ``ElemT``:   recursive union of value type, its value type, etc.
-- ``RedT``:    type following reduction by 'dr.sum' or 'dr.all'
-- ``MaskT``:   type produced by comparisons such as '__eq__')";
+See the section on Dr.Jit `type signatures <type_signatures>` to learn about
+the type parameters of :py:class:`ArrayBase`.
+)";
 
 static const char *doc_ArrayBase_init = R"(
 Construct a Dr.Jit array.
@@ -6811,8 +6804,7 @@ Arrays can be constructed ..
 - via a broadcast: ``Array3f(1)`` (equivalent to ``Array3f(1, 1, 1)``)
 
 Note that this constructor is only available in *subclasses* of the
-:py:class:`drjit.ArrayBase` type.
-)";
+:py:class:`drjit.ArrayBase` type.)";
 
 
 static const char *doc_ArrayBase_init_2 = R"(

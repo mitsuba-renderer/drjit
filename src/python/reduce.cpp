@@ -175,6 +175,7 @@ static nb::object dot(nb::handle h0, nb::handle h1) {
                 use_fma = false;
         }
 
+
         if (use_fma) {
             nb::object result = h0[0] * h1[0],
                        fma = array_module.attr("fma");
@@ -365,8 +366,6 @@ void export_reduce(nb::module_ & m) {
      .def("prod", &prod, "value"_a, "axis"_a.none() = 0, doc_prod)
      .def("min", &min, "value"_a, "axis"_a.none() = 0, doc_min)
      .def("max", &max, "value"_a, "axis"_a.none() = 0, doc_max)
-     .def("dot", [](Py_ssize_t d1, Py_ssize_t d2) { return d1 * d2; })
-     .def("dot", [](double d1, double d2) { return d1 * d2; })
      .def("dot", &dot, doc_dot)
      .def("abs_dot",
           [](nb::handle h0, nb::handle h1) -> nb::object {
@@ -384,6 +383,7 @@ void export_reduce(nb::module_ & m) {
           }, doc_squared_norm)
      .def("prefix_sum", &prefix_sum,
           "value"_a, "exclusive"_a = true,
-          "axis"_a.none() = 0, doc_prefix_sum)
+          "axis"_a.none() = 0, doc_prefix_sum,
+          nb::sig("def prefix_sum(value: ArrayT, exclusive: bool = True, axis: int | None = 0) -> ArrayT"))
      .def("compress", &compress, doc_compress);
 }

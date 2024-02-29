@@ -106,9 +106,11 @@ void export_inspect(nb::module_ &m) {
           [](bool as_string) { return graphviz(true, as_string); },
           "as_string"_a = false, doc_graphviz_ad)
      .def("whos", [](bool as_string) { return whos(false, as_string); },
-          "as_string"_a = false, doc_whos)
+          "as_string"_a = false, doc_whos,
+          nb::sig("def whos(as_string: bool) -> str | None"))
      .def("whos_ad", [](bool as_string) { return whos(true, as_string); },
-          "as_string"_a = false, doc_whos_ad)
+          "as_string"_a = false, doc_whos_ad,
+          nb::sig("def whos_ad(as_string: bool) -> str | None"))
      .def("set_label", &set_label, doc_set_label)
      .def("set_label", &set_label_2);
 }

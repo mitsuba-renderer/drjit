@@ -1,3 +1,5 @@
+# ruff: noqa: E721  -- don't warn about exact type comparisons done via 'is'
+
 import drjit as dr
 import typing
 import types
@@ -220,9 +222,10 @@ def fixup_grad(a, b, target, /):
         # arrays cannot be created with JAX, so we actually have to revert to
         # NumPy, of all things! (https://github.com/google/jax/issues/4433)
         if target == 'jax' and ((not is_jax) or 'float' not in a.dtype.name) \
-            and type(a) is not float:
-            import jax, numpy as np
-            return np.zeros(getattr(b, 'shape', ()), dtype=jax.float0)
+            and not isinstance(a, float):
+            import jax
+            import numpy
+            return numpy.zeros(getattr(b, 'shape', ()), dtype=jax.float0)
 
         if type(a) is type(b):
             if is_jax or (is_torch and a.dtype.is_floating_point):
@@ -429,9 +432,10 @@ def create_torch_wrapper():
 
     return TorchWrapper
 
+T = typing.TypeVar("T")
 
 def wrap(source: typing.Union[str, types.ModuleType],
-         target: typing.Union[str, types.ModuleType]):
+         target: typing.Union[str, types.ModuleType]) -> typing.Callable[[T], T]:
     r'''
     Differentiable bridge between Dr.Jit and other array programming
     frameworks.

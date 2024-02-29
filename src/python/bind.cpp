@@ -15,66 +15,127 @@
 #include "slice.h"
 #include "traits.h"
 
+// Return the name of a type alias storing types that are compatible with 'tp'
+nb::object compat_type(nb::handle module_name, nb::handle tp) {
+    if (!is_drjit_type(tp))
+        return nb::borrow(tp);
+    nb::object tp_module_name = tp.attr("__module__"),
+               tp_name = tp.attr("__name__");
+
+    nb::object result = nb::str("_") + tp_name + nb::str("Cp");
+    if (nb::borrow(module_name).not_equal(tp_module_name))
+        result = tp_module_name + nb::str(".") + result;
+    return result;
+}
+
+// Create a union representing that are compatible with a given array
+nb::object compat_types(nb::handle module_name, nb::handle self_name, nb::handle value_t, ArrayMeta m) {
+    nb::list tp_list;
+    tp_list.append(self_name);
+    tp_list.append(is_drjit_type(value_t) ? compat_type(module_name, value_t)
+                                          : nb::borrow(value_t));
+
+    if ((JitBackend) m.backend != JitBackend::None && m.ndim > 0) {
+        ArrayMeta m2 = m;
+        m2.backend = (uint16_t) JitBackend::None;
+        m2.ndim -= 1;
+        tp_list.append(compat_type(module_name, meta_get_type(m2)));
+    }
+
+    if (m.is_diff) {
+        ArrayMeta m2 = m;
+        m2.is_diff = false;
+        tp_list.append(compat_type(module_name, meta_get_type(m2)));
+    }
+
+    VarType vt;
+    switch ((VarType) m.type) {
+        case VarType::Float64: vt = VarType::Float32; break;
+        case VarType::Float32: vt = VarType::Float16; break;
+        case VarType::Float16: vt = VarType::UInt64; break;
+        case VarType::UInt64 : vt = VarType::Int64; break;
+        case VarType::Int64: vt = VarType::UInt32; break;
+        case VarType::UInt32 : vt = VarType::Int32; break;
+        case VarType::Int32: vt = VarType::Bool; break;
+        default: vt = VarType::Void;
+    }
+
+    if (vt != VarType::Void) {
+        ArrayMeta m2 = m;
+        m2.type = (uint16_t) vt;
+        nb::handle compat = meta_get_type(m2, false);
+        if (compat.is_valid())
+            tp_list.append(compat_type(module_name, compat));
+    }
+
+    return nb::module_::import_("typing").attr("Union")[nb::tuple(tp_list)];
+}
+
 nb::object bind(const ArrayBinding &b) {
-    // Compute the name of the type if not provided
-    dr::string name = b.name ? b.name : meta_get_name(b);
-
     VarType vt = (VarType) b.type;
-    bool is_bool  = vt == VarType::Bool;
-    bool is_float = vt == VarType::Float16 ||
-                    vt == VarType::Float32 ||
-                    vt == VarType::Float64;
 
-    nb::object self_type_o = nb::str(name.c_str());
+    // Compute the type name if not ready provided
+    dr::string name = b.name ? b.name : meta_get_name(b);
+    nb::object name_o = nb::str(name.c_str());
+
+    // Determine where to install the type if not already provided
+    nb::handle scope;
+    if (b.scope.is_valid())
+        scope = b.scope.ptr();
+    else
+        scope = meta_get_module(b).ptr();
+
+    nb::object module_name = scope.attr("__name__");
+
+    // Compute the generic parameters of ArrayBase. This is partly needed for
+    // type checking, and partly to populate metadata ("array supplement") that
+    // we embed into the created type object.
 
     // Look up the scalar type underlying the array
-    nb::object scalar_type_o;
-    if (is_bool)
-        scalar_type_o = nb::borrow(&PyBool_Type);
-    else if (is_float)
-        scalar_type_o = nb::borrow(&PyFloat_Type);
+    nb::object scalar_t_o;
+    if (vt == VarType::Bool)
+        scalar_t_o = nb::borrow(&PyBool_Type);
+    else if (is_float(b))
+        scalar_t_o = nb::borrow(&PyFloat_Type);
     else
-        scalar_type_o = nb::borrow(&PyLong_Type);
+        scalar_t_o = nb::borrow(&PyLong_Type);
 
-    // Look up the value type underlying the array
-    nb::object value_type_o;
+    // ``ValT``: the *value type* (i.e., the type of ``self[0]``)
+    nb::object val_t_o;
     if (!b.value_type) {
-        value_type_o = scalar_type_o;
+        val_t_o = scalar_t_o;
     } else {
-        value_type_o = nb::borrow(nb::detail::nb_type_lookup(b.value_type));
-        if (!value_type_o.is_valid())
+        val_t_o = nb::borrow(nb::detail::nb_type_lookup(b.value_type));
+        if (!val_t_o.is_valid())
             nb::detail::raise(
                 "nanobind.detail.bind(\"%s\"): element type \"%s\" not found.",
                 name.c_str(), b.value_type->name());
-        scalar_type_o = nb::borrow(scalar_t(value_type_o));
+        scalar_t_o = nb::borrow(scalar_t(val_t_o));
     }
 
-    // Look up the mask type resulting from comparisons involving this type
-    nb::object mask_type_o;
-    if (is_bool) {
-        mask_type_o = self_type_o; // reference self
+    /// - ``SelfCpT`` and ``ValCpT``: types compatible with '' and 'ValT'
+    nb::object self_cp_t_o = nb::str("_") + name_o + nb::str("Cp"),
+               val_cp_t_o  = compat_type(module_name, val_t_o);
+    scope.attr(self_cp_t_o) = compat_types(module_name, name_o, val_t_o, b);
+
+    // - ``RedT``: type following reduction by 'dr.sum' or 'dr.all'
+    nb::object red_t_o;
+    if (b.ndim == 1 && (JitBackend) b.backend != JitBackend::None)
+        red_t_o = name_o; // reference self
+    else
+        red_t_o = val_t_o;
+
+    // - ``MaskT``: type produced by comparisons such as ``__eq__``";
+    nb::object mask_t_o;
+    if (vt == VarType::Bool) {
+        mask_t_o = name_o; // reference self
     } else {
         ArrayMeta m2 = b;
         m2.type = (uint16_t) VarType::Bool;
         m2.is_vector = m2.is_complex = m2.is_quaternion =
             m2.is_matrix = false;
-        mask_type_o = nb::borrow(meta_get_type(m2));
+        mask_t_o = nb::borrow(meta_get_type(m2));
     }
-
-    // Determine what other types 'b' are acceptable in an arithmetic operation
-    // like 'a + b' or 'a | b' so that the result clearly has type 'a'
-    nb::object compat_type_o = value_type_o, tmp_o = value_type_o;
-    while (is_drjit_type(tmp_o)) {
-        tmp_o = nb::borrow(supp(tmp_o).value);
-        compat_type_o = compat_type_o | tmp_o;
-    }
-
-    // Determine the type of reduction operations that potentially strip the outermost dimension
-    nb::object reduce_type_o;
-    if (b.ndim == 1 && (JitBackend) b.backend != JitBackend::None)
-        reduce_type_o = self_type_o; // reference self
-    else
-        reduce_type_o = value_type_o;
 
     nb::detail::type_init_data d;
 
@@ -106,6 +167,7 @@ nb::object bind(const ArrayBinding &b) {
     d.name = name.c_str();
     d.type = b.array_type;
     d.supplement = (uint32_t) sizeof(ArraySupplement);
+    d.scope = scope.ptr();
 
     PyType_Slot slots [] = {
         { Py_tp_init, (void *) (b.is_tensor ? tp_init_tensor : tp_init_array) },
@@ -117,15 +179,9 @@ nb::object bind(const ArrayBinding &b) {
     d.type_slots = slots;
     d.type_slots_callback = nullptr;
 
-    if (b.scope.is_valid())
-        d.scope = b.scope.ptr();
-    else
-        d.scope = meta_get_module(b).ptr();
-
     // Parameterize generic base class
-    nb::object base_o =
-        array_base[nb::make_tuple(self_type_o, value_type_o, compat_type_o,
-                                  mask_type_o, reduce_type_o)];
+    nb::object base_o = array_base[nb::make_tuple(
+        name_o, self_cp_t_o, val_t_o, val_cp_t_o, red_t_o, mask_t_o)];
 
     d.base_py = (PyTypeObject *) base_o.ptr();
 
@@ -151,10 +207,7 @@ nb::object bind(const ArrayBinding &b) {
         } while (true);
 
         if (PyLong_CheckExact(o)) {
-            VarType vt = (VarType) s.type;
-            return vt == VarType::Float16 ||
-                   vt == VarType::Float32 ||
-                   vt == VarType::Float64;
+            return is_float(s);
         } else if (PySequence_Check(o)) {
             Py_ssize_t size = s.shape[0], len = PySequence_Length(o);
             if (len == -1)
@@ -186,9 +239,9 @@ nb::object bind(const ArrayBinding &b) {
         }
     }
 
-    s.value = value_type_o.ptr();
-    s.mask = is_bool ? tp.ptr() : mask_type_o.ptr();
+    s.value = val_t_o.ptr();
     s.array = array_type_o.ptr();
+    s.mask = vt == VarType::Bool ? tp.ptr() : mask_t_o.ptr();
 
     return tp;
 }

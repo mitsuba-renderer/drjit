@@ -3,7 +3,6 @@
 General information
 ===================
 
-.. _optimizations:
 
 Optimizations
 -------------
@@ -52,7 +51,7 @@ there is enough work to do so).
 
 .. _cow:
 
-Copy-on-Write 
+Copy-on-Write
 ^^^^^^^^^^^^^
 
 Arrays are reference-counted and use a `Copy-on-Write
@@ -584,3 +583,103 @@ Double precision
       - :math:`4.4 \cdot 10^{-16}`
       - :math:`9.6 \cdot 10^{-17}\,(0.64\,\text{ulp})`
       - :math:`2.5 \cdot 10^{-15}\,(16\,\text{ulp})`
+
+.. _type_signatures:
+
+Type signatures
+---------------
+
+The :py:class:`drjit.ArrayBase` class and various core functions have
+relatively complicated-looking type signatures involving Python `generics and
+type variables <https://docs.python.org/3/library/typing.html#generics>`__.
+This enables type-checking of arithmetic expressions and improves visual
+autocomplete in editors such as `VS Code <https://code.visualstudio.com>`__.
+This section explains how these type annotations work.
+
+The :py:class:`drjit.ArrayBase` class is both an *abstract* and a *generic*
+Python type parameterized by several auxiliary type parameters. They help
+static type checkers like `MyPy <https://github.com/python/mypy>`__ and
+`PyRight <https://github.com/microsoft/pyright>`__ make sense how subclasses of
+this type transform when passed to various builtin operations. These auxiliary
+parameters are:
+
+- ``SelfT``: the type of the array subclass (i.e., a forward reference of the
+  type to itself).
+- ``SelfCpT``: a union of compatible types, for which ``self + other`` or
+  ``self | other`` produce a result of type ``SelfT``.
+- ``ValT``: the *value type* (i.e., the type of ``self[0]``)
+- ``ValCpT``: a union of compatible types, for which ``self[0] + other`` or
+  ``self[0] | other`` produce a result of type ``ValT``.
+- ``RedT``: type following reduction by :py:func:`drjit.sum` or
+  :py:func:`drjit.all`.
+- ``MaskT``: type produced by comparisons such as ``__eq__``.
+
+For example, here is the declaration of ``llvm.ad.Array2f`` shipped as part of
+Dr.Jit's `stub file
+<https://nanobind.readthedocs.io/en/latest/typing.html#stubs>`__
+``drjit/llvm/ad.pyi``:
+
+.. code-block:: python
+
+   class Array2f(drjit.ArrayBase['Array2f', '_Array2fCp', Float, '_FloatCp', Float, Array2b]):
+       pass
+
+String arguments provide *forward references* that the type checker will
+resolve at a later point. So here, we have
+
+- ``SelfT``: :py:class:`drjit.llvm.ad.Array2f`,
+- ``SelfCp``: a forward reference to ``drjit.llvm.ad._Array2fCp`` (more on this shortly),
+- ``ValT``: :py:class:`drjit.llvm.ad.Float`,
+- ``ValCpT``: a forward reference to ``drjit.llvm.ad._FloatCp`` (more on this shortly),
+- ``RedT``: :py:class`drjit.llvm.ad.Float`, and
+- ``MaskT``: :py:class:`drjit.llvm.ad.Array2b`.
+
+The mysterious-looking underscored forward references can be found at the
+bottom of the same stub, for example:
+
+.. code-block:: python
+
+   _Array2fCp: TypeAlias = Union['Array2f', '_FloatCp', 'drjit.llvm._Array2fCp',
+                                 'drjit.scalar._Array2fCp', '_Array2f16Cp']
+
+This alias creates a union of types that are *compatible* (as implied by the
+``"Cp"`` suffix) with the type ``Array2f``, for example when encountered in an
+arithmetic operations like an addition. This includes:
+
+- Whatever is compatible with the *value type* of the array (``drjit.llvm.ad._FloatCp``)
+- Types compatible with the *non-AD* version of the array (``drjit.llvm._Array2fCp``)
+- Types compatible with the *scalar* version of the array (``drjit.scalar._Array2fCp``)
+- Types compatible with a representative *lower-precision* version of that same
+  array type (``drjit.llvm.ad._Array2f16Cp``)
+
+These are all themselves type aliases representing unions continuing in the
+same vein, and so this in principle expands up a quite huge combined union.
+This enables static type inference based on Dr.Jit's promotion rules.
+
+With this background, we can now try to understand a type signature such as
+that of :py:func:`drjit.maximum`:
+
+.. code-block:: python
+
+   @overload
+   def maximum(a: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, MaskT], b: SelfCpT, /) -> SelfT: ...
+   @overload
+   def maximum(a: SelfCpT, b: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, MaskT], /) -> SelfT: ...
+   @overload
+   def maximum(a: T, b: T, /) -> T: ...
+
+Suppose we are computing the maximum of two 3D arrays:
+
+.. code-block:: python
+
+   a: Array3u = ...
+   b: Array3f = ...
+   c: ??? = dr.maximum(a, b)
+
+In this case, ``???`` is ``Array3f`` due to the type promotion rules, but how
+does the type checker know this? When it tries the first overload, it
+realizes that ``b: Array3f`` is *not* part of the ``SelfCpT`` (compatible
+with *self*) type parameter of ``Array3u``. In second overload, the test is
+reversed and succeeds, and the result is the ``SelfT`` of ``Array3f``, which is
+also ``Array3f``. The third overload exists to handle cases where neither input
+is a Dr.Jit array type. (e.g. ``dr.maximum(1, 2)``)

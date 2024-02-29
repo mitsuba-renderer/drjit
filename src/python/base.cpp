@@ -925,7 +925,10 @@ static VarState get_state(nb::handle h_) {
 
 void export_base(nb::module_ &m) {
     // Generic type variable used in many places
-    m.attr("T") = nb::type_var("T");
+    for (const char *name :
+         { "T", "SelfT", "SelfCpT", "ValT", "ValCpT", "RedT", "MaskT", "SelfT2",
+           "ValT2", "RedT2", "MaskT2", "ValCpT2", "CpT2" })
+        m.attr(name) = nb::type_var(name);
 
     #if PY_VERSION_HEX >= 0x030B0000 // TypeVarTuple was introduced in v3.11
        m.attr("Ts") = nb::type_var_tuple("Ts");
@@ -939,30 +942,18 @@ void export_base(nb::module_ &m) {
     // like MyPy and PyRight make sense how subclasses of this type transform
     // when passed to various builtin operations. These auxiliary parameters
     // are:
-    //
-    // - ``SelfT``:   the type of the array subclass
-    // - ``ValT``:   the type of an individual array item
-    // - ``UnionT``:  union of the item type, its item type, etc.
-    // - ``RedT``:    type following reduction by 'dr.sum' or 'dr.all'
-    // - ``MaskT``:   type produced by comparisons such as '__eq__'
 
-    m.attr("SelfT") = nb::type_var("SelfT");
-    m.attr("ValT") = nb::type_var("ValT");
-    m.attr("ElemT") = nb::type_var("ElemT", "contravariant"_a = true);
-    m.attr("MaskT") = nb::type_var("MaskT");
-    m.attr("RedT") = nb::type_var("RedT");
-
-    // Create another set for a few cases where we must match two arrays at once
-    m.attr("SelfT2") = nb::type_var("SelfT2");
-    m.attr("ValT2") = nb::type_var("ValT2");
-    m.attr("ElemT2") = nb::type_var("ElemT2"); // no need for contravariant annotation here
-    m.attr("MaskT2") = nb::type_var("MaskT2");
-    m.attr("RedT2") = nb::type_var("RedT2");
+    // - ``SelfT``: the type of the array subclass
+    // - ``SelfCpT``: union of compatible types, for which ``self + other`` or ``self | other`` has type ``SelfT``.
+    // - ``ValT``: the *value type* (i.e., the type of ``self[0]``)
+    // - ``ValCpT``: union of compatible types, for which ``self[0] + other`` or ``self[0] | other`` has type ``ValT``.
+    // - ``RedT``: type following reduction by 'dr.sum' or 'dr.all'
+    // - ``MaskT``: type produced by comparisons such as ``__eq__``)";
 
     nb::class_<ArrayBase> ab(m, "ArrayBase",
                              nb::type_slots(array_base_slots),
                              nb::supplement<ArraySupplement>(),
-                             nb::sig("class ArrayBase(typing.Generic[SelfT, ValT, ElemT, MaskT, RedT])"),
+                             nb::sig("class ArrayBase(typing.Generic[SelfT, SelfCpT, ValT, ValCpT, RedT, MaskT])"),
                              nb::is_generic(),
                              doc_ArrayBase);
 
@@ -976,7 +967,7 @@ void export_base(nb::module_ &m) {
     ab.def("__init__",
            [](ArrayBase &, nb::handle, nb::handle) {
                 nb::raise("drjit.ArrayBase is not constructible.");
-           }, nb::sig("def __init__(self, array : object, shape: tuple[int]) -> None"),
+           }, nb::sig("def __init__(self, array : object, shape: tuple[int, ...]) -> None"),
            doc_ArrayBase_init_2);
 
     ab.def_prop_ro_static("__meta__", [](nb::type_object_t<ArrayBase> tp) {
@@ -1001,24 +992,24 @@ void export_base(nb::module_ &m) {
 
     ab.def_prop_rw("x", xyzw_getter<0>, xyzw_setter<0>, doc_ArrayBase_x,
                    nb::for_getter(nb::sig("def x(self, /) -> ValT")),
-                   nb::for_setter(nb::sig("def x(self, value: ElemT, /) -> None")));
+                   nb::for_setter(nb::sig("def x(self, value: ValCpT, /) -> None")));
 
     ab.def_prop_rw("y", xyzw_getter<1>, xyzw_setter<1>, doc_ArrayBase_y,
                    nb::for_getter(nb::sig("def y(self, /) -> ValT")),
-                   nb::for_setter(nb::sig("def y(self, value: ElemT, /) -> None")));
+                   nb::for_setter(nb::sig("def y(self, value: ValCpT, /) -> None")));
     ab.def_prop_rw("z", xyzw_getter<2>, xyzw_setter<2>, doc_ArrayBase_z,
                    nb::for_getter(nb::sig("def z(self, /) -> ValT")),
-                   nb::for_setter(nb::sig("def z(self, value: ElemT, /) -> None")));
+                   nb::for_setter(nb::sig("def z(self, value: ValCpT, /) -> None")));
     ab.def_prop_rw("w", xyzw_getter<3>, xyzw_setter<3>, doc_ArrayBase_w,
                    nb::for_getter(nb::sig("def w(self, /) -> ValT")),
-                   nb::for_setter(nb::sig("def w(self, value: ElemT, /) -> None")));
+                   nb::for_setter(nb::sig("def w(self, value: ValCpT, /) -> None")));
 
     ab.def_prop_rw("real", complex_getter<0>, complex_setter<0>, doc_ArrayBase_real,
                    nb::for_getter(nb::sig("def real(self, /) -> ValT")),
-                   nb::for_setter(nb::sig("def real(self, value: ElemT, /) -> None")));
+                   nb::for_setter(nb::sig("def real(self, value: ValCpT, /) -> None")));
     ab.def_prop_rw("imag", complex_getter<1>, complex_setter<1>, doc_ArrayBase_imag,
                    nb::for_getter(nb::sig("def imag(self, /) -> ValT")),
-                   nb::for_setter(nb::sig("def imag(self, value: ElemT, /) -> None")));
+                   nb::for_setter(nb::sig("def imag(self, value: ValCpT, /) -> None")));
 
     ab.def_prop_ro("T", transpose_getter, doc_ArrayBase_T, nb::sig("def T(self, /) -> SelfT"));
 
@@ -1027,7 +1018,7 @@ void export_base(nb::module_ &m) {
         [](nb::handle_t<ArrayBase> h, nb::handle h2) { ::set_grad(h, h2); },
         doc_ArrayBase_grad,
         nb::for_getter(nb::sig("def grad(self, /) -> SelfT")),
-        nb::for_setter(nb::sig("def grad(self, value: SelfT | ElemT, /) -> None"))
+        nb::for_setter(nb::sig("def grad(self, value: SelfCpT, /) -> None"))
     );
 
     ab.def_prop_rw("label",

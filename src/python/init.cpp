@@ -396,7 +396,7 @@ nb::object import_ndarray(ArrayMeta m, PyObject *arg,
         for (size_t i = 0; i < m.ndim; ++i) {
             shape[i] = m.shape[i];
             if (shape[i] == DRJIT_DYNAMIC)
-                shape[i] = nb::any;
+                shape[i] = -1;
         }
     }
 
@@ -432,7 +432,7 @@ nb::object import_ndarray(ArrayMeta m, PyObject *arg,
             buf.fmt("ndim=%u, shape=(", req.ndim);
 
             for (size_t i = 0; i < req.ndim; ++i) {
-                if (shape[i] == nb::any)
+                if (shape[i] == -1)
                     buf.put('*');
                 else
                     buf.put_uint32((uint32_t) shape[i]);
