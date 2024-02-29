@@ -193,13 +193,13 @@ void export_if_stmt(nb::module_ &m) {
           "mode"_a = nb::none(), doc_if_stmt,
           // Complicated signature to type-check if_stmt via TypeVarTuple
           nb::sig(
-            "def if_stmt(args: tuple[*_Ts], "
+            "def if_stmt(args: tuple[*Ts], "
                         "cond: ArrayBase | bool, "
-                        "true_fn: Callable[[*_Ts], _T], "
-                        "false_fn: Callable[[*_Ts], _T], "
+                        "true_fn: Callable[[*Ts], T], "
+                        "false_fn: Callable[[*Ts], T], "
                         "rv_labels: Sequence[str] = (), "
                         "label: str | None = None, "
                         "mode: str | None = None) "
-            "-> _T")
+            "-> T")
     );
 }

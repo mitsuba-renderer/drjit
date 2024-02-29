@@ -197,7 +197,7 @@ def allclose(a, b, rtol: Optional[float] = None, atol: Optional[float] = None, e
 #   "Safe" functions that avoid domain errors due to rounding
 # -------------------------------------------------------------------
 
-def safe_sqrt(arg: _T, /) -> _T:
+def safe_sqrt(arg: T, /) -> T:
     '''
     Safely evaluate the square root of the provided input avoiding domain errors.
 
@@ -217,7 +217,7 @@ def safe_sqrt(arg: _T, /) -> _T:
     return result
 
 
-def safe_asin(arg: _T, /) -> _T:
+def safe_asin(arg: T, /) -> T:
     '''
     Safe wrapper around :py:func:`drjit.asin` that avoids domain errors.
 
@@ -238,7 +238,7 @@ def safe_asin(arg: _T, /) -> _T:
     return result
 
 
-def safe_acos(arg: _T, /) -> _T:
+def safe_acos(arg: T, /) -> T:
     '''
     Safe wrapper around :py:func:`drjit.acos` that avoids domain errors.
 
@@ -261,13 +261,13 @@ def safe_acos(arg: _T, /) -> _T:
 
 # Typing information for the clip function below
 @overload
-def clip(value: ArrayBase[_SelfT, _ItemT, _UnionT, _MaskT, _RedT], min: _UnionT | _SelfT, max: _UnionT | _SelfT) -> _SelfT: ...
+def clip(value: ArrayBase[SelfT, ValT, ElemT, MaskT, RedT], min: ElemT | SelfT, max: ElemT | SelfT) -> SelfT: ...
 @overload
-def clip(value: _UnionT | _SelfT, min: ArrayBase[_SelfT, _ItemT, _UnionT, _MaskT, _RedT], max: _UnionT | _SelfT) -> _SelfT: ...
+def clip(value: ElemT | SelfT, min: ArrayBase[SelfT, ValT, ElemT, MaskT, RedT], max: ElemT | SelfT) -> SelfT: ...
 @overload
-def clip(value: _UnionT | _SelfT, min: _UnionT | _SelfT, max: ArrayBase[_SelfT, _ItemT, _UnionT, _MaskT, _RedT]) -> _SelfT: ...
+def clip(value: ElemT | SelfT, min: ElemT | SelfT, max: ArrayBase[SelfT, ValT, ElemT, MaskT, RedT]) -> SelfT: ...
 @overload
-def clip(value: _T, min: _T, max: _T) -> _T: ...
+def clip(value: T, min: T, max: T) -> T: ...
 
 def clip(value, min, max):
     '''
@@ -925,7 +925,7 @@ def isolate_grad(when=True):
 #      Miscellaneous
 # -------------------------------------------------------------------
 
-def copy(arg: _T, /) -> _T:
+def copy(arg: T, /) -> T:
     """
     Create a deep copy of a PyTree
 
@@ -1031,7 +1031,7 @@ def hypot(a, b, /):
         a + b
     )
 
-def log2i(arg: _T, /) -> _T:
+def log2i(arg: T, /) -> T:
     '''
     Return the floor of the base-2 logarithm.
 
@@ -1053,7 +1053,7 @@ def log2i(arg: _T, /) -> _T:
     return (sz * 8 - 1) - lzcnt(arg)
 
 
-def rad2deg(arg: _T, /) -> _T:
+def rad2deg(arg: T, /) -> T:
     '''
     Convert angles from radians to degrees.
 
@@ -1066,7 +1066,7 @@ def rad2deg(arg: _T, /) -> _T:
     return arg * (180.0 / pi)
 
 
-def deg2rad(arg: _T, /) -> _T:
+def deg2rad(arg: T, /) -> T:
     '''
     Convert angles from degrees to radians.
 
