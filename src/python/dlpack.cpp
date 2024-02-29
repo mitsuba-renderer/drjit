@@ -144,7 +144,8 @@ static nb::ndarray<> dlpack(nb::handle_t<ArrayBase> h, bool force_cpu, nb::handl
                 jit_sync_thread();
             }
         } else {
-            ptr = s2.data(inst_ptr(h));
+            nb::object arr = nb::steal(s.tensor_array(h.ptr()));
+            ptr = s2.data(inst_ptr(arr));
         }
     } else {
         owner = nb::borrow(h);
@@ -251,6 +252,6 @@ void export_dlpack(nb::module_ &) {
       .def("tf",
            [](nb::handle_t<ArrayBase> h) {
                 nb::module_ tf = nb::module_::import_("tensorflow.experimental.dlpack");
-                return tf.attr("from_dlpack")(h);
+                return tf.attr("from_dlpack")(dlpack(h, false));
            }, doc_tf);
 }
