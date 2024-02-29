@@ -6794,8 +6794,8 @@ checkers like MyPy and PyRight make sense how subclasses of this type transform
 when passed to various builtin operations. These auxiliary parameters are:
 
 - ``SelfT``:   the type of the array subclass
-- ``ItemT``:   the type of an individual array item
-- ``UnionT``:  union of the item type, its item type, etc.
+- ``ValT``:    the value type (i.e. type of an array entry)
+- ``ElemT``:   recursive union of value type, its value type, etc.
 - ``RedT``:    type following reduction by 'dr.sum' or 'dr.all'
 - ``MaskT``:   type produced by comparisons such as '__eq__')";
 

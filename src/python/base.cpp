@@ -44,14 +44,14 @@
     m.def(#name, [](nb::handle_t<ArrayBase> h0) {                              \
         return nb::steal(apply<Normal>(                                        \
             op, #name, std::make_index_sequence<1>(), h0.ptr()));              \
-    }, doc_##name, nb::sig("def " #name "(arg: _ArrayT, /) -> _ArrayT"));      \
+    }, doc_##name, nb::sig("def " #name "(arg: ArrayT, /) -> ArrayT"));      \
     m.def(#name, [](double v0) { return dr::name(v0); });
 
 #define DR_MATH_UNOP_UINT32(name, op)                                          \
     m.def(#name, [](nb::handle_t<ArrayBase> h0) {                              \
         return nb::steal(apply<Normal>(                                        \
             op, #name, std::make_index_sequence<1>(), h0.ptr()));              \
-    }, doc_##name, nb::sig("def " #name "(arg: _ArrayT, /) -> _ArrayT"));      \
+    }, doc_##name, nb::sig("def " #name "(arg: ArrayT, /) -> ArrayT"));      \
     m.def(#name, [](uint32_t v0) { return dr::name(v0); });
 
 #define DR_MATH_UNOP_PAIR(name, op)                                            \
@@ -925,14 +925,14 @@ static VarState get_state(nb::handle h_) {
 
 void export_base(nb::module_ &m) {
     // Generic type variable used in many places
-    m.attr("_T") = nb::type_var("_T");
+    m.attr("T") = nb::type_var("T");
 
     #if PY_VERSION_HEX >= 0x030B0000 // TypeVarTuple was introduced in v3.11
-       m.attr("_Ts") = nb::type_var_tuple("_Ts");
+       m.attr("Ts") = nb::type_var_tuple("Ts");
     #endif
 
     // Type variable referring specifically to an array subclass
-    m.attr("_ArrayT") = nb::type_var("_ArrayT", "bound"_a = "ArrayBase");
+    m.attr("ArrayT") = nb::type_var("ArrayT", "bound"_a = "ArrayBase");
 
     // The ArrayBase class is an abstract + generic Python type parameterized
     // by several auxiliary type parameters. They help static type checkers
@@ -941,28 +941,28 @@ void export_base(nb::module_ &m) {
     // are:
     //
     // - ``SelfT``:   the type of the array subclass
-    // - ``ItemT``:   the type of an individual array item
+    // - ``ValT``:   the type of an individual array item
     // - ``UnionT``:  union of the item type, its item type, etc.
     // - ``RedT``:    type following reduction by 'dr.sum' or 'dr.all'
     // - ``MaskT``:   type produced by comparisons such as '__eq__'
 
-    m.attr("_SelfT") = nb::type_var("_SelfT");
-    m.attr("_ItemT") = nb::type_var("_ItemT");
-    m.attr("_UnionT") = nb::type_var("_UnionT", "contravariant"_a = true);
-    m.attr("_MaskT") = nb::type_var("_MaskT");
-    m.attr("_RedT") = nb::type_var("_RedT");
+    m.attr("SelfT") = nb::type_var("SelfT");
+    m.attr("ValT") = nb::type_var("ValT");
+    m.attr("ElemT") = nb::type_var("ElemT", "contravariant"_a = true);
+    m.attr("MaskT") = nb::type_var("MaskT");
+    m.attr("RedT") = nb::type_var("RedT");
 
     // Create another set for a few cases where we must match two arrays at once
-    m.attr("_SelfT2") = nb::type_var("_SelfT2");
-    m.attr("_ItemT2") = nb::type_var("_ItemT2");
-    m.attr("_UnionT2") = nb::type_var("_UnionT2"); // no need for contravariant annotation here
-    m.attr("_MaskT2") = nb::type_var("_MaskT2");
-    m.attr("_RedT2") = nb::type_var("_RedT2");
+    m.attr("SelfT2") = nb::type_var("SelfT2");
+    m.attr("ValT2") = nb::type_var("ValT2");
+    m.attr("ElemT2") = nb::type_var("ElemT2"); // no need for contravariant annotation here
+    m.attr("MaskT2") = nb::type_var("MaskT2");
+    m.attr("RedT2") = nb::type_var("RedT2");
 
     nb::class_<ArrayBase> ab(m, "ArrayBase",
                              nb::type_slots(array_base_slots),
                              nb::supplement<ArraySupplement>(),
-                             nb::sig("class ArrayBase(typing.Generic[_SelfT, _ItemT, _UnionT, _MaskT, _RedT])"),
+                             nb::sig("class ArrayBase(typing.Generic[SelfT, ValT, ElemT, MaskT, RedT])"),
                              nb::is_generic(),
                              doc_ArrayBase);
 
@@ -1000,34 +1000,34 @@ void export_base(nb::module_ &m) {
         doc_ArrayBase_array);
 
     ab.def_prop_rw("x", xyzw_getter<0>, xyzw_setter<0>, doc_ArrayBase_x,
-                   nb::for_getter(nb::sig("def x(self, /) -> _ItemT")),
-                   nb::for_setter(nb::sig("def x(self, value: _UnionT, /) -> None")));
+                   nb::for_getter(nb::sig("def x(self, /) -> ValT")),
+                   nb::for_setter(nb::sig("def x(self, value: ElemT, /) -> None")));
 
     ab.def_prop_rw("y", xyzw_getter<1>, xyzw_setter<1>, doc_ArrayBase_y,
-                   nb::for_getter(nb::sig("def y(self, /) -> _ItemT")),
-                   nb::for_setter(nb::sig("def y(self, value: _UnionT, /) -> None")));
+                   nb::for_getter(nb::sig("def y(self, /) -> ValT")),
+                   nb::for_setter(nb::sig("def y(self, value: ElemT, /) -> None")));
     ab.def_prop_rw("z", xyzw_getter<2>, xyzw_setter<2>, doc_ArrayBase_z,
-                   nb::for_getter(nb::sig("def z(self, /) -> _ItemT")),
-                   nb::for_setter(nb::sig("def z(self, value: _UnionT, /) -> None")));
+                   nb::for_getter(nb::sig("def z(self, /) -> ValT")),
+                   nb::for_setter(nb::sig("def z(self, value: ElemT, /) -> None")));
     ab.def_prop_rw("w", xyzw_getter<3>, xyzw_setter<3>, doc_ArrayBase_w,
-                   nb::for_getter(nb::sig("def w(self, /) -> _ItemT")),
-                   nb::for_setter(nb::sig("def w(self, value: _UnionT, /) -> None")));
+                   nb::for_getter(nb::sig("def w(self, /) -> ValT")),
+                   nb::for_setter(nb::sig("def w(self, value: ElemT, /) -> None")));
 
     ab.def_prop_rw("real", complex_getter<0>, complex_setter<0>, doc_ArrayBase_real,
-                   nb::for_getter(nb::sig("def real(self, /) -> _ItemT")),
-                   nb::for_setter(nb::sig("def real(self, value: _UnionT, /) -> None")));
+                   nb::for_getter(nb::sig("def real(self, /) -> ValT")),
+                   nb::for_setter(nb::sig("def real(self, value: ElemT, /) -> None")));
     ab.def_prop_rw("imag", complex_getter<1>, complex_setter<1>, doc_ArrayBase_imag,
-                   nb::for_getter(nb::sig("def imag(self, /) -> _ItemT")),
-                   nb::for_setter(nb::sig("def imag(self, value: _UnionT, /) -> None")));
+                   nb::for_getter(nb::sig("def imag(self, /) -> ValT")),
+                   nb::for_setter(nb::sig("def imag(self, value: ElemT, /) -> None")));
 
-    ab.def_prop_ro("T", transpose_getter, doc_ArrayBase_T, nb::sig("def T(self, /) -> _SelfT"));
+    ab.def_prop_ro("T", transpose_getter, doc_ArrayBase_T, nb::sig("def T(self, /) -> SelfT"));
 
     ab.def_prop_rw(
         "grad", [](nb::handle_t<ArrayBase> h) { return ::grad(h); },
         [](nb::handle_t<ArrayBase> h, nb::handle h2) { ::set_grad(h, h2); },
         doc_ArrayBase_grad,
-        nb::for_getter(nb::sig("def grad(self, /) -> _SelfT")),
-        nb::for_setter(nb::sig("def grad(self, value: _SelfT | _UnionT, /) -> None"))
+        nb::for_getter(nb::sig("def grad(self, /) -> SelfT")),
+        nb::for_setter(nb::sig("def grad(self, value: SelfT | ElemT, /) -> None"))
     );
 
     ab.def_prop_rw("label",
@@ -1068,13 +1068,13 @@ void export_base(nb::module_ &m) {
           [](nb::handle_t<ArrayBase> h0) {
               return nb::steal(nb_absolute(h0.ptr()));
           }, doc_abs,
-          nb::sig("def abs(arg: _ArrayT, /) -> _ArrayT"))
+          nb::sig("def abs(arg: ArrayT, /) -> ArrayT"))
      .def("abs", [](Py_ssize_t v) { return dr::abs(v); })
      .def("abs", [](double v) { return dr::abs(v); });
 
     DR_MATH_UNOP(sqrt, ArrayOp::Sqrt);
 
-    m.def("rcp", ::rcp, doc_rcp, nb::sig("def rcp(arg: _ArrayT, /) -> _ArrayT"))
+    m.def("rcp", ::rcp, doc_rcp, nb::sig("def rcp(arg: ArrayT, /) -> ArrayT"))
      .def("rcp", [](double v0) { return dr::rcp(v0); });
 
     DR_MATH_UNOP(rsqrt, ArrayOp::Rsqrt);
@@ -1116,7 +1116,7 @@ void export_base(nb::module_ &m) {
     DR_MATH_UNOP_PAIR(sincosh, ArrayOp::Sincosh);
 
     m.def("square", [](nb::handle h) { return h * h; }, doc_square,
-          nb::sig("def square(arg: _T, /) -> _T"));
+          nb::sig("def square(arg: T, /) -> T"));
     m.def("matmul", &matmul, doc_matmul);
 
     m.def("minimum",

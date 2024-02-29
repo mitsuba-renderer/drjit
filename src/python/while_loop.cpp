@@ -429,13 +429,13 @@ void export_while_loop(nb::module_ &m) {
           "mode"_a = nb::none(), "compress"_a = nb::none(), doc_while_loop,
           // Complicated signature to type-check while_loop via TypeVarTuple
           nb::sig(
-            "def while_loop(state: tuple[*_Ts], "
-                           "cond: Callable[[*_Ts], ArrayBase | bool], "
-                           "body: Callable[[*_Ts], tuple[*_Ts]], "
+            "def while_loop(state: tuple[*Ts], "
+                           "cond: Callable[[*Ts], ArrayBase | bool], "
+                           "body: Callable[[*Ts], tuple[*Ts]], "
                            "state_labels: Sequence[str] = (), "
                            "label: str | None = None, "
                            "mode: str | None = None, "
                            "compress: bool | None = None) "
-            "-> tuple[*_Ts]"
+            "-> tuple[*Ts]"
     ));
 }
