@@ -269,6 +269,8 @@ ArrayMeta meta_get(nb::handle h) noexcept {
     } else if (h.is_none() || nb::type_check(tp)) {
         m.type = (uint8_t) VarType::UInt32;
         m.is_class = true;
+    } else if (PyNumber_Float(h.ptr())) {
+        m.type = (uint8_t) VarType::Float32;
     } else {
         m.is_valid = false;
     }
