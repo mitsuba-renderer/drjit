@@ -194,7 +194,7 @@ void export_if_stmt(nb::module_ &m) {
           // Complicated signature to type-check if_stmt via TypeVarTuple
           nb::sig(
             "def if_stmt(args: tuple[*Ts], "
-                        "cond: ArrayBase | bool, "
+                        "cond: AnyArray | bool, "
                         "true_fn: Callable[[*Ts], T], "
                         "false_fn: Callable[[*Ts], T], "
                         "rv_labels: Sequence[str] = (), "

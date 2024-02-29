@@ -430,7 +430,7 @@ void export_while_loop(nb::module_ &m) {
           // Complicated signature to type-check while_loop via TypeVarTuple
           nb::sig(
             "def while_loop(state: tuple[*Ts], "
-                           "cond: Callable[[*Ts], ArrayBase | bool], "
+                           "cond: Callable[[*Ts], AnyArray | bool], "
                            "body: Callable[[*Ts], tuple[*Ts]], "
                            "state_labels: Sequence[str] = (), "
                            "label: str | None = None, "

@@ -916,13 +916,13 @@ nanobind::class_<T> bind_array_t(ArrayBinding &b, nanobind::handle scope = {},
 /// Run bind_array() for many different plain array types
 template <typename T> void bind_array_types(ArrayBinding &b) {
     bind_array<mask_t<T>>(b);
+    bind_array<int32_array_t<T>>(b);
+    bind_array<uint32_array_t<T>>(b);
+    bind_array<int64_array_t<T>>(b);
+    bind_array<uint64_array_t<T>>(b);
     bind_array<float16_array_t<T>>(b);
     bind_array<float32_array_t<T>>(b);
     bind_array<float64_array_t<T>>(b);
-    bind_array<uint32_array_t<T>>(b);
-    bind_array<int32_array_t<T>>(b);
-    bind_array<uint64_array_t<T>>(b);
-    bind_array<int64_array_t<T>>(b);
 }
 
 /// Run bind_array() for many different matrix types
@@ -965,13 +965,13 @@ template <typename T> void bind_all(ArrayBinding &b) {
 
     using T2 = std::conditional_t<drjit::detail::is_scalar_v<T>, DynamicArray<T>, T>;
     bind_array<Tensor<mask_t<T2>>>(b);
-    bind_array<Tensor<float16_array_t<T2>>>(b);
-    bind_array<Tensor<float32_array_t<T2>>>(b);
-    bind_array<Tensor<float64_array_t<T2>>>(b);
     bind_array<Tensor<int32_array_t<T2>>>(b);
     bind_array<Tensor<int64_array_t<T2>>>(b);
     bind_array<Tensor<uint32_array_t<T2>>>(b);
     bind_array<Tensor<uint64_array_t<T2>>>(b);
+    bind_array<Tensor<float16_array_t<T2>>>(b);
+    bind_array<Tensor<float32_array_t<T2>>>(b);
+    bind_array<Tensor<float64_array_t<T2>>>(b);
 }
 
 // Expose already existing object tree traversal callbacks (T::traverse_1_..) in Python.

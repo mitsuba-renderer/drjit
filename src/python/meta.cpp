@@ -459,10 +459,10 @@ const char *meta_get_name(ArrayMeta meta) noexcept {
 }
 
 /// Look up the nanobind type associated with the given array metadata
-nb::handle meta_get_type(ArrayMeta meta) {
+nb::handle meta_get_type(ArrayMeta meta, bool fail_if_missing) {
     const char *name = meta_get_name(meta);
     nb::handle result = getattr(meta_get_module(meta), name, nb::handle());
-    if (!result.is_valid())
+    if (!result.is_valid() && fail_if_missing)
         nb::raise("Operation references type \"%s\", which lacks bindings", name);
     return result;
 }

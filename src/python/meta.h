@@ -51,7 +51,7 @@ extern nb::handle meta_get_module(ArrayMeta meta) noexcept;
 extern const char *meta_get_name(ArrayMeta meta) noexcept;
 
 /// Look up the nanobind type associated with the given array metadata
-extern nb::handle meta_get_type(ArrayMeta meta);
+extern nb::handle meta_get_type(ArrayMeta meta, bool fail_if_missing = true);
 
 inline bool operator==(ArrayMeta a, ArrayMeta b) {
     a.talign = a.tsize_rel = b.talign = b.tsize_rel = 0;
