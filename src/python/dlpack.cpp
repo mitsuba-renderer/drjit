@@ -144,7 +144,9 @@ static nb::ndarray<> dlpack(nb::handle_t<ArrayBase> h, bool force_cpu, nb::handl
                 jit_sync_thread();
             }
         } else {
-            nb::object arr = nb::steal(s.tensor_array(h.ptr()));
+            nb::object arr = nb::borrow(h);
+            if (s.is_tensor)
+                arr = nb::steal(s.tensor_array(h.ptr()));
             ptr = s2.data(inst_ptr(arr));
         }
     } else {
