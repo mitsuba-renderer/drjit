@@ -892,6 +892,7 @@ nb::object reinterpret_array(nb::type_object_t<dr::ArrayBase> t, nb::handle_t<dr
             target_type = (VarType) mt.type;
 
     ms.type = mt.type;
+    ms.is_class = mt.is_class;
     if (ms != mt)
         nb::raise("drjit.reinterpret_array(): input and target type are incompatible.");
 
