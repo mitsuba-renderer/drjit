@@ -24,7 +24,6 @@ def test02_switch_vec_simple(t, symbolic, drjit_verbose, capsys):
     with dr.scoped_set_flag(dr.JitFlag.SymbolicCalls, symbolic):
         Int = t
         UInt32 = dr.uint32_array_t(Int)
-        Bool = dr.mask_t(Int)
 
         c = [
             lambda a, b: (a * 4, b+1),

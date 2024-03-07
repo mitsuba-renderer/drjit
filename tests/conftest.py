@@ -1,4 +1,11 @@
-import drjit as dr
+try:
+    import drjit as dr
+except ImportError:
+    import sys
+    import pathlib
+    sys.path.append(pathlib.Path(__file__).parents[1].as_posix())
+    import drjit as dr
+
 import types
 import pytest
 import re
@@ -82,5 +89,5 @@ def drjit_verbose():
     dr.set_log_level(level)
 
 def pytest_configure():
-    pytest.test_arrays = test_arrays
-    pytest.test_packages = test_packages
+    pytest.test_arrays = test_arrays # type: ignore
+    pytest.test_packages = test_packages # type: ignore

@@ -195,11 +195,11 @@ void export_if_stmt(nb::module_ &m) {
           nb::sig(
             "def if_stmt(args: tuple[*Ts], "
                         "cond: AnyArray | bool, "
-                        "true_fn: Callable[[*Ts], T], "
-                        "false_fn: Callable[[*Ts], T], "
-                        "rv_labels: Sequence[str] = (), "
+                        "true_fn: typing.Callable[[*Ts], T], "
+                        "false_fn: typing.Callable[[*Ts], T], "
+                        "rv_labels: typing.Sequence[str] = (), "
                         "label: str | None = None, "
-                        "mode: str | None = None) "
+                        "mode: typing.Literal['scalar', 'symbolic', 'evaluated'] | None = None) "
             "-> T")
     );
 }

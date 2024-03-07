@@ -2,7 +2,7 @@ import ast
 import types
 import inspect
 import linecache
-from typing import Any, Optional, List, TypeVar, Callable, overload
+from typing import Any, Optional, List, TypeVar, Callable, Union, Literal, overload
 
 class _SyntaxVisitor(ast.NodeTransformer):
     def __init__(self, recursive, filename, line_offset):
@@ -50,14 +50,22 @@ class _SyntaxVisitor(ast.NodeTransformer):
         return node
 
     def raise_syntax_error(self, node: ast.AST, msg: str):
-        lineno = node.lineno + self.line_offset
+        if hasattr(node, 'lineno') and node.lineno:
+            lineno = node.lineno + self.line_offset
+            text = linecache.getline(self.filename, lineno)
+        else:
+            text, lineno = None, None
         s = SyntaxError(f"@drjit.syntax ({self.filename}:{lineno}): {msg}")
-        s.lineno = lineno
-        s.end_lineno = node.end_lineno + self.line_offset
-        s.offset = node.col_offset
-        s.end_offset = node.end_col_offset
+        if lineno:
+            s.lineno = lineno
+        if hasattr(node, 'end_lineno') and node.end_lineno:
+            s.end_lineno = node.end_lineno + self.line_offset
+        if hasattr(node, 'col_offset'):
+            s.offset = node.col_offset
+        if hasattr(node, 'end_col_offset'):
+            s.end_offset = node.end_col_offset
         s.filename = self.filename
-        s.text = linecache.getline(self.filename, s.lineno)
+        s.text = text
         raise s
 
     def raise_forbidden_stmt_error(self, node: ast.AST, op_name):
@@ -76,7 +84,8 @@ class _SyntaxVisitor(ast.NodeTransformer):
                 fail = True
 
         if fail:
-            self.raise_forbidden_stmt_error(node, "return")
+            #self.raise_forbidden_stmt_error(node, "return")
+            pass
         else:
             return self.generic_visit(node)
 
@@ -775,7 +784,7 @@ def hint(
     arg: T,
     /,
     *,
-    mode: Optional[str] = None,
+    mode: Union[Literal['scalar'], Literal['evaluated'], Literal['symbolic'], None] = None,
     max_iterations: Optional[int] = None,
     label: Optional[str] = None,
     include: Optional[List[object]] = None,
