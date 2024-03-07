@@ -432,7 +432,7 @@ nb::object import_ndarray(ArrayMeta m, PyObject *arg,
             buf.fmt("ndim=%u, shape=(", req.ndim);
 
             for (size_t i = 0; i < req.ndim; ++i) {
-                if (shape[i] == -1)
+                if (shape[i] == (size_t) -1)
                     buf.put('*');
                 else
                     buf.put_uint32((uint32_t) shape[i]);
