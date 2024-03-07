@@ -69,7 +69,13 @@ def isfinite(arg, /):
     return abs(arg) < float('inf')
 
 
-def allclose(a, b, rtol: Optional[float] = None, atol: Optional[float] = None, equal_nan: bool = False):
+def allclose(
+    a: object,
+    b: object,
+    rtol: Optional[float] = None,
+    atol: Optional[float] = None,
+    equal_nan: bool = False,
+) -> bool:
     r'''
     Returns ``True`` if two arrays are element-wise equal within a given error
     tolerance.
@@ -1191,7 +1197,7 @@ def mean(value, axis: Optional[int] = 0):
         n = prod(vs) if axis is None else vs[axis]
     return s / n
 
-def meshgrid(*args, indexing='xy'):
+def meshgrid(*args: tuple[*Ts], indexing='xy') -> tuple[*Ts]:
     '''
     Return flattened N-D coordinate arrays from a sequence of 1D coordinate vectors.
 

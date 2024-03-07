@@ -18,7 +18,6 @@
 #include "slice.h"
 #include "inspect.h"
 #include "traits.h"
-#include "init.h"
 #include "autodiff.h"
 #include "reduce.h"
 #include <cmath>
@@ -956,6 +955,9 @@ void export_base(nb::module_ &m) {
                              nb::sig("class ArrayBase(typing.Generic[SelfT, SelfCpT, ValT, ValCpT, RedT, MaskT])"),
                              nb::is_generic(),
                              doc_ArrayBase);
+
+    nb::object at = nb::any_type();
+    m.attr("AnyArray") = ab[nb::make_tuple(at, at, at, at, at, at)];
 
     ab.def("__init__",
            [](ArrayBase &, nb::handle) {

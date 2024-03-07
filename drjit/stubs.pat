@@ -124,20 +124,28 @@ drjit.(full|opaque)$:
     @overload
     def \1(dtype: type[T], value: T, shape: int | Sequence[int]) -> T: ...
 
-drjit.fma$:
+drjit.(fma|lerp)$:
     @overload
-    def fma(arg0: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, MaskT], arg1: SelfCpT, arg2: SelfCpT, /) -> SelfT:
+    def \1(arg0: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, MaskT], arg1: SelfCpT, arg2: SelfCpT, /) -> SelfT:
         \doc
     @overload
-    def fma(arg0: SelfCpT, arg1: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, MaskT], arg2: SelfCpT, /) -> SelfT: ...
+    def \1(arg0: SelfCpT, arg1: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, MaskT], arg2: SelfCpT, /) -> SelfT: ...
     @overload
-    def fma(arg0: SelfCpT, arg1: SelfCpT, arg2: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, MaskT], /) -> SelfT: ...
+    def \1(arg0: SelfCpT, arg1: SelfCpT, arg2: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, MaskT], /) -> SelfT: ...
     @overload
-    def fma(arg0: T, arg1: T, arg2: T) -> T: ...
+    def \1(arg0: T, arg1: T, arg2: T) -> T: ...
 
 drjit.reshape$:
     def reshape(dtype: type[T], value: object, shape: int | Sequence[int], order: str = 'A', shrink: bool = False) -> T:
         \doc
+
+
+drjit.(isnan|isinf|isfinite)$:
+    @overload
+    def \1(arg: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, MaskT], /) -> MaskT:
+        \doc
+    @overload
+    def \1(arg: float, /) -> bool: ...
 
 # -------------- drjit.syntax, interop, detail ----------------
 
@@ -174,7 +182,3 @@ drjit.scalar.__prefix__:
         int as UInt32,
         int as UInt64
     )
-
-drjit.__prefix__:
-    from typing import Any
-    AnyArray = ArrayBase[Any, Any, Any, Any, Any, Any]
