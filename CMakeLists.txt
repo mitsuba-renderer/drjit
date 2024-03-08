@@ -192,7 +192,42 @@ if (DRJIT_MASTER_PROJECT)
 
   if (DRJIT_ENABLE_PYTHON)
     install(TARGETS drjit-python DESTINATION drjit)
-    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/drjit/config.py DESTINATION drjit)
+    install(FILES
+      ${CMAKE_CURRENT_BINARY_DIR}/drjit/config.py
+      ${CMAKE_CURRENT_BINARY_DIR}/drjit/__init__.pyi
+      ${CMAKE_CURRENT_BINARY_DIR}/drjit/__init__.py
+      ${CMAKE_CURRENT_BINARY_DIR}/drjit/interop.pyi
+      ${CMAKE_CURRENT_BINARY_DIR}/drjit/interop.py
+      ${CMAKE_CURRENT_BINARY_DIR}/drjit/ast.pyi
+      ${CMAKE_CURRENT_BINARY_DIR}/drjit/ast.py
+      ${CMAKE_CURRENT_BINARY_DIR}/drjit/detail.pyi
+      ${CMAKE_CURRENT_BINARY_DIR}/drjit/detail.py
+      ${CMAKE_CURRENT_BINARY_DIR}/drjit/py.typed
+      DESTINATION drjit
+    )
+    install(FILES
+      ${CMAKE_CURRENT_BINARY_DIR}/drjit/scalar/__init__.pyi
+      ${CMAKE_CURRENT_BINARY_DIR}/drjit/scalar/__init__.py
+      DESTINATION drjit/scalar
+    )
+    install(FILES
+      ${CMAKE_CURRENT_BINARY_DIR}/drjit/llvm/py.typed
+      ${CMAKE_CURRENT_BINARY_DIR}/drjit/llvm/__init__.pyi
+      ${CMAKE_CURRENT_BINARY_DIR}/drjit/llvm/__init__.py
+      ${CMAKE_CURRENT_BINARY_DIR}/drjit/llvm/ad.pyi
+      ${CMAKE_CURRENT_BINARY_DIR}/drjit/llvm/ad.py
+      DESTINATION drjit/llvm
+    )
+    if (DRJIT_ENABLE_CUDA)
+      install(FILES
+        ${CMAKE_CURRENT_BINARY_DIR}/drjit/cuda/py.typed
+        ${CMAKE_CURRENT_BINARY_DIR}/drjit/cuda/__init__.pyi
+        ${CMAKE_CURRENT_BINARY_DIR}/drjit/cuda/__init__.py
+        ${CMAKE_CURRENT_BINARY_DIR}/drjit/cuda/ad.pyi
+        ${CMAKE_CURRENT_BINARY_DIR}/drjit/cuda/ad.py
+        DESTINATION drjit/cuda
+      )
+    endif()
   endif()
 
   if (DRJIT_ENABLE_JIT)

@@ -6,11 +6,15 @@ endif()
 # ------------------- Copy Python resources -------------------
 configure_file(
   ../../resources/config.py.in
-  ${CMAKE_BINARY_DIR}/drjit/config.py
+  "${CMAKE_BINARY_DIR}/drjit/config.py"
 )
 
-set(PY_FILES __init__.py ast.py config.py detail.py interop.py llvm/ad.py cuda/ad.py)
+set(PY_FILES
+  __init__.py ast.py config.py detail.py interop.py
+  scalar/__init__.py llvm/__init__.py llvm/ad.py
+  cuda/__init__.py cuda/ad.py)
 set(PY_FILES_OUT "${CMAKE_BINARY_DIR}/drjit/config.py")
+
 foreach(PY_FILE IN LISTS PY_FILES)
   set(IN_FILE "${CMAKE_SOURCE_DIR}/drjit/${PY_FILE}")
   if (CMAKE_SOURCE_DIR STREQUAL CMAKE_BINARY_DIR)
@@ -66,6 +70,31 @@ nanobind_add_module(
   scalar.h      scalar.cpp
   llvm.h        llvm.cpp llvm_ad.cpp
   cuda.h        cuda.cpp cuda_ad.cpp
+)
+
+
+# Convert the docstrings from a .rst file into a header
+# that can be parsed by the compiler
+add_custom_command(
+  OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/docstr.h"
+  COMMAND "${Python_EXECUTABLE}"
+  ARGS "${CMAKE_CURRENT_SOURCE_DIR}/docstr.py"
+    "${CMAKE_CURRENT_SOURCE_DIR}/docstr.rst"
+    "${CMAKE_CURRENT_BINARY_DIR}/docstr.h"
+  DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/docstr.rst"
+)
+
+add_custom_target(
+  drjit-python-docstrings
+  DEPENDS "${CMAKE_CURRENT_BINARY_DIR}/docstr.h"
+)
+
+target_include_directories(drjit-python PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+
+# This file must be generated before we can run the Python build system
+add_dependencies(
+  drjit-python
+  drjit-python-docstrings
 )
 
 set_target_properties(drjit-python

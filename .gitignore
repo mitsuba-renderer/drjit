@@ -59,6 +59,7 @@ libnanothread.dylib
 nanothread.dll
 libnanobind-drjit.dylib
 libnanobind-drjit.so
+docstr.h
 nanobind-drjit.dll
 _drjit_ext.cp*
 _drjit_ext.abi3.*

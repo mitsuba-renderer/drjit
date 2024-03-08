@@ -111,7 +111,7 @@ These operations are *horizontal* in the sense that [..]
       target indices of atomic updates. For example, CUDA programs run with an
       instruction granularity referred to as a *warp*, which is a group of 32
       threads. When some of these threads want to write to the same location, then
-      those operands can be pre-processed to reduce the total number of neccessary
+      those operands can be pre-processed to reduce the total number of necessary
       atomic memory transactions (potentially to just a single one!)
 
       On the CPU/LLVM backend, the same process works at the granularity of
@@ -241,12 +241,12 @@ Just-in-time compilation
    .. autoattribute:: LLVM
       :annotation:
 
-      Dr.Jit backend targeting various processors via the LLVM compiler infractructure.
+      Dr.Jit backend targeting various processors via the LLVM compiler infrastructure.
 
    .. autoattribute:: CUDA
       :annotation:
 
-      Dr.Jit backend targeting NVIDIA GPUs using PTX ("Parallel Thread Excecution") IR.
+      Dr.Jit backend targeting NVIDIA GPUs using PTX ("Parallel Thread Execution") IR.
 
 .. autoclass:: VarType
 
@@ -325,7 +325,7 @@ Just-in-time compilation
    .. autoattribute:: Invalid
       :annotation:
 
-      The variable has length 0 and effetively does not exist.
+      The variable has length 0 and effectively does not exist.
 
    .. autoattribute:: Undefined
       :annotation:
