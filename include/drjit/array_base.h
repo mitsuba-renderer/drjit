@@ -249,7 +249,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
             if constexpr (cond) {                                            \
                 size_t sa = derived().size();                                \
                                                                              \
-               Derived result;                                               \
+                Derived result;                                              \
                 if constexpr (Derived::Size == Dynamic)                      \
                     result = drjit::empty<Derived>(sa);                      \
                                                                              \
