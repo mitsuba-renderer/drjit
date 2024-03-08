@@ -4,15 +4,17 @@ if (SKBUILD)
 endif()
 
 # ------------------- Copy Python resources -------------------
+
 configure_file(
   ../../resources/config.py.in
   "${CMAKE_BINARY_DIR}/drjit/config.py"
 )
 
 set(PY_FILES
-  __init__.py ast.py config.py detail.py interop.py
+  __init__.py ast.py detail.py interop.py
   scalar/__init__.py llvm/__init__.py llvm/ad.py
   cuda/__init__.py cuda/ad.py)
+
 set(PY_FILES_OUT "${CMAKE_BINARY_DIR}/drjit/config.py")
 
 foreach(PY_FILE IN LISTS PY_FILES)
