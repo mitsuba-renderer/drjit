@@ -1197,7 +1197,7 @@ def mean(value, axis: Optional[int] = 0):
         n = prod(vs) if axis is None else vs[axis]
     return s / n
 
-def meshgrid(*args: tuple[*Ts], indexing='xy') -> tuple[*Ts]:
+def meshgrid(*args: tuple, indexing='xy') -> tuple: # <- proper type signature in
     '''
     Return flattened N-D coordinate arrays from a sequence of 1D coordinate vectors.
 

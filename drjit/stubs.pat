@@ -147,6 +147,10 @@ drjit.(isnan|isinf|isfinite)$:
     @overload
     def \1(arg: float, /) -> bool: ...
 
+drjit.meshgrid$:
+    def meshgrid(*args: tuple[*Ts], indexing:str = Literal['xy', 'ij'] = 'xy') -> tuple[*Ts]:
+        \doc
+
 # -------------- drjit.syntax, interop, detail ----------------
 
 # Clean the drjit.interop stub
