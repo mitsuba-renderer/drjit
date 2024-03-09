@@ -5,9 +5,15 @@ endif()
 
 # ------------------- Copy Python resources -------------------
 
+set(DRJIT_PYTHON_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../drjit")
+
+if (NOT DRJIT_PYTHON_DST_DIR)
+  set(DRJIT_PYTHON_DST_DIR "${CMAKE_CURRENT_BINARY_DIR}/../../drjit")
+endif()
+
 configure_file(
   ../../resources/config.py.in
-  "${CMAKE_BINARY_DIR}/drjit/config.py"
+  "${DRJIT_PYTHON_DST_DIR}/config.py"
 )
 
 set(PY_FILES
@@ -15,14 +21,14 @@ set(PY_FILES
   scalar/__init__.py llvm/__init__.py llvm/ad.py
   cuda/__init__.py cuda/ad.py)
 
-set(PY_FILES_OUT "${CMAKE_BINARY_DIR}/drjit/config.py")
+set(PY_FILES_OUT "${DRJIT_PYTHON_DST_DIR}/config.py")
 
 foreach(PY_FILE IN LISTS PY_FILES)
-  set(IN_FILE "${CMAKE_SOURCE_DIR}/drjit/${PY_FILE}")
-  if (CMAKE_SOURCE_DIR STREQUAL CMAKE_BINARY_DIR)
+  set(IN_FILE "${DRJIT_PYTHON_SRC_DIR}/${PY_FILE}")
+  if (CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_BINARY_DIR)
     set(OUT_FILE "${IN_FILE}")
   else()
-    set(OUT_FILE "${CMAKE_BINARY_DIR}/drjit/${PY_FILE}")
+    set(OUT_FILE "${DRJIT_PYTHON_DST_DIR}/${PY_FILE}")
     add_custom_command(
       DEPENDS "${IN_FILE}" OUTPUT "${OUT_FILE}"
       COMMAND ${CMAKE_COMMAND} -E copy_if_different ${IN_FILE} ${OUT_FILE})
@@ -126,60 +132,60 @@ endif()
 # ------------------- Stub generation -------------------
 
 set(STUB_ARGS
-  PYTHON_PATH ${CMAKE_CURRENT_BINARY_DIR}/../..
-  PATTERN_FILE  ${CMAKE_CURRENT_SOURCE_DIR}/../../drjit/stubs.pat
+  PYTHON_PATH ${DRJIT_PYTHON_DST_DIR}/..
+  PATTERN_FILE ${DRJIT_PYTHON_SRC_DIR}/stubs.pat
   DEPENDS drjit-python ${PY_FILES_OUT}
 )
 
 nanobind_add_stub(
   drjit-stub-main
   MODULE drjit
-  OUTPUT ${CMAKE_BINARY_DIR}/drjit/__init__.pyi
-  MARKER_FILE ${CMAKE_BINARY_DIR}/drjit/py.typed
+  OUTPUT ${DRJIT_PYTHON_DST_DIR}/__init__.pyi
+  MARKER_FILE ${DRJIT_PYTHON_DST_DIR}/py.typed
   ${STUB_ARGS}
 )
 
 nanobind_add_stub(
   drjit-stub-ast
   MODULE drjit.ast
-  OUTPUT ${CMAKE_BINARY_DIR}/drjit/ast.pyi
+  OUTPUT ${DRJIT_PYTHON_DST_DIR}/ast.pyi
   ${STUB_ARGS}
 )
 
 nanobind_add_stub(
   drjit-stub-interop
   MODULE drjit.interop
-  OUTPUT ${CMAKE_BINARY_DIR}/drjit/interop.pyi
+  OUTPUT ${DRJIT_PYTHON_DST_DIR}/interop.pyi
   ${STUB_ARGS}
 )
 
 nanobind_add_stub(
   drjit-stub-detail
   MODULE drjit.detail
-  OUTPUT ${CMAKE_BINARY_DIR}/drjit/detail.pyi
+  OUTPUT ${DRJIT_PYTHON_DST_DIR}/detail.pyi
   ${STUB_ARGS}
 )
 
 nanobind_add_stub(
   drjit-stub-scalar
   MODULE drjit.scalar
-  OUTPUT ${CMAKE_BINARY_DIR}/drjit/scalar/__init__.pyi
+  OUTPUT ${DRJIT_PYTHON_DST_DIR}/scalar/__init__.pyi
   ${STUB_ARGS}
 )
 
 if (DRJIT_ENABLE_LLVM)
   nanobind_add_stub(
     drjit-stub-llvm
-    MARKER_FILE ${CMAKE_BINARY_DIR}/drjit/llvm/py.typed
+    MARKER_FILE ${DRJIT_PYTHON_DST_DIR}/llvm/py.typed
     MODULE drjit.llvm
-    OUTPUT ${CMAKE_BINARY_DIR}/drjit/llvm/__init__.pyi
+    OUTPUT ${DRJIT_PYTHON_DST_DIR}/llvm/__init__.pyi
     ${STUB_ARGS}
   )
 
   nanobind_add_stub(
     drjit-stub-llvm-ad
     MODULE drjit.llvm.ad
-    OUTPUT ${CMAKE_BINARY_DIR}/drjit/llvm/ad.pyi
+    OUTPUT ${DRJIT_PYTHON_DST_DIR}/llvm/ad.pyi
     ${STUB_ARGS}
   )
 endif()
@@ -187,16 +193,16 @@ endif()
 if (DRJIT_ENABLE_CUDA)
   nanobind_add_stub(
     drjit-stub-cuda
-    MARKER_FILE ${CMAKE_BINARY_DIR}/drjit/cuda/py.typed
+    MARKER_FILE ${DRJIT_PYTHON_DST_DIR}/cuda/py.typed
     MODULE drjit.cuda
-    OUTPUT ${CMAKE_BINARY_DIR}/drjit/cuda/__init__.pyi
+    OUTPUT ${DRJIT_PYTHON_DST_DIR}/cuda/__init__.pyi
     ${STUB_ARGS}
   )
 
   nanobind_add_stub(
     drjit-stub-cuda-ad
     MODULE drjit.cuda.ad
-    OUTPUT ${CMAKE_BINARY_DIR}/drjit/cuda/ad.pyi
+    OUTPUT ${DRJIT_PYTHON_DST_DIR}/cuda/ad.pyi
     ${STUB_ARGS}
   )
 endif()
