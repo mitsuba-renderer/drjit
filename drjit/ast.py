@@ -84,7 +84,7 @@ class _SyntaxVisitor(ast.NodeTransformer):
                 fail = True
 
         if fail:
-            #self.raise_forbidden_stmt_error(node, "return")
+            self.raise_forbidden_stmt_error(node, "return")
             pass
         else:
             return self.generic_visit(node)

@@ -139,13 +139,13 @@ nb::object switch_impl(nb::handle index_, nb::sequence targets,
     }
 }
 
-nb::object dispatch_impl(nb::handle_t<dr::ArrayBase> instances,
-                         nb::callable func, nb::args args_,
+nb::object dispatch_impl(nb::handle_t<dr::ArrayBase> inst,
+                         nb::callable target, nb::args args_,
                          nb::kwargs kwargs) {
     struct State {
         const std::type_info *type;
         nb::tuple args_o;
-        nb::object func_o;
+        nb::object target_o;
         nb::object rv_o;
 
         ~State() {
@@ -153,27 +153,27 @@ nb::object dispatch_impl(nb::handle_t<dr::ArrayBase> instances,
                 return;
             nb::gil_scoped_acquire guard;
             args_o.reset();
-            func_o.reset();
+            target_o.reset();
             rv_o.reset();
         }
     };
 
-    const ArraySupplement &s = supp(instances.type());
+    const ArraySupplement &s = supp(inst.type());
     if (!s.is_class || s.ndim != 1)
-        nb::raise("drjit.dispatch(): 'instances' parameter must be an instance array.");
+        nb::raise("drjit.dispatch(): 'inst' parameter must be an instance array.");
 
-    nb::object domain_name = nb::getattr(instances.type(), "Domain", nb::handle());
+    nb::object domain_name = nb::getattr(inst.type(), "Domain", nb::handle());
     if (!domain_name.is_valid() || !nb::isinstance<nb::str>(domain_name))
         nb::raise("drjit.dispatch(): The instance array type ('%s') lacks the "
-                  "'Domain' name attribute.", nb::type_name(instances.type()).c_str());
+                  "'Domain' name attribute.", nb::type_name(inst.type()).c_str());
 
     try {
         nb::list args(args_);
         nb::object mask = extract_mask(args, kwargs);
 
-        ad_call_func func_cb = [](void *ptr, void *self,
-                               const dr::vector<uint64_t> &args_i,
-                               dr::vector<uint64_t> &rv_i) {
+        ad_call_func target_cb = [](void *ptr, void *self,
+                                    const dr::vector<uint64_t> &args_i,
+                                    dr::vector<uint64_t> &rv_i) {
             nb::gil_scoped_acquire guard;
             State &state = *(State *) ptr;
             state.args_o =
@@ -183,7 +183,7 @@ nb::object dispatch_impl(nb::handle_t<dr::ArrayBase> instances,
                 state.type, self, nb::rv_policy::reference, nullptr));
 
             nb::object result =
-                state.func_o(self_o, *state.args_o[0], **state.args_o[1]);
+                state.target_o(self_o, *state.args_o[0], **state.args_o[1]);
 
             if (state.rv_o.is_valid())
                 check_compatibility(result, state.rv_o, "result");
@@ -193,7 +193,7 @@ nb::object dispatch_impl(nb::handle_t<dr::ArrayBase> instances,
         };
 
         State *state =
-            new State{ &nb::type_info(s.value), nb::make_tuple(args, kwargs), func, nb::object() };
+            new State{ &nb::type_info(s.value), nb::make_tuple(args, kwargs), target, nb::object() };
         ad_call_cleanup cleanup = [](void *ptr) {
             if (!nb::is_alive())
                 return;
@@ -207,9 +207,9 @@ nb::object dispatch_impl(nb::handle_t<dr::ArrayBase> instances,
 
         bool done = ad_call(
             (JitBackend) s.backend, nb::borrow<nb::str>(domain_name).c_str(), 0,
-            "dispatch()", false, (uint32_t) s.index(inst_ptr(instances)),
+            "dispatch()", false, (uint32_t) s.index(inst_ptr(inst)),
             mask.is_valid() ? ((uint32_t) s.index(inst_ptr(mask))) : 0u, args_i,
-            rv_i, state, func_cb, cleanup, true);
+            rv_i, state, target_cb, cleanup, true);
 
         nb::object result = update_indices(state->rv_o, rv_i);
 
@@ -232,6 +232,7 @@ void export_switch(nb::module_&m) {
     m.def("switch", &switch_impl, doc_switch, "index"_a,
           "targets"_a, "args"_a, "kwargs"_a,
           nb::sig("def switch(index: int | AnyArray, targets: typing.Sequence[typing.Callable[[*Ts], T]], *args: *Ts) -> T"))
-     .def("dispatch", &dispatch_impl, doc_dispatch, "instances"_a,
-          "func"_a, "args"_a, "kwargs"_a);
+     .def("dispatch", &dispatch_impl, doc_dispatch, "inst"_a,
+          "target"_a, "args"_a, "kwargs"_a,
+          nb::sig("def dispatch(inst: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, MaskT], target: typing.Callable[[ValT, *Ts], T], *args: *Ts) -> T"));
 }

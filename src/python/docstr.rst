@@ -4799,14 +4799,14 @@
     Invoke a provided Python function for each instance in an instance array.
 
     This function invokes the provided ``target`` for each instance
-    in the instance array ``instances`` and assembles the return values into
+    in the instance array ``inst`` and assembles the return values into
     a result array. Conceptually, it does the following:
 
     .. code-block:: python
 
-       def dispatch(instances, target, *args, **kwargs):
+       def dispatch(inst, target, *args, **kwargs):
            result = []
-           for inst in instances:
+           for in in inst:
                result.append(target(inst, *args, **kwargs))
 
     However, the implementation accomplishes this more efficiently using only a
@@ -4829,9 +4829,9 @@
 
       .. code-block:: python
 
-         instances = # .. Array of C++ instances ..
-         result_1 = instances.func_1(arg1)
-         result_2 = instances.func_2(arg2)
+         inst = # .. Array of C++ instances ..
+         result_1 = inst.func_1(arg1)
+         result_2 = inst.func_2(arg2)
 
       The following alternative implementation instead uses :py:func:`drjit.dispatch()`:
 
@@ -4841,7 +4841,7 @@
              return (self.func_1(arg1),
                      self.func_2(arg2))
 
-         result_1, result_2 = dr.dispatch(instances, my_func, arg1, arg2)
+         result_1, result_2 = dr.dispatch(inst, my_func, arg1, arg2)
 
     This function is otherwise very similar to :py:func:`drjit.switch()`
     and similarly provides two different compilation modes, differentiability,
@@ -4849,9 +4849,9 @@
     of :py:func:`drjit.switch()` for details.
 
     Args:
-        instances (drjit.ArrayBase): a Dr.Jit instance array.
+        inst (drjit.ArrayBase): a Dr.Jit instance array.
 
-        target (Callable): function to dispatch on all instances.
+        target (Callable): function to dispatch on all inst.
 
         *args (tuple): a variable-length list of positional arguments passed to the
           function. :ref:`PyTrees <pytrees>` are supported.

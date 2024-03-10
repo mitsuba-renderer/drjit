@@ -172,7 +172,7 @@ NB_MODULE(_drjit_ext, m_) {
      .def("expand_threshold", &jit_llvm_expand_threshold, doc_expand_threshold)
      .def("set_expand_threshold", &jit_llvm_set_expand_threshold, doc_set_expand_threshold);
 
-    m.def("flag", &jit_flag, doc_flag);
+    m.def("flag", [](JitFlag f) { return jit_flag(f) != 0; }, doc_flag);
     m.def("set_flag", &set_flag_py, doc_set_flag);
 
     struct scoped_set_flag_py {

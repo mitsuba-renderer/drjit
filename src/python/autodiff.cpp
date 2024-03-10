@@ -561,12 +561,17 @@ void export_autodiff(nb::module_ &m) {
      .def("disable_grad", &disable_grad_2)
      .def("grad_enabled", &::grad_enabled, doc_grad_enabled)
      .def("grad_enabled", &::grad_enabled_2)
-     .def("set_grad", &::set_grad, "target"_a, "source"_a, doc_set_grad)
-     .def("accum_grad", &::accum_grad, "target"_a, "source"_a, doc_accum_grad)
+     .def("set_grad", &::set_grad, "target"_a, "source"_a, doc_set_grad,
+          nb::sig("def set_grad(target: T, source: T) -> None"))
+     .def("accum_grad", &::accum_grad, "target"_a, "source"_a, doc_accum_grad,
+          nb::sig("def accum_grad(target: T, source: T) -> None"))
      .def("clear_grad", &::clear_grad, doc_clear_grad)
-     .def("replace_grad", &::replace_grad, doc_replace_grad)
-     .def("grad", &::grad, "arg"_a, "preserve_type"_a = true, doc_grad)
-     .def("detach", &::detach, "arg"_a, "preserve_type"_a = true, doc_detach)
+     .def("replace_grad", &::replace_grad, doc_replace_grad,
+          nb::sig("def replace_grad(arg0: T, arg1: T, /) -> None"))
+     .def("grad", &::grad, "arg"_a, "preserve_type"_a = true, doc_grad,
+          nb::sig("def grad(arg: T, preserve_type: bool = True) -> T"))
+     .def("detach", &::detach, "arg"_a, "preserve_type"_a = true, doc_detach,
+          nb::sig("def detach(arg: T, preserve_type: bool = True) -> T"))
      .def("enqueue", &enqueue_impl, "mode"_a, "arg"_a, doc_enqueue)
      .def("enqueue",
           [](dr::ADMode mode, nb::args args) {
@@ -575,33 +580,35 @@ void export_autodiff(nb::module_ &m) {
      .def("traverse", &ad_traverse,
           "mode"_a, "flags"_a = dr::ADFlag::Default,
           doc_traverse,
-          nb::sig("def traverse(mode: drjit.ADMode, flags: drjit.ADFlag | int = drjit.ADFlag.Default)"))
+          nb::sig("def traverse(mode: drjit.ADMode, flags: drjit.ADFlag | int = drjit.ADFlag.Default) -> None"))
      .def("forward_from", &::forward_from,
           "arg"_a, "flags"_a = dr::ADFlag::Default,
           doc_forward_from,
-          nb::sig("def forward_from(arg: drjit.ArrayBase, flags: drjit.ADFlag | int = drjit.ADFlag.Default)"))
+          nb::sig("def forward_from(arg: drjit.AnyArray, flags: drjit.ADFlag | int = drjit.ADFlag.Default) -> None"))
      .def("forward", &::forward_from,
           "arg"_a, "flags"_a = dr::ADFlag::Default,
           doc_forward,
-          nb::sig("def forward(arg: drjit.ArrayBase, flags: drjit.ADFlag | int = drjit.ADFlag.Default)"))
+          nb::sig("def forward(arg: drjit.AnyArray, flags: drjit.ADFlag | int = drjit.ADFlag.Default) -> None"))
      .def("backward_from", &::backward_from,
           "arg"_a, "flags"_a = dr::ADFlag::Default,
           doc_backward_from,
-          nb::sig("def backward_from(arg: drjit.ArrayBase, flags: drjit.ADFlag | int = drjit.ADFlag.Default)"))
+          nb::sig("def backward_from(arg: drjit.AnyArray, flags: drjit.ADFlag | int = drjit.ADFlag.Default) -> None"))
      .def("backward", &::backward_from,
           "arg"_a, "flags"_a = dr::ADFlag::Default,
           doc_backward,
-          nb::sig("def backward(arg: drjit.ArrayBase, flags: drjit.ADFlag | int = drjit.ADFlag.Default)"))
+          nb::sig("def backward(arg: drjit.AnyArray, flags: drjit.ADFlag | int = drjit.ADFlag.Default) -> None"))
      .def("forward_to", &::forward_to,
           "arg"_a, "flags"_a = dr::ADFlag::Default,
           doc_forward_to,
-          nb::sig("def forward_to(*args, flags: drjit.ADFlag | int = drjit.ADFlag.Default)"))
+          nb::sig("def forward_to(arg: ArrayT, flags: drjit.ADFlag | int = drjit.ADFlag.Default) -> ArrayT"))
      .def("backward_to", &::backward_to,
           "arg"_a, "flags"_a = dr::ADFlag::Default,
           doc_backward_to,
-          nb::sig("def backward_to(*args, flags: drjit.ADFlag | int = drjit.ADFlag.Default)"))
-     .def("forward_to", &forward_to_2, "args"_a, "kwargs"_a)
-     .def("backward_to", &backward_to_2, "args"_a, "kwargs"_a);
+          nb::sig("def backward_to(arg: ArrayT, flags: drjit.ADFlag | int = drjit.ADFlag.Default) -> ArrayT"))
+     .def("forward_to", &forward_to_2, "args"_a, "kwargs"_a,
+          nb::sig("def forward_to(*args: *Ts, flags: drjit.ADFlag | int = drjit.ADFlag.Default) -> tuple[*Ts]"))
+     .def("backward_to", &backward_to_2, "args"_a, "kwargs"_a,
+          nb::sig("def backward_to(*args: *Ts, flags: drjit.ADFlag | int = drjit.ADFlag.Default) -> tuple[*Ts]"));
 
     /// Internal context managers for drjit.isolate_grad(), drjit.suspend_grad(), etc.
     nb::module_ detail = nb::module_::import_("drjit.detail");
