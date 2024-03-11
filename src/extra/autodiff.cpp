@@ -1875,7 +1875,7 @@ struct ShrinkEdge : Special {
         JitBackend backend = (JitBackend) source->backend;
 
         JitVar ctr = JitVar::steal(jit_var_counter(backend, source->size)),
-               bound = JitVar::steal(jit_var_u32(backend, target->size)),
+               bound = JitVar::steal(jit_var_u32(backend, (uint32_t) (target->size))),
                valid = JitVar::steal(jit_var_lt(ctr.index(), bound.index())),
                expanded = JitVar::steal(
                    jit_var_gather(value.index(), ctr.index(), valid.index()));

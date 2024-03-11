@@ -25,10 +25,11 @@ set(PY_FILES_OUT "${DRJIT_PYTHON_DST_DIR}/config.py")
 
 foreach(PY_FILE IN LISTS PY_FILES)
   set(IN_FILE "${DRJIT_PYTHON_SRC_DIR}/${PY_FILE}")
-  if (CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_BINARY_DIR)
-    set(OUT_FILE "${IN_FILE}")
-  else()
-    set(OUT_FILE "${DRJIT_PYTHON_DST_DIR}/${PY_FILE}")
+  set(OUT_FILE "${DRJIT_PYTHON_DST_DIR}/${PY_FILE}")
+  get_filename_component(IN_FILE "${IN_FILE}" ABSOLUTE)
+  get_filename_component(OUT_FILE "${OUT_FILE}" REALPATH)
+
+  if (NOT IN_FILE STREQUAL OUT_FILE)
     add_custom_command(
       DEPENDS "${IN_FILE}" OUTPUT "${OUT_FILE}"
       COMMAND ${CMAKE_COMMAND} -E copy_if_different ${IN_FILE} ${OUT_FILE})
