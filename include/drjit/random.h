@@ -352,7 +352,7 @@ template <typename T> struct PCG32 {
 
     /// Compute the distance between two PCG32 pseudorandom number generators
     Int64 operator-(const PCG32 &other) const {
-        const UInt64 &state = this->state;
+        UInt64 state_value = state;
 
         auto [cur_state, cur_plus, cur_mult, distance, bit] = while_loop(
             // Initial loop state
@@ -365,14 +365,14 @@ template <typename T> struct PCG32 {
             ),
 
             // Loop condition
-            [state](UInt64 &cur_state, UInt64 &, UInt64 &, UInt64 &, UInt64 &) {
-                return cur_state != state;
+            [state_value](UInt64 &cur_state, UInt64 &, UInt64 &, UInt64 &, UInt64 &) {
+                return cur_state != state_value;
             },
 
             // Loop update step
-            [state](UInt64 &cur_state, UInt64 &cur_plus, UInt64 &cur_mult,
+            [state_value](UInt64 &cur_state, UInt64 &cur_plus, UInt64 &cur_mult,
                UInt64 &distance, UInt64 &bit) {
-                Mask mask = (state & bit) != (cur_state & bit);
+                Mask mask = (state_value & bit) != (cur_state & bit);
                 masked(cur_state, mask) = fmadd(cur_state, cur_mult, cur_plus);
                 masked(distance, mask) |= bit;
                 cur_plus *= cur_mult + 1;

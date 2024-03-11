@@ -74,11 +74,10 @@ static void log_callback(LogLevel level, const char *msg) {
     nb::error_scope guard_3;
 
     bool err_out = level == LogLevel::Error || level == LogLevel::Warn;
-    nb::handle file;
-    if (err_out)
-        file = PySys_GetObject("stderr");
+    nb::handle file = PySys_GetObject(err_out ? "stderr" : "stdout");
 
-    nb::print(msg, nb::handle(), file);
+    // Write the output
+    file.attr("write")(msg);
 
     if (level == LogLevel::Error) {
         // If this is a fatal error that will bring down the Python process,

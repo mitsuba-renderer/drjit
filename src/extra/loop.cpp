@@ -290,15 +290,15 @@ ad_loop_evaluated_compress(JitBackend backend, const char *name, void *payload,
                 // Gather remaining active entries. We always do this even when
                 // the loop state was not compressed, which ensures identical code
                 // generation in each iteration to benefit from kernel caching.
-                uint32_t t_index =
+                uint32_t t_index = (uint32_t)
                     ad_var_gather(indices[i], active_index.index(),
                                   true_mask.index(), ReduceMode::Permute);
                 ad_var_dec_ref(indices[i]);
                 indices[i] = t_index;
             }
 
-            idx = JitVar::steal(ad_var_gather(idx.index(), active_index.index(),
-                                              true_mask.index(), ReduceMode::Permute));
+            idx = JitVar::steal((uint32_t) ad_var_gather(idx.index(), active_index.index(),
+                                                         true_mask.index(), ReduceMode::Permute));
             dr::schedule(idx);
         } else {
             // Increase an atomic counter to determine the position in the output array
@@ -321,7 +321,7 @@ ad_loop_evaluated_compress(JitBackend backend, const char *name, void *payload,
 
                 // Write remaining active entries into a new output buffer
                 JitVar buffer = JitVar::steal(
-                    jit_var_undefined(backend, jit_var_type(indices[i]), size));
+                    jit_var_undefined(backend, jit_var_type((uint32_t) indices[i]), size));
                 uint64_t t_index = ad_var_scatter(
                     buffer.index(), indices[i], slot.index(), active.index(),
                     ReduceOp::Identity, ReduceMode::Permute);
@@ -346,7 +346,7 @@ ad_loop_evaluated_compress(JitBackend backend, const char *name, void *payload,
                     ad_var_dec_ref(indices[i]);
                     indices[i] = new_index;
                 }
-                idx = JitVar::steal(ad_var_shrink(idx.index(), size_next));
+                idx = JitVar::steal((uint32_t) ad_var_shrink(idx.index(), size_next));
             }
         }
 

@@ -16,7 +16,11 @@
 
 #pragma once
 
-#define drjit_fail(...) do { __builtin_printf(__VA_ARGS__); abort(); } while(0)
+#if defined(_MSC_VER)
+#  define drjit_fail(...) do { printf(__VA_ARGS__); abort(); } while(0)
+#else
+#  define drjit_fail(...) do { __builtin_printf(__VA_ARGS__); abort(); } while(0)
+#endif
 
 NAMESPACE_BEGIN(drjit)
 
