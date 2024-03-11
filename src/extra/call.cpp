@@ -254,8 +254,10 @@ static void ad_call_symbolic(JitBackend backend, const char *domain,
     if (domain && combined.find("::") == std::string::npos)
         combined = std::string(domain) + "::" + combined;
 
+    jit_new_scope(backend);
+
     vector<uint32_t> checkpoints(callable_count + 1, 0),
-                            inst_id(callable_count, 0);
+                     inst_id(callable_count, 0);
 
     {
         scoped_record rec(backend, name, true);
@@ -333,6 +335,8 @@ static void ad_call_symbolic(JitBackend backend, const char *domain,
 
         rec.disarm();
     }
+
+    jit_new_scope(backend);
 }
 
 // Strategy 3: group the arguments and evaluate a kernel per callable
