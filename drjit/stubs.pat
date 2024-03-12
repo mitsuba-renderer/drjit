@@ -148,7 +148,7 @@ drjit.(isnan|isinf|isfinite)$:
     def \1(arg: float, /) -> bool: ...
 
 drjit.meshgrid$:
-    def meshgrid(*args: *Ts, indexing:str = Literal['xy', 'ij'] = 'xy') -> tuple[*Ts]:
+    def meshgrid(*args: *Ts, indexing: Literal['xy', 'ij'] = 'xy') -> tuple[*Ts]:
         \doc
 
 # -------------- drjit.syntax, interop, detail ----------------

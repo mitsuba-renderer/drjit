@@ -2,7 +2,21 @@ import ast
 import types
 import inspect
 import linecache
-from typing import Any, Optional, List, TypeVar, Callable, Union, Literal, overload
+from typing import (
+    Any,
+    Optional,
+    List,
+    TypeVar,
+    Callable,
+    Union,
+    Literal,
+    NoReturn,
+    overload,
+    cast,
+)
+
+T = TypeVar("T")
+T2 = TypeVar("T2")
 
 class _SyntaxVisitor(ast.NodeTransformer):
     def __init__(self, recursive, filename, line_offset):
@@ -28,7 +42,7 @@ class _SyntaxVisitor(ast.NodeTransformer):
         self.filename = filename
         self.line_offset = line_offset
 
-    def visit_FunctionDef(self, node: ast.FunctionDef):
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> ast.AST:
         if self.recursive or self.depth == 0:
             # Process only the outermost function
             self.depth += 1
@@ -49,8 +63,8 @@ class _SyntaxVisitor(ast.NodeTransformer):
 
         return node
 
-    def raise_syntax_error(self, node: ast.AST, msg: str):
-        if hasattr(node, 'lineno') and node.lineno:
+    def raise_syntax_error(self, node: ast.AST, msg: str) -> NoReturn:
+        if hasattr(node, "lineno") and node.lineno:
             lineno = node.lineno + self.line_offset
             text = linecache.getline(self.filename, lineno)
         else:
@@ -58,17 +72,17 @@ class _SyntaxVisitor(ast.NodeTransformer):
         s = SyntaxError(f"@drjit.syntax ({self.filename}:{lineno}): {msg}")
         if lineno:
             s.lineno = lineno
-        if hasattr(node, 'end_lineno') and node.end_lineno:
+        if hasattr(node, "end_lineno") and node.end_lineno:
             s.end_lineno = node.end_lineno + self.line_offset
-        if hasattr(node, 'col_offset'):
+        if hasattr(node, "col_offset"):
             s.offset = node.col_offset
-        if hasattr(node, 'end_col_offset'):
+        if hasattr(node, "end_col_offset"):
             s.end_offset = node.end_col_offset
         s.filename = self.filename
         s.text = text
         raise s
 
-    def raise_forbidden_stmt_error(self, node: ast.AST, op_name):
+    def raise_forbidden_stmt_error(self, node: ast.AST, op_name: str) -> NoReturn:
         self.raise_syntax_error(
             node,
             f"use of '{op_name}' inside a transformed 'while' loop or 'if' "
@@ -77,7 +91,7 @@ class _SyntaxVisitor(ast.NodeTransformer):
             "mode='scalar') to avoid this limitation.",
         )
 
-    def visit_Return(self, node: ast.Return):
+    def visit_Return(self, node: ast.Return) -> ast.AST:
         fail = False
         for el in self.op_stack:
             if not el[1]:
@@ -85,11 +99,10 @@ class _SyntaxVisitor(ast.NodeTransformer):
 
         if fail:
             self.raise_forbidden_stmt_error(node, "return")
-            pass
         else:
             return self.generic_visit(node)
 
-    def visit_Break(self, node: ast.Break):
+    def visit_Break(self, node: ast.Break) -> ast.AST:
         fail = False
         for el in reversed(self.op_stack):
             if not el[1]:
@@ -103,7 +116,7 @@ class _SyntaxVisitor(ast.NodeTransformer):
         else:
             return self.generic_visit(node)
 
-    def visit_Continue(self, node: ast.Continue):
+    def visit_Continue(self, node: ast.Continue) -> ast.AST:
         fail = False
         for el in reversed(self.op_stack):
             if not el[1]:
@@ -117,14 +130,14 @@ class _SyntaxVisitor(ast.NodeTransformer):
         else:
             return self.generic_visit(node)
 
-    def visit_Name(self, node: ast.Name):
+    def visit_Name(self, node: ast.Name) -> ast.AST:
         if isinstance(node.ctx, ast.Load):
             self.var_r.add(node.id)
         elif isinstance(node.ctx, ast.Store):
             self.var_w.add(node.id)
         return node
 
-    def extract_hints(self, node: ast.AST):
+    def extract_hints(self, node: ast.AST) -> tuple[ast.AST, dict]:
         if (
             not isinstance(node, ast.Call)
             or not isinstance(node.func, ast.Attribute)
@@ -170,14 +183,14 @@ class _SyntaxVisitor(ast.NodeTransformer):
             "max_iterations",
             "compress",
         ]
-        for k in hints.keys():
-            if k not in valid_keys:
+        for k2 in hints.keys():
+            if k2 not in valid_keys:
                 self.raise_syntax_error(
-                    node, f'drjit.hint() does not support the keyword argument "{k}".'
+                    node, f'drjit.hint() does not support the keyword argument "{k2}".'
                 )
         return node.args[0], hints
 
-    def rewrite_and_track(self, node: ast.AST):
+    def rewrite_and_track(self, node: T) -> tuple[T, list, list, dict, bool]:
         # Keep track of variable reads/writes
         self.par_r.append(self.var_r)
         self.par_w.append(self.var_w)
@@ -192,14 +205,15 @@ class _SyntaxVisitor(ast.NodeTransformer):
 
         # Extract hints, if available
         assert isinstance(node, ast.If) or isinstance(node, ast.While)
-        node.test, hints = self.extract_hints(node.test)
+        test_fn, hints = self.extract_hints(node.test)
+        node.test = cast(ast.expr, test_fn)
         mode = hints.get("mode", None)
         is_scalar = isinstance(mode, ast.Constant) and mode.value == "scalar"
 
         # Process the node recursively
         if isinstance(node, ast.While):
             self.op_stack.append(("loop", is_scalar))
-            node = self.generic_visit(node)
+            node = cast(T, self.generic_visit(node))
 
             # Set of written variables consists of:
             # - variables written in the loop, which were also
@@ -227,7 +241,7 @@ class _SyntaxVisitor(ast.NodeTransformer):
             var_r = self.var_r
 
             # Now, visit the loop condition and rewrite the node
-            node = self.generic_visit(node)
+            node = cast(T, self.generic_visit(node))
             self.op_stack.pop()
         else:
             raise RuntimeError("rewrite_and_track(): Unsupported node type!")
@@ -254,13 +268,13 @@ class _SyntaxVisitor(ast.NodeTransformer):
 
         return node, state_in, state_out, hints, is_scalar
 
-    def visit_For(self, node: ast.For):
+    def visit_For(self, node: ast.For) -> ast.AST:
         self.op_stack.append(("loop", True))
-        node = self.generic_visit(node)
+        result = self.generic_visit(node)
         self.op_stack.pop()
-        return node
+        return result
 
-    def visit_If(self, node: ast.If):
+    def visit_If(self, node: ast.If) -> ast.AST | tuple[ast.AST, ...]:
         (node, state_in, state_out, hints, is_scalar) = self.rewrite_and_track(node)
 
         if is_scalar:
@@ -528,11 +542,9 @@ class _SyntaxVisitor(ast.NodeTransformer):
 # Counts how many times the @drjit.syntax decorator has been used
 _syntax_counter = 0
 
-T = TypeVar("T")
-
 @overload
 def syntax(
-    *, recursive: bool = False, print_ast: bool = False, print_code: bool = False
+    f: None = None, *, recursive: bool = False, print_ast: bool = False, print_code: bool = False
 ) -> Callable[[T], T]:
     """
     Syntax decorator for vectorized loops and conditionals.
@@ -712,17 +724,31 @@ def syntax(
 
 
 @overload
-def syntax(f: T, /) -> T: ...
+def syntax(
+    f: T, *, recursive: bool = False, print_ast: bool = False, print_code: bool = False
+) -> T:
+    ...
 
-def syntax(f=None, *, recursive: bool = False, print_ast: bool = False, print_code: bool = False):
+
+def syntax(
+    f: Optional[T] = None,
+    *,
+    recursive: bool = False,
+    print_ast: bool = False,
+    print_code: bool = False,
+) -> T | Callable[[T2], T2]:
     global _syntax_counter
 
     if f is None:
 
-        def wrapper(f2):
-            return syntax(f2, recursive=recursive, print_ast=print_ast, print_code=print_code)
+        def wrapper(f2: T2) -> T2:
+            return syntax(
+                f2, recursive=recursive, print_ast=print_ast, print_code=print_code
+            )
 
         return wrapper
+
+    assert isinstance(f, types.FunctionType)
 
     # Warn if this function is used many times
     _syntax_counter += 1
@@ -772,9 +798,7 @@ def syntax(f=None, *, recursive: bool = False, print_ast: bool = False, print_co
             "The following transformed AST generated by "
             "@drjit.syntax could not be compiled:\n\n%s" % ast.unparse(new_ast)
         ) from e
-    new_code = next(
-        (x for x in new_code.co_consts if isinstance(x, types.CodeType)), None
-    )
+    new_code = next(x for x in new_code.co_consts if isinstance(x, types.CodeType))
     new_func = types.FunctionType(new_code, f.__globals__)
     new_func.__defaults__ = f.__defaults__
     return new_func
@@ -784,7 +808,9 @@ def hint(
     arg: T,
     /,
     *,
-    mode: Union[Literal['scalar'], Literal['evaluated'], Literal['symbolic'], None] = None,
+    mode: Union[
+        Literal["scalar"], Literal["evaluated"], Literal["symbolic"], None
+    ] = None,
     max_iterations: Optional[int] = None,
     label: Optional[str] = None,
     include: Optional[List[object]] = None,
