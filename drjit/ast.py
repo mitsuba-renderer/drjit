@@ -274,7 +274,7 @@ class _SyntaxVisitor(ast.NodeTransformer):
         self.op_stack.pop()
         return result
 
-    def visit_If(self, node: ast.If) -> ast.AST | tuple[ast.AST, ...]:
+    def visit_If(self, node: ast.If) -> Union[ast.AST, tuple[ast.AST, ...]]:
         (node, state_in, state_out, hints, is_scalar) = self.rewrite_and_track(node)
 
         if is_scalar:
@@ -736,7 +736,7 @@ def syntax(
     recursive: bool = False,
     print_ast: bool = False,
     print_code: bool = False,
-) -> T | Callable[[T2], T2]:
+) -> Union[T, Callable[[T2], T2]]:
     global _syntax_counter
 
     if f is None:
