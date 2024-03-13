@@ -303,9 +303,6 @@ ArrayMeta meta_get_general(nb::handle h) noexcept {
  * \brief Given a list of Dr.Jit arrays and scalars, determine the flavor and
  * shape of the result array and broadcast/convert everything into this form.
  *
- * \param op
- *    Name of the operation for error messages
- *
  * \param o
  *    Array of input operands of size 'n'
  *
