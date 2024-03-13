@@ -48,9 +48,10 @@ int tp_init_array(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
             PyTypeObject *arg_tp = Py_TYPE(arg);
             bool try_sequence_import = true,
                  is_drjit_tensor = false;
+            bool arg_is_drjit = is_drjit_type(arg_tp);
 
             // Initialization from another Dr.Jit array
-            if (is_drjit_type(arg_tp)) {
+            if (arg_is_drjit) {
                 const ArraySupplement &s_arg = supp(arg_tp);
                 // Copy-constructor
                 if (arg_tp == self_tp) {
@@ -118,7 +119,7 @@ int tp_init_array(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
 
             // Try to construct from an instance created by another
             // array programming framework
-            if (is_drjit_tensor || nb::ndarray_check(arg)) {
+            if (is_drjit_tensor || (!arg_is_drjit && nb::ndarray_check(arg))) {
                 // Import flattened array in C-style ordering
                 nb::object flattened;
 
@@ -639,7 +640,7 @@ int tp_init_tensor(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
         nb::object args_2;
         if (!shape) {
             nb::object flat;
-            if (nb::ndarray_check(array)) {
+            if (!is_drjit_type(array_tp) && nb::ndarray_check(array)) {
                 // Try to construct from an instance created by another
                 // array programming framework
                 flat = import_ndarray(s, array, &shape_vec);
