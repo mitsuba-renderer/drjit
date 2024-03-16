@@ -43,20 +43,24 @@
     m.def(#name, [](nb::handle_t<ArrayBase> h0) {                              \
         return nb::steal(apply<Normal>(                                        \
             op, #name, std::make_index_sequence<1>(), h0.ptr()));              \
-    }, doc_##name, nb::sig("def " #name "(arg: ArrayT, /) -> ArrayT"));      \
+    }, doc_##name, nb::sig("def " #name "(arg: ArrayT, /) -> ArrayT"));        \
     m.def(#name, [](double v0) { return dr::name(v0); });
 
 #define DR_MATH_UNOP_UINT32(name, op)                                          \
     m.def(#name, [](nb::handle_t<ArrayBase> h0) {                              \
         return nb::steal(apply<Normal>(                                        \
             op, #name, std::make_index_sequence<1>(), h0.ptr()));              \
-    }, doc_##name, nb::sig("def " #name "(arg: ArrayT, /) -> ArrayT"));      \
+    }, doc_##name, nb::sig("def " #name "(arg: ArrayT, /) -> ArrayT"));        \
     m.def(#name, [](uint32_t v0) { return dr::name(v0); });
 
 #define DR_MATH_UNOP_PAIR(name, op)                                            \
-    m.def(#name, [](nb::handle_t<ArrayBase> h0) {                              \
-        return apply_ret_pair(op, #name, h0);                                  \
-    }, doc_##name);                                                            \
+    m.def(                                                                     \
+        #name,                                                                 \
+        [](nb::handle_t<ArrayBase> h0) {                                       \
+            return apply_ret_pair(op, #name, h0);                              \
+        },                                                                     \
+        doc_##name,                                                            \
+        nb::sig("def " #name "(arg: ArrayT, /) -> tuple[ArrayT, ArrayT]"));    \
     m.def(#name, [](double v0) { return dr::name(v0); });
 
 #define DR_MATH_BINOP(name, op)                                                \
@@ -67,20 +71,6 @@
             op, #name, std::make_index_sequence<2>(), h0.ptr(), h1.ptr()));    \
     }, doc_##name);                                                            \
     m.def(#name, [](double v0, double v1) { return dr::name(v0, v1); });
-
-#define DR_MATH_TERNOP(name, op)                                               \
-    m.def(#name,                                                               \
-          [](nb::handle h0, nb::handle h1, nb::handle h2) {                    \
-              if (!is_drjit_array(h0) && !is_drjit_array(h1) &&                \
-                  !is_drjit_array(h2))                                         \
-                  return nb::steal(NB_NEXT_OVERLOAD);                          \
-              return nb::steal(apply<Normal>(op, #name,                        \
-                                             std::make_index_sequence<3>(),    \
-                                             h0.ptr(), h1.ptr(), h2.ptr()));   \
-          }, doc_##name);                                                      \
-    m.def(#name, [](double v0, double v1, double v2) {                         \
-        return dr::name(v0, v1, v2);                                           \
-    });
 
 nb::handle array_module;
 nb::handle array_submodules[5];
