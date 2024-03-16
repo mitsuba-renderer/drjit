@@ -29,7 +29,7 @@ static void ad_cond_evaluated(JitBackend backend, const char *name,
             "ad_cond_evaluated(\"%s\"): executing conditional expression.",
             name);
 
-    dr_index64_vector true_idx, false_idx;
+    index64_vector true_idx, false_idx;
 
     // Execute 'true_fn'
     {
@@ -72,7 +72,7 @@ static void ad_cond_symbolic(JitBackend backend, const char *name,
         JitVar::steal(jit_var_cond_start(name, symbolic, cond_t, cond_f));
     JitVar true_mask = JitVar::steal(jit_var_bool(backend, true));
 
-    dr_index64_vector args, true_idx, false_idx;
+    index64_vector args, true_idx, false_idx;
     args.reserve(args_.size());
 
     // Detach from original computation in AD graph
@@ -178,7 +178,7 @@ public:
     void forward() override {
         std::string name = m_name + " [ad, fwd]";
 
-        dr_index64_vector args, rv;
+        index64_vector args, rv;
         args.reserve(m_args.size() + m_input_offsets.size());
         rv.reserve(m_output_offsets.size());
 
@@ -204,7 +204,7 @@ public:
     void backward() override {
         std::string name = m_name + " [ad, bwd]";
 
-        dr_index64_vector args, rv;
+        index64_vector args, rv;
         args.reserve(m_args.size() + m_output_offsets.size());
         rv.reserve(m_input_offsets.size());
 
@@ -229,7 +229,7 @@ public:
 
     void forward_cb(bool value, const vector<uint64_t> &args,
                     vector<uint64_t> &rv) {
-        dr_index64_vector args2, rv2;
+        index64_vector args2, rv2;
 
         args2.reserve(m_args.size());
         rv2.reserve(m_rv.size());
@@ -264,7 +264,7 @@ public:
 
     void backward_cb(bool value, const vector<uint64_t> &args,
                     vector<uint64_t> &rv) {
-        dr_index64_vector args2, rv2;
+        index64_vector args2, rv2;
 
         args2.reserve(m_args.size());
         rv2.reserve(m_rv.size());
@@ -318,8 +318,8 @@ private:
     uint32_t m_cond;
     ad_cond_body m_body_cb;
     ad_cond_delete m_delete_cb;
-    dr_index64_vector m_args;
-    dr_index64_vector m_rv;
+    index64_vector m_args;
+    index64_vector m_rv;
     dr::vector<size_t> m_input_offsets;
     dr::vector<size_t> m_output_offsets;
 };

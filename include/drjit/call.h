@@ -146,15 +146,6 @@ template <typename Ret, typename... Args> struct CallState {
     }
 };
 
-struct dr_index_vector : vector<uint64_t> {
-    using Base = vector<uint64_t>;
-    using Base::Base;
-    ~dr_index_vector() {
-        for (size_t i = 0; i < size(); ++i)
-            ad_var_dec_ref(operator[](i));
-    }
-};
-
 template <typename Self, typename Ret, typename Ret2, typename... Args>
 Ret call(const Self &self, const char *domain, const char *name,
          bool is_getter, ad_call_func callback, const Args &...args) {
@@ -164,7 +155,7 @@ Ret call(const Self &self, const char *domain, const char *name,
 
     Mask mask = extract_mask<Mask>(state->args);
 
-    dr_index_vector args_i, rv_i;
+    index64_vector args_i, rv_i;
     collect_indices<true>(state->args, args_i);
     bool done = ad_call(Self::Backend, domain, 0, name, is_getter,
                         self.index(), mask.index(), args_i, rv_i, state,

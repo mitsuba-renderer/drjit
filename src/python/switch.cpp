@@ -8,6 +8,7 @@
     BSD-style license that can be found in the LICENSE.txt file.
 */
 
+#include <drjit/autodiff.h>
 #include "switch.h"
 #include "base.h"
 #include "detail.h"
@@ -101,7 +102,7 @@ nb::object switch_impl(nb::handle index_, nb::sequence targets,
                 check_compatibility(result, state.rv_o, "result");
 
             state.rv_o = std::move(result);
-            collect_indices(state.rv_o, rv_i);
+            ::collect_indices(state.rv_o, rv_i);
         };
 
         State *state =
@@ -115,8 +116,8 @@ nb::object switch_impl(nb::handle index_, nb::sequence targets,
         };
 
         vector<uint64_t> args_i;
-        dr_index_vector rv_i;
-        collect_indices(state->args_o, args_i);
+        dr::detail::index64_vector rv_i;
+        ::collect_indices(state->args_o, args_i);
 
         bool done = ad_call(
             (JitBackend) s.backend, nullptr, nb::len(targets), "drjit.switch()", false,
@@ -124,7 +125,7 @@ nb::object switch_impl(nb::handle index_, nb::sequence targets,
             mask.is_valid() ? ((uint32_t) s.index(inst_ptr(mask))) : 0u, args_i,
             rv_i, state, func, cleanup, true);
 
-        nb::object result = update_indices(state->rv_o, rv_i);
+        nb::object result = ::update_indices(state->rv_o, rv_i);
 
         if (done)
             cleanup(state);
@@ -189,7 +190,7 @@ nb::object dispatch_impl(nb::handle_t<dr::ArrayBase> inst,
                 check_compatibility(result, state.rv_o, "result");
 
             state.rv_o = std::move(result);
-            collect_indices(state.rv_o, rv_i);
+            ::collect_indices(state.rv_o, rv_i);
         };
 
         State *state =
@@ -202,8 +203,8 @@ nb::object dispatch_impl(nb::handle_t<dr::ArrayBase> inst,
         };
 
         vector<uint64_t> args_i;
-        dr_index_vector rv_i;
-        collect_indices(state->args_o, args_i);
+        dr::detail::index64_vector rv_i;
+        ::collect_indices(state->args_o, args_i);
 
         bool done = ad_call(
             (JitBackend) s.backend, nb::borrow<nb::str>(domain_name).c_str(), 0,
@@ -211,7 +212,7 @@ nb::object dispatch_impl(nb::handle_t<dr::ArrayBase> inst,
             mask.is_valid() ? ((uint32_t) s.index(inst_ptr(mask))) : 0u, args_i,
             rv_i, state, target_cb, cleanup, true);
 
-        nb::object result = update_indices(state->rv_o, rv_i);
+        nb::object result = ::update_indices(state->rv_o, rv_i);
 
         if (done)
             cleanup(state);

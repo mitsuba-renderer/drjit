@@ -37,55 +37,6 @@ private:
     T &m_mutex;
 };
 
-/// Index vector that decreases JIT refcounts when destructed
-struct dr_index32_vector : drjit::vector<uint32_t> {
-    using Base = drjit::vector<uint32_t>;
-    using Base::Base;
-
-    dr_index32_vector(dr_index32_vector &&a) : Base(std::move(a)) { }
-    dr_index32_vector &operator=(dr_index32_vector &&a) {
-        Base::operator=(std::move(a));
-        return *this;
-    }
-    ~dr_index32_vector() { release(); }
-
-    void release() {
-        for (size_t i = 0; i < size(); ++i)
-            jit_var_dec_ref(operator[](i));
-        Base::clear();
-    }
-
-    void push_back_steal(uint32_t index) { push_back(index); }
-    void push_back_borrow(uint32_t index) {
-        jit_var_inc_ref(index);
-        push_back(index);
-    }
-};
-
-/// Index vector that decreases JIT + AD refcounts when destructed
-struct dr_index64_vector : drjit::vector<uint64_t> {
-    using Base = drjit::vector<uint64_t>;
-    using Base::Base;
-    dr_index64_vector(dr_index64_vector &&a) : Base(std::move(a)) { }
-    dr_index64_vector &operator=(dr_index64_vector &&a) {
-        Base::operator=(std::move(a));
-        return *this;
-    }
-
-    ~dr_index64_vector() { release(); }
-
-    void release() {
-        for (size_t i = 0; i < size(); ++i)
-            ad_var_dec_ref(operator[](i));
-        Base::clear();
-    }
-
-    void push_back_steal(uint64_t index) { push_back(index); }
-    void push_back_borrow(uint64_t index) {
-        push_back(ad_var_inc_ref(index));
-    }
-};
-
 /// RAII AD Isolation helper
 struct scoped_isolation_boundary {
     scoped_isolation_boundary() {
@@ -137,3 +88,6 @@ struct scoped_record {
     uint32_t checkpoint, scope;
     bool cleanup = true;
 };
+
+using index32_vector = drjit::detail::index32_vector;
+using index64_vector = drjit::detail::index64_vector;

@@ -894,5 +894,30 @@ template <typename T> void update_indices(T &value, const vector<uint64_t> &indi
         drjit_fail("update_indices(): did not consume the expected number of indices!");
 #endif
 }
+
+/// Index vector that decreases JIT + AD refcounts when destructed
+struct index64_vector : drjit::vector<uint64_t> {
+    using Base = drjit::vector<uint64_t>;
+    using Base::Base;
+    index64_vector(index64_vector &&a) : Base(std::move(a)) { }
+    index64_vector &operator=(index64_vector &&a) {
+        Base::operator=(std::move(a));
+        return *this;
+    }
+
+    ~index64_vector() { release(); }
+
+    void release() {
+        for (size_t i = 0; i < size(); ++i)
+            ad_var_dec_ref(operator[](i));
+        Base::clear();
+    }
+
+    void push_back_steal(uint64_t index) { push_back(index); }
+    void push_back_borrow(uint64_t index) {
+        push_back(ad_var_inc_ref(index));
+    }
+};
+
 NAMESPACE_END(detail)
 NAMESPACE_END(drjit)
