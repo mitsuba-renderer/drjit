@@ -24,8 +24,8 @@ static bool ad_loop_symbolic(JitBackend backend, const char *name,
                              void *payload,
                              ad_loop_read read_cb, ad_loop_write write_cb,
                              ad_loop_cond cond_cb, ad_loop_body body_cb,
-                             dr_index64_vector &backup) {
-    dr_index64_vector indices1;
+                             index64_vector &backup) {
+    index64_vector indices1;
     dr::vector<uint32_t> indices2;
 
     // Read the loop state variables
@@ -127,9 +127,9 @@ static size_t ad_loop_evaluated_mask(JitBackend backend, const char *name,
                                      void *payload, ad_loop_read read_cb,
                                      ad_loop_write write_cb,
                                      ad_loop_cond cond_cb, ad_loop_body body_cb,
-                                     dr_index64_vector indices1,
+                                     index64_vector indices1,
                                      JitVar active) {
-    dr_index64_vector indices2;
+    index64_vector indices2;
     JitVar active_it;
     size_t it = 0;
 
@@ -187,7 +187,7 @@ static size_t
 ad_loop_evaluated_compress(JitBackend backend, const char *name, void *payload,
                            ad_loop_read read_cb, ad_loop_write write_cb,
                            ad_loop_cond cond_cb, ad_loop_body body_cb,
-                           dr_index64_vector indices,
+                           index64_vector indices,
                            JitVar active) {
     uint32_t size = (uint32_t) active.size(), it = 0;
 
@@ -197,7 +197,7 @@ ad_loop_evaluated_compress(JitBackend backend, const char *name, void *payload,
 
     dr::schedule(idx);
 
-    dr_index64_vector out_indices;
+    index64_vector out_indices;
     dr::vector<bool> skip;
 
     skip.reserve(indices.size());
@@ -389,7 +389,7 @@ static void ad_loop_evaluated(JitBackend backend, const char *name,
                               ad_loop_cond cond_cb,
                               ad_loop_body body_cb,
                               bool compress) {
-    dr_index64_vector indices;
+    index64_vector indices;
 
     jit_log(LogLevel::InfoSym,
             "ad_loop_evaluated(\"%s\"): evaluating initial loop state.", name);
@@ -440,7 +440,7 @@ public:
     LoopOp(JitBackend backend, const char *name, void *payload,
            ad_loop_read read_cb, ad_loop_write write_cb, ad_loop_cond cond_cb,
            ad_loop_body body_cb, ad_loop_delete delete_cb,
-           const dr_index64_vector &state)
+           const index64_vector &state)
         : m_backend(backend), m_name(name), m_payload(payload),
           m_read_cb(read_cb), m_write_cb(write_cb), m_cond_cb(cond_cb),
           m_body_cb(body_cb), m_delete_cb(delete_cb), m_diff_count(0),
@@ -635,10 +635,10 @@ private:
     ad_loop_body m_body_cb;
     ad_loop_delete m_delete_cb;
     /// Loop state of nested loop
-    dr_index64_vector m_state;
+    index64_vector m_state;
     /// Scratch array to call nested loop body/condition
-    dr_index64_vector m_state2;
-    dr_index64_vector m_rv;
+    index64_vector m_state2;
+    index64_vector m_rv;
     size_t m_diff_count;
     bool m_restart;
 };
@@ -667,7 +667,7 @@ bool ad_loop(JitBackend backend, int symbolic, int compress, const char *name,
             jit_raise("'compress' must equal 0, 1, or -1.");
 
         if (symbolic) {
-            dr_index64_vector indices_in;
+            index64_vector indices_in;
             read_cb(payload, indices_in);
 
             bool needs_ad;
@@ -680,7 +680,7 @@ bool ad_loop(JitBackend backend, int symbolic, int compress, const char *name,
             }
 
             if (needs_ad && ad) {
-                dr_index64_vector indices_out;
+                index64_vector indices_out;
                 read_cb(payload, indices_out);
 
                 nanobind::ref<LoopOp> op =

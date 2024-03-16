@@ -16,6 +16,7 @@
 #include "base.h"
 #include "shape.h"
 #include <nanobind/stl/optional.h>
+#include <drjit/autodiff.h>
 
 /// State object passed to callbacks that implement the Python interface around ad_cond().
 struct IfState {
@@ -156,7 +157,7 @@ nb::object if_stmt(nb::tuple args, nb::handle cond, nb::callable true_fn,
         // within the symbolic region
         stash_ref(is->args, is->sr);
 
-        dr_index_vector args_i, rv_i;
+        dr::detail::index64_vector args_i, rv_i;
         collect_indices(is->args, args_i, true);
 
         bool all_done =

@@ -71,10 +71,10 @@ static void ad_call_getter(JitBackend backend, const char *domain,
                            vector<uint64_t> &rv, vector<bool> &rv_ad,
                            ad_call_func func, void *payload) {
 
-    dr_index64_vector args2; // unused
+    index64_vector args2; // unused
     vector<uint64_t> rv2;
-    dr_index32_vector rv3;
-    dr_index32_vector cleanup;
+    index32_vector rv3;
+    index32_vector cleanup;
     (void) args;
 
     JitVar null_instance = JitVar::steal(jit_var_u32(backend, 0)),
@@ -243,10 +243,10 @@ static void ad_call_symbolic(JitBackend backend, const char *domain,
     else
         mask = JitVar::steal(jit_var_bool(backend, true));
 
-    dr_index64_vector args2;
+    index64_vector args2;
     vector<uint64_t> rv2;
 
-    dr_index32_vector args3, rv3;
+    index32_vector args3, rv3;
 
     args2.reserve(args.size());
     args2.reserve(args.size());
@@ -364,7 +364,7 @@ static void ad_call_reduce(JitBackend backend, const char *domain,
     CallBucket *buckets =
         jit_var_call_reduce(backend, domain, index.index(), &n_inst);
 
-    dr_index64_vector args2(args.size(), 0);
+    index64_vector args2(args.size(), 0);
     args2.clear();
 
     vector<uint64_t> rv2;
@@ -528,7 +528,7 @@ public:
     void forward() override {
         std::string name = m_name + " [ad, fwd]";
 
-        dr_index64_vector args, rv;
+        index64_vector args, rv;
         args.reserve(m_args.size() + m_input_offsets.size());
         rv.reserve(m_output_offsets.size());
 
@@ -561,7 +561,7 @@ public:
         scoped_isolation_boundary isolation_guard;
         std::string name = m_name + " [ad, bwd]";
 
-        dr_index64_vector args, rv;
+        index64_vector args, rv;
         args.reserve(m_args.size() + m_output_offsets.size());
         rv.reserve(m_input_offsets.size());
 
@@ -683,11 +683,11 @@ private:
     const char *m_domain;
     uint32_t m_index, m_mask;
     size_t m_callable_count;
-    dr_index32_vector m_args;
-    dr_index64_vector m_args2;
-    dr_index64_vector m_rv;
+    index32_vector m_args;
+    index64_vector m_args2;
+    index64_vector m_rv;
     vector<uint64_t> m_rv2;
-    dr_index32_vector m_temp;
+    index32_vector m_temp;
     vector<uint32_t> m_input_offsets;
     vector<uint32_t> m_output_offsets;
     void *m_payload;

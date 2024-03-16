@@ -43,16 +43,6 @@ inline nb::object tuple_call(nb::handle callable, nb::handle tuple) {
     return result;
 }
 
-struct dr_index_vector : dr::vector<uint64_t> {
-    using Base = dr::vector<uint64_t>;
-    using Base::Base;
-    ~dr_index_vector() {
-        for (size_t i = 0; i < size(); ++i)
-            ad_var_dec_ref(operator[](i));
-    }
-};
-
-
 #define raise_if(expr, ...)                                                    \
     do {                                                                       \
         if (NB_UNLIKELY(expr))                                                 \

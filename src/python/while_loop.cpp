@@ -10,13 +10,9 @@
 */
 
 #include "while_loop.h"
-#include "eval.h"
 #include "base.h"
-#include "reduce.h"
 #include "detail.h"
-#include "apply.h"
 #include <nanobind/stl/optional.h>
-#include <functional>
 
 /**
  * \brief This data structure is responsible for capturing and updating the

@@ -663,4 +663,32 @@ Array block_sum(const Array &array, size_t block_size) {
     }
 }
 
+NAMESPACE_BEGIN(detail)
+
+/// Index vector that decreases JIT refcounts when destructed
+struct index32_vector : drjit::vector<uint32_t> {
+    using Base = drjit::vector<uint32_t>;
+    using Base::Base;
+
+    index32_vector(index32_vector &&a) : Base(std::move(a)) { }
+    index32_vector &operator=(index32_vector &&a) {
+        Base::operator=(std::move(a));
+        return *this;
+    }
+    ~index32_vector() { release(); }
+
+    void release() {
+        for (size_t i = 0; i < size(); ++i)
+            jit_var_dec_ref(operator[](i));
+        Base::clear();
+    }
+
+    void push_back_steal(uint32_t index) { push_back(index); }
+    void push_back_borrow(uint32_t index) {
+        jit_var_inc_ref(index);
+        push_back(index);
+    }
+};
+
+NAMESPACE_END(detail)
 NAMESPACE_END(drjit)
