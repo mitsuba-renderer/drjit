@@ -3311,8 +3311,8 @@ static void DRJIT_NOINLINE ad_decref_custom_op_output(Variable *v) {
     Edge *edge = &state.edges[v->next_bwd];
     if (edge->copy_grad) {
         next_bwd = state[edge->source]->next_bwd;
-        ad_assert(next_bwd, "ad_decref_custom_op_output(): missing backward "
-                            "edge in copy_grad node!");
+        if (!next_bwd)
+            return;
         edge = &state.edges[next_bwd];
     }
 

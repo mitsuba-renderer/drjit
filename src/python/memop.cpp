@@ -49,16 +49,15 @@ nb::object gather(nb::type_object dtype, nb::object source,
             nb::object dstruct = nb::getattr(dtype, "DRJIT_STRUCT", nb::handle());
             if (dstruct.is_valid() && dstruct.type().is(&PyDict_Type)) {
                 nb::dict dstruct_dict = nb::borrow<nb::dict>(dstruct);
-                nb::dict out;
+                nb::object out = dtype();
 
                 for (auto [k, v] : dstruct_dict) {
                     if (!v.is_type())
                         throw nb::type_error("DRJIT_STRUCT invalid, expected types!");
                     nb::type_object sub_dtype = nb::borrow<nb::type_object>(v);
-                    out[k] = gather(sub_dtype, nb::getattr(source, k), index, active, mode);
+                    nb::setattr(out, k, gather(sub_dtype, nb::getattr(source, k), index, active, mode));
                 }
-
-                return dtype(**out);
+                return out;
             }
         }
     }
