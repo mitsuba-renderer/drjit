@@ -159,7 +159,7 @@ def allclose(
 
         # plus/minus infinity
         if is_float_v(a):
-            cond |= all(a == b, axis=None)
+            cond |= a == b
 
         if equal_nan:
             cond |= isnan(a) & isnan(b)
