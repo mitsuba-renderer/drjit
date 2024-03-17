@@ -6963,3 +6963,137 @@
 
     Note that this constructor is only available in *tensor subclasses* of the
     :py:class:`drjit.ArrayBase` type.
+
+.. topic:: detail_IndexVector
+
+   Reference-counted index vector. This class stores references to Dr.Jit
+   variables and generally behaves like a ``list[int]``. The main difference
+   is that it holds references to the elements so that they cannot expire.
+
+   The main purpose of this class is to represent the inputs and outputs of
+   :py:func:`drjit.detail.VariableTracker.read` and
+   :py:func:`drjit.detail.VariableTracker.write`.
+
+.. topic:: detail_VariableTracker
+
+   Helper class for tracking state variables during control flow operations.
+
+   This class reads and updates state variables as part of control flow
+   operations such as ``dr.while_loop()`` and ``dr.if_stmt()``. It checks
+   that each variable remains consistent across this multi-step process.
+
+   Consistency here means that:
+
+   - The tree structure of the :ref:`PyTree <pytrees>` PyTree is preserved
+     across calls to :py:func:`read()`` and :py:func:`write()``.
+
+   - The type of very PyTree element is similarly preserved.
+
+   - The sizes of Dr.Jit arrays in the PyTree remain compatible across calls to
+     :py:func:`read()` and :py:func:`write()`. The sizes of two arrays ``a``
+     and ``b`` are considered compatible if ``a+b`` is well-defined (this may
+     require broadcasting).
+
+   In the case of an inconsistency, the implementation generates an error
+   message that identifies the problematic variable by name. This requires the
+   assignment of variable labels via the :py:func:`set_labels()` function.
+
+   Variables are tracked in two groups: inputs and outputs. In the case of an
+   operation like :py:func:`drjit.while_loop()` where inputs and outputs
+   coincide, only the latter group is actually used. If a variable occurs both
+   as an input and as an output (as identified via its label), then its
+   consistency is also checked across groups.
+
+.. topic:: detail_VariableTracker_read
+
+   Traverse the PyTree ``state`` and read variable indices.
+
+   The implementation performs the consistency checks mentioned in the class
+   description and appends the indices of encountered Dr.Jit arrays to the
+   reference-counted output vector ``indices``.
+
+.. topic:: detail_VariableTracker_write
+
+   Traverse the PyTree ``state`` and write variable indices.
+
+   The implementation performs the consistency checks mentioned in the class
+   description and appends the indices of encountered Dr.Jit arrays to the
+   reference-counted output vector ``indices``.
+
+.. topic:: detail_VariableTracker_set_labels
+
+   Label the variables of the given group. This is important to
+   obtain actionable error messages in case of inconsistencies.
+
+.. topic:: detail_VariableTracker_labels
+
+   Return the current set of labels for the given group
+
+.. topic:: detail_VariableTracker_clear
+
+    Clear the internal state of the tracker for a specific group (except for the labels).
+
+.. topic:: detail_VariableTracker_clear_2
+
+    Clear the internal state of the tracker (except for the labels).
+
+.. topic:: detail_VariableTracker_reset
+
+    Reset a specific variable group to its initial state
+
+.. topic:: detail_VariableTracker_reset_2
+
+    Reset all variable groups to their initial state
+
+.. topic:: detail_VariableTracker_finalize
+
+    Finalize a specific variable group following a symbolic operation.
+
+    If a variable was consistently *replaced* by another variable without
+    mutating the original variable's contents, then this operation will
+    restore the original variable to its initial value.
+
+    This needed so that an operation such as
+
+    .. code-block:: python
+
+       @dr.syntax
+       def f(x):
+          if x < 0:
+              # Associate the name 'x' with a new variable but don't change
+              # the original variable.
+              x = x + 1 return x
+
+    does not mutate the caller-provided ``x``, which would be surprising and
+    bug-prone.
+
+    On the other hand, ``x`` *will* be mutated in the next snippet since an
+    in-place update was performed within the ``if`` statement.
+
+    .. code-block:: python
+
+       @dr.syntax
+       def f(x):
+          if x < 0:
+              x += 1 # Replace the contents of 'x' with 'x+1'
+
+    Some situations are less clearly defined. Consider the following
+    conditional, where one branch mutates and the other one replaces a
+    variable.
+
+    .. code-block:: python
+
+       @dr.syntax
+       def f(x):
+          if x < 0:
+              x += 1
+          else:
+              x = x + 2
+
+    In this case, finalization will consider ``x`` to be mutated and
+    rewrite the caller-provided ``x`` so that it reflects the outcome
+    of both branches.
+
+.. topic:: detail_VariableTracker_finalize_2
+
+   Finalize input/output variables following the symbolic operation

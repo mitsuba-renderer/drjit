@@ -269,6 +269,9 @@ struct ArraySupplement : ArrayMeta {
             /// Initialize from a JIT variable index
             InitIndex init_index;
 
+            /// Replace with another JIT variable
+            InitIndex reset_index;
+
             /// Gather operation
             Gather gather;
 
@@ -753,6 +756,9 @@ template <typename T> void bind_jit_ops(ArrayBinding &b) {
         +[](const T *v) { return v->index_combined(); };
     b.init_index = (ArraySupplement::InitIndex) + [](uint64_t index, T *v) {
         new (v) T(T::borrow((typename T::Index) index));
+    };
+    b.reset_index = (ArraySupplement::InitIndex) + [](uint64_t index, T *v) {
+        *v = T(T::borrow((typename T::Index) index));
     };
 }
 

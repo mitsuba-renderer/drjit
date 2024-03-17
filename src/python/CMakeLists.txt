@@ -74,6 +74,7 @@ nanobind_add_module(
   print.h       print.cpp
   history.h     history.cpp
   profile.h     profile.cpp
+  tracker.h     tracker.cpp
 
   # Backends
   scalar.h      scalar.cpp
