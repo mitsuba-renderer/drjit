@@ -37,6 +37,7 @@
 #include "texture.h"
 #include "history.h"
 #include "profile.h"
+#include "tracker.h"
 
 
 static void set_flag_py(JitFlag flag, bool value) {
@@ -239,6 +240,7 @@ NB_MODULE(_drjit_ext, m_) {
     export_print(m);
     export_history(m);
     export_profile(m);
+    export_tracker(detail);
 
     export_scalar(scalar);
 
