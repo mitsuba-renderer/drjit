@@ -77,7 +77,9 @@ static void log_callback(LogLevel level, const char *msg) {
     nb::handle file = PySys_GetObject(err_out ? "stderr" : "stdout");
 
     // Write the output
-    file.attr("write")(msg);
+    nb::object write_fn = file.attr("write");
+    write_fn(msg);
+    write_fn("\n");
 
     if (level == LogLevel::Error) {
         // If this is a fatal error that will bring down the Python process,

@@ -4514,7 +4514,7 @@
           queries the value of :py:attr:`drjit.JitFlag.CompressLoops` when the
           parameter is not specified. Symbolic loops ignore this parameter.
 
-        state_labels (list[str]): An optional list of labels associated with each
+        labels (list[str]): An optional list of labels associated with each
           ``state`` entry. Dr.Jit uses this to provide better error messages in
           case of a detected inconsistency. The :py:func:`@drjit.syntax <drjit.syntax>`
           decorator automatically provides these labels based on the transformed
@@ -6799,6 +6799,11 @@
                   queue_size = size
                   queue = dr.empty(dtype=type(state), shape=queue_size)
 
+                  # Create an opaque variable representing the number 'loop_state'.
+                  # This keeps this changing value from being baked into the program,
+                  # which is needed for proper kernel caching
+                  queue_size_o = dr.opaque(UInt32, queue_size)
+
                   while not stopping_criterion(state):
                       # This line represents the loop body that processes work
                       state = loop_body(state)
@@ -6814,7 +6819,7 @@
                           todo = state
 
                           # Be careful not to write beyond the end of the queue
-                          valid = slot < queue_size
+                          valid = slot < queue_size_o
 
                           # Write 'todo' into the reserved slot
                           dr.scatter(target=queue, index=slot, value=todo, active=valid)
@@ -7097,3 +7102,12 @@
 .. topic:: detail_VariableTracker_finalize_2
 
    Finalize input/output variables following the symbolic operation
+
+.. topic:: detail_VariableTracker_check_size
+
+   Check that modified variables in ``group`` are compatible with size ``size``.
+
+.. topic:: detail_VariableTracker_check_size_2
+
+   Check that all modified variables are compatible with size ``size``.
+

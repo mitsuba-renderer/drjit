@@ -137,6 +137,21 @@ class _SyntaxVisitor(ast.NodeTransformer):
             self.var_w.add(node.id)
         return node
 
+    # def visit_Attribute(self, node: ast.Attribute) -> ast.AST:
+    #     n = node
+    #     seq = []
+    #     while True:
+    #         seq.append(n.attr)
+    #         if isinstance(n.value, ast.Attribute):
+    #             n = n.value
+    #         elif isinstance(n.value, ast.Name):
+    #             seq.append(n.value.id)
+    #             break
+    #         else:
+    #             return self.generic_visit(node)
+    #     self.var_r.add(".".join(reversed(seq)))
+    #     return node
+
     def extract_hints(self, node: ast.AST) -> tuple[ast.AST, dict]:
         if (
             not isinstance(node, ast.Call)
@@ -473,7 +488,7 @@ class _SyntaxVisitor(ast.NodeTransformer):
         # 8. Call drjit.while_loop()
         call_kwargs = [
             ast.keyword(
-                arg="state_labels",
+                arg="labels",
                 value=ast.Tuple(
                     elts=[ast.Constant(k) for k in state],
                     ctx=load,
@@ -749,6 +764,11 @@ def syntax(
         return wrapper
 
     assert isinstance(f, types.FunctionType)
+
+    # Catch potential mistakes in applying @dr.syntax in the wrong place
+    mod = f.__module__
+    if mod.startswith('drjit') or mod.startswith('pytest'):
+        raise RuntimeError(f'You tried to apply the @dr.syntax decorator to a function in the "{mod}" namespace, giving up. It is likely that you declared decorators in the wrong order (@dr.syntax should be "closest" to the actual function definition).')
 
     # Warn if this function is used many times
     _syntax_counter += 1
