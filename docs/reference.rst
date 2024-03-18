@@ -1384,3 +1384,10 @@ Low-level bits
 .. autofunction:: set_expand_threshold
 .. autofunction:: kernel_history
 .. autofunction:: kernel_history_clear
+
+Typing
+------
+
+.. autoattribute:: T
+.. autoattribute:: Ts
+.. autoattribute:: AnyArray

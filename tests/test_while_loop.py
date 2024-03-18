@@ -21,9 +21,37 @@ def test01_simple(t, mode, optimize):
         assert dr.all(z == t(9, 9, 9, 9, 9, 0, 0))
 
 
+@pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
+@pytest.test_arrays('uint32,is_jit,shape=(*)')
+def test02_mutate(t, mode):
+    # Test that in-place mutation of loop state variables is correctly
+    # tracked and propagated to the inputs of dr.while_loop
+    @dr.syntax
+    def test_nomut(x, mode):
+        while dr.hint(x < 10, mode=mode):
+            x = x + 1
+        return x
+
+    @dr.syntax
+    def test_mut(x, mode):
+        while dr.hint(x < 10, mode=mode):
+            x += 1
+        return x
+
+    x = t(1)
+    y = test_nomut(x, mode)
+    dr.eval(x, y)
+    assert x == 1 and y == 10
+
+    x = t(1)
+    y = test_mut(x, mode)
+    dr.eval(x, y)
+    assert x == 10 and y == 10
+
+
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
 @dr.syntax
-def test02_nested_loop_disallowed_config(t):
+def test03_nested_loop_disallowed_config(t):
     # Can't record an evaluated loop within a symbolic recording session
     with pytest.raises(RuntimeError) as e:
         i, j = t(5), t(5)
@@ -41,7 +69,7 @@ def test02_nested_loop_disallowed_config(t):
 @pytest.mark.parametrize("version", [0, 1])
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
 @dr.syntax
-def test03_change_type(t, mode, version):
+def test04_change_type(t, mode, version):
     # Can't change the type of a variable
     with pytest.raises(RuntimeError) as e:
         i = t(5)
@@ -51,74 +79,70 @@ def test03_change_type(t, mode, version):
             else:
                 i = None
 
-    err_msg = "the body of this loop changed the type of loop state variable 'i'"
+    err_msg = "the type of state variable 'i' changed from"
     assert err_msg in str(e.value)
 
 
 @pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
 @dr.syntax
-def test04_change_size(t, mode):
+def test05_change_size(t, mode):
     # Can't change the size of a variable
     with pytest.raises(RuntimeError) as e:
         i = t(5, 10)
         while dr.hint(i < 10, mode=mode):
             i = t(10, 11, 12)
 
-    err_msg = "the body of this loop changed the size of loop state variable 'i'"
+    err_msg = "the size of state variable 'i' of type "
     assert err_msg in str(e.value)
 
 
 @pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
 @dr.syntax
-def test05_incompatible_size(t, mode):
+def test06_incompatible_size(t, mode):
     # Can't mix variables with incompatible sizes
     with pytest.raises(RuntimeError) as e:
         i = t(5, 6, 7)
         j = t(2, 7)
-        while i < 10:
+        while dr.hint(i < 10, mode=mode):
             i += 1
             j += 1
 
-    err_msg="The body of this loop operates on arrays of size 3. Loop state variable 'j' has an incompatible size 2."
+    err_msg = "this operation processes arrays of size 3, while state variable 'j' has an incompatible size 2."
     assert err_msg in str(e.value)
 
 
 @pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
 @dr.syntax
-def test06_uninitialized_before(t, mode):
+def test07_uninitialized_before(t, mode):
     # Loop state must be fully defined before loop
-    with pytest.raises(RuntimeError) as e:
+    with pytest.raises(RuntimeError, match=r"state variable 'j' of type .* is uninitialized"):
         i = t(5, 6, 7)
         j = t()
-        while i < 10:
+        while dr.hint(i < 10, mode=mode):
             i += 1
             j += 1
 
-    assert "loop state variable 'j'" in str(e.value) and "uninitialized" in str(e.value)
-
 
 @pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
 @dr.syntax
-def test07_uninitialized_after(t, mode):
+def test08_uninitialized_after(t, mode):
     # Loop state must be fully defined after each loop iteration
-    with pytest.raises(RuntimeError) as e:
+    with pytest.raises(RuntimeError, match=r"state variable 'j' of type .* is uninitialized"):
         i = t(5, 6)
         j = t(7, 8)
-        while i < 10:
+        while dr.hint(i < 10, mode=mode):
             i += 1
             j = t()
 
-    assert "loop state variable 'j'" in str(e.value) and "uninitialized" in str(e.value)
-
 
 @pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
 @dr.syntax
-def test07_cond_err(t, mode):
+def test09_cond_err(t, mode):
     # The loop condition might raise an exception, which should be propagated without problems
     def mycond(v):
         raise Exception("oh no")
@@ -132,7 +156,7 @@ def test07_cond_err(t, mode):
 @pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
 @dr.syntax
-def test09_body_err(t, mode):
+def test10_body_err(t, mode):
     # The body might raise an exception, which should be propagated without problems
     with pytest.raises(RuntimeError) as e:
         i = t(5)
@@ -140,10 +164,11 @@ def test09_body_err(t, mode):
             raise Exception("oh no")
     assert "oh no" in str(e.value.__cause__)
 
+
 @pytest.mark.parametrize('optimize', [True, False])
 @pytest.test_arrays('uint32,is_jit,shape=(2, *)')
 @dr.syntax
-def test10_dependency_structure(t, optimize, drjit_verbose, capsys):
+def test11_dependency_structure(t, optimize, drjit_verbose, capsys):
     # Test that only requested variables are being evaluated
     with dr.scoped_set_flag(dr.JitFlag.OptimizeLoops, optimize):
         a = t(1234, 5678)
@@ -169,7 +194,7 @@ def test10_dependency_structure(t, optimize, drjit_verbose, capsys):
 @pytest.mark.parametrize('optimize', [True, False])
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
 @dr.syntax
-def test11_loop_optimizations(t, optimize):
+def test12_loop_optimizations(t, optimize):
     # Test that the loop optimizes away constant loop state
     with dr.scoped_set_flag(dr.JitFlag.OptimizeLoops, optimize):
         a = t(1234)
@@ -209,7 +234,7 @@ def test11_loop_optimizations(t, optimize):
 @pytest.mark.parametrize('optimize', [True, False])
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
 @dr.syntax
-def test12_scatter_v1(t, mode, optimize, drjit_verbose, capsys):
+def test13_scatter_v1(t, mode, optimize, drjit_verbose, capsys):
     with dr.scoped_set_flag(dr.JitFlag.OptimizeLoops, optimize):
         i = t(0, 1)
         v = t(0, 0)
@@ -230,11 +255,12 @@ def test12_scatter_v1(t, mode, optimize, drjit_verbose, capsys):
             transcript = capsys.readouterr().out
             assert transcript.count('[direct]') == 2
 
+
 @pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
 @pytest.mark.parametrize('optimize', [True, False])
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
 @dr.syntax
-def test13_scatter_v2(t, mode, optimize, drjit_verbose, capsys):
+def test14_scatter_v2(t, mode, optimize, drjit_verbose, capsys):
     with dr.scoped_set_flag(dr.JitFlag.OptimizeLoops, optimize):
         i = t(0, 1)
         v = t(0, 0)
@@ -253,11 +279,12 @@ def test13_scatter_v2(t, mode, optimize, drjit_verbose, capsys):
             transcript = capsys.readouterr().out
             assert transcript.count('[direct]') == 1
 
+
 @pytest.mark.parametrize('mode1', ['evaluated', 'symbolic'])
 @pytest.mark.parametrize('mode2', ['evaluated', 'symbolic'])
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
 @dr.syntax
-def test14_nested_loop(mode1, mode2, t):
+def test15_nested_loop(mode1, mode2, t):
     n = dr.arange(t, 17)
     i, accum = t(0), t(0)
 
@@ -284,7 +311,7 @@ def test14_nested_loop(mode1, mode2, t):
 @pytest.mark.parametrize('mode2', ['evaluated', 'symbolic'])
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
 @dr.syntax
-def test15_nested_loop_with_side_effect(mode1, mode2, t):
+def test16_nested_loop_with_side_effect(mode1, mode2, t):
     n = dr.arange(t, 17)
     i, accum = t(0), dr.zeros(t, 17)
 
@@ -310,7 +337,7 @@ def test15_nested_loop_with_side_effect(mode1, mode2, t):
 @pytest.mark.parametrize("optimize", [True, False])
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
 @dr.syntax
-def test16_optimize_away(t, optimize):
+def test17_optimize_away(t, optimize):
     with dr.scoped_set_flag(dr.JitFlag.OptimizeLoops, optimize):
         # Test that the loop completely optimizes away with a 'false' loop condition
         a = t(1, 2, 3)
@@ -322,11 +349,12 @@ def test16_optimize_away(t, optimize):
 
         assert (a.index == ai) == optimize
 
+
 @pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
 @pytest.mark.parametrize("optimize", [True, False])
 @pytest.test_arrays('float,is_diff,shape=(*)')
 @dr.syntax
-def test17_simple_diff_loop(t, optimize, mode):
+def test18_simple_diff_loop(t, optimize, mode):
     i, j = dr.int32_array_t(t)(0), t(1)
     dr.enable_grad(j)
     dr.set_grad(j, 1.1)
@@ -337,10 +365,11 @@ def test17_simple_diff_loop(t, optimize, mode):
 
     assert dr.allclose(dr.forward_to(j), 32*1.1)
 
+
 @pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
 @pytest.mark.parametrize("optimize", [True, False])
 @pytest.test_arrays('float,is_diff,shape=(*)')
-def test18_complex_diff_loop(t, optimize, mode):
+def test19_complex_diff_loop(t, optimize, mode):
     i = dr.int32_array_t(t)(0)
     lvars = [t(0) for i in range(10)]
     dr.enable_grad(lvars[5])
@@ -359,17 +388,20 @@ def test18_complex_diff_loop(t, optimize, mode):
 @pytest.mark.parametrize("optimize", [True, False])
 @pytest.test_arrays('float,is_diff,shape=(*)')
 @dr.syntax
-def test19_no_mutate_inputs(t, optimize, mode):
+def test20_no_mutate_inputs(t, optimize, mode):
     x = t(1)
     z = t(2)
 
     xo, zo = dr.while_loop(
         state=(x,z),
         cond=lambda x, z: x < 10,
-        body=lambda x, z: (x + 1, z)
+        body=lambda x, z: (x + 1, z),
+        mode=mode
     )
 
-    assert xo == 10 and x == 1
+    assert xo is not x
+    assert xo == 10
+    assert x == 1
     assert zo is z
 
     q1 = (t(3), t(4, 5))
@@ -383,18 +415,21 @@ def test19_no_mutate_inputs(t, optimize, mode):
     q1o, q2o = dr.while_loop(
         state=(q1,q2),
         cond=lambda q1, q2: q2[1]<10,
-        body=mut
+        body=mut,
+        mode=mode
     )
 
     assert q1o is q1
-    assert q2o is not q2
+    assert q2o is q2
     assert q2o[0] is q2[0]
-    assert q2o[1] is not q2[1]
+    assert q2o[1] is q2[1]
+    assert dr.allclose(q2, ([6], [11, 12]))
+
 
 @pytest.mark.parametrize('symbolic', [True, False])
 @pytest.mark.parametrize("optimize", [True, False])
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
-def test20_loop_in_vcall(t, optimize, symbolic):
+def test21_loop_in_vcall(t, optimize, symbolic):
     @dr.syntax
     def f(t, x):
         count = t(0)
@@ -414,7 +449,8 @@ def test20_loop_in_vcall(t, optimize, symbolic):
                         out = dr.switch(indices, [f], t, x)
                         assert dr.all(out == [1,2,3])
 
-def test21_limitations():
+
+def test22_limitations():
     # Test that issues related to current limitations of the AST processing
     # are correctly reported
     with pytest.raises(SyntaxError, match="use of 'break' inside a transformed 'while' loop or 'if' statement is currently not supported."):
@@ -433,11 +469,13 @@ def test21_limitations():
             else:
                 continue
 
+
 @pytest.mark.parametrize('mode', ['symbolic', 'evaluated'])
 @pytest.mark.parametrize("compress", [True, False])
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
 @dr.syntax
-def test22_compress(t, mode, compress):
+def test23_compress(t, mode, compress):
+    # Test loop compression on Collatz sequence
     state = dr.arange(t, 10000) + 1
     it_count = dr.zeros(t, 10000)
 
@@ -453,7 +491,10 @@ def test22_compress(t, mode, compress):
 
 
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
-def test23_loop_with_fork(t):
+def test24_loop_with_fork(t):
+    # Test a more complex example of a random walk involving particles that can
+    # split. These splits are handled by scattering values to a separate buffer
+    # and processing this buffer in turn until no particles are left.
 
     @dr.syntax
     def f(t):
@@ -496,6 +537,11 @@ def test23_loop_with_fork(t):
             queue_size = int(1.1*size)
             queue = dr.empty(dtype=Particle, shape=queue_size)
 
+            # Create an opaque variable representing the number 'loop_state'.
+            # This keeps this changing value from being baked into the program,
+            # which is needed for proper kernel caching
+            queue_size_o = dr.opaque(UInt32, queue_size)
+
             # Initially, all particles are active
             active = dr.full(Bool, True, size)
 
@@ -528,7 +574,7 @@ def test23_loop_with_fork(t):
                     slot = dr.scatter_inc(queue_index, index=0)
 
                     # Be careful not to write beyond the end of the queue
-                    valid = slot < queue_size
+                    valid = slot < queue_size_o
 
                     # Write 'new_state' into the reserved slot
                     dr.scatter(target=queue, value=new_state, index=slot, active=valid)
@@ -548,12 +594,23 @@ def test23_loop_with_fork(t):
     sizes = f(t)
     assert sizes == [706, 269, 100, 28, 9, 1, 0]
 
+
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
-def test24_dr_syntax_default_args(t):
+def test25_dr_syntax_default_args(t):
+    # This test isn't really specific to while loops and just checks
+    # that @dr.syntax preserves the contents of function default arguments
     @dr.syntax
-    def f(t, limit = 10):
+    def f(t, limit=10):
         i = t(0, 0)
         while i < limit:
             i += 1
         return i
     assert dr.all(f(t) == [10, 10])
+
+
+def test26_dr_syntax_confusion():
+    with pytest.raises(RuntimeError, match='wrong order'):
+        @dr.syntax
+        @dr.wrap(source='drjit', target='torch')
+        def f2(x):
+            return x
