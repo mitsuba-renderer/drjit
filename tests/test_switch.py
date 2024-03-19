@@ -447,3 +447,44 @@ def test12_out_of_bounds(t, capsys):
         dr.eval(dr.switch(t(0, 1, 100), targets, t(1)))
     transcript = capsys.readouterr().err
     assert "Attempted to invoke callable with index 100, but this value must be smaller than 2" in transcript
+
+
+# + Masking for all elements
+@pytest.mark.parametrize("opaque_mask", [True, False])
+@pytest.mark.parametrize("symbolic", [True, False])
+@pytest.test_arrays('int32,-uint32,shape=(*),jit')
+def test13_switch_vec_fully_masked(t, symbolic, opaque_mask):
+    with dr.scoped_set_flag(dr.JitFlag.SymbolicCalls, symbolic):
+        Int = t
+        UInt32 = dr.uint32_array_t(Int)
+        Bool = dr.mask_t(Int)
+
+        global_var = Int(0, 1, 2, 3)
+
+        def assert_literal(active, x):
+            assert active.state == dr.VarState.Literal and active[0] is True
+            dr.scatter_reduce(dr.ReduceOp.Add, global_var, x[1], UInt32([0]))
+            return x
+
+        c = [
+            lambda a, b, active: assert_literal(active, (a * 4, Int(2))),
+            lambda a, b, active: assert_literal(active, (a * 8, -b))
+        ]
+
+        index = UInt32(0, 0, 1, 1)
+        a = Int(1, 2, 3, 4)
+        b = Int(1)
+        active = Bool(False)
+        if opaque_mask:
+            dr.make_opaque(active)
+
+        # Masked case
+        result = dr.switch(index, c, a, b, active)
+        assert dr.allclose(result, [[0, 0, 0, 0], [0, 0, 0, 0]])
+
+        # Masked case, as keyword argument
+        result = dr.switch(index, c, a, b, active=active)
+        assert dr.allclose(result, [[0, 0, 0, 0], [0, 0, 0, 0]])
+
+        # No side-effects were applied
+        assert dr.allclose(global_var, [0, 1, 2, 3])
