@@ -1,8 +1,9 @@
+from __future__ import annotations
 import ast
+import bisect
 import types
 import inspect
 import linecache
-import sys
 from typing import (
     Any,
     Optional,
@@ -11,11 +12,13 @@ from typing import (
     TypeVar,
     Callable,
     Union,
+    Iterator,
     Literal,
     NoReturn,
     cast,
 )
 
+import sys
 if sys.version_info < (3, 11):
     try:
         from typing_extensions import overload
@@ -24,16 +27,149 @@ if sys.version_info < (3, 11):
             "Dr.Jit requires the 'typing_extensions' package on Python <3.11")
 else:
     from typing import overload
+del sys
 
 T = TypeVar("T")
 T2 = TypeVar("T2")
+
+
+class TreeSet:
+    """
+    Custom set-like data structure storing strings with internal period
+    separators such as ``name1.name2.name3``. Every element conceptually ends
+    with ``.*``, capturing all possible period-separated suffixes.
+
+    The main difference to the built-in Python ``set`` type is that the entries
+    conceptually define a tree structure. For example, ``a.b`` refers to
+    element ``b`` in subtree ``a``,  and ``TreeSet(['a', 'a.b'])`` reduces
+    to ``TreeSet(['a'])``, as the first element subsumes the second one.
+    """
+
+    def __init__(self, entries: Optional[list[str]]=None):
+        assert entries is None or isinstance(entries, list)
+        self.entries: list[str] = entries if entries is not None else []
+        self.compressed = False
+
+    def add(self, value: str):
+        self.entries.append(value)
+        self.compressed = False
+
+    def __len__(self) -> int:
+        self.compress()
+        return len(self.entries)
+
+    def __iter__(self) -> Iterator[str]:
+        self.compress()
+        return iter(self.entries)
+
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, TreeSet):
+            return False
+
+        self.compress()
+        other.compress()
+        return self.entries == other.entries
+
+    def __ne__(self, other) -> bool:
+        if not isinstance(other, TreeSet):
+            return True
+
+        self.compress()
+        other.compress()
+        return self.entries != other.entries
+
+    def compress(self) -> None:
+        """
+        Bring the tree-set into its canonical form. This operation
+        removes duplicate entries and unnecessary suffixes.
+
+        For example, this turns
+        TreeSet(['a.b', 'a.b.c', 'a.b']) into TreeSet(['a.b'])
+        """
+        if self.compressed:
+            return
+        entries_new: list[str] = []
+        last: Optional[str] = None
+        for v in sorted(self.entries):
+            if last and v.startswith(last) and \
+                (len(v) == len(last) or v[len(last)] == '.'):
+                continue
+            entries_new.append(v)
+            last = v
+        self.entries = entries_new
+        self.compressed = True
+
+    def __or__(self, other: TreeSet) -> TreeSet:
+        """
+        Compute the union of two tree-sets.
+
+        This operation has the following semantics:
+
+        - Commutativity: ``a | b == b | a``
+        - ``TreeSet(['a', 'b']) | TreeSet(['a', 'c']) == TreeSet(['a', 'b', 'c'])``
+        - ``TreeSet(['a']) & TreeSet(['a.b']) == TreeSet(['a'])``
+        """
+        return TreeSet(self.entries + other.entries)
+
+    def __ior__(self, other: TreeSet) -> TreeSet:
+        """
+        In-place union operation.
+        """
+        self.entries += other.entries
+        return self
+
+    def __and__(self, other: TreeSet) -> TreeSet:
+        """
+        Compute the intersection of two tree-sets.
+
+        - Commutativity: ``a & b == b & a``
+        - ``TreeSet(['a', 'b']) & TreeSet(['a', 'c']) == TreeSet(['a'])``
+        - ``TreeSet(['a']) & TreeSet(['a.b']) == TreeSet(['a.b'])``
+        """
+        self.compress()
+        other.compress()
+
+        result: list[str] = []
+        # Iterate over the arrays in both directions
+        for (entries_1, entries_2) in ((self.entries, other.entries),
+                                       (other.entries, self.entries)):
+            # For each element of entries_1 ..
+            for value in entries_1:
+                key = lambda x: x[:len(value)]
+
+                # .. find elements in entries_2 with the same prefix
+                l = bisect.bisect_left(entries_2, value, key=key)
+                r = bisect.bisect_right(entries_2, value, key=key)
+
+                for i in range(l, r):
+                    # Add the entry from entries_2 if it is equal or more specific
+                    value_2 = entries_2[i]
+                    assert value_2.startswith(value)
+
+                    if len(value_2) == len(value) or value_2[len(value)] == '.':
+                        result.append(value_2)
+
+        return TreeSet(result)
+
+    def __iand__(self, other: TreeSet) -> TreeSet:
+        self.entries = (self & other).entries
+        return self
+
+    def to_list(self) -> list[str]:
+        self.compress()
+        return self.entries
+
+    def __repr__(self) -> str:
+        from pprint import pformat
+        self.compress()
+        return 'TreeSet(' + pformat(self.entries) + ')'
 
 class _SyntaxVisitor(ast.NodeTransformer):
     def __init__(self, recursive, filename, line_offset):
         super().__init__()
 
         # Keep track of read/written variables
-        self.var_r, self.var_w = set(), set()
+        self.var_r, self.var_w = TreeSet(), TreeSet()
 
         # As the above, but for parent AST nodes
         self.par_r, self.par_w = [], []
@@ -59,7 +195,7 @@ class _SyntaxVisitor(ast.NodeTransformer):
 
             # Keep track of read/written variables
             var_r, var_w = self.var_r, self.var_w
-            self.var_r, self.var_w = set(), set()
+            self.var_r, self.var_w = TreeSet(), TreeSet()
 
             # Add function parameters to self.var_w
             for o1 in (node.args.args, node.args.posonlyargs, node.args.kwonlyargs):
@@ -178,7 +314,7 @@ class _SyntaxVisitor(ast.NodeTransformer):
         hints = {}
         for k in node.keywords:
             if k.arg == "exclude" or k.arg == "include":
-                value: Any = set()
+                value: Any = TreeSet()
                 if isinstance(k.value, ast.List):
                     for e in k.value.elts:
                         if isinstance(e, ast.Name):
@@ -220,10 +356,10 @@ class _SyntaxVisitor(ast.NodeTransformer):
         # Keep track of variable reads/writes
         self.par_r.append(self.var_r)
         self.par_w.append(self.var_w)
-        self.var_r, self.var_w = set(), set()
+        self.var_r, self.var_w = TreeSet(), TreeSet()
 
         # Collect variables read/written by parent nodes
-        par_r, par_w = set(), set()
+        par_r, par_w = TreeSet(), TreeSet()
         for s in self.par_r:
             par_r |= s
         for s in self.par_w:
@@ -259,10 +395,9 @@ class _SyntaxVisitor(ast.NodeTransformer):
                     body.append(n)
                 else:
                     body.extend(n)
-
             node.body = body
-            self.var_w, var_w1 = set(), self.var_w
 
+            self.var_w, var_w1 = TreeSet(), self.var_w
             orelse = []
             for n in node.orelse:
                 n = self.visit(n)
@@ -287,24 +422,24 @@ class _SyntaxVisitor(ast.NodeTransformer):
             raise RuntimeError("rewrite_and_track(): Unsupported node type!")
 
         # Do not import globals (variables that are only read and never defined)
-        var_r -= var_r - var_w - par_w
+        var_r &= var_w | par_w
 
         # Include/exclude variables as requested by the user
         if "include" in hints:
-            include = set(hints["include"])
+            include = hints["include"]
             var_r |= include
             var_w |= include
 
         if "exclude" in hints:
-            exclude = set(hints["exclude"])
+            exclude = hints["exclude"]
             var_r -= exclude
             var_w -= exclude
 
         self.var_r = var_r | self.par_r.pop()
         self.var_w = var_w | self.par_w.pop()
 
-        state_out = sorted(var_r | var_w)
-        state_in = sorted(var_r | (var_w & par_w))
+        state_out = (var_r | var_w).to_list()
+        state_in = (var_r | (var_w & par_w)).to_list()
 
         return node, state_in, state_out, hints, is_scalar
 
