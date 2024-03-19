@@ -140,7 +140,7 @@ def test07_gather_pytree(t):
 
     class MyStruct:
         DRJIT_STRUCT = { 'a' : t }
-        def __init__(self, a: t):
+        def __init__(self, a: t = t()):
             self.a = a
 
     x = MyStruct(x)
