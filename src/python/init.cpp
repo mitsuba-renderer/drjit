@@ -120,27 +120,35 @@ int tp_init_array(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
             // Try to construct from an instance created by another
             // array programming framework
             if (is_drjit_tensor || (!arg_is_drjit && nb::ndarray_check(arg))) {
-                // Import flattened array in C-style ordering
-                nb::object flattened;
+                // For scalar types we want to rely on broadcasting below
+                if (is_drjit_tensor || meta_get(arg).ndim) {
+                    // Import flattened array in C-style ordering
+                    nb::object flattened;
 
-                if (is_drjit_tensor)
-                    flattened = nb::steal(supp(arg_tp).tensor_array(arg));
-                else
-                    flattened = import_ndarray(s, arg);
+                    if (is_drjit_tensor)
+                        flattened = nb::steal(supp(arg_tp).tensor_array(arg));
+                    else
+                        flattened = import_ndarray(s, arg);
 
-                nb::object unraveled = unravel(
-                    nb::borrow<nb::type_object_t<dr::ArrayBase>>(self_tp),
-                    flattened, s.is_complex ? 'F' : 'C');
+                    nb::object unraveled = unravel(
+                        nb::borrow<nb::type_object_t<dr::ArrayBase>>(self_tp),
+                        flattened, s.is_complex ? 'F' : 'C');
 
-                nb::inst_move(self, unraveled);
-                return 0;
+                    nb::inst_move(self, unraveled);
+                    return 0;
+                } else if (s.is_complex) { /* complex scalar */
+                    arg = PyComplex_FromCComplex(PyComplex_AsCComplex(arg));
+                    arg_tp = Py_TYPE(arg);
+                }
+
+                try_sequence_import = false;
             }
 
             // Try to construct from a sequence/iterable type
             if (try_sequence_import && array_init_from_seq(self, s, arg))
                 return 0;
 
-            if (try_sequence_import && s.is_complex && arg_tp == &PyComplex_Type) {
+            if (s.is_complex && arg_tp == &PyComplex_Type) {
                 nb::object t = nb::make_tuple(PyComplex_RealAsDouble(arg),
                                               PyComplex_ImagAsDouble(arg));
 

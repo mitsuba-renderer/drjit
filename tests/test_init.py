@@ -448,15 +448,16 @@ def test23_init_from_ndarray_various_cases(t):
     a[1] = 5 # This time, 'v' should be unaffected
     assert dr.all(v == [1, 2, 3])
 
+    # Ndim = 0 ndarray construction should be same as scalar
+    v = t(np.array(1))
+    assert dr.all(v == t(1))
+
     msg = r"Unable to initialize from an array of type 'ndarray'. The input " \
         r"should have the following configuration for this to succeed: " \
         r"ndim=2, shape=\(3, \*\), dtype=float32, order='C'."
 
     with pytest.raises(TypeError, match=msg):
         v = t(np.array([[1, 2], [3, 4], [5, 6], [7, 8]]))
-
-    with pytest.raises(TypeError, match=msg):
-        v = t(np.array(1))
 
 
 @pytest.test_arrays('tensor, float32')
