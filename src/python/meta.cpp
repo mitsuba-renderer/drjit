@@ -209,8 +209,9 @@ ArrayMeta meta_get(nb::handle h) noexcept {
             nb::ndarray<nb::ro> array = nb::cast<nb::ndarray<nb::ro>>(h);
             dtype dt = array.dtype();
             VarType vt = VarType::Void;
+            dtype_code code = (dtype_code)dt.code;
 
-            switch ((dtype_code) dt.code) {
+            switch (code) {
                 case dtype_code::Bool:
                     if (dt.bits == 1)
                         vt = VarType::Bool;
@@ -218,27 +219,27 @@ ArrayMeta meta_get(nb::handle h) noexcept {
 
                 case dtype_code::Int:
                     switch (dt.bits) {
-                        case 1: vt = VarType::Int8; break;
-                        case 2: vt = VarType::Int16; break;
-                        case 4: vt = VarType::Int32; break;
-                        case 8: vt = VarType::Int64; break;
+                        case 8  : vt = VarType::Int8; break;
+                        case 16 : vt = VarType::Int16; break;
+                        case 32 : vt = VarType::Int32; break;
+                        case 64 : vt = VarType::Int64; break;
                     }
                     break;
 
                 case dtype_code::UInt:
                     switch (dt.bits) {
-                        case 1: vt = VarType::UInt8; break;
-                        case 2: vt = VarType::UInt16; break;
-                        case 4: vt = VarType::UInt32; break;
-                        case 8: vt = VarType::UInt64; break;
+                        case 8  : vt = VarType::UInt8; break;
+                        case 16 : vt = VarType::UInt16; break;
+                        case 32 : vt = VarType::UInt32; break;
+                        case 64 : vt = VarType::UInt64; break;
                     }
                     break;
 
                 case dtype_code::Float:
                     switch (dt.bits) {
-                        case 2: vt = VarType::Float16; break;
-                        case 4: vt = VarType::Float32; break;
-                        case 8: vt = VarType::Float64; break;
+                        case 16 : vt = VarType::Float16; break;
+                        case 32 : vt = VarType::Float32; break;
+                        case 64 : vt = VarType::Float64; break;
                     }
                     break;
 
@@ -247,7 +248,8 @@ ArrayMeta meta_get(nb::handle h) noexcept {
             }
 
             size_t ndim = array.ndim();
-            if (ndim >= 1 && ndim <= 4 && vt != VarType::Void) {
+            if (ndim >= 1 && ndim <= 4 && 
+                (vt != VarType::Void || code == dtype_code::Complex)) {
                 for (size_t i = 0; i < ndim; ++i) {
                     size_t value = array.shape(i);
                     m.shape[i] = (uint8_t) (value > 4 ? DRJIT_DYNAMIC : value);
@@ -269,8 +271,6 @@ ArrayMeta meta_get(nb::handle h) noexcept {
     } else if (h.is_none() || nb::type_check(tp)) {
         m.type = (uint8_t) VarType::UInt32;
         m.is_class = true;
-    } else if (PyNumber_Float(h.ptr())) {
-        m.type = (uint8_t) VarType::Float32;
     } else {
         m.is_valid = false;
     }
