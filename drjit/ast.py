@@ -239,12 +239,27 @@ class _SyntaxVisitor(ast.NodeTransformer):
             self.op_stack.pop()
         elif isinstance(node, ast.If):
             self.op_stack.append(("cond", is_scalar))
+
             # Get information about variable accesses in each branch
+            body = []
             for n in node.body:
-                self.generic_visit(n)
+                n = self.visit(n)
+                if isinstance(n, ast.AST):
+                    body.append(n)
+                else:
+                    body.extend(n)
+
+            node.body = body
             self.var_w, var_w1 = set(), self.var_w
+
+            orelse = []
             for n in node.orelse:
-                self.generic_visit(n)
+                n = self.visit(n)
+                if isinstance(n, ast.AST):
+                    orelse.append(n)
+                else:
+                    orelse.extend(n)
+            node.orelse = orelse
             var_w2 = self.var_w
 
             # Set of written variables consists of:
@@ -254,9 +269,8 @@ class _SyntaxVisitor(ast.NodeTransformer):
             #   are written on at least one branch
             var_w = (var_w1 & var_w2) | ((var_w1 | var_w2) & par_w)
             var_r = self.var_r
+            node.test = cast(ast.expr, self.generic_visit(node.test))
 
-            # Now, visit the loop condition and rewrite the node
-            node = cast(T, self.generic_visit(node))
             self.op_stack.pop()
         else:
             raise RuntimeError("rewrite_and_track(): Unsupported node type!")
@@ -289,7 +303,7 @@ class _SyntaxVisitor(ast.NodeTransformer):
         self.op_stack.pop()
         return result
 
-    def visit_If(self, node: ast.If) -> Union[ast.AST, tuple[ast.AST, ...]]:
+    def visit_If(self, node: ast.If) -> Union[ast.AST, list[ast.AST]]:
         (node, state_in, state_out, hints, is_scalar) = self.rewrite_and_track(node)
 
         if is_scalar:
@@ -416,7 +430,7 @@ class _SyntaxVisitor(ast.NodeTransformer):
 
         cleanup = ast.Delete(targets=cleanup_targets)
 
-        return (
+        return [
             comment_start,
             true_fn,
             false_fn,
@@ -425,7 +439,7 @@ class _SyntaxVisitor(ast.NodeTransformer):
             if_expr,
             cleanup,
             comment_end,
-        )
+        ]
 
     def visit_While(self, node: ast.While):
         (node, state, _, hints, is_scalar) = self.rewrite_and_track(node)
@@ -542,7 +556,7 @@ class _SyntaxVisitor(ast.NodeTransformer):
 
         cleanup = ast.Delete(targets=cleanup_targets)
 
-        return (
+        return [
             comment_start,
             cond_func,
             body_func,
@@ -551,7 +565,7 @@ class _SyntaxVisitor(ast.NodeTransformer):
             while_expr,
             cleanup,
             comment_end,
-        )
+        ]
 
 
 # Counts how many times the @drjit.syntax decorator has been used

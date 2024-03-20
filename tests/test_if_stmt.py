@@ -434,3 +434,21 @@ def test17_nested_ast_trafo(t):
     assert dr.all(g() == t(-1, 1, 1))
 
 
+@pytest.test_arrays('uint32,is_diff,shape=(*)')
+@dr.syntax(print_code=True)
+def test18_nested_if_stmt(t):
+    x = dr.arange(t, 10)
+    if x < 5:
+        if x < 2:
+            y = x + 1
+        else:
+            y = x - 1
+    else:
+        if x < 7:
+            if x < 6:
+                y = x + 1
+            else:
+                y = x - 1
+        else:
+            y = x - 1
+    assert dr.all(y == [1, 2, 1, 2, 3, 6, 5, 6, 7, 8])
