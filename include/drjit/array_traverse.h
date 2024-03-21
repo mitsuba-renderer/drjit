@@ -178,6 +178,7 @@ template <typename T> auto labels(const T &v) {
 
 template <typename Value>
 void traverse_1_fn_ro(const Value &value, void *payload, void (*fn)(void *, uint64_t)) {
+    (void) payload; (void) fn;
     if constexpr (is_jit_v<Value> && depth_v<Value> == 1) {
         fn(payload, value.index_combined());
     } else if constexpr (is_traversable_v<Value>) {
@@ -193,6 +194,7 @@ void traverse_1_fn_ro(const Value &value, void *payload, void (*fn)(void *, uint
 
 template <typename Value>
 void traverse_1_fn_rw(Value &value, void *payload, uint64_t (*fn)(void *, uint64_t)) {
+    (void) payload; (void) fn;
     if constexpr (is_jit_v<Value> && depth_v<Value> == 1) {
         value = Value::borrow((typename Value::Index) fn(payload, value.index_combined()));
     } else if constexpr (is_traversable_v<Value>) {

@@ -1719,3 +1719,27 @@ def test113_shrink_bwd(t):
     y.grad = [10, 20, 30]
     dr.backward_to(x)
     assert dr.all(x.grad == [10, 20, 30, 0, 0])
+
+
+@pytest.test_arrays('is_diff,float32,shape=(*)')
+@pytest.mark.parametrize("mode", ['symbolic', 'evaluated'])
+def test114_block_sum_fwd(t, mode):
+    x = t(1, 2, 3, 4, 5, 6)
+    dr.enable_grad(x)
+    y = dr.block_sum(x, 2, mode=mode)
+    assert dr.all(y == [3, 7, 11])
+    x.grad = [10, 20, 30, 40, 50, 60]
+    dr.forward_to(y)
+    assert dr.all(y.grad == [30, 70, 110])
+
+
+@pytest.test_arrays('is_diff,float32,shape=(*)')
+@pytest.mark.parametrize("mode", ['symbolic', 'evaluated'])
+def test114_block_sum_rev(t, mode):
+    x = t(1, 2, 3, 4, 5, 6)
+    dr.enable_grad(x)
+    y = dr.block_sum(x, 2, mode=mode)
+    assert dr.all(y == [3, 7, 11])
+    y.grad = [10, 20, 30]
+    dr.backward_to(x)
+    assert dr.all(x.grad == [10, 10, 20, 20, 30, 30])

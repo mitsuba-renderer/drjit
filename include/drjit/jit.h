@@ -511,19 +511,12 @@ struct DRJIT_TRIVIAL_ABI JitArray
             return uint32_array_t<JitArray>::steal(jit_var_compress(m_index));
     }
 
-    JitArray block_sum_(size_t block_size) {
-        size_t input_size  = size(),
-               block_count = input_size / block_size;
+    JitArray block_sum_(size_t block_size, int symbolic) const {
+        return steal(jit_var_block_sum(m_index, (uint32_t) block_size, symbolic));
+    }
 
-        if (block_count * block_size != input_size)
-            drjit_fail("block_sum(): input size must be a multiple of block_size!");
-
-        JitArray output = empty_(block_count);
-
-        jit_block_sum(JitArray::Backend, JitArray::Type, data(), output.data(),
-                      (uint32_t) block_count, (uint32_t) block_size);
-
-        return output;
+    JitArray block_copy_(size_t block_size) const {
+        return steal(jit_var_block_copy(m_index, (uint32_t) block_size));
     }
 
     JitArray copy() const { return steal(jit_var_copy(m_index)); }
@@ -646,20 +639,38 @@ template <typename Value> using CUDAArray = JitArray<JitBackend::CUDA, Value>;
 template <typename Value> using LLVMArray = JitArray<JitBackend::LLVM, Value>;
 
 template <typename Array>
-Array block_sum(const Array &array, size_t block_size) {
+Array block_sum(const Array &array, size_t block_size, int symbolic = -1) {
     if constexpr (depth_v<Array> > 1) {
         Array result;
         if constexpr (Array::Size == Dynamic)
             result = empty<Array>(array.size());
 
         for (size_t i = 0; i < array.size(); ++i)
-            result.entry(i) = block_sum(array.entry(i), block_size);
+            result.entry(i) = block_sum(array.entry(i), block_size, symbolic);
 
         return result;
     } else if constexpr (is_jit_v<Array>) {
-        return array.block_sum_(block_size);
+        return array.block_sum_(block_size, symbolic);
     } else {
         static_assert(detail::false_v<Array>, "block_sum(): requires a JIT array!");
+    }
+}
+
+template <typename Array>
+Array block_copy(const Array &array, size_t block_size) {
+    if constexpr (depth_v<Array> > 1) {
+        Array result;
+        if constexpr (Array::Size == Dynamic)
+            result = empty<Array>(array.size());
+
+        for (size_t i = 0; i < array.size(); ++i)
+            result.entry(i) = block_copy(array.entry(i), block_size);
+
+        return result;
+    } else if constexpr (is_jit_v<Array>) {
+        return array.block_copy_(block_size);
+    } else {
+        static_assert(detail::false_v<Array>, "block_copy(): requires a JIT array!");
     }
 }
 

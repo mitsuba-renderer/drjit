@@ -584,10 +584,29 @@ def test23_block_sum(t):
     assert dr.all(dr.block_sum(x, 2) == [3, 7, 11])
     assert dr.all(dr.block_sum(x, 3) == [6, 15])
     assert dr.all(dr.block_sum(x, 6) == [21])
-    with pytest.raises(RuntimeError, match=r"array size is not a multiple of the block size \(size=6, block_size=4\)"):
+    with pytest.raises(RuntimeError, match=r"variable size \(6\) must be an integer multiple of 'block_size' \(4\)"):
         dr.block_sum(x, 4)
 
-#if defined(__GNUC__)
-#  pragma GCC diagnostic pop
-#endif
+@pytest.test_arrays('shape=(*), uint32, jit')
+def test24_block_sum_intense(t):
+    size = 4096*1024
+    import sys
+    mod = sys.modules[t.__module__]
+    rng = mod.PCG32(size)
 
+    value = rng.next_uint32()
+    dr.eval(value)
+
+    for i in range(0, 23):
+        block_size = 1 << i
+        sum_1 = dr.block_sum(
+            value=value,
+            block_size=block_size,
+            mode='evaluated'
+        )
+        sum_2 = dr.block_sum(
+            value=value,
+            block_size=block_size,
+            mode='symbolic'
+        )
+        assert dr.all(sum_1 == sum_2)
