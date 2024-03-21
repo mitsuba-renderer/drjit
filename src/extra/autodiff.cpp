@@ -1853,6 +1853,37 @@ struct PrefixSumEdge : Special {
     bool m_exclusive;
 };
 
+struct BlockSumEdge : Special {
+    BlockSumEdge(uint32_t block_size, int symbolic)
+        : m_block_size(block_size), m_symbolic(symbolic) { }
+
+    void forward(const Variable *source, Variable *target) override {
+        JitVar value = source->grad;
+
+        if (value.size() != source->size)
+            value.resize(source->size);
+
+        value = dr::block_sum(value, m_block_size, m_symbolic);
+        target->accum(value, source->size);
+    }
+
+    void backward(Variable *source, const Variable *target) override {
+        JitVar value = target->grad;
+        if (!value.valid())
+            return;
+
+        if (value.size() != target->size)
+            value.resize(target->size);
+
+        jit_set_backend(value.index());
+        value = dr::block_copy(value, m_block_size);
+        source->accum(value, value.size());
+    }
+
+    uint32_t m_block_size;
+    int m_symbolic;
+};
+
 struct ShrinkEdge : Special {
     void forward(const Variable *source, Variable *target) override {
         JitVar value = source->grad;
@@ -2633,6 +2664,23 @@ Index ad_var_shrink(Index i0, size_t size) {
     else
         return ad_var_new("shrink", std::move(result),
                           SpecialArg(i0, new ShrinkEdge()));
+}
+
+Index ad_var_block_sum(Index index, uint32_t block_size, int symbolic) {
+    if (index == 0)
+        return index;
+    else if (block_size == 1)
+        return ad_var_inc_ref(index);
+
+    JitVar result = JitVar::steal(
+        jit_var_block_sum(jit_index(index), block_size, symbolic));
+
+    if (likely(is_detached(index)))
+        return result.release();
+    else
+        return ad_var_new(
+            "block_sum", std::move(result),
+            SpecialArg(index, new BlockSumEdge(block_size, symbolic)));
 }
 
 // ==========================================================================

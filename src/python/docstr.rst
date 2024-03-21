@@ -6918,18 +6918,57 @@
     along the trailing dimension of the input array ``value`` and returns a new a
     new array containing these sums.
 
-    For example, a sum with ``block_size=2`` of ``a, b, c, d, e, f`` produces
-    ``a+b, c+d, e+f``. The length of the input array must be a multiple of
+    For example, a sum with ``block_size=2`` of ``[a, b, c, d, e, f]`` produces
+    ``[a+b, c+d, e+f]``. The length of the input array must be a multiple of
     ``block_size``.
 
     The function recursively threads through nested arrays and :ref:`PyTree
-    <pytrees>`. Static arrays and tensors currently aren't supported.
+    <pytrees>`. Tensors and and non-JIT compiled arrays are currently not
+    supported.
 
+    Dr.Jit uses one of two strategies to realize this operation, which can be
+    optionally forced by specifying the ``mode`` parameter.
+
+    - ``"evaluated"``: Evaluate the input array (:py:func:`drjit.eval()`), then
+      use a pre-compiled reduction kernel that makes efficient use of shared
+      memory and cooperative warp instructions on CUDA. On the CUDA backend, this
+      requires ``block_size`` to be a power-of-two value.
+
+    - ``"symbolic"``: use :py:func:`drjit.scatter_add()` to atomically
+      scatter-accumulate values into the output array. This strategy can be
+      advantageous when the input array is symbolic or unevaluated and
+      extremely large, which means that evaluation is either impossible or
+      would cause an out-of-memory error.
+
+      A disadvantage of this strategy compared to ``"evaluated"`` is that the
+      output can be affected by non-deterministic rounding error (IEEE 754
+      addition is non-commutative, and the precise order of the
+      scatter-additions depends on how the CPU or GPU schedules them).
+
+    - ``None``: automatically pick a reasonable strategy (the default). This
+      strategy uses the following decision tree:
+
+      - Use ``"symbolic"`` when the input array represents a symbolic variable.
+
+      - Use ``"symbolic"`` when the input array does *not* have a power-of-two
+        size, and when running on the CUDA backend.
+
+      - Use ``"symbolic"`` when the input array is unevaluated, and when
+        evaluating it would require more than a 1GiB of memory.
+
+      - Otherwise, use ``"evaluated"`` mode in all other cases.
+
+    Since evaluated mode can be quite a bit faster and is numerically stable,
+    it is recommended that you choose parameters of your program so that it
+    invokes :py:func:`drjit.block_sum` with values of ``block_size`` that are
+    a power of two.
 
     Args:
-        arg (drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+        arg (drjit.ArrayBase): Dr.Jit array
 
         block_size (int): size of the block
+
+        mode (str | None): optional parameter to force an evaluation strategy.
 
     Returns:
         Sum over elements within blocks

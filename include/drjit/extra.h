@@ -146,6 +146,11 @@ extern DRJIT_EXTRA_EXPORT uint64_t ad_var_reduce(JitBackend, VarType,
 extern DRJIT_EXTRA_EXPORT uint64_t ad_var_prefix_sum(uint64_t index,
                                                      int exclusive);
 
+/// Compute the sum of adjacent blocks of size 'block_size'
+extern DRJIT_EXTRA_EXPORT uint64_t ad_var_block_sum(uint64_t index,
+                                                    uint32_t block_size,
+                                                    int symbolic);
+
 /// Perform a differentiable gather operation. See jit_var_gather for signature.
 extern DRJIT_EXTRA_EXPORT uint64_t ad_var_gather(uint64_t source,
                                                  uint32_t offset, uint32_t mask,

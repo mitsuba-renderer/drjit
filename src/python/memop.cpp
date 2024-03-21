@@ -14,6 +14,7 @@
 #include "init.h"
 #include "shape.h"
 #include "apply.h"
+#include <nanobind/stl/optional.h>
 
 nb::object gather(nb::type_object dtype, nb::object source,
                   nb::object index, nb::object active, ReduceMode mode) {
@@ -969,46 +970,40 @@ static nb::object repeat_or_tile(nb::handle h, size_t count, bool tile) {
     return transform(tile ? "drjit.tile" : "drjit.repeat", r, h);
 }
 
-static nb::object block_sum(nb::handle h, size_t block_size) {
+static nb::object block_sum(nb::handle h, uint32_t block_size,
+                            std::optional<dr::string> mode) {
     struct BlockSumOp : TransformCallback {
         size_t block_size;
+        int symbolic;
 
-        BlockSumOp(size_t block_size) : block_size(block_size) { }
+        BlockSumOp(size_t block_size, int symbolic) : block_size(block_size), symbolic(symbolic) { }
         void operator()(nb::handle h1, nb::handle h2) override {
             const ArraySupplement &s = supp(h1.type());
             if (!s.index)
                 nb::raise("Unsupported input type!");
 
-            size_t size     = s.len(inst_ptr(h1)),
-                   reduced  = size / block_size;
+            uint64_t new_index = ad_var_block_sum(
+                s.index(inst_ptr(h1)),
+                block_size,
+                symbolic
+            );
 
-            if (size == 0)
-                return;
-
-            if (reduced * block_size != size)
-                nb::raise("array size is not a multiple of the block size "
-                          "(size=%zu, block_size=%zu).", size, block_size);
-
-            ArrayMeta m = s;
-            m.type = (uint16_t) VarType::UInt32;
-
-            nb::object index = arange(
-                nb::borrow<nb::type_object_t<ArrayBase>>(meta_get_type(m)),
-                0, (Py_ssize_t) size, 1).floor_div(nb::int_(block_size));
-
-            nb::object result = full("zeros", h1.type(), nb::int_(0), reduced);
-            scatter_add(result, nb::borrow(h1), index, nb::bool_(true),
-                        ReduceMode::Auto);
-            nb::inst_replace_move(h2, result);
+            s.init_index(new_index, inst_ptr(h2));
+            ad_var_dec_ref(new_index);
         }
     };
 
-    if (block_size == 0)
-        nb::raise("drjit.block_sum(): block size must be nonzero!");
-    if (block_size == 1)
-        return nb::borrow(h);
+    int symbolic = -1;
+    if (mode.has_value()) {
+        if (mode.value() == "symbolic")
+            symbolic = 1;
+        else if (mode.value() == "evaluated")
+            symbolic = 0;
+        else
+            nb::raise("drjit.block_sum(): 'mode' parameter must either equal 'symbolic' or 'evaluated'!");
+    }
 
-    BlockSumOp r(block_size);
+    BlockSumOp r(block_size, symbolic);
     return transform("drjit.block_sum", r, h);
 }
 
@@ -1059,6 +1054,7 @@ void export_memop(nb::module_ &m) {
           [](nb::handle h, size_t count) {
               return repeat_or_tile(h, count, false);
           }, "value"_a, "count"_a, doc_repeat)
-     .def("block_sum", &block_sum, "value"_a,
-          "block_size"_a, doc_block_sum);
+     .def("block_sum", &block_sum, "value"_a, "block_size"_a,
+          "mode"_a = nb::none(), doc_block_sum,
+          nb::sig("def block_sum(value: ArrayT, block_size: int, mode: Literal['symbolic', 'evaluated', None] = None) -> ArrayT"));
 }

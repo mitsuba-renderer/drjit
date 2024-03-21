@@ -842,9 +842,7 @@ def hint(
     arg: T,
     /,
     *,
-    mode: Union[
-        Literal["scalar"], Literal["evaluated"], Literal["symbolic"], None
-    ] = None,
+    mode: Literal["scalar", "evaluated", "symbolic", None] = None,
     max_iterations: Optional[int] = None,
     label: Optional[str] = None,
     include: Optional[List[object]] = None,
