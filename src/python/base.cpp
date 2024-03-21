@@ -948,7 +948,11 @@ void export_base(nb::module_ &m) {
                              doc_ArrayBase);
 
     nb::object at = nb::any_type();
-    m.attr("AnyArray") = ab[nb::make_tuple(at, at, at, at, at, at)];
+    #if PY_VERSION_HEX >= 0x03090000
+        m.attr("AnyArray") = ab[nb::make_tuple(at, at, at, at, at, at)];
+    #else
+        m.attr("AnyArray") = ab;
+    #endif
 
     ab.def("__init__",
            [](ArrayBase &, nb::handle) {

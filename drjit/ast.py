@@ -5,6 +5,7 @@ import linecache
 from typing import (
     Any,
     Optional,
+    Tuple,
     List,
     TypeVar,
     Callable,
@@ -152,7 +153,7 @@ class _SyntaxVisitor(ast.NodeTransformer):
     #     self.var_r.add(".".join(reversed(seq)))
     #     return node
 
-    def extract_hints(self, node: ast.AST) -> tuple[ast.AST, dict]:
+    def extract_hints(self, node: ast.AST) -> Tuple[ast.AST, dict]:
         if (
             not isinstance(node, ast.Call)
             or not isinstance(node.func, ast.Attribute)
@@ -205,7 +206,7 @@ class _SyntaxVisitor(ast.NodeTransformer):
                 )
         return node.args[0], hints
 
-    def rewrite_and_track(self, node: T) -> tuple[T, list, list, dict, bool]:
+    def rewrite_and_track(self, node: T) -> Tuple[T, list, list, dict, bool]:
         # Keep track of variable reads/writes
         self.par_r.append(self.var_r)
         self.par_w.append(self.var_w)
@@ -303,7 +304,7 @@ class _SyntaxVisitor(ast.NodeTransformer):
         self.op_stack.pop()
         return result
 
-    def visit_If(self, node: ast.If) -> Union[ast.AST, list[ast.AST]]:
+    def visit_If(self, node: ast.If) -> Union[ast.AST, List[ast.AST]]:
         (node, state_in, state_out, hints, is_scalar) = self.rewrite_and_track(node)
 
         if is_scalar:

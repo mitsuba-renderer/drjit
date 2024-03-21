@@ -179,9 +179,13 @@ nb::object bind(const ArrayBinding &b) {
     d.type_slots = slots;
     d.type_slots_callback = nullptr;
 
-    // Parameterize generic base class
-    nb::object base_o = array_base[nb::make_tuple(
-        name_o, self_cp_t_o, val_t_o, val_cp_t_o, red_t_o, mask_t_o)];
+    nb::object base_o = nb::borrow(array_base);
+
+    #if PY_VERSION_HEX >= 0x03090000
+        // Parameterize the generic base class if supported by Python
+        base_o = base_o[nb::make_tuple(
+            name_o, self_cp_t_o, val_t_o, val_cp_t_o, red_t_o, mask_t_o)];
+    #endif
 
     d.base_py = (PyTypeObject *) base_o.ptr();
 
