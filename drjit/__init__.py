@@ -269,16 +269,6 @@ def safe_acos(arg: T, /) -> T:
     return result
 
 
-# Typing information for the clip function below
-@overload
-def clip(value: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, MaskT], min: SelfCpT, max: SelfCpT) -> SelfT: ...
-@overload
-def clip(value: SelfCpT, min: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, MaskT], max: SelfCpT) -> SelfT: ...
-@overload
-def clip(value: SelfCpT, min: SelfCpT, max: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, MaskT]) -> SelfT: ...
-@overload
-def clip(value: T, min: T, max: T) -> T: ...
-
 def clip(value, min, max):
     '''
     Clip the provided input to the given interval.

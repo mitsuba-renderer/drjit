@@ -151,6 +151,19 @@ drjit.meshgrid$:
     def meshgrid(*args: *Ts, indexing: Literal['xy', 'ij'] = 'xy') -> tuple[*Ts]:
         \doc
 
+# Typing information for the clip function below
+drjit.clip$:
+    @overload
+    def clip(value: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, MaskT], min: SelfCpT, max: SelfCpT) -> SelfT:
+        \doc
+    @overload
+    def clip(value: SelfCpT, min: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, MaskT], max: SelfCpT) -> SelfT: ...
+    @overload
+    def clip(value: SelfCpT, min: SelfCpT, max: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, MaskT]) -> SelfT: ...
+    @overload
+    def clip(value: T, min: T, max: T) -> T: ...
+
+
 # -------------- drjit.syntax, interop, detail ----------------
 
 # Clean the drjit.interop stub
