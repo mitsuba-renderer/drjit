@@ -95,6 +95,9 @@ def test05_binop_inplace(t):
     assert a is c and dr.all(a == t(3, 5, 4))
     a += 1
     assert a is c and dr.all(a == t(4, 6, 5))
+    m = dr.mask_t(t)([False, True, False])
+    a[m] += b
+    assert a is c and dr.all(a == t(4, 9, 5))
     a = 1
     c = a
     a += b
