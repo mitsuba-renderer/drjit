@@ -194,8 +194,9 @@ PyObject *mp_subscript(PyObject *self, PyObject *key) noexcept {
         bool key_is_array = is_drjit_type(key_tp);
 
         if (key_is_array && (VarType) supp(key_tp).type == VarType::Bool) {
-            Py_INCREF(self);
-            return self;
+            nb::object out = nb::inst_alloc(self_tp.ptr());
+            nb::inst_copy(out, self);
+            return out.release().ptr();
         }
 
         if (s.is_tensor) {
