@@ -272,7 +272,10 @@ typedef void (*ad_call_cleanup)(void*);
  *     Callback routine, which \c ad_call will invoke a number of times to
  *     record each callable. It is given the \c payload parameter, a \c self
  *     pointer (either a pointer to an instance in the instance registry, or a
- *     callable index encoded as <tt>void*</tt>)
+ *     callable index encoded as <tt>void*</tt>), the arguments \c args and a
+ *     vector of indices \rv it might fill with return values. The \c self
+ *     pointer can be set to \c nullptr, in which case the callback is still
+ *     expected to fill \rv with indices to variables of the correct type.
  *
  * \param cleanup
  *     A cleanup routine that deletes storage associated with \c payload.

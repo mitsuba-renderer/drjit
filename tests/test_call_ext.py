@@ -580,3 +580,61 @@ def test08_test_ptr_py_loop(t, symbolic):
 
     assert dr.all(i == [3,3,3])
     assert dr.all(diff == [3,2,1])
+
+
+# Mask all elements, expect a zero-initialized return value
+@pytest.mark.parametrize("opaque_mask", [True, False])
+@pytest.mark.parametrize("symbolic", [True, False])
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+def test09_array_call_fully_masked(t, symbolic, opaque_mask):
+    pkg = get_pkg(t)
+
+    A, B, Base, BasePtr = pkg.A, pkg.B, pkg.Base, pkg.BasePtr
+    a, b = A(), B()
+
+    c = BasePtr(a, a, a, b, b)
+
+    xi = t(1, 2, 8, 3, 4)
+    yi = t(5, 6, 8, 7, 8)
+    mi = dr.mask_t(t)(False)
+    if opaque_mask:
+        dr.make_opaque(mi)
+
+    with dr.scoped_set_flag(dr.JitFlag.SymbolicCalls, symbolic):
+        xo, yo = c.f_masked((xi, yi), mi)
+
+    assert dr.all(xo == t(0, 0, 0, 0, 0))
+    assert dr.all(yo == t(0, 0, 0, 0, 0))
+
+    c.dummy()
+
+@pytest.mark.parametrize("symbolic", [True, False])
+@pytest.mark.parametrize("opaque_mask", [True, False])
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+def test10_dispatch_fully_masked(t, symbolic, opaque_mask):
+    print(f"{symbolic=}")
+    print(f"{opaque_mask=}")
+
+    pkg = get_pkg(t)
+
+    A, B, Base, BasePtr = pkg.A, pkg.B, pkg.Base, pkg.BasePtr
+    Mask = dr.mask_t(t)
+    a, b = A(), B()
+
+    xi = t(1, 2, 8, 3, 4)
+    yi = t(5, 6, 8, 7, 8)
+
+    def my_func(self, arg, mask):
+        return self.f_masked(arg, mask)
+
+    # Turn all element offs, two different ways..
+    mi = Mask(False)
+    if opaque_mask:
+        dr.make_opaque(mi)
+    c = BasePtr(a, a, a, b, b)
+
+    with dr.scoped_set_flag(dr.JitFlag.SymbolicCalls, symbolic):
+        xo, yo = dr.dispatch(c, my_func, (xi, yi), mi)
+
+    assert dr.all(xo == t(0, 0, 0, 0, 0))
+    assert dr.all(yo == t(0, 0, 0, 0, 0))
