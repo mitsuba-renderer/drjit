@@ -368,12 +368,15 @@ static void ad_call_reduce(JitBackend backend, const char *domain,
     args2.clear();
 
     vector<uint64_t> rv2;
+    bool rv_initialized = false;
     size_t last_size = 0;
     JitVar memop_mask = JitVar::steal(jit_var_bool(backend, true));
 
     for (size_t i = 0; i < n_inst ; ++i) {
         if (buckets[i].id == 0)
             continue;
+
+        rv_initialized = true;
 
         uint32_t callable_index = buckets[i].id - 1,
                  index2 = buckets[i].index;
@@ -428,6 +431,23 @@ static void ad_call_reduce(JitBackend backend, const char *domain,
         }
 
         args2.release();
+    }
+
+    // All targets were fully masked, let's zero-initialize the return value
+    if (!rv_initialized) {
+        {
+            // Dummy symbolic call to avoid side-effects
+            scoped_record record_guard(backend);
+            func(payload, nullptr, args, rv2);
+        }
+        rv.resize(rv2.size());
+        for (size_t i = 0; i < rv2.size(); ++i) {
+            uint64_t zero = 0;
+            uint32_t idx = (uint32_t) rv2[i];
+            if (idx)
+                rv[i] = jit_var_literal(backend, jit_var_type(idx), &zero, size);
+        }
+        rv_initialized = true;
     }
 
     for (uint64_t r : rv)
@@ -742,7 +762,11 @@ bool ad_call(JitBackend backend, const char *domain, size_t callable_count,
         if (index == 0 || size == 0 || jit_var_is_zero_literal(mask) ||
             callable_count == 0) {
             scoped_set_mask mask_guard(backend, jit_var_bool(backend, false));
-            func(payload, nullptr, args, rv);
+            {
+                // Dummy symbolic call to avoid side-effects
+                scoped_record record_guard(backend);
+                func(payload, nullptr, args, rv);
+            }
 
             for (uint64_t &i : rv) {
                 uint64_t zero = 0;
@@ -778,7 +802,7 @@ bool ad_call(JitBackend backend, const char *domain, size_t callable_count,
                     "information on symbolic and evaluated calls, as well as their limitations.");
 
             ad_call_reduce(backend, domain, name, size, index, mask,
-                            callable_count, args, rv, func, payload);
+                           callable_count, args, rv, func, payload);
             ad = false; // derivative already tracked, no CustomOp needed
         }
 
