@@ -148,6 +148,8 @@ nb::object dispatch_impl(nb::handle_t<dr::ArrayBase> inst,
         nb::tuple args_o;
         nb::object target_o;
         nb::object rv_o;
+        JitBackend backend;
+        nb::str domain_name;
 
         ~State() {
             if (!nb::is_alive())
@@ -156,6 +158,7 @@ nb::object dispatch_impl(nb::handle_t<dr::ArrayBase> inst,
             args_o.reset();
             target_o.reset();
             rv_o.reset();
+            domain_name.reset();
         }
     };
 
@@ -180,6 +183,9 @@ nb::object dispatch_impl(nb::handle_t<dr::ArrayBase> inst,
             state.args_o =
                 nb::borrow<nb::tuple>(update_indices(state.args_o, args_i));
 
+            if (!self)
+                self = jit_registry_peek(state.backend, state.domain_name.c_str());
+
             nb::object self_o = nb::steal(nb::detail::nb_type_put(
                 state.type, self, nb::rv_policy::reference, nullptr));
 
@@ -193,8 +199,14 @@ nb::object dispatch_impl(nb::handle_t<dr::ArrayBase> inst,
             ::collect_indices(state.rv_o, rv_i);
         };
 
-        State *state =
-            new State{ &nb::type_info(s.value), nb::make_tuple(args, kwargs), target, nb::object() };
+        State *state = new State {
+            &nb::type_info(s.value),
+            nb::make_tuple(args, kwargs),
+            target,
+            nb::object(),
+            (JitBackend) s.backend,
+            nb::borrow<nb::str>(domain_name)
+        };
         ad_call_cleanup cleanup = [](void *ptr) {
             if (!nb::is_alive())
                 return;
@@ -207,7 +219,7 @@ nb::object dispatch_impl(nb::handle_t<dr::ArrayBase> inst,
         ::collect_indices(state->args_o, args_i);
 
         bool done = ad_call(
-            (JitBackend) s.backend, nb::borrow<nb::str>(domain_name).c_str(), 0,
+            (JitBackend) s.backend, state->domain_name.c_str(), 0,
             "dispatch()", false, (uint32_t) s.index(inst_ptr(inst)),
             mask.is_valid() ? ((uint32_t) s.index(inst_ptr(mask))) : 0u, args_i,
             rv_i, state, target_cb, cleanup, true);
