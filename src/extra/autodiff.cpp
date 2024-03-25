@@ -571,6 +571,24 @@ struct LocalState {
 static State state;
 static thread_local LocalState local_state;
 
+#if defined(DRJIT_SANITIZE_INTENSE)
+static void ad_sanitation_checkpoint_variables() {
+    state.variables.emplace_back();
+    state.variables.pop_back();
+    state.variables.shrink_to_fit();
+}
+static void ad_sanitation_checkpoint_edges() {
+    state.edges.emplace_back();
+    state.edges.pop_back();
+    state.edges.shrink_to_fit();
+}
+static void ad_sanitation_checkpoint_both() {
+    ad_sanitation_checkpoint_variables();
+    ad_sanitation_checkpoint_edges();
+}
+#endif
+
+
 // Forward declarations
 static void ad_free(ADIndex, Variable *);
 static void ad_var_inc_ref_int(ADIndex index, Variable *v) noexcept;
@@ -724,6 +742,10 @@ static std::pair<ADIndex, Variable *> ad_var_new(JitBackend backend,
         unused.pop();
     }
 
+#if defined(DRJIT_SANITIZE_INTENSE)
+    ad_sanitation_checkpoint_variables();
+#endif
+
     Variable *v = &state.variables[index];
     v->ref_count = 1;
     v->size = size;
@@ -755,6 +777,10 @@ static EdgeIndex ad_edge_new() {
         index = unused.top();
         unused.pop();
     }
+
+#if defined(DRJIT_SANITIZE_INTENSE)
+    ad_sanitation_checkpoint_edges();
+#endif
 
     return index;
 }
@@ -902,7 +928,7 @@ DRJIT_NOINLINE Index ad_var_new_impl(const char *label, JitVar &&result,
 
     uint32_t flags = jit_flags();
 
-    bool symbolic    = flags & (uint32_t) JitFlag::SymbolicScope,
+    bool symbolic      = flags & (uint32_t) JitFlag::SymbolicScope,
          reuse_indices = flags & (uint32_t) JitFlag::ReuseIndices;
 
     VarInfo info = jit_set_backend(result.index());
@@ -3162,6 +3188,10 @@ struct CustomOp : Special {
             m_op->forward();
         }
 
+        #if defined(DRJIT_SANITIZE_INTENSE)
+            ad_sanitation_checkpoint_both();
+        #endif
+
         for (uint32_t ei = next_bwd; ei != 0; ) {
             const Edge &e = state.edges[ei];
             if (!clear(e, state[e.source]))
@@ -3189,6 +3219,10 @@ struct CustomOp : Special {
             scoped_set_flags flag_guard(m_flags);
             m_op->backward();
         }
+
+        #if defined(DRJIT_SANITIZE_INTENSE)
+            ad_sanitation_checkpoint_both();
+        #endif
 
         for (uint32_t ei = next_fwd; ei; ) {
             const Edge &e = state.edges[ei];

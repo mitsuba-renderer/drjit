@@ -157,6 +157,7 @@ endif()
 
 if (DRJIT_SANITIZE_INTENSE)
   target_compile_definitions(drjit-core PRIVATE -DDRJIT_SANITIZE_INTENSE)
+  target_compile_definitions(drjit-extra PRIVATE -DDRJIT_SANITIZE_INTENSE)
 endif()
 
 if (DRJIT_SANITIZE)
