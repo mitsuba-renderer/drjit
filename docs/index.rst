@@ -10,6 +10,7 @@ Dr.Jit — A Just-In-Time-Compiler for Differentiable Rendering
    types
    cflow
    interop
+   debug
    cpp
    textures
    faq
