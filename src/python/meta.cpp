@@ -213,8 +213,7 @@ ArrayMeta meta_get(nb::handle h) noexcept {
 
             switch (code) {
                 case dtype_code::Bool:
-                    if (dt.bits == 1)
-                        vt = VarType::Bool;
+                    vt = VarType::Bool;
                     break;
 
                 case dtype_code::Int:
