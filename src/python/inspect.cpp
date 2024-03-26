@@ -80,10 +80,14 @@ void set_label(nb::handle h, nb::str label) {
         for (auto [k, v] : nb::borrow<nb::dict>(h))
             set_label(v, nb::str("{}_{}").format(label, k));
     } else {
-        nb::object dstruct = nb::getattr(h.type(), "DRJIT_STRUCT", nb::handle());
-        if (dstruct.is_valid() && nb::isinstance<nb::dict>(dstruct)) {
-            for (auto [k, v] : nb::borrow<nb::dict>(dstruct))
+        if (nb::dict ds = get_drjit_struct(tp); ds.is_valid()) {
+            for (auto [k, v] : ds)
                 set_label(nb::getattr(h, k), nb::str("{}_{}").format(label, k));
+        } else if (nb::object df = get_dataclass_fields(tp); df.is_valid()) {
+            for (nb::handle field : df) {
+                nb::object k = field.attr(DR_STR(name));
+                set_label(nb::getattr(h, k), nb::str("{}_{}").format(label, k));
+            }
         }
     }
 }

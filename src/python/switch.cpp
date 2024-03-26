@@ -13,7 +13,7 @@
 #include "base.h"
 #include "detail.h"
 
-/// Exctract the mask parameter from a set of positional/keyword arguments
+/// Extract the mask parameter from a set of positional/keyword arguments
 static nb::object extract_mask(nb::list &args, nb::kwargs &kwargs) {
     nb::str mask_key("active");
     nb::object mask;

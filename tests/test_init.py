@@ -525,3 +525,17 @@ def test26_make_opaque(t):
     for i in range(2):
         dr.make_opaque(d)
         assert d.state == dr.VarState.Evaluated
+
+# Test dr.zeros applied to a dataclass
+@pytest.test_arrays('float32, shape=(*), jit')
+def test08_zeros_dataclass(t):
+    from dataclasses import dataclass
+
+    @dataclass
+    class Test:
+        x: t = t(0)
+
+    v = dr.zeros(Test, 10)
+    assert isinstance(v, Test)
+    assert isinstance(v.x, t)
+    assert len(v.x) == 10

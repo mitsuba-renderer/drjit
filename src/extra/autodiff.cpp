@@ -1960,8 +1960,8 @@ Index ad_var_new(JitIndex i0) {
         else
             v->label = concat(prefix, label);
 
-        v->flags = (uint8_t) VariableFlags::FreeLabel |
-                   (uint8_t) VariableFlags::CustomLabel;
+        v->flags |= (uint8_t) VariableFlags::FreeLabel |
+                    (uint8_t) VariableFlags::CustomLabel;
     }
 
     return result;
@@ -2974,8 +2974,8 @@ uint32_t ad_record_implicit_dependence(LocalState &ls, ReleaseHelper &rh,
         if (v_source->size != 1)
             ad_raise(
                 "ad_var_new(): You performed a differentiable operation that mixes symbolic\n"
-                "non-symbolic variables in a non-permissible way. The reason is likely one\n"
-                "of the following factors:\n"
+                "and non-symbolic variables in a non-permissible way. The reason is likely\n"
+                "one of the following factors:\n"
                 "\n"
                 "1. Your program performed a *symbolic* operation such as a\n"
                 "\n"
@@ -2983,7 +2983,7 @@ uint32_t ad_record_implicit_dependence(LocalState &ls, ReleaseHelper &rh,
                 "   - loop (via drjit.while_loop())\n"
                 "   - call (via drjit.switch(), drjit.dispatch(), C++ method)\n"
                 "\n"
-                "   (this potentially involved the @drjit.syntax decorator, which \n"
+                "   (this potentially involved the @drjit.syntax decorator, which\n"
                 "    rewrites scalar Python code to make use of these operations)\n"
                 "\n"
                 "2. The body of this operation accesses a variable *implicitly*, meaning\n"

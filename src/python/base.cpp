@@ -913,6 +913,18 @@ static VarState get_state(nb::handle h_) {
     return gs.state;
 }
 
+/// Create interned string for a few very commonly used identifiers
+nb::handle DR_STR(DRJIT_STRUCT) = PyUnicode_InternFromString("DRJIT_STRUCT");
+nb::handle DR_STR(dataclasses) = PyUnicode_InternFromString("dataclasses");
+nb::handle DR_STR(__dataclass_fields__) = PyUnicode_InternFromString("__dataclass_fields__");
+nb::handle DR_STR(name) = PyUnicode_InternFromString("name");
+nb::handle DR_STR(type) = PyUnicode_InternFromString("type");
+nb::handle DR_STR(fields) = PyUnicode_InternFromString("fields");
+nb::handle DR_STR(_traverse_write) = PyUnicode_InternFromString("_traverse_write");
+nb::handle DR_STR(_traverse_read) = PyUnicode_InternFromString("_traverse_read");
+nb::handle DR_STR(_traverse_1_cb_rw) = PyUnicode_InternFromString("_traverse_1_cb_rw");
+nb::handle DR_STR(_traverse_1_cb_ro) = PyUnicode_InternFromString("_traverse_1_cb_ro");
+
 void export_base(nb::module_ &m) {
     // Generic type variable used in many places
     for (const char *name :
@@ -921,7 +933,12 @@ void export_base(nb::module_ &m) {
         m.attr(name) = nb::type_var(name);
 
     #if PY_VERSION_HEX >= 0x030B0000 // TypeVarTuple was introduced in v3.11
-       m.attr("Ts") = nb::type_var_tuple("Ts");
+        m.attr("Ts") = nb::type_var_tuple("Ts");
+    #else
+        try {
+            m.attr("Ts") = nb::module_::import_("typing_extensions").attr("TypeVarTuple")("Ts");
+        } catch (...) {
+        }
     #endif
 
     // Type variable referring specifically to an array subclass

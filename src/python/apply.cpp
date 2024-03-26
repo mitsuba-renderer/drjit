@@ -613,16 +613,17 @@ void traverse(const char *op, TraverseCallback &tc, nb::handle h) {
             for (nb::handle h2 : nb::borrow<nb::dict>(h).values())
                 traverse(op, tc, h2);
         } else {
-            nb::object dstruct = nb::getattr(tp, "DRJIT_STRUCT", nb::handle());
-            if (dstruct.is_valid() && dstruct.type().is(&PyDict_Type)) {
-                for (auto [k, v] : nb::borrow<nb::dict>(dstruct))
+            if (nb::dict ds = get_drjit_struct(tp); ds.is_valid()) {
+                for (auto [k, v] : ds)
                     traverse(op, tc, nb::getattr(h, k));
-                return;
+            } else if (nb::object df = get_dataclass_fields(tp); df.is_valid()) {
+                for (nb::handle field : df) {
+                    nb::object k = field.attr(DR_STR(name));
+                    traverse(op, tc, nb::getattr(h, k));
+                }
+            } else if (nb::object cb = get_traverse_cb_ro(tp); cb.is_valid()) {
+                cb(h, nb::cpp_function([&](uint64_t index) { tc(index); }));
             }
-
-            nb::object traverse_cb = nb::getattr(tp, "_traverse_1_cb_ro", nb::handle());
-            if (traverse_cb.is_valid())
-                traverse_cb(h, nb::cpp_function([&](uint64_t index) { tc(index); }));
         }
     } catch (nb::python_error &e) {
         nb::raise_from(e, PyExc_RuntimeError,
@@ -637,7 +638,7 @@ void traverse(const char *op, TraverseCallback &tc, nb::handle h) {
 }
 
 void traverse_pair_impl(const char *op, TraversePairCallback &tc, nb::handle h1,
-                        nb::handle h2, std::string &name,
+                        nb::handle h2, drjit::string &name,
                         dr::vector<PyObject *> &stack,
                         bool report_inconsistencies) {
     if (std::find(stack.begin(), stack.end(), h1.ptr()) != stack.end()) {
@@ -665,7 +666,7 @@ void traverse_pair_impl(const char *op, TraversePairCallback &tc, nb::handle h1,
             nb::object sh1 = shape(h1),
                        sh2 = shape(h2);
 
-            name += ".array";
+            name.put(".array");
             traverse_pair_impl(
                 op, tc,
                 nb::steal(s.tensor_array(h1.ptr())),
@@ -687,7 +688,7 @@ void traverse_pair_impl(const char *op, TraversePairCallback &tc, nb::handle h1,
                 }
 
                 for (size_t i = 0; i < s1; ++i) {
-                    name += "[" + std::to_string(i) + "]";
+                    name.put('[', i, ']');
                     traverse_pair_impl(
                         op, tc,
                         nb::steal(s.item(h1.ptr(), i)),
@@ -718,7 +719,7 @@ void traverse_pair_impl(const char *op, TraversePairCallback &tc, nb::handle h1,
                 return;
         }
         for (size_t i = 0; i < s1; ++i) {
-            name += "[" + std::to_string(i) + "]";
+            name.put('[', i, ']');
             traverse_pair_impl(op, tc, h1[i], h2[i], name, stack,
                                report_inconsistencies);
             name.resize(name_size);
@@ -736,16 +737,24 @@ void traverse_pair_impl(const char *op, TraversePairCallback &tc, nb::handle h1,
                 return;
         }
         for (nb::handle k : k1) {
-            name += "['" + std::string(nb::str(k).c_str()) + "']";
+            name.put('[', nb::str(k).c_str(), ']');
             traverse_pair_impl(op, tc, d1[k], d2[k], name, stack,
                                report_inconsistencies);
             name.resize(name_size);
         }
     } else {
-        nb::object dstruct = nb::getattr(tp1, "DRJIT_STRUCT", nb::handle());
-        if (dstruct.is_valid() && dstruct.type().is(&PyDict_Type)) {
-            for (auto [k, v] : nb::borrow<nb::dict>(dstruct)) {
-                name += "." + std::string(nb::str(k).c_str());
+        if (nb::dict ds = get_drjit_struct(tp1); ds.is_valid()) {
+            for (auto [k, v] : ds) {
+                name.put('.', nb::str(k).c_str());
+                traverse_pair_impl(op, tc, nb::getattr(h1, k),
+                                   nb::getattr(h2, k), name, stack,
+                                   report_inconsistencies);
+                name.resize(name_size);
+            }
+        } else if (nb::object df = get_dataclass_fields(tp1); df.is_valid()) {
+            for (nb::handle field : df) {
+                nb::object k = field.attr(DR_STR(name));
+                name.put('.', nb::str(k).c_str());
                 traverse_pair_impl(op, tc, nb::getattr(h1, k),
                                    nb::getattr(h2, k), name, stack,
                                    report_inconsistencies);
@@ -766,7 +775,7 @@ void traverse_pair_impl(const char *op, TraversePairCallback &tc, nb::handle h1,
 /// Parallel traversal of two compatible PyTrees 'h1' and 'h2'
 void traverse_pair(const char *op, TraversePairCallback &tc, nb::handle h1,
                    nb::handle h2, const char *name_, bool report_inconsistencies) {
-    std::string name = name_;
+    drjit::string name = name_;
     dr::vector<PyObject *> stack;
 
     try {
@@ -788,8 +797,6 @@ nb::handle TransformCallback::transform_type(nb::handle tp) const {
 nb::object TransformCallback::transform_unknown(nb::handle h) const {
     return nb::borrow(h);
 }
-
-void TransformCallback::postprocess(nb::handle, nb::handle) { }
 
 /// Transform an input pytree 'h' into an output pytree, potentially of a different type
 nb::object transform(const char *op, TransformCallback &tc, nb::handle h) {
@@ -853,24 +860,25 @@ nb::object transform(const char *op, TransformCallback &tc, nb::handle h) {
                 tmp[k] = transform(op, tc, v);
             result = std::move(tmp);
         } else {
-            nb::object dstruct = nb::getattr(tp, "DRJIT_STRUCT", nb::handle());
-            if (dstruct.is_valid() && dstruct.type().is(&PyDict_Type)) {
+            if (nb::dict ds = get_drjit_struct(tp); ds.is_valid()) {
                 nb::object tmp = tp();
-                for (auto [k, v] : nb::borrow<nb::dict>(dstruct))
+                for (auto [k, v] : ds)
                     nb::setattr(tmp, k, transform(op, tc, nb::getattr(h, k)));
                 result = std::move(tmp);
+            } else if (nb::object df = get_dataclass_fields(tp); df.is_valid()) {
+                nb::object tmp = tp();
+                for (nb::handle field : df) {
+                    nb::object k = field.attr(DR_STR(name));
+                    nb::setattr(tmp, k, transform(op, tc, nb::getattr(h, k)));
+                }
+                result = std::move(tmp);
+            } else if (nb::object cb = get_traverse_cb_rw(tp); cb.is_valid()) {
+                cb(h, nb::cpp_function([&](uint64_t index) { return tc(index); }));
+                result = nb::borrow(h);
+            } else if (!result.is_valid()) {
+               result = tc.transform_unknown(h);
             }
-
-            if (!result.is_valid()) {
-                nb::object traverse_cb = nb::getattr(tp, "_traverse_1_cb_rw", nb::handle());
-                if (traverse_cb.is_valid())
-                    traverse_cb(h, nb::cpp_function([&](uint64_t index) { return tc(index); }));
-            }
-
-            if (!result.is_valid())
-                result = tc.transform_unknown(h);
         }
-        tc.postprocess(h, result);
         return result;
     } catch (nb::python_error &e) {
         nb::raise_from(e, PyExc_RuntimeError,
@@ -993,13 +1001,21 @@ nb::object transform_pair(const char *op, TransformPairCallback &tc,
 
             return result;
         } else {
-            nb::object dstruct = nb::getattr(tp1, "DRJIT_STRUCT", nb::handle());
-            if (dstruct.is_valid() && dstruct.type().is(&PyDict_Type)) {
+            if (nb::dict ds = get_drjit_struct(tp1); ds.is_valid()) {
                 nb::object result = tp1();
-                for (auto [k, v] : nb::borrow<nb::dict>(dstruct))
+                for (auto [k, v] : ds)
                     nb::setattr(result, k,
                                 transform_pair(op, tc, nb::getattr(h1, k),
                                                nb::getattr(h2, k)));
+                return result;
+            } else if (nb::object df = get_dataclass_fields(tp1); df.is_valid()) {
+                nb::object result = tp1();
+                for (nb::handle field : df) {
+                    nb::object k = field.attr(DR_STR(name));
+                    nb::setattr(result, k,
+                                transform_pair(op, tc, nb::getattr(h1, k),
+                                               nb::getattr(h2, k)));
+                }
                 return result;
             } else {
                 return nb::none();

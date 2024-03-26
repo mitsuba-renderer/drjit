@@ -205,7 +205,7 @@ def test12_loop_optimizations(t, optimize):
         b_const = 0
         it_count = 0
 
-        while index == 0:
+        while dr.hint(index == 0, strict=False):
             a_const += int(a.state == dr.VarState.Literal)
             b_const += int(b.state == dr.VarState.Literal)
             it_count += 1
@@ -389,14 +389,15 @@ def test19_complex_diff_loop(t, optimize, mode):
 @pytest.test_arrays('float,is_diff,shape=(*)')
 @dr.syntax
 def test20_no_mutate_inputs(t, optimize, mode):
-    x = t(1)
-    z = t(2)
+    x = dr.opaque(t, 1)
+    z = dr.opaque(t, 2)
 
     xo, zo = dr.while_loop(
         state=(x,z),
         cond=lambda x, z: x < 10,
         body=lambda x, z: (x + 1, z),
-        mode=mode
+        mode=mode,
+        labels=("x", "z")
     )
 
     assert xo is not x
@@ -404,8 +405,8 @@ def test20_no_mutate_inputs(t, optimize, mode):
     assert x == 1
     assert zo is z
 
-    q1 = (t(3), t(4, 5))
-    q2 = (t(6), t(7, 8))
+    q1 = (dr.opaque(t, 3), t(4, 5))
+    q2 = (dr.opaque(t, 6), t(7, 8))
 
     def mut(q1, q2):
         item = q2[1]
@@ -614,3 +615,35 @@ def test26_dr_syntax_confusion():
         @dr.wrap(source='drjit', target='torch')
         def f2(x):
             return x
+
+
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+@pytest.mark.parametrize('mode', ['symbolic', 'evaluated'])
+@pytest.mark.parametrize('variant', [0, 1])
+def test27_preserve_unchanged(t, mode, variant):
+    # Check that unchanged variables (including
+    # differentiable ones) are simply passed through
+    a = t(1, 1)
+    b = t(2, 2)
+    dr.enable_grad(b)
+    assert dr.grad_enabled(b)
+    ai = (a.index, a.index_ad)
+    bi = (b.index, b.index_ad)
+
+    if variant == 1:
+        c = 1
+    else:
+        c = t(3, 3)
+
+    ao, bo, co = dr.while_loop(
+        state=(a, b, c),
+        cond=lambda x, y, z: x == 0,
+        body=lambda x, y, z: (x, y, z+1),
+        strict=False)
+    ai2 = (ao.index, ao.index_ad)
+    bi2 = (bo.index, bo.index_ad)
+
+    assert not dr.grad_enabled(ao)
+    assert dr.grad_enabled(bo)
+    assert ai == ai2
+    assert bi == bi2

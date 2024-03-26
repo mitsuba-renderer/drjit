@@ -48,3 +48,42 @@ inline nb::object tuple_call(nb::handle callable, nb::handle tuple) {
         if (NB_UNLIKELY(expr))                                                 \
             nb::raise(__VA_ARGS__);                                    \
     } while (false)
+
+/// Create interned string for a few very commonly used identifiers
+#define DR_STR(x) s_##x
+extern nb::handle DR_STR(DRJIT_STRUCT);
+extern nb::handle DR_STR(dataclasses);
+extern nb::handle DR_STR(__dataclass_fields__);
+extern nb::handle DR_STR(name);
+extern nb::handle DR_STR(type);
+extern nb::handle DR_STR(fields);
+extern nb::handle DR_STR(_traverse_write);
+extern nb::handle DR_STR(_traverse_read);
+extern nb::handle DR_STR(_traverse_1_cb_rw);
+extern nb::handle DR_STR(_traverse_1_cb_ro);
+
+/// Extract the DRJIT_STRUCT element of a custom data structure type, if available
+inline nb::dict get_drjit_struct(nb::handle tp) {
+    nb::object result = nb::getattr(tp, DR_STR(DRJIT_STRUCT), nb::handle());
+    if (result.is_valid() && !result.type().is(&PyDict_Type))
+        result = nb::object();
+    return nb::borrow<nb::dict>(result);
+}
+
+/// Extract the dataclass fields element of a custom data structure type, if available
+inline nb::object get_dataclass_fields(nb::handle tp) {
+    nb::object result = nb::getattr(tp, DR_STR(__dataclass_fields__), nb::handle());
+    if (result.is_valid())
+        result = nb::module_::import_(DR_STR(dataclasses)).attr(DR_STR(fields))(tp);
+    return result;
+}
+
+/// Extract a read-only callback to traverse custom data structures
+inline nb::object get_traverse_cb_ro(nb::handle tp) {
+    return nb::getattr(tp, DR_STR(_traverse_1_cb_ro), nb::handle());
+}
+
+/// Extract a read-write callback to traverse custom data structures
+inline nb::object get_traverse_cb_rw(nb::handle tp) {
+    return nb::getattr(tp, DR_STR(_traverse_1_cb_rw), nb::handle());
+}

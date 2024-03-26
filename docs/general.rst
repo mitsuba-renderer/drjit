@@ -273,8 +273,13 @@ PyTrees
 
 The word *PyTree* (borrowed from `JAX
 <https://jax.readthedocs.io/en/latest/pytrees.html>`_) refers to a tree-like
-data structure made of Python container types including ``list``, ``tuple``,
-and ``dict``, which can be further extended to encompass user-defined classes.
+data structure made of Python container types including
+
+- ``list``,
+- ``tuple``,
+- ``dict``,
+- `data classes <https://docs.python.org/3/library/dataclasses.html>`__.
+- custom Python classes or C++ bindings with a ``DRJIT_STRUCT`` annotation.
 
 Various Dr.Jit operations will automatically traverse such PyTrees to process
 any Dr.Jit arrays or tensors found within. For example, it might be convenient
@@ -319,11 +324,32 @@ sequences or mappings. This is intentional.
 Custom types
 ^^^^^^^^^^^^
 
-To turn a user-defined type into a PyTree, define a static ``DRJIT_STRUCT``
-member dictionary describing the names and types of all fields. It should also
-be default-constructible without the need to specify any arguments. For
-instance, the following snippet defines a named 2D point, containing (amongst
-others) two nested Dr.Jit arrays.
+There are two ways of extending PyTrees with custom data types. The first is to
+register a Python `data class
+<https://docs.python.org/3/library/dataclasses.html>`__. Note that this type
+must be default-constructible, which means that its members should have default
+initializers.
+
+.. code-block:: python
+
+   from drjit.cuda.ad import Float
+   from dataclasses import dataclass
+
+   @dataclass
+   class MyPoint2f:
+       x: Float = Float(0)
+       y: Float = Float(0)
+
+   # Create a vector representing 100 2D points. Dr.Jit will
+   # automatically populate the 'x' and 'y' members
+   value = dr.zeros(MyPoint2f, 100)
+
+The second option is to annotate an existing non-dataclass type (e.g. a
+standard Python class or a C++ binding) with a static ``DRJIT_STRUCT`` member.
+This is simply a dictionary describing the names and types of all fields.
+Such custom types must also be default-constructible (i.e., the constructor
+should work if called without arguments). The following is analogous to the
+above dataclass version:
 
 .. code-block:: python
 
@@ -332,9 +358,9 @@ others) two nested Dr.Jit arrays.
    class MyPoint2f:
        DRJIT_STRUCT = { 'x' : Float, 'y': Float }
 
-       def __init__(self, x: Float = None, y: Float = None):
-           self.x = x
-           self.y = y
+       def __init__(self, x: Float | None = None, y: Float | None = None):
+           self.x = x or Float()
+           self.y = y or Float()
 
    # Create a vector representing 100 2D points. Dr.Jit will
    # automatically populate the 'x' and 'y' members

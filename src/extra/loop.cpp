@@ -59,7 +59,8 @@ static bool ad_loop_symbolic(JitBackend backend, const char *name,
             uint32_t active_initial = cond_cb(payload);
 
             // Potentially optimize the loop away
-            if (jit_var_is_zero_literal(active_initial) && jit_flag(JitFlag::OptimizeLoops)) {
+            if (jit_var_is_zero_literal(active_initial) &&
+                jit_flag(JitFlag::OptimizeLoops)) {
                 jit_log(LogLevel::InfoSym,
                         "ad_loop_symbolic(\"%s\"): optimized away (loop "
                         "condition is 'false').", name);
@@ -67,8 +68,8 @@ static bool ad_loop_symbolic(JitBackend backend, const char *name,
                 break;
             }
 
-            JitVar active = JitVar::steal(
-                jit_var_mask_apply(active_initial, (uint32_t) jit_var_size(active_initial)));
+            JitVar active = JitVar::steal(jit_var_mask_apply(
+                active_initial, (uint32_t) jit_var_size(active_initial)));
 
             JitVar loop_cond = JitVar::steal(
                 jit_var_loop_cond(loop.index(), active.index()));
@@ -443,8 +444,7 @@ public:
            const index64_vector &state)
         : m_backend(backend), m_name(name), m_payload(payload),
           m_read_cb(read_cb), m_write_cb(write_cb), m_cond_cb(cond_cb),
-          m_body_cb(body_cb), m_delete_cb(delete_cb), m_diff_count(0),
-          m_restart(true) {
+          m_body_cb(body_cb), m_delete_cb(delete_cb), m_diff_count(0) {
         m_name_op = "Loop: " + m_name;
 
         m_inputs.reserve(state.size());
@@ -520,8 +520,7 @@ public:
         for (size_t i = 0; i < m_inputs.size(); ++i)
             m_state2.push_back_borrow(m_state[i]);
 
-        m_write_cb(m_payload, m_state2, m_restart);
-        m_restart = false;
+        m_write_cb(m_payload, m_state2, false);
         m_state2.release();
         return m_cond_cb(m_payload);
     }
@@ -539,8 +538,7 @@ public:
         }
 
         // Run the loop body
-        m_write_cb(m_payload, m_state2, m_restart);
-        m_restart = false;
+        m_write_cb(m_payload, m_state2, false);
         m_body_cb(m_payload);
 
         // AD forward propagation pass
@@ -640,96 +638,99 @@ private:
     index64_vector m_state2;
     index64_vector m_rv;
     size_t m_diff_count;
-    bool m_restart;
 };
 
 bool ad_loop(JitBackend backend, int symbolic, int compress, const char *name,
              void *payload, ad_loop_read read_cb, ad_loop_write write_cb,
              ad_loop_cond cond_cb, ad_loop_body body_cb,
              ad_loop_delete delete_cb, bool ad) {
-    try {
-        if (name == nullptr)
-            name = "unnamed";
+    if (name == nullptr)
+        name = "unnamed";
 
-        if (strchr(name, '\n') || strchr(name, '\r'))
-            jit_raise("'name' may not contain newline characters.");
+    if (strchr(name, '\n') || strchr(name, '\r'))
+        jit_raise("'name' may not contain newline characters.");
 
-        if (symbolic == -1)
-            symbolic = (int) jit_flag(JitFlag::SymbolicLoops);
+    if (symbolic == -1)
+        symbolic = (int) jit_flag(JitFlag::SymbolicLoops);
 
-        if (compress == -1)
-            compress = (int) jit_flag(JitFlag::CompressLoops);
+    if (compress == -1)
+        compress = (int) jit_flag(JitFlag::CompressLoops);
 
-        if (symbolic != 0 && symbolic != 1)
-            jit_raise("'symbolic' must equal 0, 1, or -1.");
+    if (symbolic != 0 && symbolic != 1)
+        jit_raise("'symbolic' must equal 0, 1, or -1.");
 
-        if (compress != 0 && compress != 1)
-            jit_raise("'compress' must equal 0, 1, or -1.");
+    if (compress != 0 && compress != 1)
+        jit_raise("'compress' must equal 0, 1, or -1.");
 
-        if (symbolic) {
-            index64_vector indices_in;
-            read_cb(payload, indices_in);
+    if (symbolic) {
+        index64_vector indices_in;
+        read_cb(payload, indices_in);
 
-            bool needs_ad;
-            {
-                scoped_isolation_boundary guard;
-                needs_ad =
-                    ad_loop_symbolic(backend, name, payload, read_cb, write_cb,
-                                     cond_cb, body_cb, indices_in);
-                guard.defuse();
-            }
+        bool needs_ad;
+        {
+            scoped_isolation_boundary guard;
+            needs_ad =
+                ad_loop_symbolic(backend, name, payload, read_cb, write_cb,
+                                 cond_cb, body_cb, indices_in);
+            guard.defuse();
+        }
 
-            if (needs_ad && ad) {
-                index64_vector indices_out;
-                read_cb(payload, indices_out);
+        if (needs_ad && ad) {
+            index64_vector indices_out;
+            read_cb(payload, indices_out);
 
-                nanobind::ref<LoopOp> op =
-                    new LoopOp(backend, name, payload, read_cb, write_cb,
-                               cond_cb, body_cb, delete_cb, indices_in);
+            nanobind::ref<LoopOp> op =
+                new LoopOp(backend, name, payload, read_cb, write_cb,
+                           cond_cb, body_cb, delete_cb, indices_in);
 
-                for (size_t i = 0; i < indices_out.size(); ++i) {
-                    VarType vt = jit_var_type((uint32_t) indices_out[i]);
-                    if (vt != VarType::Float16 && vt != VarType::Float32 &&
-                        vt != VarType::Float64)
-                        continue;
+            for (size_t i = 0; i < indices_out.size(); ++i) {
+                VarType vt = jit_var_type((uint32_t) indices_out[i]);
+                if (vt != VarType::Float16 && vt != VarType::Float32 &&
+                    vt != VarType::Float64)
+                    continue;
 
+                if ((uint32_t) indices_in[i] == (uint32_t) indices_out[i]) {
+                    // Keep unchanged variables out of the AD system
+                    if (indices_in[i] != indices_out[i]) {
+                        ad_var_inc_ref(indices_in[i]);
+                        jit_var_dec_ref((uint32_t) indices_out[i]);
+                        indices_out[i] = indices_in[i];
+                    }
+                } else {
                     uint64_t index = ad_var_new((uint32_t) indices_out[i]);
                     jit_var_dec_ref((uint32_t) indices_out[i]);
                     indices_out[i] = index;
                     op->add_output(index);
                 }
-
-                if (ad_custom_op(op.get())) {
-                    write_cb(payload, indices_out, false);
-                    // LoopOp will eventually call delete_cb()
-                    return false;
-                }
-
-                // CustomOp was not needed, detach output again..
-                op->disable_deleter();
             }
-        } else {
-            if (jit_flag(JitFlag::SymbolicScope))
-                jit_raise("Dr.Jit is currently recording symbolic computation and "
-                          "cannot execute a loop in *evaluated mode*. You will likely "
-                          "want to set the Jit flag dr.JitFlag.SymbolicLoops to True. "
-                          "Alternatively, you could also annotate the loop condition "
-                          "with dr.hint(.., symbolic=True) if it occurs inside a "
-                          "@dr.syntax-annotated function. Please review the Dr.Jit "
-                          "documentation of drjit.JitFlag.SymbolicLoops and "
-                          "drjit.while_loop() for general information on symbolic and "
-                          "evaluated loops, as well as their limitations.");
 
-            scoped_isolation_boundary guard;
-            ad_loop_evaluated(backend, name, payload, read_cb, write_cb,
-                              cond_cb, body_cb, compress);
-            guard.defuse();
+            if (ad_custom_op(op.get())) {
+                write_cb(payload, indices_out, false);
+                // LoopOp will eventually call delete_cb()
+                return false;
+            }
+
+            // CustomOp was not needed, detach output again..
+            op->disable_deleter();
+            write_cb(payload, indices_out, false);
         }
+    } else {
+        if (jit_flag(JitFlag::SymbolicScope))
+            jit_raise("Dr.Jit is currently recording symbolic computation and "
+                      "cannot execute a loop in *evaluated mode*. You will likely "
+                      "want to set the Jit flag dr.JitFlag.SymbolicLoops to True. "
+                      "Alternatively, you could also annotate the loop condition "
+                      "with dr.hint(.., symbolic=True) if it occurs inside a "
+                      "@dr.syntax-annotated function. Please review the Dr.Jit "
+                      "documentation of drjit.JitFlag.SymbolicLoops and "
+                      "drjit.while_loop() for general information on symbolic and "
+                      "evaluated loops, as well as their limitations.");
 
-        return true; // Caller should directly call delete()
-    } catch (...) {
-        if (delete_cb)
-            delete_cb(payload);
-        throw;
+        scoped_isolation_boundary guard;
+        ad_loop_evaluated(backend, name, payload, read_cb, write_cb,
+                          cond_cb, body_cb, compress);
+        guard.defuse();
     }
+
+    return true; // Caller should directly call delete()
 }
