@@ -804,6 +804,14 @@ nb::object full(const char *name, nb::handle dtype, nb::handle value,
                 nb::dict dstruct_dict = nb::borrow<nb::dict>(dstruct);
                 nb::object result = dtype();
 
+                if (value.is(nb::int_(0))) {
+                    nb::object custom_zero = nb::getattr(result, "zero_", nb::handle());
+                    if (custom_zero.is_valid()) {
+                        custom_zero(shape[0]);
+                        return result;
+                    }
+                }
+
                 for (auto [k, v] : dstruct_dict) {
                     raise_if(!v.is_type(), "DRJIT_STRUCT invalid, expected type keys.");
 
