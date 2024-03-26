@@ -16,9 +16,19 @@ with detail.scoped_rtld_deepbind():
         err.__cause__ = e
         raise err
 
+import sys
+if sys.version_info < (3, 11):
+    try:
+        from typing_extensions import overload, Optional
+    except ImportError:
+        raise RuntimeError(
+            "Dr.Jit requires the 'typing_extension' package on Python <3.11")
+else:
+    from typing import overload, Optional
+del sys
+
 from .ast import syntax, hint
 from .interop import wrap
-from typing import overload, Optional
 import warnings as _warnings
 
 # -------------------------------------------------------------------

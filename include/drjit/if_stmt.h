@@ -17,14 +17,6 @@
 NAMESPACE_BEGIN(drjit)
 NAMESPACE_BEGIN(detail)
 
-struct ref_vec : vector<uint64_t> {
-    ref_vec() = default;
-    ~ref_vec() {
-        for (size_t i = 0; i < m_size; ++i)
-            ad_var_dec_ref(m_data[i]);
-    }
-};
-
 template <size_t... Is, typename Args, typename Mask, typename TrueFn,
           typename FalseFn>
 auto if_stmt_impl(std::index_sequence<Is...>, Args &&args, const Mask &cond,
@@ -87,24 +79,24 @@ auto if_stmt_impl(std::index_sequence<Is...>, Args &&args, const Mask &cond,
 
         ad_cond_delete delete_cb = [](void *p) { delete (IfStmtData *) p; };
 
-        IfStmtData *isd =
+        unique_ptr<IfStmtData> isd(
             new IfStmtData{ std::forward<Args>(args), cond,
                             std::forward<TrueFn>(true_fn),
                             std::forward<FalseFn>(false_fn),
-                            Return() };
+                            Return() });
 
-        ref_vec args_i, rv_i;
+        detail::index64_vector args_i, rv_i;
         detail::collect_indices<true>(isd->args, args_i);
 
-        bool all_done = ad_cond(Mask::Backend, -1, name, isd, cond.index(),
+        bool all_done = ad_cond(Mask::Backend, -1, name, isd.get(), cond.index(),
                                 args_i, rv_i, body_cb, delete_cb, true);
 
         Return rv = std::move(isd->rv);
 
-        detail::update_indices(rv, rv_i);
+        if (!all_done)
+            isd.release();
 
-        if (all_done)
-            delete isd;
+        detail::update_indices(rv, rv_i);
 
         return rv;
     }

@@ -4520,7 +4520,7 @@
           decorator automatically provides these labels based on the transformed
           code.
 
-        name (Optional[str]): An optional descriptive name. If specified, Dr.Jit
+        label (Optional[str]): An optional descriptive name. If specified, Dr.Jit
           will include this label in generated low-level IR, which can be helpful
           when debugging the compilation of large programs.
 
@@ -4528,6 +4528,11 @@
           You must specify a correct upper bound here if you wish to differentiate
           the loop in reverse mode. In that case, the maximum iteration count is used
           to reserve memory to store intermediate loop state.
+
+        strict (bool): You can specify this parameter to reduce the strictness
+          of variable consistency checks performed by the implementation. See
+          the documentation of :py:func:`drjit.hint` for an example. The
+          default is ``strict=True``.
 
     Returns:
         tuple: The function returns the final state of the loop variables following
@@ -4780,15 +4785,25 @@
           mode. Possible values besides ``None`` are: ``"scalar"``, ``"symbolic"``,
           ``"evaluated"``.
 
+        arg_labels (list[str]): An optional list of labels associated with each
+          input argument. Dr.Jit uses this feature in combination with
+          the :py:func:`@drjit.syntax <drjit.syntax>` decorator to provide better
+          error messages in case of detected inconsistencies.
+
         rv_labels (list[str]): An optional list of labels associated with each
           element of the return value. This parameter should only be specified when
           the return value is a tuple. Dr.Jit uses this feature in combination with
           the :py:func:`@drjit.syntax <drjit.syntax>` decorator to provide better
           error messages in case of detected inconsistencies.
 
-        name (Optional[str]): An optional descriptive name. If specified, Dr.Jit
+        label (Optional[str]): An optional descriptive name. If specified, Dr.Jit
           will include this label in generated low-level IR, which can be helpful
           when debugging the compilation of large programs.
+
+        strict (bool): You can specify this parameter to reduce the strictness
+          of variable consistency checks performed by the implementation. See
+          the documentation of :py:func:`drjit.hint` for an example. The
+          default is ``strict=True``.
 
     Returns:
         object: Combined return value mixing the results of ``true_fn`` and
@@ -4873,30 +4888,6 @@
     is isolate the inputs of :py:func:`drjit.while_loop()` and
     :py:func:`drjit.if_stmt()` from changes.
 
-    If the ``copy_map`` parameter is provided, the function furthermore registers
-    created copies, which is useful in combination with the
-    :py:func:`drjit.detail.uncopy()` function.
-
-    This function exists for Dr.Jit-internal use. You probably should not call
-    it in your own application code.
-
-.. topic:: detail_uncopy
-
-    Undo a prior call to :py:func:`drjit.copy()` when the contents of a
-    PyTree are unchanged.
-
-    This operation recursively traverses a PyTree ``h`` containing copies made
-    by the functions :py:func:`drjit.copy()` and
-    :py:func:`drjit.update_indices()`. Whenever an entire subtree was unchanged
-    (in the sense that the Dr.Jit array indices are still the same), the
-    function "undoes" the change by returning the original Python object prior
-    to the copy.
-
-    Both :py:func:`drjit.while_loop()` and :py:func:`drjit.if_stmt()`
-    conservatively perform a deep copy of all state variables. When that copy is
-    later discovered to not be necessary, the use :py:func:`uncopy()` to restore
-    the variable to its original Python object.
-
     This function exists for Dr.Jit-internal use. You probably should not call
     it in your own application code.
 
@@ -4936,10 +4927,6 @@
     on the provided index vector. The function returns the resulting object,
     while leaving the input unchanged. The output array object borrows the
     provided array references as opposed to stealing them.
-
-    If the ``copy_map`` parameter is provided, the function furthermore registers
-    created copies, which is useful in combination with the
-    :py:func:`drjit.detail.uncopy()` function.
 
     This function exists for Dr.Jit-internal use. You probably should not call
     it in your own application code.
@@ -7022,131 +7009,96 @@
 
    Helper class for tracking state variables during control flow operations.
 
-   This class reads and updates state variables as part of control flow
-   operations such as ``dr.while_loop()`` and ``dr.if_stmt()``. It checks
-   that each variable remains consistent across this multi-step process.
+   This class reads and writes state variables as part of control flow
+   operations such as :py:func:`dr.while_loop() <while_loop>` and
+   :py:func:`dr.if_stmt() <if_stmt>`. It checks that each variable remains
+   consistent across this multi-step process.
 
    Consistency here means that:
 
    - The tree structure of the :ref:`PyTree <pytrees>` PyTree is preserved
      across calls to :py:func:`read()`` and :py:func:`write()``.
 
-   - The type of very PyTree element is similarly preserved.
+   - The type of every PyTree element is similarly preserved.
 
    - The sizes of Dr.Jit arrays in the PyTree remain compatible across calls to
      :py:func:`read()` and :py:func:`write()`. The sizes of two arrays ``a``
-     and ``b`` are considered compatible if ``a+b`` is well-defined (this may
-     require broadcasting).
+     and ``b`` are considered compatible if ``a+b`` is well-defined (it's okay
+     if this involves an intermediate broadcasting step.)
 
    In the case of an inconsistency, the implementation generates an error
-   message that identifies the problematic variable by name. This requires the
-   assignment of variable labels via the :py:func:`set_labels()` function.
+   message that identifies the problematic variable by name.
 
-   Variables are tracked in two groups: inputs and outputs. In the case of an
-   operation like :py:func:`drjit.while_loop()` where inputs and outputs
-   coincide, only the latter group is actually used. If a variable occurs both
-   as an input and as an output (as identified via its label), then its
-   consistency is also checked across groups.
+
+.. topic:: detail_VariableTracker_VariableTracker
+
+   Create a new variable tracker.
+
+   The constructor accepts two parameters:
+
+   - ``strict``: Certain types of Python objects (e.g. custom Python classes
+     without ``DRJIT_STRUCT`` field, scalar Python numeric types) are not
+     traversed by the variable tracker. If ``strict`` mode is enabled, any
+     inconsistency here will cause the implementation to immediately give up
+     with an error message. This is not always desired, hence this behavior
+     is configurable.
+
+   - ``check_size``: If set to ``true``, the tracker will ensure that
+     variables remain size-compatible. The one case in Dr.Jit where this is
+     not desired are evaluated loops with compression enabled (i.e.,
+     inactive elements are pruned, which causes the array size to
+     progressively shrink).
 
 .. topic:: detail_VariableTracker_read
 
-   Traverse the PyTree ``state`` and read variable indices.
+   Traverse a PyTree and read its variable indices.
 
-   The implementation performs the consistency checks mentioned in the class
-   description and appends the indices of encountered Dr.Jit arrays to the
-   reference-counted output vector ``indices``.
+   This function recursively traverses the PyTree ``state`` and appends the
+   indices of encountered Dr.Jit arrays to the reference-counted output
+   vector ``indices``. It performs numerous consistency checks during this
+   process to ensure that variables remain consistent over time.
+
+   The ``labels`` argument optionally identifies the top-level variable
+   names tracked by this instance. This is recommended to obtain actionable
+   error messages in the case of inconsistencies. Otherwise,
+   ``default_label`` is prefixed to variable names.
 
 .. topic:: detail_VariableTracker_write
 
-   Traverse the PyTree ``state`` and write variable indices.
+   Traverse a PyTree and write its variable indices.
 
-   The implementation performs the consistency checks mentioned in the class
-   description and appends the indices of encountered Dr.Jit arrays to the
-   reference-counted output vector ``indices``.
+   This function recursively traverses the PyTree ``state`` and updates the
+   encountered Dr.Jit arrays with indices from the ``indices`` argument.
+   It performs numerous consistency checks during this
+   process to ensure that variables remain consistent over time.
 
-.. topic:: detail_VariableTracker_set_labels
+   When ``preserve_dirty`` is set to ``true``, the function leaves
+   dirty arrays (i.e., ones with pending side effects) unchanged.
 
-   Label the variables of the given group. This is important to
-   obtain actionable error messages in case of inconsistencies.
+   The ``labels`` argument optionally identifies the top-level variable
+   names tracked by this instance. This is recommended to obtain actionable
+   error messages in the case of inconsistencies. Otherwise,
+   ``default_label`` is prefixed to variable names.
 
-.. topic:: detail_VariableTracker_labels
-
-   Return the current set of labels for the given group
 
 .. topic:: detail_VariableTracker_clear
 
-    Clear the internal state of the tracker for a specific group (except for the labels).
+   Clear all variable state stored by the variable tracker.
 
-.. topic:: detail_VariableTracker_clear_2
+.. topic:: detail_VariableTracker_restore
 
-    Clear the internal state of the tracker (except for the labels).
+   Undo all changes and restore tracked variables to their original state.
 
-.. topic:: detail_VariableTracker_reset
+.. topic:: detail_VariableTracker_rebuild
 
-    Reset a specific variable group to its initial state
+   Create a new copy of the PyTree representing the final
+   version of the PyTree following a symbolic operation.
 
-.. topic:: detail_VariableTracker_reset_2
+   This function returns a PyTree representing the latest state. This PyTree
+   is created lazily, and it references the original one whenever values
+   were unchanged. This function also propagates in-place updates when
+   they are detected.
 
-    Reset all variable groups to their initial state
+.. topic:: detail_VariableTracker_verify_size
 
-.. topic:: detail_VariableTracker_finalize
-
-    Finalize a specific variable group following a symbolic operation.
-
-    If a variable was consistently *replaced* by another variable without
-    mutating the original variable's contents, then this operation will
-    restore the original variable to its initial value.
-
-    This needed so that an operation such as
-
-    .. code-block:: python
-
-       @dr.syntax
-       def f(x):
-          if x < 0:
-              # Associate the name 'x' with a new variable but don't change
-              # the original variable.
-              x = x + 1 return x
-
-    does not mutate the caller-provided ``x``, which would be surprising and
-    bug-prone.
-
-    On the other hand, ``x`` *will* be mutated in the next snippet since an
-    in-place update was performed within the ``if`` statement.
-
-    .. code-block:: python
-
-       @dr.syntax
-       def f(x):
-          if x < 0:
-              x += 1 # Replace the contents of 'x' with 'x+1'
-
-    Some situations are less clearly defined. Consider the following
-    conditional, where one branch mutates and the other one replaces a
-    variable.
-
-    .. code-block:: python
-
-       @dr.syntax
-       def f(x):
-          if x < 0:
-              x += 1
-          else:
-              x = x + 2
-
-    In this case, finalization will consider ``x`` to be mutated and
-    rewrite the caller-provided ``x`` so that it reflects the outcome
-    of both branches.
-
-.. topic:: detail_VariableTracker_finalize_2
-
-   Finalize input/output variables following the symbolic operation
-
-.. topic:: detail_VariableTracker_check_size
-
-   Check that modified variables in ``group`` are compatible with size ``size``.
-
-.. topic:: detail_VariableTracker_check_size_2
-
-   Check that all modified variables are compatible with size ``size``.
-
+   Check that the PyTree is compatible with size ``size``.

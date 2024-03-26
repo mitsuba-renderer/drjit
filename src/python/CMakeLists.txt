@@ -139,72 +139,78 @@ set(STUB_ARGS
   DEPENDS drjit-python ${PY_FILES_OUT}
 )
 
-nanobind_add_stub(
-  drjit-stub-main
-  MODULE drjit
-  OUTPUT ${DRJIT_PYTHON_DST_DIR}/__init__.pyi
-  MARKER_FILE ${DRJIT_PYTHON_DST_DIR}/py.typed
-  ${STUB_ARGS}
-)
+# The sanitizers require preloading shared libraries into Python, and that
+# doesn't play well with stub generation. Disable stubs if sanitizers are
+# enabled.
 
-nanobind_add_stub(
-  drjit-stub-ast
-  MODULE drjit.ast
-  OUTPUT ${DRJIT_PYTHON_DST_DIR}/ast.pyi
-  ${STUB_ARGS}
-)
-
-nanobind_add_stub(
-  drjit-stub-interop
-  MODULE drjit.interop
-  OUTPUT ${DRJIT_PYTHON_DST_DIR}/interop.pyi
-  ${STUB_ARGS}
-)
-
-nanobind_add_stub(
-  drjit-stub-detail
-  MODULE drjit.detail
-  OUTPUT ${DRJIT_PYTHON_DST_DIR}/detail.pyi
-  ${STUB_ARGS}
-)
-
-nanobind_add_stub(
-  drjit-stub-scalar
-  MODULE drjit.scalar
-  OUTPUT ${DRJIT_PYTHON_DST_DIR}/scalar/__init__.pyi
-  ${STUB_ARGS}
-)
-
-if (DRJIT_ENABLE_LLVM)
+if (NOT (DRJIT_SANITIZE_ASAN OR DRJIT_SANITIZE_UBSAN))
   nanobind_add_stub(
-    drjit-stub-llvm
-    MARKER_FILE ${DRJIT_PYTHON_DST_DIR}/llvm/py.typed
-    MODULE drjit.llvm
-    OUTPUT ${DRJIT_PYTHON_DST_DIR}/llvm/__init__.pyi
+    drjit-stub-main
+    MODULE drjit
+    OUTPUT ${DRJIT_PYTHON_DST_DIR}/__init__.pyi
+    MARKER_FILE ${DRJIT_PYTHON_DST_DIR}/py.typed
     ${STUB_ARGS}
   )
 
   nanobind_add_stub(
-    drjit-stub-llvm-ad
-    MODULE drjit.llvm.ad
-    OUTPUT ${DRJIT_PYTHON_DST_DIR}/llvm/ad.pyi
-    ${STUB_ARGS}
-  )
-endif()
-
-if (DRJIT_ENABLE_CUDA)
-  nanobind_add_stub(
-    drjit-stub-cuda
-    MARKER_FILE ${DRJIT_PYTHON_DST_DIR}/cuda/py.typed
-    MODULE drjit.cuda
-    OUTPUT ${DRJIT_PYTHON_DST_DIR}/cuda/__init__.pyi
+    drjit-stub-ast
+    MODULE drjit.ast
+    OUTPUT ${DRJIT_PYTHON_DST_DIR}/ast.pyi
     ${STUB_ARGS}
   )
 
   nanobind_add_stub(
-    drjit-stub-cuda-ad
-    MODULE drjit.cuda.ad
-    OUTPUT ${DRJIT_PYTHON_DST_DIR}/cuda/ad.pyi
+    drjit-stub-interop
+    MODULE drjit.interop
+    OUTPUT ${DRJIT_PYTHON_DST_DIR}/interop.pyi
     ${STUB_ARGS}
   )
+
+  nanobind_add_stub(
+    drjit-stub-detail
+    MODULE drjit.detail
+    OUTPUT ${DRJIT_PYTHON_DST_DIR}/detail.pyi
+    ${STUB_ARGS}
+  )
+
+  nanobind_add_stub(
+    drjit-stub-scalar
+    MODULE drjit.scalar
+    OUTPUT ${DRJIT_PYTHON_DST_DIR}/scalar/__init__.pyi
+    ${STUB_ARGS}
+  )
+
+  if (DRJIT_ENABLE_LLVM)
+    nanobind_add_stub(
+      drjit-stub-llvm
+      MARKER_FILE ${DRJIT_PYTHON_DST_DIR}/llvm/py.typed
+      MODULE drjit.llvm
+      OUTPUT ${DRJIT_PYTHON_DST_DIR}/llvm/__init__.pyi
+      ${STUB_ARGS}
+    )
+
+    nanobind_add_stub(
+      drjit-stub-llvm-ad
+      MODULE drjit.llvm.ad
+      OUTPUT ${DRJIT_PYTHON_DST_DIR}/llvm/ad.pyi
+      ${STUB_ARGS}
+    )
+  endif()
+
+  if (DRJIT_ENABLE_CUDA)
+    nanobind_add_stub(
+      drjit-stub-cuda
+      MARKER_FILE ${DRJIT_PYTHON_DST_DIR}/cuda/py.typed
+      MODULE drjit.cuda
+      OUTPUT ${DRJIT_PYTHON_DST_DIR}/cuda/__init__.pyi
+      ${STUB_ARGS}
+    )
+
+    nanobind_add_stub(
+      drjit-stub-cuda-ad
+      MODULE drjit.cuda.ad
+      OUTPUT ${DRJIT_PYTHON_DST_DIR}/cuda/ad.pyi
+      ${STUB_ARGS}
+    )
+  endif()
 endif()

@@ -29,15 +29,17 @@ struct LoopState {
     nb::callable body;
     /// Holds a temporary reference to the loop condition
     nb::object active;
-    size_t active_size;
+    /// Variable labels
+    dr::vector<dr::string> labels;
     // Variable tracker, which monitors the evolution of 'state'
     VariableTracker tracker;
 
+    size_t active_size;
+
     LoopState(nb::tuple &&state, nb::callable &&cond, nb::callable &&body,
-              dr::vector<dr::string> &&labels)
-        : state(std::move(state)), cond(std::move(cond)), body(std::move(body)), active_size(1) {
-        tracker.set_labels(VariableTracker::VariableGroup::Outputs, std::move(labels));
-    }
+              dr::vector<dr::string> &&labels, bool strict, bool check_size)
+        : state(std::move(state)), cond(std::move(cond)), body(std::move(body)),
+          labels(std::move(labels)), tracker(strict, check_size), active_size(1) { }
 };
 
 /// Helper function to check that the type+size of the state variable returned
@@ -84,8 +86,8 @@ static void while_loop_body_cb(void *p) {
 static void while_loop_read_cb(void *p, dr::vector<uint64_t> &indices) {
     nb::gil_scoped_acquire guard;
     LoopState *ls = (LoopState *) p;
-    ls->tracker.read(VariableTracker::VariableGroup::Outputs, ls->state, indices);
-    ls->tracker.check_size(VariableTracker::VariableGroup::Outputs, ls->active_size);
+    ls->tracker.read(ls->state, indices, ls->labels);
+    ls->tracker.verify_size(ls->active_size);
 }
 
 static void while_loop_write_cb(void *p,
@@ -94,10 +96,10 @@ static void while_loop_write_cb(void *p,
     nb::gil_scoped_acquire guard;
     LoopState *ls = (LoopState *) p;
     if (restart) {
-        ls->tracker.reset(VariableTracker::VariableGroup::Outputs);
+        ls->tracker.restore(ls->labels);
         ls->active_size = 1;
     }
-    ls->tracker.write(VariableTracker::VariableGroup::Outputs, ls->state, indices);
+    ls->tracker.write(ls->state, indices, false, ls->labels);
 }
 
 static void while_loop_delete_cb(void *p) {
@@ -111,6 +113,7 @@ nb::tuple while_loop(nb::tuple state, nb::callable cond, nb::callable body,
                      dr::vector<dr::string> &&labels,
                      std::optional<dr::string> name,
                      std::optional<dr::string> mode,
+                     bool strict,
                      std::optional<bool> compress) {
     try {
         JitBackend backend = JitBackend::None;
@@ -158,27 +161,26 @@ nb::tuple while_loop(nb::tuple state, nb::callable cond, nb::callable body,
         const char *name_cstr =
             name.has_value() ? name.value().c_str() : "unnamed";
 
-        LoopState *payload =
+        dr::unique_ptr<LoopState> ls(
             new LoopState(std::move(state), std::move(cond), std::move(body),
-                          std::move(labels));
-
-        payload->tracker.set_check_size(!compress.has_value() || !compress.value());
+                          std::move(labels), strict,
+                          !compress.has_value() || !compress.value()));
 
         bool rv = ad_loop(backend, symbolic,
                           compress.has_value() ? (int) compress.value() : -1,
-                          name_cstr, payload, while_loop_read_cb,
+                          name_cstr, ls.get(), while_loop_read_cb,
                           while_loop_write_cb, while_loop_cond_cb,
                           while_loop_body_cb, while_loop_delete_cb, true);
 
-        payload->tracker.finalize();
+        ls->tracker.restore(ls->labels);
 
-        nb::tuple result = payload->state;
+        nb::tuple result =
+            nb::borrow<nb::tuple>(ls->tracker.rebuild(ls->labels));
 
-        if (rv) {
-            delete payload;
-        } else {
-            payload->state = nb::borrow<nb::tuple>(reset(payload->state));
-            payload->tracker.clear();
+        if (!rv) {
+            ls->state = nb::borrow<nb::tuple>(::reset(ls->state));
+            ls->tracker.clear();
+            ls.release();
         }
 
         return result;
@@ -200,7 +202,8 @@ nb::tuple while_loop(nb::tuple state, nb::callable cond, nb::callable body,
 void export_while_loop(nb::module_ &m) {
     m.def("while_loop", &while_loop, "state"_a, "cond"_a, "body"_a,
           "labels"_a = nb::make_tuple(), "label"_a = nb::none(),
-          "mode"_a = nb::none(), "compress"_a = nb::none(), doc_while_loop,
+          "mode"_a = nb::none(), "strict"_a = true,
+          "compress"_a = nb::none(), doc_while_loop,
           // Complicated signature to type-check while_loop via TypeVarTuple
           nb::sig(
             "def while_loop(state: tuple[*Ts], "
@@ -208,7 +211,8 @@ void export_while_loop(nb::module_ &m) {
                            "body: typing.Callable[[*Ts], tuple[*Ts]], "
                            "labels: typing.Sequence[str] = (), "
                            "label: str | None = None, "
-                           "mode: typing.Literal['scalar', 'symbolic', 'evaluated'] | None = None, "
+                           "mode: typing.Literal['scalar', 'symbolic', 'evaluated', None] = None, "
+                           "strict: bool = True, "
                            "compress: bool | None = None) "
             "-> tuple[*Ts]"
     ));

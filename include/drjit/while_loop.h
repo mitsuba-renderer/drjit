@@ -80,17 +80,17 @@ StateD while_loop_impl(std::index_sequence<Is...>, State &&state_, Cond &&cond,
 
         ad_loop_delete delete_cb = [](void *p) { delete (Payload *) p; };
 
-        Payload *payload =
+        unique_ptr<Payload> payload(
             new Payload{ std::forward<State>(state_), std::forward<Cond>(cond),
-                         std::forward<Body>(body), Mask() };
+                         std::forward<Body>(body), Mask() });
 
-        bool rv = ad_loop(Mask::Backend, -1, -1, name, payload, read_cb,
-                          write_cb, cond_cb, body_cb, delete_cb, true);
+        bool all_done = ad_loop(Mask::Backend, -1, -1, name, payload.get(), read_cb,
+                                write_cb, cond_cb, body_cb, delete_cb, true);
 
         StateD state = std::move(payload->state);
 
-        if (rv)
-            delete payload;
+        if (!all_done)
+            payload.release();
 
         return state;
     }

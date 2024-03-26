@@ -81,9 +81,6 @@ struct TransformCallback {
     // C++ code. This one just gets called with Jit/AD variable indices, an
     // associated Python/ instance/type is not available.
     virtual uint64_t operator()(uint64_t index);
-
-    // Optional postprocess handler, called on every constructed object
-    virtual void postprocess(nb::handle h1, nb::handle h2);
 };
 
 /// Callback for the ``transform_pair()`` operation below

@@ -799,9 +799,7 @@ nb::object full(const char *name, nb::handle dtype, nb::handle value,
             else
                 return dtype(0);
         } else {
-            nb::object dstruct = nb::getattr(dtype, "DRJIT_STRUCT", nb::handle());
-            if (dstruct.is_valid() && dstruct.type().is(&PyDict_Type)) {
-                nb::dict dstruct_dict = nb::borrow<nb::dict>(dstruct);
+            if (nb::dict ds = get_drjit_struct(dtype); ds.is_valid()) {
                 nb::object result = dtype();
 
                 if (value.is(nb::int_(0))) {
@@ -812,8 +810,8 @@ nb::object full(const char *name, nb::handle dtype, nb::handle value,
                     }
                 }
 
-                for (auto [k, v] : dstruct_dict) {
-                    raise_if(!v.is_type(), "DRJIT_STRUCT invalid, expected type keys.");
+                for (auto [k, v] : ds) {
+                    raise_if(!v.is_type(), "DRJIT_STRUCT type annotation invalid");
 
                     nb::object entry;
                     if (is_drjit_type(v) && ndim == 1)
@@ -824,6 +822,24 @@ nb::object full(const char *name, nb::handle dtype, nb::handle value,
                     nb::setattr(result, k, entry);
                 }
 
+                return result;
+            } else if (nb::object df = get_dataclass_fields(dtype); df.is_valid()) {
+                nb::object result = dtype();
+
+                for (auto field : df) {
+                    nb::object k = field.attr(DR_STR(name)),
+                               v = field.attr(DR_STR(type));
+
+                    raise_if(!v.is_type(), "dataclass type annotations invalid");
+
+                    nb::object entry;
+                    if (is_drjit_type(v) && ndim == 1)
+                        entry = full(name, v, value, shape[0], opaque);
+                    else
+                        entry = full(name, v, value, ndim, shape, opaque);
+
+                    nb::setattr(result, k, entry);
+                }
                 return result;
             }
 
@@ -976,16 +992,19 @@ void export_init(nb::module_ &m) {
      .def("arange",
           [](const nb::type_object_t<ArrayBase> &dtype, Py_ssize_t size) {
               return arange(dtype, 0, size, 1);
-          }, "dtype"_a, "size"_a, doc_arange)
+          }, "dtype"_a, "size"_a, doc_arange,
+          nb::sig("def arange(dtype: type[T], size: int) -> T"))
      .def("arange",
           [](const nb::type_object_t<ArrayBase> &dtype,
              Py_ssize_t start, Py_ssize_t stop, Py_ssize_t step) {
               return arange(dtype, start, stop, step);
-        }, "dtype"_a, "start"_a, "stop"_a, "step"_a = 1)
+        }, "dtype"_a, "start"_a, "stop"_a, "step"_a = 1,
+        nb::sig("def arange(dtype: type[T], start: int, stop: int, step: int = 1) -> T"))
      .def("linspace",
           [](const nb::type_object_t<ArrayBase> &dtype, double start,
              double stop, size_t num, bool endpoint) {
               return linspace(dtype, start, stop, num, endpoint);
           }, "dtype"_a, "start"_a, "stop"_a, "num"_a,
-             "endpoint"_a = true, doc_linspace);
+             "endpoint"_a = true, doc_linspace,
+        nb::sig("def linspace(dtype: type[T], start: float, stop: float, num: int, endpoint: bool = True) -> T"));
 }

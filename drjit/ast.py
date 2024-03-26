@@ -2,6 +2,7 @@ import ast
 import types
 import inspect
 import linecache
+import sys
 from typing import (
     Any,
     Optional,
@@ -12,9 +13,17 @@ from typing import (
     Union,
     Literal,
     NoReturn,
-    overload,
     cast,
 )
+
+if sys.version_info < (3, 11):
+    try:
+        from typing_extensions import overload
+    except ImportError:
+        raise RuntimeError(
+            "Dr.Jit requires the 'typing_extension' package on Python <3.11")
+else:
+    from typing import overload
 
 T = TypeVar("T")
 T2 = TypeVar("T2")
@@ -197,6 +206,7 @@ class _SyntaxVisitor(ast.NodeTransformer):
             "label",
             "mode",
             "max_iterations",
+            "strict",
             "compress",
         ]
         for k2 in hints.keys():
@@ -372,6 +382,13 @@ class _SyntaxVisitor(ast.NodeTransformer):
 
         # 8. Call drjit.if_stmt()
         call_kwargs = [
+            ast.keyword(
+                arg="arg_labels",
+                value=ast.Tuple(
+                    elts=[ast.Constant(k) for k in state_in],
+                    ctx=load,
+                ),
+            ),
             ast.keyword(
                 arg="rv_labels",
                 value=ast.Tuple(
@@ -848,6 +865,7 @@ def hint(
     label: Optional[str] = None,
     include: Optional[List[object]] = None,
     exclude: Optional[List[object]] = None,
+    strict: bool = True
 ) -> T:
     """
     Within ordinary Python code, this function is unremarkable: it returns the
@@ -902,7 +920,43 @@ def hint(
          :py:attr:`drjit.JitFlag.SymbolicLoops`, :py:func:`drjit.if_stmt`, and
          :py:attr:`drjit.JitFlag.SymbolicConditionals` for details.
 
-    2. ``max_iterations`` specifies a maximum number of loop iterations for
+    2. The optional ``strict=False`` reduces the strictness of variable
+    consistency checks.
+
+       Consider the following snippet:
+
+       .. code-block:: python
+
+          from drjit.llvm import UInt32
+
+          @dr.syntax
+          def f(x: UInt32):
+              if x < 4:
+                  y = 3
+              else:
+                  y = 5
+              return y
+
+       This code will raise an exception.
+
+       .. code-block:: pycon
+
+          >> f(UInt32(1))
+          RuntimeError: drjit.if_stmt(): the non-array state variable 'y' of type 'int' changed from '5' to '10'.
+          Please review the interface and assumptions of 'drjit.while_loop()' as explained in the documentation
+          (https://drjit.readthedocs.io/en/latest/reference.html#drjit.while_loop).
+
+       This is because the computed variable ``y`` of type ``int`` has an
+       inconsistent value depending on the taken branch. Furthermore, ``y`` is
+       a scalar Python type that isn't tracked by Dr.Jit. The fix here is to
+       initialize ``y`` with ``UInt32(<integer value>)``.
+
+       However, there may also be legitimate situations where such an
+       inconsistency is needed by the implementation. This can be fine as ``y``
+       is not used below the ``if`` statement. In this case, you can annotate
+       the conditional or loop with ``dr.hint(..., strict=False)``, which disables the check.
+
+    3. ``max_iterations`` specifies a maximum number of loop iterations for
        reverse-mode automatic differentiation.
 
        Naive reverse-mode differentiation of loops (unless replaced by a
@@ -915,13 +969,13 @@ def hint(
        hint. Otherwise, reverse-mode differentiation of loops will fail with an
        error message.
 
-    3. ``label`` provovides a descriptive label.
+    4. ``label`` provovides a descriptive label.
 
        Dr.Jit will include this label as a comment in the generated
        intermediate representation, which can be helpful when debugging the
        compilation of large programs.
 
-    4. ``include`` and ``exclude`` indicates to the :py:func:`@drjit.syntax
+    5. ``include`` and ``exclude`` indicates to the :py:func:`@drjit.syntax
        <drjit.syntax>` decorator that a local variable *should* or *should not*
        be considered to be part of the set of state variables passed to
        :py:func:`drjit.while_loop` or :py:func:`drjit.if_stmt`.

@@ -14,6 +14,8 @@
 
 #include "common.h"
 #include <drjit/custom.h>
+#include <drjit-core/hash.h>
+#include <tsl/robin_map.h>
 #include <string>
 
 namespace dr = drjit;
@@ -30,6 +32,7 @@ static void ad_cond_evaluated(JitBackend backend, const char *name,
             name);
 
     index64_vector true_idx, false_idx;
+    true_idx.reserve(args.size());
 
     // Execute 'true_fn'
     {
@@ -52,9 +55,13 @@ static void ad_cond_evaluated(JitBackend backend, const char *name,
     // Combine the results
     for (size_t i = 0; i < true_idx.size(); ++i) {
         uint64_t i1 = true_idx[i], i2 = false_idx[i];
+        uint64_t i3;
 
-        rv.push_back(i1 == i2 ? ad_var_inc_ref(i1)
-                              : ad_var_select(cond_t, i1, i2));
+        if (i1 == i2 || jit_var_is_dirty((uint32_t) i2))
+            i3 = ad_var_inc_ref(i2);
+        else
+            i3 = ad_var_select(cond_t, i1, i2);
+        rv.push_back(i3);
     }
 }
 
@@ -62,8 +69,8 @@ static void ad_cond_symbolic(JitBackend backend, const char *name,
                              void *payload, uint32_t cond_t, uint32_t cond_f,
                              const vector<uint64_t> &args_,
                              vector<uint64_t> &rv, ad_cond_body body_cb,
-                             dr::vector<size_t> &input_offsets,
-                             dr::vector<size_t> &output_offsets, bool ad) {
+                             vector<size_t> &input_offsets,
+                             vector<size_t> &output_offsets, bool ad) {
     bool symbolic = jit_flag(JitFlag::SymbolicScope);
 
     scoped_record record_guard(backend);
@@ -75,15 +82,20 @@ static void ad_cond_symbolic(JitBackend backend, const char *name,
     index64_vector args, true_idx, false_idx;
     args.reserve(args_.size());
 
+    tsl::robin_map<uint64_t, uint64_t, UInt64Hasher> input_map;
+
     // Detach from original computation in AD graph
     for (size_t i = 0; i < args_.size(); ++i) {
         uint64_t index = args_[i];
 
         if (ad && (index >> 32) != 0) {
-            args.push_back_steal(ad_var_new((uint32_t) index));
+            uint64_t new_index = ad_var_new((uint32_t) index);
+            args.push_back_steal(new_index);
             input_offsets.push_back(i);
+            input_map[new_index] = index;
         } else {
             args.push_back_borrow((uint32_t) index);
+            input_map[index] = index;
         }
     }
 
@@ -96,7 +108,7 @@ static void ad_cond_symbolic(JitBackend backend, const char *name,
     false_idx.reserve(true_idx.size());
     rv.reserve(true_idx.size());
 
-    dr::vector<uint32_t> tmp(true_idx.size());
+    vector<uint32_t> tmp(true_idx.size());
     for (size_t i = 0; i < true_idx.size(); ++i)
         tmp[i] = (uint32_t) true_idx[i];
 
@@ -125,9 +137,22 @@ static void ad_cond_symbolic(JitBackend backend, const char *name,
 
     for (size_t i = 0; i < tmp.size(); ++i) {
         uint32_t index = tmp[i];
+        if (ad && (((true_idx[i] >> 32) != 0) ||
+                  ((false_idx[i] >> 32) != 0))) {
+            // Identify differentiable inputs that are returned as-is
+            // and keep them out of the CustomOp machinery
+            if (true_idx[i] == false_idx[i]) {
+                auto it = input_map.find(true_idx[i]);
+                if (it != input_map.end()) {
+                    uint64_t index_new = ad_var_inc_ref(it->second);
+                    rv.push_back(index_new);
+                    jit_var_dec_ref(index);
+                    continue;
+                }
+            }
 
-        if (ad && (((true_idx[i] >> 32) != 0) || ((false_idx[i] >> 32) != 0)))
             output_offsets.push_back(i);
+        }
 
         rv.push_back(index);
     }
@@ -139,7 +164,7 @@ public:
     CondOp(JitBackend backend, const char *name, void *payload, uint32_t cond,
            ad_cond_body body_cb, ad_cond_delete delete_cb,
            const vector<uint64_t> &args, vector<uint64_t> &rv,
-           dr::vector<size_t> &&input_offsets, dr::vector<size_t> &&output_offsets)
+           vector<size_t> &&input_offsets, vector<size_t> &&output_offsets)
         : m_backend(backend), m_name(name), m_payload(payload), m_cond(cond),
           m_body_cb(body_cb), m_delete_cb(delete_cb),
           m_input_offsets(std::move(input_offsets)), m_output_offsets(std::move(output_offsets)) {
@@ -298,13 +323,13 @@ public:
     void disable(vector<uint64_t> &rv) {
         m_delete_cb = nullptr;
 
-        for (size_t i = 0; i < rv.size(); ++i) {
-            uint64_t index = rv[i];
-            if ((index >> 32) != 0) {
-                jit_var_inc_ref((uint32_t) index);
-                ad_var_dec_ref(index);
-                rv[i] = (uint32_t) index;
-            }
+        for (size_t i = 0; i < m_output_offsets.size(); ++i) {
+            size_t k = m_output_offsets[i];
+            uint64_t index = rv[k];
+            ad_assert((index >> 32) == 0, "CondOp::disable(): internal error!");
+            jit_var_inc_ref((uint32_t) index);
+            ad_var_dec_ref(index);
+            rv[k] = (uint32_t) index;
         }
     }
 
@@ -320,80 +345,74 @@ private:
     ad_cond_delete m_delete_cb;
     index64_vector m_args;
     index64_vector m_rv;
-    dr::vector<size_t> m_input_offsets;
-    dr::vector<size_t> m_output_offsets;
+    vector<size_t> m_input_offsets;
+    vector<size_t> m_output_offsets;
 };
 
 bool ad_cond(JitBackend backend, int symbolic, const char *name, void *payload,
              uint32_t cond, const drjit::vector<uint64_t> &args,
              drjit::vector<uint64_t> &rv, ad_cond_body body_cb,
              ad_cond_delete delete_cb, bool ad) {
-    try {
-        if (name == nullptr)
-            name = "unnamed";
+    if (name == nullptr)
+        name = "unnamed";
 
-        if (strchr(name, '\n') || strchr(name, '\r'))
-            jit_raise("'name' may not contain newline characters.");
+    if (strchr(name, '\n') || strchr(name, '\r'))
+        jit_raise("'name' may not contain newline characters.");
 
-        if (symbolic == -1)
-            symbolic = (int) jit_flag(JitFlag::SymbolicConditionals);
+    if (symbolic == -1)
+        symbolic = (int) jit_flag(JitFlag::SymbolicConditionals);
 
-        if (symbolic != 0 && symbolic != 1)
-            jit_raise("'symbolic' must equal 0, 1, or -1.");
+    if (symbolic != 0 && symbolic != 1)
+        jit_raise("'symbolic' must equal 0, 1, or -1.");
 
-        if (jit_var_state(cond) == VarState::Literal) {
-            jit_log(LogLevel::InfoSym,
-                    "ad_cond_evaluated(\"%s\"): removing conditional expression "
-                    "with uniform condition.", name);
-            body_cb(payload, !jit_var_is_zero_literal(cond), args, rv);
-            return true;
-        }
+    if (jit_var_state(cond) == VarState::Literal) {
+        jit_log(LogLevel::InfoSym,
+                "ad_cond_evaluated(\"%s\"): removing conditional expression "
+                "with uniform condition.", name);
+        body_cb(payload, !jit_var_is_zero_literal(cond), args, rv);
+        return true;
+    }
 
-        size_t size = jit_var_size(cond);
+    size_t size = jit_var_size(cond);
 
-        JitVar true_mask = JitVar::steal(jit_var_mask_apply(cond, (uint32_t) size)),
-               neg_mask = JitVar::steal(jit_var_not(cond)),
-               false_mask = JitVar::steal(jit_var_mask_apply(neg_mask.index(), (uint32_t) size));
+    JitVar true_mask = JitVar::steal(jit_var_mask_apply(cond, (uint32_t) size)),
+           neg_mask = JitVar::steal(jit_var_not(cond)),
+           false_mask = JitVar::steal(jit_var_mask_apply(neg_mask.index(), (uint32_t) size));
 
-        if (symbolic) {
-            dr::vector<size_t> input_offsets, output_offsets;
-            vector<uint32_t> implicit_in;
-            {
-                scoped_isolation_boundary guard;
-                ad_cond_symbolic(backend, name, payload, true_mask.index(),
-                                 false_mask.index(), args, rv, body_cb, input_offsets,
-                                 output_offsets, ad);
-                ad_copy_implicit_deps(implicit_in);
-                guard.defuse();
-            }
-
-            if (!input_offsets.empty() || !output_offsets.empty()) {
-                nanobind::ref<CondOp> op = new CondOp(
-                    backend, name, payload, cond, body_cb, delete_cb, args, rv,
-                    std::move(input_offsets), std::move(output_offsets));
-
-                for (uint32_t index: implicit_in)
-                    op->add_index(backend, index, true);
-
-                if (ad_custom_op(op.get())) {
-                    // CondOp will eventually call delete_cb()
-                    return false;
-                }
-
-                // CustomOp was not needed, detach output again..
-                op->disable(rv);
-            }
-        } else {
+    if (symbolic) {
+        vector<size_t> input_offsets, output_offsets;
+        vector<uint32_t> implicit_in;
+        {
             scoped_isolation_boundary guard;
-            ad_cond_evaluated(backend, name, payload, true_mask.index(),
-                              false_mask.index(), args, rv, body_cb);
+            ad_cond_symbolic(backend, name, payload, true_mask.index(),
+                             false_mask.index(), args, rv, body_cb, input_offsets,
+                             output_offsets, ad);
+            ad_copy_implicit_deps(implicit_in);
             guard.defuse();
         }
 
-        return true; // Caller should directly call delete()
-    } catch (...) {
-        if (delete_cb)
-            delete_cb(payload);
-        throw;
+        if (!input_offsets.empty() || !output_offsets.empty()) {
+            nanobind::ref<CondOp> op = new CondOp(
+                backend, name, payload, cond, body_cb, delete_cb, args, rv,
+                std::move(input_offsets), std::move(output_offsets));
+
+            for (uint32_t index: implicit_in)
+                op->add_index(backend, index, true);
+
+            if (ad_custom_op(op.get())) {
+                // CondOp will eventually call delete_cb()
+                return false;
+            }
+
+            // CustomOp was not needed, detach output again..
+            op->disable(rv);
+        }
+    } else {
+        scoped_isolation_boundary guard;
+        ad_cond_evaluated(backend, name, payload, true_mask.index(),
+                          false_mask.index(), args, rv, body_cb);
+        guard.defuse();
     }
+
+    return true; // Caller should directly call delete()
 }

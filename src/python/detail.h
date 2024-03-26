@@ -10,52 +10,7 @@
 
 #pragma once
 
-#include <drjit-core/hash.h>
-#include <tsl/robin_map.h>
 #include "common.h"
-
-#if defined(_MSC_VER)
-#  pragma warning (disable: 4324) // structure was padded due to alignment specifier (in TSL robin_map)
-#endif
-
-/// Helper data structure to track copies performed by \ref copy(), \ref update_indices()
-struct CopyMap {
-public:
-    ~CopyMap() {
-        clear();
-    }
-
-    void put(nb::handle k, nb::handle v) {
-        k.inc_ref();
-        v.inc_ref();
-        map.insert({ k, v });
-    }
-
-    nb::handle get(nb::handle k) {
-        auto it = map.find(k);
-        if (it == map.end())
-            return nb::handle();
-        return it->second;
-    }
-
-    void clear() {
-        for (auto [k, v] : map) {
-            k.dec_ref();
-            v.dec_ref();
-        }
-        map.clear();
-    }
-
-    struct handle_hash {
-        size_t operator()(nb::handle h) const { return PointerHasher()(h.ptr()); }
-    };
-
-    struct handle_eq {
-        size_t operator()(nb::handle h1, nb::handle h2) const { return h1.is(h2); }
-    };
-
-    tsl::robin_map<nb::handle, nb::handle, handle_hash, handle_eq> map;
-};
 
 /// RAII helper to temporarily stash the reference count of a Dr.Jit variable
 struct StashRef {
@@ -67,13 +22,10 @@ struct StashRef {
 };
 
 // See misc.cpp for documentation of these functions
-extern nb::object copy(nb::handle h, CopyMap *copy_map = nullptr);
-extern nb::object uncopy(nb::handle h, CopyMap &copy_map);
+extern nb::object copy(nb::handle h);
 extern void collect_indices(nb::handle, dr::vector<uint64_t> &,
                             bool inc_ref = false);
-extern nb::object update_indices(nb::handle, const dr::vector<uint64_t> &,
-                                 CopyMap *copy_map = nullptr,
-                                 bool preserve_dirty = false);
+extern nb::object update_indices(nb::handle, const dr::vector<uint64_t> &);
 extern void check_compatibility(nb::handle, nb::handle, const char *name);
 extern void stash_ref(nb::handle h, dr::vector<StashRef> &);
 

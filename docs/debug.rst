@@ -1,5 +1,5 @@
 Debugging
----------
+=========
 
 This section presents strategies for debugging Dr.Jit-based programs that
 do not behave as expected.

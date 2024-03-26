@@ -113,7 +113,7 @@ drjit.(atan2|minimum|maximum)$:
     @overload
     def \1(arg0: T, arg1: T, /) -> T: ...
 
-drjit.(empty|zeros)$:
+drjit.(empty|zeros|ones)$:
     def \1(dtype: type[T], shape: int | Sequence[int] = 1) -> T:
         \doc
 
@@ -162,6 +162,15 @@ drjit.clip$:
     def clip(value: SelfCpT, min: SelfCpT, max: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, MaskT]) -> SelfT: ...
     @overload
     def clip(value: T, min: T, max: T) -> T: ...
+
+drjit.mask_t$:
+    @overload
+    def mask_t(arg: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, MaskT], /) -> type[MaskT]:
+        \doc
+    @overload
+    def mask_t(arg: type[ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, MaskT]], /) -> type[MaskT]: ...
+    @overload
+    def mask_t(arg: object, /) -> bool: ...
 
 
 # -------------- drjit.syntax, interop, detail ----------------
