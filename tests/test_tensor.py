@@ -306,8 +306,15 @@ def test09_broadcast(t):
                     assert out_n.shape == out_e.shape
                     assert np.all(out_n.ravel() == np.array(out_e.array))
 
-    with pytest.raises(RuntimeError, match=r'operands have incompatible shapes: \(2,\) and \(2, 1\).'):
-        dr.zeros(t, 2) + dr.zeros(t, (2, 1))
+    # Broadcast with scalar
+    x = dr.full(t, 2, shape=(2,2,2)) + 2
+    assert dr.all(x == dr.full(t, 4, shape=(2,2,2)), axis=None)
+
+    # Broadcast with single-element array
+    # When t is a scalar tensor, dr.array_t is a dynamic array (vector) and hence type promotion is forbidden
+    if dr.is_jit_v(t):
+        x = dr.full(t, 2, shape=(2,2,2)) * dr.array_t(t)(2)
+        assert dr.all(x == dr.full(t, 4, shape=(2,2,2)), axis=None)
 
     with pytest.raises(RuntimeError, match=r'operands have incompatible shapes: \(2,\) and \(3,\).'):
         dr.zeros(t, 2) + dr.zeros(t, 3)

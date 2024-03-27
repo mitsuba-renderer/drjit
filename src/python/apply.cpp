@@ -347,8 +347,7 @@ void tensor_broadcast(nb::object &tensor, nb::object &array,
     if (ndim == 0 || memcmp(shape_src.data(), shape_dst.data(), sizeof(size_t) * ndim) == 0)
         return;
 
-    // At this point, we know that shape_src.size() == shape_dst.size()
-    // See apply_tensor for details.
+    ndim = shape_dst.size();
 
     size_t size = 1;
     for (size_t i = 0; i < ndim; ++i)
@@ -412,10 +411,15 @@ NB_NOINLINE PyObject *apply_tensor(ArrayOp op, Slot slot,
 
         size_t ndims[] = { shapes[Is]->size()... };
         size_t ndim = maxv(ndims[Is]...);
+
+        size_t nelems[N] = { 
+            supp(arrays[Is].type()).len(inst_ptr(arrays[Is]))...
+        };
+
         bool compatible = true;
 
         if constexpr (sizeof...(Is) > 1) {
-            if (((ndim != ndims[Is] && ndims[Is] != 0) || ...))
+            if (((ndim != ndims[Is] && nelems[Is] != 1) || ...))
                 compatible = false;
         }
 
@@ -423,9 +427,9 @@ NB_NOINLINE PyObject *apply_tensor(ArrayOp op, Slot slot,
 
         if (compatible) {
             for (size_t i = 0; i < ndim; ++i) {
-                size_t shape_i[] = { (ndims[Is] ? shapes[Is]->operator[](i) : 1)... };
+                size_t shape_i[] = { (ndims[Is] > i ? shapes[Is]->operator[](i) : 1)... };
                 size_t value = maxv(shape_i[Is]...);
-                if (((shape_i[Is] != value && shape_i[Is] != 1 && ndims[Is]) || ...)) {
+                if (((shape_i[Is] != value && shape_i[Is] != 1 && nelems[Is] != 1) || ...)) {
                     compatible = false;
                     break;
                 }
