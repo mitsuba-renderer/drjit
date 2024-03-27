@@ -306,14 +306,35 @@ def test09_broadcast(t):
                     assert out_n.shape == out_e.shape
                     assert np.all(out_n.ravel() == np.array(out_e.array))
 
-    with pytest.raises(RuntimeError, match=r'operands have incompatible shapes: \(2,\) and \(2, 1\).'):
-        dr.zeros(t, 2) + dr.zeros(t, (2, 1))
+    # Broadcast with scalar
+    x = dr.full(t, 2, shape=(2,2,2)) + 2
+    assert dr.all(x == dr.full(t, 4, shape=(2,2,2)), axis=None)
+
+    # Broadcast with single-element array
+    x = dr.full(t, 2, shape=(2,2,2)) * dr.full(t, 2, shape=(1))
+    assert dr.all(x == dr.full(t, 4, shape=(2,2,2)), axis=None)
+
+    # Broadcast with same dimensions but mismatched shape
+    # Allowed if dim(i) == 1
+    x = dr.full(t, 2, shape=(2,1,2)) * dr.full(t, 2, shape=(1,2,1))
+    assert dr.all(x == dr.full(t, 4, shape=(2,2,2)), axis=None)
+
+    # Broadcast with mismatched dimensions
+    # Starting from rightmost dimensions and moving left, if dimensions are 
+    # equal or one is equal to 1, then broadcasting is allowed
+    x = dr.full(t, 2, shape=(2,1,2)) + dr.full(t, 2, shape=(3,1))
+    assert dr.all(x == dr.full(t, 4, shape=(2,3,2)), axis=None)
+    x = dr.full(t, 2, shape=(4,5)) * dr.full(t, 3, shape=(3,4,5))
+    assert dr.all(x == dr.full(t, 6, shape=(3,4,5)), axis=None)
 
     with pytest.raises(RuntimeError, match=r'operands have incompatible shapes: \(2,\) and \(3,\).'):
         dr.zeros(t, 2) + dr.zeros(t, 3)
 
     with pytest.raises(RuntimeError, match=r'operands have incompatible shapes: \(3, 2\) and \(2, 3\).'):
         dr.zeros(t, (3, 2)) + dr.zeros(t, (2, 3))
+
+    with pytest.raises(RuntimeError, match=r'operands have incompatible shapes: \(3, 2\) and \(3,\).'):
+        dr.zeros(t, (3, 2)) + dr.zeros(t, 3)
 
 
 @pytest.test_arrays('is_tensor, -bool')
