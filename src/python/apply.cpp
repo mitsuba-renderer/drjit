@@ -414,18 +414,28 @@ NB_NOINLINE PyObject *apply_tensor(ArrayOp op, Slot slot,
         size_t ndim = maxv(ndims[Is]...);
         bool compatible = true;
 
-        if constexpr (sizeof...(Is) > 1) {
-            if (((ndim != ndims[Is] && ndims[Is] != 0) || ...))
-                compatible = false;
-        }
+        // Left-fill with dummy dimensions of size 1
+        vector<size_t> expanded_shapes_alloc[N] = {};
+        auto expand = [&](size_t index, const vector<size_t>* shape) {
+            size_t src_ndim = shape->size();
+            if (src_ndim == ndim)
+                return shape;
 
+            expanded_shapes_alloc[index] = vector<size_t>(ndim, 1);
+            vector<size_t>& expanded_shape = expanded_shapes_alloc[index];
+            size_t offset = ndim - src_ndim;
+            memcpy(&expanded_shape[offset], shape->data(), sizeof(size_t) * src_ndim);
+            return (const vector<size_t>*)&expanded_shape;
+        };
+
+        const vector<size_t>* expanded_shapes[N] = { expand(Is, shapes[Is])... };
         vector<size_t> shape(ndim, 0);
 
         if (compatible) {
             for (size_t i = 0; i < ndim; ++i) {
-                size_t shape_i[] = { (ndims[Is] ? shapes[Is]->operator[](i) : 1)... };
+                size_t shape_i[] = { expanded_shapes[Is]->operator[](i)... };
                 size_t value = maxv(shape_i[Is]...);
-                if (((shape_i[Is] != value && shape_i[Is] != 1 && ndims[Is]) || ...)) {
+                if (((shape_i[Is] != value && shape_i[Is] != 1) || ...)) {
                     compatible = false;
                     break;
                 }
@@ -445,7 +455,7 @@ NB_NOINLINE PyObject *apply_tensor(ArrayOp op, Slot slot,
 
         if constexpr (N > 1) {
             // Broadcast to compatible shape for binary/ternary operations
-            (tensor_broadcast(o[Is], arrays[Is], *shapes[Is], shape), ...);
+            (tensor_broadcast(o[Is], arrays[Is], *expanded_shapes[Is], shape), ...);
         }
 
         constexpr ApplyMode NestedMode = Mode == InPlace ? Normal : Mode;
