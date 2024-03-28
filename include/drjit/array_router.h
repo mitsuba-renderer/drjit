@@ -1506,6 +1506,35 @@ void set_label(T &value, Labels... prefix) {
     }
 }
 
+/**
+ * \brief Helper guard to mark scopes that are independent of any
+ * ongoing symbolic computation
+ *
+ * Some scope of code might be traced as part of a symbolic section of code,
+ * even though its functionality is independent of the actual symbolic
+ * computations it is surrounded by. For example, consider a virtual function
+ * call which initializes some data structure the first time it is called. This
+ * initilization is completely detached from the symbolic inputs and is guarded
+ * only by a scalar runtime check. In such a case, any evaluation which happens
+ * in the initilization should be valid. Using this RAII helper will guarantee
+ * this behavior.
+ */
+template <typename T>
+struct scoped_symbolic_independence {
+    scoped_symbolic_independence() {
+        if constexpr(drjit::is_jit_v<T>) {
+            uint32_t index = jit_var_mask_default(T::Backend, 1);
+            jit_var_mask_push(T::Backend, index);
+            jit_var_dec_ref(index);
+        }
+    }
+
+    ~scoped_symbolic_independence() {
+        if constexpr (drjit::is_jit_v<T>)
+            jit_var_mask_pop(T::Backend);
+    }
+};
+
 template <typename T> bool grad_enabled(const T &value) {
     if constexpr (is_diff_v<T> && depth_v<T> == 1) {
         return value.derived().grad_enabled_();
