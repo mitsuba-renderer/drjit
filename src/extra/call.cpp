@@ -323,6 +323,10 @@ static void ad_call_symbolic(JitBackend backend, const char *domain,
         vector<uint32_t> rv4;
         rv4.resize(rv.size());
 
+        // Callables might have generated literals that are used by the output
+        // and that have a higher scope value
+        jit_new_scope(backend);
+
         jit_var_call(
             combined.c_str(), index, mask.index(), (uint32_t) callable_count_final,
             inst_id.data(), (uint32_t) args3.size(), args3.data(),
