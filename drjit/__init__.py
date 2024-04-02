@@ -18,7 +18,7 @@ with detail.scoped_rtld_deepbind():
 
 from .ast import syntax, hint
 from .interop import wrap
-from typing import overload, Optional
+from typing import overload, Optional, Tuple, List
 import warnings as _warnings
 
 # -------------------------------------------------------------------
@@ -1443,6 +1443,28 @@ def assert_equal(
         tb_skip=tb_skip+1,
         **kwargs,
     )
+
+
+
+# -------------------------------------------------------------------
+#             Frozen kernels
+# -------------------------------------------------------------------
+
+def launch(kernel_hash: Tuple[int], kernel_ir: str, return_types: List[_dr.VarType],
+           input_vars: List[_dr.ArrayBase], kernel_slot_to_flat_pos: List[Tuple[bool, int]],
+           backend: _dr.JitBackend = _dr.JitBackend.Invalid, size=0):
+
+    input_indices = [v.index for v in input_vars]
+    output_arrays = _dr.launch_frozen_kernel(
+        backend, kernel_hash[0], kernel_hash[1], kernel_ir, return_types,
+        input_indices, kernel_slot_to_flat_pos, size=size)
+
+    return output_arrays
+
+
+# -------------------------------------------------------------------
+#             Cleanup
+# -------------------------------------------------------------------
 
 newaxis = None
 
