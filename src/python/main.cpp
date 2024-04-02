@@ -12,6 +12,7 @@
 
 #include <nanobind/nanobind.h>
 #include <nanobind/intrusive/counter.h>
+#include <drjit/frozen.h>
 #include "bind.h"
 #include "base.h"
 #include "shape.h"
@@ -219,6 +220,106 @@ NB_MODULE(_drjit_ext, m_) {
                 o->set_self_py(po);
             }), doc_intrusive_base);
     jit_init(backends);
+
+#if 0
+    // TODO: this will need to be adapted to nanobind if kept
+    m.def(
+        "launch_frozen_kernel",
+        [](JitBackend backend,
+           uint64_t kernel_hash_low,
+           uint64_t kernel_hash_high,
+           const std::string &kernel_ir,
+           const std::vector<VarType> &return_types,
+           const std::vector<uint32_t> &inputs,
+           const std::vector<std::pair<bool, uint32_t>> &kernel_slot_to_flat_pos,
+           size_t size = 0) {
+
+            if (backend == JitBackend::Invalid) {
+                if (inputs.empty())
+                    jit_raise("launch(): need at least one input to infer the backend");
+                backend = jit_var_backend(inputs[0]);
+            }
+            if (backend == JitBackend::Invalid)
+                jit_fail("launch_frozen_kernel(): must use a valid JIT backend");
+
+            if (size == 0) {
+                if (inputs.empty())
+                    jit_raise("launch(): need at least one input to infer launch size");
+
+                for (size_t i = 0; i < inputs.size(); ++i)
+                    size = std::max(size, jit_var_size(inputs[i]));
+            }
+
+            std::vector<uint32_t> output_indices
+                = dr::launch_frozen_kernel(backend,
+                                           size,
+                                           kernel_hash_low,
+                                           kernel_hash_high,
+                                           kernel_ir,
+                                           return_types,
+                                           inputs,
+                                           kernel_slot_to_flat_pos);
+            if (output_indices.size() != return_types.size()) {
+                jit_fail("launch_frozen_kernel(): expected %zu outputs, found %zu",
+                         return_types.size(), output_indices.size());
+            }
+
+            py::list result(output_indices.size());
+            for (size_t i = 0; i < output_indices.size(); ++i) {
+                size_t idx = output_indices[i];
+                VarType type = return_types[i];
+
+            // TODO: is there a better way to do this?
+            // case VarType::Void: result[i] = T<void>::steal(idx);
+#define SET_ARRAY(T)                                                             \
+    switch (type) {                                                              \
+        case VarType::Bool: result[i] = T<bool>::steal(idx); break;              \
+        case VarType::Int8: result[i] = T<int8_t>::steal(idx); break;            \
+        case VarType::UInt8: result[i] = T<uint8_t>::steal(idx); break;          \
+        case VarType::Int16: result[i] = T<int16_t>::steal(idx); break;          \
+        case VarType::UInt16: result[i] = T<uint16_t>::steal(idx); break;        \
+        case VarType::Int32: result[i] = T<int32_t>::steal(idx); break;          \
+        case VarType::UInt32: result[i] = T<uint32_t>::steal(idx); break;        \
+        case VarType::Int64: result[i] = T<int64_t>::steal(idx); break;          \
+        case VarType::UInt64: result[i] = T<uint32_t>::steal(idx); break;        \
+        case VarType::Pointer: result[i] = T<void *>::steal(idx); break;         \
+        case VarType::Float16: {                                                 \
+            if constexpr (f16_enabled<T<float>>) {                               \
+                result[i] = T<dr_half_t>::steal(idx); break;                     \
+            } else {                                                             \
+                jit_raise("Not support yet: float16 on LLVM backend.");          \
+            }                                                                    \
+        }                                                                        \
+        case VarType::Float32: result[i] = T<float>::steal(idx); break;          \
+        case VarType::Float64: result[i] = T<double>::steal(idx); break;         \
+        default:                                                                 \
+            jit_raise("launch_frozen_kernel(): unsupported result var type: %u", \
+                        (uint32_t) type);                                        \
+            break;                                                               \
+    }
+
+                if (backend == JitBackend::CUDA) {
+                    SET_ARRAY(dr::CUDAArray);
+                }
+                else {
+                    SET_ARRAY(dr::LLVMArray);
+                }
+#undef SET_ARRAY
+            }
+
+            return result;
+        },
+        "backend"_a,
+        "kernel_hash_low"_a,
+        "kernel_hash_high"_a,
+        "kernel_ir"_a,
+        "return_types"_a,
+        "inputs"_a,
+        "kernel_slot_to_flat_pos"_a,
+        "size"_a = 0);
+#endif
+
+
 
     export_bind(detail);
     export_base(m);
