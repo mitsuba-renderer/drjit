@@ -22,7 +22,7 @@ if sys.version_info < (3, 11):
         from typing_extensions import overload, Optional
     except ImportError:
         raise RuntimeError(
-            "Dr.Jit requires the 'typing_extension' package on Python <3.11")
+            "Dr.Jit requires the 'typing_extensions' package on Python <3.11")
 else:
     from typing import overload, Optional
 del sys
