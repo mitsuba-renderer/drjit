@@ -612,9 +612,6 @@ def test09_array_call_fully_masked(t, symbolic, opaque_mask):
 @pytest.mark.parametrize("opaque_mask", [True, False])
 @pytest.test_arrays('float32,is_diff,shape=(*)')
 def test10_dispatch_fully_masked(t, symbolic, opaque_mask):
-    print(f"{symbolic=}")
-    print(f"{opaque_mask=}")
-
     pkg = get_pkg(t)
 
     A, B, Base, BasePtr = pkg.A, pkg.B, pkg.Base, pkg.BasePtr
@@ -638,3 +635,39 @@ def test10_dispatch_fully_masked(t, symbolic, opaque_mask):
 
     assert dr.all(xo == t(0, 0, 0, 0, 0))
     assert dr.all(yo == t(0, 0, 0, 0, 0))
+
+@pytest.mark.parametrize("symbolic", [True, False])
+@pytest.mark.parametrize("variant", [0, 1])
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+def test11_rev_correctness(t, symbolic, variant):
+    # Check the reverse-mode derivative of a call does not overwrite
+    # other derivatives flowing to an input argument
+    pkg = get_pkg(t)
+
+    with dr.scoped_set_flag(dr.JitFlag.SymbolicCalls, symbolic):
+        A, B, BasePtr = pkg.A, pkg.B, pkg.BasePtr
+        a, b = A(), B()
+
+        c = BasePtr(a, a, b, b)
+
+        xi = t(1, 2, 3, 4)
+        yi = t(5, 6, 7, 8)
+        dr.enable_grad(xi)
+        dr.enable_grad(yi)
+
+        if variant == 0:
+            xo1 = 100 * xi
+            yo1 = 100 * yi
+
+        with dr.scoped_set_flag(dr.JitFlag.SymbolicCalls, symbolic):
+            xo2, yo2 = c.f(xi, yi)
+
+        if variant == 1:
+            xo1 = 100 * xi
+            yo1 = 100 * yi
+
+        q = xo1 + xo2 + yo1 + yo2
+        q.grad = 1
+        xd, yd = dr.backward_to(xi, yi)
+        assert dr.all(xd==[99, 99, 101, 101])
+        assert dr.all(yd==[102, 102, 103, 103])
