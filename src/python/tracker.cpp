@@ -564,7 +564,9 @@ void VariableTracker::verify_size(size_t size) {
     for (auto &kv : m_impl->state) {
         const Variable &v = kv.second;
 
-        if (v.index == v.index_orig)
+        // Check if the variable was unchanged by the loop
+        if (v.index == v.index_orig ||
+            strcmp(jit_var_kind_name(v.index), "loop_phi") == 0)
             continue;
 
         size_t size_2 = jit_var_size(v.index);

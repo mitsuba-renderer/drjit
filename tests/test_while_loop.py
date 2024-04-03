@@ -692,3 +692,17 @@ def test28_evaluated_ad_kernel_launch_count(t, variant):
     assert len(h) >= iterations and len(h) < iterations + 3
     for k in h:
         assert k['operation_count'] < iterations
+
+
+@pytest.test_arrays('uint32,jit,shape=(*)')
+@dr.syntax
+def test29_gather(t):
+    source = t(1,2,3)
+    i = t(0, 1)
+    x = t(0)
+
+    while i < 3:
+        x += dr.gather(t, source=source, index=i)
+        i += 1
+
+    assert dr.all(x == [6, 5])
