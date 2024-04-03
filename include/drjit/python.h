@@ -758,7 +758,7 @@ template <typename T> void bind_jit_ops(ArrayBinding &b) {
         new (v) T(T::borrow((typename T::Index) index));
     };
     b.reset_index = (ArraySupplement::InitIndex) + [](uint64_t index, T *v) {
-        *v = T(T::borrow((typename T::Index) index));
+        *v = T::borrow((typename T::Index) index);
     };
 }
 
