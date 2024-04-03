@@ -601,7 +601,7 @@ static void ad_var_inc_ref_int(ADIndex index, Variable *v) noexcept;
 // Reference counting and variable cleanup
 // ==========================================================================
 
-static void DRJIT_NOINLINE ad_decref_custom_op_output(Variable *);
+static bool DRJIT_NOINLINE ad_decref_custom_op_output(Variable *);
 
 static void ad_var_inc_ref_int(ADIndex index, Variable *v) noexcept {
     DRJIT_MARK_USED(index);
@@ -616,8 +616,9 @@ static bool ad_var_dec_ref_int(ADIndex index, Variable *v) noexcept {
 
     if (--v->ref_count > 0) {
         if (unlikely(v->flags & (uint8_t) VariableFlags::CustomOpOutput))
-            ad_decref_custom_op_output(v);
-        return false;
+            return ad_decref_custom_op_output(v);
+        else
+            return false;
     } else {
         ad_free(index, v);
         return true;
@@ -3395,16 +3396,16 @@ bool ad_custom_op(dr::detail::CustomOpBase *op) {
 // This routine is called when decreasing the reference count of an output node
 // following a CustomOp. It breaks what would otherwise be an uncollectable
 // reference cycle, since the CustomOp references its own outputs.
-static void DRJIT_NOINLINE ad_decref_custom_op_output(Variable *v) {
+static bool DRJIT_NOINLINE ad_decref_custom_op_output(Variable *v) {
     uint32_t next_bwd = v->next_bwd;
     if (v->ref_count != 2 || !next_bwd)
-        return;
+        return false;
 
     Edge *edge = &state.edges[v->next_bwd];
     if (edge->copy_grad) {
         next_bwd = state[edge->source]->next_bwd;
         if (!next_bwd)
-            return;
+            return false;
         edge = &state.edges[next_bwd];
     }
 
@@ -3412,9 +3413,15 @@ static void DRJIT_NOINLINE ad_decref_custom_op_output(Variable *v) {
                                "find an edge representing a CustomOp!");
 
     if (!edge->special)
-        return;
+        return false;
+
+    size_t counter = v->counter;
 
     ((CustomOp *) edge->special.get())->release_one_output();
+
+    // CustomOp may have been destroyed so check again if output was also freed 
+    // or reused in the meantime
+    return v->ref_count == 0 || v->counter != counter;
 }
 
 
