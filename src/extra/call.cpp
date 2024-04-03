@@ -343,7 +343,7 @@ static void ad_call_symbolic(JitBackend backend, const char *domain,
 static void ad_call_reduce(JitBackend backend, const char *domain,
                             const char *name, size_t size, uint32_t index_,
                             uint32_t mask, size_t callable_count,
-                            const vector<uint64_t> args,
+                            const vector<uint64_t> args_,
                             vector<uint64_t> &rv,
                             ad_call_func func, void *payload) {
     (void) name; // unused
@@ -357,8 +357,16 @@ static void ad_call_reduce(JitBackend backend, const char *domain,
         index = JitVar::borrow(index_);
 
     jit_var_schedule(index.index());
-    for (uint64_t arg_i : args)
-        jit_var_schedule((uint32_t) arg_i);
+    index64_vector args;
+    args.reserve(args_.size());
+
+    for (uint64_t index : args_) {
+        jit_var_schedule((uint32_t) index);
+        if (index >> 32)
+            args.push_back_steal(ad_var_copy(index));
+        else
+            args.push_back_borrow(index);
+    }
 
     uint32_t n_inst = (uint32_t) callable_count;
     CallBucket *buckets =
@@ -372,7 +380,7 @@ static void ad_call_reduce(JitBackend backend, const char *domain,
     size_t last_size = 0;
     JitVar memop_mask = JitVar::steal(jit_var_bool(backend, true));
 
-    for (size_t i = 0; i < n_inst ; ++i) {
+    for (size_t i = 0; i < n_inst; ++i) {
         if (buckets[i].id == 0)
             continue;
 
