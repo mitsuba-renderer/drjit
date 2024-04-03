@@ -241,7 +241,7 @@ nb::object dispatch_impl(nb::handle_t<dr::ArrayBase> inst,
     return nb::none();
 }
 
-void export_switch(nb::module_&m) {
+void export_switch(nb::module_& m) {
     m.def("switch", &switch_impl, doc_switch, "index"_a,
           "targets"_a, "args"_a, "kwargs"_a,
           nb::sig("def switch(index: int | AnyArray, targets: typing.Sequence[typing.Callable[[*Ts], T]], *args: *Ts) -> T"))

@@ -202,6 +202,9 @@ extern DRJIT_EXTRA_EXPORT uint64_t ad_var_schedule_force(uint64_t index, int *rv
 /// index may, however be identical to the input ``index``).
 extern DRJIT_EXTRA_EXPORT uint64_t ad_var_data(uint64_t index, void **ptr_out);
 
+/// Mark a variable that constitutes a boundary in an evaluated loop
+extern DRJIT_EXTRA_EXPORT void ad_mark_loop_boundary(uint64_t index);
+
 namespace drjit { namespace detail { class CustomOpBase; }};
 /// Weave a custom operation into the AD graph
 extern DRJIT_EXTRA_EXPORT bool ad_custom_op(drjit::detail::CustomOpBase *);

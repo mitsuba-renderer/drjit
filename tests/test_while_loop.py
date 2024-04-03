@@ -647,3 +647,48 @@ def test27_preserve_unchanged(t, mode, variant):
     assert dr.grad_enabled(bo)
     assert ai == ai2
     assert bi == bi2
+
+@pytest.mark.parametrize('variant', ['fwd', 'bwd'])
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+def test28_evaluated_ad_kernel_launch_count(t, variant):
+    # Check that the forward/reverse-mode derivative of an
+    # evaluated loop launches a similar number of kernels
+    UInt = dr.uint32_array_t(t)
+
+    x = t(2,3,4,5)
+    dr.enable_grad(x)
+    iterations = 50
+
+    with dr.scoped_set_flag(dr.JitFlag.KernelHistory):
+        dr.kernel_history_clear()
+        _, y, i = dr.while_loop(
+            state=(x, t(1, 1, 1, 1), dr.zeros(UInt, 4)),
+            cond=lambda x, y, i: i<iterations,
+            body=lambda x, y, i: (x, .5*(y + x/y), i + 1),
+            labels=('x', 'y', 'i'),
+            mode='evaluated'
+        )
+        h = dr.kernel_history((dr.KernelType.JIT,))
+
+    from math import sqrt
+    assert len(h) >= iterations and len(h) < iterations + 3
+    assert dr.allclose(y, (sqrt(2), sqrt(3), sqrt(4), sqrt(5)))
+
+    if variant == 'fwd':
+        x.grad = dr.opaque(t, 1)
+        with dr.scoped_set_flag(dr.JitFlag.KernelHistory):
+            g = dr.forward_to(y)
+            dr.eval(g)
+            h = dr.kernel_history((dr.KernelType.JIT,))
+    elif variant == 'bwd':
+        y.grad = dr.opaque(t, 1)
+        with dr.scoped_set_flag(dr.JitFlag.KernelHistory):
+            g = dr.backward_to(x)
+            dr.eval(g)
+            h = dr.kernel_history((dr.KernelType.JIT,))
+    else:
+        raise Exception('internal error')
+    assert dr.allclose(g, (1/(2*sqrt(2)), 1/(2*sqrt(3)), 1/(2*sqrt(4)), 1/(2*sqrt(5))))
+    assert len(h) >= iterations and len(h) < iterations + 3
+    for k in h:
+        assert k['operation_count'] < iterations

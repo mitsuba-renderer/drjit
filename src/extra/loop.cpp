@@ -142,7 +142,8 @@ static size_t ad_loop_evaluated_mask(JitBackend backend, const char *name,
             break;
 
         jit_log(LogLevel::InfoSym,
-                "ad_loop_evaluated(\"%s\"): executing loop iteration %zu.", name, ++it);
+                "ad_loop_evaluated(\"%s\"): executing loop iteration %zu.",
+                name, ++it);
 
         // Push the mask onto mask stack and execute the loop body
         {
@@ -161,12 +162,18 @@ static size_t ad_loop_evaluated_mask(JitBackend backend, const char *name,
             if (i1 == i2 || jit_var_is_dirty((uint32_t) i2))
                 continue;
 
-            int unused = 0;
-            uint64_t i3 = ad_var_select(active.index(), i2, i1);
-            uint64_t i4 = ad_var_schedule_force(i3, &unused);
-            indices2[i] = i4;
+            indices2[i] = ad_var_select(active.index(), i2, i1);
             ad_var_dec_ref(i2);
-            ad_var_dec_ref(i3);
+        }
+
+        for (size_t i = 0; i < indices2.size(); ++i) {
+            uint64_t i1 = indices2[i];
+            uint64_t i2 = ad_var_copy(i1);
+            ad_var_dec_ref(i1);
+            ad_mark_loop_boundary(i2);
+            int unused = 0;
+            indices2[i] = ad_var_schedule_force(i2, &unused);
+            ad_var_dec_ref(i2);
         }
 
         write_cb(payload, indices2, false);
