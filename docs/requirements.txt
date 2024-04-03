@@ -1,2 +1,3 @@
 furo
 sphinxcontrib-katex
+typing_extensions
