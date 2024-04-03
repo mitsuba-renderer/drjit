@@ -205,6 +205,9 @@ enum VariableFlags : uint8_t {
 
     /// Temporary 'visited' flag used in ad_custom_op
     Visited = 1 << 4,
+
+    /// Is this variable on an iteration boundary of an evaluated loop?
+    LoopBoundary = 1 << 5
 };
 
 /**
@@ -1419,35 +1422,30 @@ void ad_traverse(dr::ADMode mode, uint32_t flags) {
                 postpone_before = scope.counter;
         }
 
-        std::vector<JitVar> dr_loop_todo;
+        tsl::robin_set<uint32_t, UInt32Hasher> pending;
+
         auto postprocess = [&](uint32_t prev_i, uint32_t cur_i) {
             if (!prev_i || prev_i == cur_i)
                 return;
+            pending.erase(prev_i);
 
-            Variable *cur  = cur_i ? state[cur_i] : nullptr,
-                     *prev = state[prev_i];
+            Variable *prev = state[prev_i],
+                     *cur = cur_i ? state[cur_i] : nullptr;
 
-            /* Wavefront style evaluation of dr.Loop with differentiable
-               variables produces nodes with label 'dr_loop' at the boundary of
-               each iteration. It's good if we dr::schedule() and then finally
-               evaluate the gradient of all such variables at once so that AD
-               traversal produces reasonably sized kernels (i.e. with an evaluation
-               granularity matching the loop iterations of the original/primal
-               evaluation). The code below does just that. */
+            /* Wavefront-style evaluation of loops with differentiable
+               variables produces dummy nodes with the 'LoopBoundary' flag set
+               after each iteration. It's good if we dr::schedule() and then
+               finally evaluate the gradient of everything processed so far
+               after each set of such variables so that AD traversal produces
+               reasonably sized kernels (i.e. with an evaluation granularity
+               matching the loop iterations of the original/primal evaluation).
+               The code below does just that. */
 
-            bool dr_loop_prev = prev->label && strstr(prev->label, "dr_loop"),
-                 dr_loop_cur  = cur && cur->label && strstr(cur->label, "dr_loop");
-
-            if (dr_loop_prev) {
-                dr_loop_todo.push_back(prev->grad);
-                dr::schedule(prev->grad);
-
-                if (!dr_loop_cur) {
-                    ad_log("ad_traverse(): evaluating %zi loop variables",
-                           dr_loop_todo.size());
-                    dr::eval();
-                    dr_loop_todo.clear();
-                }
+            if (prev->flags & (uint8_t) VariableFlags::LoopBoundary &&
+                !(cur && (cur->flags & (uint8_t) VariableFlags::LoopBoundary))) {
+                for (uint32_t todo: pending)
+                    jit_var_schedule(state[todo]->grad.index());
+                jit_eval();
             }
 
             bool clear_grad = false;
@@ -1524,6 +1522,8 @@ void ad_traverse(dr::ADMode mode, uint32_t flags) {
             postprocess(v0i_prev, v0i);
             v0i_prev = v0i;
 
+            pending.insert(v1i);
+
             ad_log("ad_traverse(): processing edge a%u -> a%u ..", v0i, v1i);
 
             if (unlikely(v0->flags & (uint8_t) VariableFlags::CustomLabel)) {
@@ -1556,6 +1556,7 @@ void ad_traverse(dr::ADMode mode, uint32_t flags) {
                     edge.weight = JitVar();
             }
         }
+
 
         postprocess(v0i_prev, 0);
         ad_log("ad_traverse(): done.");
@@ -1996,6 +1997,15 @@ Index ad_var_data(Index index, void **ptr) {
 
     return combine(ad_index, jit_index);
 }
+
+void ad_mark_loop_boundary(Index index) {
+    ADIndex ad_index = ::ad_index(index);
+    if (ad_index) {
+        std::lock_guard<std::mutex> guard(state.mutex);
+        state[ad_index]->flags |= (uint8_t) VariableFlags::LoopBoundary;
+    }
+}
+
 
 // ==========================================================================
 // Implementation of arithmetic operations and transcendental functions
