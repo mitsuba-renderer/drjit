@@ -357,9 +357,10 @@ bool VariableTracker::Impl::traverse(Context &ctx, nb::handle h) {
             }
 
             #if defined(DEBUG_TRACKER)
-                printf("%s '%s' (%p) r%lu[size=%zu]\n",
+                printf("%s '%s' (%p) a%u r%u (size=%zu)\n",
                        ctx.write ? "write " : "read ",
-                       ctx.label.c_str(), h.ptr(), idx,
+                       ctx.label.c_str(), h.ptr(), uint32_t(idx << 32),
+                       (uint32_t) idx,
                        jit_var_size((uint32_t) idx));
             #endif
 
@@ -384,20 +385,24 @@ bool VariableTracker::Impl::traverse(Context &ctx, nb::handle h) {
                         vi.size);
 
                 changed = idx != v->index;
-                ad_var_dec_ref(v->index);
-                v->index = ad_var_inc_ref(idx);
-                v->size = vi.size;
+                if (changed) {
+                    uint64_t old = v->index;
+                    v->index = ad_var_inc_ref(idx);
+                    ad_var_dec_ref(old);
+                    v->size = vi.size;
+                }
             }
 
             if (!ctx.write) {
-                ad_var_inc_ref(idx);
-                ad_var_inc_ref(idx);
-                ad_var_dec_ref(v->index);
-                ctx.indices.push_back(idx);
-                v->index = idx;
+                if (idx != v->index) {
+                    uint64_t old = v->index;
+                    v->index = ad_var_inc_ref(idx);
+                    ad_var_dec_ref(old);
+                }
+                ctx.indices.push_back(ad_var_inc_ref(idx));
                 ctx.index_offset++;
                 #if defined(DEBUG_TRACKER)
-                    printf("-> read: r%zu\n", idx);
+                    printf("-> read: a%u r%u\n", (uint32_t) (idx << 32), (uint32_t) idx);
                 #endif
             } else {
                 if (ctx.index_offset >= ctx.indices.size())
@@ -425,13 +430,13 @@ bool VariableTracker::Impl::traverse(Context &ctx, nb::handle h) {
 
                 if (idx != idx_new &&
                     !(ctx.preserve_dirty && jit_var_is_dirty((uint32_t) idx))) {
-                    s.reset_index(idx_new, inst_ptr(h));
-                    v->index = idx_new;
-                    ad_var_dec_ref(idx);
-                    ad_var_inc_ref(idx_new);
                     #if defined(DEBUG_TRACKER)
-                        printf("-> write: r%zu\n", idx_new);
+                        printf("-> write: a%u r%u\n", (uint32_t) (idx_new << 32), (uint32_t) idx_new);
                     #endif
+                    s.reset_index(idx_new, inst_ptr(h));
+                    uint64_t old = v->index;
+                    v->index = ad_var_inc_ref(idx_new);
+                    ad_var_dec_ref(old);
                 }
             }
         }

@@ -974,7 +974,7 @@ def copy(arg: T, /) -> T:
     lists, dictionaries, and other :ref:`custom data strutures <custom_types_py>`.
     """
 
-    return detail.copy(arg, None)
+    return detail.copy(arg)
 
 
 def sign(arg, /):
