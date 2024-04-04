@@ -138,6 +138,7 @@ def test05_binop_inplace(t):
 
 @pytest.test_arrays('type=int32,shape=(3)', 'type=int32,shape=(3, *)', 'type=int32, shape=(*, *)')
 def test05_unop(t):
+    assert dr.all(~t(0) == t(-1))
     assert dr.all(-t(1, 2, 3) == t(-1, -2, -3))
     assert dr.all(+t(1, 2, 3) == t(1, 2, 3))
     assert dr.all(abs(t(1, -2, 3)) == t(1, 2, 3))

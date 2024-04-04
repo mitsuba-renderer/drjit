@@ -138,7 +138,7 @@ int tp_init_array(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
                     nb::inst_move(self, unraveled);
                     return 0;
                 } else if (s.is_complex && nb::hasattr(arg, "__complex__")) { /* complex scalar */
-                    converted_complex_scalar = 
+                    converted_complex_scalar =
                         nb::handle(arg).attr("__complex__")();
                     arg = converted_complex_scalar.ptr();
                     arg_tp = Py_TYPE(arg);
