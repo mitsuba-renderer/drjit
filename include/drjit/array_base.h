@@ -534,6 +534,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
     DRJIT_IMPLEMENT_UNARY(tzcnt, tzcnt(a), IsIntegral)
     DRJIT_IMPLEMENT_UNARY(lzcnt, lzcnt(a), IsIntegral)
     DRJIT_IMPLEMENT_UNARY(popcnt, popcnt(a), IsIntegral)
+    DRJIT_IMPLEMENT_UNARY(brev, brev(a), IsIntegral)
 
     DRJIT_IMPLEMENT_UNARY_PAIR_REC(sincos, sincos(a), IsFloat)
     DRJIT_IMPLEMENT_UNARY_PAIR_REC(sincosh, sincosh(a), IsFloat)

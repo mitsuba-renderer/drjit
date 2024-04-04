@@ -311,6 +311,7 @@ struct DRJIT_TRIVIAL_ABI JitArray
 
     JitArray popcnt_() const { return steal(jit_var_popc(m_index)); }
     JitArray lzcnt_() const { return steal(jit_var_clz(m_index)); }
+    JitArray brev_() const { return steal(jit_var_brev(m_index)); }
     JitArray tzcnt_() const { return steal(jit_var_ctz(m_index)); }
 
     //! @}

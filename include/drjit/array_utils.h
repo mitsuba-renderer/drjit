@@ -267,6 +267,19 @@ template <typename T> DRJIT_INLINE T tzcnt_(T v) {
 #endif
 }
 
+template <typename T> DRJIT_INLINE T brev_(T value_) {
+    using Tu = std::make_unsigned_t<T>;
+    Tu value = (Tu) value_;
+    Tu result = 0;
+
+    for (size_t i = 0; i < sizeof(Tu) * 8; ++i) {
+        result = (result << 1) | (value & 1);
+        value >>= 1;
+    }
+
+    return result;
+}
+
 template <typename T>
 DRJIT_INLINE T mulhi_(T x, T y) {
     if constexpr (sizeof(T) == 4) {

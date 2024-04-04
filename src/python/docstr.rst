@@ -6294,6 +6294,19 @@
     Returns:
         int | drjit.ArrayBase: number of trailing zero bits in ``arg``
 
+.. topic:: brev
+
+    Reverse the bit representation of an integer value or array.
+
+    This function assumes that ``arg`` is either an arbitrary Dr.Jit integer
+    array or a 32 bit-sized scalar integer value.
+
+    Args:
+        arg (int | drjit.ArrayBase): A Python or Dr.Jit array
+
+    Returns:
+        int | drjit.ArrayBase: bit-reverse of ``arg``
+
 .. topic:: compress
 
     Compress a mask into an array of nonzero indices.

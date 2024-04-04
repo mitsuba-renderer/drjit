@@ -461,6 +461,7 @@ struct DRJIT_TRIVIAL_ABI DiffArray
     DiffArray popcnt_() const { return steal(jit_var_popc((uint32_t) m_index)); }
     DiffArray lzcnt_() const { return steal(jit_var_clz((uint32_t) m_index)); }
     DiffArray tzcnt_() const { return steal(jit_var_ctz((uint32_t) m_index)); }
+    DiffArray brev_() const { return steal(jit_var_brev((uint32_t) m_index)); }
 
     DiffArray round_() const { return steal(jit_var_round((uint32_t) m_index)); }
     template <typename T> T round2int_() const { return T(round(*this)); }

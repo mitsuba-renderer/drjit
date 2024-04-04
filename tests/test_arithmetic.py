@@ -283,23 +283,38 @@ def test13_hypot(t):
     assert dr.allclose(dr.hypot(t(3), t(4)), t(5))
 
 
-@pytest.test_arrays('uint32, jit, shape=(*)')
+@pytest.test_arrays('uint32, jit, shape=(*)', 'uint32, jit, shape=(*)')
 def test14_lzcnt(t):
-    assert dr.all(dr.lzcnt(t(0, 1, 100)) == t(32, 31, 25))
-    assert tuple(dr.lzcnt(i) for i in (0, 1, 100)) == (32, 31, 25)
+    bits = 64 if '64' in t.__name__ else 32
+    out = (bits, bits-1, bits-7)
+    assert dr.all(dr.lzcnt(t(0, 1, 100)) == t(out))
+    assert tuple(dr.lzcnt(t(i))[0] for i in (0, 1, 100)) == out
+    if bits == 32:
+        assert tuple(dr.lzcnt(i) for i in (0, 1, 100)) == out
 
 
-@pytest.test_arrays('uint32, jit, shape=(*)')
+@pytest.test_arrays('uint32, jit, shape=(*)', 'uint64, jit, shape=(*)')
 def test15_tzcnt(t):
-    assert dr.all(dr.tzcnt(t(0, 1, 100)) == t(32, 0, 2))
-    assert tuple(dr.tzcnt(i) for i in (0, 1, 100)) == (32, 0, 2)
+    bits = 64 if '64' in t.__name__ else 32
+    assert dr.all(dr.tzcnt(t(0, 1, 100)) == t(bits, 0, 2))
+    assert tuple(dr.tzcnt(t(i))[0] for i in (0, 1, 100)) == (bits, 0, 2)
+    if bits == 32:
+        assert tuple(dr.tzcnt(i) for i in (0, 1, 100)) == (bits, 0, 2)
 
-
-@pytest.test_arrays('uint32, jit, shape=(*)')
+@pytest.test_arrays('uint64, jit, shape=(*)', 'uint32, jit, shape=(*)')
 def test16_popcnt(t):
     assert dr.all(dr.popcnt(t(0, 1, 100)) == t(0, 1, 3))
     assert tuple(dr.popcnt(i) for i in (0, 1, 100)) == (0, 1, 3)
+    assert tuple(dr.popcnt(t(i))[0] for i in (0, 1, 100)) == (0, 1, 3)
 
+
+@pytest.test_arrays('uint32, jit, shape=(*)')
+def test17_brev(t):
+    inp = (0xcafe, 0x1, 0x12345678)
+    out = (0x7f530000, 0x80000000, 0x1e6a2c48)
+    assert dr.all(dr.brev(t(inp)) == t(out))
+    assert tuple(dr.brev(i) for i in inp) == out
+    assert tuple(dr.brev(t(i))[0] for i in inp) == out
 
 @pytest.test_arrays('uint32, jit, shape=(*)')
 def test17_log2i(t):
