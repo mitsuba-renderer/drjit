@@ -958,6 +958,7 @@ Bit-level operations
 .. autofunction:: popcnt
 .. autofunction:: lzcnt
 .. autofunction:: tzcnt
+.. autofunction:: brev
 
 .. autofunction:: log2i
 

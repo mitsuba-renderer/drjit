@@ -198,6 +198,7 @@ DRJIT_ROUTE_BINARY_FALLBACK(mulhi, mulhi, detail::mulhi_((E) a1, (E) a2))
 DRJIT_ROUTE_UNARY_FALLBACK(lzcnt, lzcnt, detail::lzcnt_(a))
 DRJIT_ROUTE_UNARY_FALLBACK(tzcnt, tzcnt, detail::tzcnt_(a))
 DRJIT_ROUTE_UNARY_FALLBACK(popcnt, popcnt, detail::popcnt_(a))
+DRJIT_ROUTE_UNARY_FALLBACK(brev, brev, detail::brev_(a))
 
 DRJIT_ROUTE_TERNARY_FALLBACK(fmadd, fmadd,   detail::fmadd_((E) a1, (E) a2, (E) a3))
 DRJIT_ROUTE_TERNARY_FALLBACK(fmsub, fmsub,   detail::fmadd_((E) a1, (E) a2, -(E) a3))

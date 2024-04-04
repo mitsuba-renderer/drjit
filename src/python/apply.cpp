@@ -31,6 +31,7 @@ static const char *op_names[] = {
     "popcnt",
     "lzcnt",
     "tzcnt",
+    "brev",
 
     "exp",
     "exp2",

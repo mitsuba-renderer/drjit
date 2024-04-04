@@ -120,6 +120,7 @@ enum class ArrayOp {
     Popcnt,
     Lzcnt,
     Tzcnt,
+    Brev,
 
     Exp,
     Exp2,
@@ -601,6 +602,7 @@ template <typename T> void bind_int_arithmetic(ArrayBinding &b) {
     b[ArrayOp::Popcnt] = (void *) +[](const T *a, T *b) { new (b) T(popcnt(*a)); };
     b[ArrayOp::Lzcnt] = (void *) +[](const T *a, T *b) { new (b) T(lzcnt(*a)); };
     b[ArrayOp::Tzcnt] = (void *) +[](const T *a, T *b) { new (b) T(tzcnt(*a)); };
+    b[ArrayOp::Brev] = (void *) +[](const T *a, T *b) { new (b) T(brev(*a)); };
 }
 
 inline void disable_int_arithmetic(ArrayBinding &b) {

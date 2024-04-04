@@ -1093,6 +1093,7 @@ void export_base(nb::module_ &m) {
     DR_MATH_UNOP_UINT32(popcnt, ArrayOp::Popcnt);
     DR_MATH_UNOP_UINT32(lzcnt, ArrayOp::Lzcnt);
     DR_MATH_UNOP_UINT32(tzcnt, ArrayOp::Tzcnt);
+    DR_MATH_UNOP_UINT32(brev, ArrayOp::Brev);
 
     DR_MATH_UNOP(exp, ArrayOp::Exp);
     DR_MATH_UNOP(exp2, ArrayOp::Exp2);
