@@ -875,7 +875,7 @@ nanobind::object bind_array(ArrayBinding &b, nanobind::handle scope = {},
             bind_memop<T>(b);
         }
 
-        if constexpr (T::Depth == 1 && T::IsMask)
+        if constexpr (T::Depth == 1 && (T::IsMask || T::IsIntegral))
             bind_bit_invert<T>(b);
     }
 
