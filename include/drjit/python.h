@@ -607,8 +607,8 @@ template <typename T> void bind_int_arithmetic(ArrayBinding &b) {
 
 inline void disable_int_arithmetic(ArrayBinding &b) {
     b[ArrayOp::FloorDiv] = b[ArrayOp::LShift] = b[ArrayOp::RShift] =
-        b[ArrayOp::Popcnt] = b[ArrayOp::Lzcnt] = b[ArrayOp::Tzcnt] =
-            DRJIT_OP_NOT_IMPLEMENTED;
+        b[ArrayOp::Mod] = b[ArrayOp::Popcnt] = b[ArrayOp::Lzcnt] =
+        b[ArrayOp::Tzcnt] = b[ArrayOp::Brev] = DRJIT_OP_NOT_IMPLEMENTED;
 }
 
 template <typename T> void bind_float_arithmetic(ArrayBinding &b) {
