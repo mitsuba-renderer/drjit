@@ -1743,3 +1743,22 @@ def test114_block_sum_rev(t, mode):
     y.grad = [10, 20, 30]
     dr.backward_to(x)
     assert dr.all(x.grad == [10, 10, 20, 20, 30, 30])
+
+@pytest.test_arrays('is_diff,float32,shape=(*)')
+def test115_dot_ad(t):
+    a = dr.arange(t, 102400)
+    b = t(dr.arange(dr.uint32_array_t(t), 102400)%4)
+    dr.enable_grad(a, b)
+    dr.eval(a, b)
+
+    c0 = dr.sum(a * b)
+    dr.backward_from(c0)
+    g0 = a.grad, b.grad
+    dr.clear_grad(a)
+    dr.clear_grad(b)
+
+    c1 = dr.dot(a, b)
+    dr.backward_from(c1)
+    g1 = a.grad, b.grad
+
+    assert dr.all((c0 == c1) & (g0[0] == g1[0]) & (g0[1] == g1[1]))

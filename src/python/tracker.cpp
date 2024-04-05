@@ -315,7 +315,7 @@ bool VariableTracker::Impl::traverse(Context &ctx, nb::handle h) {
     if (!prev.type().is(tp))
         nb::raise("the type of state variable '%s' changed from '%s' to '%s', "
                   "which is not permitted",
-                  ctx.label.c_str(), nb::inst_name(v->value).c_str(),
+                  ctx.label.c_str(), nb::inst_name(prev).c_str(),
                   nb::type_name(tp).c_str());
 
     uint32_t changed = false;

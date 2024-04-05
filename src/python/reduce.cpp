@@ -161,12 +161,16 @@ static nb::object dot(nb::handle h0, nb::handle h1) {
             nb::raise("invalid input array sizes (%zu and %zu)", l0, l1);
 
         bool use_fma = true;
+        bool use_native_op = false;
 
         nb::handle tp0 = h0.type(), tp1 = h1.type();
         if (is_drjit_type(tp0)) {
             const ArraySupplement &s0 = supp(tp0);
-            if (s0.ndim == 1 && s0.shape[0] == DRJIT_DYNAMIC)
+            if (s0.ndim == 1 && s0.shape[0] == DRJIT_DYNAMIC) {
                 use_fma = false;
+                if (tp0.is(tp1) && s0.index)
+                    use_native_op = true;
+            }
         }
 
         if (is_drjit_type(tp1)) {
@@ -175,13 +179,25 @@ static nb::object dot(nb::handle h0, nb::handle h1) {
                 use_fma = false;
         }
 
-
         if (use_fma) {
             nb::object result = h0[0] * h1[0],
                        fma = array_module.attr("fma");
             for (size_t i = 1; i < lr; ++i)
                 result = fma(h0[l0 == 1 ? 0 : i],
                              h1[l1 == 1 ? 0 : i], result);
+            return result;
+        } else if (use_native_op) {
+            const ArraySupplement &s = supp(tp0);
+
+            uint64_t index = ad_var_reduce_dot(
+                s.index(inst_ptr(h0)),
+                s.index(inst_ptr(h1))
+            );
+
+            nb::object result = nb::inst_alloc(tp1);
+            s.init_index(index, inst_ptr(result));
+            nb::inst_mark_ready(result);
+            ad_var_dec_ref(index);
             return result;
         } else {
             return sum(h0 * h1, 0);

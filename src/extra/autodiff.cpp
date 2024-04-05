@@ -2561,6 +2561,18 @@ Index ad_var_reduce(JitBackend backend, VarType vt, ReduceOp op, Index i0) {
     }
 }
 
+Index ad_var_reduce_dot(Index i0, Index i1) {
+    JitVar result = JitVar::steal(jit_var_reduce_dot(jit_index(i0), jit_index(i1)));
+
+    if (is_detached(i0) && is_detached(i1)) {
+        return result.release();
+    } else {
+        return ad_var_new("dot", std::move(result),
+                          Arg(i0, JitVar::borrow(jit_index(i1))),
+                          Arg(i1, JitVar::borrow(jit_index(i0))));
+    }
+}
+
 // ==========================================================================
 
 Index ad_var_cast(Index i0, VarType vt) {

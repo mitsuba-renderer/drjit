@@ -141,8 +141,10 @@ extern DRJIT_EXTRA_EXPORT void ad_var_dec_ref_impl(uint64_t) JIT_NOEXCEPT;
 extern DRJIT_EXTRA_EXPORT uint64_t ad_var_reduce(JitBackend, VarType,
                                                  JIT_ENUM ReduceOp, uint64_t);
 
-/// Compute an exclusive (exclusive == 1) or inclusive (exclusive == 0) prefix
-/// sum
+/// Dot product reduction
+extern DRJIT_EXTRA_EXPORT uint64_t ad_var_reduce_dot(uint64_t i0, uint64_t i1);
+
+/// Compute an exclusive or inclusive prefix sum
 extern DRJIT_EXTRA_EXPORT uint64_t ad_var_prefix_sum(uint64_t index,
                                                      int exclusive);
 
