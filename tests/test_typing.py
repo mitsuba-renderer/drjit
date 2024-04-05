@@ -7,7 +7,7 @@
 import drjit as dr
 from drjit.llvm import Array3f, Array3u, Array3b, Float, UInt, Bool
 from drjit.scalar import Array3f as ScalarArray3f
-from typing import Callable
+from typing import Callable, Tuple
 
 # TBD: matmul, matrix ops in general, complex ops
 # slicing, mask assignment
@@ -139,10 +139,10 @@ def test12_while_loop() -> None:
     def cond(a: Array3f, b: int) -> Bool:
         return a.x < 10
 
-    def body(a: Array3f, b: int) -> tuple[Array3f, int]:
+    def body(a: Array3f, b: int) -> Tuple[Array3f, int]:
         return a + 10, b
 
-    result : tuple[Array3f, int] = dr.while_loop(
+    result : Tuple[Array3f, int] = dr.while_loop(
         state,
         cond,
         body
@@ -151,13 +151,13 @@ def test12_while_loop() -> None:
 def test13_if_stmt() -> None:
     state = (Array3f(1, 2, 3), 4)
 
-    def true_fn(a: Array3f, b: int) -> tuple[Array3f, Float]:
+    def true_fn(a: Array3f, b: int) -> Tuple[Array3f, Float]:
         return a - b, a.x
 
-    def false_fn(a: Array3f, b: int) -> tuple[Array3f, Float]:
+    def false_fn(a: Array3f, b: int) -> Tuple[Array3f, Float]:
         return a + b, a.y
 
-    result: tuple[Array3f, Float] = dr.if_stmt(
+    result: Tuple[Array3f, Float] = dr.if_stmt(
         state,
         Bool(True),
         true_fn,
