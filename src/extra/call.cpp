@@ -342,7 +342,7 @@ static void ad_call_symbolic(JitBackend backend, const char *domain,
 // Strategy 3: group the arguments and evaluate a kernel per callable
 static void ad_call_reduce(JitBackend backend, const char *domain,
                             const char *name, size_t size, uint32_t index_,
-                            uint32_t mask, size_t callable_count,
+                            uint32_t mask_, size_t callable_count,
                             const vector<uint64_t> args_,
                             vector<uint64_t> &rv,
                             ad_call_func func, void *payload) {
@@ -351,10 +351,20 @@ static void ad_call_reduce(JitBackend backend, const char *domain,
                *separator = domain ? "::" : "";
 
     JitVar index;
-    if (mask)
-        index = JitVar::steal(jit_var_and(index_, mask));
-    else
-        index = JitVar::borrow(index_);
+
+    // Apply mask stack
+    JitVar mask_combined = {};
+    {
+        JitVar mask;
+        if (mask_)
+            mask = JitVar::borrow(mask_);
+        else
+            mask = JitVar::steal(jit_var_bool(backend, true));
+
+        mask_combined = JitVar::steal(jit_var_mask_apply(mask.index(), size));
+    }
+
+    index = JitVar::steal(jit_var_and(index_, mask_combined.index()));
 
     jit_var_schedule(index.index());
     index64_vector args;
