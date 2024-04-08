@@ -341,3 +341,9 @@ def test19_incompatible(t):
         t(1, 2, 3) + t()
     assert msg in str(e.value.__cause__)
 
+@pytest.test_arrays('float, shape=(*)')
+def test20_rcp_inf(t):
+    y = dr.rcp(t(0.0, -0.0))
+    assert dr.all(~dr.isnan(y))
+    assert y[0] > 0
+    assert y[1] < 0

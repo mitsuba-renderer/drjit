@@ -13,6 +13,10 @@
     documentation is most conveniently written and edited via proper ``.rst``
     file so that editors can provide syntax highlighting, spell-checking, etc.
 
+    At the same time, nanobind tool expects these docstrings to be provided
+    during the C++ compilation process. This file is therefore processed to
+    generate a header file making the docstrings available at compile time.
+
 .. ------------------------------------------------------------------------
 
 .. topic:: is_array_v
@@ -6302,10 +6306,10 @@
     array or a 32 bit-sized scalar integer value.
 
     Args:
-        arg (int | drjit.ArrayBase): A Python or Dr.Jit array
+        arg (int | drjit.ArrayBase): A Python ``int`` or Dr.Jit integer array.
 
     Returns:
-        int | drjit.ArrayBase: bit-reverse of ``arg``
+        int | drjit.ArrayBase: the bit-reversed version of ``arg``.
 
 .. topic:: compress
 
