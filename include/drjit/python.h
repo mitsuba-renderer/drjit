@@ -519,14 +519,6 @@ template <typename T> NB_INLINE void bind_base(ArrayBinding &b) {
 }
 
 template <typename T> void bind_arithmetic(ArrayBinding &b) {
-    using UInt32  = uint32_array_t<T>;
-    using Int32   = int32_array_t<T>;
-    using UInt64  = uint64_array_t<T>;
-    using Int64   = int64_array_t<T>;
-    using Float16 = float16_array_t<T>;
-    using Float32 = float32_array_t<T>;
-    using Float64 = float64_array_t<T>;
-
     b[ArrayOp::Abs] = (void *) +[](const T *a, T *b) { new (b) T(abs(*a)); };
     b[ArrayOp::Neg] = (void *) +[](const T *a, T *b) { new (b) T(-*a); };
 
@@ -547,6 +539,27 @@ template <typename T> void bind_arithmetic(ArrayBinding &b) {
     b[ArrayOp::Fma] = (void *) +[](const T *a, const T *b, const T *c, T *d) {
         new (d) T(fmadd(*a, *b, *c));
     };
+
+    if constexpr (is_jit_v<T>) {
+        b[ArrayOp::Sum] = (void *) +[](const T *a, T *b) { new (b) T(a->sum_()); };
+        b[ArrayOp::Prod] = (void *) +[](const T *a, T *b) { new (b) T(a->prod_()); };
+        b[ArrayOp::Min] = (void *) +[](const T *a, T *b) { new (b) T(a->min_()); };
+        b[ArrayOp::Max] = (void *) +[](const T *a, T *b) { new (b) T(a->max_()); };
+        b[ArrayOp::PrefixSum] = (void *) +[](const T *a, bool exclusive, T *b) {
+            new (b) T(a->prefix_sum_(exclusive));
+        };
+    }
+}
+
+
+template <typename T> void bind_cast(ArrayBinding &b) {
+    using UInt32  = uint32_array_t<T>;
+    using Int32   = int32_array_t<T>;
+    using UInt64  = uint64_array_t<T>;
+    using Int64   = int64_array_t<T>;
+    using Float16 = float16_array_t<T>;
+    using Float32 = float32_array_t<T>;
+    using Float64 = float64_array_t<T>;
 
     b.cast = (ArrayBinding::Cast) +[](const ArrayBase *a, VarType vt, bool reinterpret, T *b) {
         if (!reinterpret) {
@@ -572,18 +585,11 @@ template <typename T> void bind_arithmetic(ArrayBinding &b) {
                 default: nanobind::raise("Unsupported cast.");
             }
         }
-
     };
+}
 
-    if constexpr (is_jit_v<T>) {
-        b[ArrayOp::Sum] = (void *) +[](const T *a, T *b) { new (b) T(a->sum_()); };
-        b[ArrayOp::Prod] = (void *) +[](const T *a, T *b) { new (b) T(a->prod_()); };
-        b[ArrayOp::Min] = (void *) +[](const T *a, T *b) { new (b) T(a->min_()); };
-        b[ArrayOp::Max] = (void *) +[](const T *a, T *b) { new (b) T(a->max_()); };
-        b[ArrayOp::PrefixSum] = (void *) +[](const T *a, bool exclusive, T *b) {
-            new (b) T(a->prefix_sum_(exclusive));
-        };
-    }
+inline void disable_cast(ArrayBinding &b) {
+    b.cast = (ArrayBinding::Cast) DRJIT_OP_NOT_IMPLEMENTED;
 }
 
 inline void disable_arithmetic(ArrayBinding &b) {
@@ -591,7 +597,6 @@ inline void disable_arithmetic(ArrayBinding &b) {
         b[ArrayOp::Mul] = b[ArrayOp::Minimum] = b[ArrayOp::Maximum] =
         b[ArrayOp::Fma] = b[ArrayOp::Sum] = b[ArrayOp::Prod] =
         b[ArrayOp::Min] = b[ArrayOp::Max] = DRJIT_OP_NOT_IMPLEMENTED;
-    b.cast = (ArrayBinding::Cast) DRJIT_OP_NOT_IMPLEMENTED;
 }
 
 template <typename T> void bind_int_arithmetic(ArrayBinding &b) {
@@ -851,9 +856,13 @@ nanobind::object bind_array(ArrayBinding &b, nanobind::handle scope = {},
     } else {
         bind_base<T>(b);
 
+        if constexpr (T::IsArithmetic && T::Depth == 1 && !is_special_v<T>)
+            bind_cast<T>(b);
+
         if constexpr (T::Depth == 1 && T::IsDynamic) {
-            if constexpr (T::IsArithmetic)
+            if constexpr (T::IsArithmetic) {
                 bind_arithmetic<T>(b);
+            }
 
             if constexpr (T::IsIntegral)
                 bind_int_arithmetic<T>(b);
@@ -889,8 +898,10 @@ nanobind::object bind_array(ArrayBinding &b, nanobind::handle scope = {},
     if constexpr (T::IsComplex)
         bind_complex<T>(b);
 
-    if constexpr (!T::IsArithmetic)
+    if constexpr (!T::IsArithmetic) {
         disable_arithmetic(b);
+        disable_cast(b);
+    }
 
     if constexpr (!T::IsIntegral)
         disable_int_arithmetic(b);
