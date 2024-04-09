@@ -282,6 +282,12 @@ int mp_ass_subscript(PyObject *self, PyObject *key, PyObject *value) noexcept {
 
         if (key_is_array && (VarType) supp(key_tp).type == VarType::Bool) {
             nb::object result = select(nb::borrow(key), nb::borrow(value), nb::borrow(self));
+            nb::handle result_tp = result.type();
+            if (!result_tp.is(self_tp))
+                nb::raise("Incompatible mask assignment, type changed from "
+                          "'%s' to '%s'",
+                          type_name(self_tp).c_str(),
+                          type_name(result_tp).c_str());
             nb::inst_replace_move(self, result);
             return 0;
         }
