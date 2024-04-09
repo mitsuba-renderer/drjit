@@ -990,7 +990,8 @@ void export_base(nb::module_ &m) {
 
     ab.def_prop_ro("state", &get_state, doc_ArrayBase_state);
     ab.def_prop_ro("ndim", &ndim, doc_ArrayBase_ndim);
-    ab.def_prop_ro("shape", &shape, doc_ArrayBase_shape);
+    ab.def_prop_ro("shape", &shape, doc_ArrayBase_shape, nb::sig("def shape(self) -> tuple[int, ...]"));
+
     ab.def_prop_ro(
         "array",
         [](nb::handle_t<ArrayBase> h) -> nb::object {

@@ -482,7 +482,7 @@ def conj(arg, /):
         return arg
 
 
-def cross(arg0, arg1, /):
+def cross(arg0: ArrayT, arg1: ArrayT, /) -> ArrayT:
     '''
     Returns the cross-product of the two input 3D arrays
 
