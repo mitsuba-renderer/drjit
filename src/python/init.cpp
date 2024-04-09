@@ -103,9 +103,13 @@ int tp_init_array(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
                         try_sequence_import = false;
                     } else {
                         // Always broadcast when the element type is one of the sub-elements
+                        // or its AD/non-AD counterpart
                         PyTypeObject *cur_tp = (PyTypeObject *) s.value;
                         while (cur_tp) {
-                            if (arg_tp == cur_tp) {
+                            ArrayMeta m_curr =  supp(cur_tp);
+                            m_curr.is_diff = m_arg.is_diff;
+                            m_curr.talign = m_arg.talign;
+                            if (m_curr == m_arg) {
                                 try_sequence_import = false;
                                 break;
                             }
