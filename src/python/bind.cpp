@@ -183,8 +183,12 @@ nb::object bind(const ArrayBinding &b) {
 
     #if PY_VERSION_HEX >= 0x03090000
         // Parameterize the generic base class if supported by Python
-        base_o = base_o[nb::make_tuple(
-            name_o, self_cp_t_o, val_t_o, val_cp_t_o, red_t_o, mask_t_o)];
+        if (b.is_tensor)
+            base_o = base_o[nb::make_tuple(
+                name_o, self_cp_t_o, name_o, self_cp_t_o, name_o, mask_t_o)];
+        else
+            base_o = base_o[nb::make_tuple(
+                name_o, self_cp_t_o, val_t_o, val_cp_t_o, red_t_o, mask_t_o)];
     #endif
 
     d.base_py = (PyTypeObject *) base_o.ptr();
