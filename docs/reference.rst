@@ -1376,6 +1376,7 @@ Profiling
 Low-level bits
 --------------
 
+.. autofunction:: set_backend
 .. autofunction:: thread_count
 .. autofunction:: set_thread_count
 .. autofunction:: sync_thread

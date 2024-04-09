@@ -39,6 +39,7 @@
 #include "profile.h"
 #include "tracker.h"
 
+static int active_backend = -1;
 
 static void set_flag_py(JitFlag flag, bool value) {
     if (flag == JitFlag::Debug) {
@@ -218,7 +219,8 @@ NB_MODULE(_drjit_ext, m_) {
             [](nb::intrusive_base *o, PyObject *po) noexcept {
                 o->set_self_py(po);
             }), doc_intrusive_base);
-    jit_init(backends);
+
+    jit_init_async(backends);
 
     export_bind(detail);
     export_base(m);
@@ -253,4 +255,73 @@ NB_MODULE(_drjit_ext, m_) {
     export_cuda(cuda);
     export_cuda_ad(cuda_ad);
 #endif
+
+    /// Automatic backend selection
+    auto set_backend = [](JitBackend backend) {
+        const char *key = nullptr;
+        if (active_backend == (int) backend)
+            return;
+
+        switch (backend) {
+            case JitBackend::None: key = "scalar"; break;
+            case JitBackend::CUDA: key = "cuda"; break;
+            case JitBackend::LLVM: key = "llvm"; break;
+            default: nb::raise("Unknown backend");
+        }
+
+        nb::object value = array_module.attr(key);
+        nb::dict mods = nb::borrow<nb::dict>(nb::module_::import_("sys").attr("modules"));
+        array_module.attr("auto") = value;
+
+        mods["drjit.auto"] = value;
+        if (backend == JitBackend::None && mods.contains("drjit.auto.ad"))
+            nb::del(mods["drjit.auto.ad"]);
+        else
+            mods["drjit.auto.ad"] = value.attr("ad");
+
+        active_backend = (int) backend;
+    };
+
+    m.def("set_backend",
+          [=](const char *name) {
+              JitBackend backend;
+              if (strcmp(name, "cuda") == 0)
+                  backend = JitBackend::CUDA;
+              else if (strcmp(name, "llvm") == 0)
+                  backend = JitBackend::LLVM;
+              else if (strcmp(name, "scalar") == 0)
+                  backend = JitBackend::None;
+              else
+                  nb::raise("set_backend(): argument must equal 'cuda', 'llvm', or 'scalar'!");
+              set_backend(backend);
+          },
+          nb::sig("def set_backend(arg: Literal['cuda', 'llvm', 'scalar'], /)"), doc_set_backend);
+
+    m.def("set_backend", set_backend);
+
+
+    nb::module_ auto_ = m.def_submodule("auto"),
+                auto_ad = auto_.def_submodule("ad");
+
+    auto_.def("__getattr__", [=](nb::handle key) -> nb::handle {
+        if (jit_has_backend(JitBackend::CUDA))
+            set_backend(JitBackend::CUDA);
+        else if (jit_has_backend(JitBackend::LLVM))
+            set_backend(JitBackend::LLVM);
+        else
+            set_backend(JitBackend::None);
+        nb::object mod = nb::module_::import_("drjit.auto");
+        return PyObject_GetAttr(mod.ptr(), key.ptr());
+    });
+
+    auto_ad.def("__getattr__", [=](nb::handle key) -> nb::handle {
+        if (jit_has_backend(JitBackend::CUDA))
+            set_backend(JitBackend::CUDA);
+        else if (jit_has_backend(JitBackend::LLVM))
+            set_backend(JitBackend::LLVM);
+        else
+            set_backend(JitBackend::None);
+        nb::object mod = nb::module_::import_("drjit.auto.ad");
+        return PyObject_GetAttr(mod.ptr(), key.ptr());
+    });
 }

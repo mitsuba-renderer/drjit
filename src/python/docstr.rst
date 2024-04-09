@@ -7124,3 +7124,8 @@
 .. topic:: detail_VariableTracker_verify_size
 
    Check that the PyTree is compatible with size ``size``.
+
+.. topic:: set_backend
+
+   Adjust the ``drjit.auto.*`` module so that it refers to types from the
+   specified backend.
