@@ -381,7 +381,7 @@ public:
         }
     }
 
-    void eval(nb::args, nb::kwargs) {
+    nb::handle eval(nb::args, nb::kwargs) {
         nb::raise("%s.eval(): not implemented!", type_name().c_str());
     }
 
