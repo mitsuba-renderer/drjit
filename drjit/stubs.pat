@@ -184,6 +184,19 @@ drjit.value_t$:
     @overload
     def value_t(arg: object, /) -> type: ...
 
+drjit.uint32_array_t$:
+    @overload
+    def uint32_array_t(arg: type[ArrayBase] | ArrayBase) -> type[AnyArray]:
+        \doc
+    @overload
+    def uint32_array_t(arg: object) -> int: ...
+
+drjit.int32_array_t$:
+    @overload
+    def int32_array_t(arg: type[ArrayBase] | ArrayBase) -> type[AnyArray]:
+        \doc
+    @overload
+    def int32_array_t(arg: object) -> int: ...
 
 # -------------- drjit.syntax, interop, detail ----------------
 

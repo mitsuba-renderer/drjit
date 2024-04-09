@@ -1818,21 +1818,21 @@
     Return a tuple describing dimension and shape of the provided Dr.Jit array,
     tensor, or standard sequence type.
 
-    When the arrays is ragged, the implementation signals a failure by returning
-    ``None``. A ragged array has entries of incompatible size, e.g. ``[[1, 2], [3,
-    4, 5]]``. Note that scalar entries (e.g. ``[[1, 2], [3]]``) are acceptable,
-    since broadcasting can effectively convert them to any size.
+    When the input array is *ragged* the function raises a ``RuntimeError``.
+    The term ragged refers to an array, whose components have mismatched sizes,
+    such as ``[[1, 2], [3, 4, 5]]``. Note that scalar entries (e.g. ``[[1, 2],
+    [3]]``) are acceptable, since broadcasting can effectively convert them to
+    any size.
 
-    The expressions ``drjit.shape(arg)`` and ``arg.shape`` are equivalent.
+    The expressions :py:func:`drjit.shape(arg) <drjit.shape>` and
+    :py:func:`arg.shape <drjit.ArrayBase.shape>` are equivalent.
 
     Args:
-        arg (drjit.ArrayBase | Sequence): an arbitrary Dr.Jit array or tensor
+        arg (drjit.ArrayBase): an arbitrary Dr.Jit array or tensor
 
     Returns:
-        tuple | None: A tuple describing the dimension and shape of the
-        provided Dr.Jit input array or tensor. When the input array is *ragged*
-        (i.e., when it contains components with mismatched sizes), the function
-        returns ``None``.
+        tuple[int, ...]: A tuple describing the dimension and shape of the
+        provided Dr.Jit input array or tensor.
 
 .. topic:: ArrayBase_x
 
@@ -1885,13 +1885,18 @@
 .. topic:: ArrayBase_shape
 
     This property provides a tuple describing dimension and shape of the
-    provided Dr.Jit array or tensor. When the input array is *ragged*
-    (i.e., when it contains components with mismatched sizes), the
-    property equals ``None``.
+    provided Dr.Jit array or tensor.
 
-    The expressions ``drjit.shape(arg)`` and ``arg.shape`` are equivalent.
+    When the input array is *ragged* the function raises a ``RuntimeError``.
+    The term ragged refers to an array, whose components have mismatched sizes,
+    such as ``[[1, 2], [3, 4, 5]]``. Note that scalar entries (e.g. ``[[1, 2],
+    [3]]``) are acceptable, since broadcasting can effectively convert them to
+    any size.
 
-    :type: tuple | None
+    The expressions :py:func:`drjit.shape(arg) <drjit.shape>` and
+    :py:func:`arg.shape <drjit.ArrayBase.shape>` are equivalent.
+
+    :type: tuple[int, ...]
 
 .. topic:: ArrayBase_ndim
 

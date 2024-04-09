@@ -143,7 +143,7 @@ nb::object shape(nb::handle h) {
     vector<size_t> result;
 
     if (!shape_impl(h, result))
-        return nb::none();
+        nb::raise("drjit.shape(): the input is ragged (i.e., it does not have a consistent size).");
 
     return cast_shape(result);
 }
@@ -175,7 +175,7 @@ size_t width(nb::handle h) {
 extern size_t width(nb::handle h);
 
 void export_shape(nb::module_ &m) {
-    m.def("shape", &shape, doc_shape);
+    m.def("shape", &shape, doc_shape, nb::sig("def shape(arg: object) -> tuple[int, ...]"));
     m.def("width", &width, doc_width)
      .def("width", [](nb::args args) { return width(args); });
 }

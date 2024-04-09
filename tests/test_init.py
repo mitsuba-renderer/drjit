@@ -320,8 +320,14 @@ def test19_shape_vectorized(p):
         assert dr.shape(p.Matrix3f(v)) == (3, 3, 5) and p.Matrix3f(v).shape == (3, 3, 5)
         assert dr.shape(p.ArrayXf(1, 2, 3)) == (3, 1) and p.ArrayXf(1, 2, 3).shape == (3, 1)
         assert dr.shape(p.ArrayXf(1, v, 3)) == (3, 5) and p.ArrayXf(1, v, 3).shape == (3, 5)
-        assert dr.shape(p.ArrayXf([1, 2], v, 3)) is None and p.ArrayXf([1, 2], v, 3).shape is None
-        assert dr.shape(p.Array2f([1, 2], [])) is None and p.Array2f([1, 2], []).shape is None
+        with pytest.raises(RuntimeError, match="ragged"):
+            assert dr.shape(p.ArrayXf([1, 2], v, 3)) is None
+        with pytest.raises(RuntimeError, match="ragged"):
+            assert p.ArrayXf([1, 2], v, 3).shape is None
+        with pytest.raises(RuntimeError, match="ragged"):
+            assert dr.shape(p.Array2f([1, 2], [])) is None
+        with pytest.raises(RuntimeError, match="ragged"):
+            assert p.Array2f([1, 2], []).shape is None
         assert p.ArrayXf().ndim == 2
 
 def test20_shape_other():
@@ -335,11 +341,16 @@ def test20_shape_other():
     assert dr.shape((dr.scalar.Array3f(), dr.scalar.Array3f())) == (2, 3)
 
     # Ragged
-    assert dr.shape([[1, 2, 5], [3, 4]]) is None
-    assert dr.shape([[1, 2], [3, 4, 5]]) is None
-    assert dr.shape([[1, 2], 1]) is None
-    assert dr.shape([1, [1, 2]]) is None
-    assert dr.shape((dr.scalar.Array2f(), dr.scalar.Array3f())) is None
+    with pytest.raises(RuntimeError, match="ragged"):
+        assert dr.shape([[1, 2, 5], [3, 4]]) is None
+    with pytest.raises(RuntimeError, match="ragged"):
+        assert dr.shape([[1, 2], [3, 4, 5]]) is None
+    with pytest.raises(RuntimeError, match="ragged"):
+        assert dr.shape([[1, 2], 1]) is None
+    with pytest.raises(RuntimeError, match="ragged"):
+        assert dr.shape([1, [1, 2]]) is None
+    with pytest.raises(RuntimeError, match="ragged"):
+        assert dr.shape((dr.scalar.Array2f(), dr.scalar.Array3f())) is None
 
 
 @pytest.test_arrays('matrix, -jit, float32')
