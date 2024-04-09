@@ -97,3 +97,22 @@ def test3_binop_promote_misc():
     with pytest.raises(RuntimeError) as ei:
         a + 2**100
     assert "drjit.scalar.Array3i.__add__(): Could not promote type 'int' to 'drjit.scalar.Array3u64'." in str(ei.value)
+
+def test4_binop_promote_ad():
+    try:
+        dr.llvm.Float(0)
+    except:
+        pytest.skip()
+
+    x = dr.zeros(dr.llvm.Float) + dr.zeros(dr.llvm.ad.Float)
+    assert type(x) is dr.llvm.ad.Float
+    x = dr.zeros(dr.llvm.ad.Float) + dr.zeros(dr.llvm.Float)
+    assert type(x) is dr.llvm.ad.Float
+    x = dr.zeros(dr.llvm.Float) * dr.zeros(dr.llvm.ad.Array3f)
+    assert type(x) is dr.llvm.ad.Array3f
+    x = dr.zeros(dr.llvm.ad.Float) * dr.zeros(dr.llvm.Array3f)
+    assert type(x) is dr.llvm.ad.Array3f
+    x = dr.zeros(dr.llvm.Float) + dr.zeros(dr.llvm.ad.Complex2f)
+    assert type(x) is dr.llvm.ad.Complex2f
+    x = dr.zeros(dr.llvm.ad.Float) + dr.zeros(dr.llvm.Complex2f)
+    assert type(x) is dr.llvm.ad.Complex2f
