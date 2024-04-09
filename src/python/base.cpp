@@ -928,8 +928,7 @@ nb::handle DR_STR(_traverse_1_cb_ro) = PyUnicode_InternFromString("_traverse_1_c
 void export_base(nb::module_ &m) {
     // Generic type variable used in many places
     for (const char *name :
-         { "T", "SelfT", "SelfCpT", "ValT", "ValCpT", "RedT", "MaskT", "SelfT2",
-           "ValT2", "RedT2", "MaskT2", "ValCpT2", "CpT2" })
+         { "T", "SelfT", "SelfCpT", "ValT", "ValCpT", "RedT", "PlainT", "MaskT" })
         m.attr(name) = nb::type_var(name, "covariant"_a = strcmp(name, "T") == 0);
 
     #if PY_VERSION_HEX >= 0x030B0000 // TypeVarTuple was introduced in v3.11
@@ -955,18 +954,19 @@ void export_base(nb::module_ &m) {
     // - ``ValT``: the *value type* (i.e., the type of ``self[0]``)
     // - ``ValCpT``: union of compatible types, for which ``self[0] + other`` or ``self[0] | other`` has type ``ValT``.
     // - ``RedT``: type following reduction by 'dr.sum' or 'dr.all'
+    // - ``PlainT``: the plain type underlying a specail array.
     // - ``MaskT``: type produced by comparisons such as ``__eq__``)";
 
     nb::class_<ArrayBase> ab(m, "ArrayBase",
                              nb::type_slots(array_base_slots),
                              nb::supplement<ArraySupplement>(),
-                             nb::sig("class ArrayBase(typing.Generic[SelfT, SelfCpT, ValT, ValCpT, RedT, MaskT])"),
+                             nb::sig("class ArrayBase(typing.Generic[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT])"),
                              nb::is_generic(),
                              doc_ArrayBase);
 
     nb::object at = nb::any_type();
     #if PY_VERSION_HEX >= 0x03090000
-        m.attr("AnyArray") = ab[nb::make_tuple(at, at, at, at, at, at)];
+        m.attr("AnyArray") = ab[nb::make_tuple(at, at, at, at, at, at, at)];
     #else
         m.attr("AnyArray") = ab;
     #endif
@@ -990,7 +990,8 @@ void export_base(nb::module_ &m) {
 
     ab.def_prop_ro("state", &get_state, doc_ArrayBase_state);
     ab.def_prop_ro("ndim", &ndim, doc_ArrayBase_ndim);
-    ab.def_prop_ro("shape", &shape, doc_ArrayBase_shape, nb::sig("def shape(self) -> tuple[int, ...]"));
+    ab.def_prop_ro("shape", &shape, doc_ArrayBase_shape,
+                   nb::sig("def shape(self) -> tuple[int, ...]"));
 
     ab.def_prop_ro(
         "array",
@@ -1003,6 +1004,7 @@ void export_base(nb::module_ &m) {
             else
                 return nb::borrow(h);
         },
+        nb::sig("def array(self) -> PlainT"),
         doc_ArrayBase_array);
 
     ab.def_prop_rw("x", xyzw_getter<0>, xyzw_setter<0>, doc_ArrayBase_x,

@@ -62,7 +62,7 @@ drjit.ArrayBase.__((?:r|i|)pow)__:
 
 drjit.(imag|real)$:
     @overload
-    def \1(arg: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, MaskT], /) -> ValT:
+    def \1(arg: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], /) -> ValT:
         \doc
     @overload
     def \1(arg: complex, /) -> float: ...
@@ -71,7 +71,7 @@ drjit.(imag|real)$:
 drjit.(sum|prod|min|max|norm|squared_norm)$:
     \from typing import Literal
     @overload
-    def \1(value: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, MaskT], axis: Literal[0] = 0) -> RedT:
+    def \1(value: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], axis: Literal[0] = 0) -> RedT:
         \doc
     @overload
     def \1(value: Sequence[T], axis: Literal[0] = 0) -> T: ...
@@ -82,16 +82,16 @@ drjit.(sum|prod|min|max|norm|squared_norm)$:
 
 drjit.(dot|abs_dot)$:
     @overload
-    def \1(arg0: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, MaskT], arg1: SelfCpT, /) -> RedT:
+    def \1(arg0: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], arg1: SelfCpT, /) -> RedT:
         \doc
     @overload
-    def \1(arg0: SelfCpT, arg1: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, MaskT], /) -> RedT: ...
+    def \1(arg0: SelfCpT, arg1: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], /) -> RedT: ...
     @overload
     def \1(arg0: Sequence[T], arg1: Sequence[T], /) -> T: ...
 
 drjit.(all|any|none)$:
     @overload
-    def \1(value: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, MaskT], axis: Literal[0] = 0) -> RedT:
+    def \1(value: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], axis: Literal[0] = 0) -> RedT:
         \doc
     @overload
     def \1(value: Sequence[T], axis: Literal[0] = 0) -> T: ...
@@ -100,19 +100,19 @@ drjit.(all|any|none)$:
 
 drjit.select$:
     @overload
-    def select(arg0: bool | AnyArray, arg1: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, MaskT], arg2: ValCpT, /) -> SelfT:
+    def select(arg0: bool | AnyArray, arg1: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], arg2: ValCpT, /) -> SelfT:
         \doc
     @overload
-    def select(arg0: bool | AnyArray, arg1: ValCpT, arg2: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, MaskT], /) -> SelfT: ...
+    def select(arg0: bool | AnyArray, arg1: ValCpT, arg2: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], /) -> SelfT: ...
     @overload
     def select(arg0: bool | AnyArray, arg1: T, arg2: T) -> T: ...
 
 drjit.(atan2|minimum|maximum)$:
     @overload
-    def \1(arg0: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, MaskT], arg1: SelfCpT, /) -> SelfT:
+    def \1(arg0: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], arg1: SelfCpT, /) -> SelfT:
         \doc
     @overload
-    def \1(arg0: SelfCpT, arg1: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, MaskT], /) -> SelfT: ...
+    def \1(arg0: SelfCpT, arg1: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], /) -> SelfT: ...
     @overload
     def \1(arg0: T, arg1: T, /) -> T: ...
 
@@ -122,30 +122,29 @@ drjit.(empty|zeros|ones)$:
 
 drjit.(full|opaque)$:
     @overload
-    def \1(dtype: type[ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, MaskT]], value: ValCpT, shape: int | Sequence[int] = 1) -> SelfT:
+    def \1(dtype: type[ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT]], value: ValCpT, shape: int | Sequence[int] = 1) -> SelfT:
         \doc
     @overload
     def \1(dtype: type[T], value: T, shape: int | Sequence[int]) -> T: ...
 
 drjit.(fma|lerp)$:
     @overload
-    def \1(arg0: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, MaskT], arg1: SelfCpT, arg2: SelfCpT, /) -> SelfT:
+    def \1(arg0: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], arg1: SelfCpT, arg2: SelfCpT, /) -> SelfT:
         \doc
     @overload
-    def \1(arg0: SelfCpT, arg1: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, MaskT], arg2: SelfCpT, /) -> SelfT: ...
+    def \1(arg0: SelfCpT, arg1: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], arg2: SelfCpT, /) -> SelfT: ...
     @overload
-    def \1(arg0: SelfCpT, arg1: SelfCpT, arg2: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, MaskT], /) -> SelfT: ...
+    def \1(arg0: SelfCpT, arg1: SelfCpT, arg2: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], /) -> SelfT: ...
     @overload
     def \1(arg0: T, arg1: T, arg2: T) -> T: ...
 
 drjit.reshape$:
-    def reshape(dtype: type[T], value: object, shape: int | Sequence[int], order: str = 'A', shrink: bool = False) -> T:
+    def reshape(dtype: type[T], value: object, shape: int | Sequence[int], order: Literal['A', 'C', 'F'] = 'A', shrink: bool = False) -> T:
         \doc
-
 
 drjit.(isnan|isinf|isfinite)$:
     @overload
-    def \1(arg: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, MaskT], /) -> MaskT:
+    def \1(arg: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], /) -> MaskT:
         \doc
     @overload
     def \1(arg: float, /) -> bool: ...
@@ -157,32 +156,41 @@ drjit.meshgrid$:
 # Typing information for the clip function below
 drjit.clip$:
     @overload
-    def clip(value: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, MaskT], min: SelfCpT, max: SelfCpT) -> SelfT:
+    def clip(value: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], min: SelfCpT, max: SelfCpT) -> SelfT:
         \doc
     @overload
-    def clip(value: SelfCpT, min: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, MaskT], max: SelfCpT) -> SelfT: ...
+    def clip(value: SelfCpT, min: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], max: SelfCpT) -> SelfT: ...
     @overload
-    def clip(value: SelfCpT, min: SelfCpT, max: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, MaskT]) -> SelfT: ...
+    def clip(value: SelfCpT, min: SelfCpT, max: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT]) -> SelfT: ...
     @overload
     def clip(value: T, min: T, max: T) -> T: ...
 
 drjit.mask_t$:
     @overload
-    def mask_t(arg: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, MaskT], /) -> type[MaskT]:
+    def mask_t(arg: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], /) -> type[MaskT]:
         \doc
     @overload
-    def mask_t(arg: type[ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, MaskT]], /) -> type[MaskT]: ...
+    def mask_t(arg: type[ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT]], /) -> type[MaskT]: ...
     @overload
     def mask_t(arg: object, /) -> bool: ...
 
 drjit.value_t$:
     @overload
-    def value_t(arg: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, valueT], /) -> type[ValT]:
+    def value_t(arg: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], /) -> type[ValT]:
         \doc
     @overload
-    def value_t(arg: type[ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, valueT]], /) -> type[ValT]: ...
+    def value_t(arg: type[ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT]], /) -> type[ValT]: ...
     @overload
     def value_t(arg: object, /) -> type: ...
+
+drjit.array_t$:
+    @overload
+    def array_t(arg: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], /) -> type[PlainT]:
+        \doc
+    @overload
+    def array_t(arg: type[ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT]], /) -> type[PlainT]: ...
+    @overload
+    def array_t(arg: object, /) -> type: ...
 
 drjit.uint32_array_t$:
     @overload

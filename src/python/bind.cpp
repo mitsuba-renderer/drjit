@@ -125,6 +125,22 @@ nb::object bind(const ArrayBinding &b) {
     else
         red_t_o = val_t_o;
 
+    // - ``PlainT``: plain array type for special types like matrices
+    nb::object plain_t_o;
+    bool is_special = b.is_tensor || b.is_complex || b.is_quaternion || b.is_matrix;
+    if (!is_special) {
+        plain_t_o = name_o;
+    } else {
+        ArrayMeta m2 = b;
+        if (m2.is_tensor) {
+            m2.shape[0] = DRJIT_DYNAMIC;
+            m2.ndim = 1;
+        }
+        m2.is_vector = m2.is_complex = m2.is_quaternion = m2.is_matrix =
+            m2.is_tensor = false;
+        plain_t_o = nb::borrow(meta_get_type(m2));
+    }
+
     // - ``MaskT``: type produced by comparisons such as ``__eq__``";
     nb::object mask_t_o;
     if (vt == VarType::Bool) {
@@ -185,10 +201,10 @@ nb::object bind(const ArrayBinding &b) {
         // Parameterize the generic base class if supported by Python
         if (b.is_tensor)
             base_o = base_o[nb::make_tuple(
-                name_o, self_cp_t_o, name_o, self_cp_t_o, name_o, mask_t_o)];
+                name_o, self_cp_t_o, name_o, self_cp_t_o, name_o, plain_t_o, mask_t_o)];
         else
             base_o = base_o[nb::make_tuple(
-                name_o, self_cp_t_o, val_t_o, val_cp_t_o, red_t_o, mask_t_o)];
+                name_o, self_cp_t_o, val_t_o, val_cp_t_o, red_t_o, plain_t_o, mask_t_o)];
     #endif
 
     d.base_py = (PyTypeObject *) base_o.ptr();
@@ -234,29 +250,18 @@ nb::object bind(const ArrayBinding &b) {
 
     nb::detail::implicitly_convertible(pred, b.array_type);
 
-    // Cache a reference to the associated array type (for special types like matrices)
-    nb::handle array_type_o;
-    if (!s.is_tensor && !s.is_complex && !s.is_quaternion && !s.is_matrix) {
-        array_type_o = tp;
-    } else {
-        ArrayMeta m2 = s;
-        if (m2.is_tensor) {
-            m2.shape[0] = DRJIT_DYNAMIC;
-            m2.ndim = 1;
-        }
-        m2.is_vector = m2.is_complex = m2.is_quaternion = m2.is_matrix =
-            m2.is_tensor = false;
-        array_type_o = meta_get_type(m2);
-
-        if (s.is_tensor) {
-            m2.type = (uint32_t) VarType::UInt32;
-            s.tensor_index = meta_get_type(m2).ptr();
-        }
-    }
-
     s.value = val_t_o.ptr();
-    s.array = array_type_o.ptr();
+    s.array = is_special ? plain_t_o.ptr() : tp.ptr();
     s.mask = vt == VarType::Bool ? tp.ptr() : mask_t_o.ptr();
+
+    if (s.is_tensor) {
+        ArrayMeta m2 = s;
+        m2.type = (uint32_t) VarType::UInt32;
+        m2.shape[0] = DRJIT_DYNAMIC;
+        m2.ndim = 1;
+        m2.is_tensor = false;
+        s.tensor_index = meta_get_type(m2).ptr();
+    }
 
     return tp;
 }

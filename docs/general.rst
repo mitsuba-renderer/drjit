@@ -638,6 +638,9 @@ parameters are:
   ``self[0] | other`` produce a result of type ``ValT``.
 - ``RedT``: type following reduction by :py:func:`drjit.sum` or
   :py:func:`drjit.all`.
+- ``PlainT``: the plain type underlying a special array (e.g.
+  ``dr.scalar.Complex2f -> dr.scalar.Array2f``, ``dr.llvm.TensorXi ->
+  dr.llvm.Int``).
 - ``MaskT``: type produced by comparisons such as ``__eq__``.
 
 For example, here is the declaration of ``llvm.ad.Array2f`` shipped as part of
@@ -657,7 +660,8 @@ resolve at a later point. So here, we have
 - ``SelfCp``: a forward reference to ``drjit.llvm.ad._Array2fCp`` (more on this shortly),
 - ``ValT``: :py:class:`drjit.llvm.ad.Float`,
 - ``ValCpT``: a forward reference to ``drjit.llvm.ad._FloatCp`` (more on this shortly),
-- ``RedT``: :py:class`drjit.llvm.ad.Float`, and
+- ``RedT``: :py:class`drjit.llvm.ad.Float`,
+- ``PlainT``: :py:class:`drjit.llvm.ad.Array2f`, and
 - ``MaskT``: :py:class:`drjit.llvm.ad.Array2b`.
 
 The mysterious-looking underscored forward references can be found at the
@@ -666,7 +670,7 @@ bottom of the same stub, for example:
 .. code-block:: python
 
    _Array2fCp: TypeAlias = Union['Array2f', '_FloatCp', 'drjit.llvm._Array2fCp',
-                                 'drjit.scalar._Array2fCp', '_Array2f16Cp']
+                                 'drjit.scalar._Array2fCp', 'Array2f', '_Array2f16Cp']
 
 This alias creates a union of types that are *compatible* (as implied by the
 ``"Cp"`` suffix) with the type ``Array2f``, for example when encountered in an
@@ -688,9 +692,9 @@ that of :py:func:`drjit.maximum`:
 .. code-block:: python
 
    @overload
-   def maximum(a: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, MaskT], b: SelfCpT, /) -> SelfT: ...
+   def maximum(a: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], b: SelfCpT, /) -> SelfT: ...
    @overload
-   def maximum(a: SelfCpT, b: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, MaskT], /) -> SelfT: ...
+   def maximum(a: SelfCpT, b: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], /) -> SelfT: ...
    @overload
    def maximum(a: T, b: T, /) -> T: ...
 

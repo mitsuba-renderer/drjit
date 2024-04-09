@@ -247,5 +247,5 @@ void export_switch(nb::module_& m) {
           nb::sig("def switch(index: int | AnyArray, targets: typing.Sequence[typing.Callable[[*Ts], T]], *args: *Ts) -> T"))
      .def("dispatch", &dispatch_impl, doc_dispatch, "inst"_a,
           "target"_a, "args"_a, "kwargs"_a,
-          nb::sig("def dispatch(inst: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, MaskT], target: typing.Callable[[ValT, *Ts], T], *args: *Ts) -> T"));
+          nb::sig("def dispatch(inst: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], target: typing.Callable[[ValT, *Ts], T], *args: *Ts) -> T"));
 }
