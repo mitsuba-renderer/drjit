@@ -930,7 +930,7 @@ void export_base(nb::module_ &m) {
     for (const char *name :
          { "T", "SelfT", "SelfCpT", "ValT", "ValCpT", "RedT", "MaskT", "SelfT2",
            "ValT2", "RedT2", "MaskT2", "ValCpT2", "CpT2" })
-        m.attr(name) = nb::type_var(name);
+        m.attr(name) = nb::type_var(name, "covariant"_a = strcmp(name, "T") == 0);
 
     #if PY_VERSION_HEX >= 0x030B0000 // TypeVarTuple was introduced in v3.11
         m.attr("Ts") = nb::type_var_tuple("Ts");

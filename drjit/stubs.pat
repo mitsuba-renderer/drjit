@@ -198,6 +198,17 @@ drjit.int32_array_t$:
     @overload
     def int32_array_t(arg: object) -> int: ...
 
+
+drjit.custom$:
+    \from typing import ParamSpec, Protocol
+    P = ParamSpec("P")
+
+    class CustomOpT(Protocol[P, T]):
+        def eval(self, *args: P.args, **kwargs: P.kwargs) -> T:...
+
+    def custom(arg0: type[CustomOpT[P, T]], /, *args: P.args, **kwargs: P.kwargs) -> T:
+        \doc
+
 # -------------- drjit.syntax, interop, detail ----------------
 
 # Clean the drjit.interop stub
