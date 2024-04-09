@@ -154,17 +154,21 @@ ArrayMeta meta_get(nb::handle h) noexcept {
     } else if (tp.is(&PyLong_Type)) {
         int overflow = 0;
         long long result = PyLong_AsLongLongAndOverflow(h.ptr(), &overflow);
+        VarType vt;
 
-        if (result == -1) {
-            if (overflow) {
-                PyErr_Clear();
+        if (overflow) {
+            vt = overflow > 0 ? VarType::UInt64 : VarType::Int64;
+        } else if (result < 0) {
+            vt = result < INT_MIN ? VarType::Int64 : VarType::Int32;
+
+            if (result == -1 and PyErr_Occurred()) {
                 m.is_valid = false;
-            } else {
-                m.type = (uint16_t) (overflow > 0 ? VarType::UInt64 : VarType::Int64);
+                PyErr_Clear();
             }
         } else {
-            m.type = (uint16_t) (result > INT_MAX ? VarType::UInt32 : VarType::Int32);
+            vt = result > INT_MAX ? VarType::Int64 : VarType::Int32;
         }
+        m.type = (uint8_t) vt;
     } else if (tp.is(&PyFloat_Type)) {
         m.type = (uint8_t) VarType::Float32;
     } else if (tp.is(&PyTuple_Type) || tp.is(&PyList_Type)) {
@@ -247,7 +251,7 @@ ArrayMeta meta_get(nb::handle h) noexcept {
             }
 
             size_t ndim = array.ndim();
-            if (ndim >= 1 && ndim <= 4 && 
+            if (ndim >= 1 && ndim <= 4 &&
                 (vt != VarType::Void || code == dtype_code::Complex)) {
                 for (size_t i = 0; i < ndim; ++i) {
                     size_t value = array.shape(i);
