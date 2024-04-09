@@ -1040,7 +1040,8 @@ void export_memop(nb::module_ &m) {
           [](const nb::type_object_t<ArrayBase> &dtype,
              nb::handle_t<ArrayBase> array,
              char order) { return unravel(dtype, array, order); },
-          "dtype"_a, "array"_a, "order"_a = 'A', doc_unravel)
+          "dtype"_a, "array"_a, "order"_a = 'A', doc_unravel,
+          nb::sig("def unravel(dtype: type[ArrayT], array: AnyArray, order: Literal['A', 'C', 'F'] = 'A') -> ArrayT"))
      .def("slice", &slice, "value"_a, "index"_a, doc_slice)
      .def("reshape", &reshape, "dtype"_a, "value"_a,
           "shape"_a, "order"_a = 'A', "shrink"_a = false, doc_reshape)
