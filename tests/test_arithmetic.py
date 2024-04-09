@@ -347,3 +347,10 @@ def test20_rcp_inf(t):
     assert dr.all(~dr.isnan(y))
     assert y[0] > 0
     assert y[1] < 0
+
+@pytest.test_arrays('bool, shape=(2, *)', 'bool, shape=(2)')
+def test21_int_promote(t):
+    from drjit.scalar import Array2b
+    Array2i = dr.int32_array_t(Array2b)
+    assert type(dr.select(Array2b(True, False), 1, 2)) is Array2i
+    assert type(dr.select(Array2b(True, False), -1, 1)) is Array2i
