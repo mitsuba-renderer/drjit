@@ -175,6 +175,15 @@ drjit.mask_t$:
     @overload
     def mask_t(arg: object, /) -> bool: ...
 
+drjit.value_t$:
+    @overload
+    def value_t(arg: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, valueT], /) -> type[ValT]:
+        \doc
+    @overload
+    def value_t(arg: type[ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, valueT]], /) -> type[ValT]: ...
+    @overload
+    def value_t(arg: object, /) -> type: ...
+
 
 # -------------- drjit.syntax, interop, detail ----------------
 
