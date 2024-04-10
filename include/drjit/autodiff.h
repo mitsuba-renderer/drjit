@@ -627,12 +627,12 @@ struct DRJIT_TRIVIAL_ABI DiffArray
 
     void clear_grad_() {
         if constexpr (IsFloat)
-            ad_clear_grad(index_ad());
+            ad_clear_grad(index_combined());
     }
 
     void accum_grad_(uint32_t index) {
         if constexpr (IsFloat)
-            ad_accum_grad(index_ad(), index);
+            ad_accum_grad(index_combined(), index);
     }
 
     DiffArray copy() const {
