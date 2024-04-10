@@ -303,7 +303,7 @@ NB_MODULE(_drjit_ext, m_) {
     nb::module_ auto_ = m.def_submodule("auto"),
                 auto_ad = auto_.def_submodule("ad");
 
-    auto_.def("__getattr__", [=](nb::handle key) -> nb::handle {
+    auto_.def("__getattr__", [=](nb::handle key) -> nb::object {
         if (jit_has_backend(JitBackend::CUDA))
             set_backend(JitBackend::CUDA);
         else if (jit_has_backend(JitBackend::LLVM))
@@ -311,10 +311,10 @@ NB_MODULE(_drjit_ext, m_) {
         else
             set_backend(JitBackend::None);
         nb::object mod = nb::module_::import_("drjit.auto");
-        return PyObject_GetAttr(mod.ptr(), key.ptr());
+        return nb::steal(PyObject_GetAttr(mod.ptr(), key.ptr()));
     });
 
-    auto_ad.def("__getattr__", [=](nb::handle key) -> nb::handle {
+    auto_ad.def("__getattr__", [=](nb::handle key) -> nb::object {
         if (jit_has_backend(JitBackend::CUDA))
             set_backend(JitBackend::CUDA);
         else if (jit_has_backend(JitBackend::LLVM))
@@ -322,6 +322,6 @@ NB_MODULE(_drjit_ext, m_) {
         else
             set_backend(JitBackend::None);
         nb::object mod = nb::module_::import_("drjit.auto.ad");
-        return PyObject_GetAttr(mod.ptr(), key.ptr());
+        return nb::steal(PyObject_GetAttr(mod.ptr(), key.ptr()));
     });
 }
