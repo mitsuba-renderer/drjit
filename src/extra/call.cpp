@@ -386,6 +386,8 @@ static void ad_call_reduce(JitBackend backend, const char *domain,
     }
 
     index = JitVar::steal(jit_var_and(index_, mask_combined.index()));
+    if (index.size() == 1)
+        index.resize(size);
 
     jit_var_schedule(index.index());
     index64_vector args;
