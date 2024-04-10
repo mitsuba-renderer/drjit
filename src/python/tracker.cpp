@@ -565,11 +565,12 @@ void VariableTracker::verify_size(size_t size) {
         const Variable &v = kv.second;
 
         // Check if the variable was unchanged by the loop
-        if (v.index == v.index_orig ||
-            strcmp(jit_var_kind_name(v.index), "loop_phi") == 0)
+        if ((uint32_t) v.index == (uint32_t) v.index_orig ||
+            strcmp(jit_var_kind_name((uint32_t) v.index), "loop_phi") == 0)
             continue;
 
         size_t size_2 = jit_var_size(v.index);
+
         if (size != size_2 && size != 1 && size_2 != 1 && !jit_var_is_dirty(v.index))
             nb::raise("this operation processes arrays of size %zu, while "
                       "state variable '%s' has an incompatible size %zu",
