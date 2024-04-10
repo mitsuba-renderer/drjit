@@ -582,7 +582,7 @@ struct DRJIT_TRIVIAL_ABI JitArray
         m_index = index;
     }
 
-	void resize(size_t size) {
+    void resize(size_t size) {
         Index index = jit_var_resize(m_index, size);
         jit_var_dec_ref(m_index);
         m_index = index;
@@ -600,11 +600,11 @@ struct DRJIT_TRIVIAL_ABI JitArray
         Index index = jit_var_set_label(m_index, sizeof...(Ts), args...);
         jit_var_dec_ref(m_index);
         m_index = index;
-	}
+    }
 
-	const char *label_() const {
-		return jit_var_label(m_index);
-	}
+    const char *label_() const {
+        return jit_var_label(m_index);
+    }
 
     const CallSupport operator->() const {
         return CallSupport(*this);

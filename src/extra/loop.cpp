@@ -478,20 +478,24 @@ public:
 
         m_state.reserve(state.size() + m_diff_count);
         m_state2.reserve(state.size());
+        m_reset = true;
     }
 
     ~LoopOp() {
         for (const Input &i : m_inputs)
             jit_var_dec_ref(i.index);
+
         if (m_delete_cb)
             m_delete_cb(m_payload);
     }
 
     void disable_deleter() { m_delete_cb = nullptr; }
 
-    void add_output(uint64_t index) {
-        if (add_index(m_backend, index >> 32, false))
+    void add_output(uint64_t index, size_t offset) {
+        if (add_index(m_backend, index >> 32, false)) {
             m_rv.push_back_borrow((index >> 32) << 32);
+            m_rv_offset.push_back((uint32_t) offset);
+        }
     }
 
     void read(dr::vector<uint64_t> &indices) {
@@ -499,7 +503,7 @@ public:
             indices.push_back(ad_var_inc_ref(index));
     }
 
-    void write(const dr::vector<uint64_t> &indices) {
+    void write(const dr::vector<uint64_t> &indices, bool reset) {
         if (indices.size() != m_state.size())
             jit_fail("LoopOp::write(): internal error!");
 
@@ -508,6 +512,8 @@ public:
             m_state[i] = ad_var_inc_ref(indices[i]);
             ad_var_dec_ref(old_index);
         }
+
+        m_reset = reset;
     }
 
     // ---------------------------------------
@@ -527,7 +533,8 @@ public:
         for (size_t i = 0; i < m_inputs.size(); ++i)
             m_state2.push_back_borrow(m_state[i]);
 
-        m_write_cb(m_payload, m_state2, false);
+        m_write_cb(m_payload, m_state2, m_reset);
+        m_reset = false;
         m_state2.release();
         return m_cond_cb(m_payload);
     }
@@ -545,7 +552,8 @@ public:
         }
 
         // Run the loop body
-        m_write_cb(m_payload, m_state2, false);
+        m_write_cb(m_payload, m_state2, true);
+        m_reset = false;
         m_body_cb(m_payload);
 
         // AD forward propagation pass
@@ -597,20 +605,20 @@ public:
             m_state.push_back_steal(grad);
         }
 
-        if (ctr != m_input_indices.size() ||
-            m_state.size() - m_inputs.size() != m_output_indices.size())
+        if (ctr != m_input_indices.size())
             jit_fail("LoopOp::forward(): internal error!");
 
         ad_loop(
             m_backend, 1, 0, fwd_name.c_str(), this,
             [](void *p, dr::vector<uint64_t> &i) { ((LoopOp *) p)->read(i); },
-            [](void *p, const dr::vector<uint64_t> &i, bool) { ((LoopOp *) p)->write(i); },
+            [](void *p, const dr::vector<uint64_t> &i, bool reset) { ((LoopOp *) p)->write(i, reset); },
             [](void *p) { return ((LoopOp *) p)->fwd_cond(); },
             [](void *p) { return ((LoopOp *) p)->fwd_body(); }, nullptr, false);
 
-        for (size_t i = 0; i < m_output_indices.size(); ++i)
+        for (size_t i = 0; i < m_output_indices.size(); ++i) {
             ad_accum_grad(combine(m_output_indices[i]),
-                          (uint32_t) m_state[m_inputs.size() + i]);
+                          (uint32_t) m_state[m_inputs.size() + m_inputs[m_rv_offset[i]].grad_offset]);
+        }
 
         m_state.release();
     }
@@ -644,7 +652,9 @@ private:
     /// Scratch array to call nested loop body/condition
     index64_vector m_state2;
     index64_vector m_rv;
+    dr::vector<uint32_t> m_rv_offset;
     size_t m_diff_count;
+    bool m_reset;
 };
 
 bool ad_loop(JitBackend backend, int symbolic, int compress, const char *name,
@@ -707,7 +717,7 @@ bool ad_loop(JitBackend backend, int symbolic, int compress, const char *name,
                     uint64_t index = ad_var_new((uint32_t) indices_out[i]);
                     jit_var_dec_ref((uint32_t) indices_out[i]);
                     indices_out[i] = index;
-                    op->add_output(index);
+                    op->add_output(index, i);
                 }
             }
 
