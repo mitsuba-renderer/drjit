@@ -168,6 +168,9 @@ template <typename T> using traversable_t = detail::traversable<std::decay_t<T>>
 template <typename T> static constexpr bool is_traversable_v = traversable_t<T>::value;
 template <typename T> using enable_if_traversable_t = enable_if_t<is_traversable_v<T>>;
 
+template <typename T> static constexpr bool is_dynamic_traversable_v = 
+    is_jit_v<T> && is_dynamic_array_v<T> && is_vector_v<T> && !is_tensor_v<T>;
+
 template <typename T> DRJIT_INLINE auto fields(T &&v) {
     return traversable_t<T>::fields(v);
 }
@@ -185,6 +188,12 @@ void traverse_1_fn_ro(const Value &value, void *payload, void (*fn)(void *, uint
         traverse_1(fields(value), [payload, fn](auto &x) {
             traverse_1_fn_ro(x, payload, fn);
         });
+    } else if constexpr (is_dynamic_traversable_v<Value>) {
+        for (size_t i = 0; i < value.size(); ++i) {
+            traverse_1(drjit::tie(value.entry(i)), [payload, fn](auto &x) {
+                traverse_1_fn_ro(x, payload, fn);
+            });
+        }
     } else if constexpr (std::is_pointer_v<Value> &&
                          is_detected_v<detail::det_traverse_1_cb_ro, Value>) {
         if (value)
@@ -201,6 +210,12 @@ void traverse_1_fn_rw(Value &value, void *payload, uint64_t (*fn)(void *, uint64
         traverse_1(fields(value), [payload, fn](auto &x) {
             traverse_1_fn_rw(x, payload, fn);
         });
+    } else if constexpr (is_dynamic_traversable_v<Value>) {
+        for (size_t i = 0; i < value.size(); ++i) {
+            traverse_1(drjit::tie(value.entry(i)), [payload, fn](auto &x) {
+                traverse_1_fn_rw(x, payload, fn);
+            });
+        }
     } else if constexpr (std::is_pointer_v<Value> &&
                          is_detected_v<detail::det_traverse_1_cb_rw, Value>) {
         if (value)
