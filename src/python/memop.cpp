@@ -1050,11 +1050,13 @@ void export_memop(nb::module_ &m) {
      .def("tile",
           [](nb::handle h, size_t count) {
               return repeat_or_tile(h, count, true);
-          }, "value"_a, "count"_a, doc_tile)
+          }, "value"_a, "count"_a, doc_tile,
+          nb::sig("def tile(value: T, count: int) -> T"))
      .def("repeat",
           [](nb::handle h, size_t count) {
               return repeat_or_tile(h, count, false);
-          }, "value"_a, "count"_a, doc_repeat)
+          }, "value"_a, "count"_a, doc_repeat,
+          nb::sig("def repeat(value: T, count: int) -> T"))
      .def("block_sum", &block_sum, "value"_a, "block_size"_a,
           "mode"_a = nb::none(), doc_block_sum,
           nb::sig("def block_sum(value: ArrayT, block_size: int, mode: Literal['symbolic', 'evaluated', None] = None) -> ArrayT"));

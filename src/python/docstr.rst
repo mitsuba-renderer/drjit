@@ -6874,6 +6874,7 @@
     This function replicates the input ``count`` times along the trailing dynamic
     dimension. It recursively threads through nested arrays and :ref:`PyTree
     <pytrees>`. Static arrays and tensors currently aren't supported.
+    When ``count==1``, the function returns the input without changes.
 
     An example is shown below:
 
@@ -6900,6 +6901,7 @@
     This function replicates the input ``count`` times along the trailing dynamic
     dimension. It recursively threads through nested arrays and :ref:`PyTree
     <pytrees>`. Static arrays and tensors currently aren't supported.
+    When ``count==1``, the function returns the input without changes.
 
     An example is shown below:
 

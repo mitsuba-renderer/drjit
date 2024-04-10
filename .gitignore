@@ -71,6 +71,7 @@ drjit/config.py
 *\.pyi
 /drjit/llvm
 /drjit/cuda
+/drjit/auto
 
 # Documentation
 /html
