@@ -59,7 +59,10 @@ void set_label(nb::handle h, nb::str label) {
         const ArraySupplement &s = supp(tp);
         if ((JitBackend) s.backend == JitBackend::None)
             return;
-        if (s.ndim == 1) {
+        if (s.is_tensor) {
+            set_label(nb::steal(s.tensor_array(h.ptr())), label);
+            return;
+        } else if (s.ndim == 1) {
             uint64_t new_index =
                 ad_var_set_label(s.index(inst_ptr(h)), 1, label.c_str());
             nb::object tmp = nb::inst_alloc(tp);
@@ -70,6 +73,7 @@ void set_label(nb::handle h, nb::str label) {
             nb::inst_replace_move(h, tmp);
             return;
         }
+
     }
 
     if (is_drjit || tp.is(&PyList_Type) || tp.is(&PyTuple_Type)) {
