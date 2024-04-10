@@ -711,3 +711,38 @@ def test23_rev_correctness(t, symbolic, variant):
         xd, yd = dr.backward_to(xi, yi)
         assert dr.all(xd==[99, 99, 101, 101])
         assert dr.all(yd==[102, 102, 103, 103])
+
+@pytest.mark.parametrize("symbolic", [False, True])
+@pytest.mark.parametrize("with_evaluated_loop", [False, True])
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+def test12_constant_broadcast(t, symbolic, with_evaluated_loop):
+    # When the dispatch index is scalar, the return value should broadcast
+    # to the size of the arguments even when they are not used.
+
+    pkg = get_pkg(t)
+    A, BasePtr = pkg.A, pkg.BasePtr
+    a = A()
+    a.value = t(123)
+
+    arg = t(1, 2, 8, 3, 4)
+    c = BasePtr(a)
+
+    def cond(out, counter):
+        # One iteration
+        return counter == 0
+
+    def body(out, counter):
+        with dr.scoped_set_flag(dr.JitFlag.SymbolicCalls, symbolic):
+            out += c.g(arg)
+        counter += 1
+        return out, counter
+
+    out = t(0)
+    counter = dr.uint32_array_t(t)(0)
+    if with_evaluated_loop:
+        with dr.scoped_set_flag(dr.JitFlag.SymbolicLoops, False):
+            out, _ = dr.while_loop((out, counter), cond, body)
+    else:
+        out += c.g(arg)
+
+    assert dr.all(out == t(123, 123, 123, 123, 123))
