@@ -162,8 +162,8 @@ static void ad_call_getter(JitBackend backend, const char *domain,
         }
 
         if (is_literal) {
-            jit_var_inc_ref(rv3[i]);
-            rv[i] = rv3[i];
+            jit_var_inc_ref(first);
+            rv[i] = first;
             continue;
         }
 

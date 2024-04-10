@@ -337,6 +337,26 @@ def test09_constant_getter(t, drjit_verbose, capsys):
 
 
 @pytest.test_arrays('float32,is_diff,shape=(*)')
+def test10_constant_getter_partial_registry(t, drjit_verbose, capsys):
+    pkg = get_pkg(t)
+
+    A, B, BasePtr = pkg.A, pkg.B, pkg.BasePtr
+    a = A()
+    b = B()
+
+    del a
+    gc.collect()
+    gc.collect()
+
+    c = BasePtr(b, b, b, b, b)
+    d = c.constant_getter()
+    transcript = capsys.readouterr().out
+    assert d[0] == 123
+    assert transcript.count('ad_call_getter') == 1
+    assert transcript.count('jit_var_gather') == 0
+
+
+@pytest.test_arrays('float32,is_diff,shape=(*)')
 def test11_getter_ad(t):
     pkg = get_pkg(t)
 
