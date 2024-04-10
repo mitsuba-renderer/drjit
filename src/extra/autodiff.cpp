@@ -1527,11 +1527,15 @@ void ad_traverse(dr::ADMode mode, uint32_t flags) {
 
             ad_log("ad_traverse(): processing edge a%u -> a%u ..", v0i, v1i);
 
-            if (unlikely(v0->flags & (uint8_t) VariableFlags::CustomLabel)) {
-                char tmp[256];
-                snprintf(tmp, 256, "%s [grad]", v0->label);
+            // Only propagate the label to the gradient if this doesn't require
+            // a copy of the variable to be made. (This can interfere with
+            // some of the symbolic operations)
+            if (unlikely(v0->flags & (uint8_t) VariableFlags::CustomLabel) &&
+                jit_var_ref(v0->grad.index()) == 1) {
+                dr::string tmp;
+                tmp.put(v0->label, " [grad]");
                 if (v0->grad.valid())
-                    dr::set_label(v0->grad, tmp);
+                    dr::set_label(v0->grad, tmp.c_str());
             }
 
             if (unlikely(edge.special)) {
