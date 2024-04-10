@@ -139,7 +139,15 @@ struct DynamicArray
     static DynamicArray load_(const void *ptr, size_t size) {
         DynamicArray result;
         result.init_(size);
-        memcpy(result.m_data, ptr, sizeof(Value) * size);
+
+        if constexpr (drjit::detail::is_scalar_v<Value>) {
+            memcpy(result.m_data, ptr, sizeof(Value) * size);
+        } else {
+            for (size_t i = 0; i < size; ++i)
+                result.entry(i) =
+                    load<Value>(static_cast<const Value *>(ptr) + i);
+        }
+
         return result;
     }
 
