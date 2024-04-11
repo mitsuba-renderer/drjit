@@ -3584,8 +3584,9 @@
     refer to the documentation of :py:func:`drjit.enqueue()` and the meaning of
     the ``flags`` parameter.
 
-    The implementation raises an exception when the provided array does not support
-    gradient tracking, or when gradient tracking was not previously enabled via
+    When :py:attr:`drjit.JitFlag.SymbolicCalls` is set, the implementation
+    raises an exception when the provided array does not support gradient
+    tracking, or when gradient tracking was not previously enabled via
     :py:func:`drjit.enable_grad()`, as this generally indicates the presence of
     a bug. Specify the :py:attr:`drjit.ADFlag.AllowNoGrad` flag (e.g. by
     passing ``flags=dr.ADFlag.Default | dr.ADFlag.AllowNoGrad``) to the function.
@@ -3625,8 +3626,9 @@
     refer to the documentation of :py:func:`drjit.enqueue()` and the meaning of
     the ``flags`` parameter.
 
-    The implementation raises an exception when the provided array does not support
-    gradient tracking, or when gradient tracking was not previously enabled via
+    When :py:attr:`drjit.JitFlag.SymbolicCalls` is set, the implementation
+    raises an exception when the provided array does not support gradient
+    tracking, or when gradient tracking was not previously enabled via
     :py:func:`drjit.enable_grad()`, as this generally indicates the presence of
     a bug. Specify the :py:attr:`drjit.ADFlag.AllowNoGrad` flag (e.g. by
     passing ``flags=dr.ADFlag.Default | dr.ADFlag.AllowNoGrad``) to the function.
@@ -3682,8 +3684,9 @@
     refer to the documentation of :py:func:`drjit.enqueue()` and the meaning of
     the ``flags`` parameter.
 
-    The implementation raises an exception when the provided array does not support
-    gradient tracking, or when gradient tracking was not previously enabled via
+    When :py:attr:`drjit.JitFlag.SymbolicCalls` is set, the implementation
+    raises an exception when the provided array does not support gradient
+    tracking, or when gradient tracking was not previously enabled via
     :py:func:`drjit.enable_grad()`, as this generally indicates the presence of
     a bug. Specify the :py:attr:`drjit.ADFlag.AllowNoGrad` flag (e.g. by
     passing ``flags=dr.ADFlag.Default | dr.ADFlag.AllowNoGrad``) to the function.
@@ -3723,8 +3726,9 @@
     refer to the documentation of :py:func:`drjit.enqueue()` and the meaning of
     the ``flags`` parameter.
 
-    The implementation raises an exception when the provided array does not support
-    gradient tracking, or when gradient tracking was not previously enabled via
+    When :py:attr:`drjit.JitFlag.SymbolicCalls` is set, the implementation
+    raises an exception when the provided array does not support gradient
+    tracking, or when gradient tracking was not previously enabled via
     :py:func:`drjit.enable_grad()`, as this generally indicates the presence of
     a bug. Specify the :py:attr:`drjit.ADFlag.AllowNoGrad` flag (e.g. by
     passing ``flags=dr.ADFlag.Default | dr.ADFlag.AllowNoGrad``) to the function.

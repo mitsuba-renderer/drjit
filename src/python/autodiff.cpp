@@ -265,7 +265,9 @@ static void enqueue_impl(dr::ADMode mode_, nb::handle h_) {
 
 static bool check_grad_enabled(const char *name, nb::handle h, uint32_t flags) {
     bool rv = grad_enabled(h);
-    if (!rv & !(flags & (uint32_t) dr::ADFlag::AllowNoGrad))
+    if (!rv &
+        !(flags & (uint32_t) dr::ADFlag::AllowNoGrad) &
+        jit_flag(JitFlag::SymbolicCalls)) {
         nb::raise(
             "%s(): the argument does not depend on the input variable(s) being "
             "differentiated. Raising an exception since this is usually "
@@ -274,6 +276,7 @@ static bool check_grad_enabled(const char *name, nb::handle h, uint32_t flags) {
             "drjit.ADFlag.AllowNoGrad flag to the function (e.g., by "
             "specifying flags=dr.ADFlag.Default | dr.ADFlag.AllowNoGrad).",
             name);
+    }
     return rv;
 }
 
