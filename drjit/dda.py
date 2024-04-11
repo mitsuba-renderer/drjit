@@ -34,7 +34,9 @@ def dda(
 
        from drjit.scalar import Array3f, Array3i, Float, Bool
 
-       def dda_fun(state: list, index: Array3i, pt_in: Array3f, pt_out: Array3f) -> tuple[list, Bool]:
+       def dda_fun(state: list, index: Array3i,
+                   pt_in: Array3f, pt_out: Array3f) -> tuple[list, bool]:
+           # Entered a grid cell, stash it in the 'state' variable
            state.append(Array3f(index))
            return state, Bool(True)
 
@@ -338,10 +340,10 @@ def integrate(
     """
     Compute an analytic definite integral of a bi- or trilinear interpolant.
 
-    This function uses DDA (:py:func:`drjit.dda.dda()``) to step along the
-    voxels of a 2D/3D volume traversed by a a finite segment or an or
-    infinite-length ray. It analytically computes and accumulates the definite
-    integral of the interpolant in each voxel.
+    This function uses DDA (:py:func:`drjit.dda.dda()`) to step along the
+    voxels of a 2D/3D volume traversed by a finite segment or a infinite-length
+    ray. It analytically computes and accumulates the definite integral of the
+    interpolant in each voxel.
 
     The input 2D/3D volume is provided using a tensor ``vol`` (e.g., of type
     :py:class:`drjit.cuda.ad.TensorXf`) with an implicitly specified grid
