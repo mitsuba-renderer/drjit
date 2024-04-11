@@ -18,7 +18,7 @@ Here is what's new:
 
 - **Python bindings**: Dr.Jit comes with an all-new set of Python bindings
   created using the `nanobind <https://github.com/wjakob/nanobind>`__ library.
-  This has two main consequences:
+  This has several consequences:
 
   - Tracing Dr.Jit code written in Python is now *significantly* faster (we've
     observed speedups by a factor of ~10-20×). This should help in situations
@@ -28,6 +28,9 @@ Here is what's new:
     <https://docs.python.org/3/c-api/stable.html#stable-abi>`__. This means
     that binary wheels will work on future versions of Python without
     recompilation.
+
+  - thorough type annotations enable static type checking and better code
+    completion in editors like `VS Code <https://code.visualstudio.com>`__.
 
 - **Natural syntax**: vectorized loops and conditionals can now be expressed
   using natural Python syntax. To see what this means, consider the following
@@ -142,6 +145,12 @@ Here is what's new:
   brings a roughly 20-40% speedup on the CUDA backend. See the documentation
   section on :ref:`atomic reductions <reduce-local>` for details and
   benchmarks with plots.
+
+- **DDA**: a newly added *digital differential analyzer*
+  (:py:func:`drjit.dda.dda`) can be used to traverse the intersection of a ray
+  segment and an n-dimensional grid. The function :py:func`drjit.dda.integrate`
+  builds on this functionality to compute analytic differentiable line
+  integrals of bi- and trilinear interpolants.
 
 - **Loop compression**: the implementation of evaluated loops (previously
   referred to as wavefront mode) visits all entries of the loop state variables
