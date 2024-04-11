@@ -14,12 +14,12 @@ Differentiating loops
 (Most of this section still needs to be written)
 
 
-Reverse-mode derivative of "sum" loops
---------------------------------------
+Backward derivative of simple loops
+-----------------------------------
 
 Dr.Jit also provides a specialized reverse-mode differentiation strategy for
 certain types of loops that is more efficient and avoids severe storage
-overheads. It can be used to handle simple "sum"-style loops such as
+overheads. It can be used to handle simple summation loops such as
 
 .. code-block:: python
 
@@ -75,8 +75,8 @@ These three sets *may not overlap*. In the above example,
 
 1. ``i`` does not carry derivatives.
 2. ``x`` is a differentiable input
-3. ``y`` is a differentiable output computed from variables
-   in categories 1/2 via accumulation (i.e., ``y += f(x, i)``).
+3. ``y`` is a differentiable output accumulating an expression that depends on
+   the variables in categories 1 and 2 (``y += f(x, i)``).
 
 In contrast is *not* important that the loop counter ``i`` linearly increases,
 that there is a loop counter at all, or that the loop runs for a uniform number
