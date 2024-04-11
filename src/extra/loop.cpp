@@ -448,28 +448,28 @@ public:
     LoopOp(JitBackend backend, const char *name, void *payload,
            ad_loop_read read_cb, ad_loop_write write_cb, ad_loop_cond cond_cb,
            ad_loop_body body_cb, ad_loop_delete delete_cb,
-           const index64_vector &state)
+           const index64_vector &state, long long max_iterations)
         : m_backend(backend), m_name(name), m_payload(payload),
           m_read_cb(read_cb), m_write_cb(write_cb), m_cond_cb(cond_cb),
-          m_body_cb(body_cb), m_delete_cb(delete_cb), m_diff_count(0) {
+          m_body_cb(body_cb), m_delete_cb(delete_cb), m_diff_count(0),
+          m_max_iterations(max_iterations), m_reset(false) {
         m_name_op = "Loop: " + m_name;
 
         m_inputs.reserve(state.size());
-        m_rv.reserve(state.size());
 
         for (size_t i = 0; i < state.size(); ++i) {
             uint32_t jit_index = (uint32_t) state[i];
 
             VarType vt = jit_var_type(jit_index);
-            Input input;
+            Input input{};
             input.index = jit_index;
 
             if (vt == VarType::Float16 || vt == VarType::Float32 ||
                 vt == VarType::Float64) {
                 uint32_t ad_index = (uint32_t) (state[i] >> 32);
-                input.has_grad = true;
+                input.is_diff = true;
                 input.has_grad_in = add_index(m_backend, ad_index, true);
-                input.grad_offset = (uint32_t) m_diff_count++;
+                input.grad_in_offset = (uint32_t) m_diff_count++;
             }
 
             jit_var_inc_ref(jit_index);
@@ -478,12 +478,14 @@ public:
 
         m_state.reserve(state.size() + m_diff_count);
         m_state2.reserve(state.size());
-        m_reset = true;
     }
 
     ~LoopOp() {
-        for (const Input &i : m_inputs)
+        for (const Input &i : m_inputs) {
             jit_var_dec_ref(i.index);
+            if (i.has_grad_out)
+                ad_var_dec_ref(combine(m_output_indices[i.grad_out_offset]));
+        }
 
         if (m_delete_cb)
             m_delete_cb(m_payload);
@@ -493,8 +495,10 @@ public:
 
     void add_output(uint64_t index, size_t offset) {
         if (add_index(m_backend, index >> 32, false)) {
-            m_rv.push_back_borrow((index >> 32) << 32);
-            m_rv_offset.push_back((uint32_t) offset);
+            Input &in = m_inputs[offset];
+            in.has_grad_out = true;
+            in.grad_out_offset = m_output_indices.size() - 1;
+            ad_var_inc_ref(combine(m_output_indices[in.grad_out_offset]));
         }
     }
 
@@ -505,7 +509,9 @@ public:
 
     void write(const dr::vector<uint64_t> &indices, bool reset) {
         if (indices.size() != m_state.size())
-            jit_fail("LoopOp::write(): internal error!");
+            jit_fail("LoopOp::write(): internal error (received request to "
+                     "write %zu indices, but state size is %zu)!",
+                     indices.size(), m_state.size());
 
         for (size_t i = 0; i < indices.size(); ++i) {
             uint64_t old_index = m_state[i];
@@ -516,14 +522,20 @@ public:
         m_reset = reset;
     }
 
-    // ---------------------------------------
+    uint64_t combine(uint32_t ad_index, uint32_t jit_index = 0) {
+        return (((uint64_t) ad_index) << 32) + jit_index;
+    }
+
+    const char *name() const override { return m_name_op.c_str(); }
+
+    // -------------------------------------------------------------------
 
     /* The forward() callbacks below implement the following logic:
 
          while cond(state):
              dr.enable_grad(state)
              dr.set_grad(state, grad_state)
-             body(state)
+             state = body(state)
              grad_state = dr.forward_from(state)
              dr.disable_grad(state)
      */
@@ -544,7 +556,7 @@ public:
         m_state2.release();
         for (size_t i = 0; i < m_inputs.size(); ++i) {
             uint64_t index;
-            if (m_inputs[i].has_grad)
+            if (m_inputs[i].is_diff)
                 index = ad_var_new((uint32_t) m_state[i]);
             else
                 index = ad_var_inc_ref(m_state[i]);
@@ -553,16 +565,15 @@ public:
 
         // Run the loop body
         m_write_cb(m_payload, m_state2, true);
-        m_reset = false;
         m_body_cb(m_payload);
 
         // AD forward propagation pass
         for (size_t i = 0; i < m_inputs.size(); ++i) {
             const Input &in = m_inputs[i];
-            if (!in.has_grad)
+            if (!in.is_diff)
                 continue;
             ad_accum_grad(m_state2[i],
-                          (uint32_t) m_state[m_inputs.size() + in.grad_offset]);
+                          (uint32_t) m_state[m_inputs.size() + in.grad_in_offset]);
             ad_enqueue(dr::ADMode::Forward, m_state2[i]);
         }
         m_state2.release();
@@ -575,7 +586,7 @@ public:
             m_state.push_back_borrow((uint32_t) m_state2[i]);
         for (size_t i = 0; i < m_inputs.size(); ++i) {
             const Input &in = m_inputs[i];
-            if (!in.has_grad)
+            if (!in.is_diff)
                 continue;
             m_state.push_back_steal(ad_grad(m_state2[i]));
         }
@@ -593,7 +604,7 @@ public:
         uint64_t zero = 0;
         size_t ctr = 0;
         for (const Input &in : m_inputs) {
-            if (!in.has_grad)
+            if (!in.is_diff)
                 continue;
 
             uint32_t grad;
@@ -609,32 +620,195 @@ public:
             jit_fail("LoopOp::forward(): internal error!");
 
         ad_loop(
-            m_backend, 1, 0, fwd_name.c_str(), this,
+            m_backend, 1, 0, 0, fwd_name.c_str(), this,
             [](void *p, dr::vector<uint64_t> &i) { ((LoopOp *) p)->read(i); },
             [](void *p, const dr::vector<uint64_t> &i, bool reset) { ((LoopOp *) p)->write(i, reset); },
             [](void *p) { return ((LoopOp *) p)->fwd_cond(); },
             [](void *p) { return ((LoopOp *) p)->fwd_body(); }, nullptr, false);
 
-        for (size_t i = 0; i < m_output_indices.size(); ++i) {
-            ad_accum_grad(combine(m_output_indices[i]),
-                          (uint32_t) m_state[m_inputs.size() + m_inputs[m_rv_offset[i]].grad_offset]);
+        for (size_t i = 0; i < m_inputs.size(); ++i) {
+            const Input &in = m_inputs[i];
+            if (!in.has_grad_out)
+                continue;
+
+            ad_accum_grad(combine(m_output_indices[in.grad_out_offset]),
+                          (uint32_t) m_state[m_inputs.size() + in.grad_in_offset]);
         }
 
         m_state.release();
     }
 
-    uint64_t combine(uint32_t ad_index, uint32_t jit_index = 0) {
-        return (((uint64_t) ad_index) << 32) + jit_index;
+    // -------------------------------------------------------------------
+
+    void backward() override {
+        if (m_max_iterations == -1) {
+            backward_simple();
+        } else {
+            jit_raise("CustomOp::backward(): the reverse-mode derivative of a "
+                      "complex loop (with max_iterations != -1) is not yet "
+                      "implemented!");
+        }
     }
 
-    const char *name() const override { return m_name_op.c_str(); }
+    // -------------------------------------------------------------------
+
+    /* The backward_simple() callbacks below implement the following logic:
+
+         state_o = <subset of 'state' for which derivative
+                    tracking was enabled after, but not
+                    before the loop>
+
+         state_i = <subset of 'state' for which derivative
+                    tracking was enabled before and after
+                    the loop>
+
+         grad_state_o = <zero-initialized gradients>
+
+         while cond(state):
+             dr.enable_grad(state_i)
+             state = body(state)
+             dr.set_grad(state_o, grad_state_o)
+             grad_state_i += dr.backward_to(state_i)
+             dr.disable_grad(state)
+     */
+
+    void bwd_body_simple() {
+        // Create differentiable loop state variables
+        m_state2.release();
+
+        index32_vector tmp;
+        size_t offset = m_inputs.size();
+        for (size_t i = 0; i < m_inputs.size(); ++i) {
+            const Input &in = m_inputs[i];
+
+            uint64_t index;
+            if (in.has_grad_out && in.has_grad_in) {
+                index = ad_var_new((uint32_t) m_state[i]);
+                tmp.push_back_borrow(m_state[offset]);
+            } else {
+                index = ad_var_inc_ref(m_state[i]);
+            }
+            m_state2.push_back_steal(index);
+
+            if (in.has_grad_out)
+                offset++;
+        }
+
+        // Run the loop body
+        m_write_cb(m_payload, m_state2, true);
+        m_body_cb(m_payload);
+        m_state2.release();
+        m_read_cb(m_payload, m_state2);
+
+        // AD backward propagation pass
+        offset = m_inputs.size();
+        for (size_t i = 0; i < m_inputs.size(); ++i) {
+            const Input &in = m_inputs[i];
+            if (!in.has_grad_out)
+                continue;
+
+            ad_accum_grad(m_state2[i], (uint32_t) m_state[offset]);
+
+            if (!in.has_grad_in)
+                ad_enqueue(dr::ADMode::Backward, m_state2[i]);
+
+            offset++;
+        }
+
+        ad_traverse(dr::ADMode::Backward, (uint32_t) dr::ADFlag::ClearNone);
+
+        // Read the loop output + derivatives copy to loop state vars
+        m_state.release();
+        for (size_t i = 0; i < m_inputs.size(); ++i)
+            m_state.push_back_borrow((uint32_t) m_state2[i]);
+
+        offset = m_inputs.size();
+        for (size_t i = 0; i < m_inputs.size(); ++i) {
+            const Input &in = m_inputs[i];
+
+            if (!in.has_grad_out)
+                continue;
+            uint32_t grad = ad_grad(m_state2[i]);
+            m_state.push_back_steal(grad);
+            offset++;
+        }
+
+        m_state2.release();
+    }
+
+    void backward_simple() {
+        std::string fwd_name = m_name + " [ad, bwd, simple]";
+
+        m_state.release();
+        for (const Input &i : m_inputs)
+            m_state.push_back_borrow(i.index);
+
+        for (const Input &in : m_inputs) {
+            uint32_t grad;
+            if (!in.has_grad_out)
+                continue;
+
+            if (in.has_grad_in) {
+                uint64_t zero = 0;
+                grad = jit_var_literal(m_backend, jit_var_type(in.index), &zero, jit_var_size(in.index));
+            } else {
+                grad = ad_grad(combine(m_output_indices[in.grad_out_offset]));
+            }
+
+            m_state.push_back_steal(grad);
+        }
+
+        ad_loop(
+            m_backend, 1, 0, 0, fwd_name.c_str(), this,
+            [](void *p, dr::vector<uint64_t> &i) { ((LoopOp *) p)->read(i); },
+            [](void *p, const dr::vector<uint64_t> &i, bool reset) { ((LoopOp *) p)->write(i, reset); },
+            [](void *p) { return ((LoopOp *) p)->fwd_cond(); },
+            [](void *p) { return ((LoopOp *) p)->bwd_body_simple(); }, nullptr, false);
+
+
+        size_t offset = m_inputs.size();
+        for (const Input &in : m_inputs) {
+            if (!in.has_grad_out)
+                continue;
+
+            if (in.has_grad_in) {
+                ad_accum_grad(
+                    combine(m_input_indices[in.grad_in_offset]),
+                    (uint32_t) m_state[offset]
+                );
+            }
+
+            offset++;
+        }
+
+        for (size_t i = 0; i < m_inputs.size(); ++i) {
+            const Input &in = m_inputs[i];
+            if (!in.has_grad_out)
+                continue;
+
+            ad_accum_grad(combine(m_output_indices[in.grad_out_offset]),
+                          (uint32_t) m_state[m_inputs.size() + in.grad_in_offset]);
+        }
+
+
+        m_state.release();
+    }
 
 private:
     struct Input {
         uint32_t index;
-        bool has_grad = false;
-        bool has_grad_in = false;
-        uint32_t grad_offset = 0;
+
+        /// Is this variable differentiable in principle?
+        bool is_diff;
+
+        /// Does the loop op. receive gradients for this variable?
+        bool has_grad_in;
+
+        /// Does the loop op. produce gradients for this variable?
+        bool has_grad_out;
+
+        uint32_t grad_in_offset; // position in m_input_indices
+        uint32_t grad_out_offset; // position in m_output_indices
     };
     dr::vector<Input> m_inputs;
 
@@ -651,16 +825,15 @@ private:
     index64_vector m_state;
     /// Scratch array to call nested loop body/condition
     index64_vector m_state2;
-    index64_vector m_rv;
-    dr::vector<uint32_t> m_rv_offset;
     size_t m_diff_count;
+    long long m_max_iterations;
     bool m_reset;
 };
 
-bool ad_loop(JitBackend backend, int symbolic, int compress, const char *name,
-             void *payload, ad_loop_read read_cb, ad_loop_write write_cb,
-             ad_loop_cond cond_cb, ad_loop_body body_cb,
-             ad_loop_delete delete_cb, bool ad) {
+bool ad_loop(JitBackend backend, int symbolic, int compress,
+             long long max_iterations, const char *name, void *payload,
+             ad_loop_read read_cb, ad_loop_write write_cb, ad_loop_cond cond_cb,
+             ad_loop_body body_cb, ad_loop_delete delete_cb, bool ad) {
     if (name == nullptr)
         name = "unnamed";
 
@@ -678,6 +851,9 @@ bool ad_loop(JitBackend backend, int symbolic, int compress, const char *name,
 
     if (compress != 0 && compress != 1)
         jit_raise("'compress' must equal 0, 1, or -1.");
+
+    if (max_iterations < -1)
+        jit_raise("'max_iterations' must be >= -1.");
 
     if (symbolic) {
         index64_vector indices_in;
@@ -698,7 +874,8 @@ bool ad_loop(JitBackend backend, int symbolic, int compress, const char *name,
 
             nanobind::ref<LoopOp> op =
                 new LoopOp(backend, name, payload, read_cb, write_cb,
-                           cond_cb, body_cb, delete_cb, indices_in);
+                           cond_cb, body_cb, delete_cb, indices_in,
+                           max_iterations);
 
             for (size_t i = 0; i < indices_out.size(); ++i) {
                 VarType vt = jit_var_type((uint32_t) indices_out[i]);
@@ -706,7 +883,8 @@ bool ad_loop(JitBackend backend, int symbolic, int compress, const char *name,
                     vt != VarType::Float64)
                     continue;
 
-                if ((uint32_t) indices_in[i] == (uint32_t) indices_out[i]) {
+                if (max_iterations == 0 &&
+                    (uint32_t) indices_in[i] == (uint32_t) indices_out[i]) {
                     // Keep unchanged variables out of the AD system
                     if (indices_in[i] != indices_out[i]) {
                         ad_var_inc_ref(indices_in[i]);

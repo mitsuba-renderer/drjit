@@ -9,6 +9,7 @@ Dr.Jit — A Just-In-Time-Compiler for Differentiable Rendering
    general
    types
    cflow
+   autodiff
    interop
    debug
    cpp

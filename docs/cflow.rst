@@ -1,3 +1,7 @@
+.. py:currentmodule:: drjit
+
+.. _cflow:
+
 Control flow
 ============
 

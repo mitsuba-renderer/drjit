@@ -573,8 +573,10 @@ void VariableTracker::verify_size(size_t size) {
 
         if (size != size_2 && size != 1 && size_2 != 1 && !jit_var_is_dirty(v.index))
             nb::raise("this operation processes arrays of size %zu, while "
-                      "state variable '%s' has an incompatible size %zu",
-                      size, kv.first.c_str(), size_2);
+                      "state variable '%s' has an incompatible size %zu. [(a%u, r%u) -> (a%u, r%u)]",
+                      size, kv.first.c_str(), size_2,
+                      uint32_t(v.index_orig >> 32), uint32_t(v.index_orig),
+                      uint32_t(v.index >> 32), uint32_t(v.index));
     }
 }
 

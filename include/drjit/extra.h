@@ -372,6 +372,7 @@ typedef void (*ad_loop_delete)(void *payload);
  * already been destroyed.
  */
 extern DRJIT_EXTRA_EXPORT bool ad_loop(JitBackend backend, int symbolic, int compress,
+                                       long long max_iterations,
                                        const char *name, void *payload,
                                        ad_loop_read read_cb, ad_loop_write write_cb,
                                        ad_loop_cond cond_cb, ad_loop_body body_cb,

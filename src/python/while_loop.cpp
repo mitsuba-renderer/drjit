@@ -114,7 +114,8 @@ nb::tuple while_loop(nb::tuple state, nb::callable cond, nb::callable body,
                      std::optional<dr::string> name,
                      std::optional<dr::string> mode,
                      bool strict,
-                     std::optional<bool> compress) {
+                     std::optional<bool> compress,
+                     std::optional<long long> max_iterations) {
     try {
         JitBackend backend = JitBackend::None;
 
@@ -168,6 +169,7 @@ nb::tuple while_loop(nb::tuple state, nb::callable cond, nb::callable body,
 
         bool rv = ad_loop(backend, symbolic,
                           compress.has_value() ? (int) compress.value() : -1,
+                          max_iterations.has_value() ? max_iterations.value() : 0,
                           name_cstr, ls.get(), while_loop_read_cb,
                           while_loop_write_cb, while_loop_cond_cb,
                           while_loop_body_cb, while_loop_delete_cb, true);
@@ -203,7 +205,8 @@ void export_while_loop(nb::module_ &m) {
     m.def("while_loop", &while_loop, "state"_a, "cond"_a, "body"_a,
           "labels"_a = nb::make_tuple(), "label"_a = nb::none(),
           "mode"_a = nb::none(), "strict"_a = true,
-          "compress"_a = nb::none(), doc_while_loop,
+          "compress"_a = nb::none(), "max_iterations"_a = nb::none(),
+          doc_while_loop,
           // Complicated signature to type-check while_loop via TypeVarTuple
           nb::sig(
             "def while_loop(state: tuple[*Ts], "
@@ -213,7 +216,8 @@ void export_while_loop(nb::module_ &m) {
                            "label: str | None = None, "
                            "mode: typing.Literal['scalar', 'symbolic', 'evaluated', None] = None, "
                            "strict: bool = True, "
-                           "compress: bool | None = None) "
+                           "compress: bool | None = None, "
+                           "max_iterations: int | None = None) "
             "-> tuple[*Ts]"
     ));
 }
