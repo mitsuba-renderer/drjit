@@ -1394,14 +1394,14 @@ Typing
 .. autoattribute:: Ts
 .. autoattribute:: AnyArray
 
-Discrete Differential Analyzer
-------------------------------
+Digital Differential Analyzer
+-----------------------------
 
 .. py:module:: drjit.dda
 
-The :py:mod:`drjit.dda` module provides a general implementation of a
-*discrete differential analyzer* (DDA) that steps through the intersection of a
-ray segment and a N-dimensional grid, performing a custom computation at every
+The :py:mod:`drjit.dda` module provides a general implementation of a *digital
+differential analyzer* (DDA) that steps through the intersection of a ray
+segment and a N-dimensional grid, performing a custom computation at every
 cell.
 
 The :py:func:`drjit.integrate` function builds on this functionality to compute
