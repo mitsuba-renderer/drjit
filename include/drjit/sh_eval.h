@@ -1,5 +1,5 @@
 /*
-    drjit/sh.h -- Real spherical harmonics evaluation routines
+    drjit/sh_eval.h -- Real spherical harmonics evaluation routines
 
     The generated code is based on the paper `Efficient Spherical Harmonic
     Evaluation, Journal of Computer Graphics Techniques (JCGT), vol. 2, no. 2,
@@ -17,6 +17,7 @@
 #pragma once
 
 #include <drjit/array.h>
+#include <stdexcept>
 
 NAMESPACE_BEGIN(drjit)
 
@@ -33,7 +34,7 @@ void sh_eval(const Vector3f &d, size_t order, value_t<Vector3f> *out) {
         case 7: sh_eval_7(d, out); break;
         case 8: sh_eval_8(d, out); break;
         case 9: sh_eval_9(d, out); break;
-        default: throw drjit::Exception("sh_eval(): order too high!");
+        default: throw std::runtime_error("sh_eval(): order too high!");
     }
 }
 

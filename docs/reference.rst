@@ -993,6 +993,7 @@ Operations for vectors and matrices
 .. autofunction:: hypot
 .. autofunction:: normalize
 .. autofunction:: lerp
+.. autofunction:: sh_eval
 
 
 Operations for complex values and quaternions
