@@ -161,7 +161,7 @@ ArrayMeta meta_get(nb::handle h) noexcept {
         } else if (result < 0) {
             vt = result < INT_MIN ? VarType::Int64 : VarType::Int32;
 
-            if (result == -1 and PyErr_Occurred()) {
+            if (result == -1 && PyErr_Occurred()) {
                 m.is_valid = false;
                 PyErr_Clear();
             }
