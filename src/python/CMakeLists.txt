@@ -219,7 +219,7 @@ foreach (NAME __init__ ad)
   add_custom_command(
     OUTPUT ${DRJIT_PYTHON_DST_DIR}/auto/${NAME}.pyi
     DEPENDS ${DRJIT_PYTHON_DST_DIR}/llvm/${NAME}.pyi
-    COMMAND cmake -P ../../resources/auto-stub.cmake
+    COMMAND cmake -P ${CMAKE_CURRENT_SOURCE_DIR}/../../resources/auto-stub.cmake
       ${DRJIT_PYTHON_DST_DIR}/llvm/${NAME}.pyi
       ${DRJIT_PYTHON_DST_DIR}/auto/${NAME}.pyi
   )
