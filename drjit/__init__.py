@@ -1119,7 +1119,7 @@ def deg2rad(arg: T, /) -> T:
     return arg * (pi / 180.0)
 
 
-def normalize(arg, /):
+def normalize(arg: T, /) -> T:
     '''
     Normalize the input vector so that it has unit length and return the
     result.
@@ -1230,6 +1230,68 @@ def mean(value, axis: Optional[int] = 0):
     if vs != ():
         n = prod(vs) if axis is None else vs[axis]
     return s / n
+
+
+def sh_eval(d: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], order: int) -> list[ValT]:
+    """
+    Evalute real spherical harmonics basis function up to a specified order.
+
+    The input ``d`` must be a normalized 3D Cartesian coordinate vector. The
+    function returns a list containing all spherical haromnic basis functions
+    evaluated with respect to ``d`` up to the desired order, for a total of
+    ``(order+1)**2`` output values.
+
+    The implementation relies on efficient pre-generated branch-free code with
+    aggressive constant folding and common subexpression elimination. It admits
+    scalar and Jit-compiled input arrays. Evaluation routines are included for
+    orders ``0`` to ``10``. Requesting higher orders triggers a runtime
+    exception.
+
+    This automatically generated code is based on the paper `Efficient
+    Spherical Harmonic Evaluation <http://jcgt.org/published/0002/02/06/>`__,
+    *Journal of Computer Graphics Techniques (JCGT)*, vol. 2, no. 2, 84-90,
+    2013 by `Peter-Pike Sloan <http://www.ppsloan.org/publications/>`__.
+
+    The SciPy equivalent of this function is given by
+
+    .. code-block:: python
+
+       def sh_eval(d, order: int):
+           from scipy.special import sph_harm
+           theta, phi = np.arccos(d.z), np.arctan2(d.y, d.x)
+           r = []
+           for l in range(order + 1):
+               for m in range(-l, l + 1):
+                   Y = sph_harm(abs(m), l, phi, theta)
+                   if m > 0:
+                       Y = np.sqrt(2) * Y.real
+                   elif m < 0:
+                       Y = np.sqrt(2) * Y.imag
+                   r.append(Y.real)
+           return d
+
+    The Mathematica equivalent of a specific entry is given by:
+
+    .. code-block:: wolfram-language
+
+        SphericalHarmonicQ[l_, m_, d_] := Block[{θ, ϕ},
+          θ = ArcCos[d[[3]]];
+          ϕ = ArcTan[d[[1]], d[[2]]];
+          Piecewise[{
+            {SphericalHarmonicY[l, m, θ, ϕ], m == 0},
+            {Sqrt[2] * Re[SphericalHarmonicY[l,  m, θ, ϕ]], m > 0},
+            {Sqrt[2] * Im[SphericalHarmonicY[l, -m, θ, ϕ]], m < 0}
+          }]
+        ]
+    """
+
+    if order < 0 or order > 9:
+        raise RuntimeError("sh_eval(): order must be in [0, 9]");
+    r = [None]*(order+1)*(order + 1)
+    from . import _sh_eval as _sh_eval
+    getattr(_sh_eval, f'sh_eval_{order}')(d, r)
+    return r
+
 
 def meshgrid(*args, indexing='xy') -> tuple: # <- proper type signature in stubs
     '''
@@ -1453,6 +1515,7 @@ def assert_equal(
         tb_skip=tb_skip+1,
         **kwargs,
     )
+
 
 newaxis = None
 
