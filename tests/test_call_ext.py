@@ -329,7 +329,7 @@ def test09_constant_getter(t, drjit_verbose, capsys):
     transcript = capsys.readouterr().out
     assert d[0] == 123
     assert transcript.count('ad_call_getter') == 1
-    assert transcript.count('jit_var_gather') == 1
+    assert transcript.count('jit_var_gather') == 0
     d = c.opaque_getter()
     transcript = capsys.readouterr().out
     assert transcript.count('ad_call_getter') == 1
@@ -746,3 +746,23 @@ def test12_constant_broadcast(t, symbolic, with_evaluated_loop):
         out += c.g(arg)
 
     assert dr.all(out == t(123, 123, 123, 123, 123))
+
+
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+def test13_constant_getter_masked(t, drjit_verbose, capsys):
+    pkg = get_pkg(t)
+
+    A, B, BasePtr = pkg.A, pkg.B, pkg.BasePtr
+    a = A()
+    b = B()
+
+    # Turn off some lanes
+    c = BasePtr(a, b, None, None, a)
+    d = c.constant_getter()
+
+    transcript = capsys.readouterr().out
+    assert transcript.count('ad_call_getter') == 1
+    # Output is just masked, no gather should happen
+    assert transcript.count('jit_var_gather') == 0
+
+    assert dr.all(d == [123, 123, 0, 0, 123])

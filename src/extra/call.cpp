@@ -91,59 +91,63 @@ static void ad_call_getter(JitBackend backend, const char *domain,
             separator, name, index, mask.index());
 
     scoped_isolation_boundary guard;
+    {
+        scoped_record rec(backend, name, true);
 
-    for (size_t i = 0; i < callable_count; ++i) {
-        rv2.clear();
+        for (size_t i = 0; i < callable_count; ++i) {
+            rv2.clear();
 
-        void *ptr;
-        if (domain) {
-            ptr = jit_registry_ptr(backend, domain, (uint32_t) i + 1);
-            if (!ptr)
-                continue;
-        } else {
-            ptr = (void *) (uintptr_t) i;
-        }
+            void *ptr;
+            if (domain) {
+                ptr = jit_registry_ptr(backend, domain, (uint32_t) i + 1);
+                if (!ptr)
+                    continue;
+            } else {
+                ptr = (void *) (uintptr_t) i;
+            }
 
-        {
-            // Suppress side effects
-            scoped_record tmp(backend, name, true);
+            rec.checkpoint_and_rewind(); // Don't need checkpoints, just reset scope
             func(payload, ptr, args2, rv2);
             for (uint64_t index2: rv2)
                 ad_var_check_implicit(index2);
+
+            // Perform some sanity checks on the return values
+            ad_call_check_rv(backend, size, i, rv, rv2);
+
+            // Preallocate memory in the first iteration
+            if (rv_ad.empty()) {
+                rv3.resize(rv2.size() * callable_count, 0);
+                rv_ad.resize(rv2.size(), false);
+            }
+
+            // Move return values to a separate array storing them for all callables
+            for (size_t j = 0; j < rv2.size(); ++j) {
+                uint64_t index2 = rv2[j];
+                rv_ad[j] |= (index2 >> 32) != 0;
+                if (!index2)
+                    jit_raise(
+                        "ad_call_getter(\"%s%s%s\"): return value of callable %zu "
+                        "is empty/uninitialized, which is not permitted!",
+                        domain_or_empty, separator, name, i);
+                size_t size2 = jit_var_size((uint32_t) index2);
+                if (size2 != 1)
+                    jit_raise("ad_call_getter(\"%s%s%s\"): return value of "
+                              "callable %zu is not a scalar (r%u has size %zu).",
+                              domain_or_empty, separator, name, i, (uint32_t) index2,
+                              size2);
+                rv3[i*rv2.size()+j] = (uint32_t) index2;
+                jit_var_inc_ref((uint32_t) index2);
+            }
         }
 
-        // Perform some sanity checks on the return values
-        ad_call_check_rv(backend, size, i, rv, rv2);
-
-        // Preallocate memory in the first iteration
-        if (rv_ad.empty()) {
-            rv3.resize(rv2.size() * callable_count, 0);
-            rv_ad.resize(rv2.size(), false);
-        }
-
-        // Move return values to a separate array storing them for all callables
-        for (size_t j = 0; j < rv2.size(); ++j) {
-            uint64_t index2 = rv2[j];
-            rv_ad[j] |= (index2 >> 32) != 0;
-            if (!index2)
-                jit_raise(
-                    "ad_call_getter(\"%s%s%s\"): return value of callable %zu "
-                    "is empty/uninitialized, which is not permitted!",
-                    domain_or_empty, separator, name, i);
-            size_t size2 = jit_var_size((uint32_t) index2);
-            if (size2 != 1)
-                jit_raise("ad_call_getter(\"%s%s%s\"): return value of "
-                          "callable %zu is not a scalar (r%u has size %zu).",
-                          domain_or_empty, separator, name, i, (uint32_t) index2,
-                          size2);
-            rv3[i*rv2.size()+j] = (uint32_t) index2;
-            jit_var_inc_ref((uint32_t) index2);
-        }
+        rec.disarm();
     }
 
     if (ad)
         ad_copy_implicit_deps(implicit_in, true);
     guard.disarm();
+
+    jit_new_scope(backend);
 
     for (size_t i = 0; i < rv2.size(); ++i) {
         // Deallocate previous entry
@@ -171,8 +175,8 @@ static void ad_call_getter(JitBackend backend, const char *domain,
         }
 
         if (is_literal) {
-            jit_var_inc_ref(first);
-            rv[i] = first;
+            uint32_t out = jit_var_and(first, mask.index());
+            rv[i] = out;
             continue;
         }
 
