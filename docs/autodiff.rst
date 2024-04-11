@@ -14,12 +14,12 @@ Differentiating loops
 (Most of this section still needs to be written)
 
 
-Efficient reverse-mode derivative for "sum" loops
--------------------------------------------------
+Reverse-mode derivative of "sum" loops
+--------------------------------------
 
 Dr.Jit also provides a specialized reverse-mode differentiation strategy for
-certain types of loops that is more efficient and has storage overheads. It can
-be used to handle simple "sum"-style loops such as
+certain types of loops that is more efficient and avoids severe storage
+overheads. It can be used to handle simple "sum"-style loops such as
 
 .. code-block:: python
 
@@ -36,7 +36,7 @@ be used to handle simple "sum"-style loops such as
        return y
 
 Here, ``f`` represents an arbitrary pure computation that depends on
-``x`` and the loop counter ``i`.
+``x`` and the loop counter ``i``.
 
 Normally, the reverse-mode derivative of a loop is a complicated and
 costly affair: it must run the loop twice, store all intermediate
@@ -66,27 +66,30 @@ follows:
 
 For this optimization to be legal, the loop state must consist of
 
-1. arbitrary variables that don't carry derivatives
-2. differentiable inputs, which remain constant during the loop
-3. differentiable outputs, which are computed by accumulating a function
-   of the variables in categories 1 and 2.
+1. Arbitrary variables that don't carry derivatives
+2. Differentiable inputs, which remain constant during the loop
+3. Differentiable outputs computed by accumulating a function
+   of variables in categories 1 and 2.
 
-These three sets may not overlap. In the above example,
+These three sets *may not overlap*. In the above example,
 
 1. ``i`` does not carry derivatives.
-2. ``x`` is a differentiable input of the loop
+2. ``x`` is a differentiable input
 3. ``y`` is a differentiable output computed from variables
-   in the other categories via accumulation (i.e., ``y += f(x, i)``).
+   in categories 1/2 via accumulation (i.e., ``y += f(x, i)``).
 
-When all of these conditions are satisfied, specify
-``max_iterations=-1`` to :py:func:`dr.while_loop <while_loop>`.
-This tells Dr.Jit that it can automatically perform the explained
-optimization to generate an efficient reverse-mode derivative.
+In contrast is *not* important that the loop counter ``i`` linearly increases,
+that there is a loop counter at all, or that the loop runs for a uniform number
+of iterations.
 
-In :py:func:`@dr.syntax <syntax>`-decorated functions, you can
-equivalently wrap the loop condition into a :py:func:`dr.hint(...,
-max_iterations=-1)`` annotation). The original example then looks as
-follows:
+When the conditions explained above are satisfied, specify
+``max_iterations=-1`` to :py:func:`dr.while_loop() <while_loop>`. This tells
+Dr.Jit that it can automatically perform the explained optimization to generate
+an efficient reverse-mode derivative.
+
+In :py:func:`@dr.syntax <syntax>`-decorated functions, you can equivalently
+wrap the loop condition into a :py:func:`dr.hint(..., max_iterations=-1)
+<hint>` annotation). The original example then looks as follows:
 
 .. code-block:: python
 
