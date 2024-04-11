@@ -706,3 +706,48 @@ def test29_gather(t):
         i += 1
 
     assert dr.all(x == [6, 5])
+
+
+@pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
+@pytest.test_arrays('float32,diff,shape=(*)')
+@dr.syntax
+def test30_sum_loop_fwd(t, mode):
+    UInt32 = dr.uint32_array_t(t)
+    Float = t
+
+    y, i = Float(0), UInt32(0)
+    x = dr.linspace(Float, .25, 1, 4)
+    dr.enable_grad(x)
+    xo = x
+
+    while dr.hint(i < 10, mode=mode):
+        y += x**i
+        i += 1
+
+    dr.forward_from(xo)
+
+    assert dr.allclose(y, [1.33333, 1.99805, 3.77475, 10])
+    assert dr.allclose(y.grad, [1.77773, 3.95703, 12.0956, 45])
+
+
+@pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
+@pytest.test_arrays('float32,diff,shape=(*)')
+@dr.syntax
+def test30_sum_loop_rev(t, mode):
+    UInt32 = dr.uint32_array_t(t)
+    Float = t
+
+    y, i = Float(0), UInt32(0)
+    x = dr.linspace(Float, .25, 1, 4)
+    xo = x
+    dr.enable_grad(x)
+
+    while dr.hint(i < 10, max_iterations=-1, mode=mode):
+        y += x**i
+        i += 1
+
+    assert dr.grad_enabled(y)
+    dr.backward_from(y)
+
+    assert dr.allclose(y, [1.33333, 1.99805, 3.77475, 10])
+    assert dr.allclose(xo.grad, [1.77773, 3.95703, 12.0956, 45])

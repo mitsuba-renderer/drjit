@@ -1393,14 +1393,15 @@ void ad_traverse(dr::ADMode mode, uint32_t flags) {
 
     LocalState &ls = local_state;
     std::vector<EdgeRef> &todo_tls = ls.todo, todo;
+    jit_log(LogLevel::InfoSym,
+            "ad_traverse(): processing %zu edges in %s mode ..", todo_tls.size(),
+            mode == dr::ADMode::Forward ? "forward" : "backward");
+
     if (todo_tls.empty())
         return;
 
     todo.swap(todo_tls);
     bool clear_edges = flags & (uint32_t) dr::ADFlag::ClearEdges;
-
-    ad_log("ad_traverse(): processing %zu edges in %s mode ..", todo.size(),
-           mode == dr::ADMode::Forward ? "forward" : "backward");
 
     std::lock_guard<std::mutex> guard(state.mutex);
     try {

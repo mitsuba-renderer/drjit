@@ -38,6 +38,12 @@ packages named
 
 (Additional backends are likely to be added in the future.)
 
+Additionally, there is an *automatic backend* that simply redirects to
+one of the above depending on the backends detected at runtime.
+
+- :py:mod:`drjit.auto`, and
+- :py:mod:`drjit.auto.ad`.
+
 Any given array type (e.g. ``Array3f``) actually exists in *all five* of these
 packages (e.g., ``drjit.scalar.Array3f``, ``drjit.llvm.ad.Array3f``). However,
 there are notable differences between them:
