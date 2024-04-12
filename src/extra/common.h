@@ -47,7 +47,12 @@ struct scoped_isolation_boundary {
         ad_scope_leave(success);
     }
 
-    void defuse() { success = true; }
+    void reset() {
+        ad_scope_leave(false);
+        ad_scope_enter(drjit::ADScope::Isolate, 0, nullptr);
+    }
+
+    void disarm() { success = true; }
 
     bool success = false;
 };

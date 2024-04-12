@@ -25,6 +25,7 @@ static bool ad_loop_symbolic(JitBackend backend, const char *name,
                              ad_loop_read read_cb, ad_loop_write write_cb,
                              ad_loop_cond cond_cb, ad_loop_body body_cb,
                              index64_vector &backup) {
+    scoped_isolation_boundary isolation_guard;
     index64_vector indices1;
     dr::vector<uint32_t> indices2;
 
@@ -104,12 +105,12 @@ static bool ad_loop_symbolic(JitBackend backend, const char *name,
             if (rv) {
                 // All done
                 record_guard.disarm();
+                isolation_guard.disarm();
                 break;
             }
 
             // Re-record, discard postponed nodes on the AD graph
-            ad_scope_leave(false);
-            ad_scope_enter(drjit::ADScope::Isolate, 0, nullptr);
+            isolation_guard.reset();
         } while (true);
     } catch (...) {
         // Restore all loop state variables to their original state
@@ -865,11 +866,9 @@ bool ad_loop(JitBackend backend, int symbolic, int compress,
 
         bool needs_ad;
         {
-            scoped_isolation_boundary guard;
             needs_ad =
                 ad_loop_symbolic(backend, name, payload, read_cb, write_cb,
                                  cond_cb, body_cb, indices_in);
-            guard.defuse();
         }
 
         if (needs_ad && ad) {
@@ -928,7 +927,7 @@ bool ad_loop(JitBackend backend, int symbolic, int compress,
         scoped_isolation_boundary guard;
         ad_loop_evaluated(backend, name, payload, read_cb, write_cb,
                           cond_cb, body_cb, compress);
-        guard.defuse();
+        guard.disarm();
     }
 
     return true; // Caller should directly call delete()
