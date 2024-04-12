@@ -387,7 +387,7 @@ bool ad_cond(JitBackend backend, int symbolic, const char *name, void *payload,
                              false_mask.index(), args, rv, body_cb, input_offsets,
                              output_offsets, ad);
             ad_copy_implicit_deps(implicit_in);
-            guard.defuse();
+            guard.disarm();
         }
 
         if (!input_offsets.empty() || !output_offsets.empty()) {
@@ -410,7 +410,7 @@ bool ad_cond(JitBackend backend, int symbolic, const char *name, void *payload,
         scoped_isolation_boundary guard;
         ad_cond_evaluated(backend, name, payload, true_mask.index(),
                           false_mask.index(), args, rv, body_cb);
-        guard.defuse();
+        guard.disarm();
     }
 
     return true; // Caller should directly call delete()
