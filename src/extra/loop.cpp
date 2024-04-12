@@ -106,6 +106,10 @@ static bool ad_loop_symbolic(JitBackend backend, const char *name,
                 record_guard.disarm();
                 break;
             }
+
+            // Re-record, discard postponed nodes on the AD graph
+            ad_scope_leave(false);
+            ad_scope_enter(drjit::ADScope::Isolate, 0, nullptr);
         } while (true);
     } catch (...) {
         // Restore all loop state variables to their original state
