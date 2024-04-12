@@ -1693,8 +1693,10 @@ void ad_scope_leave(bool process_postponed) {
                         (uint32_t) dr::ADFlag::ClearVertices);
         } else {
             std::lock_guard<std::mutex> guard(state.mutex);
-            for (EdgeRef &r: scope.postponed)
-                ad_var_dec_ref_int(r.target, state[r.target]);
+            for (EdgeRef &er: scope.postponed) {
+                ad_var_dec_ref_int(er.target, state[er.target]);
+                state.edges[er.id].visited = 0;
+            }
             scopes.pop_back();
         }
     } else {
@@ -3436,7 +3438,7 @@ static bool DRJIT_NOINLINE ad_decref_custom_op_output(Variable *v) {
 
     ((CustomOp *) edge->special.get())->release_one_output();
 
-    // CustomOp may have been destroyed so check again if output was also freed 
+    // CustomOp may have been destroyed so check again if output was also freed
     // or reused in the meantime
     return v->ref_count == 0 || v->counter != counter;
 }
