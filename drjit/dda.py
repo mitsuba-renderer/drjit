@@ -384,6 +384,12 @@ def integrate(
     assert type(active) is Bool
     assert dr.is_tensor_v(vol) and dr.array_t(vol) is Float
 
+    if dr.grad_enabled(ray_o, ray_d, grid_min, grid_max):
+        raise Exception(
+            'integrate(): the implementation has only been tested with '
+            'differentiable volume data and will likely need changes to '
+            'enable gradient tracking for ray and/or grid parameters')
+
     ndim = len(ray_o)
     res = vol.shape
     grid_scale = (ArrayNf(reversed(res)) - 1) / (grid_max - grid_min)
