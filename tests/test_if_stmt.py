@@ -448,10 +448,50 @@ def test16_ad_bwd_implicit_dep(t, mode):
     dr.backward_from(z)
     assert dr.all(dr.grad(y) == 6)
 
+@pytest.test_arrays('float,is_diff,shape=(*)')
+@pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
+@pytest.mark.parametrize('variant', [1, 2, 3])
+@pytest.mark.parametrize('size', [3, 4])
+def test17_diff_gather_bwd(t, mode, variant, size):
+    """
+    Tests that gathers in ``dr.if_stmt`` are properly differentiated reverse
+    mode when they are passed explicitly as inputs.
+    """
+    i = dr.uint32_array_t(t)(0, 1, 2)
+    src = dr.arange(t, size)+1
+    src_o = src
+    dr.enable_grad(src)
+
+    def true_fn(i, src):
+        if variant & 1:
+            return dr.gather(t, src, i)
+        else:
+            return dr.zeros(t, len(i))
+
+    def false_fn(i, src):
+        if variant & 2:
+            return dr.gather(t, src, i)
+        else:
+            return dr.zeros(t, len(i))
+
+    out = dr.if_stmt(
+        args=(i, src),
+        cond=dr.mask_t(t)(True, False, True),
+        true_fn=true_fn,
+        false_fn=false_fn
+    )
+
+    b1 = bool(variant & 1)
+    b2 = bool(variant & 2)
+    assert dr.all(out == (1 if b1 else 0, 2 if b2 else 0, 3 if b1 else 0))
+
+    out.grad = 1
+    g = dr.backward_to(src_o)
+    assert dr.all(g[0] == b1 and g[1] == b2 and g[2] == b1)
 
 @pytest.test_arrays('float,is_diff,shape=(*)')
 @dr.syntax(recursive=True)
-def test17_nested_ast_trafo(t):
+def test18_nested_ast_trafo(t):
     # Test that @dr.syntax works for local function declarations if called with recursive=True
     y = t(1, 2, 3)
 
@@ -467,7 +507,7 @@ def test17_nested_ast_trafo(t):
 
 @pytest.test_arrays('uint32,jit,shape=(*)')
 @dr.syntax
-def test18_nested_if_stmt(t):
+def test19_nested_if_stmt(t):
     # Test that a 3-level nested 'if' construction compiles
     # (yes, this was broken at some point!)
     x = dr.arange(t, 10)
@@ -488,7 +528,7 @@ def test18_nested_if_stmt(t):
 
 
 @pytest.test_arrays('float32,is_diff,shape=(*)')
-def test19_preserve_unchanged(t):
+def test20_preserve_unchanged(t):
     # Check that unchanged variables (including differentiable ones) are simply
     # passed through
     a = t(1, 1)
@@ -514,7 +554,7 @@ def test19_preserve_unchanged(t):
 
 @pytest.test_arrays('uint32,is_diff,shape=(*)')
 @pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
-def test20_mutate_dr_syntax(t, mode):
+def test21_mutate_dr_syntax(t, mode):
     # Simple test for array mutation/non-mutation combined with @dr.syntax
 
     @dr.syntax
@@ -548,7 +588,7 @@ def test20_mutate_dr_syntax(t, mode):
 
 @pytest.test_arrays('uint32,is_diff,shape=(*)')
 @pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
-def test21_mutate_dr_syntax_v2(t, mode):
+def test22_mutate_dr_syntax_v2(t, mode):
     # Simple test for array mutation/non-mutation combined with @dr.syntax
 
     @dr.syntax
@@ -578,12 +618,13 @@ def test21_mutate_dr_syntax_v2(t, mode):
     assert xo is x
     assert dr.all(xo == (0, 1, 2))
     assert dr.all(y == (0, 1, 1))
+
 
 @pytest.test_arrays('uint32,is_diff,shape=(*)')
 @pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
 @pytest.mark.parametrize('tt', ['tuple', 'list', 'dict', 'dataclass', 'nested'])
 @pytest.mark.parametrize('mutate', [True, False])
-def test22_mutate_other_containers(t, tt, mutate, mode):
+def test23_mutate_other_containers(t, tt, mutate, mode):
     # One last test about mutation/non-mutation involving lots of PyTree types
 
     if tt == 'tuple' and not mutate:
