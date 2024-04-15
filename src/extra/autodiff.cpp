@@ -942,13 +942,20 @@ DRJIT_NOINLINE Index ad_var_new_impl(const char *label, JitVar &&result,
        and keep track of implicit dependencies while recording virtual
        function calls */
     if (unlikely(symbolic)) {
+        bool is_gather = label && strcmp(label, "gather") == 0;
+
         for (size_t i = 0; i < N; ++i) {
             ADIndex source = args[i].ad_index;
             if (source == 0)
                 continue;
+
             Variable *v_source = state[source];
-            if (v_source->flags & (uint8_t) VariableFlags::Symbolic)
+            bool source_symbolic =
+                v_source->flags & (uint8_t) VariableFlags::Symbolic;
+
+            if (!is_gather && source_symbolic)
                 continue;
+
             args[i].ad_index = ad_record_implicit_dependence(
                 ls, rh, info.backend, label, source, v_source, reuse_indices);
         }
@@ -2974,8 +2981,7 @@ void ad_var_check_implicit(uint64_t index) {
     if (!(v->flags & (uint8_t) VariableFlags::Symbolic)) {
         ad_var_inc_ref_int(ad_index, v);
         ad_log("ad_check_implicit(): registering an implicit dependence on "
-               "variable a%u.",
-               ad_index);
+               "variable a%u.", ad_index);
         std::vector<Scope> &scopes = local_state.scopes;
         if (scopes.empty())
             ad_raise("ad_var_check_implicit(): no scope found!");
