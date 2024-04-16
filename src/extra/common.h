@@ -74,11 +74,17 @@ struct scoped_record {
                   bool new_scope = false)
         : backend(backend) {
         checkpoint = jit_record_begin(backend, name);
+        flags = jit_flags();
+        jit_set_flags(flags |
+                      (uint32_t) JitFlag::SymbolicCalls |
+                      (uint32_t) JitFlag::SymbolicLoops |
+                      (uint32_t) JitFlag::SymbolicConditionals);
         if (new_scope)
             scope = jit_new_scope(backend);
     }
 
     ~scoped_record() {
+        jit_set_flags(flags);
         jit_record_end(backend, checkpoint, cleanup);
     }
 
@@ -90,7 +96,7 @@ struct scoped_record {
     void disarm() { cleanup = false; }
 
     JitBackend backend;
-    uint32_t checkpoint, scope;
+    uint32_t checkpoint, scope, flags;
     bool cleanup = true;
 };
 
