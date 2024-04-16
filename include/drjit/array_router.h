@@ -990,12 +990,17 @@ Target gather(Source &&source, const Index &index, const Mask &mask_ = true,
                 }
             }
         } else if constexpr (depth_v<Target> == depth_v<Index>) {
+            using Index2 = plain_t<replace_scalar_t<Target, uint32_t>>;
+            static_assert(is_array_v<Index> &&
+                          is_integral_v<Index> &&
+                          sizeof(typename Index::Scalar) <= 4,
+                          "Second argument of gather operation must be a 32 bit index array!");
             if constexpr ((Target::IsPacked || Target::IsRecursive) && is_array_v<Source>)
                 // Case 2.1.0: gather<FloatC>(const FloatP&, ...)
-                return Target::template gather_(source.data(), index, mask, mode);
+                return Target::template gather_(source.data(), Index2(index), mask, mode);
             else
                 // Case 2.1.1: gather<FloatC>(const FloatC& / const void *, ...)
-                return Target::template gather_(source, index, mask, mode);
+                return Target::template gather_(source, Index2(index), mask, mode);
         } else {
             // Case 2.2: gather<Vector3fC>(const FloatC & / const void *, ...)
             using TargetIndex = replace_scalar_t<Target, scalar_t<Index>>;
@@ -1053,11 +1058,13 @@ void scatter(Target &target, const Value &value, const Index &index,
                           depth_v<Target> == 1,
                       "Target argument of scatter operation must either be a "
                       "pointer address or a flat array!");
-        static_assert(is_array_v<Index> && is_integral_v<Index>,
-                      "Second argument of gather operation must be an index array!");
+        static_assert(is_array_v<Index> &&
+                      is_integral_v<Index> &&
+                      sizeof(typename Index::Scalar) <= 4,
+                      "Third argument of scatter operation must be a 32 bit index array!");
 
         if constexpr (depth_v<Value> == depth_v<Index>) {
-            value.scatter_(target, index, mask, mode);
+            value.scatter_(target, uint32_array_t<Value>(index), mask, mode);
         } else {
             using TargetIndex = replace_scalar_t<Value, scalar_t<Index>>;
             scatter(target, value, detail::broadcast_index<TargetIndex>(index),
