@@ -633,6 +633,375 @@ def trace(arg, /):
     else:
         raise Exception('drjit.trace(): unsupported input type!')
 
+
+def rotate(dtype, axis, angle):
+    '''
+    Constructs a rotation quaternion, which rotates by ``angle`` radians around
+    ``axis``.
+
+    The function requires ``axis`` to be normalized.
+
+    Args:
+        dtype (type): Desired Dr.Jit quaternion type.
+
+        axis (drjit.ArrayBase): A 3-dimensional Dr.Jit array representing the rotation axis
+
+        angle (float | drjit.ArrayBase): Rotation angle.
+
+    Returns:
+        drjit.ArrayBase: The rotation quaternion
+    '''
+    if not is_quaternion_v(dtype):
+        raise Exception("drjit.rotate(): unsupported input type!")
+
+    s, c = sincos(angle * .5)
+    q = dtype(c, *(axis * s))
+    return q
+
+
+def frob(a, /):
+    '''
+    frob(arg, /)
+    Returns the squared Frobenius norm of the provided Dr.Jit matrix.
+
+    The squared Frobenius norm is defined as the sum of the squares of its elements:
+
+    .. math::
+
+        \sum_{i=1}^m \sum_{j=1}^n a_{i j}^2
+
+    Args:
+        arg (drjit.ArrayBase): A Dr.Jit matrix type
+
+    Returns:
+        drjit.ArrayBase: The squared Frobenius norm of the input matrix
+    '''
+    if not is_matrix_v(a):
+        raise Exception('frob() : unsupported type!')
+
+    result = square(a[0])
+    for i in range(1, size_v(a)):
+        value = a[i]
+        result = fma(value, value, result)
+    return sum(result)
+
+
+def polar_decomp(arg, it=10):
+    '''
+    Returns the polar decomposition of the provided Dr.Jit matrix.
+
+    The polar decomposition separates the matrix into a rotation followed by a
+    scaling along each of its eigen vectors. This decomposition always exists
+    for square matrices.
+
+    The implementation relies on an iterative algorithm, where the number of
+    iterations can be controlled by the argument ``it`` (tradeoff between
+    precision and computational cost).
+
+    Args:
+        arg (drjit.ArrayBase): A Dr.Jit matrix type
+
+        it (int): Number of iterations to be taken by the algorithm.
+
+    Returns:
+        tuple: A tuple containing the rotation matrix and the scaling matrix resulting from the decomposition.
+    '''
+    if not is_matrix_v(arg):
+        raise Exception('drjit.polar_decomp(): unsupported input type!')
+
+    def func(q,i):
+        qi = rcp(q.T)
+        gamma = sqrt(frob(qi) / frob(q))
+        s1, s2 = gamma * .5, (rcp(gamma) * .5)
+        for j in range(size_v(arg)):
+            q[j] = fma(q[j], s1, qi[j] * s2)
+        i += 1
+        return q, i
+
+    import sys
+    tp = type(arg)
+    m = sys.modules[tp.__module__]
+
+    q = type(arg)(arg)
+    i = m.UInt32(0)
+    q0, i0 = while_loop(
+        state=(q, i),
+        cond=lambda q, i: i < it,
+        body=func
+    )
+    return q0, q0.T @ arg
+
+
+def matrix_to_quat(mtx, /):
+    '''
+    matrix_to_quat(arg, /)
+    Converts a 3x3 or 4x4 homogeneous containing
+    a pure rotation into a rotation quaternion.
+
+    Args:
+        arg (drjit.ArrayBase): A Dr.Jit matrix type
+
+    Returns:
+        drjit.ArrayBase: The Dr.Jit quaternion corresponding the to input matrix.
+    '''
+    if not is_matrix_v(mtx):
+        raise Exception('drjit.matrix_to_quat(): unsupported input type!')
+
+    s = mtx.shape[:2]
+    if s != (3,3) and s != (4, 4):
+        raise Exception('drjit.matrix_to_quat(): invalid input shape!')
+
+    import sys
+    tp = type(mtx)
+    m = sys.modules[tp.__module__]
+    Q = getattr(m, tp.__name__.replace('Matrix4f' if s[0] == 4 else 'Matrix3f', 'Quaternion4f'), None)
+
+    o = 1.0
+    t0 = o + mtx[0, 0] - mtx[1, 1] - mtx[2, 2]
+    q0 = Q(t0, mtx[1, 0] + mtx[0, 1], mtx[0, 2] + mtx[2, 0], mtx[2, 1] - mtx[1, 2])
+
+    t1 = o - mtx[0, 0] + mtx[1, 1] - mtx[2, 2]
+    q1 = Q(mtx[1, 0] + mtx[0, 1], t1, mtx[2, 1] + mtx[1, 2], mtx[0, 2] - mtx[2, 0])
+
+    t2 = o - mtx[0, 0] - mtx[1, 1] + mtx[2, 2]
+    q2 = Q(mtx[0, 2] + mtx[2, 0], mtx[2, 1] + mtx[1, 2], t2, mtx[1, 0] - mtx[0, 1])
+
+    t3 = o + mtx[0, 0] + mtx[1, 1] + mtx[2, 2]
+    q3 = Q(mtx[2, 1] - mtx[1, 2], mtx[0, 2] - mtx[2, 0], mtx[1, 0] - mtx[0, 1], t3)
+
+    mask0 = mtx[0, 0] > mtx[1, 1]
+    t01 = select(mask0, t0, t1)
+    q01 = select(mask0, q0, q1)
+
+    mask1 = mtx[0, 0] < -mtx[1, 1]
+    t23 = select(mask1, t2, t3)
+    q23 = select(mask1, q2, q3)
+
+    mask2 = mtx[2, 2] < 0.0
+    t0123 = select(mask2, t01, t23)
+    q0123 = select(mask2, q01, q23)
+
+    return q0123 * (rsqrt(t0123) * 0.5)
+
+
+def quat_to_matrix(q, size=4):
+    '''
+    quat_to_matrix(arg, size=4)
+    Converts a quaternion into its matrix representation.
+
+    Args:
+        arg (drjit.ArrayBase): A Dr.Jit quaternion type
+        size (int): Controls whether to construct a 3x3 or 4x4 matrix.
+
+    Returns:
+        drjit.ArrayBase: The Dr.Jit matrix corresponding the to input quaternion.
+    '''
+    if not is_quaternion_v(q):
+        raise Exception('drjit.quat_to_matrix(): unsupported input type!')
+
+    if size != 3 and size != 4:
+        raise Exception('drjit.quat_to_matrix(): Unsupported input size!')
+
+    import sys
+    tp = type(q)
+    m = sys.modules[tp.__module__]
+    name = tp.__name__
+
+    Matrix3f = getattr(m, name.replace('Quaternion4f', 'Matrix3f'), None)
+    Matrix4f = getattr(m, name.replace('Quaternion4f', 'Matrix4f'), None)
+
+    q = q * sqrt_two
+
+    xx = q.x * q.x; yy = q.y * q.y; zz = q.z * q.z
+    xy = q.x * q.y; xz = q.x * q.z; yz = q.y * q.z
+    xw = q.x * q.w; yw = q.y * q.w; zw = q.z * q.w
+
+    if size == 4:
+        return Matrix4f(
+            1.0 - (yy + zz), xy - zw, xz + yw, 0.0,
+            xy + zw, 1.0 - (xx + zz), yz - xw, 0.0,
+            xz - yw, yz + xw, 1.0 - (xx + yy), 0.0,
+            0.0, 0.0, 0.0, 1.0)
+    elif size == 3:
+        return Matrix3f(
+            1.0 - (yy + zz), xy - zw, xz + yw,
+            xy + zw, 1.0 - (xx + zz), yz - xw,
+            xz - yw,  yz + xw, 1.0 - (xx + yy)
+        )
+
+
+def quat_to_euler(q, /):
+    '''
+    quat_to_euler(arg, /)
+    Converts a quaternion into its Euler angles representation.
+
+    The order for Euler angles is XYZ.
+
+    Args:
+        arg (drjit.ArrayBase): A Dr.Jit quaternion type
+
+    Returns:
+        drjit.ArrayBase: A 3D Dr.Jit array containing the Euler angles.
+    '''
+
+    if not is_quaternion_v(q):
+        raise Exception('drjit.quat_to_euler(): unsupported input type!')
+
+    import sys
+    tp = type(q)
+    m = sys.modules[tp.__module__]
+    name = tp.__name__
+
+    Array3f = getattr(m, name.replace('Quaternion4f', 'Array3f'), None)
+
+    # Clamp the result to stay in the valid range for asin
+    sinp = clip(2 * fma(q.w, q.y, -q.z * q.x), -1.0, 1.0)
+    gimbal_lock = abs(sinp) > (1.0 - 5e-8)
+
+    # roll (x-axis rotation)
+    q_y_2 = square(q.y)
+    sinr_cosp = 2 * fma(q.w, q.x, q.y * q.z)
+    cosr_cosp = fma(-2, fma(q.x, q.x, q_y_2), 1)
+    roll = select(gimbal_lock, 2 * atan2(q.x, q.w), atan2(sinr_cosp, cosr_cosp))
+
+    # pitch (y-axis rotation)
+    pitch = select(gimbal_lock, copysign(0.5 * pi, sinp), asin(sinp))
+
+    # yaw (z-axis rotation)
+    siny_cosp = 2 * fma(q.w, q.z, q.x * q.y)
+    cosy_cosp = fma(-2, fma(q.z, q.z, q_y_2), 1)
+    yaw = select(gimbal_lock, 0, atan2(siny_cosp, cosy_cosp))
+
+    return Array3f(roll, pitch, yaw)
+
+
+def euler_to_quat(a, /):
+    '''
+    euler_to_quat(arg, /)
+    Converts Euler angles into a Dr.Jit quaternion.
+
+    The order for input Euler angles must be XYZ.
+
+    Args:
+        arg (drjit.ArrayBase): A 3D Dr.Jit array type
+
+    Returns:
+        drjit.ArrayBase: A Dr.Jit quaternion representing the input Euler angles.
+    '''
+    if not is_array_v(a):
+        raise Exception('drjit.euler_to_quat(): unsupported input type!')
+
+    if len(a) != 3:
+        raise Exception('drjit.euler_to_quat(): input has invalid shape!')
+
+    import sys
+    tp = type(a)
+    m = sys.modules[tp.__module__]
+    name = tp.__name__
+    Quaternion4f = getattr(m, name.replace('Array3f', 'Quaternion4f'), None)
+
+    angles = a / 2.0
+    sr, cr = sincos(angles.x)
+    sp, cp = sincos(angles.y)
+    sy, cy = sincos(angles.z)
+
+    w = cr*cp*cy + sr*sp*sy
+    x = sr*cp*cy - cr*sp*sy
+    y = cr*sp*cy + sr*cp*sy
+    z = cr*cp*sy - sr*sp*cy
+    return Quaternion4f(x, y, z, w)
+
+
+def transform_decompose(a, it=10):
+    '''
+    transform_decompose(arg, it=10)
+    Performs a polar decomposition of a non-perspective 4x4 homogeneous
+    coordinate matrix and returns a tuple of
+
+    1. A positive definite 3x3 matrix containing an inhomogeneous scaling operation
+    2. A rotation quaternion
+    3. A 3D translation vector
+
+    This representation is helpful when animating keyframe animations.
+
+    Args:
+        arg (drjit.ArrayBase): A Dr.Jit matrix type
+
+        it (int): Number of iterations to be taken by the polar decomposition algorithm.
+
+    Returns:
+        tuple: The tuple containing the scaling matrix, rotation quaternion and 3D translation vector.
+    '''
+    if not is_matrix_v(a):
+        raise Exception('drjit.transform_decompose(): unsupported input type!')
+
+    if a.shape[:2] != (4,4):
+        raise Exception('drjit.transform_decompose(): invalid input shape!')
+
+    import sys
+    tp = type(a)
+    m = sys.modules[tp.__module__]
+    name = tp.__name__
+    Matrix3f = getattr(m, name.replace('Matrix4f', 'Matrix3f'), None)
+    Array3f  = getattr(m, name.replace('Matrix4f', 'Array3f'), None)
+
+    m33 = Matrix3f(
+        a[0][0], a[0][1], a[0][2],
+        a[1][0], a[1][1], a[1][2],
+        a[2][0], a[2][1], a[2][2]
+    )
+
+    Q, P = polar_decomp(m33, it)
+
+    sign_q = det(Q)
+    Q = mulsign(Q, sign_q)
+    P = mulsign(P, sign_q)
+
+    return P, matrix_to_quat(Q), Array3f(a[0][3], a[1][3], a[2][3])
+
+
+def transform_compose(s, q, t, /):
+    '''
+    transform_compose(S, Q, T, /)
+    This function composes a 4x4 homogeneous coordinate transformation from the
+    given scale, rotation, and translation. It performs the reverse of
+    :py:func:`transform_decompose`.
+
+    Args:
+        S (drjit.ArrayBase): A Dr.Jit matrix type representing the scaling part
+        Q (drjit.ArrayBase): A Dr.Jit quaternion type representing the rotation part
+        T (drjit.ArrayBase): A 3D Dr.Jit array type representing the translation part
+
+    Returns:
+        drjit.ArrayBase: The Dr.Jit matrix resulting from the composition described above.
+    '''
+    if not is_matrix_v(s) or not is_quaternion_v(q):
+        raise Exception('drjit.transform_compose(): unsupported input type!')
+
+    if s.shape[:2] != (3,3):
+        raise Exception('drjit.transform_decompose(): scale has invalid shape!')
+
+    if len(t) != 3:
+        raise Exception('drjit.transform_decompose(): translation has invalid shape!')
+
+    import sys
+    tp = type(s)
+    m = sys.modules[tp.__module__]
+    name = tp.__name__
+    Matrix3f = tp
+    Matrix4f = getattr(m, name.replace('Matrix3f', 'Matrix4f'), None)
+
+    m33 = Matrix3f(quat_to_matrix(q, 3) @ s)
+
+    m44 = Matrix4f(
+        m33[0][0], m33[0][1], m33[0][2], t[0],
+        m33[1][0], m33[1][1], m33[1][2], t[1],
+        m33[2][0], m33[2][1], m33[2][2], t[2],
+        0        , 0        , 0        , 1.0
+    )
+
+    return m44
+
 # -------------------------------------------------------------------
 #                      Mathematical constants
 # -------------------------------------------------------------------

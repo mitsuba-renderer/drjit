@@ -375,6 +375,8 @@ void promote(nb::object *o, size_t n, bool select) {
 
         if (select && i == 0) {
             m.type = (uint16_t) VarType::Bool;
+            m.is_quaternion = 0;
+            m.is_matrix = 0;
             h2 = meta_get_type(m);
         }
 
