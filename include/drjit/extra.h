@@ -221,7 +221,7 @@ ad_var_scatter_add_kahan(uint64_t *target_1, uint64_t *target_2, uint64_t value,
                          uint32_t index, uint32_t mask);
 
 /// Check if a variable represents an implicit dependency on a non-symbolic operand
-extern void ad_var_check_implicit(uint64_t index);
+extern void ad_var_check_implicit(uint64_t index, bool force_track = false);
 
 // Callbacks used by \ref ad_call() below. See the interface for details
 typedef void (*ad_call_func)(void *payload, void *self,
