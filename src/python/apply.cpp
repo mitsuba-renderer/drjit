@@ -641,7 +641,8 @@ void traverse(const char *op, TraverseCallback &tc, nb::handle h) {
 void traverse_pair_impl(const char *op, TraversePairCallback &tc, nb::handle h1,
                         nb::handle h2, drjit::string &name,
                         dr::vector<PyObject *> &stack,
-                        bool report_inconsistencies) {
+                        bool report_inconsistencies,
+                        bool width_consistency) {
     if (std::find(stack.begin(), stack.end(), h1.ptr()) != stack.end()) {
         PyErr_Format(PyExc_RecursionError, "detected a cycle in field '%s'.",
                      name.c_str());
@@ -672,8 +673,7 @@ void traverse_pair_impl(const char *op, TraversePairCallback &tc, nb::handle h1,
                 op, tc,
                 nb::steal(s.tensor_array(h1.ptr())),
                 nb::steal(s.tensor_array(h2.ptr())),
-                name, stack,
-                report_inconsistencies
+                name, stack, report_inconsistencies, width_consistency
             );
             name.resize(name_size);
         } else {
@@ -694,7 +694,7 @@ void traverse_pair_impl(const char *op, TraversePairCallback &tc, nb::handle h1,
                         op, tc,
                         nb::steal(s.item(h1.ptr(), s1 == 1 ? 0 : i)),
                         nb::steal(s.item(h2.ptr(), s2 == 1 ? 0 : i)),
-                        name, stack, report_inconsistencies
+                        name, stack, report_inconsistencies, width_consistency
                     );
                     name.resize(name_size);
                 }
@@ -702,7 +702,7 @@ void traverse_pair_impl(const char *op, TraversePairCallback &tc, nb::handle h1,
                 if (report_inconsistencies) {
                     if (s1 == 0 || s2 == 0) {
                         nb::raise("field '%s' is uninitialized.", name.c_str());
-                    } else if (s1 != s2 && s1 != 1 && s2 != 1) {
+                    } else if (s1 != s2 && s1 != 1 && s2 != 1 && width_consistency) {
                         nb::raise("incompatible sizes for field '%s' (%zu and %zu).",
                                   name.c_str(), s1, s2);
                     }
@@ -721,8 +721,11 @@ void traverse_pair_impl(const char *op, TraversePairCallback &tc, nb::handle h1,
         }
         for (size_t i = 0; i < s1; ++i) {
             name.put('[', i, ']');
-            traverse_pair_impl(op, tc, h1[s1 == 1 ? 0 : i], h2[s2 == 1 ? 0 : i],
-                               name, stack, report_inconsistencies);
+            traverse_pair_impl(
+                op, tc,
+                h1[s1 == 1 ? 0 : i], h2[s2 == 1 ? 0 : i],
+                name, stack, report_inconsistencies, width_consistency
+            );
             name.resize(name_size);
         }
     } else if (tp1.is(&PyDict_Type)) {
@@ -740,7 +743,7 @@ void traverse_pair_impl(const char *op, TraversePairCallback &tc, nb::handle h1,
         for (nb::handle k : k1) {
             name.put('[', nb::str(k).c_str(), ']');
             traverse_pair_impl(op, tc, d1[k], d2[k], name, stack,
-                               report_inconsistencies);
+                               report_inconsistencies, width_consistency);
             name.resize(name_size);
         }
     } else {
@@ -749,7 +752,7 @@ void traverse_pair_impl(const char *op, TraversePairCallback &tc, nb::handle h1,
                 name.put('.', nb::str(k).c_str());
                 traverse_pair_impl(op, tc, nb::getattr(h1, k),
                                    nb::getattr(h2, k), name, stack,
-                                   report_inconsistencies);
+                                   report_inconsistencies, width_consistency);
                 name.resize(name_size);
             }
         } else if (nb::object df = get_dataclass_fields(tp1); df.is_valid()) {
@@ -758,7 +761,7 @@ void traverse_pair_impl(const char *op, TraversePairCallback &tc, nb::handle h1,
                 name.put('.', nb::str(k).c_str());
                 traverse_pair_impl(op, tc, nb::getattr(h1, k),
                                    nb::getattr(h2, k), name, stack,
-                                   report_inconsistencies);
+                                   report_inconsistencies, width_consistency);
                 name.resize(name_size);
             }
         } else if (!h1.is(h2) && !h1.equal(h2)) {
@@ -775,12 +778,14 @@ void traverse_pair_impl(const char *op, TraversePairCallback &tc, nb::handle h1,
 
 /// Parallel traversal of two compatible PyTrees 'h1' and 'h2'
 void traverse_pair(const char *op, TraversePairCallback &tc, nb::handle h1,
-                   nb::handle h2, const char *name_, bool report_inconsistencies) {
+                   nb::handle h2, const char *name_,
+                   bool report_inconsistencies, bool width_consistency) {
     drjit::string name = name_;
     dr::vector<PyObject *> stack;
 
     try {
-        traverse_pair_impl(op, tc, h1, h2, name, stack, report_inconsistencies);
+        traverse_pair_impl(op, tc, h1, h2, name, stack,
+                           report_inconsistencies, width_consistency);
     } catch (nb::python_error &e) {
         nb::raise_from(e, PyExc_RuntimeError,
                        "%s(): error encountered while processing arguments "

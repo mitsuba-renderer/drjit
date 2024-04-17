@@ -5252,6 +5252,10 @@
     Raises an exception is a mismatch is found (e.g., different types, arrays with
     incompatible numbers of elements, dictionaries with different keys, etc.)
 
+    When the ``width_consistency`` argument is enabled, an exception will also be
+    raised if there is a mismatch of the vectorization widths of any Dr.Jit type
+    in the pytrees.
+
 .. topic:: detail_collect_indices
 
     Return Dr.Jit variable indices associated with the provided data structure.

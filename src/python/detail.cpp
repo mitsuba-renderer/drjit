@@ -26,7 +26,7 @@
  * This function exists for Dr.Jit-internal use. You probably should not call
  * it in your own application code.
  *
- * (Note: this explanation is also part of src/python/docstr.h -- please keep
+ * (Note: this explanation is also part of src/python/docstr.rst -- please keep
  * them in sync in case you make a change here)
  */
 nb::object copy(nb::handle h) {
@@ -99,7 +99,7 @@ bool can_scatter_reduce(nb::type_object_t<dr::ArrayBase> tp, ReduceOp op) {
  * This function exists for Dr.Jit-internal use. You probably should not
  * call it in your own application code.
  *
- * (Note: this explanation is also part of src/python/docstr.h -- please keep
+ * (Note: this explanation is also part of src/python/docstr.rst -- please keep
  * them in sync in case you make a change here)
 */
 void collect_indices(nb::handle h, dr::vector<uint64_t> &indices, bool inc_ref) {
@@ -147,7 +147,7 @@ void collect_indices(nb::handle h, dr::vector<uint64_t> &indices, bool inc_ref) 
  * This function exists for Dr.Jit-internal use. You probably should not call
  * it in your own application code.
  *
- * (Note: this explanation is also part of src/python/docstr.h -- please keep
+ * (Note: this explanation is also part of src/python/docstr.rst -- please keep
  * them in sync in case you make a change here)
  */
 nb::object update_indices(nb::handle h, const dr::vector<uint64_t> &indices) {
@@ -194,7 +194,7 @@ nb::object update_indices(nb::handle h, const dr::vector<uint64_t> &indices) {
  * function internally to release references held by a temporary copy of the
  * state tuple.
  *
- * (Note: this explanation is also part of src/python/docstr.h -- please keep
+ * (Note: this explanation is also part of src/python/docstr.rst -- please keep
  * them in sync in case you make a change here)
  */
 nb::object reset(nb::handle h) {
@@ -213,15 +213,19 @@ nb::object reset(nb::handle h) {
  * Raises an exception is a mismatch is found (e.g., different types, arrays with
  * incompatible numbers of elements, dictionaries with different keys, etc.)
  *
- * (Note: this explanation is also part of src/python/docstr.h -- please keep
+ * When the ``width_consistency`` argument is enabled, an exception will also be
+ * raised if there is a mismatch of the vectorization widths of any Dr.Jit type
+ * in the pytrees.
+ *
+ * (Note: this explanation is also part of src/python/docstr.rst -- please keep
  * them in sync in case you make a change here)
  */
-void check_compatibility(nb::handle h1, nb::handle h2, const char *name) {
+void check_compatibility(nb::handle h1, nb::handle h2, bool width_consistency, const char *name) {
     struct CheckCompatibility : TraversePairCallback {
         void operator()(nb::handle, nb::handle) override {
         }
     } cc;
-    traverse_pair("drjit.detail.check_compatibility", cc, h1, h2, name, true);
+    traverse_pair("drjit.detail.check_compatibility", cc, h1, h2, name, true, width_consistency);
 }
 
 static nb::handle trace_func_handle;
