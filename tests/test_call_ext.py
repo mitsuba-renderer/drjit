@@ -800,3 +800,34 @@ def test14_dispatch_uneven_buckets(t, symbolic):
         xo, yo = dr.dispatch(c, my_func, (xi, yi), active=m)
     assert dr.all(xo == t(10, 0, 0, 21, 24, 27))
     assert dr.all(yo == t(-1, 0, 0,  3,  4, 5))
+
+
+@pytest.mark.parametrize("symbolic", [True, False])
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+def test15_dispatch_scalar_mask(t, symbolic):
+    pkg = get_pkg(t)
+
+    A, B, Base, BasePtr = pkg.A, pkg.B, pkg.Base, pkg.BasePtr
+    Mask = dr.mask_t(t)
+    a, b = A(), B()
+
+    xi = t(1, 2, 8, 3, 4)
+    yi = t(5, 6, 8, 7, 8)
+
+    def my_func(self, arg, active):
+        return self.f_masked(arg, active)
+
+    c = BasePtr(a, a, a, b, b)
+    m = True # Use a scalar mask
+
+    # Masked case
+    with dr.scoped_set_flag(dr.JitFlag.SymbolicCalls, symbolic):
+        xo, yo = dr.dispatch(c, my_func, (xi, yi), m)
+    assert dr.all(xo == t(10, 12, 16, 21, 24))
+    assert dr.all(yo == t(-1, -2, -8, 3, 4))
+
+    # Masked case, as keyword argument
+    with dr.scoped_set_flag(dr.JitFlag.SymbolicCalls, symbolic):
+        xo, yo = dr.dispatch(c, my_func, (xi, yi), active=m)
+    assert dr.all(xo == t(10, 12, 16, 21, 24))
+    assert dr.all(yo == t(-1, -2, -8, 3, 4))

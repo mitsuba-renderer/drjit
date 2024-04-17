@@ -591,3 +591,29 @@ def test17_switch_uneven_buckets(t, symbolic):
         # Masked case, as keyword argument
         result = dr.switch(index, c, x, active=m)
         assert dr.allclose(result, [1, 0, 0, 40, 50, 60])
+
+
+@pytest.mark.parametrize("symbolic", [True, False])
+@pytest.test_arrays('int32,-uint32,shape=(*),jit')
+def test15_switch_scalar_mask(t, symbolic):
+    with dr.scoped_set_flag(dr.JitFlag.SymbolicCalls, symbolic):
+        Int = t
+        UInt32 = dr.uint32_array_t(Int)
+
+        c = [
+            lambda x, active: x,
+            lambda x, active: x * 10
+        ]
+
+        index = UInt32(0, 0, 1, 1, 1)
+        x = Int(1, 2, 3, 4, 5)
+
+        m = True # Use a scalar mask
+
+        # Masked case
+        result = dr.switch(index, c, x, m)
+        assert dr.allclose(result, [1, 2, 30, 40, 50])
+
+        # Masked case, as keyword argument
+        result = dr.switch(index, c, x, active=m)
+        assert dr.allclose(result, [1, 2, 30, 40, 50])
