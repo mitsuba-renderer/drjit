@@ -676,6 +676,7 @@ def test22_dispatch_fully_masked(t, symbolic, opaque_mask):
     assert dr.all(xo == t(0, 0, 0, 0, 0))
     assert dr.all(yo == t(0, 0, 0, 0, 0))
 
+
 @pytest.mark.parametrize("symbolic", [True, False])
 @pytest.mark.parametrize("variant", [0, 1])
 @pytest.test_arrays('float32,is_diff,shape=(*)')
@@ -711,6 +712,7 @@ def test23_rev_correctness(t, symbolic, variant):
         xd, yd = dr.backward_to(xi, yi)
         assert dr.all(xd==[99, 99, 101, 101])
         assert dr.all(yd==[102, 102, 103, 103])
+
 
 @pytest.mark.parametrize("symbolic", [False, True])
 @pytest.mark.parametrize("with_evaluated_loop", [False, True])
@@ -766,3 +768,35 @@ def test13_constant_getter_masked(t, drjit_verbose, capsys):
     assert transcript.count('jit_var_gather') == 0
 
     assert dr.all(d == [123, 123, 0, 0, 123])
+
+
+@pytest.mark.parametrize("symbolic", [True, False])
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+def test14_dispatch_uneven_buckets(t, symbolic):
+    pkg = get_pkg(t)
+
+    A, B, Base, BasePtr = pkg.A, pkg.B, pkg.Base, pkg.BasePtr
+    Mask = dr.mask_t(t)
+    a, b = A(), B()
+
+    xi = t(1, 2, 8, 3, 4, 5)
+    yi = t(5, 6, 8, 7, 8, 9)
+
+    def my_func(self, arg, active):
+        return self.f_masked(arg, active)
+
+    # One thread to A, two threads masked, three threads to B
+    c = BasePtr(a, b, b, b, b, b)
+    m = Mask([True, False, False, True, True, True])
+
+    # Masked case
+    with dr.scoped_set_flag(dr.JitFlag.SymbolicCalls, symbolic):
+        xo, yo = dr.dispatch(c, my_func, (xi, yi), m)
+    assert dr.all(xo == t(10, 0, 0, 21, 24, 27))
+    assert dr.all(yo == t(-1, 0, 0,  3,  4, 5))
+
+    # Masked case, as keyword argument
+    with dr.scoped_set_flag(dr.JitFlag.SymbolicCalls, symbolic):
+        xo, yo = dr.dispatch(c, my_func, (xi, yi), active=m)
+    assert dr.all(xo == t(10, 0, 0, 21, 24, 27))
+    assert dr.all(yo == t(-1, 0, 0,  3,  4, 5))

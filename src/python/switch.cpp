@@ -140,7 +140,7 @@ nb::object switch_impl(nb::handle index_, nb::sequence targets,
                 state.targets_o[index](*state.args_o[0], **state.args_o[1]);
 
             if (state.rv_o.is_valid())
-                check_compatibility(result, state.rv_o, "result");
+                check_compatibility(result, state.rv_o, false, "result");
 
             state.rv_o = std::move(result);
             ::collect_indices(state.rv_o, rv_i);
@@ -236,7 +236,7 @@ nb::object dispatch_impl(nb::handle_t<dr::ArrayBase> inst,
                 state.target_o(self_o, *state.args_o[0], **state.args_o[1]);
 
             if (state.rv_o.is_valid())
-                check_compatibility(result, state.rv_o, "result");
+                check_compatibility(result, state.rv_o, false, "result");
 
             state.rv_o = std::move(result);
             ::collect_indices(state.rv_o, rv_i);

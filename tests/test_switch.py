@@ -391,7 +391,7 @@ def test09_complex(t, symbolic):
         dr.enable_grad(a, b)
 
         result = dr.switch(index, c, b=b, a=a)
-        dr.detail.check_compatibility(result, expected, "result")
+        dr.detail.check_compatibility(result, expected, True, "result")
         assert dr.all(result['rv0'] == expected['rv0'])
         assert dr.all(result['rv1'][0] == expected['rv1'][0])
         assert dr.all(result['rv1'][1] == expected['rv1'][1])
@@ -440,6 +440,7 @@ def test11_no_mutate(t, optimize, symbolic):
         with dr.scoped_set_flag(dr.JitFlag.OptimizeCalls, optimize):
             assert dr.all(dr.switch(t(0, 1, 2), targets, t(1, 2, 3)) == [11, 102, 1003])
 
+
 @pytest.test_arrays('uint32,shape=(*),jit')
 def test12_out_of_bounds_symbolic(t, capsys):
     targets = [lambda x:x, lambda x: x+1]
@@ -459,7 +460,6 @@ def test13_out_of_bounds_evaluted(t):
             dr.eval(dr.switch(t(0, 1, 100), targets, t(1), mode='evaluated'))
     assert 'out-of-bounds callable ID 101 (must be < 3).' in str(e)
 
-# + Masking for all elements
 @pytest.mark.parametrize("opaque_mask", [True, False])
 @pytest.mark.parametrize("symbolic", [True, False])
 @pytest.test_arrays('int32,-uint32,shape=(*),jit')
@@ -563,3 +563,31 @@ def test16_optimize_away(t, variant):
         assert ir.count(' = xor') == 2*variant
     elif dr.backend_v(t) is dr.JitBackend.CUDA:
         assert ir.count('xor.b32') == 2*variant
+
+
+@pytest.mark.parametrize("symbolic", [True, False])
+@pytest.test_arrays('int32,-uint32,shape=(*),jit')
+def test17_switch_uneven_buckets(t, symbolic):
+    with dr.scoped_set_flag(dr.JitFlag.SymbolicCalls, symbolic):
+        Int = t
+        UInt32 = dr.uint32_array_t(Int)
+        Bool = dr.mask_t(Int)
+
+        c = [
+            lambda x, active: x,
+            lambda x, active: x * 10
+        ]
+
+        # One thread to 0, two threads masked, three threads to 1
+        index = UInt32(0, 1, 1, 1, 1, 1)
+        m = Bool([True, False, False, True, True, True])
+
+        x = Int(1, 2, 3, 4, 5, 6)
+
+        # Masked case
+        result = dr.switch(index, c, x, m)
+        assert dr.allclose(result, [1, 0, 0, 40, 50, 60])
+
+        # Masked case, as keyword argument
+        result = dr.switch(index, c, x, active=m)
+        assert dr.allclose(result, [1, 0, 0, 40, 50, 60])

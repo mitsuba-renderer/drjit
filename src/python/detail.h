@@ -26,7 +26,7 @@ extern nb::object copy(nb::handle h);
 extern void collect_indices(nb::handle, dr::vector<uint64_t> &,
                             bool inc_ref = false);
 extern nb::object update_indices(nb::handle, const dr::vector<uint64_t> &);
-extern void check_compatibility(nb::handle, nb::handle, const char *name);
+extern void check_compatibility(nb::handle, nb::handle, bool, const char *);
 extern void stash_ref(nb::handle h, dr::vector<StashRef> &);
 
 extern nb::object reset(nb::handle h);
