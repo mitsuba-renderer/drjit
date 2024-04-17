@@ -92,104 +92,121 @@ static void ad_cond_symbolic(JitBackend backend, const char *label,
                              dr::vector<bool> &input_implicit,
                              dr::vector<uint32_t> &implicit_in,
                              bool ad) {
+    tsl::robin_map<uint32_t, uint32_t, UInt32Hasher> input_map;
     bool symbolic = jit_flag(JitFlag::SymbolicScope);
 
-    tsl::robin_map<uint32_t, uint32_t, UInt32Hasher> input_map;
-    index64_vector args;
-    args.reserve(args_.size());
+    {
+        scoped_isolation_boundary guard;
 
-    input_implicit.reserve(args_.size());
-    input_offsets.reserve(args_.size());
+        index64_vector args;
+        args.reserve(args_.size());
 
-    scoped_record record_guard(backend);
+        input_implicit.reserve(args_.size());
+        input_offsets.reserve(args_.size());
 
-    // Detach from original computation in AD graph
-    for (size_t i = 0; i < args_.size(); ++i) {
-        uint64_t index = args_[i];
+        scoped_record record_guard(backend);
 
-        if (ad && (index >> 32) != 0) {
-            uint64_t new_index = ad_var_new((uint32_t) index);
-            args.push_back_steal(new_index);
-            input_map[uint32_t(new_index >> 32)] = input_offsets.size();
-            input_offsets.push_back(i);
-            input_implicit.push_back(false);
-        } else {
-            args.push_back_borrow((uint32_t) index);
+        // Detach from original computation in AD graph
+        for (size_t i = 0; i < args_.size(); ++i) {
+            uint64_t index = args_[i];
+
+            if (ad && (index >> 32) != 0) {
+                uint64_t new_index = ad_var_new((uint32_t) index);
+                args.push_back_steal(new_index);
+                input_map[uint32_t(new_index >> 32)] = input_offsets.size();
+                input_offsets.push_back(i);
+                input_implicit.push_back(false);
+            } else {
+                args.push_back_borrow((uint32_t) index);
+            }
         }
-    }
 
-    JitVar handle =
-        JitVar::steal(jit_var_cond_start(label, symbolic, cond_t, cond_f));
-    JitVar true_mask = JitVar::steal(jit_var_bool(backend, true));
+        JitVar handle =
+            JitVar::steal(jit_var_cond_start(label, symbolic, cond_t, cond_f));
+        JitVar true_mask = JitVar::steal(jit_var_bool(backend, true));
 
-    index64_vector true_idx, false_idx;
+        index64_vector true_idx, false_idx;
 
-    // Execute 'true_fn'
-    {
-        scoped_push_mask guard(
-            backend, backend == JitBackend::CUDA ? true_mask.index() : cond_t);
-        body_cb(payload, true, args, true_idx);
-    }
-    false_idx.reserve(true_idx.size());
-    rv.reserve(true_idx.size());
+        // Execute 'true_fn'
+        {
+            scoped_push_mask guard(
+                backend, backend == JitBackend::CUDA ? true_mask.index() : cond_t);
+            body_cb(payload, true, args, true_idx);
+        }
+        false_idx.reserve(true_idx.size());
+        rv.reserve(true_idx.size());
 
-    dr::vector<uint32_t> tmp(true_idx.size());
-    for (size_t i = 0; i < true_idx.size(); ++i)
-        tmp[i] = (uint32_t) true_idx[i];
+        dr::vector<uint32_t> tmp(true_idx.size());
+        for (size_t i = 0; i < true_idx.size(); ++i)
+            tmp[i] = (uint32_t) true_idx[i];
 
-    JitVar handle_2 = JitVar::steal(jit_var_cond_append(
-        handle.index(), tmp.data(), tmp.size()));
+        JitVar handle_2 = JitVar::steal(jit_var_cond_append(
+            handle.index(), tmp.data(), tmp.size()));
 
-    // Execute 'false_fn'
-    {
-        scoped_push_mask guard(
-            backend, backend == JitBackend::CUDA ? true_mask.index() : cond_f);
-        body_cb(payload, false, args, false_idx);
-    }
+        // Execute 'false_fn'
+        {
+            scoped_push_mask guard(
+                backend, backend == JitBackend::CUDA ? true_mask.index() : cond_f);
+            body_cb(payload, false, args, false_idx);
+        }
 
-    if (true_idx.size() != false_idx.size())
-        jit_raise("ad_cond_symbolic(): inconsistent number of outputs!");
+        if (true_idx.size() != false_idx.size())
+            jit_raise("ad_cond_symbolic(): inconsistent number of outputs!");
 
-    for (size_t i = 0; i < false_idx.size(); ++i)
-        tmp[i] = (uint32_t) false_idx[i];
+        for (size_t i = 0; i < false_idx.size(); ++i)
+            tmp[i] = (uint32_t) false_idx[i];
 
-    JitVar handle_3 = JitVar::steal(jit_var_cond_append(
-        handle.index(), tmp.data(), tmp.size()));
+        JitVar handle_3 = JitVar::steal(jit_var_cond_append(
+            handle.index(), tmp.data(), tmp.size()));
 
-    record_guard.disarm();
+        record_guard.disarm();
 
-    jit_var_cond_end(handle.index(), tmp.data());
+        jit_var_cond_end(handle.index(), tmp.data());
 
-    for (size_t i = 0; i < tmp.size(); ++i) {
-        uint32_t index = tmp[i];
+        for (size_t i = 0; i < tmp.size(); ++i) {
+            uint32_t index = tmp[i];
 
-        if (ad && ((true_idx[i] >> 32) || (false_idx[i] >> 32))) {
-            // Identify differentiable inputs that are returned as-is
-            // and keep them out of the CustomOp machinery
-            if (true_idx[i] == false_idx[i]) {
-                auto it = input_map.find(uint32_t(true_idx[i] >> 32));
-                if (it != input_map.end()) {
-                    uint32_t offset = input_offsets[it->second];
-                    uint64_t index_2 = args_[offset];
-                    rv.push_back(ad_var_inc_ref(index_2));
-                    jit_var_dec_ref(index);
-                    continue;
+            if (ad && ((true_idx[i] >> 32) || (false_idx[i] >> 32))) {
+                // Identify differentiable inputs that are returned as-is
+                // and keep them out of the CustomOp machinery
+                if (true_idx[i] == false_idx[i]) {
+                    auto it = input_map.find(uint32_t(true_idx[i] >> 32));
+                    if (it != input_map.end()) {
+                        uint32_t offset = input_offsets[it->second];
+                        uint64_t index_2 = args_[offset];
+                        rv.push_back(ad_var_inc_ref(index_2));
+                        jit_var_dec_ref(index);
+                        continue;
+                    }
                 }
+
+                output_offsets.push_back(i);
             }
 
-            output_offsets.push_back(i);
+            rv.push_back(index);
         }
 
-        rv.push_back(index);
+        if (ad)
+            ad_copy_implicit_deps(implicit_in);
+
+        guard.disarm();
     }
 
     if (ad) {
-        ad_copy_implicit_deps(implicit_in);
-
         for (uint32_t &index: implicit_in) {
             auto it = input_map.find(index);
-            if (it != input_map.end())
+            printf("%s: implicit dependence on a%u\n", label, index);
+
+            if (it != input_map.end()) {
                 input_implicit[it->second] = true;
+                index = uint32_t(args_[input_offsets[it->second]] >> 32);
+                printf(" - changed to a%u\n", index);
+            }
+
+            if (symbolic) {
+                printf("Adding it.\n");
+                ad_var_check_implicit(((uint64_t) index) << 32, true);
+            }
         }
     }
 }
@@ -215,7 +232,6 @@ public:
             m_args.push_back_borrow(index);
 
         m_rv.reserve(rv.size());
-        m_input_implicit.reserve(m_input_offsets.size());
 
         for (size_t i : m_input_offsets)
             add_index(m_backend, m_args[i] >> 32, true);
@@ -445,11 +461,9 @@ bool ad_cond(JitBackend backend, int symbolic, const char *label, void *payload,
         dr::vector<uint32_t> implicit_in;
 
         {
-            scoped_isolation_boundary guard;
             ad_cond_symbolic(backend, label, payload, true_mask.index(),
                              false_mask.index(), args, rv, body_cb, input_offsets,
                              output_offsets, input_implicit, implicit_in, ad);
-            guard.disarm();
         }
 
         if (!input_offsets.empty() || !output_offsets.empty()) {

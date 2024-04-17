@@ -2970,7 +2970,7 @@ const char *ad_var_graphviz() {
 // Functionality to track implicit inputs of recorded computation
 // ==========================================================================
 
-void ad_var_check_implicit(uint64_t index) {
+void ad_var_check_implicit(uint64_t index, bool force_track) {
     ADIndex ad_index = ::ad_index(index);
     if (ad_index == 0 || !jit_flag(JitFlag::SymbolicScope))
         return;
@@ -2978,7 +2978,7 @@ void ad_var_check_implicit(uint64_t index) {
     std::lock_guard<std::mutex> guard(state.mutex);
     Variable *v = state[ad_index];
 
-    if (!(v->flags & (uint8_t) VariableFlags::Symbolic)) {
+    if (force_track || !(v->flags & (uint8_t) VariableFlags::Symbolic)) {
         ad_var_inc_ref_int(ad_index, v);
         ad_log("ad_check_implicit(): registering an implicit dependence on "
                "variable a%u.", ad_index);
