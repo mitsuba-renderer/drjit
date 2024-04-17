@@ -160,6 +160,11 @@ nb::object switch_impl(nb::handle index_, nb::sequence targets,
         dr::detail::index64_vector rv_i;
         ::collect_indices(state->args_o, args_i);
 
+        if (mask.is_valid() && mask.type().is(&PyBool_Type)) {
+            nb::type_object mask_tp = nb::borrow<nb::type_object>(s.mask);
+            mask = mask_tp(mask);
+        }
+
         bool done = ad_call(
             (JitBackend) s.backend, nullptr, symbolic, nb::len(targets),
             label.c_str(), false, (uint32_t) s.index(inst_ptr(index)),
@@ -261,6 +266,11 @@ nb::object dispatch_impl(nb::handle_t<dr::ArrayBase> inst,
         vector<uint64_t> args_i;
         dr::detail::index64_vector rv_i;
         ::collect_indices(state->args_o, args_i);
+
+        if (mask.is_valid() && mask.type().is(&PyBool_Type)) {
+            nb::type_object mask_tp = nb::borrow<nb::type_object>(s.mask);
+            mask = mask_tp(mask);
+        }
 
         bool done = ad_call(
             (JitBackend) s.backend, state->domain_name.c_str(), symbolic, 0,
