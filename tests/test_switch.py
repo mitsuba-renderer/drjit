@@ -617,3 +617,32 @@ def test15_switch_scalar_mask(t, symbolic):
         # Masked case, as keyword argument
         result = dr.switch(index, c, x, active=m)
         assert dr.allclose(result, [1, 2, 30, 40, 50])
+
+
+@pytest.mark.parametrize("symbolic", [True, False])
+@pytest.test_arrays('int32,-uint32,shape=(*),jit')
+def test16_switch_loop_in_target(t, symbolic):
+    with dr.scoped_set_flag(dr.JitFlag.SymbolicCalls, symbolic):
+        Int = t
+        UInt32 = dr.uint32_array_t(Int)
+
+        impl_data = Int([3])
+        dr.make_opaque(impl_data)
+
+        @dr.syntax()
+        def a(x, y=impl_data):
+            z = y + x
+            while z < 10:
+                z += 2
+            return 3 * z
+
+        c = [
+            lambda x: a(x),
+            lambda x: x * 10
+        ]
+
+        index = UInt32(0, 0, 1, 1, 1)
+        x = Int(1, 2, 3, 4, 5)
+
+        result = dr.switch(index, c, x)
+        assert dr.allclose(result, [30, 33, 30, 40, 50])
