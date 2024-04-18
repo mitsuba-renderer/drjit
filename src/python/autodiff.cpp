@@ -196,7 +196,6 @@ static void accum_grad(nb::handle target, nb::handle source) {
         void operator()(nb::handle h1, nb::handle h2) override {
             const ArraySupplement &s1 = supp(h1.type()),
                                   &s2 = supp(h2.type());
-
             if (s1.is_diff && is_float(s1) && is_float(s2) &&
                 s1.backend == s2.backend) {
                 uint64_t i1 = s1.index(inst_ptr(h1)),
@@ -286,7 +285,7 @@ static bool check_grad_enabled(const char *name, nb::handle h, uint32_t flags) {
 static void forward_from(nb::handle_t<dr::ArrayBase> h, uint32_t flags) {
     if (check_grad_enabled("drjit.forward_from", h, flags)) {
         ::clear_grad(h);
-        ::accum_grad(h, nb::float_(1.0));
+        ::accum_grad(h, h.type()(1.0));
         enqueue_impl(dr::ADMode::Forward, h);
         nb::gil_scoped_release r;
         ad_traverse(dr::ADMode::Forward, flags);
@@ -296,7 +295,7 @@ static void forward_from(nb::handle_t<dr::ArrayBase> h, uint32_t flags) {
 static void backward_from(nb::handle_t<dr::ArrayBase> h, uint32_t flags) {
     if (check_grad_enabled("drjit.backward_from", h, flags)) {
         ::clear_grad(h);
-        ::accum_grad(h, nb::float_(1.0));
+        ::accum_grad(h, h.type()(1.0));
         enqueue_impl(dr::ADMode::Backward, h);
         nb::gil_scoped_release r;
         ad_traverse(dr::ADMode::Backward, flags);
