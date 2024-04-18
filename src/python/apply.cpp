@@ -684,7 +684,7 @@ void traverse_pair_impl(const char *op, TraversePairCallback &tc, nb::handle h1,
                     if (report_inconsistencies)
                         nb::raise("inconsistent sizes for field '%s' (%zu and %zu).",
                                   name.c_str(), s1, s2);
-                    else
+                    else if (s1 != 1 && s2 != 1)
                         return;
                 }
 
@@ -692,8 +692,8 @@ void traverse_pair_impl(const char *op, TraversePairCallback &tc, nb::handle h1,
                     name.put('[', i, ']');
                     traverse_pair_impl(
                         op, tc,
-                        nb::steal(s.item(h1.ptr(), i)),
-                        nb::steal(s.item(h2.ptr(), i)),
+                        nb::steal(s.item(h1.ptr(), s1 == 1 ? 0 : i)),
+                        nb::steal(s.item(h2.ptr(), s2 == 1 ? 0 : i)),
                         name, stack, report_inconsistencies
                     );
                     name.resize(name_size);
@@ -716,13 +716,13 @@ void traverse_pair_impl(const char *op, TraversePairCallback &tc, nb::handle h1,
             if (report_inconsistencies)
                 nb::raise("inconsistent sizes for field '%s' (%zu and %zu).",
                           name.c_str(), s1, s2);
-            else
+            else if (s1 != 1 && s2 != 1)
                 return;
         }
         for (size_t i = 0; i < s1; ++i) {
             name.put('[', i, ']');
-            traverse_pair_impl(op, tc, h1[i], h2[i], name, stack,
-                               report_inconsistencies);
+            traverse_pair_impl(op, tc, h1[s1 == 1 ? 0 : i], h2[s2 == 1 ? 0 : i],
+                               name, stack, report_inconsistencies);
             name.resize(name_size);
         }
     } else if (tp1.is(&PyDict_Type)) {

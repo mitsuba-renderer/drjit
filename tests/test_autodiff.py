@@ -1762,3 +1762,11 @@ def test115_dot_ad(t):
     g1 = a.grad, b.grad
 
     assert dr.all((c0 == c1) & (g0[0] == g1[0]) & (g0[1] == g1[1]))
+
+@pytest.test_arrays('is_diff,float32,shape=(*, *)')
+def test116_arrayxf_backprop(t):
+    a = t([[1,2,3], [4,5,6]])
+    dr.enable_grad(a)
+    c = 2 * a
+    dr.backward(c)
+    assert dr.all(a.grad == t([2,2,2], [2,2,2]), axis=None)
