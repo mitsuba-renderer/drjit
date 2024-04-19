@@ -355,10 +355,32 @@ public:
             rv[offset] = index_new;
             ad_var_dec_ref(index);
         }
+
+        if (!implicit_out.empty()) {
+            implicit.clear();
+            for (uint32_t index: implicit_out)
+                implicit.insert(index);
+            for (size_t i = 0; i < rv.size(); ++i) {
+                uint32_t ad_index = to_ad_index(rv[i]);
+                auto it = implicit.find(ad_index);
+                if (it == implicit.end())
+                    continue;
+                implicit.erase_fast(it);
+                add_index(m_backend, ad_index, false);
+                m_implicit_out.push_back_borrow(from_ad_index(ad_index));
+                m_output_offsets.push_back(i);
+            }
+            for (uint32_t index: implicit_out) {
+                auto it = implicit.find(index);
+                if (it == implicit.end())
+                    continue;
+                add_index(m_backend, index, false);
+                m_implicit_out.push_back_borrow(from_ad_index(index));
+            }
+        }
+
         for (uint32_t index: implicit_in)
             add_index(m_backend, index, true);
-        for (uint32_t index: implicit_out)
-            add_index(m_backend, index, false);
     }
 
     ~CondOp() {
@@ -445,13 +467,20 @@ public:
             args2.push_back_borrow(m_args_implicit[i] ? m_args[i] : args[i]);
 
         for (size_t offset : m_input_offsets) {
-            uint64_t &index    = args2[offset],
+            uint64_t &index = args2[offset],
                      index_new = ad_var_new((uint32_t) index);
             ad_var_dec_ref(index);
             index = index_new;
         }
 
-        m_body_cb(m_payload, value, args2, rv2);
+        {
+            // Begin a recording session and abort it by not
+            // calling .disarm(). This clears side effects.
+            scoped_record record_guard(m_backend);
+
+            // Execute the body of the conditional operation
+            m_body_cb(m_payload, value, args2, rv2);
+        }
 
         for (size_t i = 0; i < m_input_offsets.size(); ++i) {
             uint64_t index = args2[m_input_offsets[i]];
@@ -482,30 +511,31 @@ public:
             args2.push_back_borrow(m_args_implicit[i] ? m_args[i] : args[i]);
 
         for (size_t offset : m_input_offsets) {
-            uint64_t &index    = args2[offset],
+            uint64_t &index = args2[offset],
                      index_new = ad_var_new((uint32_t) index);
             ad_var_dec_ref(index);
             index = index_new;
         }
 
-        m_body_cb(m_payload, value, args2, rv2);
+        {
+            // Begin a recording session and abort it by not
+            // calling .disarm(). This clears side effects.
+            scoped_record record_guard(m_backend);
 
-        // Launch the AD system recursively to propagate derivatives
-        for (size_t i = 0; i < m_output_indices.size(); ++i) {
-            if (i < m_output_offsets.size()) {
-                // Enqueue regular output argument
-                uint64_t index_new = ad_var_copy(rv2[m_output_offsets[i]]);
-                ad_accum_grad(index_new, (uint32_t) args[m_args.size() + i]);
-                ad_enqueue(dr::ADMode::Backward, index_new);
-                ad_var_dec_ref(index_new);
-            } else {
-                // Enqueue implicit output
-                ad_enqueue(dr::ADMode::Backward,
-                           from_ad_index(m_output_indices[i]));
-            }
+            // Execute the body of the conditional operation
+            m_body_cb(m_payload, value, args2, rv2);
         }
 
-        ad_traverse(dr::ADMode::Backward, (uint32_t) dr::ADFlag::Default);
+        // Launch the AD system recursively to propagate derivatives
+        for (size_t i = 0; i < m_output_offsets.size(); ++i) {
+            // Enqueue regular output argument
+            uint64_t index_new = ad_var_copy(rv2[m_output_offsets[i]]);
+            ad_accum_grad(index_new, (uint32_t) args[m_args.size() + i]);
+            ad_enqueue(dr::ADMode::Backward, index_new);
+            ad_var_dec_ref(index_new);
+        }
+
+        ad_traverse(dr::ADMode::Backward, (uint32_t) dr::ADFlag::ClearNone);
 
         // Return gradients of non-implicit inputs
         for (size_t offset: m_input_offsets)
@@ -538,6 +568,7 @@ private:
     ad_cond_delete m_delete_cb;
     index64_vector m_args;
     index64_vector m_rv;
+    index64_vector m_implicit_out;
     dr::vector<bool> m_args_implicit;
     dr::vector<size_t> m_input_offsets;
     dr::vector<size_t> m_output_offsets;
