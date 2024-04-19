@@ -806,13 +806,13 @@ bool ad_call(JitBackend backend, const char *domain, size_t callable_count,
             scoped_isolation_boundary guard;
             ad_call_getter(backend, domain, name, size, index, mask,
                             callable_count, args, rv, rv_ad, func, payload);
-            ad_copy_implicit_deps(implicit_in);
+            ad_copy_implicit_deps(implicit_in, true);
             guard.success = true;
         } else if (jit_flag(JitFlag::SymbolicCalls)) {
             scoped_isolation_boundary guard;
             ad_call_symbolic(backend, domain, name, size, index, mask,
                             callable_count, args, rv, rv_ad, func, payload);
-            ad_copy_implicit_deps(implicit_in);
+            ad_copy_implicit_deps(implicit_in, true);
             guard.success = true;
         } else {
             if (jit_flag(JitFlag::SymbolicScope))

@@ -51,6 +51,7 @@
 #include <drjit/custom.h>
 #include <drjit-core/hash.h>
 #include <tsl/robin_set.h>
+#include <tsl/robin_map.h>
 #include <nanobind/intrusive/counter.inl>
 #include <queue>
 #include <mutex>
@@ -400,7 +401,7 @@ struct State {
                edges_used = edges.size() - unused_edges.size() - 1;
 
         if (vars_used) {
-            ad_warn("AD Variable leak detected (%zu variables remain in use)!",
+            ad_warn("AD variable leak detected (%zu variables remain in use)!",
                     vars_used);
             size_t count = 0;
 
@@ -417,7 +418,7 @@ struct State {
         }
 
         if (edges_used != 0)
-            ad_warn("AD Edge leak detected (%zu edges remain in use)!",
+            ad_warn("AD sdge leak detected (%zu edges remain in use)!",
                     edges_used);
     }
 
@@ -513,7 +514,15 @@ struct Scope {
     std::vector<EdgeRef> postponed;
 
     /// Keeps track of implicit input dependencies of symbolic computation
-    std::vector<uint32_t> implicit;
+    tsl::robin_set<uint32_t, UInt32Hasher> implicit_in;
+
+    /// Keeps track of implicit output dependencies of symbolic computation
+    tsl::robin_set<uint32_t, UInt32Hasher> implicit_out;
+
+    /// Symbolic operations like `dr.if_stmt` and `dr.while_loop` temporarily
+    /// replace variable IDs. This map keeps track of this association, which
+    /// is needed to resolve the target/source of gatter/scatter operations.
+    tsl::robin_map<ADIndex, ADIndex, UInt32Hasher> variable_map;
 
     Scope() = default;
     Scope(Scope&&) = default;
@@ -696,6 +705,15 @@ Index ad_var_inc_ref_impl(Index index) JIT_NOEXCEPT {
     return combine(ad_index, jit_index);
 }
 
+
+uint32_t ad_var_ref(uint64_t index) {
+    uint32_t ad_index = ::ad_index(index);
+    if (!ad_index)
+        return 0;
+    std::lock_guard<std::mutex> guard(state.mutex);
+    return state[ad_index]->ref_count;
+}
+
 void ad_var_dec_ref_impl(Index index) JIT_NOEXCEPT {
     JitIndex jit_index = ::jit_index(index);
     ADIndex ad_index = ::ad_index(index);
@@ -875,9 +893,8 @@ struct ReleaseHelper {
 
 /// Forward declaration of a helper function defined later on
 uint32_t ad_record_implicit_dependence(LocalState &ls, ReleaseHelper &rl,
-                                       JitBackend backend, const char *label,
-                                       uint32_t source, Variable *v_source,
-                                       bool reuse_indices);
+                                       JitBackend backend, uint32_t source,
+                                       Variable *v_source, bool reuse_indices);
 
 /// This helper function is called by essentially all implementations of
 /// arithmetic operations below (e.g. ``ad_var_add``). It creates a new
@@ -942,22 +959,23 @@ DRJIT_NOINLINE Index ad_var_new_impl(const char *label, JitVar &&result,
        and keep track of implicit dependencies while recording virtual
        function calls */
     if (unlikely(symbolic)) {
-        bool is_gather = label && strcmp(label, "gather") == 0;
+        if (label && (strncmp(label, "gather", 6) == 0 ||
+                      strncmp(label, "scatter", 7) == 0)) {
+            // Gatters/scaters are already handled elsewhere
+        } else {
+            for (size_t i = 0; i < N; ++i) {
+                ADIndex source = args[i].ad_index;
+                if (source == 0)
+                    continue;
 
-        for (size_t i = 0; i < N; ++i) {
-            ADIndex source = args[i].ad_index;
-            if (source == 0)
-                continue;
+                Variable *v_source = state[source];
+                bool source_symbolic =
+                    v_source->flags & (uint8_t) VariableFlags::Symbolic;
 
-            Variable *v_source = state[source];
-            bool source_symbolic =
-                v_source->flags & (uint8_t) VariableFlags::Symbolic;
-
-            if (!is_gather && source_symbolic)
-                continue;
-
-            args[i].ad_index = ad_record_implicit_dependence(
-                ls, rh, info.backend, label, source, v_source, reuse_indices);
+                if (!source_symbolic)
+                    args[i].ad_index = ad_record_implicit_dependence(
+                        ls, rh, info.backend, source, v_source, reuse_indices);
+            }
         }
     }
 
@@ -1051,7 +1069,7 @@ DRJIT_INLINE Index ad_var_new(const char *label, JitVar &&result,
     return rv;
 }
 
-JitIndex ad_grad(Index index) {
+JitIndex ad_grad(Index index, bool null_ok) {
     ADIndex ad_index = ::ad_index(index);
     const std::vector<Scope> &scopes = local_state.scopes;
     if (unlikely(!scopes.empty()))
@@ -1078,6 +1096,9 @@ JitIndex ad_grad(Index index) {
         type = info.type;
         size = info.size;
     }
+
+    if (!result.valid() && null_ok)
+        return 0;
 
     if (!result.valid() &&
         (type == VarType::Float16 || type == VarType::Float32 ||
@@ -1597,7 +1618,8 @@ void ad_scope_enter(ADScope type, size_t size, const Index *indices) {
 
     scope.symbolic = jit_flag(JitFlag::SymbolicScope);
     scope.postponed.clear();
-    scope.implicit.clear();
+    scope.implicit_in.clear();
+    scope.implicit_out.clear();
     scope.type = type;
 
     switch (type) {
@@ -1670,13 +1692,22 @@ void ad_scope_leave(bool process_postponed) {
     ad_log("ad_scope_leave(%s)", type_name);
 
     if (scopes.size() < 2 || !scopes[scopes.size() - 2].symbolic) {
-        for (uint32_t i: scope.implicit)
+        std::lock_guard<std::mutex> guard(state.mutex);
+        for (uint32_t i: scope.implicit_in)
+            ad_var_dec_ref_int(i, state[i]);
+        for (uint32_t i: scope.implicit_out)
             ad_var_dec_ref_int(i, state[i]);
     } else {
+        std::lock_guard<std::mutex> guard(state.mutex);
         Scope &prev = scopes[scopes.size() - 2];
-        prev.implicit.reserve(prev.implicit.size() + scope.implicit.size());
-        for (uint32_t i : scope.implicit)
-            prev.implicit.push_back(i);
+        for (uint32_t i : scope.implicit_in) {
+            if (!prev.implicit_in.insert(i).second)
+                ad_var_dec_ref_int(i, state[i]);
+        }
+        for (uint32_t i : scope.implicit_out) {
+            if (!prev.implicit_out.insert(i).second)
+                ad_var_dec_ref_int(i, state[i]);
+        }
     }
 
     if (scope.isolate && !scope.postponed.empty()) {
@@ -1707,6 +1738,8 @@ void ad_scope_leave(bool process_postponed) {
             scopes.pop_back();
         }
     } else {
+        if (!scope.postponed.empty())
+            ad_raise("ad_scope_leave(): internal error: postponed is nonempty");
         scopes.pop_back();
     }
 }
@@ -2602,12 +2635,93 @@ Index ad_var_cast(Index i0, VarType vt) {
 
 // ==========================================================================
 
+void ad_var_map_put(Index source, Index target) {
+    uint32_t ad_index_source = ad_index(source),
+             ad_index_target = ad_index(target);
+
+    if ((ad_index_source == 0) != (ad_index_target == 0))
+        ad_raise("ad_var_map_put(): mixed attached/detached inputs!");
+
+    if (ad_index_source == 0)
+        return;
+
+    ad_log("ad_var_map_put(): a%u -> a%u", ad_index_source, ad_index_target);
+
+    std::vector<Scope> &scopes = local_state.scopes;
+    if (scopes.empty())
+        ad_raise("ad_var_map_put(): no scope found!");
+
+    Scope &scope = scopes.back();
+    auto [it, success] =
+        scope.variable_map.emplace(ad_index_target, ad_index_source);
+
+    if (!success)
+        ad_raise("ad_var_map_put(): variable already exists!");
+}
+
+/// Symbolic operations like `dr.if_stmt` and `dr.while_loop` temporarily
+/// replace variable IDs. This function queris this association, which
+/// is needed to resolve the target/source of gatter/scatter operations.
+Index ad_var_map_get(Index index) {
+    std::vector<Scope> &scopes = local_state.scopes;
+    uint32_t ad_index = ::ad_index(index);
+
+    if (scopes.empty() || !ad_index)
+        return index;
+
+    const Scope &scope = scopes.back();
+
+    while (true) {
+        auto it = scope.variable_map.find(ad_index);
+        if (it != scope.variable_map.end())
+            ad_index = it->second;
+        else
+            break;
+    }
+
+    return combine(ad_index, jit_index(index));
+}
+
+/// Potentially use ad_var_map_get to rewrite the source or target of a
+/// gatter/scatter operation
+static Index ad_var_memop_remap(Index index, bool input) {
+    uint32_t flags = jit_flags();
+    if (flags & (uint32_t) JitFlag::SymbolicScope) {
+        index = ad_var_map_get(index);
+
+        // Add to set of implicit variable dependencies
+        std::vector<Scope> &scopes = local_state.scopes;
+        if (scopes.empty())
+            ad_raise("ad_var_memop_remap(): expected a scope!");
+
+        Scope &scope = scopes.back();
+        uint32_t ad_index = ::ad_index(index);
+        if (ad_index == 0)
+            return index;
+
+        auto &implicit = input ? scope.implicit_in : scope.implicit_out;
+        auto [it, success] = implicit.insert(ad_index);
+        if (success) {
+            ad_var_inc_ref_int(ad_index, state[ad_index]);
+            ad_log("ad_var_memop_remap(): registered an implicit %s dependence "
+                   "on variable a%u.", input ? "input" : "output", ad_index);
+        }
+    }
+
+    return index;
+}
+
+// ==========================================================================
+
 uint64_t ad_var_gather(Index source, JitIndex offset, JitIndex mask, ReduceMode mode) {
-    JitVar result = JitVar::steal(jit_var_gather((JitIndex) source, offset, mask));
+    JitVar result = JitVar::steal(jit_var_gather(jit_index(source), offset, mask));
 
     if (is_detached(source)) {
         return result.release();
     } else {
+        // Track implicit dependencies & potentially remap variable IDs
+        source = ad_var_memop_remap(source, true);
+
         return ad_var_new(
             mode == ReduceMode::Permute ? "gather_permute" : "gather",
             std::move(result),
@@ -2640,6 +2754,9 @@ Index ad_var_scatter(Index target, Index value, JitIndex offset, JitIndex mask,
                      "'op' not in {ReduceOp.Identity, ReduceOp.Add} are "
                      "currently unsupported!");
 
+        // Track implicit dependencies & potentially remap variable IDs
+        target = ad_var_memop_remap(target, false);
+
         VarInfo info = jit_set_backend(jit_index(target));
         JitMask overwritten = dr::zeros<JitMask>(info.size);
 
@@ -2655,12 +2772,12 @@ Index ad_var_scatter(Index target, Index value, JitIndex offset, JitIndex mask,
             name = "scatter_reduce";
         }
 
-        return ad_var_new(
+        return ad_var_memop_remap(ad_var_new(
             name, std::move(result),
             SpecialArg(value,
                        new Scatter(GenericArray<uint32_t>::borrow(offset),
                                    JitMask::borrow(mask), op, mode)),
-            SpecialArg(target, new MaskEdge(overwritten, true)));
+            SpecialArg(target, new MaskEdge(overwritten, true))), false);
     }
 }
 
@@ -2685,8 +2802,8 @@ void ad_var_scatter_add_kahan(Index *target_1, Index *target_2, Index value,
     } else {
         jit_set_backend(mask);
 
-        uint32_t ad_index_1 = ad_index(*target_1);
-        uint32_t ad_index_2 = ad_index(*target_2);
+        uint32_t ad_index_1 = ad_index(ad_var_memop_remap(*target_1, false));
+        uint32_t ad_index_2 = ad_index(ad_var_memop_remap(*target_2, false));
 
         Index combined_1 = ad_var_new(
             "scatter_add_kahan", JitVar::steal(target_1_jit),
@@ -2970,7 +3087,7 @@ const char *ad_var_graphviz() {
 // Functionality to track implicit inputs of recorded computation
 // ==========================================================================
 
-void ad_var_check_implicit(uint64_t index, bool force_track) {
+void ad_var_check_implicit(uint64_t index) {
     ADIndex ad_index = ::ad_index(index);
     if (ad_index == 0 || !jit_flag(JitFlag::SymbolicScope))
         return;
@@ -2978,111 +3095,109 @@ void ad_var_check_implicit(uint64_t index, bool force_track) {
     std::lock_guard<std::mutex> guard(state.mutex);
     Variable *v = state[ad_index];
 
-    if (force_track || !(v->flags & (uint8_t) VariableFlags::Symbolic)) {
-        ad_var_inc_ref_int(ad_index, v);
-        ad_log("ad_check_implicit(): registering an implicit dependence on "
-               "variable a%u.", ad_index);
+    if (!(v->flags & (uint8_t) VariableFlags::Symbolic)) {
         std::vector<Scope> &scopes = local_state.scopes;
         if (scopes.empty())
             ad_raise("ad_var_check_implicit(): no scope found!");
-        scopes.back().implicit.push_back(ad_index);
+
+        auto [it, success] = scopes.back().implicit_in.insert(ad_index);
+        if (success) {
+            ad_log("ad_check_implicit(): registered an implicit input dependence on "
+                   "variable a%u.", ad_index);
+            ad_var_inc_ref_int(ad_index, state[ad_index]);
+        }
     }
 }
 
 // Turn symbolic reads from non-symbolic variables into gathers,
 // and keep track of implicit dependencies of symbolic function calls
 uint32_t ad_record_implicit_dependence(LocalState &ls, ReleaseHelper &rh,
-                                       JitBackend backend, const char *label,
+                                       JitBackend backend,
                                        uint32_t source, Variable *v_source,
                                        bool reuse_indices) {
     std::vector<Scope> &scopes = ls.scopes;
     if (scopes.empty())
         ad_raise("ad_record_implicit_dependence(): no scope found!");
 
-    if (strncmp(label, "gather", 6) == 0) {
-        ad_log("ad_var_new(): registering an implicit dependence on variable a%u.", source);
-        ad_var_inc_ref_int(source, v_source);
-        scopes.back().implicit.push_back(source);
-        return source;
-    } else if (strncmp(label, "scatter", 7) == 0) {
-        return source; // don't know how to handle this case yet
-    } else {
-        if (v_source->size != 1)
-            ad_raise(
-                "ad_var_new(): You performed a differentiable operation that mixes symbolic\n"
-                "and non-symbolic variables in a non-permissible way. The reason is likely\n"
-                "one of the following factors:\n"
-                "\n"
-                "1. Your program performed a *symbolic* operation such as a\n"
-                "\n"
-                "   - conditional (via drjit.if_stmt())\n"
-                "   - loop (via drjit.while_loop())\n"
-                "   - call (via drjit.switch(), drjit.dispatch(), C++ method)\n"
-                "\n"
-                "   (this potentially involved the @drjit.syntax decorator, which\n"
-                "    rewrites scalar Python code to make use of these operations)\n"
-                "\n"
-                "2. The body of this operation accesses a variable *implicitly*, meaning\n"
-                "   that the variable wasn't listed as part of 'args' (for conditionals),\n"
-                "   'state' (for loops), or as a function argument (for calls).\n"
-                "\n"
-                "   If you executed a symbolic call, the variable might, e.g., be a field\n"
-                "   of an instance targeted by the call. This is fine.\n"
-                "\n"
-                "3. Dr.Jit then tried to convert the implicit read into a drjit.gather()\n"
-                "   operation to legalize this behavior.\n"
-                "\n"
-                "   However, the problem is that the variable in question (a%u) has size %zu,\n"
-                "   and the conversion to drjit.gather() only makes sense for scalar (size 1)\n"
-                "   variables.\n"
-                "\n"
-                "There are two possible solutions:\n"
-                "\n"
-                "1. \"Pipe\" the variable to the code in question, by explicitly listing it\n"
-                "   as part of conditional inputs, loop state varibles, and function inputs.\n"
-                "\n"
-                "2. Is this potentially a bug in your code? Did you mean to gather an\n"
-                "   element from the variable instead of reading it directly? In that case,\n"
-                "   please fix the operation referenced in the stack trace.",
-                source, v_source->size);
+    if (v_source->size != 1)
+        ad_raise(
+            "ad_var_new(): You performed a differentiable operation that mixes symbolic\n"
+            "and non-symbolic variables in a non-permissible way. The reason is likely\n"
+            "one of the following factors:\n"
+            "\n"
+            "1. Your program performed a *symbolic* operation such as a\n"
+            "\n"
+            "   - conditional (via drjit.if_stmt())\n"
+            "   - loop (via drjit.while_loop())\n"
+            "   - call (via drjit.switch(), drjit.dispatch(), C++ method)\n"
+            "\n"
+            "   (this potentially involved the @drjit.syntax decorator, which\n"
+            "    rewrites scalar Python code to make use of these operations)\n"
+            "\n"
+            "2. The body of this operation accesses a variable *implicitly*, meaning\n"
+            "   that the variable wasn't listed as part of 'args' (for conditionals),\n"
+            "   'state' (for loops), or as a function argument (for calls).\n"
+            "\n"
+            "   If you executed a symbolic call, the variable might, e.g., be a field\n"
+            "   of an instance targeted by the call. This is fine.\n"
+            "\n"
+            "3. Dr.Jit then tried to convert the implicit read into a drjit.gather()\n"
+            "   operation to legalize this behavior.\n"
+            "\n"
+            "   However, the problem is that the variable in question (a%u) has size %zu,\n"
+            "   and the conversion to drjit.gather() only makes sense for scalar (size 1)\n"
+            "   variables.\n"
+            "\n"
+            "There are two possible solutions:\n"
+            "\n"
+            "1. \"Pipe\" the variable to the code in question, by explicitly listing it\n"
+            "   as part of conditional inputs, loop state varibles, and function inputs.\n"
+            "\n"
+            "2. Is this potentially a bug in your code? Did you mean to gather an\n"
+            "   element from the variable instead of reading it directly? In that case,\n"
+            "   please fix the operation referenced in the stack trace.",
+            source, v_source->size);
 
-        auto [ad_index, v] = ad_var_new(backend, 1, (VarType) v_source->type,
-                                        true, reuse_indices, "gather");
-        v_source = state[source];
-        EdgeIndex edge_index_new = ad_edge_new();
-        Edge &edge = state.edges[edge_index_new];
-        edge.source = source;
-        edge.target = ad_index;
-        edge.next_fwd = v_source->next_fwd;
-        v->next_bwd = edge_index_new;
-        v_source->next_fwd = edge_index_new;
-        edge.next_bwd = 0;
-        edge.special = dr::make_unique<Gather>(GenericArray<uint32_t>(0), JitMask(true));
-        ad_var_inc_ref_int(source, v_source);
-        ad_var_inc_ref_int(source, v_source);
-        ad_log(
-            "ad_var_new(): a%u = gather(a%u) [converted from scalar "
-            "read, registering an implicit dependence on variable a%u].",
-            ad_index, source, source);
+    auto [ad_index, v] = ad_var_new(backend, 1, (VarType) v_source->type,
+                                    true, reuse_indices, "gather");
+    v_source = state[source];
+    EdgeIndex edge_index_new = ad_edge_new();
+    Edge &edge = state.edges[edge_index_new];
+    edge.source = source;
+    edge.target = ad_index;
+    edge.next_fwd = v_source->next_fwd;
+    v->next_bwd = edge_index_new;
+    v_source->next_fwd = edge_index_new;
+    edge.next_bwd = 0;
+    edge.special = dr::make_unique<Gather>(GenericArray<uint32_t>(0), JitMask(true));
+    ad_var_inc_ref_int(source, v_source);
+    ad_log(
+        "ad_var_new(): a%u = gather(a%u) [converted from scalar read].",
+        ad_index, source);
 
-        scopes.back().implicit.push_back(source);
-        rh.put(ad_index);
-        return ad_index;
+    auto [it, success] = scopes.back().implicit_in.insert(source);
+    if (success) {
+        ad_var_inc_ref_int(source, v_source);
+        ad_log("ad_var_new(): registered an implicit input dependence "
+               "on variable a%u.", ad_index);
     }
-
-    return source;
+    rh.put(ad_index);
+    return ad_index;
 }
 
-void ad_copy_implicit_deps(drjit::vector<uint32_t>& result) {
+void ad_copy_implicit_deps(drjit::vector<uint32_t>& result, bool input) {
     std::vector<Scope> &scopes = local_state.scopes;
     if (scopes.empty())
         return;
 
-    std::vector<uint32_t> &implicit = scopes.back().implicit;
+    const Scope &scope = scopes.back();
+
+    auto &implicit = input ? scope.implicit_in : scope.implicit_out;
     if (implicit.empty())
         return;
 
-    ad_log("ad_copy_implicit_deps(): returning %zu implicit dependences.", implicit.size());
+    ad_log("ad_copy_implicit_deps(): returning %zu implicit %s dependencies.",
+           implicit.size(), input ? "input" : "output");
 
     result.reserve(result.size() + implicit.size());
     for (uint32_t index : implicit) {
@@ -3129,6 +3244,13 @@ struct PushScope {
                     child_scope.postponed.end()
                 );
             }
+
+            std::lock_guard<std::mutex> guard(state.mutex);
+            for (uint32_t i: child_scope.implicit_in)
+                ad_var_dec_ref_int(i, state[i]);
+            for (uint32_t i: child_scope.implicit_out)
+                ad_var_dec_ref_int(i, state[i]);
+
         } else if (scopes.size() == 0) {
             ad_fail("PushScope::~PushScope(): underflow!");
         }
@@ -3297,7 +3419,7 @@ void ad_add_special(uint32_t v0i, uint32_t v1i, bool is_custom,
 
 bool ad_custom_op(dr::detail::CustomOpBase *op) {
     const dr::vector<uint32_t> &inputs  = op->m_input_indices,
-                                  &outputs = op->m_output_indices;
+                               &outputs = op->m_output_indices;
 
     if (inputs.empty() || outputs.empty() || op->m_counter_offset == 0)
         return false;
@@ -3391,7 +3513,8 @@ bool ad_custom_op(dr::detail::CustomOpBase *op) {
     if (!scopes.empty()) {
         scope = scopes.back();
         scope.postponed.clear();
-        scope.implicit.clear();
+        scope.implicit_in.clear();
+        scope.implicit_out.clear();
     }
 
     ad_add_special(v0i, v1i, true,
@@ -3412,6 +3535,7 @@ bool ad_custom_op(dr::detail::CustomOpBase *op) {
                  (uint8_t) VariableFlags::CustomLabel;
 
     ad_var_dec_ref_int(v0i, v0);
+
     ad_var_dec_ref_int(v1i, v1);
 
     op->m_counter_offset = 0;
@@ -3495,10 +3619,9 @@ bool CustomOpBase::add_index(JitBackend backend, ADIndex index, bool input) {
     std::lock_guard<std::mutex> guard(state.mutex);
     ad_var_inc_ref_int(index, state[index]);
 
-    if (input)
-        m_input_indices.push_back(index);
-    else
-        m_output_indices.push_back(index);
+    dr::vector<uint32_t> &indices = input ? m_input_indices
+                                          : m_output_indices;
+    indices.push_back(index);
 
     return true;
 }

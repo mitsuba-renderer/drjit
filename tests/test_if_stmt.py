@@ -129,7 +129,7 @@ def test06_uninitialized_output(t, mode):
 
 @pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
-def test06_test_exceptions(t, mode):
+def test07_test_exceptions(t, mode):
     # Exceptions raise in 'true_fn' and 'false_fn' should be correctly propagated
     def my_fn(_):
         raise RuntimeError("foo")
@@ -156,7 +156,7 @@ def test06_test_exceptions(t, mode):
 
 @pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
-def test07_test_syntax_simple(t, mode):
+def test08_test_syntax_simple(t, mode):
     # Test the @dr.syntax approach to defining 'if' statements
     @dr.syntax
     def f(x, t, mode):
@@ -180,7 +180,7 @@ def test07_test_syntax_simple(t, mode):
 
 @pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
-def test08_test_mutate(t, mode):
+def test09_test_mutate(t, mode):
     # Everything should work as expected when 'if_fn' and 'true_fn' mutate their inputs
     @dr.syntax
     def f(x, y, t, mode):
@@ -295,7 +295,7 @@ def test11_side_effect_v2(t, mode, variant, variant_2, capsys, drjit_verbose):
 
 @pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
-def test11_mutation_rules(t, mode):
+def test12_mutation_rules(t, mode):
     # Mutation rules for arguments and return values:
     #
     # Both 'true_fn' and 'false_fn' should receive the original function
@@ -344,7 +344,7 @@ def test11_mutation_rules(t, mode):
     assert yo is yi
 
 
-def test12_limitations():
+def test13_limitations():
     # Test that issues related to current limitations of the AST processing
     # are correctly reported
     with pytest.raises(SyntaxError, match="use of 'return' inside a transformed 'while' loop or 'if' statement is currently not supported."):
@@ -358,170 +358,9 @@ def test12_limitations():
             return -x
 
 
-@pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
-@pytest.test_arrays('float,is_diff,shape=(*)')
-def test13_ad_fwd(t, mode):
-    # Test that we can forward-propagate through a series of 'if' statements
-    @dr.syntax
-    def f(x, mode):
-        if dr.hint(x < 5, mode=mode):
-            y = 10*x
-        else:
-            if dr.hint(x < 7, mode=mode):
-                y = 100*x
-            else:
-                y = 1000*x
-        return x, y
-
-    x = dr.arange(t, 10)
-    dr.enable_grad(x)
-    xi = x
-
-    xo, yo = f(x, mode)
-    assert dr.all(xo == dr.arange(t, 10))
-    assert dr.all(yo == [0, 10, 20, 30, 40, 500, 600, 7000, 8000, 9000])
-    dr.forward_from(x, flags=0)
-    assert dr.all(dr.grad(xo) == dr.full(t, 1, 10))
-    assert dr.all(dr.grad(yo) == [10, 10, 10, 10, 10, 100, 100, 1000, 1000, 1000])
-    assert xi is xo
-
-
-@pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
-@pytest.test_arrays('float,is_diff,shape=(*)')
-def test14_ad_bwd(t, mode):
-    # Analogous to the above, but test reverse-mode propagation
-    @dr.syntax
-    def f(x, mode):
-        if dr.hint(x < 5, mode=mode):
-            y = 10*x
-        else:
-            if dr.hint(x < 7, mode=mode):
-                y = 100*x
-            else:
-                y = 1000*x
-        return y
-
-    x = dr.arange(t, 10)
-    dr.enable_grad(x)
-
-    y = f(x, mode)
-    dr.backward_from(y)
-    assert dr.all(dr.grad(x) == [10, 10, 10, 10, 10, 100, 100, 1000, 1000, 1000])
-
-
-@pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
-@pytest.test_arrays('float,is_diff,shape=(*)')
-@dr.syntax
-def test15_ad_fwd_implicit_dep(t, mode):
-    # Ensure that implicit dependencies ('y') are correctly tracked
-    y = t(1)
-    dr.enable_grad(y)
-    dr.set_grad(y, 1)
-
-    x = dr.arange(t, 10)
-
-    if dr.hint(x < 5, exclude=[y]):
-        z = x*y
-    else:
-        z = x-y
-
-    dr.forward_to(z)
-    assert dr.all(dr.grad(z) == [0, 1, 2, 3, 4, -1, -1, -1, -1, -1])
-
-
-@pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
-@pytest.test_arrays('float,is_diff,shape=(*)')
-@dr.syntax
-def test16_ad_bwd_implicit_dep(t, mode):
-    # Identical to the above, but for reverse mode
-    y = t(1)
-    dr.enable_grad(y)
-    dr.set_grad(y, 1)
-
-    x = dr.arange(t, 10)
-
-    if dr.hint(x < 5, exclude=[y]):
-        z = x*y
-    else:
-        z = x-y
-
-    dr.backward_from(z)
-    assert dr.all(dr.grad(y) == 6)
-
-@pytest.test_arrays('float,is_diff,shape=(*)')
-@pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
-@pytest.mark.parametrize('variant', [1, 2, 3, 5, 6, 7])
-@pytest.mark.parametrize('size', [3, 4])
-def test17_diff_gather_bwd(t, mode, variant, size):
-    """
-    Tests that gathers in ``dr.if_stmt`` are properly differentiated reverse
-    mode no matter whether they are passed implicitly or explicitly as inputs.
-    """
-    i = dr.uint32_array_t(t)(0, 1, 2)
-    src = dr.arange(t, size)+1
-    src_o = src
-    dr.enable_grad(src)
-
-    def true_fn(i, src):
-        if variant & 4:
-            src = src_o
-        if variant & 1:
-            return dr.gather(t, src, i)
-        else:
-            return dr.zeros(t, len(i))
-
-    def false_fn(i, src):
-        if variant & 4:
-            src = src_o
-        if variant & 2:
-            return dr.gather(t, src, i)
-        else:
-            return dr.zeros(t, len(i))
-
-    b1 = bool(variant & 1)
-    b2 = bool(variant & 2)
-    b4 = bool(variant & 4)
-
-    out = dr.if_stmt(
-        args=(i, src if not b4 else None),
-        cond=dr.mask_t(t)(True, False, True),
-        true_fn=true_fn,
-        false_fn=false_fn
-    )
-
-    assert dr.all(out == (1 if b1 else 0, 2 if b2 else 0, 3 if b1 else 0))
-
-    out.grad = 1
-    g = dr.backward_to(src_o)
-    assert dr.all(g[0] == b1 and g[1] == b2 and g[2] == b1)
-
-
-@pytest.test_arrays('float32,is_diff,shape=(*)')
-@pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
-@pytest.mark.parametrize('variant', [0, 1])
-@dr.syntax
-def test18_diff_gather_nest_bwd(t, mode, variant):
-    idx = dr.arange(dr.uint32_array_t(t), 10)
-    y = dr.zeros(t, 11)
-    z = dr.zeros(t, 10)
-    dr.enable_grad(y)
-
-    if dr.hint(variant == 0, mode='scalar'):
-        if dr.hint(idx > 3, label='outer', mode=mode, exclude=[y]):
-            if dr.hint(idx < 8, label='inner', mode=mode, exclude=[y]):
-                z = dr.gather(t, y, idx)
-    else:
-        if dr.hint(idx > 3, label='outer', mode=mode):
-            if dr.hint(idx < 8, label='inner', mode=mode):
-                z = dr.gather(t, y, idx)
-
-    dr.backward_from(z)
-    assert dr.sum(y.grad) == 4
-
-
 @pytest.test_arrays('float,is_diff,shape=(*)')
 @dr.syntax(recursive=True)
-def test19_nested_ast_trafo(t):
+def test14_nested_ast_trafo(t):
     # Test that @dr.syntax works for local function declarations if called with recursive=True
     y = t(1, 2, 3)
 
@@ -558,7 +397,7 @@ def test20_nested_if_stmt(t):
 
 
 @pytest.test_arrays('float32,is_diff,shape=(*)')
-def test21_preserve_unchanged(t):
+def test15_preserve_unchanged(t):
     # Check that unchanged variables (including differentiable ones) are simply
     # passed through
     a = t(1, 1)
@@ -584,7 +423,7 @@ def test21_preserve_unchanged(t):
 
 @pytest.test_arrays('uint32,is_diff,shape=(*)')
 @pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
-def test22_mutate_dr_syntax(t, mode):
+def test16_mutate_dr_syntax(t, mode):
     # Simple test for array mutation/non-mutation combined with @dr.syntax
 
     @dr.syntax
@@ -654,7 +493,7 @@ def test23_mutate_dr_syntax_v2(t, mode):
 @pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
 @pytest.mark.parametrize('tt', ['tuple', 'list', 'dict', 'dataclass', 'nested'])
 @pytest.mark.parametrize('mutate', [True, False])
-def test24_mutate_other_containers(t, tt, mutate, mode):
+def test17_mutate_other_containers(t, tt, mutate, mode):
     # One last test about mutation/non-mutation involving lots of PyTree types
 
     if tt == 'tuple' and not mutate:

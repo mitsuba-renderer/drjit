@@ -83,7 +83,7 @@ NB_MODULE(_drjit_ext, m_) {
         .value("CUDA", JitBackend::CUDA, doc_JitBackend_CUDA)
         .value("LLVM", JitBackend::LLVM, doc_JitBackend_LLVM);
 
-    nb::enum_<JitFlag>(m, "JitFlag", doc_JitFlag)
+    nb::enum_<JitFlag>(m, "JitFlag", doc_JitFlag, nb::is_arithmetic())
         .value("Debug", JitFlag::Debug, doc_JitFlag_Debug)
         .value("ReuseIndices", JitFlag::ReuseIndices, doc_JitFlag_ReuseIndices)
         .value("ConstantPropagation", JitFlag::ConstantPropagation, doc_JitFlag_ConstantPropagation)

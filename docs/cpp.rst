@@ -20,15 +20,15 @@ dependencies.
 
    namespace dr = drjit;
 
-   using Array3f  = drjit::Array<float, 3>;
-   using Matrix3f = drjit::Matrix<float, 3>;
+   using Array3f  = dr::Array<float, 3>;
+   using Matrix3f = dr::Matrix<float, 3>;
 
    int main(int, char**) {
        Array3f x(1, 2, 3),
                y(1, 0, 1);
 
        Array3f z = dr::normalize(dr::cross(x, y)) * .5f;
-       printf("Result = %s\n", dr::to_string(z).c_str());
+       printf("Result = %s\n", dr::string(z).c_str());
    }
 
 Vectorized loops
