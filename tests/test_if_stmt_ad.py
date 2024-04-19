@@ -164,7 +164,7 @@ def test05_backward_gather_outside(t, variant, mode, same_size, source_evaluated
 
 @pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
 @pytest.test_arrays('float, is_diff, shape=(*)')
-def test06_ad_bwd(t, mode):
+def test06_ad_bwd_nested(t, mode):
     # Test that we can backpropagate through a sequence of nested 'if' statements
     @dr.syntax
     def f(x, mode):
@@ -210,7 +210,7 @@ def test07_ad_bwd_implicit_dep(t, mode):
 @pytest.mark.parametrize('variant', [0, 1])
 @dr.syntax
 def test07_diff_gather_nest_bwd(t, mode, variant):
-    # Test that we can backpropagate gathers a sequence of nested 'if' statements
+    # Test that we can backpropagate htough gathers in nested 'if' statements
     idx = dr.arange(dr.uint32_array_t(t), 10)
     y = dr.zeros(t, 11)
     z = dr.zeros(t, 10)
@@ -231,7 +231,7 @@ def test07_diff_gather_nest_bwd(t, mode, variant):
 
 @pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
 @pytest.test_arrays('float,is_diff,shape=(*)')
-def test08_ad_fwd(t, mode):
+def test08_ad_fwd_nested(t, mode):
     # Test that we can forward-propagate through a series of 'if' statements
     @dr.syntax
     def f(x, mode):
@@ -276,4 +276,32 @@ def test09_ad_fwd_implicit_dep(t, mode):
     dr.forward_to(z)
     assert dr.all(dr.grad(z) == [0, 1, 2, 3, 4, -1, -1, -1, -1, -1])
 
+
+@pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
+@pytest.mark.parametrize('variant', [1, 2, 3])
+@pytest.test_arrays('float, is_diff, shape=(*)')
+@dr.syntax
+def test10_scatter_add_bwd(t, variant, mode):
+    """Test that we can backpropagate through scatters"""
+    i = dr.arange(dr.uint32_array_t(t), 5)
+    x = dr.arange(t, 5)
+    y = dr.zeros(t, 6)
+    dr.enable_grad(x)
+    xo = x
+
+    if dr.hint(i < 3, mode=mode):
+        if dr.hint(variant & 1, mode='scalar'):
+            dr.scatter_add(y, 2*x, i)
+    else:
+        if dr.hint(variant & 2, mode='scalar'):
+            dr.scatter_add(y, 3*x, i)
+
+    b1 = variant & 1
+    b2 = (variant & 2) >> 1
+
+    assert dr.all(y == [0, 2*b1, 4*b1, 9*b2, 12*b2, 0])
+
+    assert xo is x
+    dr.backward_from(y)
+    assert dr.all(x.grad == [2*b1, 2*b1, 2*b1, 3*b2, 3*b2])
 

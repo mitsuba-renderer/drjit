@@ -3473,7 +3473,13 @@ bool ad_custom_op(dr::detail::CustomOpBase *op) {
         ad_log(" - out: a%u", v1i);
         ad_var_inc_ref_int(v1i, v1);
         v1->flags |= VariableFlags::CustomOpOutput;
-        ad_assert(v1->ref_count == 4,
+        bool is_scatter = v1->label && strncmp(v1->label, "scatter", 7) == 0;
+        if (is_scatter)
+            v1->counter = state.counter++;
+
+        // References should be held by: caller & CustomOp (2x), this scope(1x)
+        // Side effects can have a higher refcount
+        ad_assert(v1->ref_count == 4 || is_scatter,
                   "ad_custom_op(): invalid reference count %u in variable a%u",
                   v1->ref_count, v1i);
     } else {
@@ -3492,14 +3498,19 @@ bool ad_custom_op(dr::detail::CustomOpBase *op) {
 
             flags_ref |= (uint8_t) VariableFlags::Visited;
 
+            Variable *vo = state[o];
+            bool is_scatter = vo->label && strncmp(vo->label, "scatter", 7) == 0;
+            if (is_scatter)
+                vo->counter = state.counter++;
+
             ad_log(" - out: a%u", o);
             ad_add_special(v1i, o, false, dr::make_unique<CopyGrad>());
-            Variable *vo = state[o];
-
+            vo = state[o];
             vo->flags |= VariableFlags::CustomOpOutput;
 
-            // references should be held by: caller & CustomOp (2x)
-            ad_assert(vo->ref_count == 3,
+            // References should be held by: caller & CustomOp (2x)
+            // Side effects can have a higher refcount
+            ad_assert(vo->ref_count == 3 || is_scatter,
                       "ad_custom_op(): invalid reference count %u in variable a%u",
                       vo->ref_count, o);
         }
