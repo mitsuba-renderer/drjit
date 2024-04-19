@@ -401,13 +401,12 @@ def versiontuple(v):
     return tuple(map(int, (v.split("."))))
 
 @pytest.mark.parametrize('op',
-    [int(dr.ReduceOp.Add), int(dr.ReduceOp.Min), int(dr.ReduceOp.Max),
-     int(dr.ReduceOp.And), int(dr.ReduceOp.Or)])
+    [dr.ReduceOp.Add, dr.ReduceOp.Min, dr.ReduceOp.Max,
+     dr.ReduceOp.And, dr.ReduceOp.Or])
 @pytest.test_arrays('-bool,jit,-diff,shape=(*)')
 def test18_scatter_reduce(t, op):
     import sys
     mod = sys.modules[t.__module__]
-    op = dr.ReduceOp(op)
     size = 100000
 
     if op == dr.ReduceOp.And or \

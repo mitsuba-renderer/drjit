@@ -32,20 +32,15 @@ static void set_grad_enabled(nb::handle h, bool enable_) {
             bool grad_enabled = ((uint32_t) index) != index;
 
             if (enable != grad_enabled) {
-                nb::object tmp = nb::inst_alloc(tp);
-                uint64_t new_index;
+                ArrayBase *p = inst_ptr(h);
 
                 if (enable) {
-                    new_index = ad_var_new((uint32_t) index);
+                    uint64_t new_index = ad_var_new((uint32_t) index);
+                    s.reset_index(new_index, p);
+                    ad_var_dec_ref(new_index);
                 } else {
-                    new_index = (uint32_t) index;
-                    ad_var_inc_ref(new_index);
+                    s.reset_index((uint32_t) index, p);
                 }
-
-                s.init_index(new_index, inst_ptr(tmp));
-                ad_var_dec_ref(new_index);
-                nb::inst_mark_ready(tmp);
-                nb::inst_replace_move(h, tmp);
             }
         }
     };

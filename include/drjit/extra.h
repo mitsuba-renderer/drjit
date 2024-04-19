@@ -114,7 +114,7 @@ DR_EXPORT_AD_3(select)
 extern DRJIT_EXTRA_EXPORT uint64_t ad_var_new(uint32_t index);
 
 /// Return the gradient value associated with a particular variable
-extern DRJIT_EXTRA_EXPORT uint32_t ad_grad(uint64_t index);
+extern DRJIT_EXTRA_EXPORT uint32_t ad_grad(uint64_t index, bool null_ok = false);
 
 /// Check if gradient tracking is enabled for the given variable
 extern DRJIT_EXTRA_EXPORT int ad_grad_enabled(uint64_t index);
@@ -212,8 +212,9 @@ namespace drjit { namespace detail { class CustomOpBase; }};
 extern DRJIT_EXTRA_EXPORT bool ad_custom_op(drjit::detail::CustomOpBase *);
 extern DRJIT_EXTRA_EXPORT bool ad_release_one_output(drjit::detail::CustomOpBase *);
 
-/// VCall implementation: get a list of observed implicit dependencies
-extern DRJIT_EXTRA_EXPORT void ad_copy_implicit_deps(drjit::vector<uint32_t>&);
+/// Retrieve a list of implicit input/output dependencies observed in the current scope
+extern DRJIT_EXTRA_EXPORT void ad_copy_implicit_deps(drjit::vector<uint32_t> &,
+                                                     bool input);
 
 /// Kahan-compensated floating point atomic scatter-addition
 extern DRJIT_EXTRA_EXPORT void
@@ -221,7 +222,7 @@ ad_var_scatter_add_kahan(uint64_t *target_1, uint64_t *target_2, uint64_t value,
                          uint32_t index, uint32_t mask);
 
 /// Check if a variable represents an implicit dependency on a non-symbolic operand
-extern void ad_var_check_implicit(uint64_t index, bool force_track = false);
+extern void ad_var_check_implicit(uint64_t index);
 
 // Callbacks used by \ref ad_call() below. See the interface for details
 typedef void (*ad_call_func)(void *payload, void *self,
@@ -438,6 +439,12 @@ ad_cond(JitBackend backend, int symbolic, const char *name, void *payload,
         drjit::vector<uint64_t> &rv, ad_cond_body body_cb,
         ad_cond_delete delete_cb, bool ad);
 
+/// Inform the AD layer that a state variable is temporarily being rewritten
+/// by a symbolic operation
+extern DRJIT_EXTRA_EXPORT void ad_var_map_put(uint64_t source, uint64_t target);
+
+/// Query the mapping created by ad_var_map() for a given target
+extern DRJIT_EXTRA_EXPORT uint64_t ad_var_map_get(uint64_t index);
 
 #if defined(__GNUC__)
 DRJIT_INLINE uint64_t ad_var_inc_ref(uint64_t index) JIT_NOEXCEPT {
@@ -457,6 +464,9 @@ DRJIT_INLINE void ad_var_dec_ref(uint64_t index) JIT_NOEXCEPT {
 #define ad_var_dec_ref ad_var_dec_ref_impl
 #define ad_var_inc_ref ad_var_inc_ref_impl
 #endif
+
+// Return the AD reference count of a variable (for debugging)
+extern DRJIT_EXTRA_EXPORT uint32_t ad_var_ref(uint64_t index);
 
 #if defined(__cplusplus)
 }

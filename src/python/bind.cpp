@@ -193,7 +193,6 @@ nb::object bind(const ArrayBinding &b) {
     };
 
     d.type_slots = slots;
-    d.type_slots_callback = nullptr;
 
     nb::object base_o = nb::borrow(array_base);
 
