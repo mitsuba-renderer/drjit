@@ -19,6 +19,10 @@
 #include "dlpack.h"
 #include "init.h"
 
+#include <mutex>
+#include <thread>
+#include <condition_variable>
+
 /// Forward declaration
 static bool array_init_from_seq(PyObject *self, const ArraySupplement &s, PyObject *seq);
 
@@ -563,29 +567,43 @@ nb::object import_ndarray(ArrayMeta m, PyObject *arg,
     return temp;
 }
 
-// The ndarray release sequence implemented by the following callbacks is
-// paranoid but needed in some case. When Dr.Jit wants to release an array, it
-// might still be accessed by concurrently running code (this is particularly
-// relevant for LLVM mode, where both host and "device" share the same address
-// space). Decreasing the reference count is therefore done by enqueueuing a
-// host function that is called after Dr.Jit is guaranteed to have finished
-// accessing the array. But this presents another problem: decreasing the
-// DLPack reference count might involve CPython API calls that require holding
-// the GIL, which is not a nice requirement for things running in the
-// CUDA-internal message queue thread or nanothread worker due to a danger of
-// deadlocks. So we enqueue an asynchronous request via Py_AddPendingCall
-// asking Python to *eventually* decrease the reference count of the array.
-// Hopefully that won't come back to bite us. There are some known cases where
-// code that never releases the GIL doesn't service the Py_AddPendingCall
-// callbacks, see https://github.com/python/cpython/issues/95820.
+struct FreeThread {
+    bool active = false;
+    dr::vector<void *> queue;
+    std::condition_variable cv;
+    std::mutex mutex;
 
-static int ndarray_free_cb_3(void *p) {
-    nb::detail::ndarray_dec_ref((nb::detail::ndarray_handle *) p);
-    return 0;
-}
+    void run() {
+        std::unique_lock<std::mutex> guard(mutex);
+        while (true) {
+            while (queue.empty())
+                cv.wait(guard);
+            void *p = queue.back();
+            queue.pop_back();
+
+            guard.unlock();
+            try {
+                nb::detail::ndarray_dec_ref((nb::detail::ndarray_handle *) p);
+            } catch (...) { }
+            guard.lock();
+        }
+    }
+    void enqueue(void *p) {
+        if (!active) {
+            active = true;
+            std::thread t(&FreeThread::run, this);
+            t.detach();
+        }
+        std::unique_lock<std::mutex> guard(mutex);
+        queue.push_back(p);
+        cv.notify_one();
+    }
+};
+
+static FreeThread free_thread;
 
 static void ndarray_free_cb_2(void *p) {
-    Py_AddPendingCall(ndarray_free_cb_3, p);
+    free_thread.enqueue(p);
 }
 
 static void ndarray_free_cb(uint32_t, int free, void *p) {
