@@ -28,7 +28,7 @@ of this function might look as follows:
       if (x <= 0.0031308f)
          return x * 12.92f;
       else
-         return std::pow(x * 1.055f, 1.f / 2.4f) - 0.055f;
+         return 1.055f * std::pow(x, 1.f / 2.4f) - 0.055f;
    }
 
 A Dr.Jit implementation of the same computation first replaces ``float`` by a
@@ -38,10 +38,10 @@ replaced by generalized expressions involving masks.
 .. code-block:: cpp
 
    template <typename Value> Value srgb_gamma(Value x) {
-      return drjit::select(
+      return dr::select(
          x <= 0.0031308f,
          x * 12.92f,
-         drjit::pow(x * 1.055f, 1.f / 2.4f) - 0.055f
+         dr::fma(1.055f, dr::pow(x , 1.f / 2.4f), - 0.055f)
       );
    }
 
