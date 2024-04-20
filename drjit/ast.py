@@ -921,7 +921,7 @@ def hint(
          :py:attr:`drjit.JitFlag.SymbolicConditionals` for details.
 
     2. The optional ``strict=False`` reduces the strictness of variable
-    consistency checks.
+       consistency checks.
 
        Consider the following snippet:
 
