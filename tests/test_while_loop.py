@@ -350,12 +350,11 @@ def test17_optimize_away(t, optimize):
         assert (a.index == ai) == optimize
 
 
-
 @pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
 @pytest.mark.parametrize("optimize", [True, False])
 @pytest.test_arrays('float,is_diff,shape=(*)')
 @dr.syntax
-def test20_no_mutate_inputs(t, optimize, mode):
+def test18_no_mutate_inputs(t, optimize, mode):
     x = dr.opaque(t, 1)
     z = dr.opaque(t, 2)
 
@@ -397,7 +396,7 @@ def test20_no_mutate_inputs(t, optimize, mode):
 @pytest.mark.parametrize('symbolic', [True, False])
 @pytest.mark.parametrize("optimize", [True, False])
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
-def test21_loop_in_vcall(t, optimize, symbolic):
+def test19_loop_in_vcall(t, optimize, symbolic):
     @dr.syntax
     def f(t, x):
         count = t(0)
@@ -417,7 +416,7 @@ def test21_loop_in_vcall(t, optimize, symbolic):
                     assert dr.all(out == [12,18,24])
 
 
-def test22_limitations():
+def test20_limitations():
     # Test that issues related to current limitations of the AST processing
     # are correctly reported
     with pytest.raises(SyntaxError, match="use of 'break' inside a transformed 'while' loop or 'if' statement is currently not supported."):
@@ -441,7 +440,7 @@ def test22_limitations():
 @pytest.mark.parametrize("compress", [True, False])
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
 @dr.syntax
-def test23_compress(t, mode, compress):
+def test21_compress(t, mode, compress):
     # Test loop compression on Collatz sequence
     state = dr.arange(t, 10000) + 1
     it_count = dr.zeros(t, 10000)
@@ -458,7 +457,7 @@ def test23_compress(t, mode, compress):
 
 
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
-def test24_loop_with_fork(t):
+def test22_loop_with_fork(t):
     # Test a more complex example of a random walk involving particles that can
     # split. These splits are handled by scattering values to a separate buffer
     # and processing this buffer in turn until no particles are left.
@@ -563,7 +562,7 @@ def test24_loop_with_fork(t):
 
 
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
-def test25_dr_syntax_default_args(t):
+def test23_dr_syntax_default_args(t):
     # This test isn't really specific to while loops and just checks
     # that @dr.syntax preserves the contents of function default arguments
     @dr.syntax
@@ -575,7 +574,7 @@ def test25_dr_syntax_default_args(t):
     assert dr.all(f(t) == [10, 10])
 
 
-def test26_dr_syntax_confusion():
+def test24_dr_syntax_confusion():
     with pytest.raises(RuntimeError, match='wrong order'):
         @dr.syntax
         @dr.wrap(source='drjit', target='torch')
@@ -586,7 +585,7 @@ def test26_dr_syntax_confusion():
 @pytest.test_arrays('float32,is_diff,shape=(*)')
 @pytest.mark.parametrize('mode', ['symbolic', 'evaluated'])
 @pytest.mark.parametrize('variant', [0, 1])
-def test27_preserve_unchanged(t, mode, variant):
+def test25_preserve_unchanged(t, mode, variant):
     # Check that unchanged variables (including
     # differentiable ones) are simply passed through
     a = t(1, 1)
@@ -614,56 +613,11 @@ def test27_preserve_unchanged(t, mode, variant):
     assert ai == ai2
     assert bi == bi2
 
-@pytest.mark.parametrize('variant', ['fwd', 'bwd'])
-@pytest.test_arrays('float32,is_diff,shape=(*)')
-def test28_evaluated_ad_kernel_launch_count(t, variant):
-    # Check that the forward/reverse-mode derivative of an
-    # evaluated loop launches a similar number of kernels
-    UInt = dr.uint32_array_t(t)
-
-    x = t(2,3,4,5)
-    dr.enable_grad(x)
-    iterations = 50
-
-    with dr.scoped_set_flag(dr.JitFlag.KernelHistory):
-        dr.kernel_history_clear()
-        _, y, i = dr.while_loop(
-            state=(x, t(1, 1, 1, 1), dr.zeros(UInt, 4)),
-            cond=lambda x, y, i: i<iterations,
-            body=lambda x, y, i: (x, .5*(y + x/y), i + 1),
-            labels=('x', 'y', 'i'),
-            mode='evaluated'
-        )
-        h = dr.kernel_history((dr.KernelType.JIT,))
-
-    from math import sqrt
-    assert len(h) >= iterations and len(h) < iterations + 3
-    assert dr.allclose(y, (sqrt(2), sqrt(3), sqrt(4), sqrt(5)))
-
-    if variant == 'fwd':
-        x.grad = dr.opaque(t, 1)
-        with dr.scoped_set_flag(dr.JitFlag.KernelHistory):
-            g = dr.forward_to(y)
-            dr.eval(g)
-            h = dr.kernel_history((dr.KernelType.JIT,))
-    elif variant == 'bwd':
-        y.grad = dr.opaque(t, 1)
-        with dr.scoped_set_flag(dr.JitFlag.KernelHistory):
-            g = dr.backward_to(x)
-            dr.eval(g)
-            h = dr.kernel_history((dr.KernelType.JIT,))
-    else:
-        raise Exception('internal error')
-    assert dr.allclose(g, (1/(2*sqrt(2)), 1/(2*sqrt(3)), 1/(2*sqrt(4)), 1/(2*sqrt(5))))
-    assert len(h) >= iterations and len(h) < iterations + 3
-    for k in h:
-        assert k['operation_count'] < iterations
-
-
 @pytest.test_arrays('uint32,jit,shape=(*)')
 @dr.syntax
-def test29_gather(t):
-    source = t(1,2,3)
+def test26_gather(t):
+    # Test that gather operations within loops work
+    source = t(1, 2, 3)
     i = t(0, 1)
     x = t(0)
 

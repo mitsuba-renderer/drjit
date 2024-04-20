@@ -686,7 +686,7 @@ public:
         m_func(m_payload, self, m_args2, m_rv2);
 
         for (size_t i = 0; i < m_output_offsets.size(); ++i) {
-            uint64_t index     = m_rv2[m_output_offsets[i]],
+            uint64_t index = m_rv2[m_output_offsets[i]],
                      index_new = ad_var_copy(index);
             ad_accum_grad(index_new, (uint32_t) args[m_args.size() + i]);
             ad_enqueue(dr::ADMode::Backward, index_new);
