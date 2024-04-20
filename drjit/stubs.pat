@@ -208,14 +208,44 @@ drjit.int32_array_t$:
 
 
 drjit.custom$:
-    \from typing import ParamSpec, Protocol
-    P = ParamSpec("P")
+    \from typing import Protocol, ParamSpec
 
-    class CustomOpT(Protocol[P, T]):
-        def eval(self, *args: P.args, **kwargs: P.kwargs) -> T:...
+    Ps = ParamSpec("Ps")
+    Tc = TypeVar("Tc", covariant=True)
 
-    def custom(arg0: type[CustomOpT[P, T]], /, *args: P.args, **kwargs: P.kwargs) -> T:
+    class CustomOpT(Protocol[Ps, Tc]):
+        def eval(self, *args: Ps.args, **kwargs: Ps.kwargs) -> Tc:...
+
+    def custom(arg0: type[CustomOpT[Ps, T]], /, *args: Ps.args, **kwargs: Ps.kwargs) -> T:
         \doc
+
+drjit.switch$:
+    \from typing import Sequence
+
+    # Helper type variable and protocol to type-check ``dr.switch()``
+    class CallablePT(Protocol[Ps, Tc]):
+        def __call__(self, *args: Ps.args, **kwargs: Ps.kwargs) -> Tc:...
+
+    def switch(index: int | AnyArray,
+               targets: Sequence[CallablePT[Ps, T]],
+               *args: Ps.args,
+               mode: Literal['symbolic', 'evaluated', None] = None,
+               **kwargs: Ps.kwargs) -> T:
+        \doc
+
+drjit.dispatch$:
+    # Helper type variable and protocol to type-check ``dr.dispatch()``
+    InstT = TypeVar("InstT", contravariant=True)
+    class CallableSelfPT(Protocol[InstT, Ps, Tc]):
+        def __call__(self, arg0: InstT, /, *args: Ps.args, **kwargs: Ps.kwargs) -> Tc:...
+
+    def dispatch(inst: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT],
+                 target: CallableSelfPT[ValT, Ps, T],
+                 *args: Ps.args,
+                 mode: Literal['symbolic', 'evaluated', None] = None,
+                 **kwargs: Ps.kwargs) -> T:
+        \doc
+
 
 # -------------- drjit.syntax, interop, detail ----------------
 

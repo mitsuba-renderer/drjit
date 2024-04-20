@@ -4172,6 +4172,14 @@
         targets (Sequence[Callable]): a list of callables to which calls will be
           dispatched based on the ``index`` argument.
 
+        mode (Optional[str]): Specify this parameter to override the evaluation mode.
+          Possible values besides ``None`` are: ``"symbolic"``, ``"evaluated"``.
+          If not specified, the function first checks if the index is
+          potentially scalar, in which case it uses a trivial fallback
+          implementation. Otherwise, it queries the state of the Jit flag
+          :py:attr:`drjit.JitFlag.SymbolicCalls` and then either performs a
+          symbolic or an evaluated call.
+
         *args (tuple): a variable-length list of positional arguments passed to the
           functions. :ref:`PyTrees <pytrees>` are supported.
 
@@ -4875,7 +4883,15 @@
     Args:
         inst (drjit.ArrayBase): a Dr.Jit instance array.
 
-        target (Callable): function to dispatch on all inst.
+        target (Callable): function to dispatch on all instances
+
+        mode (Optional[str]): Specify this parameter to override the evaluation mode.
+          Possible values besides ``None`` are: ``"symbolic"``, ``"evaluated"``.
+          If not specified, the function first checks if the index is
+          potentially scalar, in which case it uses a trivial fallback
+          implementation. Otherwise, it queries the state of the Jit flag
+          :py:attr:`drjit.JitFlag.SymbolicCalls` and then either performs a
+          symbolic or an evaluated call.
 
         *args (tuple): a variable-length list of positional arguments passed to the
           function. :ref:`PyTrees <pytrees>` are supported.
@@ -4913,7 +4929,7 @@
     Return Dr.Jit variable indices associated with the provided data structure.
 
     This function traverses Dr.Jit arrays, tensors, :ref:`PyTree <pytrees>` (lists,
-    tuples, dicts, custom data structures) and returns the indices of all detected
+    tuples, dictionaries, custom data structures) and returns the indices of all detected
     variables (in the order of traversal, may contain duplicates). The index
     information is returned as a list of encoded 64 bit integers, where each
     contains the AD variable index in the upper 32 bits and the JIT variable

@@ -181,16 +181,17 @@ def test02_switch_autodiff_forward(t, symbolic):
 
 
 # Forward-mode AD testcase with an implicit dependence on another variable
-@pytest.test_arrays('float,shape=(*),jit,is_diff')
 @pytest.mark.parametrize("symbolic", [True, False])
-def test03_switch_autodiff_forward_implicit(t, symbolic):
+@pytest.mark.parametrize("variant", [0, 1])
+@pytest.test_arrays('float,shape=(*),jit,is_diff')
+def test03_switch_autodiff_forward_implicit(t, symbolic, variant):
     UInt32 = dr.uint32_array_t(t)
     idx = UInt32(0, 0, 1, 1)
     a = t(1.0, 2.0, 3.0, 4.0)
 
     with dr.scoped_set_flag(dr.JitFlag.SymbolicCalls, symbolic):
         # Implicit dependence on a variable accessed via `dr.gather`
-        if True:
+        if variant == 0:
             data = t(1.0, 2.0, 3.0, 4.0)
             dr.enable_grad(data)
             data2 = dr.square(data)
@@ -211,7 +212,7 @@ def test03_switch_autodiff_forward_implicit(t, symbolic):
             assert dr.allclose(g, [8*4, 6*3, 16*2, 8*1])
 
         # Implicit dependence on a scalar variable accessed directly
-        if False:
+        if variant == 1:
             value = t(4.0)
             dr.enable_grad(value)
             value2 = 2*value

@@ -5,7 +5,7 @@
 # pyright: strict, reportUnusedVariable=false
 
 import drjit as dr
-from drjit.llvm import Array3f, Array3u, Array3b, Float, UInt, Bool
+from drjit.auto import Array3f, Array3u, Array3b, Float, UInt, Bool
 from drjit.scalar import Array3f as ScalarArray3f
 from typing import Callable, Tuple
 
@@ -203,5 +203,6 @@ def test17_switch() -> None:
     a, b = dr.switch(
         UInt(0, 1, 0),
         (f1, f2),
-        x, y
+        x, y=y,
+        mode="symbolic",
     )
