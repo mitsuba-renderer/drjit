@@ -5,17 +5,12 @@
 #  84-90, 2013 by Peter-Pike Sloan
 
 import drjit
-from typing import TypeVar
 
-SelfT, SelfCpT = TypeVar("SelfT"), TypeVar("SelfCpT")
-ValT, ValCpT = TypeVar("ValT"), TypeVar("ValCpT")
-RedT, PlainT, MaskT = TypeVar("RedT"), TypeVar("PlainT"), TypeVar("MaskT")
-
-def sh_eval_0(d: drjit.ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], r: list[ValT]) -> None:
+def sh_eval_0(d, r) -> None:
     Float = type(d.x)
     r[0] = Float(0.28209479177387814)
 
-def sh_eval_1(d: drjit.ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], r: list[ValT]) -> None:
+def sh_eval_1(d, r) -> None:
     x, y, z = d
     Float = type(x)
 
@@ -28,7 +23,7 @@ def sh_eval_1(d: drjit.ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, Mas
     r[3] = tmp_a * c0
     r[1] = tmp_a * s0
 
-def sh_eval_2(d: drjit.ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], r: list[ValT]) -> None:
+def sh_eval_2(d, r) -> None:
     from drjit import fma
     x, y, z = d
     z2 = z*z
@@ -53,7 +48,7 @@ def sh_eval_2(d: drjit.ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, Mas
     r[8] = tmp_c * c1
     r[4] = tmp_c * s1
 
-def sh_eval_3(d: drjit.ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], r: list[ValT]) -> None:
+def sh_eval_3(d, r) -> None:
     from drjit import fma
     x, y, z = d
     z2 = z*z
@@ -91,7 +86,7 @@ def sh_eval_3(d: drjit.ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, Mas
     r[15] = tmp_c * c0
     r[9] = tmp_c * s0
 
-def sh_eval_4(d: drjit.ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], r: list[ValT]) -> None:
+def sh_eval_4(d, r) -> None:
     from drjit import fma
     x, y, z = d
     z2 = z*z
@@ -145,7 +140,7 @@ def sh_eval_4(d: drjit.ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, Mas
     r[24] = tmp_c * c1
     r[16] = tmp_c * s1
 
-def sh_eval_5(d: drjit.ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], r: list[ValT]) -> None:
+def sh_eval_5(d, r) -> None:
     from drjit import fma
     x, y, z = d
     z2 = z*z
@@ -218,7 +213,7 @@ def sh_eval_5(d: drjit.ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, Mas
     r[35] = tmp_c * c0
     r[25] = tmp_c * s0
 
-def sh_eval_6(d: drjit.ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], r: list[ValT]) -> None:
+def sh_eval_6(d, r) -> None:
     from drjit import fma
     x, y, z = d
     z2 = z*z
@@ -313,7 +308,7 @@ def sh_eval_6(d: drjit.ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, Mas
     r[48] = tmp_c * c1
     r[36] = tmp_c * s1
 
-def sh_eval_7(d: drjit.ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], r: list[ValT]) -> None:
+def sh_eval_7(d, r) -> None:
     from drjit import fma
     x, y, z = d
     z2 = z*z
@@ -433,7 +428,7 @@ def sh_eval_7(d: drjit.ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, Mas
     r[63] = tmp_c * c0
     r[49] = tmp_c * s0
 
-def sh_eval_8(d: drjit.ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], r: list[ValT]) -> None:
+def sh_eval_8(d, r) -> None:
     from drjit import fma
     x, y, z = d
     z2 = z*z
@@ -581,7 +576,7 @@ def sh_eval_8(d: drjit.ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, Mas
     r[80] = tmp_c * c1
     r[64] = tmp_c * s1
 
-def sh_eval_9(d: drjit.ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], r: list[ValT]) -> None:
+def sh_eval_9(d, r) -> None:
     from drjit import fma
     x, y, z = d
     z2 = z*z
