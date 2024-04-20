@@ -35,13 +35,17 @@ static int PyGC_Disable() {
 }
 #endif
 
+int disable_gc_scope = 0;
+
 struct scoped_disable_gc {
     scoped_disable_gc() {
         status = PyGC_Disable();
+        disable_gc_scope = 1;
     }
     ~scoped_disable_gc() {
         if (status)
             PyGC_Enable();
+        disable_gc_scope = 0;
     }
     int status;
 };

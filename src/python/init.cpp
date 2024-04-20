@@ -567,56 +567,39 @@ nb::object import_ndarray(ArrayMeta m, PyObject *arg,
     return temp;
 }
 
-struct FreeThread {
-    bool active = false;
-    dr::vector<void *> queue;
-    std::condition_variable cv;
-    std::mutex mutex;
-    std::thread thread;
+// The ndarray release sequence implemented by the following callbacks is
+// paranoid but needed in some case. When Dr.Jit wants to release an array, it
+// might still be accessed by concurrently running code (this is particularly
+// relevant for LLVM mode, where both host and "device" share the same address
+// space). Decreasing the reference count is therefore done by enqueueuing a
+// host function that is called after Dr.Jit is guaranteed to have finished
+// accessing the array. But this presents another problem: decreasing the
+// DLPack reference count might involve CPython API calls that require holding
+// the GIL, which is not a nice requirement for things running in the
+// CUDA-internal message queue thread or nanothread worker due to a danger of
+// deadlocks. So we enqueue an asynchronous request via Py_AddPendingCall
+// asking Python to *eventually* decrease the reference count of the array.
+// Hopefully that won't come back to bite us. There are some known cases where
+// code that never releases the GIL doesn't service the Py_AddPendingCall
+// callbacks, see https://github.com/python/cpython/issues/95820.
 
-    ~FreeThread() {
-        {
-            std::unique_lock<std::mutex> guard(mutex);
-            if (active) {
-                active = false;
-                cv.notify_all();
-            }
-        }
-        if (thread.joinable())
-            thread.join();
+extern int disable_gc_scope;
+
+static int ndarray_free_cb_3(void *p) {
+    if (disable_gc_scope) {
+        // Don't service pending calls while in the logger critical section.
+        // That's because we can have arbitrary Dr.Jit/Dr.Jit-Extra functions
+        // on the call stack. Re-entering Python to then free nd-arrays,
+        // which can call code in Dr.Jit/Dr.Jit-extra, is a recipe for deadlocks.
+        Py_AddPendingCall(ndarray_free_cb_3, p);
+    } else {
+        nb::detail::ndarray_dec_ref((nb::detail::ndarray_handle *) p);
     }
-
-    void run() {
-        std::unique_lock<std::mutex> guard(mutex);
-        while (active) {
-            while (queue.empty() && active)
-                cv.wait(guard);
-            if (!active)
-                break;
-            void *p = queue.back();
-            queue.pop_back();
-
-            guard.unlock();
-            nb::detail::ndarray_dec_ref((nb::detail::ndarray_handle *) p);
-            guard.lock();
-        }
-    }
-
-    void enqueue(void *p) {
-        std::unique_lock<std::mutex> guard(mutex);
-        if (!active) {
-            active = true;
-            thread = std::thread(&FreeThread::run, this);
-        }
-        queue.push_back(p);
-        cv.notify_one();
-    }
-};
-
-static FreeThread free_thread;
+    return 0;
+}
 
 static void ndarray_free_cb_2(void *p) {
-    free_thread.enqueue(p);
+    Py_AddPendingCall(ndarray_free_cb_3, p);
 }
 
 static void ndarray_free_cb(uint32_t, int free, void *p) {
