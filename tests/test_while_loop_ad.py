@@ -131,27 +131,34 @@ def test05_evaluated_ad_kernel_launch_count(t, variant):
     for k in h:
         assert k['operation_count'] < iterations
 
+@pytest.mark.parametrize('variant', [0, 1])
 @pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
 @pytest.test_arrays('float32,diff,shape=(*)')
 @dr.syntax
-def test06_gather_in_loop_fwd(t, mode):
+def test06_gather_in_loop_fwd(t, mode, variant):
     x = dr.opaque(t, 0, 3)
     xo = x
     dr.enable_grad(x)
     i = dr.uint32_array_t(x)(0)
     y = dr.zeros(t)
-    while dr.hint(i < 3, mode=mode):
-        y += dr.gather(t, x, i)*i
-        i += 1
-    xo.grad=[1,2,3]
+    if dr.hint(variant == 0, mode='scalar'):
+        while dr.hint(i < 3, mode=mode):
+            y += dr.gather(t, x, i)*i
+            i += 1
+    else:
+        while dr.hint(i < 3, mode=mode, exclude=[x]):
+            y += dr.gather(t, x, i)*i
+            i += 1
+    xo.grad = [1, 2, 3]
     dr.forward_to(y)
     assert y.grad == 8
 
 
+@pytest.mark.parametrize('variant', [0, 1])
 @pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
 @pytest.test_arrays('float32,diff,shape=(*)')
 @dr.syntax
-def test07_gather_in_loop_fwd_nested(t, mode):
+def test07_gather_in_loop_fwd_nested(t, mode, variant):
     UInt = dr.uint32_array_t(t)
     x = dr.opaque(t, 0, 3)
     x.label="x"
@@ -159,13 +166,21 @@ def test07_gather_in_loop_fwd_nested(t, mode):
     dr.enable_grad(x)
     y = dr.zeros(t)
     j = dr.zeros(UInt, 3)
-    while dr.hint(j < 2, mode=mode):
-        i = dr.zeros(UInt, 3)
-        while dr.hint(i < 3, mode=mode):
-            y += dr.gather(t, x, i)*i
-            i += 1
-        j += 1
-    xo.grad=[1,2,3]
+    if dr.hint(variant == 0, mode='scalar'):
+        while dr.hint(j < 2, mode=mode):
+            i = dr.zeros(UInt, 3)
+            while dr.hint(i < 3, mode=mode):
+                y += dr.gather(t, x, i)*i
+                i += 1
+            j += 1
+    else:
+        while dr.hint(j < 2, mode=mode, exclude=[x]):
+            i = dr.zeros(UInt, 3)
+            while dr.hint(i < 3, mode=mode, exclude=[x]):
+                y += dr.gather(t, x, i)*i
+                i += 1
+            j += 1
+    xo.grad = [1, 2, 3]
     dr.forward_to(y)
     assert dr.all(y.grad == 16)
 

@@ -904,6 +904,30 @@ template <typename T> void update_indices(T &value, const vector<uint64_t> &indi
 #endif
 }
 
+/// Index vector that decreases AD refcounts when destructed
+struct ad_index32_vector : drjit::vector<uint32_t> {
+    using Base = drjit::vector<uint32_t>;
+    using Base::Base;
+    ad_index32_vector(ad_index32_vector &&a) : Base(std::move(a)) { }
+    ad_index32_vector &operator=(ad_index32_vector &&a) {
+        Base::operator=(std::move(a));
+        return *this;
+    }
+
+    ~ad_index32_vector() { release(); }
+
+    void release() {
+        for (size_t i = 0; i < size(); ++i)
+            ad_var_dec_ref(uint64_t(operator[](i)) << 32);
+        Base::clear();
+    }
+
+    void push_back_steal(uint32_t index) { push_back(index); }
+    void push_back_borrow(uint32_t index) {
+        push_back(uint32_t(ad_var_inc_ref(uint64_t(index) << 32) >> 32));
+    }
+};
+
 /// Index vector that decreases JIT + AD refcounts when destructed
 struct index64_vector : drjit::vector<uint64_t> {
     using Base = drjit::vector<uint64_t>;

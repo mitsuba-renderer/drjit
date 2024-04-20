@@ -371,17 +371,8 @@ public:
                 m_implicit_out.push_back_borrow(from_ad_index(ad_index));
                 m_output_offsets.push_back(i);
             }
-
-            #if 0
-            // Attach the other implicit outputs
-            for (uint32_t index: implicit_out) {
-                auto it = implicit.find(index);
-                if (it == implicit.end())
-                    continue;
-                add_index(m_backend, index, false);
-                m_implicit_out.push_back_borrow(from_ad_index(index));
-            }
-            #endif
+            // We don't support implicit outputs that aren't outputs
+            // of the operation.
         }
 
         for (uint32_t index: implicit_in)
@@ -611,7 +602,7 @@ bool ad_cond(JitBackend backend, int symbolic, const char *label, void *payload,
 
     if (symbolic) {
         dr::vector<size_t> input_offsets, output_offsets;
-        dr::vector<uint32_t> implicit_in, implicit_out;
+        dr::detail::ad_index32_vector implicit_in, implicit_out;
 
         {
             ad_cond_symbolic(backend, label, payload, true_mask.index(),

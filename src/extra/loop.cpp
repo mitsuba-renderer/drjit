@@ -24,8 +24,9 @@ static bool ad_loop_symbolic(JitBackend backend, const char *name,
                              void *payload,
                              ad_loop_read read_cb, ad_loop_write write_cb,
                              ad_loop_cond cond_cb, ad_loop_body body_cb,
-                             index64_vector &backup) {
-    scoped_isolation_boundary isolation_guard;
+                             index64_vector &backup,
+                             dr::vector<uint32_t> &implicit_in,
+                             dr::vector<uint32_t> &implicit_out) {
     index64_vector indices1;
     dr::vector<uint32_t> indices2;
 
@@ -42,6 +43,7 @@ static bool ad_loop_symbolic(JitBackend backend, const char *name,
 
     try {
         scoped_record record_guard(backend);
+        scoped_isolation_boundary isolation_guard;
 
         // Rewrite the loop state variables
         JitVar loop = JitVar::steal(jit_var_loop_start(
@@ -106,6 +108,8 @@ static bool ad_loop_symbolic(JitBackend backend, const char *name,
                 // All done
                 record_guard.disarm();
                 isolation_guard.disarm();
+                ad_copy_implicit_deps(implicit_in, true);
+                ad_copy_implicit_deps(implicit_out, false);
                 break;
             }
 
@@ -453,7 +457,9 @@ public:
     LoopOp(JitBackend backend, const char *name, void *payload,
            ad_loop_read read_cb, ad_loop_write write_cb, ad_loop_cond cond_cb,
            ad_loop_body body_cb, ad_loop_delete delete_cb,
-           const index64_vector &state, long long max_iterations)
+           const index64_vector &state,
+           const dr::vector<uint32_t> &implicit_in,
+           long long max_iterations)
         : m_backend(backend), m_name(name), m_payload(payload),
           m_read_cb(read_cb), m_write_cb(write_cb), m_cond_cb(cond_cb),
           m_body_cb(body_cb), m_delete_cb(delete_cb), m_diff_count(0),
@@ -480,6 +486,10 @@ public:
             jit_var_inc_ref(jit_index);
             m_inputs.push_back(input);
         }
+
+        m_implicit_in_offset = m_input_indices.size();
+        for (uint32_t index: implicit_in)
+            add_index(m_backend, index, true);
 
         m_state.reserve(state.size() + m_diff_count);
         m_state2.reserve(state.size());
@@ -581,6 +591,10 @@ public:
                           (uint32_t) m_state[m_inputs.size() + in.grad_in_offset]);
             ad_enqueue(dr::ADMode::Forward, m_state2[i]);
         }
+
+        for (size_t i = m_implicit_in_offset; i < m_input_indices.size(); ++i)
+            ad_enqueue(dr::ADMode::Forward, uint64_t(m_input_indices[i]) << 32);
+
         m_state2.release();
         ad_traverse(dr::ADMode::Forward, (uint32_t) dr::ADFlag::ClearNone);
 
@@ -620,9 +634,6 @@ public:
 
             m_state.push_back_steal(grad);
         }
-
-        if (ctr != m_input_indices.size())
-            jit_fail("LoopOp::forward(): internal error!");
 
         ad_loop(
             m_backend, 1, 0, 0, fwd_name.c_str(), this,
@@ -830,7 +841,10 @@ private:
     index64_vector m_state;
     /// Scratch array to call nested loop body/condition
     index64_vector m_state2;
+    /// Total number of differentiable state variables
     size_t m_diff_count;
+    // Offset of implicit indices in m_input_indices
+    size_t m_implicit_in_offset;
     long long m_max_iterations;
     bool m_reset;
 };
@@ -863,12 +877,13 @@ bool ad_loop(JitBackend backend, int symbolic, int compress,
     if (symbolic) {
         index64_vector indices_in;
         read_cb(payload, indices_in);
+        dr::detail::ad_index32_vector implicit_in, implicit_out;
 
         bool needs_ad;
         {
-            needs_ad =
-                ad_loop_symbolic(backend, name, payload, read_cb, write_cb,
-                                 cond_cb, body_cb, indices_in);
+            needs_ad = ad_loop_symbolic(backend, name, payload, read_cb,
+                                        write_cb, cond_cb, body_cb, indices_in,
+                                        implicit_in, implicit_out);
         }
 
         if (needs_ad && ad) {
@@ -878,7 +893,7 @@ bool ad_loop(JitBackend backend, int symbolic, int compress,
             nanobind::ref<LoopOp> op =
                 new LoopOp(backend, name, payload, read_cb, write_cb,
                            cond_cb, body_cb, delete_cb, indices_in,
-                           max_iterations);
+                           implicit_in, max_iterations);
 
             for (size_t i = 0; i < indices_out.size(); ++i) {
                 VarType vt = jit_var_type((uint32_t) indices_out[i]);
