@@ -70,6 +70,22 @@ static int extract_mode(nb::kwargs &kwargs) {
         nb::raise("'mode' must equal None, 'symbolic', or 'evaluated'");
 }
 
+static dr::string extract_label(nb::kwargs &kwargs, const char *def) {
+    nb::str label_key("label");
+    if (kwargs.contains(label_key)) {
+        nb::object label = kwargs[label_key];
+        nb::del(kwargs[label_key]);
+
+        if (!label.is_none()) {
+            if (!nb::isinstance<nb::str>(label))
+                nb::raise("'label' must be None or of type 'str'!");
+            else
+                return ((nb::str) label).c_str();
+        }
+    }
+    return def;
+}
+
 nb::object switch_impl(nb::handle index_, nb::sequence targets,
                        nb::args args_, nb::kwargs kwargs) {
     struct State {
@@ -82,6 +98,7 @@ nb::object switch_impl(nb::handle index_, nb::sequence targets,
         nb::list args(args_);
         nb::object mask = extract_mask(args, kwargs);
         int symbolic = extract_mode(kwargs);
+        dr::string label = extract_label(kwargs, "drjit.switch()");
 
         nb::handle index_tp = index_.type();
         if (index_tp.is(&PyLong_Type)) {
@@ -145,7 +162,7 @@ nb::object switch_impl(nb::handle index_, nb::sequence targets,
 
         bool done = ad_call(
             (JitBackend) s.backend, nullptr, symbolic, nb::len(targets),
-            "drjit.switch()", false, (uint32_t) s.index(inst_ptr(index)),
+            label.c_str(), false, (uint32_t) s.index(inst_ptr(index)),
             mask.is_valid() ? ((uint32_t) s.index(inst_ptr(mask))) : 0u, args_i,
             rv_i, state, func, cleanup, true);
 
@@ -199,6 +216,7 @@ nb::object dispatch_impl(nb::handle_t<dr::ArrayBase> inst,
         nb::list args(args_);
         nb::object mask = extract_mask(args, kwargs);
         int symbolic = extract_mode(kwargs);
+        dr::string label = extract_label(kwargs, "drjit.dispatch()");
 
         ad_call_func target_cb = [](void *ptr, void *self,
                                     const dr::vector<uint64_t> &args_i,
@@ -246,7 +264,7 @@ nb::object dispatch_impl(nb::handle_t<dr::ArrayBase> inst,
 
         bool done = ad_call(
             (JitBackend) s.backend, state->domain_name.c_str(), symbolic, 0,
-            "dispatch()", false, (uint32_t) s.index(inst_ptr(inst)),
+            label.c_str(), false, (uint32_t) s.index(inst_ptr(inst)),
             mask.is_valid() ? ((uint32_t) s.index(inst_ptr(mask))) : 0u, args_i,
             rv_i, state, target_cb, cleanup, true);
 

@@ -4180,6 +4180,10 @@
           :py:attr:`drjit.JitFlag.SymbolicCalls` and then either performs a
           symbolic or an evaluated call.
 
+        label (Optional[str]): An optional descriptive name. If specified, Dr.Jit
+          will include this label in generated low-level IR, which can be helpful
+          when debugging the compilation of large programs.
+
         *args (tuple): a variable-length list of positional arguments passed to the
           functions. :ref:`PyTrees <pytrees>` are supported.
 
@@ -4892,6 +4896,10 @@
           implementation. Otherwise, it queries the state of the Jit flag
           :py:attr:`drjit.JitFlag.SymbolicCalls` and then either performs a
           symbolic or an evaluated call.
+
+        label (Optional[str]): An optional descriptive name. If specified, Dr.Jit
+          will include this label in generated low-level IR, which can be helpful
+          when debugging the compilation of large programs.
 
         *args (tuple): a variable-length list of positional arguments passed to the
           function. :ref:`PyTrees <pytrees>` are supported.
@@ -6978,11 +6986,11 @@
     - ``None``: automatically pick a reasonable strategy (the default) using
       the algorithm described below. The first matching query sets the mode.
 
-      - Use ``"evaluated"`` when ``op=``:py:attr:`drjit.ReduceOp.Mul`, or when
-        using the CUDA backend and ``op=``:py:attr:`drjit.ReduceOp.{Min,Max}
-        <drjit.ReduceOp.Min}`. This is because these combinations would involve
-        instructions for atomic scatter-reductions that aren't supported by the
-        backend(s).
+      - Use ``"evaluated"`` when ``op`` equals ``:py:attr:`drjit.ReduceOp.Mul`,
+        or when using the CUDA backend and ``op`` equals
+        :py:attr:`drjit.ReduceOp.{Min,Max} <drjit.ReduceOp.Min>`. This is
+        because these combinations would involve instructions for atomic
+        scatter-reductions that aren't supported by the backend(s).
 
       - Use ``"symbolic"`` when the input is symbolic.
 

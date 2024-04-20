@@ -230,6 +230,7 @@ drjit.switch$:
                targets: Sequence[CallablePT[Ps, T]],
                *args: Ps.args,
                mode: Literal['symbolic', 'evaluated', None] = None,
+               label: str | None = None,
                **kwargs: Ps.kwargs) -> T:
         \doc
 
@@ -243,6 +244,7 @@ drjit.dispatch$:
                  target: CallableSelfPT[ValT, Ps, T],
                  *args: Ps.args,
                  mode: Literal['symbolic', 'evaluated', None] = None,
+                 label: str | None = None,
                  **kwargs: Ps.kwargs) -> T:
         \doc
 
