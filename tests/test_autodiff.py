@@ -1821,3 +1821,59 @@ def test118_scatter_reduce_minmax_bwd(t, op):
         assert dr.all(valg == [1, 0, 0, 10, 0, 0])
     print(xg)
     assert dr.all(xg == [0, 0, 100])
+
+
+@pytest.mark.parametrize('op', [dr.ReduceOp.Max, dr.ReduceOp.Min])
+@pytest.test_arrays('is_diff,float32,shape=(*)')
+@pytest.mark.parametrize("mode", ['symbolic', 'evaluated'])
+def test120_block_minmax_fwd(t, mode, op):
+    if mode == 'symbolic' and dr.backend_v(t) == dr.JitBackend.CUDA:
+        # Float32 min/max atomics not supported on CUDA
+        return
+
+    x = t(1, 2, 3, 4, 5, 6)
+    dr.enable_grad(x)
+    y = dr.block_reduce(op, x, 2, mode=mode)
+    x.grad = [10, 20, 30, 40, 50, 60]
+    dr.forward_to(y)
+    if op == dr.ReduceOp.Max:
+        assert dr.all(y == [2, 4, 6])
+        assert dr.all(y.grad == [20, 40, 60])
+    else:
+        assert dr.all(y == [1, 3, 5])
+        assert dr.all(y.grad == [10, 30, 50])
+
+
+@pytest.mark.parametrize('op', [dr.ReduceOp.Max, dr.ReduceOp.Min])
+@pytest.test_arrays('is_diff,float32,shape=(*)')
+def test121_block_minmax_bwd(t, op):
+    x = t(1, 2, 3, 4, 5, 6)
+    dr.enable_grad(x)
+    y = dr.block_reduce(op, x, 2)
+    y.grad = [1, 10, 100]
+    dr.backward_to(x)
+    if op == dr.ReduceOp.Max:
+        assert dr.all(x.grad == [0, 1, 0, 10, 0, 100])
+    else:
+        assert dr.all(x.grad == [1, 0, 10, 0, 100, 0])
+
+
+@pytest.test_arrays('is_diff,float32,shape=(*)')
+def test122_block_mul_fwd(t):
+    x = t(1, 2, 3, 4, 5, 6)
+    dr.enable_grad(x)
+    y = dr.block_reduce(dr.ReduceOp.Mul, x, 2)
+    x.grad = [10, 20, 30, 40, 50, 60]
+    dr.forward_to(y)
+    assert dr.all(y == [2, 12, 30])
+    assert dr.all(y.grad == [40, 240, 600])
+
+
+@pytest.test_arrays('is_diff,float32,shape=(*)')
+def test123_block_mul_bwd(t):
+    x = t(1, 2, 3, 4, 5, 6)
+    dr.enable_grad(x)
+    y = dr.block_reduce(dr.ReduceOp.Mul, x, 2)
+    y.grad = [1, 10, 100]
+    dr.backward_to(x)
+    assert dr.all(x.grad == [2, 1, 40, 30, 600, 500])

@@ -6937,58 +6937,67 @@
     Returns:
         object: The repeated input as described above. The return type matches that of ``value``.
 
-.. topic:: block_sum
+.. topic:: block_reduce
 
-    Sum over elements within blocks
+    Reduce elements within blocks.
 
-    This function adds all elements within contiguous blocks of size ``block_size``
-    along the trailing dimension of the input array ``value`` and returns a new a
-    new array containing these sums.
+    This function reduces all elements within contiguous blocks of size ``block_size``
+    along the trailing dimension of the input array ``value``, returning a
+    correspondingly smaller output. Various types of reductions are supported, see
+    :py:class:`drjit.ReduceOp` for details.
 
-    For example, a sum with ``block_size=2`` of ``[a, b, c, d, e, f]`` produces
-    ``[a+b, c+d, e+f]``. The length of the input array must be a multiple of
-    ``block_size``.
+    For example, a sum reduction of a hypothetical array ``[a, b, c, d, e, f]`` with 
+    ``block_size=2`` produces the output ``[a+b, c+d, e+f]``. 
 
-    The function recursively threads through nested arrays and :ref:`PyTree
-    <pytrees>`. Tensors and and non-JIT compiled arrays are currently not
-    supported.
+    The function raises an exception when the length of the trailing dimension is not
+    a multiple of the block size.  It recursively threads through nested arrays and
+    :ref:`PyTrees <pytrees>`.
 
     Dr.Jit uses one of two strategies to realize this operation, which can be
     optionally forced by specifying the ``mode`` parameter.
 
-    - ``"evaluated"``: Evaluate the input array (:py:func:`drjit.eval()`), then
-      use a pre-compiled reduction kernel that makes efficient use of shared
-      memory and cooperative warp instructions on CUDA. On the CUDA backend, this
-      requires ``block_size`` to be a power-of-two value.
+    - ``"evaluated"``: Evaluate the input array (via :py:func:`drjit.eval()`) if
+      not already evaluated, then launch a precompiled reduction kernel.
 
-    - ``"symbolic"``: use :py:func:`drjit.scatter_add()` to atomically
-      scatter-accumulate values into the output array. This strategy can be
+      On the CUDA backend, this strategy exploits shared memory and cooperative
+      warp instructions, which requires ``block_size`` to be a power-of-two value.
+
+    - ``"symbolic"``: use :py:func:`drjit.scatter_reduce()` to atomically
+      scatter-reduce values into the output array. This strategy can be
       advantageous when the input array is symbolic or unevaluated and
       extremely large, which means that evaluation is either impossible or
       would cause an out-of-memory error.
 
-      A disadvantage of this strategy compared to ``"evaluated"`` is that the
-      output can be affected by non-deterministic rounding error (IEEE 754
-      addition is non-commutative, and the precise order of the
-      scatter-additions depends on how the CPU or GPU schedules them).
+      A disadvantage of this strategy compared to ``"evaluated"`` is that
+      block-reduced floating point arrays are subject to non-deterministic
+      rounding errors.  The reason for this is that operations like IEEE-754
+      addition are non-commutative. The execution order of the atomic
+      scatter-reductions is scheduling-dependent, which can lead to small
+      variations across program runs.
 
     - ``None``: automatically pick a reasonable strategy (the default). This
       strategy uses the following decision tree:
 
-      - Use ``"symbolic"`` when the input array represents a symbolic variable.
+      - Use ``"symbolic"`` when the input is symbolic.
 
       - Use ``"symbolic"`` when the input array does *not* have a power-of-two
         size, and when running on the CUDA backend.
 
       - Use ``"symbolic"`` when the input array is unevaluated, and when
-        evaluating it would require more than a 1GiB of memory.
+        evaluating it would consume more than a 1GiB of memory.
 
-      - Otherwise, use ``"evaluated"`` mode in all other cases.
+      - Otherwise, use ``"evaluated"`` mode.
 
-    Since evaluated mode can be quite a bit faster and is numerically stable,
-    it is recommended that you choose parameters of your program so that it
-    invokes :py:func:`drjit.block_sum` with values of ``block_size`` that are
-    a power of two.
+    Since evaluated mode can be quite a bit faster and is guaranteed to be
+    deterministic, it is recommended that you design your program so that it
+    invokes :py:func:`drjit.block_reduce` with a power-of-two ``block_size``.
+
+    .. note::
+
+        Tensor inputs are not supported. To reduce blocks within tensors, apply the
+        regular per-axis reductions to reshaped tensors. For example, to sum-reduce
+        a ``(16, 16)`` tensor by a factor of ``(4, 2)`` (i.e., to a ``(4, 8)``-sized
+        tensor), write ``dr.sum(dr.reshape(value, shape=(4, 4, 8, 2)), axis=(1, 3))``.
 
     Args:
         arg (drjit.ArrayBase): Dr.Jit array
@@ -6998,7 +7007,14 @@
         mode (str | None): optional parameter to force an evaluation strategy.
 
     Returns:
-        Sum over elements within blocks
+        The block-reduced array as specified above.
+
+.. topic:: block_sum
+
+    Sum elements within blocks.
+
+    This is a convenience alias for :py:func:`drjit.block_reduce` with
+    ``op`` set to :py:attr:`drjit.ReduceOp.Add`.
 
 .. topic:: ArrayBase
 

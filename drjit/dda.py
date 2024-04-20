@@ -1,5 +1,5 @@
 import drjit as dr
-from typing import Callable, TypeVar, Literal, Union, Any
+from typing import Callable, TypeVar, Literal, Union, Any, Tuple, Optional
 
 ArrayNfT  = TypeVar("ArrayNfT", bound=dr.AnyArray)
 ArrayNuT  = TypeVar("ArrayNuT", bound=dr.AnyArray)
@@ -17,11 +17,11 @@ def dda(
     grid_res: ArrayNuT,
     grid_min: ArrayNfT,
     grid_max: ArrayNfT,
-    func: Callable[[StateT, ArrayNuT, ArrayNfT, ArrayNfT, BoolT], tuple[StateT, BoolT]],
+    func: Callable[[StateT, ArrayNuT, ArrayNfT, ArrayNfT, BoolT], Tuple[StateT, BoolT]],
     state: StateT,
     active: BoolT,
     mode: Literal["scalar", "symbolic", "evaluated", None] = None,
-    max_iterations: int | None = None
+    max_iterations: Optional[int] = None
 ) -> StateT:
     r"""
     N-dimensional digital differential analyzer (DDA).
@@ -207,7 +207,7 @@ def dda(
 
     def body_fn(
         active: BoolT, state: StateT, dt_v: ArrayNfT, p0: ArrayNfT, pi: ArrayNiT, t_rem: Any,
-    ) -> tuple[BoolT, StateT, ArrayNfT, ArrayNfT, ArrayNiT, Any]:
+    ) -> Tuple[BoolT, StateT, ArrayNfT, ArrayNfT, ArrayNiT, Any]:
         # Select the smallest step. It's possible that dt == 0 when starting
         # directly on a grid line.
         dt = dr.minimum(dr.min(dt_v), t_rem)
@@ -241,12 +241,12 @@ def dda(
 
 
 def _int_cell_2d(
-    state: tuple[FloatT, ArrayNuT, FloatT],
+    state: Tuple[FloatT, ArrayNuT, FloatT],
     index: ArrayNuT,
     p_a: ArrayNfT,
     p_b: ArrayNfT,
     active: BoolT,
-) -> tuple[tuple[FloatT, ArrayNuT, FloatT], BoolT]:
+) -> Tuple[Tuple[FloatT, ArrayNuT, FloatT], BoolT]:
     """
     Compute the analytic integral of a bilinear interpolant within a 2D grid
     cell. This is an implementation detail of ``integrate()`` defined below.
@@ -279,12 +279,12 @@ def _int_cell_2d(
 
 
 def _int_cell_3d(
-    state: tuple[FloatT, ArrayNuT, FloatT],
+    state: Tuple[FloatT, ArrayNuT, FloatT],
     index: ArrayNuT,
     p_a: ArrayNfT,
     p_d: ArrayNfT,
     active: BoolT,
-) -> tuple[tuple[FloatT, ArrayNuT, FloatT], BoolT]:
+) -> Tuple[Tuple[FloatT, ArrayNuT, FloatT], BoolT]:
     """
     Compute the analytic integral of a trilinear interpolant within a 3D grid
     cell. This is an implementation detail of ``integrate()`` defined below.

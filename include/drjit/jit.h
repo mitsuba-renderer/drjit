@@ -512,12 +512,12 @@ struct DRJIT_TRIVIAL_ABI JitArray
             return uint32_array_t<JitArray>::steal(jit_var_compress(m_index));
     }
 
-    JitArray block_sum_(size_t block_size, int symbolic) const {
-        return steal(jit_var_block_sum(m_index, (uint32_t) block_size, symbolic));
+    JitArray block_reduce_(ReduceOp op, size_t block_size, int symbolic) const {
+        return steal(jit_var_block_reduce(op, m_index, (uint32_t) block_size, symbolic));
     }
 
-    JitArray block_copy_(size_t block_size) const {
-        return steal(jit_var_block_copy(m_index, (uint32_t) block_size));
+    JitArray tile_(size_t count) const {
+        return steal(jit_var_tile(m_index, (uint32_t) count));
     }
 
     JitArray copy() const { return steal(jit_var_copy(m_index)); }
@@ -639,39 +639,39 @@ protected:
 template <typename Value> using CUDAArray = JitArray<JitBackend::CUDA, Value>;
 template <typename Value> using LLVMArray = JitArray<JitBackend::LLVM, Value>;
 
-template <typename Array>
-Array block_sum(const Array &array, size_t block_size, int symbolic = -1) {
-    if constexpr (depth_v<Array> > 1) {
-        Array result;
-        if constexpr (Array::Size == Dynamic)
-            result = empty<Array>(array.size());
-
-        for (size_t i = 0; i < array.size(); ++i)
-            result.entry(i) = block_sum(array.entry(i), block_size, symbolic);
-
+template <typename T> T block_reduce(ReduceOp op, const T &value, size_t block_size, int symbolic = -1) {
+    if constexpr (is_traversable_v<T>) {
+        T result;
+        traverse_2(
+            fields(result), fields(value),
+            [op, block_size, symbolic](auto &x, const auto &y) {
+                x = block_reduce(op, y, block_size, symbolic);
+            });
         return result;
-    } else if constexpr (is_jit_v<Array>) {
-        return array.block_sum_(block_size, symbolic);
+    } if constexpr (is_jit_v<T>) {
+        return value.block_reduce_(op, block_size, symbolic);
     } else {
-        static_assert(detail::false_v<Array>, "block_sum(): requires a JIT array!");
+        return value;
     }
 }
 
-template <typename Array>
-Array block_copy(const Array &array, size_t block_size) {
-    if constexpr (depth_v<Array> > 1) {
-        Array result;
-        if constexpr (Array::Size == Dynamic)
-            result = empty<Array>(array.size());
+template <typename T> T block_sum(const T &value, size_t block_size, int symbolic = -1) {
+    return block_reduce(ReduceOp::Add, value, block_size, symbolic);
+}
 
-        for (size_t i = 0; i < array.size(); ++i)
-            result.entry(i) = block_copy(array.entry(i), block_size);
-
+template <typename T> T tile(const T &value, size_t count) {
+    if constexpr (is_traversable_v<T>) {
+        T result;
+        traverse_2(
+            fields(result), fields(value),
+            [count](auto &x, const auto &y) {
+                x = tile(y, count);
+            });
         return result;
-    } else if constexpr (is_jit_v<Array>) {
-        return array.block_copy_(block_size);
+    } if constexpr (is_jit_v<T>) {
+        return value.tile_(count);
     } else {
-        static_assert(detail::false_v<Array>, "block_copy(): requires a JIT array!");
+        return value;
     }
 }
 

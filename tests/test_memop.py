@@ -586,8 +586,11 @@ def test23_block_sum(t):
     with pytest.raises(RuntimeError, match=r"variable size \(6\) must be an integer multiple of 'block_size' \(4\)"):
         dr.block_sum(x, 4)
 
+@pytest.mark.parametrize('op',
+    [dr.ReduceOp.Add, dr.ReduceOp.Min, dr.ReduceOp.Max,
+     dr.ReduceOp.And, dr.ReduceOp.Or])
 @pytest.test_arrays('shape=(*), uint32, jit')
-def test24_block_sum_intense(t):
+def test24_block_reduce_intense(t, op):
     size = 4096*1024
     import sys
     mod = sys.modules[t.__module__]
@@ -598,12 +601,14 @@ def test24_block_sum_intense(t):
 
     for i in range(0, 23):
         block_size = 1 << i
-        sum_1 = dr.block_sum(
+        sum_1 = dr.block_reduce(
+            op=dr.ReduceOp(op),
             value=value,
             block_size=block_size,
             mode='evaluated'
         )
-        sum_2 = dr.block_sum(
+        sum_2 = dr.block_reduce(
+            op=dr.ReduceOp(op),
             value=value,
             block_size=block_size,
             mode='symbolic'

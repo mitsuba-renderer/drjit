@@ -1,5 +1,6 @@
 import drjit as dr
 from drjit.dda import dda, integrate, integrate_ref
+from typing import Tuple, List
 from dataclasses import dataclass
 import pytest
 import sys
@@ -7,19 +8,19 @@ import sys
 @dataclass
 class Voxel:
     t: float
-    idx: tuple[int, ...]
-    p0: tuple[float, ...]
-    p1: tuple[float, ...]
+    idx: Tuple[int, ...]
+    p0: Tuple[float, ...]
+    p1: Tuple[float, ...]
 
 
 def dda_bruteforce(
-    ray_o: tuple[float, ...],
-    ray_d: tuple[float, ...],
+    ray_o: Tuple[float, ...],
+    ray_d: Tuple[float, ...],
     ray_max: float = float("inf"),
-    grid_res: tuple[int, ...] = (1, 1, 1),
-    grid_min: tuple[float, ...] = (0, 0, 0),
-    grid_max: tuple[float, ...] = (1, 1, 1),
-) -> list[Voxel]:
+    grid_res: Tuple[int, ...] = (1, 1, 1),
+    grid_min: Tuple[float, ...] = (0, 0, 0),
+    grid_max: Tuple[float, ...] = (1, 1, 1),
+) -> List[Voxel]:
     """
     Brute-force DDA routine that enumerates all grid cells and computes
     intersections with each one. Used in dda_check()
@@ -65,12 +66,12 @@ def dda_bruteforce(
 
 
 def dda_check(
-    ray_o: tuple[float, ...],
-    ray_d: tuple[float, ...],
+    ray_o: Tuple[float, ...],
+    ray_d: Tuple[float, ...],
     ray_max: float = float("inf"),
-    grid_res: tuple[int, ...] = (1, 1, 1),
-    grid_min: tuple[float, ...] = (0, 0, 0),
-    grid_max: tuple[float, ...] = (1, 1, 1),
+    grid_res: Tuple[int, ...] = (1, 1, 1),
+    grid_min: Tuple[float, ...] = (0, 0, 0),
+    grid_max: Tuple[float, ...] = (1, 1, 1),
 ) -> None:
     """
     Compare the proper and brute force versions of DDA against each other.

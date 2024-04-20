@@ -388,13 +388,19 @@ struct DRJIT_TRIVIAL_ABI DiffArray
             return steal(jit_var_prefix_sum(m_index, exclusive));
     }
 
-    DiffArray block_sum_(size_t block_size, int symbolic) {
+    DiffArray block_reduce_(ReduceOp op, size_t block_size, int symbolic) {
         if constexpr (IsFloat)
-            return steal(ad_var_block_sum(m_index, (uint32_t) block_size, symbolic));
+            return steal(ad_var_block_reduce(op, m_index, (uint32_t) block_size, symbolic));
         else
-            return steal(jit_var_block_sum(m_index, (uint32_t) block_size, symbolic));
+            return steal(jit_var_block_reduce(op, m_index, (uint32_t) block_size, symbolic));
     }
 
+    DiffArray tile_(size_t count) const {
+        if constexpr (IsFloat)
+            return steal(ad_var_tile(m_index, count));
+        else
+            return steal(jit_var_tile(m_index, count));
+    }
 
     DiffArray dot_(const DiffArray &a) const { return sum(*this * a); }
 
