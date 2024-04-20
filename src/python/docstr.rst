@@ -6975,8 +6975,14 @@
       scatter-reductions is scheduling-dependent, which can lead to small
       variations across program runs.
 
-    - ``None``: automatically pick a reasonable strategy (the default). This
-      strategy uses the following decision tree:
+    - ``None``: automatically pick a reasonable strategy (the default) using
+      the algorithm described below. The first matching query sets the mode.
+
+      - Use ``"evaluated"`` when ``op=``:py:attr:`drjit.ReduceOp.Mul`, or when
+        using the CUDA backend and ``op=``:py:attr:`drjit.ReduceOp.{Min,Max}
+        <drjit.ReduceOp.Min}`. This is because these combinations would involve
+        instructions for atomic scatter-reductions that aren't supported by the
+        backend(s).
 
       - Use ``"symbolic"`` when the input is symbolic.
 
@@ -6984,7 +6990,7 @@
         size, and when running on the CUDA backend.
 
       - Use ``"symbolic"`` when the input array is unevaluated, and when
-        evaluating it would consume more than a 1GiB of memory.
+        evaluating it would consume more than a 1 GiB of memory.
 
       - Otherwise, use ``"evaluated"`` mode.
 

@@ -123,9 +123,9 @@ On macOS, the ``DYLD_INSERT_LIBRARIES`` environment variable isn't enough:
 ``libasan`` needs to be preloaded into the actual Python binary, and the
 ``python3`` binary is generally just a thin wrapper. To determine the path of
 the actual Python executable, run ``whoami.py`` by `Jonas Devlieghere
-<https://jonasdevlieghere.com/post/sanitizing-python-modules/>`.
+<https://jonasdevlieghere.com/post/sanitizing-python-modules/>`__.
 
-.. code-block:: pycon
+.. code-block:: python
 
    import ctypes
    dyld = ctypes.cdll.LoadLibrary('/usr/lib/system/libdyld.dylib')
@@ -135,7 +135,7 @@ the actual Python executable, run ``whoami.py`` by `Jonas Devlieghere
    print(name.value)
 
 On my machine, this, e.g., prints
-```b'/opt/homebrew/Cellar/python@3.12/3.12.2_1/Frameworks/Python.framework/Versions/3.12/Resources/Python.app/Contents/MacOS/Python'``.
+``b'/opt/homebrew/Cellar/python@3.12/3.12.2_1/Frameworks/Python.framework/Versions/3.12/Resources/Python.app/Contents/MacOS/Python'``.
 
 Putting both together, we can then, e.g., run the Python test suite via ``pytest``. (Don't forget to specify ``--capture no`` to ensure
 that the sanitizer messages are visible).
