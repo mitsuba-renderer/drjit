@@ -3597,7 +3597,7 @@ bool ad_custom_op(dr::detail::CustomOpBase *op) {
 
     if (outputs.size() == 1) {
         v1i = outputs[0];
-        Variable *v1 = v1 = ad_custom_output_create(v1i, state[v1i]);
+        Variable *v1 = ad_custom_output_create(v1i, state[v1i]);
         ad_log(" - out: a%u", v1i);
         ad_var_inc_ref_int(v1i, v1);
     } else {

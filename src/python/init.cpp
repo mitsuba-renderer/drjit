@@ -572,12 +572,27 @@ struct FreeThread {
     dr::vector<void *> queue;
     std::condition_variable cv;
     std::mutex mutex;
+    std::thread thread;
+
+    ~FreeThread() {
+        {
+            std::unique_lock<std::mutex> guard(mutex);
+            if (active) {
+                active = false;
+                cv.notify_all();
+            }
+        }
+        if (thread.joinable())
+            thread.join();
+    }
 
     void run() {
         std::unique_lock<std::mutex> guard(mutex);
-        while (true) {
-            while (queue.empty())
+        while (active) {
+            while (queue.empty() && active)
                 cv.wait(guard);
+            if (!active)
+                break;
             void *p = queue.back();
             queue.pop_back();
 
@@ -588,12 +603,11 @@ struct FreeThread {
     }
 
     void enqueue(void *p) {
+        std::unique_lock<std::mutex> guard(mutex);
         if (!active) {
             active = true;
-            std::thread t(&FreeThread::run, this);
-            t.detach();
+            thread = std::thread(&FreeThread::run, this);
         }
-        std::unique_lock<std::mutex> guard(mutex);
         queue.push_back(p);
         cv.notify_one();
     }
