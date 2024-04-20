@@ -929,15 +929,15 @@ void export_base(nb::module_ &m) {
     // Generic type variable used in many places
     for (const char *name :
          { "T", "SelfT", "SelfCpT", "ValT", "ValCpT", "RedT", "PlainT", "MaskT" })
-        m.attr(name) = nb::type_var(name, "covariant"_a = strcmp(name, "T") == 0);
+        m.attr(name) = nb::type_var(name);
+
 
     #if PY_VERSION_HEX >= 0x030B0000 // TypeVarTuple was introduced in v3.11
         m.attr("Ts") = nb::type_var_tuple("Ts");
     #else
         try {
             m.attr("Ts") = nb::module_::import_("typing_extensions").attr("TypeVarTuple")("Ts");
-        } catch (...) {
-        }
+        } catch (...) { }
     #endif
 
     // Type variable referring specifically to an array subclass

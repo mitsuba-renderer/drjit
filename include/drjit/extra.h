@@ -247,6 +247,10 @@ typedef void (*ad_call_cleanup)(void*);
  *     The domain of the virtual function call in the instance registry.
  *     Must be \c nullptr if \c callable_count is provided instead.
  *
+ * \param symbolic
+ *     Set this to \c 0 for evaluated mode, \c 1 for symbolic mode, and \c -1
+ *     to select the mode automatically.
+ *
  * \param callable_count
  *     The number of callables. Must be zero if \c domain is provided instead.
  *
@@ -299,7 +303,7 @@ typedef void (*ad_call_cleanup)(void*);
  * already been destroyed.
  */
 extern DRJIT_EXTRA_EXPORT bool
-ad_call(JitBackend backend, const char *domain, size_t callable_count,
+ad_call(JitBackend backend, const char *domain, int symbolic, size_t callable_count,
         const char *name, bool is_getter, uint32_t index, uint32_t mask,
         const drjit::vector<uint64_t> &args, drjit::vector<uint64_t> &rv,
         void *payload, ad_call_func callback, ad_call_cleanup cleanup,

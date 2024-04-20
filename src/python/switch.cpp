@@ -47,6 +47,29 @@ static nb::object extract_mask(nb::list &args, nb::kwargs &kwargs) {
     return mask;
 }
 
+static int extract_mode(nb::kwargs &kwargs) {
+    nb::str mode_key("mode");
+    if (!kwargs.contains(mode_key))
+        return -1;
+
+    nb::object mode = kwargs[mode_key];
+    nb::del(kwargs[mode_key]);
+
+    if (mode.is_none())
+        return -1;
+
+    if (!nb::isinstance<nb::str>(mode))
+        nb::raise("'mode' must be None or of type 'str'!");
+
+    const char *mode_str = nb::str(mode).c_str();
+    if (strcmp(mode_str, "symbolic") == 0)
+        return 1;
+    else if (strcmp(mode_str, "evaluated") == 0)
+        return 0;
+    else
+        nb::raise("'mode' must equal None, 'symbolic', or 'evaluated'");
+}
+
 nb::object switch_impl(nb::handle index_, nb::sequence targets,
                        nb::args args_, nb::kwargs kwargs) {
     struct State {
@@ -58,6 +81,7 @@ nb::object switch_impl(nb::handle index_, nb::sequence targets,
     try {
         nb::list args(args_);
         nb::object mask = extract_mask(args, kwargs);
+        int symbolic = extract_mode(kwargs);
 
         nb::handle index_tp = index_.type();
         if (index_tp.is(&PyLong_Type)) {
@@ -120,8 +144,8 @@ nb::object switch_impl(nb::handle index_, nb::sequence targets,
         ::collect_indices(state->args_o, args_i);
 
         bool done = ad_call(
-            (JitBackend) s.backend, nullptr, nb::len(targets), "drjit.switch()", false,
-            (uint32_t) s.index(inst_ptr(index)),
+            (JitBackend) s.backend, nullptr, symbolic, nb::len(targets),
+            "drjit.switch()", false, (uint32_t) s.index(inst_ptr(index)),
             mask.is_valid() ? ((uint32_t) s.index(inst_ptr(mask))) : 0u, args_i,
             rv_i, state, func, cleanup, true);
 
@@ -174,6 +198,7 @@ nb::object dispatch_impl(nb::handle_t<dr::ArrayBase> inst,
     try {
         nb::list args(args_);
         nb::object mask = extract_mask(args, kwargs);
+        int symbolic = extract_mode(kwargs);
 
         ad_call_func target_cb = [](void *ptr, void *self,
                                     const dr::vector<uint64_t> &args_i,
@@ -207,6 +232,7 @@ nb::object dispatch_impl(nb::handle_t<dr::ArrayBase> inst,
             (JitBackend) s.backend,
             nb::borrow<nb::str>(domain_name)
         };
+
         ad_call_cleanup cleanup = [](void *ptr) {
             if (!nb::is_alive())
                 return;
@@ -219,7 +245,7 @@ nb::object dispatch_impl(nb::handle_t<dr::ArrayBase> inst,
         ::collect_indices(state->args_o, args_i);
 
         bool done = ad_call(
-            (JitBackend) s.backend, state->domain_name.c_str(), 0,
+            (JitBackend) s.backend, state->domain_name.c_str(), symbolic, 0,
             "dispatch()", false, (uint32_t) s.index(inst_ptr(inst)),
             mask.is_valid() ? ((uint32_t) s.index(inst_ptr(mask))) : 0u, args_i,
             rv_i, state, target_cb, cleanup, true);
@@ -243,9 +269,7 @@ nb::object dispatch_impl(nb::handle_t<dr::ArrayBase> inst,
 
 void export_switch(nb::module_& m) {
     m.def("switch", &switch_impl, doc_switch, "index"_a,
-          "targets"_a, "args"_a, "kwargs"_a,
-          nb::sig("def switch(index: int | AnyArray, targets: typing.Sequence[typing.Callable[[*Ts], T]], *args: *Ts) -> T"))
+          "targets"_a, "args"_a, "kwargs"_a)
      .def("dispatch", &dispatch_impl, doc_dispatch, "inst"_a,
-          "target"_a, "args"_a, "kwargs"_a,
-          nb::sig("def dispatch(inst: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], target: typing.Callable[[ValT, *Ts], T], *args: *Ts) -> T"));
+          "target"_a, "args"_a, "kwargs"_a);
 }

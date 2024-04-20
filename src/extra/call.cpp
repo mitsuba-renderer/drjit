@@ -580,8 +580,8 @@ public:
             args.push_back_steal(ad_grad(combine(m_input_indices[i])));
 
         ad_call(
-            m_backend, m_domain, m_callable_count, name.c_str(), false, m_index,
-            m_mask, args, rv, this,
+            m_backend, m_domain, 1, m_callable_count, name.c_str(), false,
+            m_index, m_mask, args, rv, this,
             [](void *ptr, void *self, const vector<uint64_t> &args,
                vector<uint64_t> &rv) {
                 ((CallOp *) ptr)->forward_cb(self, args, rv);
@@ -613,8 +613,8 @@ public:
             args.push_back_steal(ad_grad(combine(m_output_indices[i])));
 
         ad_call(
-            m_backend, m_domain, m_callable_count, name.c_str(), false, m_index,
-            m_mask, args, rv, this,
+            m_backend, m_domain, 1, m_callable_count, name.c_str(), false,
+            m_index, m_mask, args, rv, this,
             [](void *ptr, void *self, const vector<uint64_t> &args,
                vector<uint64_t> &rv) {
                 ((CallOp *) ptr)->backward_cb(self, args, rv);
@@ -738,11 +738,11 @@ private:
 };
 
 // Generic checks, then forward either to ad_call_symbolic or ad_call_reduce
-bool ad_call(JitBackend backend, const char *domain, size_t callable_count,
-             const char *name, bool is_getter, uint32_t index, uint32_t mask,
-             const vector<uint64_t> &args, vector<uint64_t> &rv,
-             void *payload, ad_call_func func, ad_call_cleanup cleanup,
-             bool ad) {
+bool ad_call(JitBackend backend, const char *domain, int symbolic,
+             size_t callable_count, const char *name, bool is_getter,
+             uint32_t index, uint32_t mask, const vector<uint64_t> &args,
+             vector<uint64_t> &rv, void *payload, ad_call_func func,
+             ad_call_cleanup cleanup, bool ad) {
     try {
         const char *domain_or_empty = domain ? domain : "",
                    *separator = domain ? "::" : "";
@@ -751,6 +751,12 @@ bool ad_call(JitBackend backend, const char *domain, size_t callable_count,
             jit_raise("ad_call(\"%s%s%s\"): please specify either the "
                       "'domain' parameter *or* 'callable_count', but not both",
                       domain_or_empty, separator, name);
+
+        if (symbolic == -1)
+            symbolic = jit_flag(JitFlag::SymbolicCalls) ? 1 : 0;
+
+        if (symbolic != 0 && symbolic != 1)
+            jit_raise("ad_call(): 'symbolic' must be -1, 0, or 1!");
 
         if (domain)
             callable_count = jit_registry_id_bound(backend, domain);
@@ -808,7 +814,7 @@ bool ad_call(JitBackend backend, const char *domain, size_t callable_count,
                             callable_count, args, rv, rv_ad, func, payload);
             ad_copy_implicit_deps(implicit_in, true);
             guard.success = true;
-        } else if (jit_flag(JitFlag::SymbolicCalls)) {
+        } else if (symbolic) {
             scoped_isolation_boundary guard;
             ad_call_symbolic(backend, domain, name, size, index, mask,
                             callable_count, args, rv, rv_ad, func, payload);
@@ -886,4 +892,3 @@ bool ad_call(JitBackend backend, const char *domain, size_t callable_count,
         throw;
     }
 }
-

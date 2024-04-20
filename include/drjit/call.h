@@ -157,7 +157,7 @@ Ret call(const Self &self, const char *domain, const char *name,
 
     index64_vector args_i, rv_i;
     collect_indices<true>(state->args, args_i);
-    bool done = ad_call(Self::Backend, domain, 0, name, is_getter,
+    bool done = ad_call(Self::Backend, domain, -1, 0, name, is_getter,
                         self.index(), mask.index(), args_i, rv_i, state,
                         callback, &CallStateT::cleanup, true);
 
