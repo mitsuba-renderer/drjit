@@ -760,7 +760,7 @@ def test034_scatter_fwd_permute(t):
 
 
 @pytest.test_arrays('is_diff,float,shape=(*)')
-def test035_scatter_reduce_bwd(t):
+def test035_scatter_add_bwd(t):
     m = sys.modules[t.__module__]
     for i in range(3):
         idx1 = dr.arange(m.UInt, 5)
@@ -780,8 +780,8 @@ def test035_scatter_reduce_bwd(t):
         dr.set_label(buf, "buf")
 
         buf2 = t(buf)
-        dr.scatter_reduce(dr.ReduceOp.Add, buf2, x, idx1)
-        dr.scatter_reduce(dr.ReduceOp.Add, buf2, y, idx2)
+        dr.scatter_add(buf2, x, idx1)
+        dr.scatter_add(buf2, y, idx2)
 
         ref_buf = t(0.0000, 0.2500, 0.5000, 1.7500, 2.25,
                           1.5, 1.75, 2.0000, 0.0000, 0.0000)
@@ -809,7 +809,7 @@ def test035_scatter_reduce_bwd(t):
 
 
 @pytest.test_arrays('is_diff,float,-float16,shape=(*)')
-def test036_scatter_reduce_fwd(t):
+def test036_scatter_add_fwd(t):
     m = sys.modules[t.__module__]
     for i in range(3):
         idx1 = dr.arange(m.UInt, 5)
@@ -832,8 +832,8 @@ def test036_scatter_reduce_fwd(t):
         dr.set_label(buf, "buf")
 
         buf2 = t(buf)
-        dr.scatter_reduce(dr.ReduceOp.Add, buf2, x, idx1)
-        dr.scatter_reduce(dr.ReduceOp.Add, buf2, y, idx2)
+        dr.scatter_add(buf2, x, idx1)
+        dr.scatter_add(buf2, y, idx2)
 
         s = dr.dot(buf2, buf2)
 
@@ -1770,3 +1770,54 @@ def test116_arrayxf_backprop(t):
     c = 2 * a
     dr.backward(c)
     assert dr.all(a.grad == t([2,2,2], [2,2,2]), axis=None)
+
+
+@pytest.mark.parametrize('op', [dr.ReduceOp.Max, dr.ReduceOp.Min])
+@pytest.test_arrays('is_diff,float,shape=(*)')
+def test117_scatter_reduce_minmax_fwd(t, op):
+    x = t(2, 4, 6)
+    dr.enable_grad(x)
+    x.grad = [.01, .1, 1]
+    if op == dr.ReduceOp.Max:
+        val = t(1, 3, 5, 4, 0, 0)
+    else:
+        val = t(1, 3, 5, 4, 10, 10)
+
+    dr.enable_grad(val)
+    index = dr.uint32_array_t(t)(0, 0, 1, 1, 2, 2)
+    val.grad = [1, 10, 100, 1000, 10000, 10000]
+    dr.scatter_reduce(op, x, val, index)
+
+    xg = dr.forward_to(x)
+    if op == dr.ReduceOp.Max:
+        assert dr.all(x == [3, 5, 6])
+        assert dr.all(xg == [10, 100, 1])
+    else:
+        assert dr.all(x == [1, 4, 6])
+        assert dr.all(xg == [1, 1000, 1])
+
+
+@pytest.mark.parametrize('op', [dr.ReduceOp.Max, dr.ReduceOp.Min])
+@pytest.test_arrays('is_diff,float,shape=(*)')
+def test118_scatter_reduce_minmax_bwd(t, op):
+    x = t(2, 4, 6)
+    dr.enable_grad(x)
+    if op == dr.ReduceOp.Max:
+        val = t(1, 3, 5, 3, 0, 0)
+    else:
+        val = t(1, 3, 5, 3, 10, 10)
+
+    dr.enable_grad(val)
+    index = dr.uint32_array_t(t)(0, 0, 1, 1, 2, 2)
+    xn = t(x)
+    dr.scatter_reduce(op, xn, val, index)
+
+    xn.grad=[1, 10, 100]
+    xg, valg = dr.backward_to(x, val)
+
+    if op == dr.ReduceOp.Max:
+        assert dr.all(valg == [0, 1, 10, 0, 0, 0])
+    else:
+        assert dr.all(valg == [1, 0, 0, 10, 0, 0])
+    print(xg)
+    assert dr.all(xg == [0, 0, 100])

@@ -291,7 +291,7 @@ def test10_scatter_add_bwd(t, variant, mode):
 
     if dr.hint(i < 3, mode=mode):
         if dr.hint(variant & 1, mode='scalar'):
-            dr.scatter_add(y, 2*x, i)
+            dr.scatter_add(y, 2*x, i+1)
     else:
         if dr.hint(variant & 2, mode='scalar'):
             dr.scatter_add(y, 3*x, i)
@@ -299,9 +299,10 @@ def test10_scatter_add_bwd(t, variant, mode):
     b1 = variant & 1
     b2 = (variant & 2) >> 1
 
-    assert dr.all(y == [0, 2*b1, 4*b1, 9*b2, 12*b2, 0])
+    assert dr.all(y == [0, 0*b1, 2*b1, 9*b2 + 4 * b1, 12*b2, 0])
 
     assert xo is x
-    dr.backward_from(y)
-    assert dr.all(x.grad == [2*b1, 2*b1, 2*b1, 3*b2, 3*b2])
+    y.grad = [1,2,3,4,5,6]
+    xg = dr.backward_to(x)
+    assert dr.all(xg == [2*b1*2, 2*b1*3, 2*b1*4, 3*b2*4, 3*b2*5])
 
