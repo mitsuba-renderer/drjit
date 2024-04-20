@@ -572,7 +572,7 @@ def test17_mutate_other_containers(t, tt, mutate, mode):
     else:
         assert dr.all(zo[0] == (11, 20)) and dr.all(zo[1] == (30, 40))
         if tt == 'nested':
-            assert zo[1].index is y.index and zo[1] is not y
+            assert zo[1].index == y.index and zo[1] is not y
             assert dr.all(z[0] == (11, 20))
         else:
             assert zo[1] is y

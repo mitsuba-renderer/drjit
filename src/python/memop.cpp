@@ -970,19 +970,24 @@ static nb::object repeat_or_tile(nb::handle h, size_t count, bool tile) {
     return transform(tile ? "drjit.tile" : "drjit.repeat", r, h);
 }
 
-static nb::object block_sum(nb::handle h, uint32_t block_size,
-                            std::optional<dr::string> mode) {
-    struct BlockSumOp : TransformCallback {
+static nb::object block_reduce(ReduceOp op,
+                               nb::handle h, uint32_t block_size,
+                               std::optional<dr::string> mode) {
+    struct BlockReduceOp : TransformCallback {
+        ReduceOp op;
         size_t block_size;
         int symbolic;
 
-        BlockSumOp(size_t block_size, int symbolic) : block_size(block_size), symbolic(symbolic) { }
+        BlockReduceOp(ReduceOp op, size_t block_size, int symbolic)
+            : op(op), block_size(block_size), symbolic(symbolic) { }
+
         void operator()(nb::handle h1, nb::handle h2) override {
             const ArraySupplement &s = supp(h1.type());
             if (!s.index)
                 nb::raise("Unsupported input type!");
 
-            uint64_t new_index = ad_var_block_sum(
+            uint64_t new_index = ad_var_block_reduce(
+                op,
                 s.index(inst_ptr(h1)),
                 block_size,
                 symbolic
@@ -1000,11 +1005,16 @@ static nb::object block_sum(nb::handle h, uint32_t block_size,
         else if (mode.value() == "evaluated")
             symbolic = 0;
         else
-            nb::raise("drjit.block_sum(): 'mode' parameter must either equal 'symbolic' or 'evaluated'!");
+            nb::raise("drjit.block_reduce(): 'mode' parameter must either equal 'symbolic' or 'evaluated'!");
     }
 
-    BlockSumOp r(block_size, symbolic);
-    return transform("drjit.block_sum", r, h);
+    BlockReduceOp r(op, block_size, symbolic);
+    return transform("drjit.block_reduce", r, h);
+}
+
+static nb::object block_sum(nb::handle h, uint32_t block_size,
+                            std::optional<dr::string> mode) {
+    return block_reduce(ReduceOp::Add, h, block_size, mode);
 }
 
 void export_memop(nb::module_ &m) {
@@ -1057,7 +1067,8 @@ void export_memop(nb::module_ &m) {
               return repeat_or_tile(h, count, false);
           }, "value"_a, "count"_a, doc_repeat,
           nb::sig("def repeat(value: T, count: int) -> T"))
-     .def("block_sum", &block_sum, "value"_a, "block_size"_a,
-          "mode"_a = nb::none(), doc_block_sum,
-          nb::sig("def block_sum(value: ArrayT, block_size: int, mode: Literal['symbolic', 'evaluated', None] = None) -> ArrayT"));
+     .def("block_reduce", &block_reduce, "op"_a, "value"_a, "block_size"_a, "mode"_a = nb::none(), doc_block_reduce,
+          nb::sig("def block_reduce(op: ReduceOp, value: ArrayT, block_size: int, mode: Literal['evaluated', 'symbolic'] = None) -> ArrayT"))
+     .def("block_sum", &block_sum, "value"_a, "block_size"_a, "mode"_a = nb::none(), doc_block_sum,
+          nb::sig("def block_sum(value: ArrayT, block_size: int, mode: Literal['evaluated', 'symbolic'] = None) -> ArrayT"));
 }

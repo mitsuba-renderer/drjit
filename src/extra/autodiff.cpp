@@ -2030,35 +2030,85 @@ struct PrefixSumEdge : Special {
     bool m_exclusive;
 };
 
-struct BlockSumEdge : Special {
-    BlockSumEdge(uint32_t block_size, int symbolic)
-        : m_block_size(block_size), m_symbolic(symbolic) { }
+struct BlockReduceEdge : Special {
+    BlockReduceEdge(ReduceOp op, uint32_t block_size, int symbolic,
+                    JitVar value_in, JitVar value_out)
+        : m_op(op), m_block_size(block_size), m_symbolic(symbolic),
+          m_value_in(value_in), m_value_out(value_out) {
+        if (m_op == ReduceOp::Add) {
+            m_value_in = JitVar();
+            m_value_out = JitVar();
+        }
+    }
 
     void forward(const Variable *source, Variable *target) override {
-        JitVar value = source->grad;
+        JitVar source_grad = source->grad;
 
-        if (value.size() != source->size)
-            value.resize(source->size);
+        if (source_grad.size() != source->size)
+            source_grad.resize(source->size);
 
-        value = dr::block_sum(value, m_block_size, m_symbolic);
-        target->accum(value, source->size);
+        JitVar result;
+        switch (m_op) {
+            case ReduceOp::Add:
+                result = dr::block_sum(source_grad, m_block_size, m_symbolic);
+                break;
+
+            case ReduceOp::Mul:
+                result = dr::block_sum(
+                    source_grad / m_value_in,
+                    m_block_size, m_symbolic) * m_value_out;
+                break;
+
+            case ReduceOp::Min:
+            case ReduceOp::Max: {
+                    JitVar value_tile = dr::tile(m_value_out, m_block_size);
+                    result = dr::block_sum(source_grad & (value_tile == m_value_in), m_block_size, m_symbolic);
+                }
+                break;
+
+            default:
+                ad_raise("dr.block_reduce(): derivative not implemented for this reduction!");
+        }
+
+        target->accum(result, target->size);
     }
 
     void backward(Variable *source, const Variable *target) override {
-        JitVar value = target->grad;
-        if (!value.valid())
+        JitVar target_grad = target->grad;
+        if (!target_grad.valid())
             return;
 
-        if (value.size() != target->size)
-            value.resize(target->size);
+        if (target_grad.size() != target->size)
+            target_grad.resize(target->size);
 
-        jit_set_backend(value.index());
-        value = dr::block_copy(value, m_block_size);
-        source->accum(value, value.size());
+        JitVar result;
+        switch (m_op) {
+            case ReduceOp::Add:
+                result = dr::tile(target_grad, m_block_size);
+                break;
+
+            case ReduceOp::Mul:
+                result = dr::tile(target_grad * m_value_out, m_block_size) / m_value_in;
+                break;
+
+            case ReduceOp::Min:
+            case ReduceOp::Max:
+                result = dr::select(
+                    dr::tile(m_value_out, m_block_size) == m_value_in,
+                    dr::tile(target_grad, m_block_size), scalar(m_value_in.index(), 0.0));
+                break;
+
+            default:
+                ad_raise("dr.block_reduce(): derivative not implemented for this reduction!");
+        }
+
+        source->accum(result, result.size());
     }
 
+    ReduceOp m_op;
     uint32_t m_block_size;
     int m_symbolic;
+    JitVar m_value_in, m_value_out;
 };
 
 struct ShrinkEdge : Special {
@@ -2953,21 +3003,23 @@ Index ad_var_shrink(Index i0, size_t size) {
                           SpecialArg(i0, new ShrinkEdge()));
 }
 
-Index ad_var_block_sum(Index index, uint32_t block_size, int symbolic) {
+Index ad_var_block_reduce(ReduceOp op, Index index, uint32_t block_size, int symbolic) {
     if (index == 0)
         return index;
     else if (block_size == 1)
         return ad_var_inc_ref(index);
 
     JitVar result = JitVar::steal(
-        jit_var_block_sum(jit_index(index), block_size, symbolic));
+        jit_var_block_reduce(op, jit_index(index), block_size, symbolic));
 
     if (likely(is_detached(index)))
         return result.release();
     else
         return ad_var_new(
-            "block_sum", std::move(result),
-            SpecialArg(index, new BlockSumEdge(block_size, symbolic)));
+            "block_reduce", std::move(result),
+            SpecialArg(index, new BlockReduceEdge(op, block_size, symbolic,
+                                                  JitVar::borrow(jit_index(index)),
+                                                  result)));
 }
 
 // ==========================================================================

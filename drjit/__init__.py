@@ -1232,7 +1232,7 @@ def mean(value, axis: Optional[int] = 0):
     return s / n
 
 
-def sh_eval(d: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], order: int) -> list[ValT]:
+def sh_eval(d: ArrayBase, order: int) -> list:
     """
     Evalute real spherical harmonics basis function up to a specified order.
 

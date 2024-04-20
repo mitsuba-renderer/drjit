@@ -246,6 +246,13 @@ drjit.dispatch$:
                  **kwargs: Ps.kwargs) -> T:
         \doc
 
+drjit.sh_eval$:
+    def sh_eval(d: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], order: int) -> list[ValT]:
+        \doc
+
+drjit.sh_eval$:
+    def sh_eval(d: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], order: int) -> list[ValT]:
+        \doc
 
 # -------------- drjit.syntax, interop, detail ----------------
 

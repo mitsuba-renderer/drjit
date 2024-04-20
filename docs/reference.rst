@@ -182,6 +182,8 @@ These operations are *horizontal* in the sense that [..]
 .. autofunction:: scatter_add
 .. autofunction:: scatter_add_kahan
 .. autofunction:: scatter_inc
+.. autofunction:: block_reduce
+.. autofunction:: block_sum
 .. autofunction:: compress
 .. autofunction:: ravel
 .. autofunction:: unravel
@@ -203,7 +205,6 @@ These operations are *horizontal* in the sense that [..]
 .. autofunction:: none
 .. autofunction:: count
 .. autofunction:: prefix_sum
-.. autofunction:: block_sum
 .. autofunction:: cumsum
 .. autofunction:: reverse
 
