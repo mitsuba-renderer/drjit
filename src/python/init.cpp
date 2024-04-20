@@ -582,12 +582,11 @@ struct FreeThread {
             queue.pop_back();
 
             guard.unlock();
-            try {
-                nb::detail::ndarray_dec_ref((nb::detail::ndarray_handle *) p);
-            } catch (...) { }
+            nb::detail::ndarray_dec_ref((nb::detail::ndarray_handle *) p);
             guard.lock();
         }
     }
+
     void enqueue(void *p) {
         if (!active) {
             active = true;

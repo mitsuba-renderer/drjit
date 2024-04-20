@@ -365,11 +365,15 @@ public:
                 auto it = implicit.find(ad_index);
                 if (it == implicit.end())
                     continue;
+                // Recognize implicit outputs that are return values
                 implicit.erase_fast(it);
                 add_index(m_backend, ad_index, false);
                 m_implicit_out.push_back_borrow(from_ad_index(ad_index));
                 m_output_offsets.push_back(i);
             }
+
+            #if 0
+            // Attach the other implicit outputs
             for (uint32_t index: implicit_out) {
                 auto it = implicit.find(index);
                 if (it == implicit.end())
@@ -377,6 +381,7 @@ public:
                 add_index(m_backend, index, false);
                 m_implicit_out.push_back_borrow(from_ad_index(index));
             }
+            #endif
         }
 
         for (uint32_t index: implicit_in)

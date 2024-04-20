@@ -634,20 +634,18 @@ static bool ad_var_dec_ref_int(ADIndex index, Variable *v) noexcept {
     }
 }
 
-static void ad_free(ADIndex index, Variable *v) {
-    ad_trace("ad_free(a%u)", index);
-
+static void ad_free_edges(uint32_t index, Variable *v) {
     EdgeIndex edge_id = v->next_bwd;
     v->next_bwd = 0;
 
     while (edge_id) {
         Edge &edge = state.edges[edge_id];
 
-        ad_log("ad_free(): freeing edge a%u -> a%u", edge.source,
+        ad_log("ad_free_edges(): freeing edge a%u -> a%u", edge.source,
                edge.target);
 
         ad_assert(edge.target == index,
-                  "ad_free(): invalid edge connectivity!");
+                  "ad_free_edges(): invalid edge connectivity!");
 
         ADIndex source = edge.source;
         EdgeIndex next_bwd = edge.next_bwd,
@@ -665,7 +663,7 @@ static void ad_free(ADIndex index, Variable *v) {
                 while (true) {
                     Edge &edge2 = state.edges[fwd];
                     ad_assert(edge2.source == source,
-                              "ad_free(): invalid edge connectivity!");
+                              "ad_free_edges(): invalid edge connectivity!");
                     if (edge2.next_fwd != edge_id) {
                         fwd = edge2.next_fwd;
                     } else {
@@ -680,6 +678,12 @@ static void ad_free(ADIndex index, Variable *v) {
 
         edge_id = next_bwd;
     }
+}
+
+static void ad_free(ADIndex index, Variable *v) {
+    ad_trace("ad_free(a%u)", index);
+
+    ad_free_edges(index, v);
 
     *v = Variable { };
     state.unused_variables.push(index);
@@ -3417,6 +3421,26 @@ void ad_add_special(uint32_t v0i, uint32_t v1i, bool is_custom,
     ad_var_inc_ref_int(v0i, v0);
 }
 
+static Variable *ad_custom_output_create(uint32_t index, Variable *v) {
+    bool is_scatter = v->label && strncmp(v->label, "scatter", 7) == 0;
+
+    // References should be held by: caller & CustomOp (2x)
+    // Side effects can have a higher refcount
+    ad_assert(v->ref_count == 3 || is_scatter,
+              "ad_custom_op(): invalid reference count %u in variable a%u",
+              v->ref_count, index);
+
+    v->flags |= VariableFlags::CustomOpOutput;
+
+    if (!is_scatter)
+        return v;
+
+    // From implicit outputs, remove any prior computation traced within the CustomOp
+    v->counter = state.counter++;
+    ad_free_edges(index, v);
+    return state[index];
+}
+
 bool ad_custom_op(dr::detail::CustomOpBase *op) {
     const dr::vector<uint32_t> &inputs  = op->m_input_indices,
                                &outputs = op->m_output_indices;
@@ -3469,19 +3493,9 @@ bool ad_custom_op(dr::detail::CustomOpBase *op) {
 
     if (outputs.size() == 1) {
         v1i = outputs[0];
-        Variable *v1 = state[v1i];
+        Variable *v1 = v1 = ad_custom_output_create(v1i, state[v1i]);
         ad_log(" - out: a%u", v1i);
         ad_var_inc_ref_int(v1i, v1);
-        v1->flags |= VariableFlags::CustomOpOutput;
-        bool is_scatter = v1->label && strncmp(v1->label, "scatter", 7) == 0;
-        if (is_scatter)
-            v1->counter = state.counter++;
-
-        // References should be held by: caller & CustomOp (2x), this scope(1x)
-        // Side effects can have a higher refcount
-        ad_assert(v1->ref_count == 4 || is_scatter,
-                  "ad_custom_op(): invalid reference count %u in variable a%u",
-                  v1->ref_count, v1i);
     } else {
         auto [idx, v1] = ad_var_new(op->m_backend, 1, VarType::Void, symbolic,
                                     reuse_indices, "CustomOp[out]");
@@ -3498,21 +3512,12 @@ bool ad_custom_op(dr::detail::CustomOpBase *op) {
 
             flags_ref |= (uint8_t) VariableFlags::Visited;
 
-            Variable *vo = state[o];
-            bool is_scatter = vo->label && strncmp(vo->label, "scatter", 7) == 0;
-            if (is_scatter)
-                vo->counter = state.counter++;
+            Variable *vo = ad_custom_output_create(o, state[o]);
 
             ad_log(" - out: a%u", o);
             ad_add_special(v1i, o, false, dr::make_unique<CopyGrad>());
             vo = state[o];
             vo->flags |= VariableFlags::CustomOpOutput;
-
-            // References should be held by: caller & CustomOp (2x)
-            // Side effects can have a higher refcount
-            ad_assert(vo->ref_count == 3 || is_scatter,
-                      "ad_custom_op(): invalid reference count %u in variable a%u",
-                      vo->ref_count, o);
         }
     }
 
@@ -3546,7 +3551,6 @@ bool ad_custom_op(dr::detail::CustomOpBase *op) {
                  (uint8_t) VariableFlags::CustomLabel;
 
     ad_var_dec_ref_int(v0i, v0);
-
     ad_var_dec_ref_int(v1i, v1);
 
     op->m_counter_offset = 0;
