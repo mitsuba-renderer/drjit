@@ -3309,6 +3309,7 @@ void ad_copy_implicit_deps(drjit::vector<uint32_t>& result, bool input) {
     result.reserve(result.size() + implicit.size());
     for (uint32_t index : implicit) {
         ad_log(" - a%u", index);
+        ad_var_inc_ref_int(index, state[index]);
         result.push_back(index);
     }
 }

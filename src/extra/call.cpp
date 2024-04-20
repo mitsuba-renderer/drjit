@@ -800,7 +800,7 @@ bool ad_call(JitBackend backend, const char *domain, size_t callable_count,
         }
 
         vector<bool> rv_ad;
-        vector<uint32_t> implicit_in;
+        dr::detail::ad_index32_vector implicit_in;
 
         if (is_getter) {
             scoped_isolation_boundary guard;
