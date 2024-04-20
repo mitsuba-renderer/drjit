@@ -441,20 +441,29 @@ def test11_no_mutate(t, optimize, symbolic):
             assert dr.all(dr.switch(t(0, 1, 2), targets, t(1, 2, 3)) == [11, 102, 1003])
 
 @pytest.test_arrays('uint32,shape=(*),jit')
-def test12_out_of_bounds(t, capsys):
+def test12_out_of_bounds_symbolic(t, capsys):
     targets = [lambda x:x, lambda x: x+1]
 
     with dr.scoped_set_flag(dr.JitFlag.Debug, True):
-        dr.eval(dr.switch(t(0, 1, 100), targets, t(1)))
+        dr.eval(dr.switch(t(0, 1, 100), targets, t(1), mode='symbolic'))
     transcript = capsys.readouterr().err
     assert "Attempted to invoke callable with index 100, but this value must be smaller than 2" in transcript
 
+
+@pytest.test_arrays('uint32,shape=(*),jit')
+def test13_out_of_bounds_evaluted(t):
+    targets = [lambda x:x, lambda x: x+1]
+
+    with pytest.raises(RuntimeError) as e:
+        with dr.scoped_set_flag(dr.JitFlag.Debug, True):
+            dr.eval(dr.switch(t(0, 1, 100), targets, t(1), mode='evaluated'))
+    assert 'out-of-bounds callable ID 101 (must be < 3).' in str(e)
 
 # + Masking for all elements
 @pytest.mark.parametrize("opaque_mask", [True, False])
 @pytest.mark.parametrize("symbolic", [True, False])
 @pytest.test_arrays('int32,-uint32,shape=(*),jit')
-def test13_switch_vec_fully_masked(t, symbolic, opaque_mask):
+def test14_switch_vec_fully_masked(t, symbolic, opaque_mask):
     with dr.scoped_set_flag(dr.JitFlag.SymbolicCalls, symbolic):
         Int = t
         UInt32 = dr.uint32_array_t(Int)
