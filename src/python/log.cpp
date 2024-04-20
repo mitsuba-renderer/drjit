@@ -134,11 +134,15 @@ void export_log(nb::module_ &m, PyModuleDef &pmd) {
     jit_set_log_level_callback(LogLevel::Warn, log_callback);
 
     pmd.m_free = [](void *) {
-        /// Shut down the JIT when the module is deallocated
+        // Switch from the Python logger to standard stderr output
         jit_set_log_level_stderr(LogLevel::Warn);
         jit_set_log_level_callback(LogLevel::Disable, nullptr);
-        jit_shutdown(false);
     };
+
+    // Shut down the Dr.Jit component when the Python interpreter
+    // has been fully wound down. Doing it above (in pmd.m_free)
+    // can lead to leak warnings.
+    (void) Py_AtExit([] { jit_shutdown(false); });
 
     nb::enum_<LogLevel>(m, "LogLevel")
         .value("Disable", LogLevel::Disable)
