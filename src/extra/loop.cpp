@@ -580,7 +580,14 @@ public:
 
         // Run the loop body
         m_write_cb(m_payload, m_state2, true);
-        m_body_cb(m_payload);
+
+        {
+            // Begin a recording session and abort it by not
+            // calling .disarm(). This clears side effects.
+            scoped_record record_guard(m_backend);
+
+            m_body_cb(m_payload);
+        }
 
         // AD forward propagation pass
         for (size_t i = 0; i < m_inputs.size(); ++i) {
@@ -712,7 +719,14 @@ public:
 
         // Run the loop body
         m_write_cb(m_payload, m_state2, true);
-        m_body_cb(m_payload);
+
+        {
+            // Begin a recording session and abort it by not
+            // calling .disarm(). This clears side effects.
+            scoped_record record_guard(m_backend);
+
+            m_body_cb(m_payload);
+        }
         m_state2.release();
         m_read_cb(m_payload, m_state2);
 

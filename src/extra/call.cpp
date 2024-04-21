@@ -646,7 +646,14 @@ public:
         }
 
         m_rv2.clear();
-        m_func(m_payload, self, m_args2, m_rv2);
+
+        {
+            // Begin a recording session and abort it by not
+            // calling .disarm(). This clears side effects.
+            scoped_record record_guard(m_backend);
+
+            m_func(m_payload, self, m_args2, m_rv2);
+        }
 
         for (size_t i = 0; i < m_input_offsets.size(); ++i) {
             uint64_t index = m_args2[m_input_offsets[i]];
@@ -683,7 +690,13 @@ public:
         }
 
         m_rv2.clear();
-        m_func(m_payload, self, m_args2, m_rv2);
+
+        {
+            // Begin a recording session and abort it by not
+            // calling .disarm(). This clears side effects.
+            scoped_record record_guard(m_backend);
+            m_func(m_payload, self, m_args2, m_rv2);
+        }
 
         for (size_t i = 0; i < m_output_offsets.size(); ++i) {
             uint64_t index = m_rv2[m_output_offsets[i]],
