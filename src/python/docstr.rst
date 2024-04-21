@@ -2367,7 +2367,7 @@
            :emphasize-lines: 2-3
 
            >>> dr.gather(dtype=UInt, source=UInt(1, 2, 3), index=UInt(0, 1, 100))
-           drjit.gather(): out-of-bounds read from position 100 in an arrayâ
+           drjit.gather(): out-of-bounds read from position 100 in an array↵
            of size 3. (<stdin>:2)
 
     Args:
@@ -4163,7 +4163,7 @@
            :emphasize-lines: 2-3
 
            >>> print(dr.switch(UInt32(0, 100), [lambda x:x], UInt32(1)))
-           Attempted to invoke callable with index 100, but this â
+           Attempted to invoke callable with index 100, but this↵
            value must be smaller than 1. (<stdin>:2)
 
     Args:
@@ -5049,7 +5049,7 @@
        :emphasize-lines: 2-3
 
        >>> dr.gather(dtype=UInt, source=UInt(1, 2, 3), index=UInt(0, 1, 100))
-       RuntimeWarning: drjit.gather(): out-of-bounds read from position 100 in an arrayâ
+       RuntimeWarning: drjit.gather(): out-of-bounds read from position 100 in an array↵
        of size 3. (<stdin>:2)
 
     Finally, Dr.Jit also installs a `python tracing hook
@@ -5977,7 +5977,7 @@
        [0, 1, 2, .. 24 skipped .., 27, 28, 29]
 
        >>> dr.format(dr.arange(dr.llvm.Int, 30), limit=30)
-       [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,â
+       [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,↵
         23, 24, 25, 26, 27, 28, 29]
 
     This function lacks many features of Python's (rather intricate)
@@ -6085,7 +6085,7 @@
        [0, 1, 2, .. 24 skipped .., 27, 28, 29]
 
        >>> dr.format(dr.arange(dr.llvm.Int, 30), limit=30)
-       [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,â
+       [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,↵
         23, 24, 25, 26, 27, 28, 29]
 
     This function lacks many features of Python's (rather intricate)
@@ -6949,48 +6949,52 @@
 
     Reduce elements within blocks.
 
-    This function reduces all elements within contiguous blocks of size ``block_size``
-    along the trailing dimension of the input array ``value``, returning a
-    correspondingly smaller output. Various types of reductions are supported, see
-    :py:class:`drjit.ReduceOp` for details.
+    This function reduces all elements within contiguous blocks of size
+    ``block_size`` along the trailing dimension of the input array ``value``,
+    returning a correspondingly smaller output array. Various types of
+    reductions are supported (see :py:class:`drjit.ReduceOp` for details).
 
-    For example, a sum reduction of a hypothetical array ``[a, b, c, d, e, f]`` with 
-    ``block_size=2`` produces the output ``[a+b, c+d, e+f]``. 
+    For example, a sum reduction of a hypothetical array ``[a, b, c, d, e, f]``
+    with ``block_size=2`` produces the output ``[a+b, c+d, e+f]``.
 
-    The function raises an exception when the length of the trailing dimension is not
-    a multiple of the block size.  It recursively threads through nested arrays and
-    :ref:`PyTrees <pytrees>`.
+    The function raises an exception when the length of the trailing dimension
+    is not a multiple of the block size.  It recursively threads through nested
+    arrays and :ref:`PyTrees <pytrees>`.
 
     Dr.Jit uses one of two strategies to realize this operation, which can be
     optionally forced by specifying the ``mode`` parameter.
 
-    - ``"evaluated"``: Evaluate the input array (via :py:func:`drjit.eval()`) if
-      not already evaluated, then launch a precompiled reduction kernel.
+    - ``mode="evaluated"`` evaluates the input array via
+      :py:func:`drjit.eval()`. Then, it launches a precompiled reduction
+      kernel.
 
-      On the CUDA backend, this strategy exploits shared memory and cooperative
-      warp instructions, which requires ``block_size`` to be a power-of-two value.
+      On the CUDA backend, this provided kernel relies on shared memory and
+      cooperative warp instructions, which is very efficient but requires
+      ``block_size`` to be a power of two. The LLVM backend parallelizes the
+      operation via the built-in thread pool and has no ``block_size``
+      limitations.
 
-    - ``"symbolic"``: use :py:func:`drjit.scatter_reduce()` to atomically
+    - ``mode="symbolic"`` uses :py:func:`drjit.scatter_reduce()` to atomically
       scatter-reduce values into the output array. This strategy can be
-      advantageous when the input array is symbolic or unevaluated and
-      extremely large, which means that evaluation is either impossible or
-      would cause an out-of-memory error.
+      advantageous when the input array is symbolic (making evaluation
+      impossible) or both unevaluated and extremely large (making evaluation
+      costly or impossible if there isn't enough memory).
 
       A disadvantage of this strategy compared to ``"evaluated"`` is that
-      block-reduced floating point arrays are subject to non-deterministic
+      block-reducing floating point arrays is subject to non-deterministic
       rounding errors.  The reason for this is that operations like IEEE-754
       addition are non-commutative. The execution order of the atomic
       scatter-reductions is scheduling-dependent, which can lead to small
       variations across program runs.
 
-    - ``None``: automatically pick a reasonable strategy (the default) using
-      the algorithm described below. The first matching query sets the mode.
+    - ``None``: automatically pick a reasonable strategy (the default). The
+      first matching statement of the following list decides the mode.
 
-      - Use ``"evaluated"`` when ``op`` equals ``:py:attr:`drjit.ReduceOp.Mul`,
+      - Use ``"evaluated"`` when ``op`` equals :py:attr:`drjit.ReduceOp.Mul`,
         or when using the CUDA backend and ``op`` equals
         :py:attr:`drjit.ReduceOp.{Min,Max} <drjit.ReduceOp.Min>`. This is
-        because these combinations would involve instructions for atomic
-        scatter-reductions that aren't supported by the backend(s).
+        because these combinations would involve instructions that aren't
+        supported by their respective backend(s).
 
       - Use ``"symbolic"`` when the input is symbolic.
 
@@ -7008,20 +7012,22 @@
 
     .. note::
 
-        Tensor inputs are not supported. To reduce blocks within tensors, apply the
-        regular per-axis reductions to reshaped tensors. For example, to sum-reduce
-        a ``(16, 16)`` tensor by a factor of ``(4, 2)`` (i.e., to a ``(4, 8)``-sized
-        tensor), write ``dr.sum(dr.reshape(value, shape=(4, 4, 8, 2)), axis=(1, 3))``.
+        Tensor inputs are not supported. To reduce blocks within tensors, apply
+        the regular axis-wide reductions (:py:func:`drjit.sum`,
+        :py:func:`drjit.prod`, :py:func:`drjit.min`, :py:func:`drjit.max`) to
+        reshaped tensors. For example, to sum-reduce a ``(16, 16)`` tensor by a
+        factor of ``(4, 2)`` (i.e., to a ``(4, 8)``-sized tensor), write
+        ``dr.sum(dr.reshape(value, shape=(4, 4, 8, 2)), axis=(1, 3))``.
 
     Args:
-        arg (drjit.ArrayBase): Dr.Jit array
+        arg (object): A Dr.Jit array or PyTree
 
         block_size (int): size of the block
 
         mode (str | None): optional parameter to force an evaluation strategy.
 
     Returns:
-        The block-reduced array as specified above.
+        The block-reduced array or PyTree as specified above.
 
 .. topic:: block_sum
 
