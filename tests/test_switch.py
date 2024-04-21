@@ -447,7 +447,7 @@ def test12_out_of_bounds_symbolic(t, capsys):
     with dr.scoped_set_flag(dr.JitFlag.Debug, True):
         dr.eval(dr.switch(t(0, 1, 100), targets, t(1), mode='symbolic'))
     transcript = capsys.readouterr().err
-    assert "Attempted to invoke callable with index 100, but this value must be smaller than 2" in transcript
+    assert "Attempted to invoke callable with index 100, but this value must be strictly smaller than 2" in transcript
 
 
 @pytest.test_arrays('uint32,shape=(*),jit')
