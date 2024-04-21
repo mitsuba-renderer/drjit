@@ -56,19 +56,27 @@ void stash_ref(nb::handle h, dr::vector<StashRef> &v) {
     traverse("drjit.detail.stash_ref", vo, h);
 }
 
-nb::object reduce_identity(JitBackend backend, VarType vt, ReduceOp op) {
+nb::object reduce_identity(nb::type_object_t<dr::ArrayBase> tp, ReduceOp op) {
+    const ArraySupplement &s = supp(tp);
+
     ArrayMeta m { };
-    m.backend = (uint16_t) backend;
+    m.backend = s.backend;
     m.ndim = 1;
-    m.type = (uint16_t) vt;
+    m.type = s.type;
     m.shape[0] = DRJIT_DYNAMIC;
-    nb::handle tp = meta_get_type(m);
-    nb::object result = nb::inst_alloc(tp);
-    uint32_t index = jit_var_reduce_identity(backend, vt, op);
-    supp(tp).init_index(index, inst_ptr(result));
+    nb::handle tp2 = meta_get_type(m);
+    nb::object result = nb::inst_alloc(tp2);
+    uint32_t index =
+        jit_var_reduce_identity((JitBackend) s.backend, (VarType) s.type, op);
+    supp(tp2).init_index(index, inst_ptr(result));
     nb::inst_mark_ready(result);
     jit_var_dec_ref(index);
     return result;
+}
+
+bool can_scatter_reduce(nb::type_object_t<dr::ArrayBase> tp, ReduceOp op) {
+    const ArraySupplement &s = supp(tp);
+    return jit_can_scatter_reduce((JitBackend) s.backend, (VarType) s.type, op);
 }
 
 /**
@@ -265,8 +273,8 @@ void export_detail(nb::module_ &) {
           },
           doc_detail_collect_indices)
 
-     .def("update_indices", &update_indices,
-          "value"_a, "indices"_a, doc_detail_update_indices)
+     .def("update_indices", &update_indices, "value"_a, "indices"_a,
+          doc_detail_update_indices)
 
      .def("copy", &copy, "value"_a, doc_detail_copy)
 
@@ -282,24 +290,28 @@ void export_detail(nb::module_ &) {
               return nb::str("{}.{}.{}").format(major, minor, patch);
           })
 
-     .def("trace_func", &trace_func, "frame"_a,
-          "event"_a, "arg"_a = nb::none())
+     .def("trace_func", &trace_func, "frame"_a, "event"_a,
+          "arg"_a = nb::none())
 
-     .def("clear_registry", &jit_registry_clear,
-          doc_detail_clear_registry)
+     .def("clear_registry", &jit_registry_clear, doc_detail_clear_registry)
 
      .def("import_tensor",
           [](nb::handle h, bool ad) {
               dr::vector<size_t> shape;
-              nb::object flat = import_ndarray(ArrayMeta{}, h.ptr(), &shape, ad);
-              return tensor_t(flat.type())(
-                  flat,
-                  cast_shape(shape)
-              );
-          }, "tensor"_a, "ad"_a = false)
+              nb::object flat =
+                  import_ndarray(ArrayMeta{}, h.ptr(), &shape, ad);
+              return tensor_t(flat.type())(flat, cast_shape(shape));
+          },
+          "tensor"_a, "ad"_a = false)
 
      .def("any_symbolic", &any_symbolic, doc_detail_any_symbolic)
-     .def("reduce_identity", &reduce_identity)
+
+     .def("reduce_identity", &reduce_identity,
+          nb::sig("def reduce_identity(arg0: typing.Type[drjit.ArrayT], arg1: drjit.ReduceOp, /) -> drjit.ArrayT"),
+          doc_detail_reduce_identity)
+
+     .def("can_scatter_reduce", &can_scatter_reduce, doc_detail_can_scatter_reduce)
+
      .def("cuda_compute_capability", &jit_cuda_compute_capability);
 
     trace_func_handle = d.attr("trace_func");
