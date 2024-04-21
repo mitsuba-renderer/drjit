@@ -3747,7 +3747,7 @@
 
 .. topic:: JitBackend_Invalid
 
-    Indicates that a type is not handled by a Dr.Jit backend (e.g., a scalar type)
+    Indicates that a type is *not* handled by a Dr.Jit backend (e.g., a scalar type)
 
 .. topic:: JitBackend_LLVM
 
@@ -5434,7 +5434,7 @@
     - :py:attr:`drjit.JitFlag.OptimizeCalls`,
     - :py:attr:`drjit.JitFlag.SymbolicConditionals`,
     - :py:attr:`drjit.JitFlag.ReuseIndices`, and
-    - :py:attr:`drjit.JitFlag.AtomicReduceLocal`.
+    - :py:attr:`drjit.JitFlag.ScatterReduceLocal`.
 
 .. topic:: JitFlag_LoopRecord
 
@@ -5934,7 +5934,7 @@
 
     This function has a few limitations: in contrast to
     :py:func:`drjit.scatter_reduce` and :py:func:`drjit.scatter_add`, it does not
-    perform a local reduction (see flag :py:attr:`JitFlag.AtomicReduceLocal`),
+    perform a local reduction (see flag :py:attr:`JitFlag.ScatterReduceLocal`),
     which can be an important optimization when atomic accumulation is a
     performance bottleneck.
 

@@ -1,3 +1,4 @@
 furo
 sphinxcontrib-katex
 typing_extensions
+enum-tools[sphinx]
