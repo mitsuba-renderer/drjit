@@ -357,7 +357,7 @@ def test10_constant_getter_partial_registry(t, drjit_verbose, capsys):
 
 
 @pytest.test_arrays('float32,is_diff,shape=(*)')
-def test11_getter_ad(t):
+def test11_getter_ad_fwd(t):
     pkg = get_pkg(t)
 
     A, B, Base, BasePtr = pkg.A, pkg.B, pkg.Base, pkg.BasePtr
@@ -378,7 +378,27 @@ def test11_getter_ad(t):
 
 
 @pytest.test_arrays('float32,is_diff,shape=(*)')
-def test12_array_call_instance_expired(t):
+def test12_getter_ad_bwd(t):
+    pkg = get_pkg(t)
+
+    A, B, Base, BasePtr = pkg.A, pkg.B, pkg.Base, pkg.BasePtr
+    Mask = dr.mask_t(t)
+    a, b = A(), B()
+
+    c = BasePtr(a, a, None, b, b)
+    dr.enable_grad(a.opaque)
+    dr.enable_grad(b.opaque)
+
+    arr1 = c.opaque_getter()
+    arr1.grad = [1,2, 3,4,5]
+    dr.backward_to(a.opaque, b.opaque)
+
+    assert a.opaque.grad == 3
+    assert b.opaque.grad == 9
+
+
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+def test13_array_call_instance_expired(t):
     pkg = get_pkg(t)
 
     A, B, Base, BasePtr = pkg.A, pkg.B, pkg.Base, pkg.BasePtr
@@ -398,7 +418,7 @@ def test12_array_call_instance_expired(t):
 
 @pytest.mark.parametrize("symbolic", [True, False])
 @pytest.test_arrays('float32,is_diff,shape=(*)')
-def test13_array_call_self(t, symbolic, drjit_verbose, capsys):
+def test14_array_call_self(t, symbolic, drjit_verbose, capsys):
     pkg = get_pkg(t)
     A, B, Base, BasePtr = pkg.A, pkg.B, pkg.Base, pkg.BasePtr
     a, b = A(), B()
@@ -418,7 +438,7 @@ def test13_array_call_self(t, symbolic, drjit_verbose, capsys):
 
 @pytest.mark.parametrize("symbolic", [True, False])
 @pytest.test_arrays('float32,is_diff,shape=(*)')
-def test14_array_call_noinst(t, symbolic):
+def test15_array_call_noinst(t, symbolic):
     pkg = get_pkg(t)
     A, B, BasePtr = pkg.A, pkg.B, pkg.BasePtr
     gc.collect()
@@ -448,7 +468,7 @@ def test14_array_call_noinst(t, symbolic):
 @pytest.mark.parametrize("symbolic", [True, False])
 @pytest.mark.parametrize("use_mask", [True, False])
 @pytest.test_arrays('float32,is_diff,shape=(*)')
-def test04_forward_diff_dispatch(t, symbolic, use_mask, diff_p1, diff_p2):
+def test16_forward_diff_dispatch(t, symbolic, use_mask, diff_p1, diff_p2):
     pkg = get_pkg(t)
 
     A, B, Base, BasePtr = pkg.A, pkg.B, pkg.Base, pkg.BasePtr
@@ -500,7 +520,7 @@ def test04_forward_diff_dispatch(t, symbolic, use_mask, diff_p1, diff_p2):
 
 @pytest.mark.parametrize("symbolic", [True, False])
 @pytest.test_arrays('float32,is_diff,shape=(*)')
-def test05_dispatch(t, symbolic):
+def test17_dispatch(t, symbolic):
     pkg = get_pkg(t)
 
     A, B, Base, BasePtr = pkg.A, pkg.B, pkg.Base, pkg.BasePtr
@@ -519,7 +539,7 @@ def test05_dispatch(t, symbolic):
 
 @pytest.mark.parametrize("symbolic", [True, False])
 @pytest.test_arrays('float32,is_diff,shape=(*)')
-def test06_test_ptr(t, symbolic):
+def test18_test_ptr(t, symbolic):
     pkg = get_pkg(t)
 
     sampler_old = pkg.Sampler(3)
@@ -542,7 +562,7 @@ def test06_test_ptr(t, symbolic):
 
 @pytest.mark.parametrize("symbolic", [True, False])
 @pytest.test_arrays('float32,is_diff,shape=(*)')
-def test07_test_ptr_py_dispatch(t, symbolic):
+def test19_test_ptr_py_dispatch(t, symbolic):
     pkg = get_pkg(t)
 
     sampler_old = pkg.Sampler(3)
@@ -577,7 +597,7 @@ def test07_test_ptr_py_dispatch(t, symbolic):
 
 @pytest.mark.parametrize("symbolic", [True, False])
 @pytest.test_arrays('float32,is_diff,shape=(*)')
-def test08_test_ptr_py_loop(t, symbolic):
+def test20_test_ptr_py_loop(t, symbolic):
     # This test is technically about loops. It is located in test_call_ext.py
     # since reuses some of the infrastruture
     pkg = get_pkg(t)
@@ -606,7 +626,7 @@ def test08_test_ptr_py_loop(t, symbolic):
 @pytest.mark.parametrize("opaque_mask", [True, False])
 @pytest.mark.parametrize("symbolic", [True, False])
 @pytest.test_arrays('float32,is_diff,shape=(*)')
-def test09_array_call_fully_masked(t, symbolic, opaque_mask):
+def test21_array_call_fully_masked(t, symbolic, opaque_mask):
     pkg = get_pkg(t)
 
     A, B, Base, BasePtr = pkg.A, pkg.B, pkg.Base, pkg.BasePtr
@@ -631,7 +651,7 @@ def test09_array_call_fully_masked(t, symbolic, opaque_mask):
 @pytest.mark.parametrize("symbolic", [True, False])
 @pytest.mark.parametrize("opaque_mask", [True, False])
 @pytest.test_arrays('float32,is_diff,shape=(*)')
-def test10_dispatch_fully_masked(t, symbolic, opaque_mask):
+def test22_dispatch_fully_masked(t, symbolic, opaque_mask):
     pkg = get_pkg(t)
 
     A, B, Base, BasePtr = pkg.A, pkg.B, pkg.Base, pkg.BasePtr
@@ -659,7 +679,7 @@ def test10_dispatch_fully_masked(t, symbolic, opaque_mask):
 @pytest.mark.parametrize("symbolic", [True, False])
 @pytest.mark.parametrize("variant", [0, 1])
 @pytest.test_arrays('float32,is_diff,shape=(*)')
-def test11_rev_correctness(t, symbolic, variant):
+def test23_rev_correctness(t, symbolic, variant):
     # Check the reverse-mode derivative of a call does not overwrite
     # other derivatives flowing to an input argument
     pkg = get_pkg(t)

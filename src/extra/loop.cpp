@@ -583,7 +583,7 @@ public:
 
         {
             // Begin a recording session and abort it by not
-            // calling .disarm(). This clears side effects.
+            // calling .disarm(). This suppresses side effects.
             scoped_record record_guard(m_backend);
 
             m_body_cb(m_payload);
@@ -722,7 +722,7 @@ public:
 
         {
             // Begin a recording session and abort it by not
-            // calling .disarm(). This clears side effects.
+            // calling .disarm(). This suppresses side effects.
             scoped_record record_guard(m_backend);
 
             m_body_cb(m_payload);

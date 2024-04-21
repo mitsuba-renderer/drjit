@@ -69,7 +69,9 @@ static void ad_call_getter(JitBackend backend, const char *domain,
                            uint32_t mask_, size_t callable_count,
                            const vector<uint64_t> args,
                            vector<uint64_t> &rv, vector<bool> &rv_ad,
-                           ad_call_func func, void *payload) {
+                           ad_call_func func, void *payload,
+                           dr::vector<uint32_t> &implicit_in,
+                           bool ad) {
 
     index64_vector args2; // unused
     vector<uint64_t> rv2;
@@ -88,6 +90,8 @@ static void ad_call_getter(JitBackend backend, const char *domain,
             "ad_call_getter(\"%s%s%s\", index=r%u, mask=r%u)", domain_or_empty,
             separator, name, index, mask.index());
 
+    scoped_isolation_boundary guard;
+
     for (size_t i = 0; i < callable_count; ++i) {
         rv2.clear();
 
@@ -101,7 +105,8 @@ static void ad_call_getter(JitBackend backend, const char *domain,
         }
 
         {
-            scoped_record rec(backend, name, true);
+            // Suppress side effects
+            scoped_record tmp(backend, name, true);
             func(payload, ptr, args2, rv2);
             for (uint64_t index2: rv2)
                 ad_var_check_implicit(index2);
@@ -135,6 +140,10 @@ static void ad_call_getter(JitBackend backend, const char *domain,
             jit_var_inc_ref((uint32_t) index2);
         }
     }
+
+    if (ad)
+        ad_copy_implicit_deps(implicit_in, true);
+    guard.disarm();
 
     for (size_t i = 0; i < rv2.size(); ++i) {
         // Deallocate previous entry
@@ -233,7 +242,9 @@ static void ad_call_symbolic(JitBackend backend, const char *domain,
                              uint32_t mask_, size_t callable_count,
                              const vector<uint64_t> args,
                              vector<uint64_t> &rv, vector<bool> &rv_ad,
-                             ad_call_func func, void *payload) {
+                             ad_call_func func, void *payload,
+                             dr::vector<uint32_t> &implicit_in,
+                             bool ad) {
     (void) domain;
     (void) size;
 
@@ -260,7 +271,8 @@ static void ad_call_symbolic(JitBackend backend, const char *domain,
                      inst_id(callable_count, 0);
 
     {
-        scoped_record rec(backend, name, true);
+        scoped_record guard_1(backend, name, true);
+        scoped_isolation_boundary guard_2;
 
         // Wrap input arguments to clearly expose them as inputs of the vcall
         for (size_t i = 0; i < args.size(); ++i) {
@@ -277,7 +289,7 @@ static void ad_call_symbolic(JitBackend backend, const char *domain,
         {
             scoped_set_mask mask_guard(backend, jit_var_call_mask(backend));
             for (size_t i = 0; i < callable_count; ++i) {
-                checkpoints[i] = rec.checkpoint_and_rewind();
+                checkpoints[i] = guard_1.checkpoint_and_rewind();
                 rv2.clear();
 
                 void *ptr;
@@ -317,7 +329,7 @@ static void ad_call_symbolic(JitBackend backend, const char *domain,
                 callable_count_final++;
             }
 
-            checkpoints[callable_count_final] = rec.checkpoint_and_rewind();
+            checkpoints[callable_count_final] = guard_1.checkpoint_and_rewind();
         }
 
         vector<uint32_t> rv4;
@@ -337,7 +349,11 @@ static void ad_call_symbolic(JitBackend backend, const char *domain,
             rv[i] = rv4[i];
         }
 
-        rec.disarm();
+        guard_1.disarm();
+        guard_2.disarm();
+
+        if (ad)
+            ad_copy_implicit_deps(implicit_in, true);
     }
 
     jit_new_scope(backend);
@@ -458,7 +474,7 @@ static void ad_call_reduce(JitBackend backend, const char *domain,
     // All targets were fully masked, let's zero-initialize the return value
     if (!rv_initialized) {
         {
-            // Dummy symbolic call to avoid side-effects
+            // Suppress side effects
             scoped_record record_guard(backend);
             func(payload, nullptr, args, rv2);
         }
@@ -649,7 +665,7 @@ public:
 
         {
             // Begin a recording session and abort it by not
-            // calling .disarm(). This clears side effects.
+            // calling .disarm(). This suppresses side effects.
             scoped_record record_guard(m_backend);
 
             m_func(m_payload, self, m_args2, m_rv2);
@@ -693,7 +709,7 @@ public:
 
         {
             // Begin a recording session and abort it by not
-            // calling .disarm(). This clears side effects.
+            // calling .disarm(). This suppresses side effects.
             scoped_record record_guard(m_backend);
             m_func(m_payload, self, m_args2, m_rv2);
         }
@@ -804,7 +820,7 @@ bool ad_call(JitBackend backend, const char *domain, int symbolic,
             callable_count == 0) {
             scoped_set_mask mask_guard(backend, jit_var_bool(backend, false));
             {
-                // Dummy symbolic call to avoid side-effects
+                // Suppress side effects
                 scoped_record record_guard(backend);
                 func(payload, nullptr, args, rv);
             }
@@ -822,17 +838,13 @@ bool ad_call(JitBackend backend, const char *domain, int symbolic,
         dr::detail::ad_index32_vector implicit_in;
 
         if (is_getter) {
-            scoped_isolation_boundary guard;
             ad_call_getter(backend, domain, name, size, index, mask,
-                            callable_count, args, rv, rv_ad, func, payload);
-            ad_copy_implicit_deps(implicit_in, true);
-            guard.success = true;
+                           callable_count, args, rv, rv_ad, func, payload,
+                           implicit_in, ad);
         } else if (symbolic) {
-            scoped_isolation_boundary guard;
             ad_call_symbolic(backend, domain, name, size, index, mask,
-                            callable_count, args, rv, rv_ad, func, payload);
-            ad_copy_implicit_deps(implicit_in, true);
-            guard.success = true;
+                             callable_count, args, rv, rv_ad, func, payload,
+                             implicit_in, ad);
         } else {
             if (jit_flag(JitFlag::SymbolicScope))
                 jit_raise(
