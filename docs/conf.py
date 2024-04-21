@@ -33,7 +33,8 @@ author = 'Realistic Graphics Lab'
 extensions = [
     'sphinx.ext.napoleon',
     'sphinx.ext.autodoc',
-    'sphinxcontrib.katex'
+    'sphinxcontrib.katex',
+    'enum_tools.autoenum'
 ]
 
 # Napoleon settings
