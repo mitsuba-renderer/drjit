@@ -2537,6 +2537,70 @@
     via the ``mode`` parameter. The documentation of :py:class:`drjit.ReduceMode`
     provides more detail and performance plots.
 
+    .. _scatter_reduce_supported:
+
+    .. rubric:: Backend support
+
+    Many combinations of reductions and variable types are not supported. Some
+    combinations depend on the *LLVM version* (LV) or the *compute capability*
+    (CC) of the underlying CUDA device. The following matrix displays the level
+    of support.
+
+    .. list-table::
+
+       * - Reduction
+         - ``Bool``
+         - ``[U]Int{32,64}``
+         - ``Float16``
+         - ``Float32``
+         - ``Float64``
+       * - :py:attr:`ReduceOp.Identity`
+         - ✅
+         - ✅
+         - ✅
+         - ✅
+         - ✅
+       * - :py:attr:`ReduceOp.Add`
+         - ❌
+         - ✅
+         - ⚠️  (CC≥60, LV≥16)
+         - ✅
+         - ⚠️  (CC≥60)
+       * - :py:attr:`ReduceOp.Mul`
+         - ❌
+         - ❌
+         - ❌
+         - ❌
+         - ❌
+       * - :py:attr:`ReduceOp.Min`
+         - ❌
+         - ⚠️  (LV≥15)
+         - ⚠️  (CC≥90, LV≥16)
+         - ❌
+         - ❌
+       * - :py:attr:`ReduceOp.Max`
+         - ❌
+         - ⚠️  (LV≥15)
+         - ⚠️  (CC≥90, LV≥16)
+         - ❌
+         - ❌
+       * - :py:attr:`ReduceOp.And`
+         - ❌
+         - ✅
+         - ❌
+         - ❌
+         - ❌
+       * - :py:attr:`ReduceOp.Or`
+         - ❌
+         - ✅
+         - ❌
+         - ❌
+         - ❌
+
+    The function raises an exception when the operation is not supported by the backend.
+
+    .. rubric:: Scatter-reducing nested types
+
     This operation can be used in the following different ways:
 
     1. When ``target`` is a 1D Dr.Jit array like :py:class:`drjit.llvm.ad.Float`,
@@ -2596,27 +2660,6 @@
             dr.scatter_reduce(op, target, value.x, index*3 + 0)
             dr.scatter_reduce(op, target, value.y, index*3 + 1)
             dr.scatter_reduce(op, target, value.z, index*3 + 2)
-
-    .. warning::
-
-       Various combinations of parameters are not supported or are
-       backend-dependent:
-
-       - Multiplicative reductions (:py:attr:`drjit.ReduceOp.Mul`) are not
-         supported.
-
-       - Mask/boolean array ``target`` values are currently not supported.
-
-       - Bitwise reductions (:py:attr:`drjit.ReduceOp.And`,
-         :py:attr:`drjit.ReduceOp.Or`) do not support floating point
-         operands.
-
-       - On the LLVM backend, some reductions may require newer versions of
-         the LLVM library (v15 or newer).
-
-       - On the CUDA backend, min/max reductions (:py:attr:`drjit.ReduceOp.Min`,
-         :py:attr:`drjit.ReduceOp.Max`) do not support floating point
-         operands.
 
     .. danger::
 
@@ -4995,6 +5038,16 @@
 
        # Flag is returned to its original status
 
+.. topic:: detail_reduce_identity
+
+   Return the identity element for a reduction with the desired variable type
+   and operation.
+
+.. topic:: detail_can_scatter_reduce
+
+   Check if the underlying backend supports a desired flavor of
+   scatter-reduction for the given array type.
+
 .. topic:: JitFlag
 
     Flags that control how Dr.Jit compiles and optimizes programs.
@@ -6990,11 +7043,9 @@
     - ``None``: automatically pick a reasonable strategy (the default). The
       first matching statement of the following list decides the mode.
 
-      - Use ``"evaluated"`` when ``op`` equals :py:attr:`drjit.ReduceOp.Mul`,
-        or when using the CUDA backend and ``op`` equals
-        :py:attr:`drjit.ReduceOp.{Min,Max} <drjit.ReduceOp.Min>`. This is
-        because these combinations would involve instructions that aren't
-        supported by their respective backend(s).
+      - Use ``"evaluated"`` when a symbolic reduction would involve atomic
+        operations that :ref:`are not supported by the backend
+        <scatter_reduce_supported>`.
 
       - Use ``"symbolic"`` when the input is symbolic.
 
@@ -7005,6 +7056,10 @@
         evaluating it would consume more than a 1 GiB of memory.
 
       - Otherwise, use ``"evaluated"`` mode.
+
+    For some inputs, this decision tree only leaves the empty set (for example,
+    attempting to perform a multiplicative reduction of a CUDA array with a
+    non-power-of-two block size). An function will raise an exception in such cases.
 
     Since evaluated mode can be quite a bit faster and is guaranteed to be
     deterministic, it is recommended that you design your program so that it

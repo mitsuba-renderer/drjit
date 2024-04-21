@@ -409,45 +409,12 @@ def test18_scatter_reduce(t, op):
     mod = sys.modules[t.__module__]
     size = 100000
 
-    if op == dr.ReduceOp.And or \
-       op == dr.ReduceOp.Or:
-        if dr.is_float_v(t):
-            return
+    if dr.type_v(t) == dr.VarType.Float16:
         size = 100
 
-    backend = dr.backend_v(t)
-    tp = dr.type_v(t)
-
-    if backend == dr.JitBackend.LLVM and \
-       (op == dr.ReduceOp.Min or
-        op == dr.ReduceOp.Max) and \
-       versiontuple(dr.detail.llvm_version()) < (15, 0, 0):
-        return # unsupported in older LLVM versions
-
-    if backend == dr.JitBackend.CUDA and \
-       (tp == dr.VarType.Float32 or
-        tp == dr.VarType.Float64) and \
-       (op == dr.ReduceOp.Min or
-        op == dr.ReduceOp.Max):
-        return # unsupported in hardware
-
-    if tp == dr.VarType.Float16:
-        # Support for float16 atomics is still kind of spotty
-        size = 100
-
-        if backend == dr.JitBackend.LLVM:
-            # Don't test float16 LLVM atomics on older LLVM versions
-            if versiontuple(dr.detail.llvm_version()) < (16, 0, 0) or \
-               op != dr.ReduceOp.Add:
-                return
-
-        if backend == dr.JitBackend.CUDA:
-            ccap = dr.detail.cuda_compute_capability()
-
-            if op == dr.ReduceOp.Min or op == dr.ReduceOp.Max and ccap < 90:
-                return
-
-    identity = dr.detail.reduce_identity(backend, tp, op)
+    if not dr.detail.can_scatter_reduce(t, op):
+        return
+    identity = dr.detail.reduce_identity(t, op)
 
     for k in range(0, 10):
         k = 2**k
@@ -472,7 +439,7 @@ def test18_scatter_reduce(t, op):
         else:
             assert dr.all(buf_1 == buf_2)
 
-        if backend == dr.JitBackend.LLVM:
+        if dr.backend_v(t) == dr.JitBackend.LLVM:
             buf_3 = dr.full(t, identity[0], k)
             dr.scatter_reduce(op, buf_3, index=i, value=j, mode=dr.ReduceMode.Expand)
             dr.eval(buf_3)
