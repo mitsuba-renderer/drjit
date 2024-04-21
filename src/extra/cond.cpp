@@ -471,7 +471,7 @@ public:
 
         {
             // Begin a recording session and abort it by not
-            // calling .disarm(). This clears side effects.
+            // calling .disarm(). This suppresses side effects.
             scoped_record record_guard(m_backend);
 
             // Execute the body of the conditional operation
@@ -515,7 +515,7 @@ public:
 
         {
             // Begin a recording session and abort it by not
-            // calling .disarm(). This clears side effects.
+            // calling .disarm(). This suppresses side effects.
             scoped_record record_guard(m_backend);
 
             // Execute the body of the conditional operation

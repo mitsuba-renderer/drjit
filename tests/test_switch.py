@@ -498,3 +498,37 @@ def test14_switch_vec_fully_masked(t, symbolic, opaque_mask):
 
         # No side-effects were applied
         assert dr.allclose(global_var, [0, 1, 2, 3])
+
+@pytest.mark.parametrize("mode", ["symbolic", "evaluated"])
+@pytest.test_arrays('is_diff,shape=(*),float32')
+@dr.syntax
+def test15_ad_nested_implicit_dep_fwd(t, mode):
+    UInt32 = dr.uint32_array_t(t)
+    idx = UInt32(0, 0, 0, 1)
+    a = t(0.1, 0.2, 0.3, 0.4)
+
+    # Implicit dependence on a variable accessed via `dr.gather`
+    data = t(1.0, 2.0, 3.0, 4.0)
+    dr.enable_grad(data)
+    data2 = dr.square(data)
+
+    def f(a, i):
+        def f1(a, i):
+            return a + dr.gather(t, data2, i)
+
+        def f2(a, i):
+            return a + dr.gather(t, data2, 3-i)
+
+        return dr.switch(i//2, [f1, f2], a, i, mode=mode, label='inner')
+
+    def g(a, i):
+        return t(123)
+
+    i = UInt32(3, 2, 1, 0)
+
+    r = dr.switch(idx, [f, g], a, i, mode=mode, label='outer')
+    assert dr.allclose(r, [[1.1, 4.2, 4.3, 123]])
+
+    dr.set_grad(data, [1, 2, 3, 4])
+    rg = dr.forward_to(r)
+    assert dr.allclose(rg, [2, 8, 8, 0])
