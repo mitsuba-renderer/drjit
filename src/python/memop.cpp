@@ -1068,7 +1068,7 @@ void export_memop(nb::module_ &m) {
           }, "value"_a, "count"_a, doc_repeat,
           nb::sig("def repeat(value: T, count: int) -> T"))
      .def("block_reduce", &block_reduce, "op"_a, "value"_a, "block_size"_a, "mode"_a = nb::none(), doc_block_reduce,
-          nb::sig("def block_reduce(op: ReduceOp, value: ArrayT, block_size: int, mode: Literal['evaluated', 'symbolic'] = None) -> ArrayT"))
+          nb::sig("def block_reduce(op: ReduceOp, value: T, block_size: int, mode: Literal['evaluated', 'symbolic', None] = None) -> T"))
      .def("block_sum", &block_sum, "value"_a, "block_size"_a, "mode"_a = nb::none(), doc_block_sum,
-          nb::sig("def block_sum(value: ArrayT, block_size: int, mode: Literal['evaluated', 'symbolic'] = None) -> ArrayT"));
+          nb::sig("def block_sum(value: T, block_size: int, mode: Literal['evaluated', 'symbolic', None] = None) -> T"));
 }
