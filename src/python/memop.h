@@ -21,6 +21,10 @@ extern nb::object gather(nb::type_object dtype, nb::object source,
 extern void scatter(nb::object target, nb::object value, nb::object index,
                     nb::object active, ReduceMode mode = ReduceMode::Auto);
 
+extern void scatter_reduce(ReduceOp op, nb::object target, nb::object value,
+                           nb::object index, nb::object active,
+                           ReduceMode mode);
+
 extern nb::object ravel(nb::handle h, char order,
                         vector<size_t> *shape_out = nullptr,
                         vector<int64_t> *strides_out = nullptr,

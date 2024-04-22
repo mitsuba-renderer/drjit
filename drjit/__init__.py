@@ -19,12 +19,12 @@ with detail.scoped_rtld_deepbind():
 import sys
 if sys.version_info < (3, 11):
     try:
-        from typing_extensions import overload, Optional
+        from typing_extensions import overload, Optional, Tuple, Literal
     except ImportError:
         raise RuntimeError(
             "Dr.Jit requires the 'typing_extensions' package on Python <3.11")
 else:
-    from typing import overload, Optional
+    from typing import overload, Optional, Tuple, Literal
 del sys
 
 from .ast import syntax, hint
@@ -1130,10 +1130,6 @@ def normalize(arg: T, /) -> T:
 
        arg * dr.rsqrt(dr.squared_norm(arg))
 
-    The :py:func:`normalize` operation performs a horizontal reduction. Please
-    see the section on :ref:`horizontal reductions <horizontal-reductions>` for
-    details on their properties.
-
     Args:
         arg (drjit.ArrayBase): A Dr.Jit array type
 
@@ -1199,7 +1195,8 @@ def reverse(value, axis: int = 0):
         return result
 
 
-def mean(value, axis: Optional[int] = 0):
+def mean(value: object, axis: int | Tuple[int, ...] | None = 0,
+         mode: Literal['symbolic', 'evaluated', None] = None) -> object:
     """
     Compute the mean of the input array or tensor along one or multiple axes.
 
@@ -1222,14 +1219,26 @@ def mean(value, axis: Optional[int] = 0):
     Returns:
         float | int | drjit.ArrayBase: Result of the reduction operation)";
     """
+    sh = shape(value)
+    ndim = len(sh)
 
-    s = sum(value, axis)
-    vs = shape(value)
+    axis2: Tuple[int, ...]
+    if axis is None:
+        axis2 = tuple(range(ndim))
+    elif isinstance(axis, int):
+        axis2 = () if ndim == 0 else (axis, )
+    else:
+        axis2 = tuple(set(axis))
 
-    n = 1
-    if vs != ():
-        n = prod(vs) if axis is None else vs[axis]
-    return s / n
+    size = 1
+    for i in axis2:
+        if i < 0:
+            i += ndim
+        if i < 0 or i >= ndim:
+            raise IndexError(f"drjit.mean({type(value)}): out-of-bounds axis {i}")
+        size *= sh[i]
+
+    return sum(value, axis, mode) / size
 
 
 def sh_eval(d: ArrayBase, order: int) -> list:

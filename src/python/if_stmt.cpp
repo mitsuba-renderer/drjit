@@ -91,19 +91,20 @@ nb::object if_stmt(nb::tuple args, nb::handle cond, nb::callable true_fn,
                     if (!cond_index)
                         nb::raise("'cond' cannot be empty.");
                 }
+
+                if ((VarType) s.type == VarType::Bool && s.ndim == 1 &&
+                    (JitBackend) s.backend == JitBackend::None)
+                    is_scalar = true;
             }
 
-            if (!cond_index)
+            if (!cond_index || is_scalar)
                 nb::raise("'cond' must either be a Jit-compiled 1D Boolean "
                           "array or a scalar Python 'bool'");
         }
 
         if (is_scalar) {
-            // If so, process it directly
-            if (nb::cast<bool>(cond))
-                return tuple_call(true_fn, args);
-            else
-                return tuple_call(false_fn, args);
+            bool cond_b = nb::cast<bool>(nb::bool_(cond));
+            return tuple_call(cond_b ? true_fn : false_fn, args);
         }
 
         // General case: call ad_cond() with a number of callbacks that

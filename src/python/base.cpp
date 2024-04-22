@@ -782,7 +782,7 @@ nb::object matmul(nb::handle h0, nb::handle h1) {
 
             // Inner product, case 2
             if (is_dyn_1d(s0) && is_dyn_1d(s1) && nb::len(h0) == nb::len(h1))
-                return sum(h0 * h1, 0);
+                return ::dot(h0, h1);
 
             // Scalar product
             if (is_dyn_1d(s0) && outer_static(s1)) {

@@ -69,16 +69,26 @@ drjit.(imag|real)$:
 
 # Improve the types of reduction operations
 drjit.(sum|prod|min|max|norm|squared_norm)$:
-    \from typing import Literal
     @overload
-    def \1(value: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], axis: Literal[0] = 0) -> RedT:
+    def \1(value: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], axis: Axis = 0,
+           mode: Literal['symbolic', 'evaluated', None] = None) -> RedT:
         \doc
     @overload
-    def \1(value: Sequence[T], axis: Literal[0] = 0) -> T: ...
+    def \1(value: Iterable[T], axis: Axis = 0, mode: Literal['symbolic', 'evaluated', None] = None) -> T: ...
     @overload
-    def \1(value: int, axis: int | None = 0) -> int: ...
+    def \1(value: int, axis: Axis = 0, mode: Literal['symbolic', 'evaluated', None] = None) -> int: ...
     @overload
-    def \1(value: float, axis: int | None = 0) -> float: ...
+    def \1(value: float, axis: Axis = 0, mode: Literal['symbolic', 'evaluated', None] = None) -> float: ...
+
+drjit.(all|any|none)$:
+    @overload
+    def \1(value: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], axis: Axis = 0,
+           mode: Literal['symbolic', 'evaluated', None] = None) -> RedT:
+        \doc
+    @overload
+    def \1(value: Iterable[T], axis: Axis = 0, mode: Literal['symbolic', 'evaluated', None] = None) -> T: ...
+    @overload
+    def \1(value: bool, axis: Axis = 0, mode: Literal['symbolic', 'evaluated', None] = None) -> bool: ...
 
 drjit.(dot|abs_dot)$:
     @overload
@@ -88,15 +98,6 @@ drjit.(dot|abs_dot)$:
     def \1(arg0: SelfCpT, arg1: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], /) -> RedT: ...
     @overload
     def \1(arg0: Sequence[T], arg1: Sequence[T], /) -> T: ...
-
-drjit.(all|any|none)$:
-    @overload
-    def \1(value: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], axis: Literal[0] = 0) -> RedT:
-        \doc
-    @overload
-    def \1(value: Sequence[T], axis: Literal[0] = 0) -> T: ...
-    @overload
-    def \1(value: bool, axis: int | None = 0) -> bool: ...
 
 drjit.select$:
     @overload
@@ -139,6 +140,7 @@ drjit.(fma|lerp)$:
     def \1(arg0: T, arg1: T, arg2: T) -> T: ...
 
 drjit.reshape$:
+    \from typing import Literal
     def reshape(dtype: type[T], value: object, shape: int | Sequence[int], order: Literal['A', 'C', 'F'] = 'A', shrink: bool = False) -> T:
         \doc
 
@@ -220,8 +222,6 @@ drjit.custom$:
         \doc
 
 drjit.switch$:
-    \from typing import Sequence
-
     # Helper type variable and protocol to type-check ``dr.switch()``
     class CallablePT(Protocol[Ps, Tc]):
         def __call__(self, *args: Ps.args, **kwargs: Ps.kwargs) -> Tc:...
@@ -291,3 +291,8 @@ drjit.scalar.__prefix__:
         int as UInt32,
         int as UInt64
     )
+
+drjit.__prefix__:
+    \from typing import TypeAlias
+    \from collections.abc import Iterable, Sequence
+    Axis: TypeAlias = int | tuple[int] | None

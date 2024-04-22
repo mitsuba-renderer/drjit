@@ -812,8 +812,20 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
         size_t sa = derived().size(), sb = index.size(), sc = mask.size(),
                sd = sa > sb ? sa : sb, sr = sc > sd ? sc : sd;
 
+        if constexpr (Derived::Size == Dynamic) {
+            if ((sa != sr && sa != 1) || (sb != sr && sb != 1) ||
+                (sc != sr && sc != 1))
+                drjit_fail(
+                    "scatter_() : incompatible input sizes (%zu, %zu, and %zu)",
+                    sa, sb, sc);
+        }
+
         for (size_t i = 0; i < sr; ++i)
-            scatter(target, derived().entry(i), index.entry(i), mask.entry(i), mode);
+            scatter(target,
+                    derived().entry(sa > 1 ? i : 0),
+                    index.entry(sb > 1 ? i : 0),
+                    mask.entry(sc > 1 ? i : 0),
+                    mode);
     }
 
     template <typename Target, typename Index, typename Mask>
@@ -824,9 +836,20 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
         size_t sa = derived().size(), sb = index.size(), sc = mask.size(),
                sd = sa > sb ? sa : sb, sr = sc > sd ? sc : sd;
 
+        if constexpr (Derived::Size == Dynamic) {
+            if ((sa != sr && sa != 1) || (sb != sr && sb != 1) ||
+                (sc != sr && sc != 1))
+                drjit_fail(
+                    "scatter_reduce_() : incompatible input sizes (%zu, %zu, and %zu)",
+                    sa, sb, sc);
+        }
+
         for (size_t i = 0; i < sr; ++i)
-            scatter_reduce(op, target, derived().entry(i), index.entry(i),
-                           mask.entry(i), mode);
+            scatter_reduce(op, target,
+                           derived().entry(sa > 1 ? i : 0),
+                           index.entry(sb > 1 ? i : 0),
+                           mask.entry(sc > 1 ? i : 0),
+                           mode);
     }
 
     static Derived load_aligned_(const void *mem, size_t size) {

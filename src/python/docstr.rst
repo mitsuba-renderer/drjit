@@ -499,8 +499,8 @@
 
     Compute the element-wise maximum value of the provided inputs.
 
-    This function returns a result of the type ``type(arg0 + arg1)`` (i.e.,
-    according to the usual implicit type conversion rules).
+    (Not to be confused with :py:func:`drjit.max`, which reduces the input
+    along the specified axes to determine the maximum)
 
     Args:
         arg0 (int | float | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
@@ -513,8 +513,8 @@
 
     Compute the element-wise minimum value of the provided inputs.
 
-    This function returns a result of the type ``type(arg0 + arg1)`` (i.e.,
-    according to the usual implicit type conversion rules).
+    (Not to be confused with :py:func:`drjit.min`, which reduces the input
+    along the specified axes to determine the minimum)
 
     Args:
         arg0 (int | float | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
@@ -522,30 +522,6 @@
 
     Returns:
         int | float | drjit.ArrayBase: Minimum of the input(s)
-
-.. topic:: min
-
-    Compute the minimum of the input array or tensor along one or multiple axes.
-
-    By default, it computes the minimum along index ``0``, which refers to the
-    outermost axis. Negative indices (e.g. ``-1``) count backwards from the
-    innermost axis. The special argument ``axis=None`` causes a simultaneous
-    reduction over all axes. The minimum of an empty array is considered to be
-    equal to positive infinity.
-
-    See the section on :ref:`horizontal reductions <horizontal-reductions>` for
-    important general information about their properties.
-
-    Args:
-        value (float | int | Sequence | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
-
-        axis (int | None): The axis along which to reduce. The default value of
-          ``0`` refers to the outermost axis. Negative values count backwards from
-          the innermost axis. A value of ``None`` causes a simultaneous reduction
-          along all axes.
-
-    Returns:
-        float | int | drjit.ArrayBase: Result of the reduction operation
 
 .. topic:: square
 
@@ -640,84 +616,199 @@
     Returns:
         object: The result of the operation as defined above
 
-.. topic:: max
+.. topic:: reduce
 
-    Compute the maximum of the input array or tensor along one or multiple axes.
+    Reduce the input array, tensor, or iterable along the specified axis/axes.
 
-    This function performs a horizontal maximum reduction of the input array,
-    tensor, or Python sequence along one or multiple axes.
+    This function reduces arrays, tensors and other iterable Python types along
+    one or multiple axes, where ``op`` selects the operation to be performed:
 
-    By default, it computes the maximum along index ``0``, which refers to the
-    outermost axis. Negative indices (e.g. ``-1``) count backwards from the
-    innermost axis. The special argument ``axis=None`` causes a simultaneous
-    reduction over all axes. The maximum of an empty array is considered to be
-    equal to negative infinity.
+    - :py:attr:`drjit.ReduceOp.Add`: ``a[0] + a[1] + ...``.
+    - :py:attr:`drjit.ReduceOp.Mul`: ``a[0] * a[1] * ...)``.
+    - :py:attr:`drjit.ReduceOp.Min`: ``min(a[0], a[1], ...)``.
+    - :py:attr:`drjit.ReduceOp.Max`: ``max(a[0], a[1], ...)``.
+    - :py:attr:`drjit.ReduceOp.Or`: ``a[0] | a[1] | ...`` (integer arrays only).
+    - :py:attr:`drjit.ReduceOp.And`: ``a[0] & a[1] & ...`` (integer arrays only).
 
-    See the section on :ref:`horizontal reductions <horizontal-reductions>` for
-    important general information about their properties.
+    The functions :py:func:`drjit.sum()`, :py:func:`drjit.prod()`,
+    :py:func:`drjit.min()`, and :py:func:`drjit.max()` are convenience aliases
+    that call :py:func:`drjit.reduce()` with specific values of ``op``.
+
+    By default, the reduction is along axis ``0`` (i.e., the outermost
+    one), returning an instance of the array's element type. For instance,
+    sum-reducing an array ``a`` of type :py:class:`drjit.cuda.Array3f` is
+    equivalent to writing ``a[0] + a[1] + a[2]`` and produces a result of type
+    :py:class:`drjit.cuda.Float`. Dr.Jit can trace this operation and include
+    it in the generated kernel.
+
+    Negative indices (e.g. ``axis=-1``) count backward from the innermost
+    axis. Multiple axes can be specified as a tuple. The value ``axis=None``
+    requests a simultaneous reduction over all axes.
+
+    When reducing axes of a tensor, or when reducing the *trailing* dimension
+    of a Jit-compiled array, some special precautions apply: these axes
+    correspond to computational threads of a large parallel program that now
+    have to coordinate to determine the reduced value. This can be done
+    using the following strategies:
+
+    - ``mode="evaluated"`` first evaluates the input array via
+      :py:func:`drjit.eval()` and then launches a specialized reduction kernel.
+
+      On the CUDA backend, this kernel makes efficient use of shared memory and
+      cooperative warp instructions. The LLVM backend parallelizes the
+      reduction via the built-in thread pool.
+
+    - ``mode="symbolic"`` uses :py:func:`drjit.scatter_reduce()` to atomically
+      scatter-reduce values into the output array. This strategy can be
+      advantageous when the input is symbolic (making evaluation
+      impossible) or both unevaluated and extremely large (making evaluation
+      costly or impossible if there isn't enough memory).
+
+      Disadvantages of this mode are that
+
+      - Atomic scatters can suffer from memory contention (though the
+        :py:func:`drjit.scatter_reduce()` function takes steps to reduce
+        contention, see its documentation for details).
+
+      - Atomic floating point scatter-addition is subject to non-deterministic
+        rounding errors that arise from its non-commutative nature. Coupled
+        with the scheduling-dependent execution order, this can lead to small
+        variations across program runs. Integer reductions and floating point
+        min/max reductions are unaffected by this.
+
+    - ``mode=None`` (default) automatically picks a reasonable strategy
+      according to the following logic:
+
+      - Use evaluated mode when the input array is already evaluated, or when
+        evaluating it would consume less than 1 GiB of memory.
+
+      - Use evaluated mode when the necessary atomic reduction operation is
+        :ref:`not supported <scatter_reduce_supported>` by the backend.
+
+      - Otherwise, use symbolic mode.
+
+    This function generally strips away reduced axes, but there is one notable
+    exception: it will *never* remove a trailing dynamic dimension, if present
+    in the input array.
+
+    For example, reducing an instance of type :py:class:`drjit.cuda.Float`
+    along axis ``0`` does not produce a scalar Python ``float``. Instead, the
+    operation returns another array of the same type with a single element.
+    This is intentional--unboxing the array into a Python scalar would require
+    transferring the value from the GPU, which would incur costly
+    synchronization overheads. You must explicitly index into the result
+    (``result[0]``) to obtain a value with the underlying element type.
 
     Args:
-        value (float | int | Sequence | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+        op (ReduceOp): The operation that should be applied along the
+          reduced axis/axes.
 
-        axis (int | None): The axis along which to reduce. The default value of
-          ``0`` refers to the outermost axis. Negative values count backwards from
-          the innermost axis. A value of ``None`` causes a simultaneous reduction
-          along all axes.
+        value (ArrayBase | Iterable | float | int): An input Dr.Jit array or tensor.
+
+        axes (int | tuple[int, ...] | None): The axis/axes along which
+          to reduce. The default value is ``0``.
+
+        mode (str | None): optional parameter to force an evaluation strategy.
+          Must equal ``"evaluated"``, ``"symbolic"``, or ``None``.
 
     Returns:
-        float | int | drjit.ArrayBase: Result of the reduction operation
+        The reduced array or tensor as specified above.
 
 .. topic:: sum
 
-    Compute the sum of the input array or tensor along one or multiple axes.
+    Sum-reduce the input array, tensor, or iterable along the specified axis/axes.
 
-    This function performs a horizontal sum reduction by adding values of the input
-    array, tensor, or Python sequence along one or multiple axes.
-
-    By default, it sums along index ``0``, which refers to the outermost axis.
-    Negative indices (e.g. ``-1``) count backwards from the innermost axis. The
-    special argument ``axis=None`` causes a simultaneous reduction over all axes.
-    The horizontal sum of an empty array is considered to be zero.
-
-    See the section on :ref:`horizontal reductions <horizontal-reductions>` for
-    important general information about their properties.
+    This function sum-reduces arrays, tensors and other iterable Python types
+    along one or multiple axes. It is equivalent to
+    :py:func:`dr.reduce(dr.ReduceOp.Add, ...) <reduce>`. See the documentation of
+    this function for further information.
 
     Args:
-        value (float | int | Sequence | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+        value (ArrayBase | Iterable | float | int): An input Dr.Jit array,
+          tensor, iterable, or scalar Python type.
 
-        axis (int | None): The axis along which to reduce. The default value of
-          ``0`` refers to the outermost axis. Negative values count backwards from
-          the innermost axis. A value of ``None`` causes a simultaneous reduction
-          along all axes.
+        axes (int | tuple[int, ...] | None): The axis/axes along which
+          to reduce. The default value is ``0``.
+
+        mode (str | None): optional parameter to force an evaluation strategy.
+          Must equal ``"evaluated"``, ``"symbolic"``, or ``None``.
 
     Returns:
-        float | int | drjit.ArrayBase: Result of the reduction operation
+        object: The reduced array or tensor as specified above.
 
 .. topic:: prod
 
-    Compute the product of the input array or tensor along one or multiple axes.
+    Multiplicatively reduce the input array, tensor, or iterable along the specified axis/axes.
 
-    This function performs horizontal product reduction by multiplying values of
-    the input array, tensor, or Python sequence along one or multiple axes.
-
-    By default, it multiplies along index ``0``, which refers to the outermost axis.
-    Negative indices (e.g. ``-1``) count backwards from the innermost axis. The
-    special argument ``axis=None`` causes a simultaneous reduction over all axes.
-    The horizontal product of an empty array is considered to be equal to one.
-
-    See the section on :ref:`horizontal reductions <horizontal-reductions>` for
-    important general information about their properties.
+    This function performs a multiplicative reduction along one or multiple axes of
+    the provided Dr.Jit array, tensor, or iterable Python types. It is
+    equivalent to :py:func:`dr.reduce(dr.ReduceOp.Mul, ...) <reduce>`. See
+    the documentation of this function for further information.
 
     Args:
-        value (float | int | Sequence | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+        value (ArrayBase | Iterable | float | int): An input Dr.Jit array,
+          tensor, iterable, or scalar Python type.
 
-        axis (int | None): The axis along which to reduce. The default value of
-          ``0`` refers to the outermost axis. Negative values count backwards from
-          the innermost axis. A value of ``None`` causes a simultaneous reduction
-          along all axes.
+        axes (int | tuple[int, ...] | None): The axis/axes along which
+          to reduce. The default value is ``0``.
+
+        mode (str | None): optional parameter to force an evaluation strategy.
+          Must equal ``"evaluated"``, ``"symbolic"``, or ``None``.
 
     Returns:
-        float | int | drjit.ArrayBase: Result of the reduction operation
+        object: The reduced array or tensor as specified above.
+
+.. topic:: min
+
+    Perform a minimum reduction of the input array, tensor, or iterable along
+    the specified axis/axes.
+
+    (Not to be confused with :py:func:`drjit.minimum`, which computes the
+    smaller of two values).
+
+    This function performs a minimum reduction along one or multiple axes of
+    the provided Dr.Jit array, tensor, or iterable Python types. It is
+    equivalent to :py:func:`dr.reduce(dr.ReduceOp.Min, ...) <reduce>`. See
+    the documentation of this function for further information.
+
+    Args:
+        value (ArrayBase | Iterable | float | int): An input Dr.Jit array,
+          tensor, iterable, or scalar Python type.
+
+        axes (int | tuple[int, ...] | None): The axis/axes along which
+          to reduce. The default value is ``0``.
+
+        mode (str | None): optional parameter to force an evaluation strategy.
+          Must equal ``"evaluated"``, ``"symbolic"``, or ``None``.
+
+    Returns:
+        object: The reduced array or tensor as specified above.
+
+.. topic:: max
+
+    Perform a maximum reduction of the input array, tensor, or iterable along
+    the specified axis/axes.
+
+    (Not to be confused with :py:func:`drjit.maximum`, which computes the
+    larger of two values).
+
+    This function performs a maximum reduction along one or multiple axes of
+    the provided Dr.Jit array, tensor, or iterable Python types. It is
+    equivalent to :py:func:`dr.reduce(dr.ReduceOp.Max, ...) <reduce>`. See
+    the documentation of this function for further information.
+
+    Args:
+        value (ArrayBase | Iterable | float | int): An input Dr.Jit array, tensor,
+          iterable, or scalar Python type.
+
+        axes (int | tuple[int, ...] | None): The axis/axes along which
+          to reduce. The default value is ``0``.
+
+        mode (str | None): optional parameter to force an evaluation strategy.
+          Must equal ``"evaluated"``, ``"symbolic"``, or ``None``.
+
+    Returns:
+        The reduced array or tensor as specified above.
 
 .. topic:: all
 
@@ -731,19 +822,61 @@
     special argument ``axis=None`` causes a simultaneous reduction over all axes.
     Note that the reduced form of an *empty* array is considered to be ``True``.
 
-    See the section on :ref:`horizontal reductions <horizontal-reductions>` for
-    important general information about their properties.
+    The function is internally based on :py:func:`dr.reduce() <reduce>`. See
+    the documentation of this function for further information.
+
+    Like :py:func:`dr.reduce()`, this function does *not* strip away trailing
+    dynamic dimensions if present in the input array. This means that reducing
+    :py:class:`drjit.cuda.Bool` does not produce a scalar Python ``bool``.
+    Instead, the operation returns another array of the same type with a single
+    element. This is intentional--unboxing the array into a Python scalar would
+    require transferring the value from the GPU, which would incur costly
+    synchronization overheads. You must explicitly index into the result
+    (``result[0]``) to obtain a value with the underlying element type.
+
+    Boolean 1D arrays automatically convert to ``bool`` if they only contain a
+    single element. This means that the aforementioned indexing operation
+    happens implicitly in the following fragment:
+
+    .. code-block:: python
+
+       from drjit.cuda import Float
+
+       x = Float(...)
+       if dr.all(s < 0):
+          # ...
+
+    A last point to consider is that reductions along the last / trailing
+    dynamic axis of an array are generally expensive. Its entries correspond to
+    computational threads of a large parallel program that now have to
+    coordinate to determine the reduced value. Normally, this involves
+    :py:func:`drjit.eval` to evaluate and store the array in memory and then
+    launch a device-specific reduction kernel. All of these steps interfere
+    with Dr.Jit's regular mode of operation, which is to capture a maximally
+    large program without intermediate evaluation.
+
+    To avoid Boolean reductions, one can often use *symbolic operations* such
+    as :py:func:`if_stmt`, :py:func:`while_loop`, etc. The :py:func:`@dr.syntax
+    <syntax>` decorator can generate these automatically. For example, the
+    following fragment predicates the execution of the body (``# ...``) based
+    on the condition.
+
+    .. code-block:: python
+
+       @dr.syntax
+       def f(x: Float):
+           if a < 0:
+              # ...
 
     Args:
-        value (bool | Sequence | drjit.ArrayBase): A Python or Dr.Jit mask type
+        value (ArrayBase | Iterable | bool): An input Dr.Jit array, tensor,
+          iterable, or scalar Python type.
 
-        axis (int | None): The axis along which to reduce. The default value of
-          ``0`` refers to the outermost axis. Negative values count backwards from
-          the innermost axis. A value of ``None`` causes a simultaneous reduction
-          along all axes.
+        axes (int | tuple[int, ...] | None): The axis/axes along which
+          to reduce. The default value is ``0``.
 
     Returns:
-        bool | drjit.ArrayBase: Result of the reduction operation
+        object: The reduced array or tensor as specified above.
 
 .. topic:: any
 
@@ -757,16 +890,58 @@
     special argument ``axis=None`` causes a simultaneous reduction over all axes.
     Note that the reduced form of an *empty* array is considered to be ``False``.
 
-    See the section on :ref:`horizontal reductions <horizontal-reductions>` for
-    important general information about their properties.
+    The function is internally based on :py:func:`dr.reduce() <reduce>`. See
+    the documentation of this function for further information.
+
+    Like :py:func:`dr.reduce()`, this function does *not* strip away trailing
+    dynamic dimensions if present in the input array. This means that reducing
+    :py:class:`drjit.cuda.Bool` does not produce a scalar Python ``bool``.
+    Instead, the operation returns another array of the same type with a single
+    element. This is intentional--unboxing the array into a Python scalar would
+    require transferring the value from the GPU, which would incur costly
+    synchronization overheads. You must explicitly index into the result
+    (``result[0]``) to obtain a value with the underlying element type.
+
+    Boolean 1D arrays automatically convert to ``bool`` if they only contain a
+    single element. This means that the aforementioned indexing operation
+    happens implicitly in the following fragment:
+
+    .. code-block:: python
+
+       from drjit.cuda import Float
+
+       x = Float(...)
+       if dr.any(s < 0):
+          # ...
+
+    A last point to consider is that reductions along the last / trailing
+    dynamic axis of an array are generally expensive. Its entries correspond to
+    computational threads of a large parallel program that now have to
+    coordinate to determine the reduced value. Normally, this involves
+    :py:func:`drjit.eval` to evaluate and store the array in memory and then
+    launch a device-specific reduction kernel. All of these steps interfere
+    with Dr.Jit's regular mode of operation, which is to capture a maximally
+    large program without intermediate evaluation.
+
+    To avoid Boolean reductions, one can often use *symbolic operations* such
+    as :py:func:`if_stmt`, :py:func:`while_loop`, etc. The :py:func:`@dr.syntax
+    <syntax>` decorator can generate these automatically. For example, the
+    following fragment predicates the execution of the body (``# ...``) based
+    on the condition.
+
+    .. code-block:: python
+
+       @dr.syntax
+       def f(x: Float):
+           if a < 0:
+              # ...
 
     Args:
-        value (bool | Sequence | drjit.ArrayBase): A Python or Dr.Jit mask type
+        value (ArrayBase | Iterable | bool): An input Dr.Jit array, tensor,
+          iterable, or scalar Python type.
 
-        axis (int | None): The axis along which to reduce. The default value of
-          ``0`` refers to the outermost axis. Negative values count backwards from
-          the innermost axis. A value of ``None`` causes a simultaneous reduction
-          along all axes.
+        axes (int | tuple[int, ...] | None): The axis/axes along which
+          to reduce. The default value is ``0``.
 
     Returns:
         bool | drjit.ArrayBase: Result of the reduction operation
@@ -779,21 +954,58 @@
     reduces elements using the ``|`` (OR) operator and finally returns the bit-wise
     *inverse* of the result.
 
-    By default, it reduces along index ``0``, which refers to the outermost axis.
-    Negative indices (e.g. ``-1``) count backwards from the innermost axis. The
-    special argument ``axis=None`` causes a simultaneous reduction over all axes.
-    Note that the reduced form of an *empty* array is considered to be ``False``.
+    The function is internally based on :py:func:`dr.reduce() <reduce>`. See
+    the documentation of this function for further information.
 
-    See the section on :ref:`horizontal reductions <horizontal-reductions>` for
-    important general information about their properties.
+    Like :py:func:`dr.reduce()`, this function does *not* strip away trailing
+    dynamic dimensions if present in the input array. This means that reducing
+    :py:class:`drjit.cuda.Bool` does not produce a scalar Python ``bool``.
+    Instead, the operation returns another array of the same type with a single
+    element. This is intentional--unboxing the array into a Python scalar would
+    require transferring the value from the GPU, which would incur costly
+    synchronization overheads. You must explicitly index into the result
+    (``result[0]``) to obtain a value with the underlying element type.
+
+    Boolean 1D arrays automatically convert to ``bool`` if they only contain a
+    single element. This means that the aforementioned indexing operation
+    happens implicitly in the following fragment:
+
+    .. code-block:: python
+
+       from drjit.cuda import Float
+
+       x = Float(...)
+       if dr.none(s < 0):
+          # ...
+
+    A last point to consider is that reductions along the last / trailing
+    dynamic axis of an array are generally expensive. Its entries correspond to
+    computational threads of a large parallel program that now have to
+    coordinate to determine the reduced value. Normally, this involves
+    :py:func:`drjit.eval` to evaluate and store the array in memory and then
+    launch a device-specific reduction kernel. All of these steps interfere
+    with Dr.Jit's regular mode of operation, which is to capture a maximally
+    large program without intermediate evaluation.
+
+    To avoid Boolean reductions, one can often use *symbolic operations* such
+    as :py:func:`if_stmt`, :py:func:`while_loop`, etc. The :py:func:`@dr.syntax
+    <syntax>` decorator can generate these automatically. For example, the
+    following fragment predicates the execution of the body (``# ...``) based
+    on the condition.
+
+    .. code-block:: python
+
+       @dr.syntax
+       def f(x: Float):
+           if a < 0:
+              # ...
 
     Args:
-        value (bool | Sequence | drjit.ArrayBase): A Python or Dr.Jit mask type
+        value (ArrayBase | Iterable | bool): An input Dr.Jit array, tensor,
+          iterable, or scalar Python type.
 
-        axis (int | None): The axis along which to reduce. The default value of
-          ``0`` refers to the outermost axis. Negative values count backwards from
-          the innermost axis. A value of ``None`` causes a simultaneous reduction
-          along all axes.
+        axes (int | tuple[int, ...] | None): The axis/axes along which
+          to reduce. The default value is ``0``.
 
     Returns:
         bool | drjit.ArrayBase: Result of the reduction operation
@@ -2528,6 +2740,11 @@
     The optional ``active`` argument can be used to disable some of the updates,
     e.g., when not all provided values or indices are valid.
 
+    Atomic additions are subject to non-deterministic rounding errors.  The
+    reason for this is that IEEE-754 addition are non-commutative. The execution
+    order is scheduling-dependent, which can lead to small variations across
+    program runs.
+
     Atomic scatter-reductions can have a *significant* detrimental impact on
     performance. When many threads in a parallel computation attempt to modify the
     same element, this can lead to *contention*---essentially a fight over which
@@ -2680,7 +2897,7 @@
         rounding error.
 
     Args:
-        reduce_op (drjit.ReduceOp): Specifies the type of update that should be performed.
+        op (drjit.ReduceOp): Specifies the type of update that should be performed.
 
         target (object): The object into which data should be written (typically a
           1D Dr.Jit array, but other variations are possible as well, see the
@@ -5857,7 +6074,7 @@
 
     This operation works just like the :py:func:`drjit.scatter_reduce()` operation
     for 32-bit unsigned integer operands, but with a fixed ``value=1`` parameter
-    and ``reduce_op=ReduceOp::Add``.
+    and ``op=ReduceOp::Add``.
 
     The main difference is that this variant additionally returns the *old* value
     of the target array prior to the atomic update in contrast to the more general
@@ -7017,12 +7234,11 @@
     Dr.Jit uses one of two strategies to realize this operation, which can be
     optionally forced by specifying the ``mode`` parameter.
 
-    - ``mode="evaluated"`` evaluates the input array via
-      :py:func:`drjit.eval()`. Then, it launches a precompiled reduction
-      kernel.
+    - ``mode="evaluated"`` first evaluates the input array via
+      :py:func:`drjit.eval()` and then launches a specialized reduction kernel.
 
-      On the CUDA backend, this provided kernel relies on shared memory and
-      cooperative warp instructions, which is very efficient but requires
+      On the CUDA backend, this kernel makes efficient use of shared memory and
+      cooperative warp instructions with the limitation that it requires
       ``block_size`` to be a power of two. The LLVM backend parallelizes the
       operation via the built-in thread pool and has no ``block_size``
       limitations.
@@ -7033,33 +7249,40 @@
       impossible) or both unevaluated and extremely large (making evaluation
       costly or impossible if there isn't enough memory).
 
-      A disadvantage of this strategy compared to ``"evaluated"`` is that
-      block-reducing floating point arrays is subject to non-deterministic
-      rounding errors.  The reason for this is that operations like IEEE-754
-      addition are non-commutative. The execution order of the atomic
-      scatter-reductions is scheduling-dependent, which can lead to small
-      variations across program runs.
+      Disadvantages of this mode are that
 
-    - ``None``: automatically pick a reasonable strategy (the default). The
-      first matching statement of the following list decides the mode.
+      - Atomic scatters can suffer from memory contention (though
+        :py:func:`drjit.scatter_reduce()` takes steps to reduce contention, see
+        its documentation for details).
 
-      - Use ``"evaluated"`` when a symbolic reduction would involve atomic
-        operations that :ref:`are not supported by the backend
-        <scatter_reduce_supported>`.
+      - Atomic floating point scatter-addition is subject to non-deterministic
+        rounding errors that arise from its non-commutative nature. Coupled
+        with the scheduling-dependent execution order, this can lead to small
+        variations across program runs. Integer and floating point min/max
+        reductions are unaffected by this.
 
-      - Use ``"symbolic"`` when the input is symbolic.
+    - ``mode=None`` (default) automatically picks a reasonable strategy
+      according to the following logic:
 
-      - Use ``"symbolic"`` when the input array does *not* have a power-of-two
-        size, and when running on the CUDA backend.
+      - Symbolic mode is admissible when the necessary atomic reduction
+        :ref:`is supported by the backend <scatter_reduce_supported>`.
 
-      - Use ``"symbolic"`` when the input array is unevaluated, and when
-        evaluating it would consume more than a 1 GiB of memory.
+      - Evaluated mode is admissible when the input does not involve symbolic
+        variables. On the CUDA backend ``block_size`` must furthermore be a
+        power of two.
 
-      - Otherwise, use ``"evaluated"`` mode.
+      - If only one strategy remains, then pick that one. Raise an exception
+        when no strategy works out.
 
-    For some inputs, this decision tree only leaves the empty set (for example,
-    attempting to perform a multiplicative reduction of a CUDA array with a
-    non-power-of-two block size). An function will raise an exception in such cases.
+      - Otherwise, use evaluated mode when the input array is already
+        evaluated, or when evaluating it would consume less than 1 GiB of
+        memory.
+
+      - Use symbolic mode in all other cases.
+
+    For some inputs, no strategy works out (e.g., multiplicative reduction of
+    an array with a non-power-of-two block size on the CUDA backend). The
+    function will raise an exception in such cases.
 
     Since evaluated mode can be quite a bit faster and is guaranteed to be
     deterministic, it is recommended that you design your program so that it
@@ -7075,7 +7298,7 @@
         ``dr.sum(dr.reshape(value, shape=(4, 4, 8, 2)), axis=(1, 3))``.
 
     Args:
-        arg (object): A Dr.Jit array or PyTree
+        value (object): A Dr.Jit array or PyTree
 
         block_size (int): size of the block
 
