@@ -56,21 +56,28 @@ void stash_ref(nb::handle h, dr::vector<StashRef> &v) {
     traverse("drjit.detail.stash_ref", vo, h);
 }
 
-nb::object reduce_identity(nb::type_object_t<dr::ArrayBase> tp, ReduceOp op) {
+nb::object reduce_identity(nb::type_object_t<dr::ArrayBase> tp, ReduceOp op, uint32_t size) {
     const ArraySupplement &s = supp(tp);
 
     ArrayMeta m { };
     m.backend = s.backend;
     m.ndim = 1;
+    m.is_diff = s.is_diff;
     m.type = s.type;
     m.shape[0] = DRJIT_DYNAMIC;
     nb::handle tp2 = meta_get_type(m);
+
+    const ArraySupplement &s2 = supp(tp2);
+
+    nb::object id_elem = nb::inst_alloc(tp2);
+    uint64_t value = jit_reduce_identity((VarType) s.type, op);
+    s.init_data(1, &value, inst_ptr(id_elem));
+    nb::inst_mark_ready(id_elem);
+
     nb::object result = nb::inst_alloc(tp2);
-    uint32_t index =
-        jit_var_reduce_identity((JitBackend) s.backend, (VarType) s.type, op);
-    supp(tp2).init_index(index, inst_ptr(result));
+    s.init_const(size, false, id_elem[0].ptr(), inst_ptr(result));
     nb::inst_mark_ready(result);
-    jit_var_dec_ref(index);
+
     return result;
 }
 
@@ -307,8 +314,8 @@ void export_detail(nb::module_ &) {
      .def("any_symbolic", &any_symbolic, doc_detail_any_symbolic)
 
      .def("reduce_identity", &reduce_identity,
-          nb::sig("def reduce_identity(arg0: typing.Type[drjit.ArrayT], arg1: drjit.ReduceOp, /) -> drjit.ArrayT"),
-          doc_detail_reduce_identity)
+          nb::sig("def reduce_identity(dtype: typing.Type[drjit.ArrayT], op: drjit.ReduceOp, size: int = 1, /) -> drjit.ArrayT"),
+          doc_detail_reduce_identity, "dtype"_a, "op"_a, "size"_a = 1)
 
      .def("can_scatter_reduce", &can_scatter_reduce, doc_detail_can_scatter_reduce)
 

@@ -120,16 +120,20 @@ nb::tuple while_loop(nb::tuple state, nb::callable cond, nb::callable body,
         JitBackend backend = JitBackend::None;
 
         nb::object cond_val = tuple_call(cond, state);
+        nb::handle cond_tp = cond_val.type();
 
         bool scalar_loop;
         if (mode.has_value())
             scalar_loop = mode == "scalar";
         else
-            scalar_loop = cond_val.type().is(&PyBool_Type);
+            scalar_loop = cond_tp.is(&PyBool_Type);
+
+        if (!scalar_loop && is_drjit_type(cond_tp))
+            scalar_loop = (JitBackend) supp(cond_tp).backend == JitBackend::None;
 
         if (scalar_loop) {
             // If so, process it directly
-            while (nb::cast<bool>(cond_val)) {
+            while (nb::cast<bool>(nb::bool_(cond_val))) {
                 state = check_state("body", tuple_call(body, state), state);
                 cond_val = tuple_call(cond, state);
             }

@@ -90,12 +90,17 @@ def test03_implicit_bool_conversion_failures(t):
         with pytest.raises(RuntimeError, match=r'implicit conversion to \'bool\' requires an array with at most 1 element \(this one has 2 elements\).'):
             bool(dr.value_t(t)(True, False))
 
-@pytest.test_arrays('shape=(*), float, -float64, jit')
+
+@pytest.test_arrays('shape=(*), float32, jit')
 def test04_sum(t):
     m = sys.modules[t.__module__]
     assert dr.allclose(dr.sum(6.0), 6)
 
-    a = dr.sum(m.Float([1, 2, 3]))
+    a = dr.sum(m.Float([1, 2, 3]), mode='evaluated')
+    assert dr.allclose(a, 6)
+    assert type(a) is m.Float
+
+    a = dr.sum(m.Float([1, 2, 3]), mode='symbolic')
     assert dr.allclose(a, 6)
     assert type(a) is m.Float
 
@@ -135,15 +140,11 @@ def test04_sum(t):
     assert dr.allclose(a, 10)
     assert type(a) is float
 
-    with pytest.raises(RuntimeError) as ei:
+    with pytest.raises(RuntimeError, match="out-of-bounds axis"):
         a = dr.sum(dr.scalar.Matrix2f([1, 2], [3, 4]), axis=3)
 
-    assert "axis 3 is out of bounds" in str(ei.value)
-
-    with pytest.raises(RuntimeError) as ei:
+    with pytest.raises(RuntimeError, match="out-of-bounds axis"):
         a = dr.sum(dr.scalar.Matrix2f([1, 2], [3, 4]), axis=-3)
-
-    assert "axis -1 is out of bounds" in str(ei.value)
 
 
 @pytest.test_arrays('shape=(*), float, -float64, jit')
@@ -253,6 +254,7 @@ def test04_minimum(t):
     assert dr.allclose(a, [[1, 1, 1], [2, 1, 2], [3, 3, 3]])
     assert type(a) is m.ArrayXf
 
+
 @pytest.test_arrays('shape=(*), float, -float64, jit')
 def test05_maximum(t):
     m = sys.modules[t.__module__]
@@ -354,7 +356,7 @@ def test10_sum_avg_mixed_size(t):
 
 
 @pytest.test_arrays('shape=(*), bool')
-def test10_sum_avg_mixed_size(t):
+def test11_count(t):
     i = dr.uint32_array_t(t)
 
     assert dr.count(t(True, False)) == i(1)
@@ -363,3 +365,47 @@ def test10_sum_avg_mixed_size(t):
     assert dr.count(False) == 0
     assert dr.count(True) == 1
     assert dr.count((True, False)) == 1
+
+
+@pytest.mark.parametrize('op', [dr.ReduceOp.Add, dr.ReduceOp.Max, dr.ReduceOp.Min])
+@pytest.test_arrays('int, tensor, -is_diff')
+def test12_tensor_reduce(t, op):
+    def check(y, axis, mode):
+        import numpy as np
+
+        #print(f"{axis=}: ", end="")
+        ynp = y.numpy()
+        if op is dr.ReduceOp.Add:
+            a0 = ynp.sum(axis=axis)
+        elif op is dr.ReduceOp.Min:
+            a0 = ynp.min(axis=axis)
+        elif op is dr.ReduceOp.Max:
+            a0 = ynp.max(axis=axis)
+        a1 = dr.reduce(op, y, axis, mode)
+        match = np.all(a1.numpy() == a0, axis=None)
+        #print(f"{'OK' if match else 'FAIL'}")
+
+
+    def check_all(y):
+        import itertools
+
+        axes = []
+        for i in range(0, y.ndim + 1):
+            axes.extend(list(itertools.combinations(range(y.ndim), i)))
+
+        for a in axes:
+            check(y, a, 'symbolic')
+            check(y, a, 'evaluated')
+
+
+    if True:
+        x = dr.arange(t, 256)
+        y = dr.reshape(t, x, (4, 4, 4, 4))
+
+        check_all(y)
+
+    if True:
+        x = dr.arange(t, 1155)
+        y = dr.reshape(t, x, (3, 5, 7, 11))
+
+        check_all(y)

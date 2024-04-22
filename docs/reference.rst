@@ -45,6 +45,27 @@ These operations are *horizontal* in the sense that [..]
 .. autofunction:: scatter_inc
 .. autofunction:: block_reduce
 .. autofunction:: block_sum
+
+.. autofunction:: reduce
+.. autofunction:: sum
+.. autofunction:: prod
+.. autofunction:: min
+.. autofunction:: max
+.. autofunction:: mean
+
+.. autofunction:: all
+.. autofunction:: any
+.. autofunction:: none
+.. autofunction:: count
+
+.. autofunction:: dot
+.. autofunction:: abs_dot
+.. autofunction:: squared_norm
+.. autofunction:: norm
+.. autofunction:: prefix_sum
+.. autofunction:: cumsum
+.. autofunction:: reverse
+
 .. autofunction:: compress
 .. autofunction:: ravel
 .. autofunction:: unravel
@@ -52,22 +73,6 @@ These operations are *horizontal* in the sense that [..]
 .. autofunction:: slice
 .. autofunction:: tile
 .. autofunction:: repeat
-.. autofunction:: min
-.. autofunction:: max
-.. autofunction:: sum
-.. autofunction:: mean
-.. autofunction:: prod
-.. autofunction:: dot
-.. autofunction:: abs_dot
-.. autofunction:: squared_norm
-.. autofunction:: norm
-.. autofunction:: all
-.. autofunction:: any
-.. autofunction:: none
-.. autofunction:: count
-.. autofunction:: prefix_sum
-.. autofunction:: cumsum
-.. autofunction:: reverse
 
 Mask operations
 ---------------

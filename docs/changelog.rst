@@ -124,7 +124,8 @@ Here is what's new:
 - Reductions operations previously existed as *ordinary* (e.g.,
   :py:func:`drjit.all`) and *nested* (e.g. ``drjit.all_nested``) variants. Both
   are now subsumed by an optional ``axis`` argument similar to how this works
-  in other array programming frameworks like NumPy.
+  in other array programming frameworks like NumPy. All functions support both
+  regular Dr.Jit arrays and tensors.
 
   The reduction functions (:py:func:`drjit.all` :py:func:`drjit.any`,
   :py:func:`drjit.sum`, :py:func:`drjit.prod`, :py:func:`drjit.min`,

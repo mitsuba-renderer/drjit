@@ -209,63 +209,6 @@ Some other optimizations are specific to symbolic operations, such as
 
 Please refer the documentation of these flags for details.
 
-.. _horizontal-reductions:
-
-Horizontal reductions
----------------------
-
-Dr.Jit offers the following *horizontal operations* that reduce the dimension
-of an input array, tensor, or Python sequence:
-
-- :py:func:`drjit.sum` and :py:func:`drjit.mean`, which reduce using ``+``,
-- :py:func:`drjit.prod`, which reduces using ``*``,
-- :py:func:`drjit.min`, which reduces using ``min()``,
-- :py:func:`drjit.max`, which reduces using ``max()``,
-- :py:func:`drjit.all`, which reduces using ``&``, and
-- :py:func:`drjit.any` and :py:func:`drjit.none`, which reduce using ``|``.
-
-By default, these functions reduce along the outermost dimension and return an
-instance of the array's element type. For instance, sum-reducing an array ``a`` of
-type :py:class:`drjit.cuda.Array3f` would just be a convenient abbreviation for
-the expression ``a[0] + a[1] + a[2]`` of type :py:class:`drjit.cuda.Float`.
-Dr.Jit can trace this operation and include it in the generated kernel (i.e.,
-it is *symbolic*).
-
-Reductions of JIT-compiled 1D arrays (e.g., :py:class:`drjit.cuda.Float`) are an
-important special case. Since each value of such an array represents a
-different execution thread of a parallel program, Dr.Jit must first invoke
-:py:func:`drjit.eval` to evaluate and store the array in memory and then launch
-a device-specific implementation of a horizontal reduction. This interferes with
-Dr.Jit's regular mode of operation, which is to capture a maximally large
-program without intermediate evaluation. In other words, use of such 1D
-reductions may have a negative effect on performance. The operation will fail
-in execution contexts where evaluation is forbidden, e.g., while capturing
-symbolic loops and function calls. Atomic operations like
-:py:func:`drjit.scatter_add` can be an interesting alternative in such cases.
-
-Furthermore Dr.Jit does *not* reduce such JIT-compiled 1D arrays to their
-element type (e.g., a standard Python `float`). Instead, it returns a dynamic
-array of the same type, containing only a single element. This is
-intentional--unboxing the array into a Python scalar would require transferring
-the value to the CPU, which would incur GPU<->CPU synchronization overheads.
-You must explicitly index into the result (``result[0]``) to obtain a value
-with the underlying element type. Boolean arrays define a ``__bool__`` method
-so that such indexing can be avoided. For example, the following works as
-expected:
-
-.. code-block:: python
-
-   a = drjit.cuda.Float(...)
-   # The line below is simply a nicer way of writing "if dr.any(a < 0)[0]:"
-   if dr.any(a < 0):
-      # ...
-
-All reduction operations take an optional argument ``axis`` that specifies the
-axis of the reduction. Its default value ``0`` implies a reduction over the
-outermost axis. Negative indices (e.g. ``-1``) count backwards from the
-innermost axis. The special argument ``axis=None`` causes a simultaneous
-reduction over all axes.
-
 .. _pytrees:
 
 PyTrees
@@ -704,9 +647,9 @@ Suppose we are computing the maximum of two 3D arrays:
 
    a: Array3u = ...
    b: Array3f = ...
-   c: ??? = dr.maximum(a, b)
+   c: WhatIsThis = dr.maximum(a, b)
 
-In this case, ``???`` is ``Array3f`` due to the type promotion rules, but how
+In this case, ``WhatIsThis`` is ``Array3f`` due to the type promotion rules, but how
 does the type checker know this? When it tries the first overload, it
 realizes that ``b: Array3f`` is *not* part of the ``SelfCpT`` (compatible
 with *self*) type parameter of ``Array3u``. In second overload, the test is

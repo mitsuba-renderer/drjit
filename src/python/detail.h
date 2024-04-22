@@ -34,3 +34,6 @@ extern void enable_py_tracing();
 extern void disable_py_tracing();
 
 extern void export_detail(nb::module_ &);
+
+extern nb::object reduce_identity(nb::type_object_t<dr::ArrayBase> tp, ReduceOp op, uint32_t size);
+extern bool can_scatter_reduce(nb::type_object_t<dr::ArrayBase> tp, ReduceOp op);
