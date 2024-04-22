@@ -1773,8 +1773,11 @@ def test116_arrayxf_backprop(t):
 
 
 @pytest.mark.parametrize('op', [dr.ReduceOp.Max, dr.ReduceOp.Min])
-@pytest.test_arrays('is_diff,llvm,float32,shape=(*)')
+@pytest.test_arrays('is_diff,llvm,float,shape=(*)')
 def test117_scatter_reduce_minmax_fwd(t, op):
+    if not dr.detail.can_scatter_reduce(t, op):
+        return
+
     x = t(2, 4, 6)
     dr.enable_grad(x)
     x.grad = [.01, .1, 1]
@@ -1798,8 +1801,11 @@ def test117_scatter_reduce_minmax_fwd(t, op):
 
 
 @pytest.mark.parametrize('op', [dr.ReduceOp.Max, dr.ReduceOp.Min])
-@pytest.test_arrays('is_diff,llvm,float32,shape=(*)')
+@pytest.test_arrays('is_diff,llvm,float,shape=(*)')
 def test118_scatter_reduce_minmax_bwd(t, op):
+    if not dr.detail.can_scatter_reduce(t, op):
+        return
+
     x = t(2, 4, 6)
     dr.enable_grad(x)
     if op == dr.ReduceOp.Max:
