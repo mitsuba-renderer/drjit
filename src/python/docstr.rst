@@ -2759,9 +2759,11 @@
     .. rubric:: Backend support
 
     Many combinations of reductions and variable types are not supported. Some
-    combinations depend on the *LLVM version* (LV) or the *compute capability*
-    (CC) of the underlying CUDA device. The following matrix displays the level
-    of support.
+    combinations depend on the *compute capability* (CC) of the underlying CUDA
+    device or on the *LLVM version* (LV) and the host architecutre (AMD64,
+    x86_64). The following matrices display the level of support.
+
+    For CUDA:
 
     .. list-table::
 
@@ -2780,9 +2782,9 @@
        * - :py:attr:`ReduceOp.Add`
          - ❌
          - ✅
-         - ⚠️  (CC≥60, LV≥16)
+         - ⚠️  CC≥60
          - ✅
-         - ⚠️  (CC≥60)
+         - ⚠️  CC≥60
        * - :py:attr:`ReduceOp.Mul`
          - ❌
          - ❌
@@ -2791,16 +2793,70 @@
          - ❌
        * - :py:attr:`ReduceOp.Min`
          - ❌
-         - ⚠️  (LV≥15)
-         - ⚠️  (CC≥90, LV≥16)
+         - ❌
+         - ⚠️  CC≥90
          - ❌
          - ❌
        * - :py:attr:`ReduceOp.Max`
          - ❌
-         - ⚠️  (LV≥15)
-         - ⚠️  (CC≥90, LV≥16)
+         - ❌
+         - ⚠️  CC≥90
          - ❌
          - ❌
+       * - :py:attr:`ReduceOp.And`
+         - ❌
+         - ✅
+         - ❌
+         - ❌
+         - ❌
+       * - :py:attr:`ReduceOp.Or`
+         - ❌
+         - ✅
+         - ❌
+         - ❌
+         - ❌
+
+
+    For LLVM:
+
+    .. list-table::
+
+       * - Reduction
+         - ``Bool``
+         - ``[U]Int{32,64}``
+         - ``Float16``
+         - ``Float32``
+         - ``Float64``
+       * - :py:attr:`ReduceOp.Identity`
+         - ✅
+         - ✅
+         - ✅
+         - ✅
+         - ✅
+       * - :py:attr:`ReduceOp.Add`
+         - ❌
+         - ✅
+         - ⚠️  LV≥16
+         - ✅
+         - ✅
+       * - :py:attr:`ReduceOp.Mul`
+         - ❌
+         - ❌
+         - ❌
+         - ❌
+         - ❌
+       * - :py:attr:`ReduceOp.Min`
+         - ❌
+         - ⚠️  LV≥15
+         - ⚠️  LV≥16, ARM64
+         - ⚠️  LV≥15
+         - ⚠️  LV≥15
+       * - :py:attr:`ReduceOp.Max`
+         - ❌
+         - ⚠️  LV≥15
+         - ⚠️  LV≥16, ARM64
+         - ⚠️  LV≥15
+         - ⚠️  LV≥15
        * - :py:attr:`ReduceOp.And`
          - ❌
          - ✅
