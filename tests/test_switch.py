@@ -532,3 +532,34 @@ def test15_ad_nested_implicit_dep_fwd(t, mode):
     dr.set_grad(data, [1, 2, 3, 4])
     rg = dr.forward_to(r)
     assert dr.allclose(rg, [2, 8, 8, 0])
+
+
+@pytest.mark.parametrize('variant', [0, 1])
+@pytest.test_arrays('is_jit,-is_diff,shape=(*),uint32')
+def test16_optimize_away(t, variant):
+    # Ensure that unreferenced outputs aren't included
+    Int = t
+    UInt32 = dr.uint32_array_t(Int)
+
+    c = [
+        lambda a, b: (a + 1, b ^ a),
+        lambda a, b: (a + 2, b & a + 1)
+    ]
+
+    index = UInt32(0, 0, 1, 1)
+    a = Int(1, 2, 3, 4)
+    b = Int(1, 4, 1, 2)
+
+    with dr.scoped_set_flag(dr.JitFlag.KernelHistory):
+        a, b = dr.switch(index, c, a, b^1)
+        if variant == 0:
+            b = None
+        dr.eval(a, b)
+        hist = dr.kernel_history((dr.KernelType.JIT,))
+
+    ir = hist[0]['ir'].getvalue()
+
+    if dr.backend_v(t) is dr.JitBackend.LLVM:
+        assert ir.count(' = xor') == 2*variant
+    elif dr.backend_v(t) is dr.JitBackend.CUDA:
+        assert ir.count('xor.b32') == 2*variant
