@@ -873,8 +873,19 @@ bool ad_loop(JitBackend backend, int symbolic, int compress,
     if (strchr(name, '\n') || strchr(name, '\r'))
         jit_raise("'name' may not contain newline characters.");
 
-    if (symbolic == -1)
-        symbolic = (int) jit_flag(JitFlag::SymbolicLoops);
+    if (symbolic == -1) {
+        if (jit_flag(JitFlag::SymbolicScope)) {
+            // We're inside some other symbolic operation, cannot use evaluated mode
+            if (!jit_flag(JitFlag::SymbolicLoops))
+                jit_log(LogLevel::Warn,
+                        "ad_loop(\"%s\"): currently inside some other symbolic "
+                        "operation, forcefully running the loop in symbolic "
+                        "mode even though the feature flag was disabled.", name);
+            symbolic = 1;
+        } else {
+            symbolic = jit_flag(JitFlag::SymbolicLoops);
+        }
+    }
 
     if (compress == -1)
         compress = (int) jit_flag(JitFlag::CompressLoops);

@@ -51,18 +51,17 @@ def test02_mutate(t, mode):
 
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
 @dr.syntax
-def test03_nested_loop_disallowed_config(t):
+def test03_nested_loop_warn_config(t, capsys):
     # Can't record an evaluated loop within a symbolic recording session
-    with pytest.raises(RuntimeError) as e:
-        i, j = t(5), t(5)
-        while i < 10:
-            i += 1
-            with dr.scoped_set_flag(dr.JitFlag.SymbolicLoops, False):
-                while j < 10:
-                    j += 1
+    i, j = t(5), t(5)
+    while i < 10:
+        i += 1
+        with dr.scoped_set_flag(dr.JitFlag.SymbolicLoops, False):
+            while j < 10:
+                j += 1
 
-    err_msg='Dr.Jit is currently recording symbolic computation and cannot execute'
-    assert err_msg in str(e.value.__cause__)
+    transcript = capsys.readouterr().err
+    assert transcript.count('currently inside some other symbolic operation') == 1
 
 
 @pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])

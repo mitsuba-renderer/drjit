@@ -580,8 +580,20 @@ bool ad_cond(JitBackend backend, int symbolic, const char *label, void *payload,
     if (strchr(label, '\n') || strchr(label, '\r'))
         jit_raise("'label' may not contain newline characters.");
 
-    if (symbolic == -1)
-        symbolic = (int) jit_flag(JitFlag::SymbolicConditionals);
+    if (symbolic == -1) {
+        if (jit_flag(JitFlag::SymbolicScope)) {
+            // We're inside some other symbolic operation, cannot use evaluated mode
+            if (!jit_flag(JitFlag::SymbolicCalls))
+                jit_log(LogLevel::Warn,
+                        "ad_cond(\"%s\"): currently inside some other symbolic "
+                        "operation, forcefully running the conditional "
+                        "statement in symbolic mode even though the feature "
+                        "flag was disabled.", label);
+            symbolic = 1;
+        } else {
+            symbolic = jit_flag(JitFlag::SymbolicConditionals);
+        }
+    }
 
     if (symbolic != 0 && symbolic != 1)
         jit_raise("'symbolic' must equal 0, 1, or -1.");
