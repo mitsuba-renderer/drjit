@@ -17,7 +17,7 @@ configure_file(
 )
 
 set(PY_FILES
-  __init__.py ast.py detail.py interop.py
+  __init__.py ast.py detail.py interop.py dda.py _sh_eval.py _reduce.py
   scalar/__init__.py llvm/__init__.py llvm/ad.py
   cuda/__init__.py cuda/ad.py)
 
