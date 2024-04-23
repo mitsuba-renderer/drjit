@@ -116,6 +116,7 @@ Miscellaneous operations
 .. autofunction:: width
 .. autofunction:: slice_index
 .. autofunction:: meshgrid
+.. autofunction:: binary_search
 .. autofunction:: make_opaque
 .. autofunction:: copy
 
