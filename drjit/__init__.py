@@ -1752,6 +1752,59 @@ def meshgrid(*args, indexing='xy') -> tuple: # <- proper type signature in stubs
     return tuple(result)
 
 
+def binary_search(start, end, pred):
+    '''
+    Perform a binary search over a range given a predicate ``pred``, which
+    monotonically decreases over this range (i.e. max one ``True`` -> ``False``
+    transition).
+
+    Given a (scalar) ``start`` and ``end`` index of a range, this function
+    evaluates a predicate ``floor(log2(end-start) + 1)`` times with index
+    values on the interval [start, end] (inclusive) to find the first index
+    that no longer satisfies it. Note that the template parameter ``Index`` is
+    automatically inferred from the supplied predicate. Specifically, the
+    predicate takes an index array as input argument. When ``pred`` is ``False``
+    for all entries, the function returns ``start``, and when it is ``True`` for
+    all cases, it returns ``end``.
+
+    The following code example shows a typical use case: ``data`` contains a
+    sorted list of floating point numbers, and the goal is to map floating
+    point entries of ``x`` to the first index ``j`` such that ``data[j] >= threshold``
+    (and all of this of course in parallel for each vector element).
+
+    .. code-block::
+
+        dtype = dr.llvm.Float
+        data = dtype(...)
+        threshold = dtype(...)
+
+        index = dr.binary_search(
+            0, len(data) - 1,
+            lambda index: dr.gather(dtype, data, index) < threshold
+        )
+
+    Args:
+        start (int): Starting index for the search range
+        end (int): Ending index for the search range
+        pred (function): The predicate function to be evaluated
+
+    Returns:
+        Index array resulting from the binary search
+    '''
+    assert isinstance(start, int) and isinstance(end, int)
+
+    iterations = log2i(end - start) + 1 if start < end else 0
+
+    for _ in range(iterations):
+        middle = (start + end) >> 1
+
+        cond = pred(middle)
+        start = select(cond, minimum(middle + 1, end), start)
+        end = select(cond, end, middle)
+
+    return start
+
+
 def assert_true(
     cond,
     fmt: Optional[str] = None,
