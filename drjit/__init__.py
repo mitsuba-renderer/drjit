@@ -19,12 +19,12 @@ with detail.scoped_rtld_deepbind():
 import sys
 if sys.version_info < (3, 11):
     try:
-        from typing_extensions import overload, Optional, Tuple, Literal
+        from typing_extensions import overload, Optional, Tuple, Literal, Union
     except ImportError:
         raise RuntimeError(
             "Dr.Jit requires the 'typing_extensions' package on Python <3.11")
 else:
-    from typing import overload, Optional, Tuple, Literal
+    from typing import overload, Optional, Tuple, Literal, Union
 del sys
 
 from .ast import syntax, hint
@@ -1195,7 +1195,7 @@ def reverse(value, axis: int = 0):
         return result
 
 
-def mean(value: object, axis: int | Tuple[int, ...] | None = 0,
+def mean(value: object, axis: Union[int, Tuple[int, ...], None] = 0,
          mode: Literal['symbolic', 'evaluated', None] = None) -> object:
     """
     Compute the mean of the input array or tensor along one or multiple axes.
