@@ -788,8 +788,20 @@ bool ad_call(JitBackend backend, const char *domain, int symbolic,
                       "'domain' parameter *or* 'callable_count', but not both",
                       domain_or_empty, separator, name);
 
-        if (symbolic == -1)
-            symbolic = jit_flag(JitFlag::SymbolicCalls) ? 1 : 0;
+        if (symbolic == -1) {
+            if (jit_flag(JitFlag::SymbolicScope)) {
+                // We're inside some other symbolic operation, cannot use evaluated mode
+                if (!jit_flag(JitFlag::SymbolicCalls))
+                    jit_log(LogLevel::Warn,
+                            "ad_call(\"%s\"): currently inside some other symbolic "
+                            "operation, forcefully running the vectorizd call "
+                            "in symbolic " "mode even though the feature flag "
+                            "was disabled.", name);
+                symbolic = 1;
+            } else {
+                symbolic = jit_flag(JitFlag::SymbolicCalls);
+            }
+        }
 
         if (symbolic != 0 && symbolic != 1)
             jit_raise("ad_call(): 'symbolic' must be -1, 0, or 1!");
