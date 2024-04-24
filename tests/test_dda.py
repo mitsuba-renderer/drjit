@@ -370,13 +370,13 @@ def check_grad(t, rng, vol, diff, grad_val, n_samples=4, grid_min=None, grid_max
             val_dda.grad = grad_val
             grad_dda = dr.backward_to(vol)
 
-    print("----")
-    print("Result: (ref/dda)")
-    print(val_ref)
-    print(val_dda)
-    print("Grad: (ref/dda)")
-    print(grad_ref)
-    print(grad_dda)
+    # print("----")
+    # print("Result: (ref/dda)")
+    # print(val_ref)
+    # print(val_dda)
+    # print("Grad: (ref/dda)")
+    # print(grad_ref)
+    # print(grad_dda)
 
     assert dr.allclose(grad_ref, grad_dda, rtol=rtol)
 
