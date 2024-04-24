@@ -989,17 +989,17 @@ DRJIT_NOINLINE Index ad_var_new_impl(const char *label, JitVar &&result,
 
     if constexpr (N == 0) {
         if (label)
-            ad_log("ad_var_new(): %s a%u = %s()", tname, ad_index, label);
+            ad_log("ad_var_new(): %s a%u[%zu] = %s()", tname, ad_index, info.size, label);
         else
-            ad_log("ad_var_new(): %s a%u = new()", tname, ad_index);
+            ad_log("ad_var_new(): %s a%u[%zu] = new()", tname, ad_index, info.size);
     } else if constexpr (N == 1) {
-        ad_log("ad_var_new(): %s a%u = %s(a%u)", tname, ad_index, label,
-               args[0].ad_index);
+        ad_log("ad_var_new(): %s a%u[%zu] = %s(a%u)", tname, ad_index, info.size,
+               label, args[0].ad_index);
     } else if constexpr (N == 2) {
-        ad_log("ad_var_new(): %s a%u = %s(a%u, a%u)", tname, ad_index,
+        ad_log("ad_var_new(): %s a%u[%zu] = %s(a%u, a%u)", tname, ad_index, info.size,
                label, args[0].ad_index, args[1].ad_index);
     } else if constexpr (N == 3) {
-        ad_log("ad_var_new(): %s a%u = %s(a%u, a%u, a%u)", tname, ad_index,
+        ad_log("ad_var_new(): %s a%u[%zu] = %s(a%u, a%u, a%u)", tname, ad_index, info.size,
                label, args[0].ad_index, args[1].ad_index, args[2].ad_index);
     }
 
@@ -2877,6 +2877,10 @@ uint64_t ad_var_gather(Index source, JitIndex offset, JitIndex mask, ReduceMode 
 
 // ==========================================================================
 
+static const char *mode_name[] = { "auto",        "direct", "local",
+                                   "no_conflict", "expand", "permute" };
+static const char *red_name[] = { "identity", "add", "mul", "min", "max", "and", "or" };
+
 /// Perform a differentiable scatter operation. See jit_var_scatter for signature.
 Index ad_var_scatter(Index target, Index value, JitIndex offset, JitIndex mask,
                      ReduceOp op, ReduceMode mode) {
@@ -2911,7 +2915,7 @@ Index ad_var_scatter(Index target, Index value, JitIndex offset, JitIndex mask,
         else
             name = "scatter_reduce";
 
-        return ad_var_memop_remap(
+        Index r = ad_var_memop_remap(
             ad_var_new(
                 name, std::move(result),
                 SpecialArg(value, new Scatter(
@@ -2923,6 +2927,14 @@ Index ad_var_scatter(Index target, Index value, JitIndex offset, JitIndex mask,
                                        JitMask::borrow(mask), target_copy,
                                        result, op, result.size()))),
             false);
+
+        ad_log("ad_var_scatter(): (a%u, r%u) = scatter(op=%s, target=(a%u, r%u), value=(a%u, r%u), offset=r%u, mask=r%u, mode=%s)",
+               ad_index(r), jit_index(r),
+               red_name[(int) op],
+               ad_index(target), jit_index(target),
+               ad_index(value), jit_index(value),
+               offset, mask, mode_name[(int) mode]);
+        return r;
     }
 }
 

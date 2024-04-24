@@ -581,3 +581,61 @@ def test24_block_reduce_intense(t, op):
             mode='symbolic'
         )
         assert dr.all(sum_1 == sum_2)
+
+
+@pytest.mark.parametrize('variant', [0, 1])
+@pytest.test_arrays('diff, float32, shape=(*)')
+def test25_elide_scatter(t, variant):
+    # Test that scatters are not performed when their result is not used
+    UInt = dr.uint32_array_t(t)
+    with dr.scoped_set_flag(dr.JitFlag.KernelHistory):
+        v = dr.arange(t, 1000)
+        dr.enable_grad(v)
+
+        out = dr.zeros(t, 1000)
+        dr.scatter(out, index=dr.arange(UInt, 1000), value=v)
+
+        dr.backward_from(out)
+        if variant == 0:
+            del out
+        assert dr.all(v.grad == 1)
+        dr.eval()
+
+    hist = dr.kernel_history((dr.KernelType.JIT,))
+    if variant == 0:
+        assert len(hist) == 0
+    else:
+        ir = hist[0]['ir'].getvalue()
+        if dr.backend_v(t) is dr.JitBackend.CUDA:
+            assert ir.count('st.global.b32') == 1
+        else:
+            assert ir.count('call void @llvm.masked.scatter') == 1
+
+
+@pytest.mark.parametrize('variant', [0, 1])
+@pytest.test_arrays('diff, float32, shape=(*)')
+def test25_elide_scatter_in_call(t, variant):
+    # Test that scatters are not performed when their result is not used
+    UInt = dr.uint32_array_t(t)
+    with dr.scoped_set_flag(dr.JitFlag.KernelHistory):
+        v = dr.arange(t, 1000)
+        i = dr.arange(UInt, 1000)
+        k = dr.opaque(UInt, 0, 1000)
+        dr.enable_grad(v)
+        out = dr.zeros(t, 1000)
+
+        def f(i,v):
+            dr.scatter(out, index=i, value=v)
+
+        dr.switch(k, (f,), i, v)
+        if variant == 0:
+            del out
+        dr.eval()
+
+    hist = dr.kernel_history((dr.KernelType.JIT,))
+    assert len(hist) == 1
+    ir = hist[0]['ir'].getvalue()
+    if dr.backend_v(t) is dr.JitBackend.CUDA:
+        assert ir.count('st.global.b32') == variant
+    else:
+        assert ir.count('call void @llvm.masked.scatter') == variant

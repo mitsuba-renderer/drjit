@@ -1825,7 +1825,6 @@ def test118_scatter_reduce_minmax_bwd(t, op):
         assert dr.all(valg == [0, 1, 10, 0, 0, 0])
     else:
         assert dr.all(valg == [1, 0, 0, 10, 0, 0])
-    print(xg)
     assert dr.all(xg == [0, 0, 100])
 
 
