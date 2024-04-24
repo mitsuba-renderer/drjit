@@ -1962,7 +1962,6 @@ struct ScatterTarget : Special {
     }
 
     JitMask create_mask() {
-        jit_set_backend(mask.index());
         switch (op) {
             case ReduceOp::Identity:
                 return !mask;
