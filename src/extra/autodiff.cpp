@@ -1947,30 +1947,25 @@ struct Scatter : Special {
 
 /// Edge representing the target modified by a scatter operation
 struct ScatterTarget : Special {
-    ScatterTarget(const GenericArray<uint32_t> &offset, const JitMask &mask,
-            const JitVar &value_before, const JitVar &value_after, ReduceOp op)
-        : offset(offset), mask(mask), op(op) {
-        backend = jit_set_backend(mask.index()).backend;
-        uint32_t mask_idx = jit_var_mask_peek(backend);
-        if (!mask_idx)
-            mask_idx = jit_var_mask_default(backend, (uint32_t) dr::width(offset, mask));
-        mask_stack = JitMask::steal(mask_idx);
+    ScatterTarget(const GenericArray<uint32_t> &offset, const JitMask &mask_,
+                  const JitVar &value_before_, const JitVar &value_after_,
+                  ReduceOp op, size_t size)
+        : offset(offset), op(op) {
 
         if (op == ReduceOp::Min || op == ReduceOp::Max) {
-            this->value_before = value_before;
-            this->value_after = value_after;
+            value_before = value_before_;
+            value_after = value_after_;
+        } else if (op == ReduceOp::Identity) {
+            mask = dr::zeros<JitMask>(size);
+            dr::scatter(mask, JitMask(true), offset, mask_);
         }
     }
 
-    JitMask create_mask(size_t size) {
+    JitMask create_mask() {
         jit_set_backend(mask.index());
         switch (op) {
-            case ReduceOp::Identity: {
-                    MaskGuard guard(backend, mask_stack);
-                    JitMask new_mask = dr::zeros<JitMask>(size);
-                    dr::scatter(new_mask, JitMask(true), offset, mask);
-                    return !new_mask;
-                }
+            case ReduceOp::Identity:
+                return !mask;
 
             case ReduceOp::Add:
                 return JitMask(true);
@@ -1985,19 +1980,17 @@ struct ScatterTarget : Special {
     }
 
     void backward(Variable *source, const Variable *target) override {
-        source->accum(target->grad & create_mask(target->size), target->size);
+        source->accum(target->grad & create_mask(), target->size);
     }
 
     void forward(const Variable *source, Variable *target) override {
-        target->accum(source->grad & create_mask(source->size), source->size);
+        target->accum(source->grad & create_mask(), source->size);
     }
 
     GenericArray<uint32_t> offset;
     JitMask mask;
     JitVar value_before, value_after;
     ReduceOp op;
-    JitBackend backend;
-    JitMask mask_stack;
 };
 
 
@@ -2922,19 +2915,15 @@ Index ad_var_scatter(Index target, Index value, JitIndex offset, JitIndex mask,
         return ad_var_memop_remap(
             ad_var_new(
                 name, std::move(result),
-                SpecialArg(
-                    value,
-                    new Scatter(GenericArray<uint32_t>::borrow(offset),
-                                JitMask::borrow(mask), JitVar::borrow(value),
-                                result, op, mode)),
-                SpecialArg(
-                    target,
-                    new ScatterTarget(GenericArray<uint32_t>::borrow(offset),
-                                JitMask::borrow(mask), target_copy,
-                                result, op))
-            ),
-            false
-        );
+                SpecialArg(value, new Scatter(
+                                      GenericArray<uint32_t>::borrow(offset),
+                                      JitMask::borrow(mask),
+                                      JitVar::borrow(value), result, op, mode)),
+                SpecialArg(target, new ScatterTarget(
+                                       GenericArray<uint32_t>::borrow(offset),
+                                       JitMask::borrow(mask), target_copy,
+                                       result, op, result.size()))),
+            false);
     }
 }
 
