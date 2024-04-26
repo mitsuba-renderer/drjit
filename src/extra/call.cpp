@@ -266,6 +266,7 @@ static void ad_call_symbolic(JitBackend backend, const char *domain,
         combined = std::string(domain) + "::" + combined;
 
     jit_new_scope(backend);
+    bool symbolic = jit_flag(JitFlag::SymbolicScope);
 
     vector<uint32_t> checkpoints(callable_count + 1, 0),
                      inst_id(callable_count, 0);
@@ -340,7 +341,7 @@ static void ad_call_symbolic(JitBackend backend, const char *domain,
         jit_new_scope(backend);
 
         jit_var_call(
-            combined.c_str(), index, mask.index(), (uint32_t) callable_count_final,
+            combined.c_str(), symbolic, index, mask.index(), (uint32_t) callable_count_final,
             inst_id.data(), (uint32_t) args3.size(), args3.data(),
             (uint32_t) rv3.size(), rv3.data(), checkpoints.data(), rv4.data());
 
