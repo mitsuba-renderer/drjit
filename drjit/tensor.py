@@ -106,7 +106,8 @@ def upsample(t, shape=None, scale_factor=None):
         coords.reverse()
 
         # Evaluate the texture at all voxel coordinates with interpolation
-        values = t.eval(coords)
+        #values = t.eval(coords)
+        values = t.eval_cubic(coords)  # <---------- Cubic interpolation
 
         # Concatenate output values to a flatten buffer
         channels = len(values)
