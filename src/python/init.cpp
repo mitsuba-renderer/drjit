@@ -598,8 +598,11 @@ static int ndarray_free_cb_3(void *p) {
     return 0;
 }
 
+int drjit_py_is_alive = 1;
+
 static void ndarray_free_cb_2(void *p) {
-    Py_AddPendingCall(ndarray_free_cb_3, p);
+    if (nb::is_alive() && drjit_py_is_alive)
+        Py_AddPendingCall(ndarray_free_cb_3, p);
 }
 
 static void ndarray_free_cb(uint32_t, int free, void *p) {
@@ -612,7 +615,7 @@ static void ndarray_free_cb(uint32_t, int free, void *p) {
     void *p2 = (void *) (msg & ~mask);
 
     // Don't run the next step if Dr.Jit has already shut down
-    if (nb::is_alive() && jit_has_backend(backend))
+    if (nb::is_alive() && jit_has_backend(backend) && drjit_py_is_alive)
         jit_enqueue_host_func(backend, ndarray_free_cb_2, p2);
 }
 
