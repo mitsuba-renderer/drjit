@@ -639,3 +639,11 @@ def test25_elide_scatter_in_call(t, variant):
         assert ir.count('st.global.b32') == variant
     else:
         assert ir.count('call void @llvm.masked.scatter') == variant
+
+@pytest.test_arrays('-bool, -diff, shape=(*)')
+def test27_scalar_reductions(t):
+    x = dr.full(t, 3, 4)
+    assert dr.sum(x) == 12
+    assert dr.prod(x) == 81
+    assert dr.all(dr.block_reduce(dr.ReduceOp.Add, x, 2) == [6, 6])
+    assert dr.all(dr.block_reduce(dr.ReduceOp.Mul, x, 2) == [9, 9])
