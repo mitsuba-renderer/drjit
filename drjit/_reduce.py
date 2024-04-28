@@ -1,5 +1,5 @@
 import drjit as dr
-from typing import Dict, TypeVar, Tuple, Literal, List, Protocol, Union, cast
+from typing import Dict, TypeVar, Tuple, Literal, Protocol, cast
 
 ArrayT = TypeVar("ArrayT", bound=dr.ArrayBase)
 

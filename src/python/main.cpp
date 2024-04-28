@@ -95,6 +95,7 @@ NB_MODULE(_drjit_ext, m_) {
         .value("SymbolicCalls", JitFlag::SymbolicCalls, doc_JitFlag_SymbolicCalls)
         .value("OptimizeCalls", JitFlag::OptimizeCalls, doc_JitFlag_OptimizeCalls)
         .value("MergeFunctions", JitFlag::MergeFunctions, doc_JitFlag_MergeFunctions)
+        .value("PacketOps", JitFlag::PacketOps, doc_JitFlag_PacketOps)
         .value("ForceOptiX", JitFlag::ForceOptiX, doc_JitFlag_ForceOptiX)
         .value("PrintIR", JitFlag::PrintIR, doc_JitFlag_PrintIR)
         .value("KernelHistory", JitFlag::KernelHistory, doc_JitFlag_KernelHistory)

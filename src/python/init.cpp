@@ -80,7 +80,7 @@ int tp_init_array(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
                     // Potentially do a cast
                     m_temp = s_arg;
                     m_temp.type = s.type;
-                    if (m_temp == m_self && s.cast) {
+                    if (m_temp == m_self && s.cast && s.cast != DRJIT_OP_NOT_IMPLEMENTED) {
                         s.cast(inst_ptr(arg), (VarType) s_arg.type, false, inst_ptr(self));
                         nb::inst_mark_ready(self);
                         return 0;

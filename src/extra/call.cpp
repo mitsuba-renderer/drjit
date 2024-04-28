@@ -828,8 +828,8 @@ bool ad_call(JitBackend backend, const char *domain, int symbolic,
             if (size == 1)
                 size = size_2;
             else if (size != size_2 && size_2 != 1)
-                jit_raise("ad_call(\"%s%s%s\"): mismatched argument sizes "
-                          "(%zu and %zu)",
+                jit_raise("ad_call(\"%s%s%s\"): some of the call arguments have incompatible sizes "
+                          "(encountered arrays of length %zu and %zu)",
                           domain_or_empty, separator, name, size, size_2);
 
             needs_ad |= (arg_i >> 32) != 0;

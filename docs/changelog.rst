@@ -136,7 +136,7 @@ Here is what's new:
   Aliases for the ``_nested`` function variants still exist to facilitate
   porting but are deprecated and will be removed in a future release.
 
-- The performance of atomic scatter-reductions
+- **Scatter-reductions**: the performance of atomic scatter-reductions
   (:py:func:`drjit.scatter_reduce`, :py:func:`drjit.scatter_add`) has been
   *significantly* improved. Both functions now provide a ``mode=`` parameter to
   select between different implementation strategies. The new strategy
@@ -146,6 +146,25 @@ Here is what's new:
   brings a roughly 20-40% speedup on the CUDA backend. See the documentation
   section on :ref:`atomic reductions <reduce-local>` for details and
   benchmarks with plots.
+
+* **Packet memory operations**: programs sometimes need to gather or scatter
+  several memory locations that are contiguous in memory. In principle, it
+  should be possible to perform such reads or writes more efficiently than via
+  general gathers/gathers.
+
+  Dr.Jit now features improved code generation to realize this optimization
+  for calls to :py:func:`dr.gather() <gather>` and :py:func:`dr.scatter()
+  <scatter>` that access a power-of-two-sized chunk of contiguous array
+  elements. On the CUDA backend, this operation leverages native package memory
+  instruction, which can produce small speedups on the order of ~5-30%. On the
+  LLVM backend, packet loads/stores now compile to aligned packet loads/stores
+  with a transpose operation that brings data into the right shape. Speedups
+  here are dramatic (up to >20× for scatters, 1.5 to 2× for gathers). See the
+  :py:attr:`drjit.JitFlag.PacketOps` flag for details. On the LLVM backend,
+  packet scatter-addition furthermore compose with the
+  :py:attr:`drjit.ReduceMode.Expand` optimization explained in the last point,
+  which combines the benefits of both steps. This is particularly useful when
+  computing the reverse-mode derivative of packet reads.
 
 - **DDA**: a newly added *digital differential analyzer*
   (:py:func:`drjit.dda.dda`) can be used to traverse the intersection of a ray
@@ -214,6 +233,7 @@ Here is what's new:
   are not always valid. For example, equality in this example breaks when ``a``
   is infinite or equal to NaN. The flag is on by default since it can
   considerably improve performance especially when targeting GPUs.
+
 
 ⚠️ Compatibility ⚠️
 ------------------

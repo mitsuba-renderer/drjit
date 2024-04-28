@@ -74,7 +74,7 @@ static void disable_grad(nb::handle h) { set_grad_enabled(h, false); }
 static void enable_grad_2(nb::args args) { enable_grad(args); }
 static void disable_grad_2(nb::args args) { disable_grad(args); }
 
-static bool grad_enabled(nb::handle h) {
+bool grad_enabled(nb::handle h) {
     struct GradEnabled : TraverseCallback {
         bool result = false;
 

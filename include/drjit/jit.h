@@ -456,12 +456,49 @@ struct DRJIT_TRIVIAL_ABI JitArray
         return steal(jit_var_gather(src.index(), index.index(), mask.index()));
     }
 
+    template <size_t N, typename Index, typename Mask>
+    static Array<JitArray, N> gather_packet_(const JitArray &src, const Index &index,
+                                             const Mask &mask, ReduceMode /* mode */) {
+        if constexpr (N & (N-1)) {
+            return Base::gather_packet_(src, index, mask);
+        } else {
+            static_assert(
+                std::is_same_v<detached_t<Mask>, detached_t<mask_t<JitArray>>>);
+            uint32_t tmp[N];
+            jit_var_gather_packet(src.index(), index.index(), mask.index(), tmp);
+
+            Array<JitArray, N> result;
+            for (size_t i = 0; i < N; ++i)
+                result[i] = steal(tmp[i]);
+            return result;
+        }
+    }
+
     template <typename Index, typename Mask>
     void scatter_(JitArray &dst, const Index &index, const Mask &mask, ReduceMode mode) const {
         static_assert(
             std::is_same_v<detached_t<Mask>, detached_t<mask_t<JitArray>>>);
         dst = steal(jit_var_scatter(dst.index(), m_index, index.index(),
                                     mask.index(), ReduceOp::Identity, mode));
+    }
+
+    template <size_t N, typename Source, typename Index, typename Mask>
+    static void scatter_packet_(JitArray &dst, const Source &source,
+                                const Index &index, const Mask &mask,
+                                ReduceMode mode) {
+        static_assert(
+            std::is_same_v<detached_t<Mask>, detached_t<mask_t<JitArray>>>);
+        if constexpr (N & (N-1)) {
+            Base::template scatter_packet_<N>(dst, source, index, mask, mode);
+        } else {
+            uint32_t indices[N];
+            for (uint32_t i = 0; i < N; ++i)
+                indices[i] = source[i].index();
+
+            dst = steal(jit_var_scatter_packet(N, dst.index(), indices,
+                                               index.index(), mask.index(),
+                                               ReduceOp::Identity, mode));
+        }
     }
 
     template <typename Index, typename Mask>
@@ -471,6 +508,25 @@ struct DRJIT_TRIVIAL_ABI JitArray
             std::is_same_v<detached_t<Mask>, detached_t<mask_t<JitArray>>>);
         dst = steal(jit_var_scatter(dst.index(), m_index, index.index(),
                                     mask.index(), op, mode));
+    }
+
+    template <size_t N, typename Source, typename Index, typename Mask>
+    static void scatter_reduce_packet_(JitArray &dst, const Source &source,
+                                       const Index &index, const Mask &mask,
+                                       ReduceOp op, ReduceMode mode) {
+        static_assert(
+            std::is_same_v<detached_t<Mask>, detached_t<mask_t<JitArray>>>);
+        if constexpr (N & (N-1)) {
+            Base::template scatter_reduce_packet_<N>(dst, source, index, mask, op, mode);
+        } else {
+            uint32_t indices[N];
+            for (uint32_t i = 0; i < N; ++i)
+                indices[i] = source[i].index();
+
+            dst = steal(jit_var_scatter_packet(N, dst.index(), indices,
+                                               index.index(), mask.index(),
+                                               op, mode));
+        }
     }
 
     template <typename Index, typename Mask>

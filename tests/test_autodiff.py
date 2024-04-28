@@ -1885,3 +1885,111 @@ def test123_block_mul_bwd(t):
     y.grad = [1, 10, 100]
     dr.backward_to(x)
     assert dr.all(x.grad == [2, 1, 40, 30, 600, 500])
+
+
+@pytest.mark.parametrize("enabled", [True, False])
+@pytest.test_arrays('is_diff,float,shape=(4, *),-quat')
+def test124_packet_gather_fwd(t, enabled):
+    with dr.scoped_set_flag(dr.JitFlag.PacketOps, enabled):
+        vt = dr.value_t(t)
+        x = vt(1, 2, 3, 4, 5, 6, 7, 8)
+        dr.enable_grad(x)
+        x.grad = [10, 20, 30, 40, 50, 60, 70, 80]
+        y = dr.gather(t, x, dr.uint32_array_t(vt)(1, 0))
+        dr.forward_to(y)
+        assert dr.all(y.grad == t([50, 10], [60, 20], [70, 30], [80, 40]), axis=None)
+
+
+@pytest.mark.parametrize("enabled", [True, False])
+@pytest.test_arrays('is_diff,float,shape=(4, *),-quat')
+def test125_packet_gather_bwd(t, enabled):
+    if not enabled and dr.backend_v(t) == dr.JitBackend.LLVM and dr.type_v(t) == dr.VarType.Float16:
+        return
+    with dr.scoped_set_flag(dr.JitFlag.PacketOps, enabled):
+        vt = dr.value_t(t)
+        x = vt(1, 2, 3, 4, 5, 6, 7, 8)
+        dr.enable_grad(x)
+        y = dr.gather(t, x, dr.uint32_array_t(vt)(1, 0))
+        y.grad = t([50, 10], [60, 20], [70, 30], [80, 40])
+        dr.backward_to(x)
+        assert dr.all(x.grad == [10, 20, 30, 40, 50, 60, 70, 80])
+
+
+@pytest.mark.parametrize("enabled", [True, False])
+@pytest.test_arrays('is_diff,float,shape=(4, *),-quat')
+def test126_packet_scatter_fwd(t, enabled):
+    with dr.scoped_set_flag(dr.JitFlag.PacketOps, enabled):
+        Float = dr.value_t(t)
+        UInt32 = dr.uint32_array_t(Float)
+        x = dr.zeros(Float, 8)
+        dr.enable_grad(x)
+        x2 = Float(x)
+
+        y = t(1,2,3,4)
+        dr.enable_grad(y)
+        x.grad =  dr.arange(Float, 8)
+        y.grad = t(10, 20, 30, 40)
+        dr.scatter(x2, y, index=UInt32(1))
+        x2g = dr.forward_to(x2)
+        assert dr.all(x2g == [0,1,2,3,10,20,30,40])
+
+
+@pytest.mark.parametrize("enabled", [True, False])
+@pytest.test_arrays('is_diff,float,shape=(4, *),-quat')
+def test127_packet_scatter_bwd(t, enabled):
+    with dr.scoped_set_flag(dr.JitFlag.PacketOps, enabled):
+        Float = dr.value_t(t)
+        UInt32 = dr.uint32_array_t(Float)
+        x = dr.zeros(Float, 8)
+        dr.enable_grad(x)
+        x2 = Float(x)
+
+        y = t(1,2,3,4)
+        dr.enable_grad(y)
+        dr.scatter(x2, y, index=UInt32(1))
+        x2.grad = dr.arange(Float, 8)
+        dr.backward_to(x, y)
+        assert dr.all(x.grad == [0,1,2,3,0,0,0,0])
+        assert dr.all(dr.all(y.grad == [4,5,6,7]))
+
+
+@pytest.mark.parametrize("enabled", [True, False])
+@pytest.test_arrays('is_diff,float,shape=(4, *),-quat')
+def test128_packet_scatter_add_fwd(t, enabled):
+    if not enabled and dr.backend_v(t) == dr.JitBackend.LLVM and dr.type_v(t) == dr.VarType.Float16:
+        return
+    with dr.scoped_set_flag(dr.JitFlag.PacketOps, enabled):
+        Float = dr.value_t(t)
+        UInt32 = dr.uint32_array_t(Float)
+        x = dr.zeros(Float, 8)
+        dr.enable_grad(x)
+        x2 = Float(x)
+
+        y = t(1,2,3,4)
+        dr.enable_grad(y)
+        dr.scatter_add(x2, y, index=UInt32(1))
+        x2.grad = dr.arange(Float, 8)
+        dr.backward_to(x, y)
+        assert dr.all(x.grad == [0,1,2,3,4,5,6,7])
+        assert dr.all(dr.all(y.grad == [4,5,6,7]))
+
+
+@pytest.mark.parametrize("enabled", [True, False])
+@pytest.test_arrays('is_diff,float,shape=(4, *),-quat')
+def test129_packet_scatter_add_bwd(t, enabled):
+    if not enabled and dr.backend_v(t) == dr.JitBackend.LLVM and dr.type_v(t) == dr.VarType.Float16:
+        return
+    with dr.scoped_set_flag(dr.JitFlag.PacketOps, enabled):
+        Float = dr.value_t(t)
+        UInt32 = dr.uint32_array_t(Float)
+        x = dr.zeros(Float, 8)
+        dr.enable_grad(x)
+        x2 = Float(x)
+
+        y = t(1,2,3,4)
+        dr.enable_grad(y)
+        dr.scatter_add(x2, y, index=UInt32(1))
+        x2.grad = dr.arange(Float, 8)
+        dr.backward_to(x, y)
+        assert dr.all(x.grad == [0,1,2,3,4,5,6,7])
+        assert dr.all(dr.all(y.grad == [4,5,6,7]))

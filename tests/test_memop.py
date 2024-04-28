@@ -1,5 +1,6 @@
 import drjit as dr
 import pytest
+import sys
 
 @pytest.test_arrays('-bool,shape=(*)')
 def test01_gather_simple(t):
@@ -385,7 +386,6 @@ def test17_slice(t):
     # Dimensionality reduction
 
     if dr.is_jit_v(t):
-        import sys
         mod = sys.modules[t.__module__]
         v = mod.Array3i([[1,2], [3, 4], [5]])
         v2 = dr.slice(v, 1)
@@ -405,7 +405,6 @@ def versiontuple(v):
      dr.ReduceOp.And, dr.ReduceOp.Or])
 @pytest.test_arrays('-bool,jit,-diff,shape=(*)')
 def test18_scatter_reduce(t, op):
-    import sys
     mod = sys.modules[t.__module__]
     size = 100000
 
@@ -493,7 +492,6 @@ def test19_reshape_tensor(t):
 
 @pytest.test_arrays('jit,float32,shape=(2, *)')
 def test20_reshape_nested(t):
-    import sys
     mod = sys.modules[t.__module__]
     t2 = mod.Array3f
 
@@ -560,7 +558,6 @@ def test23_block_sum(t):
 @pytest.test_arrays('shape=(*), uint32, jit')
 def test24_block_reduce_intense(t, op):
     size = 4096*1024
-    import sys
     mod = sys.modules[t.__module__]
     rng = mod.PCG32(size)
 
@@ -642,9 +639,137 @@ def test25_elide_scatter_in_call(t, variant):
         assert ir.count('call void @llvm.masked.scatter') == variant
 
 @pytest.test_arrays('-bool, -diff, shape=(*)')
-def test27_scalar_reductions(t):
+def test2t_scalar_reductions(t):
     x = dr.full(t, 3, 4)
     assert dr.sum(x) == 12
     assert dr.prod(x) == 81
     assert dr.all(dr.block_reduce(dr.ReduceOp.Add, x, 2) == [6, 6])
     assert dr.all(dr.block_reduce(dr.ReduceOp.Mul, x, 2) == [9, 9])
+
+@pytest.mark.parametrize('psize', [2, 4, 8, 16])
+@pytest.test_arrays('-diff, jit, shape=(*, *)')
+def test27_packet_gather(t, psize):
+    mod = sys.modules[t.__module__]
+
+    size = 1024
+    pcg = mod.PCG32(size*psize)
+    tp = dr.type_v(t)
+    vt = dr.value_t(t)
+
+    if tp == dr.VarType.Bool:
+        buf = pcg.next_uint32() & 1 == 0
+    elif tp in (dr.VarType.Float16, dr.VarType.Float32, dr.VarType.Float64):
+        buf = vt(pcg.next_float32())
+    elif tp in (dr.VarType.Int32, dr.VarType.UInt32):
+        buf = vt(pcg.next_uint32())
+    elif tp in (dr.VarType.Int64, dr.VarType.UInt64):
+        buf = vt(pcg.next_uint64())
+    else:
+        raise Exception("Unknown type")
+
+    dr.eval(buf)
+    i = mod.PCG32(1024*1024).next_uint32_bounded(size)
+
+    with dr.scoped_set_flag(dr.JitFlag.PacketOps, False):
+        y1 = dr.gather(t, source=buf, index=i, active = i & 128 != 0, shape=(psize, size))
+        dr.eval(y1)
+
+    with dr.scoped_set_flag(dr.JitFlag.PacketOps, True):
+        y2 = dr.gather(t, source=buf, index=i, active = i & 128 != 0, shape=(psize, size))
+        dr.eval(y2)
+
+    assert dr.all(y1 == y2, axis=None)
+
+
+@pytest.mark.parametrize('psize', [2, 4, 8, 16])
+@pytest.test_arrays('-diff, jit, shape=(*, *)')
+def test28_packet_scatter(t, psize):
+    np = pytest.importorskip("numpy")
+    mod = sys.modules[t.__module__]
+
+    tp = dr.type_v(t)
+    vt = dr.value_t(t)
+    UInt32 = dr.uint32_array_t(vt)
+
+    value = []
+    size = 1024
+    pcg = mod.PCG32(size)
+    for _ in range(psize):
+        if tp == dr.VarType.Bool:
+            v = pcg.next_uint32() & 1 == 0
+        elif tp in (dr.VarType.Float16, dr.VarType.Float32, dr.VarType.Float64):
+            v = vt(pcg.next_float32())
+        elif tp in (dr.VarType.Int32, dr.VarType.UInt32):
+            v = vt(pcg.next_uint32())
+        elif tp in (dr.VarType.Int64, dr.VarType.UInt64):
+            v = vt(pcg.next_uint64())
+        else:
+            raise Exception("Unknown type")
+        value.append(v)
+
+    value_arr = t(value)
+    perm = UInt32(np.random.permutation(1024))
+    target_1 = dr.empty(vt, size*psize)
+    target_2 = dr.empty(vt, size*psize)
+
+    with dr.scoped_set_flag(dr.JitFlag.PacketOps, False):
+        dr.scatter(target_1, value_arr, perm)
+    dr.eval(target_1)
+
+    with dr.scoped_set_flag(dr.JitFlag.PacketOps, True):
+        dr.scatter(target_2, value_arr, perm)
+    dr.eval(target_2)
+
+    assert dr.all(target_1 == target_2)
+
+@pytest.mark.parametrize('psize', [2, 4, 8, 16])
+@pytest.test_arrays('-diff, jit, int, shape=(*, *)')
+def test29_packet_scatter_add(t, psize):
+    np = pytest.importorskip("numpy")
+    mod = sys.modules[t.__module__]
+
+    tp = dr.type_v(t)
+    vt = dr.value_t(t)
+    UInt32 = dr.uint32_array_t(vt)
+
+    value = []
+    size = 1024
+    pcg = mod.PCG32(size)
+    for _ in range(psize):
+        if tp in (dr.VarType.Int32, dr.VarType.UInt32):
+            v = vt(pcg.next_uint32())
+        elif tp in (dr.VarType.Int64, dr.VarType.UInt64):
+            v = vt(pcg.next_uint64())
+        else:
+            raise Exception("Unknown type")
+        value.append(v)
+
+    value_arr = t(value)
+    perm = UInt32(np.random.permutation(1024))
+    target_1 = dr.zeros(vt, size*psize)
+    target_2 = dr.zeros(vt, size*psize)
+
+    with dr.scoped_set_flag(dr.JitFlag.PacketOps, False):
+        dr.scatter_add(target_1, value_arr, perm)
+    dr.eval(target_1)
+
+    with dr.scoped_set_flag(dr.JitFlag.PacketOps, True):
+        dr.scatter_add(target_2, value_arr, perm)
+    dr.eval(target_2)
+
+    assert dr.all(target_1 == target_2)
+
+
+@pytest.test_arrays('jit, -bool, -quat, -diff, shape=(4, *)')
+def test30_packet_ravel_unravel(t, capsys, drjit_verbose):
+    # Test that packet memory operations are used in ravel/unravel
+
+    q = t([0,1],[0,1],[1,0],[1,0])
+    q2 = dr.ravel(q)
+    dr.eval(q2)
+    q3 = dr.unravel(t, q2)
+    dr.eval(q3)
+    assert dr.all(q == q3, axis=None)
+    transcript = capsys.readouterr().out
+    assert transcript.count('jit_var_gather_packet') != 0
+    assert transcript.count('jit_var_scatter_packet') != 0

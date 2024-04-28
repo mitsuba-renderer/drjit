@@ -162,6 +162,12 @@ extern DRJIT_EXTRA_EXPORT uint64_t ad_var_gather(uint64_t source,
                                                  uint32_t offset, uint32_t mask,
                                                  JIT_ENUM ReduceMode mode);
 
+/// Gather a contiguous n-dimensional vector
+extern DRJIT_EXTRA_EXPORT void ad_var_gather_packet(size_t n, uint64_t source,
+                                                    uint32_t offset, uint32_t mask,
+                                                    uint64_t *out,
+                                                    JIT_ENUM ReduceMode mode);
+
 /// Perform a differentiable scatter operation. See jit_var_scatter for
 /// signature.
 extern DRJIT_EXTRA_EXPORT uint64_t ad_var_scatter(uint64_t target,
@@ -169,6 +175,13 @@ extern DRJIT_EXTRA_EXPORT uint64_t ad_var_scatter(uint64_t target,
                                                   uint32_t index, uint32_t mask,
                                                   JIT_ENUM ReduceOp reduce_op,
                                                   JIT_ENUM ReduceMode reduce_mode);
+
+/// Gather a contiguous n-dimensional vector (n must be a power of two)
+extern DRJIT_EXTRA_EXPORT uint64_t ad_var_scatter_packet(size_t n, uint64_t target,
+                                                         const uint64_t *values,
+                                                         uint32_t index, uint32_t mask,
+                                                         JIT_ENUM ReduceOp reduce_op,
+                                                         JIT_ENUM ReduceMode reduce_mode);
 
 /// Create a view of an existing variable that has a smaller size
 extern DRJIT_EXTRA_EXPORT uint64_t ad_var_shrink(uint64_t index, size_t size);

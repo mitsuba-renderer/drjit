@@ -16,7 +16,8 @@ extern void export_memop(nb::module_ &);
 
 extern nb::object gather(nb::type_object dtype, nb::object source,
                          nb::object index, nb::object active,
-                         ReduceMode mode = ReduceMode::Auto);
+                         ReduceMode mode = ReduceMode::Auto,
+                         nb::handle shape = nb::handle());
 
 extern void scatter(nb::object target, nb::object value, nb::object index,
                     nb::object active, ReduceMode mode = ReduceMode::Auto);

@@ -346,7 +346,7 @@ def test07_uninitialized_array_in(t):
     idx = dr.uint32_array_t(t)(0, 0, 1, 1)
     with pytest.raises(RuntimeError) as e:
         dr.switch(idx, [lambda a: a, lambda a: a*2], t())
-    assert "mismatched argument sizes (4 and 0)" in str(e.value)
+    assert "some of the call arguments have incompatible sizes (encountered arrays of length 4 and 0)" in str(e.value)
 
 
 @pytest.test_arrays('float,shape=(*),jit')

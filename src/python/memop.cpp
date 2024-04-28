@@ -14,17 +14,31 @@
 #include "init.h"
 #include "shape.h"
 #include "apply.h"
+#include "autodiff.h"
 #include <nanobind/stl/optional.h>
 
 nb::object gather(nb::type_object dtype, nb::object source,
-                  nb::object index, nb::object active, ReduceMode mode) {
+                  nb::object index, nb::object active,
+                  ReduceMode mode, nb::handle shape) {
     nb::handle source_tp = source.type();
 
     bool is_drjit_source_1d = is_drjit_type(source_tp);
+    bool has_shape = false;
+
+    if (shape.is_valid() && !shape.is_none()) {
+        if (shape.type().is(&PyTuple_Type))
+            has_shape = true;
+        else
+            nb::raise("drjit.gather(): if provided, 'shape' must be a tuple!");
+    }
 
     if (is_drjit_source_1d) {
         const ArraySupplement &s = supp(source_tp);
         is_drjit_source_1d = s.ndim == 1 && s.shape[0] == DRJIT_DYNAMIC;
+
+        if (s.is_tensor)
+            nb::raise("drjit.gather(): tensors are not supported. Use slice "
+                      "expressions to perform gathers involving tensors.");
     }
 
     // Recurse through pytrees
@@ -64,7 +78,8 @@ nb::object gather(nb::type_object dtype, nb::object source,
     }
 
     if (!is_drjit_type(dtype))
-        throw nb::type_error("drjit.gather(): unsupported dtype!");
+        nb::raise_type_error("drjit.gather(<%s>): unsupported dtype!",
+                             nb::type_name(dtype).c_str());
 
     if (!is_drjit_source_1d)
         throw nb::type_error(
@@ -105,17 +120,23 @@ nb::object gather(nb::type_object dtype, nb::object source,
     }
 
     const ArraySupplement &dtype_supp = supp(dtype);
+    if (has_shape && nb::len(shape) != dtype_supp.ndim)
+        nb::raise("drjit.gather(): the 'shape' parameter has an incorrect "
+                  "dimension (%zu vs %u).", nb::len(shape), (uint32_t) dtype_supp.ndim);
+
     ArrayMeta dtype_meta = dtype_supp;
+
+    if (dtype_supp.is_tensor)
+        nb::raise("drjit.gather(): tensors are not supported. Use slice "
+                  "expressions to perform gathers involving tensors.");
 
     if (dtype_meta == source_meta) {
         nb::object result = nb::inst_alloc(dtype);
 
         source_supp.gather(
             mode,
-            inst_ptr(source),
-            inst_ptr(index),
-            inst_ptr(active),
-            inst_ptr(result)
+            inst_ptr(source), inst_ptr(index),
+            inst_ptr(active), inst_ptr(result)
         );
 
         nb::inst_mark_ready(result);
@@ -129,21 +150,60 @@ nb::object gather(nb::type_object dtype, nb::object source,
     m.is_quaternion = dtype_meta.is_quaternion;
     m.ndim = dtype_meta.ndim;
     memcpy(m.shape, dtype_meta.shape, sizeof(ArrayMeta::shape));
+    nb::object fma = array_module.attr("fma");
+    size_t size = m.shape[0];
 
-    if (m == dtype_meta && m.ndim > 0 && m.shape[m.ndim - 1] == DRJIT_DYNAMIC &&
-        m.shape[0] != DRJIT_DYNAMIC) {
-        nb::object result = dtype();
+    if (m == dtype_meta && m.ndim > 0 && m.shape[m.ndim - 1] == DRJIT_DYNAMIC) {
+        if (size == DRJIT_DYNAMIC) {
+            if (has_shape)
+                size = nb::cast<size_t>(shape[0]);
+            else
+                nb::raise("drjit.gather(): the target type has a dynamic size. "
+                          "You must specify a 'shape' argument!");
+        }
+
+        nb::object result = nb::inst_alloc(dtype);
+        if (m.shape[0] == DRJIT_DYNAMIC) {
+            dtype_supp.init(size, inst_ptr(result));
+            nb::inst_mark_ready(result);
+        } else {
+            nb::inst_zero(result);
+        }
+
         nb::type_object sub_tp = nb::borrow<nb::type_object>(dtype_supp.value);
-        nb::int_ sub_size(m.shape[0]);
 
-        for (size_t i = 0; i < m.shape[0]; ++i)
-            result[i] = gather(sub_tp, source, index * sub_size + nb::int_(i),
-                               active, mode);
+        // Potentially perform a packet gather
+        if ((JitBackend) m.backend != JitBackend::None && m.ndim == 2 &&
+            size != 1 && (size & (size - 1)) == 0) {
+            uint64_t source_index = source_supp.index(inst_ptr(source));
+            uint32_t offset_index = (uint32_t) supp(index.type()).index(inst_ptr(index));
+            uint32_t mask_index = (uint32_t) supp(active.type()).index(inst_ptr(active));
+            uint64_t *out_indices = (uint64_t *) alloca(sizeof(uint64_t) * size);
+            ad_var_gather_packet(size, source_index, offset_index, mask_index,
+                                 out_indices, mode);
+            const ArraySupplement &sub_s = supp(sub_tp);
+            for (size_t i = 0; i < size; ++i) {
+                nb::object elem = inst_alloc(sub_tp);
+                sub_s.init_index(out_indices[i], inst_ptr(elem));
+                nb::inst_mark_ready(elem);
+                ad_var_dec_ref(out_indices[i]);
+                result[i] = elem;
+            }
+        } else {
+            nb::object sub_shape;
+            if (has_shape)
+                sub_shape = shape[nb::slice(nb::int_(1), nb::none(), nb::none())];
+
+            nb::int_ size_o(size);
+            for (size_t i = 0; i < size; ++i)
+                result[i] = gather(sub_tp, source, fma(index, size_o, nb::int_(i)),
+                                   active, mode, sub_shape);
+        }
 
         return result;
     }
 
-    throw nb::type_error("drjit.gather(): unsupported dtype!");
+    nb::raise_type_error("drjit.gather(<%s>): unsupported dtype!", nb::type_name(dtype).c_str());
 }
 
 static void scatter_generic(const char *name, ReduceOp op, nb::object target,
@@ -157,6 +217,10 @@ static void scatter_generic(const char *name, ReduceOp op, nb::object target,
     if (is_drjit_target_1d) {
         const ArraySupplement &s = supp(target_tp);
         is_drjit_target_1d = s.ndim == 1 && s.shape[0] == DRJIT_DYNAMIC;
+
+        if (s.is_tensor)
+            nb::raise("drjit.scatter(): tensors are not supported. Use slice "
+                      "assignments to perform scatters involving tensors.");
     }
 
     // Recurse through pytrees
@@ -251,6 +315,10 @@ static void scatter_generic(const char *name, ReduceOp op, nb::object target,
     const ArraySupplement &value_supp = supp(value_tp);
     ArrayMeta value_meta = value_supp;
 
+    if (value_supp.is_tensor)
+        nb::raise("drjit.scatter(): tensors are not supported. Use slice "
+                  "assignments to perform scatters involving tensors.");
+
     if (value_meta.is_diff != target_meta.is_diff) {
         value = target.type()(value);
         value_meta = target_meta;
@@ -271,12 +339,37 @@ static void scatter_generic(const char *name, ReduceOp op, nb::object target,
     for (int i = 0; i < 4; ++i)
         m.shape[i] = value_meta.shape[i];
 
-    if (m == value_meta && m.ndim > 0 && m.shape[m.ndim - 1] == DRJIT_DYNAMIC &&
-        m.shape[0] != DRJIT_DYNAMIC) {
-        nb::int_ sub_size(m.shape[0]);
-        for (size_t i = 0; i < m.shape[0]; ++i)
-            scatter_generic(name, op, target, value[i],
-                            index * sub_size + nb::int_(i), active, mode);
+    size_t size = m.shape[0];
+    if (size == DRJIT_DYNAMIC)
+        size = value_supp.len(inst_ptr(value));
+
+    if (m == value_meta && m.ndim >= 2 &&
+        m.shape[m.ndim - 1] == DRJIT_DYNAMIC) {
+
+        // Potentially perform a packet scatter
+        if ((JitBackend) m.backend != JitBackend::None && m.ndim == 2 &&
+            size != 1 && (size & (size - 1)) == 0 &&
+            (op == ReduceOp::Identity || op == ReduceOp::Add)) {
+            const ArraySupplement &sub_s = supp(value_supp.value);
+            uint64_t target_index = target_supp.index(inst_ptr(target));
+            uint32_t offset_index = (uint32_t) supp(index.type()).index(inst_ptr(index));
+            uint32_t mask_index = (uint32_t) supp(active.type()).index(inst_ptr(active));
+            uint64_t *values = (uint64_t *) alloca(sizeof(uint64_t) * size);
+
+            for (size_t i = 0; i < size; ++i)
+                values[i] = sub_s.index(inst_ptr(value[i]));
+
+            uint64_t new_index = ad_var_scatter_packet(
+                size, target_index, values, offset_index, mask_index, op, mode);
+
+            target_supp.reset_index(new_index, inst_ptr(target));
+            ad_var_dec_ref(new_index);
+        } else {
+            nb::int_ size_o(size);
+            for (size_t i = 0; i < size; ++i)
+                scatter_generic(name, op, target, value[i],
+                                index * size_o + nb::int_(i), active, mode);
+        }
         return;
     }
 
@@ -545,6 +638,7 @@ nb::object ravel(nb::handle h, char order,
             "drjit.ravel(): order parameter must equal 'A', 'C', or 'F'.");
     }
 
+
     ArrayMeta m { };
     m.backend = (uint16_t) backend;
     m.type = (int16_t) vt;
@@ -563,8 +657,17 @@ nb::object ravel(nb::handle h, char order,
         index_dtype = meta_get_type(m);
     }
 
-    ravel_recursive(result, h, index_dtype, shape.data(), strides.data(), 0, 0,
-                    (int) shape.size() - is_dynamic);
+    if (is_dynamic && (order == 'A' || order == 'F') && shape.size() == 2 &&
+        shape[0] > 1 && ((shape[0]-1) & shape[0])==0) {
+        // Reduce via dr.scatter() to benefit from new packet write feature for power-of-two sized ravels
+        scatter(result, nb::borrow(h),
+                arange(nb::borrow<nb::type_object_t<ArrayBase>>(index_dtype), 0,
+                       shape[1], 1),
+                nb::bool_(true), ReduceMode::Permute);
+    } else {
+        ravel_recursive(result, h, index_dtype, shape.data(), strides.data(), 0, 0,
+                        (int) shape.size() - is_dynamic);
+    }
 
     if (shape_out)
         *shape_out = std::move(shape);
@@ -679,13 +782,24 @@ nb::object unravel(const nb::type_object_t<ArrayBase> &dtype,
     }
 
     nb::handle index_dtype;
-    if (s.shape[s.ndim - 1] == DRJIT_DYNAMIC) {
+    bool is_dynamic = s.shape[s.ndim - 1] == DRJIT_DYNAMIC;
+    if (is_dynamic) {
         m.type = (uint16_t) VarType::UInt32;
         index_dtype = meta_get_type(m);
     }
 
-    return unravel_recursive(dtype, array, index_dtype, shape, strides, 0, 0,
-                             (int) ndim - index_dtype.is_valid());
+    if (is_dynamic && (order == 'A' || order == 'F') && s.ndim == 2 &&
+        s.shape[0] > 1 && ((s.shape[0]-1) & s.shape[0])==0) {
+        // Potentially use dr.gather() to benefit from new packet gather feature for power-of-two sized unravels
+        return gather(
+            dtype, nb::borrow(array),
+            arange(nb::borrow<nb::type_object_t<ArrayBase>>(index_dtype), 0,
+                   shape[1], 1),
+            nb::bool_(true));
+    } else {
+        return unravel_recursive(dtype, array, index_dtype, shape, strides, 0, 0,
+                                 (int) ndim - index_dtype.is_valid());
+    }
 }
 
 nb::object slice(nb::handle h, nb::handle index) {
@@ -979,11 +1093,13 @@ static nb::object repeat_or_tile(nb::handle h, size_t count, bool tile) {
 void export_memop(nb::module_ &m) {
     m.def("gather", &gather, "dtype"_a, "source"_a, "index"_a,
           "active"_a = true, "mode"_a = ReduceMode::Auto,
+          "shape"_a = nb::none(),
           doc_gather,
           nb::sig("def gather(dtype: type[T], source: object, "
-                             "index: Union[AnyArray, Sequence[int], int], "
-                             "active: Union[AnyArray, Sequence[bool], bool] = True, "
-                             "mode: drjit.ReduceMode = drjit.ReduceMode.Auto) -> T"))
+                             "index: AnyArray | Sequence[int] | int, "
+                             "active: AnyArray | Sequence[bool] | bool = True, "
+                             "mode: drjit.ReduceMode = drjit.ReduceMode.Auto, "
+                             "shape: tuple[int, ...] | None = None) -> T"))
      .def("scatter", &scatter, "target"_a, "value"_a, "index"_a,
           "active"_a = true, "mode"_a = ReduceMode::Auto,
           doc_scatter)

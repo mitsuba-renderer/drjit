@@ -8,10 +8,9 @@
  *
  * Forward and reverse-mode traversal build on three main data structures:
  *
- * - ``state.variable``: A hash table to map from variable IDs (uint32_t) to
- *   ``Variable`` instances. It stores the gradient associated with each
- *   variable and links into the ``state.edges`` list to specify the variable's
- *   connectivity.
+ * - ``state.variable``: A list that stores ``Variable`` instances underlying
+ *   variable IDs. It stores the gradient associated with each variable and
+ *   links into the ``state.edges`` list to specify the variable's connectivity.
  *
  * - ``state.edges``: An interlinked array storing edges, which encode the
  *   connectivity between variables. Each edge can be simple or special. A
@@ -66,23 +65,24 @@ using drjit::detail::Buffer;
 static Buffer buffer;
 
 using dr::ADScope;
+using nanobind::ref;
 
 // ==========================================================================
 // Aliases for various indices to clarify their use in the code below
 // ==========================================================================
 
 /// Index of an AD edge within ``state.edges``
-using EdgeIndex     = uint32_t;
+using EdgeIndex = uint32_t;
 
 /// Index of an AD variable within ``state.variables``
-using ADIndex       = uint32_t;
+using ADIndex   = uint32_t;
 
 /// Index of a Jit variable managed by drjit-core
-using JitIndex      = uint32_t;
+using JitIndex  = uint32_t;
 
 /// Combined index that simultaneously stores a Jit index (low part)
 /// and an AD index (high part)
-using Index         = uint64_t;
+using Index     = uint64_t;
 
 /// Return the low (Jit) part of a combined variable index
 inline JitIndex jit_index(Index i) { return (JitIndex) i; }
@@ -1950,7 +1950,7 @@ struct Scatter : Special {
 struct ScatterTarget : Special {
     ScatterTarget(const GenericArray<uint32_t> &offset, const JitMask &mask_,
                   const JitVar &value_before_, const JitVar &value_after_,
-                  ReduceOp op, size_t size)
+                  ReduceOp op, size_t size, bool perm_scatter)
         : offset(offset), op(op) {
 
         if (op == ReduceOp::Min || op == ReduceOp::Max) {
@@ -1958,7 +1958,8 @@ struct ScatterTarget : Special {
             value_after = value_after_;
         } else if (op == ReduceOp::Identity) {
             mask = dr::zeros<JitMask>(size);
-            dr::scatter(mask, JitMask(true), offset, mask_);
+            if (!perm_scatter)
+                dr::scatter(mask, JitMask(true), offset, mask_);
         }
     }
 
@@ -2126,7 +2127,7 @@ struct ShrinkEdge : Special {
         JitBackend backend = (JitBackend) source->backend;
 
         JitVar ctr = JitVar::steal(jit_var_counter(backend, source->size)),
-               bound = JitVar::steal(jit_var_u32(backend, (uint32_t) (target->size))),
+               bound = JitVar::steal(jit_var_u32(backend, (uint32_t) target->size)),
                valid = JitVar::steal(jit_var_lt(ctr.index(), bound.index())),
                expanded = JitVar::steal(
                    jit_var_gather(value.index(), ctr.index(), valid.index()));
@@ -2805,7 +2806,7 @@ void ad_var_map_put(Index source, Index target) {
 }
 
 /// Symbolic operations like `dr.if_stmt` and `dr.while_loop` temporarily
-/// replace variable IDs. This function queris this association, which
+/// replace variable IDs. This function queries this association, which
 /// is needed to resolve the target/source of gatter/scatter operations.
 Index ad_var_map_get(Index index) {
     std::vector<Scope> &scopes = local_state.scopes;
@@ -2878,6 +2879,119 @@ uint64_t ad_var_gather(Index source, JitIndex offset, JitIndex mask, ReduceMode 
 
 // ==========================================================================
 
+// Packet gather is an unusual operation in that it has multiple differentiable
+// outputs that must be tracked at the same time so that we can compile its
+// reverse-mode derivative into a packet scatter. Therefore, it is implemented
+// as a CustomOp rather than the edge-specific Special class.
+class PacketGather : public dr::detail::CustomOpBase {
+public:
+    PacketGather(JitIndex offset, JitIndex mask, ReduceMode mode)
+        : offset(JitVar::borrow(offset)), mask(JitVar::borrow(mask)),
+          mode(mode) { }
+
+    ~PacketGather() {
+        std::lock_guard<std::mutex> guard(state.mutex);
+        for (ADIndex index : m_output_indices)
+            ad_var_dec_ref_int(index, state[index]);
+    }
+
+    void forward() override {
+        std::lock_guard<std::mutex> guard(state.mutex);
+        size_t n = m_output_indices.size();
+
+        const Variable *v = state[m_input_indices[0]];
+        if (!v->grad.valid())
+            return;
+
+        index32_vector out(n, 0);
+
+        jit_var_gather_packet(n, v->grad.index(), offset.index(), mask.index(), out.data());
+        for (size_t i = 0; i < n; ++i) {
+            Variable *v = state[m_output_indices[i]];
+            v->accum(JitVar::steal(out[i]), v->size);
+            out[i] = 0;
+        }
+    }
+
+    void backward() override {
+        std::lock_guard<std::mutex> guard(state.mutex);
+        size_t n = m_output_indices.size();
+
+        index32_vector grad_out;
+        grad_out.reserve(n);
+        for (size_t i = 0; i < n; ++i) {
+            Variable *v = state[m_output_indices[i]];
+            uint32_t index = v->grad.index();
+
+            if (index) {
+                grad_out.push_back_borrow(index);
+            } else {
+                grad_out.push_back_steal(
+                    scalar(m_backend, (VarType) v->type, 0.0).release());
+            }
+        }
+
+        Variable *source = state[m_input_indices[0]];
+        JitVar &source_grad = source->grad;
+        if (!source_grad.valid())
+            source_grad = scalar(m_backend, (VarType) source->type, 0.0);
+        if (source_grad.size() != source->size)
+            source_grad.resize(source->size);
+
+        source_grad = JitVar::steal(jit_var_scatter_packet(
+            n, source_grad.index(), grad_out.data(), offset.index(),
+            mask.index(), ReduceOp::Add, mode));
+    }
+
+    void add_output(uint32_t index) {
+        add_index(m_backend, index, false);
+
+        std::lock_guard<std::mutex> guard(state.mutex);
+        ad_var_inc_ref_int(index, state[index]);
+    }
+
+    const char *name() const override { return "packet_gather"; }
+
+private:
+    JitVar offset, mask;
+    ReduceMode mode;
+};
+
+
+void ad_var_gather_packet(size_t n, Index source, JitIndex offset,
+                          JitIndex mask, uint64_t *out, ReduceMode mode) {
+    uint32_t *out2 = (uint32_t *) alloca(sizeof(uint32_t) * n);
+    jit_var_gather_packet(n, jit_index(source), offset, mask, out2);
+    ADIndex source_ad = ad_index(source);
+
+    const std::vector<Scope> &scopes = local_state.scopes;
+    if (!scopes.empty())
+        scopes.back().maybe_disable(source_ad);
+
+    if (source_ad) {
+        // Track implicit dependencies & potentially remap variable IDs
+        source = ad_var_memop_remap(source, true);
+
+        ref<PacketGather> op = new PacketGather(offset, mask, mode);
+        JitBackend backend = jit_set_backend(jit_index(source)).backend;
+        op->add_index(backend, source_ad, true);
+
+        for (size_t i = 0; i < n; ++i) {
+            out[i] = ad_var_new(out2[i]);
+            jit_var_dec_ref(out2[i]);
+            op->add_output(ad_index(out[i]));
+        }
+
+        if (!ad_custom_op(op.get()))
+            ad_raise("ad_var_gather_packet(): could not create CustomOp");
+    } else {
+        for (size_t i = 0; i < n; ++i)
+            out[i] = out2[i];
+    }
+}
+
+// ==========================================================================
+
 static const char *mode_name[] = { "auto",        "direct", "local",
                                    "no_conflict", "expand", "permute" };
 static const char *red_name[] = { "identity", "add", "mul", "min", "max", "and", "or" };
@@ -2926,16 +3040,182 @@ Index ad_var_scatter(Index target, Index value, JitIndex offset, JitIndex mask,
                 SpecialArg(target, new ScatterTarget(
                                        GenericArray<uint32_t>::borrow(offset),
                                        JitMask::borrow(mask), target_copy,
-                                       result, op, result.size()))),
+                                       result, op, result.size(), perm_scatter))),
             false);
 
-        ad_log("ad_var_scatter(): (a%u, r%u) = scatter(op=%s, target=(a%u, r%u), value=(a%u, r%u), offset=r%u, mask=r%u, mode=%s)",
-               ad_index(r), jit_index(r),
-               red_name[(int) op],
-               ad_index(target), jit_index(target),
-               ad_index(value), jit_index(value),
-               offset, mask, mode_name[(int) mode]);
+        ad_log("ad_var_scatter(): (a%u, r%u) = scatter(op=%s, target=(a%u, "
+               "r%u), value=(a%u, r%u), offset=r%u, mask=r%u, mode=%s)",
+               ad_index(r), jit_index(r), red_name[(int) op], ad_index(target),
+               jit_index(target), ad_index(value), jit_index(value), offset,
+               mask, mode_name[(int) mode]);
         return r;
+    }
+}
+
+class PacketScatter : public dr::detail::CustomOpBase {
+public:
+    PacketScatter(JitBackend backend, VarType type, size_t n, size_t target_size,
+                  JitIndex offset, JitIndex mask, ReduceOp op, ReduceMode mode)
+        : m_type(type), m_n(n), m_target_size(target_size),
+          m_offset(JitVar::borrow(offset)), m_mask(JitVar::borrow(mask)),
+          m_op(op), m_mode(mode) {
+        m_backend = backend;
+
+        m_blend = dr::zeros<JitMask>(target_size);
+
+        if (op == ReduceOp::Identity && mode != ReduceMode::Permute) {
+            JitMask value(true);
+            uint32_t *values = (uint32_t *) alloca(sizeof(uint32_t)*n);
+            for (size_t i = 0; i < n; ++i)
+                values[i] = value.index();
+            m_blend = JitMask::steal(jit_var_scatter_packet(
+                n, m_blend.index(), values, offset, mask));
+        }
+
+        if (op != ReduceOp::Add && op != ReduceOp::Identity)
+            ad_raise("PacketScatter(): unsupported reduction type!");
+    }
+
+    ~PacketScatter() {
+        std::lock_guard<std::mutex> guard(state.mutex);
+        for (uint32_t index: m_output_indices)
+            ad_var_dec_ref_int(index, state[index]);
+    }
+
+    void forward() override {
+        std::lock_guard<std::mutex> guard(state.mutex);
+        JitIndex *grad_in = (JitIndex *)  alloca(sizeof(JitIndex) * m_n);
+        size_t n_valid = 0;
+        JitVar zero = scalar(m_backend, m_type, 0.0);
+
+        Variable *target = state[m_output_indices[0]];
+
+        if (m_input_indices[0]) {
+            JitVar &source_grad = state[m_input_indices[0]]->grad;
+            if (source_grad.valid())
+                target->accum(source_grad, target->size);
+        }
+
+        for (size_t i = 0; i < m_n; ++i) {
+            grad_in[i] = zero.index();
+
+            if (m_inputs[i+1]) {
+                Variable *v2 = state[m_inputs[i+1]];
+                if (v2->grad.valid()) {
+                    grad_in[i] = v2->grad.index();
+                    n_valid++;
+                }
+            }
+        }
+
+        if (n_valid) {
+            JitVar &target_grad = target->grad;
+
+            if (!target_grad.valid())
+                target_grad = zero;
+
+            if (target_grad.size() != m_target_size)
+                target_grad.resize(m_target_size);
+
+            target_grad = JitVar::steal(jit_var_scatter_packet(
+                m_n, target_grad.index(), grad_in, m_offset.index(), m_mask.index(),
+                m_op, m_mode));
+        }
+    }
+
+    void backward() override {
+        std::lock_guard<std::mutex> guard(state.mutex);
+        JitIndex *out = (JitIndex *)  alloca(sizeof(JitIndex) * m_n);
+
+        Variable *v = state[m_output_indices[0]];
+        if (!v->grad.valid())
+            return;
+
+        jit_var_gather_packet(m_n, v->grad.index(), m_offset.index(),
+                              m_mask.index(), out);
+
+        for (size_t i = 0; i < m_n; ++i) {
+            JitVar g = JitVar::steal(out[i]);
+            if (m_inputs[i+1]) {
+                Variable *v2 = state[m_inputs[i+1]];
+                v2->accum(g, v2->size);
+            }
+        }
+
+        if (m_inputs[0]) {
+            Variable *v2 = state[m_inputs[0]];
+            if (m_op == ReduceOp::Identity)
+                v2->accum(andnot(v->grad, m_blend), v->size);
+            else if (m_op == ReduceOp::Add)
+                v2->accum(v->grad, v->size);
+            else
+                ad_raise("Unsupported operation");
+        }
+    }
+
+    void add_input(uint32_t index) {
+        add_index(m_backend, index, true);
+        // No need for extra reference counting
+        m_inputs.push_back(index);
+    }
+
+    void add_output(uint32_t index) {
+        add_index(m_backend, index, false);
+        std::lock_guard<std::mutex> guard(state.mutex);
+        ad_var_inc_ref_int(index, state[index]);
+    }
+
+    const char *name() const override { return "packet_scatter"; }
+
+private:
+    VarType m_type;
+    size_t m_n, m_target_size;
+    GenericArray<uint32_t> m_offset;
+    JitMask m_mask, m_blend;
+    ReduceOp m_op;
+    ReduceMode m_mode;
+    std::vector<uint32_t> m_inputs;
+};
+
+/// Perform a differentiable scatter operation. See jit_var_scatter for signature.
+Index ad_var_scatter_packet(size_t n, Index target, const Index *values,
+                            JitIndex offset, JitIndex mask, ReduceOp op,
+                            ReduceMode mode) {
+    JitIndex *values2 = (JitIndex *) alloca(sizeof(JitIndex) * n);
+    bool attached = ad_index(target) != 0;
+
+    for (size_t i = 0; i < n; ++i) {
+        Index index = values[i];
+        values2[i] = jit_index(index);
+        if (ad_index(index))
+            attached = true;
+    }
+
+    JitVar result = JitVar::steal(jit_var_scatter_packet(
+        n, jit_index(target), values2, offset, mask, op, mode));
+    bool perm_scatter = op == ReduceOp::Identity && mode == ReduceMode::Permute;
+
+    if (!attached) {
+        return result.release();
+    } else {
+        // Track implicit dependencies & potentially remap variable IDs
+        target = ad_var_memop_remap(target, false);
+
+        VarInfo vi = jit_set_backend(jit_index(target));
+
+        ref<PacketScatter> ps = new PacketScatter(
+            vi.backend, vi.type, n, result.size(), offset, mask, op, mode);
+
+        ps->add_input(perm_scatter ? 0 : ad_index(target));
+        for (size_t i = 0; i < n; ++i)
+            ps->add_input(ad_index(values[i]));
+        uint64_t ad_result = ad_var_new(result.index());
+        ps->add_output(ad_index(ad_result));
+
+        if (!ad_custom_op(ps.get()))
+            ad_raise("ad_var_scatter_packet(): could not create CustomOp");
+
+        return ad_result;
     }
 }
 
@@ -3438,7 +3718,7 @@ struct scoped_set_flags {
 };
 
 struct CustomOp : Special {
-    nanobind::ref<dr::detail::CustomOpBase> m_op;
+    ref<dr::detail::CustomOpBase> m_op;
     Scope m_scope;
     uint32_t m_flags;
 
@@ -3447,7 +3727,7 @@ struct CustomOp : Special {
 
     ~CustomOp() {
         if (m_op.get()) {
-            nanobind::ref<dr::detail::CustomOpBase> op = std::move(m_op);
+            ref<dr::detail::CustomOpBase> op = std::move(m_op);
             {
                 unlock_guard<std::mutex> guard(state.mutex);
                 ad_log("ad_free(): freeing custom operation \"%s\"", op->name());
@@ -3479,7 +3759,7 @@ struct CustomOp : Special {
 
     void release_one_output() {
         if (m_op.get() && !ad_release_one_output(m_op.get())) {
-            nanobind::ref<dr::detail::CustomOpBase> op = std::move(m_op);
+            ref<dr::detail::CustomOpBase> op = std::move(m_op);
             {
                 unlock_guard<std::mutex> guard(state.mutex);
                 ad_log("ad_free(): freeing custom operation \"%s\"", op->name());

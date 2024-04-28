@@ -804,6 +804,23 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
         return result;
     }
 
+    template <size_t N, typename Source, typename Index, typename Mask>
+    static auto gather_packet_(Source &&source, const Index &index, const Mask &mask, ReduceMode mode) {
+        DRJIT_CHKSCALAR("gather_packet_");
+        Array<Derived, N> result;
+        for (size_t i = 0; i < N; ++i)
+            result.entry(i) = gather<Derived>(source, fmadd(index, (uint32_t) N, (uint32_t) i), mask, mode);
+        return result;
+    }
+
+    template <size_t N, typename Target, typename Source, typename Index, typename Mask>
+    static void scatter_packet_(Target &&target, const Source &source, const Index &index, const Mask &mask,
+                                ReduceMode mode) {
+        DRJIT_CHKSCALAR("scatter_packet_");
+        for (size_t i = 0; i < N; ++i)
+            scatter(target, source.entry(i), fmadd(index, (uint32_t) N, (uint32_t) i), mask, mode);
+    }
+
     template <typename Target, typename Index, typename Mask>
     void scatter_(Target &&target, const Index &index, const Mask &mask,
                   ReduceMode mode) const {
@@ -851,6 +868,15 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
                            mask.entry(sc > 1 ? i : 0),
                            mode);
     }
+
+    template <size_t N, typename Target, typename Source, typename Index, typename Mask>
+    static void scatter_reduce_packet_(Target &&target, const Source &source, const Index &index,
+                                       const Mask &mask, ReduceOp op, ReduceMode mode) {
+        DRJIT_CHKSCALAR("scatter_reduce_packet_");
+        for (size_t i = 0; i < N; ++i)
+            scatter_reduce(target, source.entry(i), fmadd(index, (uint32_t) N, (uint32_t) i), mask, op, mode);
+    }
+
 
     Derived block_reduce_(ReduceOp op, size_t block_size, int symbolic) const {
         Derived value;

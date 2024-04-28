@@ -926,25 +926,7 @@ template <typename T> DRJIT_INLINE void store(void *ptr, const T &value) {
         *static_cast<T *>(ptr) = value;
 }
 
-namespace detail {
-    template <typename Target, typename Index> Target broadcast_index(const Index &index) {
-        using Scalar = scalar_t<Index>;
-        static_assert(Target::Size != Dynamic);
-
-        Index scaled = index * Scalar(Target::Size);
-        Target result;
-        for (size_t i = 0; i < Target::Size; ++i) {
-            if constexpr (depth_v<Target> == depth_v<Index> + 1)
-                result.entry(i) = scaled + Scalar(i);
-            else
-                result.entry(i) = broadcast_index<value_t<Target>>(scaled + Scalar(i));
-        }
-        return result;
-    }
-}
-
-template <typename Target, typename Source,
-          typename Index, typename Mask = mask_t<Index>>
+template <typename Target, typename Source, typename Index, typename Mask = mask_t<Index>>
 Target gather(Source &&source, const Index &index, const Mask &mask_ = true,
               ReduceMode mode = ReduceMode::Auto) {
     // Broadcast mask to match shape of Index
@@ -1003,10 +985,7 @@ Target gather(Source &&source, const Index &index, const Mask &mask_ = true,
                 return Target::template gather_(source, Index2(index), mask, mode);
         } else {
             // Case 2.2: gather<Vector3fC>(const FloatC & / const void *, ...)
-            using TargetIndex = replace_scalar_t<Target, scalar_t<Index>>;
-
-            return gather<Target>(
-                source, detail::broadcast_index<TargetIndex>(index), mask, mode);
+            return value_t<Target>::template gather_packet_<Target::Size>(source, index, mask, mode);
         }
     } else if constexpr (is_drjit_struct_v<Target>) {
         /// Case 3: gather<MyStruct>(const MyStruct &, ...)
@@ -1034,8 +1013,7 @@ Target gather(Source &&source, const Index &index, const Mask &mask_ = true,
     (void) mode;
 }
 
-template <typename Target, typename Value, typename Index,
-          typename Mask = mask_t<Index>>
+template <typename Target, typename Value, typename Index, typename Mask = mask_t<Index>>
 void scatter(Target &target, const Value &value, const Index &index,
              const Mask &mask_ = true, ReduceMode mode = ReduceMode::Auto) {
     // Broadcast mask to match shape of Index
@@ -1066,9 +1044,8 @@ void scatter(Target &target, const Value &value, const Index &index,
         if constexpr (depth_v<Value> == depth_v<Index>) {
             value.scatter_(target, uint32_array_t<Value>(index), mask, mode);
         } else {
-            using TargetIndex = replace_scalar_t<Value, scalar_t<Index>>;
-            scatter(target, value, detail::broadcast_index<TargetIndex>(index),
-                    mask, mode);
+            Target::template scatter_packet_<Value::Size>(
+                target, value, uint32_array_t<Target>(index), mask, mode);
         }
     } else if constexpr (is_drjit_struct_v<Value>) {
         static_assert(is_drjit_struct_v<Target>,
@@ -1099,9 +1076,9 @@ Index scatter_inc(Index &target, const Index &index, const mask_t<Index> &value 
     return target.scatter_inc_(index, value);
 }
 
-template <typename Target, typename Value, typename Index>
+template <typename Target, typename Value, typename Index, typename Mask = mask_t<Index>>
 void scatter_reduce(ReduceOp op, Target &target, const Value &value,
-                    const Index &index, const mask_t<Value> &mask = true,
+                    const Index &index, const Mask &mask = true,
                     ReduceMode mode = ReduceMode::Auto) {
     if constexpr (is_array_v<Value>) {
         static_assert(std::is_pointer_v<std::decay_t<Target>> || depth_v<Target> == 1,
@@ -1113,9 +1090,8 @@ void scatter_reduce(ReduceOp op, Target &target, const Value &value,
         if constexpr (depth_v<Value> == depth_v<Index>) {
             value.scatter_reduce_(target, index, mask, op, mode);
         } else {
-            using TargetIndex = replace_scalar_t<Value, scalar_t<Index>>;
-            scatter_reduce(op, target, value,
-                           detail::broadcast_index<TargetIndex>(index), mask, mode);
+            Target::template scatter_reduce_packet_<Value::Size>(
+                target, value, uint32_array_t<Target>(index), mask, op, mode);
         }
     } else if constexpr (is_integral_v<Index> && detail::is_arithmetic_v<scalar_t<Value>>) {
         if (mask) {
@@ -1160,10 +1136,17 @@ void scatter_reduce(ReduceOp op, Target &target, const Value &value,
     (void) mode;
 }
 
-template <typename Target, typename Value, typename Index>
+template <typename Target, typename Value, typename Index,
+          typename Mask = mask_t<Index>>
+void scatter_add(Target &target, const Value &value, const Index &index,
+                 const Mask &mask = true, ReduceMode mode = ReduceMode::Auto) {
+    scatter_reduce(ReduceOp::Add, target, value, index, mask, mode);
+}
+
+template <typename Target, typename Value, typename Index, typename Mask = mask_t<Index>>
 void scatter_add_kahan(Target &&target_1, Target &&target_2,
                        const Value &value, const Index &index,
-                       const mask_t<Value> &mask = true) {
+                       const Mask &mask = true) {
     static_assert(
         is_jit_v<Target> &&
         is_jit_v<Value> &&

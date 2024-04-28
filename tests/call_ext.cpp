@@ -31,6 +31,7 @@ struct Sampler {
 
 template <typename Float> struct Base : nb::intrusive_base {
     using Mask = dr::mask_t<Float>;
+    using UInt32 = dr::uint32_array_t<Float>;
 
     virtual std::pair<Float, Float> f(Float x, Float y) = 0;
     virtual std::pair<Float, Float> f_masked(const std::pair<Float, Float> &xy, Mask active) = 0;
@@ -42,6 +43,9 @@ template <typename Float> struct Base : nb::intrusive_base {
     virtual std::pair<Float, dr::uint32_array_t<Float>> complex_getter() = 0;
     virtual dr::replace_value_t<Float, Base<Float>*> get_self() const = 0;
     virtual std::pair<Sampler<Float> *, Float> sample(Sampler<Float> *) = 0;
+    virtual dr::Array<Float, 4> gather_packet(UInt32 i) const = 0;
+    virtual void scatter_packet(UInt32, dr::Array<Float, 4>) = 0;
+    virtual void scatter_add_packet(UInt32, dr::Array<Float, 4>) = 0;
 
     Base() {
         if constexpr (dr::is_jit_v<Float>)
@@ -54,6 +58,7 @@ template <typename Float> struct Base : nb::intrusive_base {
 
 template <typename Float> struct A : Base<Float> {
     using Mask = dr::mask_t<Float>;
+    using UInt32 = dr::uint32_array_t<Float>;
 
     virtual std::pair<Float, Float> f(Float x, Float y) override {
         return { 2 * y, -x };
@@ -83,12 +88,23 @@ template <typename Float> struct A : Base<Float> {
     }
     dr::replace_value_t<Float, Base<Float>*> get_self() const override { return this; }
 
+    dr::Array<Float, 4> gather_packet(UInt32 i) const override {
+        return dr::gather<dr::Array<Float, 4>>(value, i);
+    }
+    void scatter_packet(UInt32 i, dr::Array<Float, 4> arg) override {
+        dr::scatter(value, arg, i);
+    }
+    void scatter_add_packet(UInt32 i, dr::Array<Float, 4> arg) override {
+        dr::scatter_add(value, arg, i);
+    }
+
     Float value;
     Float opaque = dr::opaque<Float>(1.f);
 };
 
 template <typename Float> struct B : Base<Float> {
     using Mask = dr::mask_t<Float>;
+    using UInt32 = dr::uint32_array_t<Float>;
 
     virtual std::pair<Float, Float> f(Float x, Float y) override {
         return { 3 * y, x };
@@ -117,6 +133,12 @@ template <typename Float> struct B : Base<Float> {
         return { 2 * opaque, 3 };
     }
     dr::replace_value_t<Float, Base<Float>*> get_self() const override { return this; }
+    dr::Array<Float, 4> gather_packet(UInt32) const override {
+        return 0;
+    }
+    void scatter_packet(UInt32, dr::Array<Float, 4>) override { }
+    void scatter_add_packet(UInt32, dr::Array<Float, 4>) override { }
+
 
     Float value;
     Float opaque = dr::opaque<Float>(2.f);
@@ -128,6 +150,9 @@ DRJIT_CALL_TEMPLATE_BEGIN(Base)
     DRJIT_CALL_METHOD(dummy)
     DRJIT_CALL_METHOD(g)
     DRJIT_CALL_METHOD(sample)
+    DRJIT_CALL_METHOD(gather_packet)
+    DRJIT_CALL_METHOD(scatter_packet)
+    DRJIT_CALL_METHOD(scatter_add_packet)
     DRJIT_CALL_GETTER(scalar_getter)
     DRJIT_CALL_GETTER(opaque_getter)
     DRJIT_CALL_GETTER(complex_getter)
@@ -139,6 +164,7 @@ DRJIT_CALL_END(Base)
 template <JitBackend Backend>
 void bind(nb::module_ &m) {
     using Float = dr::DiffArray<Backend, float>;
+    using UInt32 = dr::uint32_array_t<Float>;
     using BaseT = Base<Float>;
     using AT = A<Float>;
     using BT = B<Float>;
@@ -202,7 +228,10 @@ void bind(nb::module_ &m) {
         .def("sample", [](BaseArray &self, Sampler *sampler) {
                 return self->sample(sampler);
              }, "sampler"_a)
-        .def("get_self", [](BaseArray &self) { return self->get_self(); });
+        .def("get_self", [](BaseArray &self) { return self->get_self(); })
+        .def("gather_packet", [](BaseArray &self, UInt32 i) { return self->gather_packet(i); })
+        .def("scatter_packet", [](BaseArray &self, UInt32 i, dr::Array<Float, 4> arg) { self->scatter_packet(i, arg); })
+        .def("scatter_add_packet", [](BaseArray &self, UInt32 i, dr::Array<Float, 4> arg) { self->scatter_add_packet(i, arg); });
 }
 
 NB_MODULE(call_ext, m) {

@@ -196,6 +196,25 @@ where *N* is the number of cores. The functions :py:func:`expand_threshold`
 and :py:func:`set_expand_threshold` can be used to set thresholds that
 determine when Dr.Jit is willing to automatically use this strategy.
 
+Packet memory operations
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+The functions :py:func:`drjit.gather`, :py:func:`drjit.scatter`, and
+:py:func:`drjit.scatter_reduce` can be used to access vectors in a flat array.
+
+For example,
+
+.. code-block:: pycon
+
+   >>> buffer = Float(...)
+   >>> vec4_out = dr.gather(dtype=Array4f, source=buffer, index=..)
+
+is equivalent to (but *more efficient* than) four subsequent gathers that access
+elements ``index4*0`` to ``index*4+3``. Dr.Jit compiles such operations into
+*packet memory operations* whenever the size of the output array is a power of
+two. This yields a small performance improvement on the GPU (on the order of
+5-30%) and a massive speedup on the LLVM CPU backend especially for scatters.
+See the flag :py:attr:`drjit.JitFlag.PacketOps` for details.
 
 Other
 ^^^^^

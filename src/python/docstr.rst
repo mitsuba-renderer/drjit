@@ -2526,7 +2526,7 @@
 
          .. code-block:: python
 
-            result = dr.cuda.Array3f(...)
+            source = dr.cuda.Array3f(...)
             index = dr.cuda.UInt([...])
             result = dr.gather(dr.cuda.Array3f, source, index)
 
@@ -2547,7 +2547,6 @@
          ``source`` array, using C-style ordering with a suitably modified
          ``index``. For example, the gather below reads 3D vectors from a 1D array.
 
-
          .. code-block:: python
 
             source = dr.cuda.Float([...])
@@ -2558,10 +2557,18 @@
 
          .. code-block:: python
 
-            result = dr.cuda.Vector3f(
+            result = dr.cuda.Array3f(
                 dr.gather(dr.cuda.Float, source, index*3 + 0),
                 dr.gather(dr.cuda.Float, source, index*3 + 1),
                 dr.gather(dr.cuda.Float, source, index*3 + 2))
+
+         By default, Dr.Jit bundles sequences of gather operations that access
+         a *power-of-two* number of contiguous elements (e.g.
+         ``dr.gather(Array4f, ...)`` or ``dr.gather(ArrayXf, ..., shape=(16,
+         N))`` into one or more *packet loads* (the precise number depending on
+         the hardware's capabilities) that is potentially significantly faster.
+         This optimization can be controlled via the
+         :py:attr:`drjit.JitFlag.PacketOps` flag.
 
     .. danger::
 
@@ -2607,6 +2614,12 @@
           different compilation strategies to realize them. Specifying this
           parameter selects a strategy for the derivative of a particular
           gather operation. The default is :py:attr:`drjit.ReduceMode.Auto`.
+
+        shape (tuple[int, ...] | None): When gathering into a dynamically sized
+          array type (e.g. :py:class:`drjit.cuda.ArrayXf`), this parameter can
+          be used to specify the shape of the unknown dimensions. Otherwise, it
+          is not needed. The default is ``None``.
+
 
 .. topic:: scatter
 
@@ -2673,6 +2686,13 @@
             dr.scatter(target, value.x, index*3 + 0)
             dr.scatter(target, value.y, index*3 + 1)
             dr.scatter(target, value.z, index*3 + 2)
+
+         By default, Dr.Jit bundles sequences of scatter operations that write
+         a *power-of-two* number of contiguous elements into one or more
+         *packet stores* (the precise number depending on the hardware's
+         capabilities) that is potentially significantly faster. This
+         optimization can be controlled via the
+         :py:attr:`drjit.JitFlag.PacketOps` flag.
 
     .. danger::
 
@@ -2933,6 +2953,17 @@
             dr.scatter_reduce(op, target, value.x, index*3 + 0)
             dr.scatter_reduce(op, target, value.y, index*3 + 1)
             dr.scatter_reduce(op, target, value.z, index*3 + 2)
+
+         Dr.Jit may be able to bundle sequences of scatter-reductions that
+         write a *power-of-two* number of contiguous elements into one or more
+         *packet scatter-updates*  that are potentially significantly faster.
+         This optimization can be controlled via the
+         :py:attr:`drjit.JitFlag.PacketOps` flag. Currently, this is only
+         possible in a narrow set of circumstances requiring:
+
+         1. use of the LLVM backend.
+         2. integer or floating point scatter-additions.
+         2. use of the :py:attr:`drjit.ReduceMode.Expand` reduction strategy.
 
     .. danger::
 
@@ -5586,8 +5617,7 @@
 
 .. topic:: JitFlag_OptimizeLoops
 
-    Perform basic optimizations
-    for loops involving Dr.Jit arrays.
+    Perform basic optimizations for loops involving Dr.Jit arrays.
 
     This flag enables two optimizations:
 
@@ -5609,6 +5639,65 @@
 
     This flag is *enabled* by default. Note that it is only meaningful
     in combination with :py:attr:`SymbolicLoops`.
+
+.. topic:: JitFlag_PacketOps
+
+    Turn sequences of contiguous gather/scatter operations into packet
+    loads/stores.
+
+    When indirect memory accesses (gathers/scatters) access multiple subsequent
+    elements, it should be possible to exploit this to perform the operation
+    more efficiently.
+
+    If :py:attr:`drjit.JitFlag.PacketOps` is set, Dr.Jit will realizes this
+    optimization opportunity when
+
+    - The size of the leading dimension of the source/target array is a power
+      of two.
+
+    - The array is read/written via :py:func:`drjit.gather`,
+      :py:func:`drjit.scatter`, :py:func:`drjit.ravel`, or
+      :py:func:`drjit.unravel`.
+
+      For example, the following operation gathers 4D vectors from a flat array:
+
+      .. code-block:: python
+
+          from drjit.auto import Array4f, Float, UInt32
+          source = Float(...)
+          result = dr.gather(Array4f, source, index=UInt32(...))
+
+      Wider cases are supported as well by providing a ``shape`` argument
+
+      .. code-block:: python
+
+          from drjit.auto import Array4f, Float, UInt32
+          source = Float(...)
+          result = dr.gather(ArrayXf, source, index=index, shape=(16, len(index)))
+
+    - This optimization also applies to atomic scatter-adds performed on the
+      LLVM backend when using the :py:attr:`drjit.ReduceMode.Expand` reduction
+      strategy.
+
+    Packet gathers yield a modest performance improvement on the CUDA backend,
+    where they produce fewer and larger memory transactions. For example, a
+    single 128 bit load can fetch 8 half-precision values at once. Speedups of
+    5-30% have been observed.
+
+    On the LLVM backend, the operation replaces vector/scatter instructions
+    with a combination of aligned packet loads/stores and a matrix transpose
+    (implemented for 2, 4, and 8-D inputs, larger vectors perform several 8D
+    transposes). Speedups here are are rather dramatic (up to >20× for
+    scatters, 1.5-2× for gathers have been measured).
+
+    This optimization is expected to make an even bigger difference following
+    microcode-based `security mitigations for a recent side-channel attack
+    <https://downfall.page>`__ that effectively break the performance
+    characteristics of the native gather operation on Intel CPUs. Packet
+    gathers don't use the regular gather instruction and thus aren't affected
+    by the mitigation.
+
+    This flag is *enabled* by default.
 
 .. topic:: JitFlag_CompressLoops
 
@@ -5769,6 +5858,7 @@
     - :py:attr:`drjit.JitFlag.SymbolicConditionals`,
     - :py:attr:`drjit.JitFlag.ReuseIndices`, and
     - :py:attr:`drjit.JitFlag.ScatterReduceLocal`.
+    - :py:attr:`drjit.JitFlag.PacketOps`.
 
 .. topic:: JitFlag_LoopRecord
 

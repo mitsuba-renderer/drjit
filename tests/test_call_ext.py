@@ -831,3 +831,65 @@ def test15_dispatch_scalar_mask(t, symbolic):
         xo, yo = dr.dispatch(c, my_func, (xi, yi), active=m)
     assert dr.all(xo == t(10, 12, 16, 21, 24))
     assert dr.all(yo == t(-1, -2, -8, 3, 4))
+
+
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+def test16_packet_gather(t):
+    # Packet gathers within vcalls, tests C++ routing and LLVM pointer calculation logic for this special case
+    pkg = get_pkg(t)
+
+    A, B, Base, BasePtr = pkg.A, pkg.B, pkg.Base, pkg.BasePtr
+    Mask = dr.mask_t(t)
+    a, b = A(), B()
+
+    v = dr.arange(t, 16)
+    dr.enable_grad(v)
+    dr.eval(v)
+    a.value=v
+
+    c = BasePtr(a, a, a, b, b)
+    r = c.gather_packet(dr.uint32_array_t(t)(1, 2, 3, 4, 5))
+    assert(dr.all(r==[
+        [4, 8, 12, 0, 0],
+        [5, 9, 13, 0, 0],
+        [6, 10, 14, 0, 0],
+        [7, 11, 15, 0, 0]], axis=None))
+    dr.backward_from(r)
+    assert dr.all(v.grad == [0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1])
+
+
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+def test17_packet_scatter(t):
+    # Packet scatter within vcalls, tests C++ routing and LLVM pointer calculation logic for this special case
+    pkg = get_pkg(t)
+
+    A, B, Base, BasePtr = pkg.A, pkg.B, pkg.Base, pkg.BasePtr
+    Mask = dr.mask_t(t)
+    a, b = A(), B()
+    import sys
+    m=sys.modules[t.__module__]
+
+    a.value = dr.zeros(t, 16)
+
+    c = BasePtr(a, a, a, b, b)
+    v=m.Array4f([10, 11, 12, 0, 0], [101, 102, 103, 0, 0], [1001, 1002,1003, 0, 0], [10001, 10002, 10003, 0, 0])
+    c.scatter_packet(dr.uint32_array_t(t)(1, 2, 3, 0, 0), v)
+    assert dr.all(a.value == [0, 0, 0, 0, 10, 101, 1001, 10001, 11, 102, 1002, 10002, 12, 103, 1003, 10003])
+
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+def test18_packet_scatter_add(t):
+    # Packet scatter_add within vcalls, tests C++ routing and LLVM pointer calculation logic for this special case
+    pkg = get_pkg(t)
+
+    A, B, Base, BasePtr = pkg.A, pkg.B, pkg.Base, pkg.BasePtr
+    Mask = dr.mask_t(t)
+    a, b = A(), B()
+    import sys
+    m=sys.modules[t.__module__]
+
+    a.value = dr.ones(t, 16)
+
+    c = BasePtr(a, a, a, b, b)
+    v=m.Array4f([10, 11, 12, 0, 0], [101, 102, 103, 0, 0], [1001, 1002,1003, 0, 0], [10001, 10002, 10003, 0, 0])
+    c.scatter_add_packet(dr.uint32_array_t(t)(1, 2, 3, 0, 0), v)
+    assert dr.all(a.value == [1, 1, 1, 1, 11, 102, 1002, 10002, 12, 103, 1003, 10003, 13, 104, 1004, 10004])
