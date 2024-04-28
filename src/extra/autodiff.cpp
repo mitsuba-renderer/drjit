@@ -637,6 +637,7 @@ static bool ad_var_dec_ref_int(ADIndex index, Variable *v) noexcept {
 static void ad_free_edges(uint32_t index, Variable *v) {
     EdgeIndex edge_id = v->next_bwd;
     v->next_bwd = 0;
+    (void) index;
 
     while (edge_id) {
         Edge &edge = state.edges[edge_id];
