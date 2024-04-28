@@ -103,6 +103,9 @@ static void log_callback(LogLevel level, const char *msg) {
     }
 }
 
+/// Defined in init.cpp
+extern int drjit_py_is_alive;
+
 void export_log(nb::module_ &m, PyModuleDef &pmd) {
 #if PY_VERSION_HEX < 0x030A0000
     // Emulate PyGC_Enable()/ PyGC_Disable() on Python < 3.10
@@ -142,7 +145,7 @@ void export_log(nb::module_ &m, PyModuleDef &pmd) {
     // Shut down the Dr.Jit component when the Python interpreter
     // has been fully wound down. Doing it above (in pmd.m_free)
     // can lead to leak warnings.
-    (void) Py_AtExit([] { jit_shutdown(false); });
+    (void) Py_AtExit([] { drjit_py_is_alive = 0; jit_shutdown(false); });
 
     nb::enum_<LogLevel>(m, "LogLevel")
         .value("Disable", LogLevel::Disable)
