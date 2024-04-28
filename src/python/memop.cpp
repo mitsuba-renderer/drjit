@@ -908,6 +908,12 @@ static nb::object reshape(nb::type_object dtype, nb::handle value,
                 return nb::borrow(value);
 
             nb::object raveled = ravel(value, order);
+
+            if (supp(dtype).is_tensor) {
+                nb::object shape_o = cast_shape(new_shape);
+                return dtype(raveled, shape_o);
+            }
+
             return unravel(nb::borrow<nb::type_object_t<ArrayBase>>(dtype),
                            raveled, order);
         }
