@@ -854,6 +854,9 @@ nb::object full(const char *name, nb::handle dtype, nb::handle value,
                     nb::object k = field.attr(DR_STR(name)),
                                v = field.attr(DR_STR(type));
 
+                    if (!v.is_type())
+                        v = extract_type(v);
+
                     raise_if(!v.is_type(), "dataclass type annotations invalid");
 
                     nb::object entry;
@@ -970,6 +973,22 @@ nb::object linspace(const nb::type_object_t<ArrayBase> &dtype,
 
     double step = (stop - start) / (size - ((endpoint && size > 0) ? 1 : 0));
     return fma(dtype(result), dtype(step), dtype(start));
+}
+
+/// Extract types from typing.Optional[T], typing.Union[T, None], etc.
+nb::object extract_type(nb::object tp) {
+    try {
+        nb::object args = nb::module_::import_("typing").attr("get_args")(tp);
+        size_t len = nb::len(args);
+        nb::handle nt = nb::none().type();
+        if (len == 1)
+            tp = args[0];
+        else if (len == 2 && args[1].is(nt))
+            tp = args[0];
+        else if (len == 2 && args[0].is(nt))
+            tp = args[1];
+    } catch (...) { }
+    return tp;
 }
 
 void export_init(nb::module_ &m) {

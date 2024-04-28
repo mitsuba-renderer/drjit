@@ -1894,7 +1894,6 @@ def assert_equal(
         **kwargs,
     )
 
-
 newaxis = None
 
 del overload, Optional

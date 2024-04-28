@@ -607,8 +607,8 @@ drjit\.(cuda|llvm|auto)(.ad|).Array[0-4]([^0-4].*)\.__getitem__:
     wwww: Array4\3
 
 # Typed versions of these are already provided by drjit.ArrayBase
-\.(Tensor|Float|Int|Bool|Matrix|Complex|Quaternion|(Int|UInt|Float|)(16|32|64|)).*__(set|del)item__:
-\.(Tensor|Float|Int|Bool|Matrix|Complex|Quaternion|(Int|UInt|Float|)(16|32|64|)).*__getitem__:
+drjit.(cuda|llvm|auto).*__(set|del)item__:
+drjit.(cuda|llvm|auto).*__getitem__:
     pass
 
 PCG32.__isub__:

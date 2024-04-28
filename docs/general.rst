@@ -42,7 +42,8 @@ example, there is not enough work to truly benefit from multi-core parallelism,
 but this approach pays off in more complex examples.
 
 You can use the functions :py:func:`drjit.thread_count`,
-:py:func:`drjit.set_thread_count` to specify the number of threads used for parallel processing.
+:py:func:`drjit.set_thread_count` to specify the number of threads used for
+parallel processing.
 
 On the CUDA backend, the system automatically determines a number of *threads*
 that maximize occupancy along with a suitable number of *blocks* and then
@@ -332,6 +333,99 @@ Fields don't exclusively have to be containers or Dr.Jit types. For example, we
 could have added an extra ``datetime`` entry to record when a set of points was
 captured. Such fields will be ignored by traversal operations.
 
+Local memory
+============
+
+*Local memory* is a relatively advanced feature of Dr.Jit. You need it
+it if you encounter the following circumstances:
+
+1. A symbolic loop in your program must *both read and write* the same
+   memory buffer using computed indices.
+
+2. The buffer is *entirely local* to a thread of the computation (i.e., local
+   to an element of an array program).
+
+3. The buffer is *small* (e.g., a few 100-1000s of entries).
+
+Example uses might include `insertion sort
+<https://en.wikipedia.org/wiki/Insertion_sort>`__ to maintain a small sorted
+list, or a `LU factorization
+<https://en.wikipedia.org/wiki/LU_decomposition>`__ of a small (e.g. 32×32)
+matrix with column pivoting. In contrast to what the name might suggest, local
+memory is not particularly fast or local to the processor. In fact, it is based
+on standard global device memory. Local memory is also not to be confused with
+*shared memory* on CUDA architectures.
+
+The point of local memory is that it exposes global memory in a different
+way to provide a *local scratch space* within a larger parallel computation.
+Normally, one would use :py:func:`drjit.gather` and :py:func:`drjit.scatter` to
+dynamically read and write memory. However, they cannot be used in this
+situation because *read-after-write* (RAW) dependencies would trigger variable
+evaluations that aren't permitted in a symbolic context. Local memory
+legalizes such use of memory.
+
+Local memory is only temporary and does not add to the long-term memory
+requirements of a program. However, the short-term memory usage can be
+*significant* because local memory is separately allocated for each thread. On
+a CUDA device, there could be as many as 1 million threads across
+simultaneously resident thread blocks. A seemingly small local 1024-element
+single precision array then expands into a whopping 4 GiB of memory.
+
+Use the :py:func:`drjit.alloc_local` function to create a
+:py:class:`drjit.Local` instance that wraps local memory.
+
+See the snippet below for an example that calls a function ``f()``  ``n`` times
+to compute a histogram (stored in local memory) of its outputs to then find the
+largest histogram bucket.
+
+.. code-block:: python
+
+   from drjit.auto import UInt32, Float
+
+   # A function returning results in the range 0..9
+   def f(i: UInt32) -> UInt32: ....
+
+   @dr.syntax
+   def g(n: UInt32):
+       # Returns: zero-initialized 'hist' of type 'drjit.Local[drjit.auto.Float]'
+       hist = dr.alloc_local(Float, 10, value=dr.zeros(Float))
+
+       # Fill histogram
+       i = UInt32(0)
+       while i < n:        # <-- symbolic loop
+           hist[f(i)] += 1 # <-- read+write with computed index
+           i += 1
+
+       # Get the largest histogram entry
+       i = UInt32(0), maxval = UInt32(0)
+       while i < 10:
+           maxval = dr.maximum(maxval, hist[i])
+           i += 1
+       return maxval
+
+When this function is evaluated with an *array* of inputs (e.g. ``n=UInt32(n1,
+n2, ...)``) it will create several histograms with different numbers of
+functions evaluations in parallel. Each evaluation conceptually gets its own
+``hist`` variable in this case.
+
+Dr.Jit can also create local memory over PyTrees :ref:`PyTrees <pytrees>`  (for
+example, instead of ``dtype=Float``, we could have called
+:py:func:`drjit.alloc_local` with a complex number, 3x3 matrix, tuple, or
+dataclass). Indexing into the :py:class:`drjit.Local` instance then fetches or
+stores one instance of the PyTree.
+
+.. note::
+
+   Local memory reads/writes are *not* tracked by Dr.Jit's automatic
+   differentiation layer. However, you *may* use local memory in
+   implementations of custom differentiable operations based on the
+   :py:class:`drjit.CustomOp` interface.
+
+   The implication of the above two points it that when you want to
+   differentiate a local memory-based computation, you have to realize the
+   forward/backward derivative yourself. This is intentional because the
+   default AD-provided derivative would be extremely bad (it will increase the
+   size of the scratch space many-fold).
 
 .. _transcendental-accuracy:
 

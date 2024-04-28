@@ -12,6 +12,7 @@
 #include "tracker.h"
 #include "base.h"
 #include "shape.h"
+#include "local.h"
 #include <string_view>
 #include <drjit/autodiff.h>
 #include <tsl/robin_map.h>
@@ -440,6 +441,35 @@ bool VariableTracker::Impl::traverse(Context &ctx, nb::handle h) {
                 }
             }
         }
+    } else if (tp.is(local_type)) {
+        Local & local = nb::cast<Local&>(h);
+        dr::vector<uint32_t> &arrays = local.arrays();
+
+        if (!ctx.write) {
+            for (uint32_t idx: arrays) {
+                ctx.indices.push_back(ad_var_inc_ref(idx));
+                ctx.index_offset++;
+                #if defined(DEBUG_TRACKER)
+                    printf("read '%s' (array): r%u\n", ctx.label.c_str(), (uint32_t) idx);
+                #endif
+            }
+        } else {
+            for (uint32_t &idx: arrays) {
+                if (ctx.index_offset >= ctx.indices.size())
+                    nb::raise("internal error at state variable '%s': ran "
+                              "out of indices", ctx.label.c_str());
+
+                uint64_t idx_new = ctx.indices[ctx.index_offset++];
+                if (!ctx.preserve_dirty) {
+                    jit_var_dec_ref(idx);
+                    jit_var_inc_ref(idx_new);
+                    #if defined(DEBUG_TRACKER)
+                        printf("write '%s' (array): r%u\n", ctx.label.c_str(), (uint32_t) idx_new);
+                    #endif
+                    idx = idx_new;
+                }
+            }
+        }
     } else if (tp.is(&PyTuple_Type)) {
         nb::tuple t = nb::borrow<nb::tuple>(h);
         size_t size = size_valid(v, ctx.label, h, nb::len(t));
@@ -465,7 +495,6 @@ bool VariableTracker::Impl::traverse(Context &ctx, nb::handle h) {
         nb::object traverse_cb = nb::getattr(
             h, ctx.write ? DR_STR(_traverse_1_cb_rw) : DR_STR(_traverse_1_cb_ro),
             nb::handle());
-        nb::object dcls = nb::getattr(tp, DR_STR(__dataclass_fields__), nb::handle());
 
         if (nb::dict ds = get_drjit_struct(tp); ds.is_valid()) {
             for (auto [k, v] : ds) {

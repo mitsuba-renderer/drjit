@@ -113,7 +113,7 @@ endif()
 
 mark_as_advanced(NANOTHREAD_ENABLE_TESTS)
 mark_as_advanced(DRJIT_CORE_ENABLE_TESTS)
-mark_as_advanced(NB_TEST NB_TEST_SHARED_BUILD NB_TEST_STABLE_ABI NB_USE_SUBMODULE_DEPS NB_CREATE_INSTALL_RULES nanobind_DIR)
+mark_as_advanced(NB_TEST NB_TEST_SHARED_BUILD NB_TEST_STABLE_ABI NB_USE_SUBMODULE_DEPS NB_TEST_SANITZE NB_CREATE_INSTALL_RULES nanobind_DIR)
 
 if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   # In case Clang is used, avoid header file bloat from transitive
