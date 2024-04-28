@@ -217,6 +217,9 @@ template <typename T> struct PCG32 {
                     return result % bound;
             }
         } else {
+            if ((bound & (bound - 1)) == 0)
+                return next_uint32() % bound;
+
             divisor<uint32_t> div(bound);
             UInt32 threshold = imod(~bound + 1u, div);
 
@@ -260,6 +263,9 @@ template <typename T> struct PCG32 {
                     return result % bound;
             }
         } else {
+            if ((bound & (bound - 1)) == 0)
+                return next_uint64() % bound;
+
             divisor<uint64_t> div(bound);
             UInt64 threshold = imod(~bound + (uint64_t) 1, div);
 
