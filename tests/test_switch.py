@@ -261,6 +261,7 @@ def test04_switch_autodiff_backward(t, symbolic):
 
 @pytest.test_arrays('float,shape=(*),jit,is_diff')
 @pytest.mark.parametrize("symbolic", [True, False])
+@pytest.skip_on(RuntimeError, "backend does not support the requested type of atomic reduction")
 def test05_switch_autodiff_backward_implicit(t, symbolic):
     UInt32 = dr.uint32_array_t(t)
 

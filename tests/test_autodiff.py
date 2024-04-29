@@ -624,6 +624,7 @@ def test029_max_fwd(t):
 
 
 @pytest.test_arrays('is_diff,float,shape=(*)')
+@pytest.skip_on(RuntimeError, "backend does not support the requested type of atomic reduction")
 def test030_gather_bwd(t):
     x = dr.linspace(t, -1, 1, 9)
     dr.enable_grad(x)
@@ -760,6 +761,7 @@ def test034_scatter_fwd_permute(t):
 
 
 @pytest.test_arrays('is_diff,float,shape=(*)')
+@pytest.skip_on(RuntimeError, "backend does not support the requested type of atomic reduction")
 def test035_scatter_add_bwd(t):
     m = sys.modules[t.__module__]
     for i in range(3):
@@ -1831,6 +1833,7 @@ def test118_scatter_reduce_minmax_bwd(t, op):
 @pytest.mark.parametrize('op', [dr.ReduceOp.Max, dr.ReduceOp.Min])
 @pytest.test_arrays('is_diff,float32,shape=(*)')
 @pytest.mark.parametrize("mode", ['symbolic', 'evaluated'])
+@pytest.skip_on(RuntimeError, "backend does not support the requested type of atomic reduction")
 def test120_block_minmax_fwd(t, mode, op):
     if mode == 'symbolic' and dr.backend_v(t) == dr.JitBackend.CUDA:
         # Float32 min/max atomics not supported on CUDA

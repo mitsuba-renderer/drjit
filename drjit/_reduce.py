@@ -1,5 +1,5 @@
 import drjit as dr
-from typing import TypeVar, Tuple, Literal, List, Protocol, Union, cast
+from typing import Dict, TypeVar, Tuple, Literal, List, Protocol, Union, cast
 
 ArrayT = TypeVar("ArrayT", bound=dr.ArrayBase)
 
@@ -18,7 +18,7 @@ class BinaryOp(Protocol):
     def __call__(self, arg0: ArrayT, arg1: ArrayT, /) -> ArrayT:
         ...
 
-_reduce_ops: dict[dr.ReduceOp, BinaryOp] = {
+_reduce_ops: Dict[dr.ReduceOp, BinaryOp] = {
     dr.ReduceOp.Add: cast(BinaryOp, lambda a, b: a + b),
     dr.ReduceOp.Mul: cast(BinaryOp, lambda a, b: a * b),
     dr.ReduceOp.Min: cast(BinaryOp, lambda a, b: dr.minimum(a, b)),
@@ -30,8 +30,8 @@ _reduce_ops: dict[dr.ReduceOp, BinaryOp] = {
 def reduce_recursive(
     op: dr.ReduceOp,
     value: ArrayT,
-    shape: tuple[int, ...],
-    strides: tuple[int, ...],
+    shape: Tuple[int, ...],
+    strides: Tuple[int, ...],
     offset: dr.AnyArray,
     accum: ArrayT
 ) -> ArrayT:
@@ -61,7 +61,7 @@ def reduce_recursive(
 def tensor_reduce(
     op: dr.ReduceOp,
     value: ArrayT,
-    axis: tuple[int, ...],
+    axis: Tuple[int, ...],
     mode: Literal["symbolic", "evaluated", None],
 ) -> ArrayT:
     """

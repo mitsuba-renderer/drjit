@@ -368,6 +368,7 @@ def test11_count(t):
 
 
 @pytest.mark.parametrize('op', [dr.ReduceOp.Add, dr.ReduceOp.Max, dr.ReduceOp.Min])
+@pytest.skip_on(RuntimeError, "backend does not support the requested type of atomic reduction")
 @pytest.test_arrays('int, tensor, -is_diff')
 def test12_tensor_reduce(t, op):
     def check(y, axis, mode):

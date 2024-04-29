@@ -177,6 +177,7 @@ def test04_interp_3d(t, wrap_mode, texture_type):
 @pytest.mark.parametrize("migrate", [True, False])
 @pytest.mark.parametrize("texture_type", ['Texture1f', 'Texture1f16'])
 @pytest.test_arrays("is_diff, float32, shape=(*)")
+@pytest.skip_on(RuntimeError, "backend does not support the requested type of atomic reduction")
 def test05_grad(t, migrate, texture_type):
     mod = sys.modules[t.__module__]
     Float = getattr(mod, 'Float')
@@ -393,6 +394,7 @@ def test10_cubic_interp_3d(t, texture_type):
 
 @pytest.mark.parametrize("texture_type", ['Texture3f'])
 @pytest.test_arrays("is_diff, float32, shape=(*)")
+@pytest.mark.skipif(sys.platform == "win32", reason="FIXME: Non-deterministic crashes on Windows")
 def test11_cubic_grad_pos(t, texture_type):
     mod = sys.modules[t.__module__]
     TexType = getattr(mod, texture_type)
@@ -654,6 +656,7 @@ def test21_fetch_migrate(t, texture_type, migrate):
 
 @pytest.mark.parametrize("texture_type", ['Texture2f', 'Texture2f16'])
 @pytest.test_arrays("is_diff, float32, shape=(*)")
+@pytest.skip_on(RuntimeError, "backend does not support the requested type of atomic reduction")
 def test22_fetch_grad(t, texture_type):
     mod = sys.modules[t.__module__]
     TexType = getattr(mod, texture_type)

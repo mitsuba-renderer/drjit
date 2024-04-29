@@ -95,6 +95,7 @@ def test03_backward_outside(t, variant, mode):
 @pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
 @pytest.mark.parametrize('source_evaluated', [True, False])
 @pytest.test_arrays('float, is_diff, shape=(*)')
+@pytest.skip_on(RuntimeError, "backend does not support the requested type of atomic reduction")
 @dr.syntax
 def test04_backward_gather_inside(t, variant, mode, same_size, source_evaluated):
     # Variant of test01 where the differentiable read is replaced by a
@@ -131,6 +132,7 @@ def test04_backward_gather_inside(t, variant, mode, same_size, source_evaluated)
 @pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
 @pytest.mark.parametrize('source_evaluated', [True, False])
 @pytest.test_arrays('float, is_diff, shape=(*)')
+@pytest.skip_on(RuntimeError, "backend does not support the requested type of atomic reduction")
 @dr.syntax
 def test05_backward_gather_outside(t, variant, mode, same_size, source_evaluated):
     # Variant of test02 where the differentiable read is replaced by a
@@ -187,6 +189,7 @@ def test06_ad_bwd_nested(t, mode):
 
 @pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
 @pytest.test_arrays('float,is_diff,shape=(*)')
+@pytest.skip_on(RuntimeError, "backend does not support the requested type of atomic reduction")
 @dr.syntax
 def test07_ad_bwd_implicit_dep(t, mode):
     # Identical to the above, but for reverse mode
@@ -280,6 +283,7 @@ def test09_ad_fwd_implicit_dep(t, mode):
 @pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
 @pytest.mark.parametrize('variant', [1, 2, 3])
 @pytest.test_arrays('float, is_diff, shape=(*)')
+@pytest.skip_on(RuntimeError, "backend does not support the requested type of atomic reduction")
 @dr.syntax
 def test10_scatter_add_bwd(t, variant, mode):
     """Test that we can backpropagate through scatters"""

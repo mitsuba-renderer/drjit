@@ -93,6 +93,7 @@ def test01_simple_bwd(t, config, is_diff):
 @pytest.mark.parametrize('is_diff', [True, False])
 @pytest.mark.parametrize('config', configs_torch)
 @pytest.test_arrays('is_diff,float,shape=(*)')
+@pytest.skip_on(RuntimeError, "backend does not support the requested type of atomic reduction")
 def test02_flipped_simple_bwd(t, config, is_diff, scalar_deriv):
     @wrap_flipped(config)
     def test_fn(x):
@@ -190,6 +191,7 @@ def test05_simple_multiarg_bwd(t, config):
 
 @pytest.mark.parametrize('config', configs_torch)
 @pytest.test_arrays('is_diff,float,shape=(*)')
+@pytest.skip_on(RuntimeError, "backend does not support the requested type of atomic reduction")
 def test06_flipped_simple_multiarg_bwd(t, config):
     @wrap_flipped(config)
     def test_fn(x, y):
@@ -245,6 +247,7 @@ def test07_simple_multiarg_fwd(t, config):
 
 @pytest.mark.parametrize('config', configs_torch)
 @pytest.test_arrays('is_diff,float,shape=(*)')
+@pytest.skip_on(RuntimeError, "not implemented for 'Half'")
 def test08_filled_simple_multiarg_fwd(t, config):
     @wrap_flipped(config)
     def test_fn(x, y):
@@ -342,6 +345,7 @@ def test11_nondiff_fwd(t, config):
 
 @pytest.mark.parametrize('config', configs_torch)
 @pytest.test_arrays('is_diff,float,shape=(*)')
+@pytest.skip_on(RuntimeError, "not implemented for 'Half'")
 def test12_flipped_nondiff_bwd(t, config):
     @wrap_flipped(config)
     def test_fn(x, y, z):
@@ -391,6 +395,7 @@ def test13_scalar_bwd(t, config):
 
 @pytest.mark.parametrize('config', configs_torch)
 @pytest.test_arrays('is_diff,float,shape=(*)')
+@pytest.skip_on(RuntimeError, "not implemented for 'Half'")
 def test14_flipped_scalar_bwd(t, config):
     @wrap_flipped(config)
     def test_fn(x, y, z):
@@ -471,6 +476,7 @@ def test15_custom_class_bwd(t, config):
 
 @pytest.mark.parametrize('config', configs_torch)
 @pytest.test_arrays('is_diff,float,shape=(*)')
+@pytest.skip_on(RuntimeError, "not implemented for 'Half'")
 def test16_flipped_custom_class_bwd(t, config):
     class MyClass:
         pass
@@ -563,6 +569,7 @@ def test19_args_kwargs_bwd(t, config):
 
 @pytest.mark.parametrize('config', configs_torch)
 @pytest.test_arrays('is_diff,float,shape=(*)')
+@pytest.skip_on(RuntimeError, "backend does not support the requested type of atomic reduction")
 def test20_flipped_args_kwargs_bwd(t, config):
     @wrap_flipped(config)
     def test_fn(*args, **kwargs):
@@ -603,6 +610,7 @@ def test21_args_kwargs_fwd(t, config):
 
 @pytest.mark.parametrize('config', configs_torch)
 @pytest.test_arrays('is_diff,float,shape=(*)')
+@pytest.skip_on(RuntimeError, "not implemented for 'Half'")
 def test22_flipped_args_kwargs_fwd(t, config):
     @wrap_flipped(config)
     def test_fn(*args, **kwargs):

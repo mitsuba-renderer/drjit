@@ -76,6 +76,27 @@ def test_arrays(*queries, name='t'):
 
     return wrapped
 
+def skip_on(exception, reason):
+    from functools import wraps
+    def wrapped(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            try:
+                return func(*args, **kwargs)
+            except exception as e:
+                m = str(e)
+                c = str(e.__cause__)
+                if reason in m:
+                    pytest.skip(m)
+                elif reason in c:
+                    pytest.skip(c)
+                else:
+                    raise e
+
+        return wrapper
+
+    return wrapped
+
 def test_packages(name='p'):
     def wrapped(func):
         return pytest.mark.parametrize(name, array_packages)(func)
@@ -91,3 +112,4 @@ def drjit_verbose():
 def pytest_configure():
     pytest.test_arrays = test_arrays # type: ignore
     pytest.test_packages = test_packages # type: ignore
+    pytest.skip_on = skip_on

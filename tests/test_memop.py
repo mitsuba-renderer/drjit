@@ -556,6 +556,7 @@ def test23_block_sum(t):
 @pytest.mark.parametrize('op',
     [dr.ReduceOp.Add, dr.ReduceOp.Min, dr.ReduceOp.Max,
      dr.ReduceOp.And, dr.ReduceOp.Or])
+@pytest.skip_on(RuntimeError, "backend does not support the requested type of atomic reduction")
 @pytest.test_arrays('shape=(*), uint32, jit')
 def test24_block_reduce_intense(t, op):
     size = 4096*1024

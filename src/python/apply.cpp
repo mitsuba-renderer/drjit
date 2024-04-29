@@ -132,7 +132,21 @@ template <typename... Args> NB_INLINE Py_ssize_t maxv(Py_ssize_t arg, Args... ar
     }
 }
 
-template <typename T1, typename T2> using first_t = T1;
+
+namespace detail {
+
+struct Arg;
+template <typename...> struct first {
+    using type = Arg;
+};
+
+template <typename T, typename... Ts> struct first<T, Ts...> {
+    using type = T;
+};
+
+}
+
+template <typename... Ts> using first_t = typename detail::first<Ts...>::type;
 template <typename... T>
 nb::handle first(nb::handle h, T&...) { return h; }
 
