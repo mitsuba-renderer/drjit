@@ -42,8 +42,17 @@ static bool ad_loop_symbolic(JitBackend backend, const char *name,
     bool symbolic = jit_flag(JitFlag::SymbolicScope);
 
     try {
-        scoped_record record_guard(backend);
+        /* Postponed operations captured by the isolation scope should only
+         * be executed once we've exited the symbolic scope. We therefore
+         * need to declare the AD isolation guard before the recording guard.
+         * However, the isolation scope must also be marked as symbolic for it
+         * to correctly receive implicit dependencies from inner (nested)
+         * computations, hence the dummy recording. */
+        uint32_t checkpoint = jit_record_begin(
+            backend, "Dummy recording for loop's isolation scope");
         scoped_isolation_boundary isolation_guard;
+        jit_record_end(backend, checkpoint, true);
+        scoped_record record_guard(backend);
 
         // Rewrite the loop state variables
         JitVar loop = JitVar::steal(jit_var_loop_start(
