@@ -184,3 +184,21 @@ def test07_gather_in_loop_fwd_nested(t, mode, variant):
     dr.forward_to(y)
     assert dr.all(y.grad == 16)
 
+
+@pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
+@pytest.test_arrays('float32,diff,shape=(*)')
+@dr.syntax
+def test08_bwd_in_loop(t, mode):
+    UInt = dr.uint32_array_t(t)
+    x = dr.opaque(t, 0, 3)
+    dr.enable_grad(x)
+
+    y = dr.gather(t, x, UInt([2, 1, 0])) # Edge that will be postponed
+
+    i = dr.zeros(UInt, 3)
+    while dr.hint(i < 2, mode=mode, exclude=[y]):
+        with dr.resume_grad():
+            dr.backward(2 * dr.gather(t, y, UInt([0, 1, 2])))
+            i += 1
+
+    assert dr.all(x.grad == 4)
