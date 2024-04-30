@@ -873,22 +873,24 @@ bool ad_loop(JitBackend backend, int symbolic, int compress,
     if (strchr(name, '\n') || strchr(name, '\r'))
         jit_raise("'name' may not contain newline characters.");
 
+    uint32_t flags = jit_flags();
+
     if (symbolic == -1) {
-        if (jit_flag(JitFlag::SymbolicScope)) {
+        if (flags & (uint32_t) JitFlag::SymbolicScope) {
             // We're inside some other symbolic operation, cannot use evaluated mode
             if (!jit_flag(JitFlag::SymbolicLoops))
                 jit_log(LogLevel::Warn,
-                        "ad_loop(\"%s\"): currently inside some other symbolic "
-                        "operation, forcefully running the loop in symbolic "
-                        "mode even though the feature flag was disabled.", name);
+                        "ad_loop(\"%s\"): forcing conditional statement to "
+                        "symbolic mode since the operation is nested within "
+                        "another symbolic operation).", name);
             symbolic = 1;
         } else {
-            symbolic = jit_flag(JitFlag::SymbolicLoops);
+            symbolic = flags & (uint32_t) JitFlag::SymbolicLoops;
         }
     }
 
     if (compress == -1)
-        compress = (int) jit_flag(JitFlag::CompressLoops);
+        compress = (int) flags & (uint32_t) JitFlag::CompressLoops;
 
     if (symbolic != 0 && symbolic != 1)
         jit_raise("'symbolic' must equal 0, 1, or -1.");
