@@ -388,7 +388,7 @@ struct DRJIT_TRIVIAL_ABI DiffArray
             return steal(jit_var_prefix_sum(m_index, exclusive));
     }
 
-    DiffArray block_reduce_(ReduceOp op, size_t block_size, int symbolic) {
+    DiffArray block_reduce_(ReduceOp op, size_t block_size, int symbolic) const {
         if constexpr (IsFloat)
             return steal(ad_var_block_reduce(op, m_index, (uint32_t) block_size, symbolic));
         else
