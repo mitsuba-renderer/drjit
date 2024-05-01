@@ -61,7 +61,7 @@ def test03_nested_loop_warn_config(t, capsys):
                 j += 1
 
     transcript = capsys.readouterr().err
-    assert transcript.count('currently inside some other symbolic operation') == 1
+    assert transcript.count('forcing conditional statement to symbolic mode') == 1
 
 
 @pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
