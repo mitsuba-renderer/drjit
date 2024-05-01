@@ -41,26 +41,29 @@ enum class CudaTextureFormat : uint32_t {
     Float16 = 1, /// Half precision storage format
 };
 
-template <typename Value, size_t Dimension> class Texture {
+template <typename _Storage, size_t Dimension> class Texture {
 public:
-    static constexpr bool IsCUDA = is_cuda_v<Value>;
-    static constexpr bool IsDiff = is_diff_v<Value>;
-    static constexpr bool IsDynamic = is_dynamic_v<Value>;
+    static constexpr bool IsCUDA = is_cuda_v<_Storage>;
+    static constexpr bool IsDiff = is_diff_v<_Storage>;
+    static constexpr bool IsDynamic = is_dynamic_v<_Storage>;
     // Only half/single-precision floating-point CUDA textures are supported
-    static constexpr bool IsHalf = std::is_same_v<scalar_t<Value>, drjit::half>;
-    static constexpr bool IsFloat = std::is_same_v<scalar_t<Value>, float>;
+    static constexpr bool IsHalf = std::is_same_v<scalar_t<_Storage>, drjit::half>;
+    static constexpr bool IsFloat = std::is_same_v<scalar_t<_Storage>, float>;
     static constexpr bool HasCudaTexture = (IsHalf || IsFloat) && IsCUDA;
     static constexpr int CudaFormat = HasCudaTexture ? 
         IsHalf ? (int)CudaTextureFormat::Float16 : (int)CudaTextureFormat::Float32 : -1;
 
+    using Storage = std::conditional_t<IsDynamic, _Storage, DynamicArray<_Storage>>;
+    // If storage is half-precision, output of texture lookup is single-precision
+    using Value = std::conditional_t<IsHalf, std::conditional_t<IsDynamic,
+        float32_array_t<_Storage>, float>, _Storage>;
+    using PosF = Array<Value, Dimension>;
+    using PosI = int32_array_t<PosF>;
     using Int32 = int32_array_t<Value>;
     using UInt32 = uint32_array_t<Value>;
     using Mask = mask_t<Value>;
-    using PosType = float32_array_t<Value>;
-    using PosF = Array<PosType, Dimension>;
-    using PosI = int32_array_t<PosF>;
     using ArrayX = DynamicArray<Value>;
-    using Storage = std::conditional_t<IsDynamic, Value, DynamicArray<Value>>;
+
     using TensorXf = Tensor<Storage>;
 
     /// Default constructor: create an invalid texture object
@@ -317,7 +320,7 @@ public:
      */
     TensorXf &tensor() {
         return const_cast<TensorXf &>(
-            const_cast<const Texture<Value, Dimension> *>(this)->tensor());
+            const_cast<const Texture<_Storage, Dimension> *>(this)->tensor());
     }
 
     /**
@@ -326,7 +329,7 @@ public:
      * This is an implementation detail, please use \ref eval() that may
      * dispatch to this function depending on its inputs.
      */
-    void eval_cuda(const Array<PosType, Dimension> &pos, Value *out,
+    void eval_cuda(const Array<Value, Dimension> &pos, Value *out,
                    Mask active = true) const {
         const size_t channels = m_value.shape(Dimension);
 
@@ -357,7 +360,7 @@ public:
      * This is an implementation detail, please use \ref eval() that may
      * dispatch to this function depending on its inputs.
      */
-    void eval_nonaccel(const Array<PosType, Dimension> &pos, Value *out,
+    void eval_nonaccel(const Array<Value, Dimension> &pos, Value *out,
                        Mask active = true) const {
         if constexpr (!is_array_v<Mask>)
             active = true;
@@ -371,7 +374,7 @@ public:
             UInt32 idx = index(pos_i_w);
 
             for (uint32_t ch = 0; ch < channels; ++ch)
-                out[ch] = gather<Value>(m_value.array(), idx + ch, active);
+                out[ch] = Value(gather<_Storage>(m_value.array(), idx + ch, active));
         } else {
             using InterpOffset = Array<Int32, ipow(2, Dimension)>;
             using InterpPosI = Array<InterpOffset, Dimension>;
@@ -395,7 +398,7 @@ public:
                     Value weight_ = Value(weight);                                     \
                     for (uint32_t ch = 0; ch < channels; ++ch)                         \
                         out[ch] =                                                      \
-                            fmadd(gather<Value>(m_value.array(), index_ + ch, active), \
+                            fmadd(gather<_Storage>(m_value.array(), index_ + ch, active), \
                                 weight_, out[ch]);                                     \
                 }
 
@@ -434,7 +437,7 @@ public:
      * graph of \ref eval_nonaccel() and combines it with the primal result of
      * \ref eval_cuda().
      */
-    void eval(const Array<PosType, Dimension> &pos, Value *out,
+    void eval(const Array<Value, Dimension> &pos, Value *out,
               Mask active = true) const {
         if constexpr (HasCudaTexture) {
             if (m_use_accel) {
@@ -466,7 +469,7 @@ public:
      * This is an implementation detail, please use \ref eval_fetch() that may
      * dispatch to this function depending on its inputs.
      */
-    void eval_fetch_cuda(const Array<PosType, Dimension> &pos,
+    void eval_fetch_cuda(const Array<Value, Dimension> &pos,
                          Array<Value *, 1 << Dimension> &out,
                          Mask active = true) const {
         const size_t channels = m_value.shape(Dimension);
@@ -539,7 +542,7 @@ public:
      * This is an implementation detail, please use \ref eval_fetch() that may
      * dispatch to this function depending on its inputs.
      */
-    void eval_fetch_nonaccel(const Array<PosType, Dimension> &pos,
+    void eval_fetch_nonaccel(const Array<Value, Dimension> &pos,
                              Array<Value *, 1 << Dimension> &out,
                              Mask active = true) const {
         using InterpOffset = Array<Int32, 1 << Dimension>;
@@ -561,8 +564,7 @@ public:
         const uint32_t channels = (uint32_t) m_value.shape(Dimension);
         for (size_t i = 0; i < InterpOffset::Size; ++i)
             for (uint32_t ch = 0; ch < channels; ++ch)
-                out[i][ch] =
-                    gather<Value>(m_value.array(), idx[i] + ch, active);
+                out[i][ch] = Value(gather<_Storage>(m_value.array(), idx[i] + ch, active));
     }
 
     /**
@@ -575,7 +577,7 @@ public:
      * records the AD graph of \ref eval_fetch_nonaccel() and combines it with
      * the primal result of \ref eval_fetch_cuda().
      */
-    void eval_fetch(const Array<PosType, Dimension> &pos,
+    void eval_fetch(const Array<Value, Dimension> &pos,
                     Array<Value *, 1 << Dimension> &out,
                     Mask active = true) const {
         if constexpr (HasCudaTexture) {
@@ -616,7 +618,7 @@ public:
      * evaluation result is desired, the \ref eval_cubic() function is faster
      * than this simple implementation
      */
-    void eval_cubic_helper(const Array<PosType, Dimension> &pos, Value *out,
+    void eval_cubic_helper(const Array<Value, Dimension> &pos, Value *out,
                            Mask active = true) const {
         using Array4 = Array<Value, 4>;
         using InterpOffset = Array<Int32, ipow(4, Dimension)>;
@@ -656,14 +658,14 @@ public:
         for (uint32_t ch = 0; ch < channels; ++ch)
             out[ch] = zeros<Value>();
 
-        #define DR_TEX_CUBIC_ACCUM(index, weight)                                  \
-            {                                                                      \
-                UInt32 index_ = index;                                             \
-                Value weight_ = weight;                                            \
-                for (uint32_t ch = 0; ch < channels; ++ch)                         \
-                    out[ch] =                                                      \
-                        fmadd(gather<Value>(m_value.array(), index_ + ch, active), \
-                              weight_, out[ch]);                                   \
+        #define DR_TEX_CUBIC_ACCUM(index, weight)                                     \
+            {                                                                         \
+                UInt32 index_ = index;                                                \
+                Value weight_ = weight;                                               \
+                for (uint32_t ch = 0; ch < channels; ++ch)                            \
+                    out[ch] =                                                         \
+                        fmadd(gather<_Storage>(m_value.array(), index_ + ch, active), \
+                              weight_, out[ch]);                                      \
             }
 
         if constexpr (Dimension == 1) {
@@ -709,7 +711,7 @@ public:
      * calls \ref eval_cubic_helper() function to replace the AD graph with a
      * direct evaluation of the B-Spline basis functions in that case.
      */
-    void eval_cubic(const Array<PosType, Dimension> &pos, Value *out,
+    void eval_cubic(const Array<Value, Dimension> &pos, Value *out,
                     Mask active = true, bool force_nonaccel = false) const {
         using Array3 = Array<Value, 3>;
 
@@ -770,8 +772,7 @@ public:
         };
 
         ArrayX result = empty<ArrayX>(channels);
-        using F = PosType;
-
+        using F = Value;
 
         if constexpr (Dimension == 1) {
             Array3 cx = compute_weight_coord(0);
@@ -844,7 +845,7 @@ public:
      * to count for the transformation from the unit size volume to the size of its
      * shape.
      */
-    void eval_cubic_grad(const Array<PosType, Dimension> &pos,
+    void eval_cubic_grad(const Array<Value, Dimension> &pos,
                          Value *out_value, Array<Value, Dimension> *out_gradient,
                          Mask active = true) const {
         using Array4 = Array<Value, 4>;
@@ -900,7 +901,7 @@ public:
             {                                                                         \
                 UInt32 index_ = index;                                                \
                 for (uint32_t ch = 0; ch < channels; ++ch)                            \
-                    values[ch] = gather<Value>(m_value.array(), index_ + ch, active); \
+                    values[ch] = Value(gather<_Storage>(m_value.array(), index_ + ch, active)); \
             }
         #define DR_TEX_CUBIC_ACCUM_VALUE(weight)                               \
             {                                                                  \
@@ -975,7 +976,7 @@ public:
      * to count for the transformation from the unit size volume to the size of its
      * shape.
      */
-    void eval_cubic_hessian(const Array<PosType, Dimension> &pos,
+    void eval_cubic_hessian(const Array<Value, Dimension> &pos,
                             Value *out_value,
                             Array<Value, Dimension> *out_gradient,
                             Matrix<Value, Dimension> *out_hessian,
@@ -1043,11 +1044,11 @@ public:
         ArrayX values = empty<ArrayX>(channels);
 
         // Make sure channel related operations are executed together
-        #define DR_TEX_CUBIC_GATHER(index)                                            \
-            {                                                                         \
-                UInt32 index_ = index;                                                \
-                for (uint32_t ch = 0; ch < channels; ++ch)                            \
-                    values[ch] = gather<Value>(m_value.array(), index_ + ch, active); \
+        #define DR_TEX_CUBIC_GATHER(index)                                                      \
+            {                                                                                   \
+                UInt32 index_ = index;                                                          \
+                for (uint32_t ch = 0; ch < channels; ++ch)                                      \
+                    values[ch] = Value(gather<_Storage>(m_value.array(), index_ + ch, active)); \
             }
         #define DR_TEX_CUBIC_ACCUM_VALUE(weight_value)                                \
             {                                                                         \
