@@ -64,7 +64,7 @@ static const ArraySupplement &check_cond(nb::handle h) {
 
     nb::raise("the type of the loop condition ('%s') is not supported. The "
               "'cond' function must either return a Jit-compiled 1D Boolean "
-              "array or a Python 'bool'.", nb::type_name(tp).c_str());
+              "array or a Python 'bool'", nb::type_name(tp).c_str());
 }
 
 /// Callback functions that will be invoked by ad_loop()
@@ -161,7 +161,7 @@ nb::tuple while_loop(nb::tuple state, nb::callable cond, nb::callable body,
             symbolic = 0;
         else
             nb::raise("invalid 'mode' argument (must equal None, "
-                      "\"scalar\", \"symbolic\", or \"evaluated\").");
+                      "\"scalar\", \"symbolic\", or \"evaluated\")");
 
         const char *name_cstr =
             name.has_value() ? name.value().c_str() : "unnamed";
