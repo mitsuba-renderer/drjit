@@ -195,6 +195,33 @@ def test06_select():
         result = dr.select(l.ArrayXb(True, False), l.ArrayXi(3, 4), l.ArrayXf(5, 6))
         assert isinstance(result, l.ArrayXf) and dr.all(result == l.ArrayXf(3, 6))
 
+        # Test select on PyTree types (DRJIT_STRUCT, dataclasses, sequences, dicts)
+        class MyPoint2f:
+            DRJIT_STRUCT = { 'x' : l.Float, 'y': l.Float }
+
+            def __init__(self, x: l.Float = l.Float(), y: l.Float = l.Float()):
+                self.x = x
+                self.y = y
+
+        from dataclasses import dataclass
+        @dataclass
+        class Foo:
+            x: l.Float = l.Float(0)
+            y: l.Float = l.Float(0)
+
+        m = l.Bool(False, False, True, True)
+        result = dr.select(m, dr.zeros(MyPoint2f, 4), dr.ones(MyPoint2f, 4))
+        assert isinstance(result, MyPoint2f)
+        result = dr.select(m, dr.zeros(Foo, 4), dr.ones(Foo, 4))
+        assert isinstance(result, Foo)
+        result = dr.select(m, [l.Float(1), l.Float(2)], [l.Float(-1), l.Float(-2)])
+        assert str(result) == '[[-1, -1, 1, 1], [-2, -2, 2, 2]]'
+        result = dr.select(m, (l.Float(1), l.Float(2)), (l.Float(-1), l.Float(-2)))
+        assert str(result) == '([-1, -1, 1, 1], [-2, -2, 2, 2])'
+        result = dr.select(m, { 'a' : l.Float(1), 'b' : l.Float(2) },
+                         { 'a' : l.Float(-1), 'b' : l.Float(-2) })
+        assert str(result) == "{'a': [-1, -1, 1, 1], 'b': [-2, -2, 2, 2]}"
+
 @pytest.test_arrays('type=float32,shape=(*)')
 def test07_power(t):
     assert dr.allclose(t(2)**0, t(1))

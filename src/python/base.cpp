@@ -843,14 +843,38 @@ nb::object select(nb::handle h0, nb::handle h1, nb::handle h2) {
                     !is_drjit_array(h2)))
         return nb::steal(NB_NEXT_OVERLOAD);
 
-    PyObject *o =
-        apply<Select>(ArrayOp::Select, "select", std::make_index_sequence<3>(),
-                      h0.ptr(), h1.ptr(), h2.ptr());
+    nb::handle tp = h1.type();
 
-    if (!o)
-        nb::raise_python_error();
+    if (is_drjit_type(tp) || !tp.is(h2.type()) ||
+        tp.is(&PyLong_Type) || tp.is(&PyFloat_Type)) {
+        PyObject *o = apply<Select>(ArrayOp::Select, "select", 
+            std::make_index_sequence<3>(), h0.ptr(), h1.ptr(), h2.ptr());
 
-    return nb::steal(o);
+        if (!o)
+            nb::raise_python_error();
+
+        return nb::steal(o);
+    }
+
+    // Otherwise PyTree recurse
+    // This has stricter pre-conditions regarding the select arguments being
+    // consistent types so only perform as a last resort
+    struct SelectCB : TransformPairCallback {
+        SelectCB(nb::handle mask) : mask(mask) {}
+        void operator()(nb::handle h1, nb::handle h2, nb::handle h3) override {
+            PyObject *o = apply<Select>(ArrayOp::Select, "select", 
+                std::make_index_sequence<3>(), mask.ptr(), h1.ptr(), h2.ptr());
+
+            if (!o)
+                nb::raise_python_error();
+
+            nb::inst_replace_copy(h3, nb::steal(o));
+        }
+        nb::handle mask;
+
+    } select_cb(h0);
+
+    return transform_pair("drjit.select", select_cb, h1, h2);
 }
 
 nb::object reinterpret_array(nb::type_object_t<dr::ArrayBase> t, nb::handle_t<dr::ArrayBase> h) {
