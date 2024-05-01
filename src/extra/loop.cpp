@@ -885,12 +885,12 @@ bool ad_loop(JitBackend backend, int symbolic, int compress,
                         "another symbolic operation).", name);
             symbolic = 1;
         } else {
-            symbolic = flags & (uint32_t) JitFlag::SymbolicLoops;
+            symbolic = bool(flags & (uint32_t) JitFlag::SymbolicLoops);
         }
     }
 
     if (compress == -1)
-        compress = (int) flags & (uint32_t) JitFlag::CompressLoops;
+        compress = (int) bool(flags & (uint32_t) JitFlag::CompressLoops);
 
     if (symbolic != 0 && symbolic != 1)
         jit_raise("'symbolic' must equal 0, 1, or -1.");

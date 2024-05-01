@@ -591,7 +591,7 @@ bool ad_cond(JitBackend backend, int symbolic, const char *label, void *payload,
                         "another symbolic operation).", label);
             symbolic = 1;
         } else {
-            symbolic = flags & (uint32_t) JitFlag::SymbolicConditionals;
+            symbolic = bool(flags & (uint32_t) JitFlag::SymbolicConditionals);
         }
     }
 
