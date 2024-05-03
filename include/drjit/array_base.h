@@ -852,6 +852,13 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
                            mode);
     }
 
+    Derived block_reduce_(ReduceOp op, size_t block_size, int symbolic) const {
+        Derived value;
+        for (size_t i = 0; i < derived().size(); ++i)
+            value.entry(i) = derived().entry(i).block_reduce_(op, block_size, symbolic);
+        return value;
+    }
+
     static Derived load_aligned_(const void *mem, size_t size) {
         return Derived::load_(mem, size);
     }
