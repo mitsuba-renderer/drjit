@@ -13,13 +13,13 @@ template <typename T> auto bind_tensor(py::module m) {
        .def(py::init([](py::object o) -> Tensor {
             std::string mod = py::cast<std::string>(o.get_type().attr("__module__"));
             const char *mod_s = mod.c_str();
+            bool is_drjit = strncmp(mod_s, "drjit", 5) || py::hasattr(o, "IsDrJit");
             if (strncmp(mod_s, "numpy", 5) == 0 ||
                 strncmp(mod_s, "torch", 5) == 0 ||
                 strncmp(mod_s, "jax.interpreters.xla", 20) == 0 ||
                 strncmp(mod_s, "jaxlib", 6) == 0 ||
                 strncmp(mod_s, "tensorflow", 10) == 0 ||
-                (strncmp(mod_s, "drjit", 5) != 0
-                 && py::hasattr(o, "__array_interface__"))) {
+                (!is_drjit && py::hasattr(o, "__array_interface__"))) {
                 o = tensor_init(py::type::of<Tensor>(), o);
                 return py::cast<Tensor>(o);
             } else {
