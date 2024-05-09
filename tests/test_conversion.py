@@ -96,3 +96,33 @@ def test08_roundtrip_vector_jax(t):
 
     assert roundtrip.shape == (3, 3) and roundtrip.shape == a.shape
     assert dr.all(a == roundtrip, axis=None)
+
+# Test inplace modifications from numpy (tensors & dynamic array)
+@pytest.test_arrays('tensor, -bool, -float16, -uint64, -uint32')
+def test09_inplace_numpy(t):
+    pytest.importorskip("numpy")
+    a = dr.empty(t, shape=(3, 3, 3))
+    x = a.numpy()
+    x[0,0,0] = 1
+
+    assert a[0,0,0] == x[0,0,0]
+
+# Test inplace modifications from torch (tensors & dynamic array)
+@pytest.test_arrays('tensor, -bool, -float16, -uint64, -uint32')
+def test10_inplace_torch(t):
+    pytest.importorskip("torch")
+    a = dr.empty(t, shape=(3, 3, 3))
+    x = a.torch()
+    x[0,0,0] = 1
+
+    assert a[0,0,0] == x[0,0,0]
+
+# Test inplace modifications from jax (tensors & dynamic array)
+@pytest.test_arrays('tensor, -bool, -float16, -uint64, -uint32')
+def test11_inplace_jax(t):
+    pytest.importorskip("jax")
+    a = dr.empty(t, shape=(3, 3, 3))
+    x = a.jax()
+    x[0,0,0] = 1
+
+    assert a[0,0,0] == x[0,0,0]

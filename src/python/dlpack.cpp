@@ -111,13 +111,6 @@ static nb::ndarray<> dlpack(nb::handle_t<ArrayBase> h, bool force_cpu, nb::handl
 
             value = JitVar::steal(jit_var_data(value.index(), &ptr));
 
-            if (value.index() != index) {
-                nb::object tmp = nb::inst_alloc(owner.type());
-                s2.init_index(value.index(), inst_ptr(tmp));
-                nb::inst_mark_ready(tmp);
-                owner = std::move(tmp);
-            }
-
             if (backend == JitBackend::CUDA && !force_cpu) {
                 device_type = nb::device::cuda::value;
                 device_id = jit_var_device(index);
@@ -142,6 +135,12 @@ static nb::ndarray<> dlpack(nb::handle_t<ArrayBase> h, bool force_cpu, nb::handl
                 }
             } else {
                 jit_sync_thread();
+            }
+
+            if (value.index() != index) {
+                nb::object tmp = nb::inst_alloc(owner.type());
+                s2.init_index(value.index(), inst_ptr(tmp));
+                nb::inst_replace_move(owner, tmp);
             }
         } else {
             nb::object arr = nb::borrow(h);
