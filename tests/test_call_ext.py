@@ -876,6 +876,7 @@ def test17_packet_scatter(t):
     c.scatter_packet(dr.uint32_array_t(t)(1, 2, 3, 0, 0), v)
     assert dr.all(a.value == [0, 0, 0, 0, 10, 101, 1001, 10001, 11, 102, 1002, 10002, 12, 103, 1003, 10003])
 
+
 @pytest.test_arrays('float32,is_diff,shape=(*)')
 def test18_packet_scatter_add(t):
     # Packet scatter_add within vcalls, tests C++ routing and LLVM pointer calculation logic for this special case
@@ -893,3 +894,26 @@ def test18_packet_scatter_add(t):
     v=m.Array4f([10, 11, 12, 0, 0], [101, 102, 103, 0, 0], [1001, 1002,1003, 0, 0], [10001, 10002, 10003, 0, 0])
     c.scatter_add_packet(dr.uint32_array_t(t)(1, 2, 3, 0, 0), v)
     assert dr.all(a.value == [1, 1, 1, 1, 11, 102, 1002, 10002, 12, 103, 1003, 10003, 13, 104, 1004, 10004])
+
+
+@pytest.mark.parametrize("symbolic", [True, False])
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+def test19_nested_call(t, symbolic):
+    pkg = get_pkg(t)
+
+    A, B, Base, BasePtr = pkg.A, pkg.B, pkg.Base, pkg.BasePtr
+    a, b = A(), B()
+
+    U = dr.uint32_array_t(t)
+    xi = t(1, 2, 8, 3, 4)
+    yi = dr.reinterpret_array(U, BasePtr(a, a, a, a, a))
+
+    def my_func(self, xi, yi):
+        return self.nested(xi, yi)
+
+    c = BasePtr(a, a, a, b, b)
+
+    with dr.scoped_set_flag(dr.JitFlag.SymbolicCalls, symbolic):
+        xo = dr.dispatch(c, my_func, xi, yi)
+
+    assert dr.all(xo == xi)
