@@ -29,7 +29,7 @@ Here is what's new:
     that binary wheels will work on future versions of Python without
     recompilation.
 
-  - thorough type annotations enable static type checking and better code
+  - Thorough type annotations improve static type checking and code
     completion in editors like `VS Code <https://code.visualstudio.com>`__.
 
 - **Natural syntax**: vectorized loops and conditionals can now be expressed
@@ -40,12 +40,12 @@ Here is what's new:
 
      from drjit.cuda import Int, Float
 
-     @dr.syntax
+     @dr.syntax # <-- new!
      def ipow(x: Float, n: Int):
          result = Float(1)
 
-         while n != 0:
-             if n & 1 != 0:
+         while n != 0:       # <-- vectorized loop ('n' is an array)
+             if n & 1 != 0:  # <-- vectorized conditional
                  result *= x
              x *= x
              n >>= 1
@@ -55,7 +55,7 @@ Here is what's new:
   Given that this function processes arrays, we expect that condition of the
   ``if`` statement may disagree among elements. Also, each element may need a
   different number of loop iterations. However, such component-wise
-  conditionals and loops aren't supported by stock Python. Previously, Dr.Jit
+  conditionals and loops aren't supported by normal Python. Previously, Dr.Jit
   provided ways of expressing such code using masking and a special
   ``dr.cuda.Loop`` object, but this was rather tedious.
 
@@ -121,21 +121,6 @@ Here is what's new:
      a = Array4f(...), b = Array2f(...)
      a.xyw = a.xzy + b.xyx
 
-- Reductions operations previously existed as *ordinary* (e.g.,
-  :py:func:`drjit.all`) and *nested* (e.g. ``drjit.all_nested``) variants. Both
-  are now subsumed by an optional ``axis`` argument similar to how this works
-  in other array programming frameworks like NumPy. All functions support both
-  regular Dr.Jit arrays and tensors.
-
-  The reduction functions (:py:func:`drjit.all` :py:func:`drjit.any`,
-  :py:func:`drjit.sum`, :py:func:`drjit.prod`, :py:func:`drjit.min`,
-  :py:func:`drjit.max`) reduce over the outermost axis (``axis=0``) by default,
-  Specify ``axis=None`` to reduce the entire array recursively analogous to the
-  previous nested reduction.
-
-  Aliases for the ``_nested`` function variants still exist to facilitate
-  porting but are deprecated and will be removed in a future release.
-
 - **Scatter-reductions**: the performance of atomic scatter-reductions
   (:py:func:`drjit.scatter_reduce`, :py:func:`drjit.scatter_add`) has been
   *significantly* improved. Both functions now provide a ``mode=`` parameter to
@@ -147,10 +132,9 @@ Here is what's new:
   section on :ref:`atomic reductions <reduce-local>` for details and
   benchmarks with plots.
 
-* **Packet memory operations**: programs sometimes need to gather or scatter
-  several memory locations that are contiguous in memory. In principle, it
-  should be possible to perform such reads or writes more efficiently than via
-  general gathers/gathers.
+* **Packet memory operations**: programs often gather or scatter several memory
+  locations that are directly next to each other in memory. In principle, it
+  should be possible to do such reads or writes more efficiently.
 
   Dr.Jit now features improved code generation to realize this optimization
   for calls to :py:func:`dr.gather() <gather>` and :py:func:`dr.scatter()
@@ -166,11 +150,27 @@ Here is what's new:
   which combines the benefits of both steps. This is particularly useful when
   computing the reverse-mode derivative of packet reads.
 
+- Reductions operations previously existed as *ordinary* (e.g.,
+  :py:func:`drjit.all`) and *nested* (e.g. ``drjit.all_nested``) variants. Both
+  are now subsumed by an optional ``axis`` argument similar to how this works
+  in other array programming frameworks like NumPy. All functions support both
+  regular Dr.Jit arrays and tensors.
+
+  The reduction functions (:py:func:`drjit.all` :py:func:`drjit.any`,
+  :py:func:`drjit.sum`, :py:func:`drjit.prod`, :py:func:`drjit.min`,
+  :py:func:`drjit.max`) reduce over the outermost axis (``axis=0``) by default,
+  Specify ``axis=None`` to reduce the entire array recursively analogous to the
+  previous nested reduction.
+
+  Aliases for the ``_nested`` function variants still exist to facilitate
+  porting but are deprecated and will be removed in a future release.
+
+
 - **DDA**: a newly added *digital differential analyzer*
   (:py:func:`drjit.dda.dda`) can be used to traverse the intersection of a ray
-  segment and an n-dimensional grid. The function :py:func`drjit.dda.integrate`
-  builds on this functionality to compute analytic differentiable line
-  integrals of bi- and trilinear interpolants.
+  segment and an n-dimensional grid. The function
+  :py:func:`drjit.dda.integrate()` builds on this functionality to compute
+  analytic differentiable line integrals of bi- and trilinear interpolants.
 
 - **Loop compression**: the implementation of evaluated loops (previously
   referred to as wavefront mode) visits all entries of the loop state variables
