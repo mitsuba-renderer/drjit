@@ -505,7 +505,7 @@ struct DRJIT_TRIVIAL_ABI DiffArray
     static Array<DiffArray, N> gather_packet_(const DiffArray &src, const Index &index,
                                               const Mask &mask, ReduceMode mode) {
         if constexpr (N & (N-1)) {
-            return Base::gather_packet_(src, index, mask);
+            return Base::gather_packet_<N>(src, index, mask, mode);
         } else {
             static_assert(
                 std::is_same_v<detached_t<Mask>, detached_t<mask_t<DiffArray>>>);

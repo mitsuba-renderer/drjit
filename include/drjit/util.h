@@ -17,28 +17,6 @@
 
 NAMESPACE_BEGIN(drjit)
 
-template <typename Array> Array tile(const Array &array, size_t count) {
-    static_assert(is_array_v<Array> && is_dynamic_v<Array>,
-                  "tile(): requires a dynamic Dr.Jit array as input!");
-
-    size_t size = array.size();
-
-    if constexpr (Array::Depth > 1) {
-        Array result;
-        if (Array::Size == Dynamic)
-            result.init_(size);
-
-        for (size_t i = 0; i < size; ++i)
-            result.set_entry(i, tile(array.entry(i), count));
-
-        return result;
-    } else {
-        using UInt = uint32_array_t<Array>;
-        UInt index = imod(arange<UInt>((uint32_t) (size * count)), (uint32_t) size);
-        return gather<Array>(array, index);
-    }
-}
-
 template <typename Array> Array repeat(const Array &array, size_t count) {
     static_assert(is_array_v<Array> && is_dynamic_v<Array>,
                   "repeat(): requires a dynamic Dr.Jit array as input!");
