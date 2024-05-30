@@ -561,6 +561,19 @@ Typing
 .. autoattribute:: Ts
 .. autoattribute:: AnyArray
 
+Local memory
+------------
+
+.. autofunction:: alloc_local
+.. autoclass:: Alloc
+
+   .. automethod:: __init__
+   .. automethod:: read
+   .. automethod:: write
+   .. automethod:: __getindex__
+   .. automethod:: __setindex__
+   .. automethod:: __len__
+
 Digital Differential Analyzer
 -----------------------------
 
@@ -577,3 +590,4 @@ grid.
 
 .. autofunction:: dda
 .. autofunction:: integrate
+

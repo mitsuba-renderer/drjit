@@ -153,8 +153,8 @@ Here is what's new:
 - Reductions operations previously existed as *ordinary* (e.g.,
   :py:func:`drjit.all`) and *nested* (e.g. ``drjit.all_nested``) variants. Both
   are now subsumed by an optional ``axis`` argument similar to how this works
-  in other array programming frameworks like NumPy. All functions support both
-  regular Dr.Jit arrays and tensors.
+  in other array programming frameworks like NumPy. Reductions can process
+  any number of axes on both regular Dr.Jit arrays and tensors.
 
   The reduction functions (:py:func:`drjit.all` :py:func:`drjit.any`,
   :py:func:`drjit.sum`, :py:func:`drjit.prod`, :py:func:`drjit.min`,
@@ -162,9 +162,14 @@ Here is what's new:
   Specify ``axis=None`` to reduce the entire array recursively analogous to the
   previous nested reduction.
 
-  Aliases for the ``_nested`` function variants still exist to facilitate
-  porting but are deprecated and will be removed in a future release.
+  Aliases for the ``_nested`` function variants still exist to help porting but
+  are deprecated and will be removed in a future release.
 
+- **Local memory**: kernels can now allocate temporary thread-local memory and
+  perform arbitrary indexed reads and writes. This is useful to implement a
+  stack or other types of scratch space that might be needed by a calculation.
+  See the separate documentation section about :ref:`local memory
+  <local_memory>` for details.
 
 - **DDA**: a newly added *digital differential analyzer*
   (:py:func:`drjit.dda.dda`) can be used to traverse the intersection of a ray

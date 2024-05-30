@@ -344,12 +344,12 @@ it if you encounter the following circumstances:
 
 Example uses might include `insertion sort
 <https://en.wikipedia.org/wiki/Insertion_sort>`__ to maintain a small sorted
-list, or a `LU factorization
+list, a local stack to traverse a tree data structure, or a `LU factorization
 <https://en.wikipedia.org/wiki/LU_decomposition>`__ of a small (e.g. 32×32)
 matrix with column pivoting. In contrast to what the name might suggest, local
-memory is not particularly fast or local to the processor. In fact, it is based
-on standard global device memory. Local memory is also not to be confused with
-*shared memory* on CUDA architectures.
+memory is neither particularly fast nor local to the processor. In fact, it is
+based on standard global device memory. Local memory is also not to be confused
+with *shared memory* on CUDA architectures.
 
 The point of local memory is that it exposes global memory in a different
 way to provide a *local scratch space* within a larger parallel computation.
