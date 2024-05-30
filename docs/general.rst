@@ -289,9 +289,7 @@ Custom types
 
 There are two ways of extending PyTrees with custom data types. The first is to
 register a Python `data class
-<https://docs.python.org/3/library/dataclasses.html>`__. Note that this type
-must be default-constructible, which means that its members should have default
-initializers.
+<https://docs.python.org/3/library/dataclasses.html>`__.
 
 .. code-block:: python
 
@@ -300,8 +298,8 @@ initializers.
 
    @dataclass
    class MyPoint2f:
-       x: Float = Float(0)
-       y: Float = Float(0)
+       x: Float
+       y: Float
 
    # Create a vector representing 100 2D points. Dr.Jit will
    # automatically populate the 'x' and 'y' members
@@ -310,9 +308,8 @@ initializers.
 The second option is to annotate an existing non-dataclass type (e.g. a
 standard Python class or a C++ binding) with a static ``DRJIT_STRUCT`` member.
 This is simply a dictionary describing the names and types of all fields.
-Such custom types must also be default-constructible (i.e., the constructor
-should work if called without arguments). The following is analogous to the
-above dataclass version:
+Such custom types must be default-constructible (i.e., the constructor
+should work if called without arguments).
 
 .. code-block:: python
 
@@ -320,10 +317,6 @@ above dataclass version:
 
    class MyPoint2f:
        DRJIT_STRUCT = { 'x' : Float, 'y': Float }
-
-       def __init__(self, x: Float | None = None, y: Float | None = None):
-           self.x = x or Float()
-           self.y = y or Float()
 
    # Create a vector representing 100 2D points. Dr.Jit will
    # automatically populate the 'x' and 'y' members
@@ -333,8 +326,10 @@ Fields don't exclusively have to be containers or Dr.Jit types. For example, we
 could have added an extra ``datetime`` entry to record when a set of points was
 captured. Such fields will be ignored by traversal operations.
 
+.. _local_memory:
+
 Local memory
-============
+------------
 
 *Local memory* is a relatively advanced feature of Dr.Jit. You need it
 it if you encounter the following circumstances:
@@ -361,14 +356,14 @@ way to provide a *local scratch space* within a larger parallel computation.
 Normally, one would use :py:func:`drjit.gather` and :py:func:`drjit.scatter` to
 dynamically read and write memory. However, they cannot be used in this
 situation because *read-after-write* (RAW) dependencies would trigger variable
-evaluations that aren't permitted in a symbolic context. Local memory
-legalizes such use of memory.
+evaluations that aren't permitted in a symbolic context. Local memory legalizes
+such programs because RAW dependencies among threads are not possible.
 
 Local memory is only temporary and does not add to the long-term memory
 requirements of a program. However, the short-term memory usage can be
 *significant* because local memory is separately allocated for each thread. On
-a CUDA device, there could be as many as 1 million threads across
-simultaneously resident thread blocks. A seemingly small local 1024-element
+a CUDA device, there could be as many as 1 million simultaneously resident threads across
+thread blocks. A seemingly small local 1024-element
 single precision array then expands into a whopping 4 GiB of memory.
 
 Use the :py:func:`drjit.alloc_local` function to create a
@@ -380,15 +375,15 @@ largest histogram bucket.
 
 .. code-block:: python
 
-   from drjit.auto import UInt32, Float
+   from drjit.auto import UInt32
 
    # A function returning results in the range 0..9
    def f(i: UInt32) -> UInt32: ....
 
    @dr.syntax
    def g(n: UInt32):
-       # Returns: zero-initialized 'hist' of type 'drjit.Local[drjit.auto.Float]'
-       hist = dr.alloc_local(Float, 10, value=dr.zeros(Float))
+       # Create zero-initialized 'hist' of type 'drjit.Local[drjit.auto.UInt32]'
+       hist = dr.alloc_local(UInt32, 10, value=dr.zeros(UInt32))
 
        # Fill histogram
        i = UInt32(0)
@@ -397,7 +392,7 @@ largest histogram bucket.
            i += 1
 
        # Get the largest histogram entry
-       i = UInt32(0), maxval = UInt32(0)
+       i, maxval = UInt32(0), UInt32(0)
        while i < 10:
            maxval = dr.maximum(maxval, hist[i])
            i += 1

@@ -27,7 +27,7 @@ Local::Local(nb::handle dtype, size_t length, nb::handle value)
     : m_dtype(nb::borrow(dtype)), m_length(length),
       m_value(value.is_none() ? nb::object() : nb::borrow(value)) {
 
-    /// Localate variable arrays for the input PyTree
+    /// Allocate variable arrays for the input PyTree
     struct LocalCallback : Callback {
         size_t length;
         dr::vector<uint32_t> arrays;
@@ -72,6 +72,14 @@ Local::Local(nb::handle dtype, size_t length, nb::handle value)
     m_index_tp = meta_get_type(m);
     m.type = (uint32_t) VarType::Bool;
     m_mask_tp = meta_get_type(m);
+}
+
+Local::Local(const Local &l) : m_dtype(l.m_dtype), m_length(l.m_length), m_value(l.m_value), m_backend(l.m_backend), m_index_tp(l.m_index_tp), m_mask_tp(l.m_mask_tp) {
+    m_arrays.reserve(l.m_arrays.size());
+    for (uint32_t index: l.m_arrays) {
+        jit_var_inc_ref(index);
+        m_arrays.push_back(index);
+    }
 }
 
 Local::~Local() {
@@ -142,9 +150,14 @@ void Local::write(nb::handle index_, nb::handle value_, nb::handle mask_) {
             if (ctr >= arrays.size())
                 nb::raise("Local.write(): internal error, ran out of "
                           "variable arrays!");
-            uint32_t value_i = s.index(inst_ptr(value));
+            uint64_t value_i = s.index(inst_ptr(value));
+            if (value_i >> 32)
+                nb::raise("Local memory writes are not differentiable. You "
+                          "must use 'drjit.detach()' to disable gradient "
+                          "tracking of the written value.");
+
             uint32_t result =
-                jit_array_write(arrays[ctr], index, value_i, mask);
+                jit_array_write(arrays[ctr], index, (uint32_t) value_i, mask);
             jit_var_dec_ref(arrays[ctr]);
             arrays[ctr++] = result;
             return nb::object();
@@ -311,7 +324,8 @@ static nb::object traverse(nb::handle tp, nb::handle v1, nb::handle v2,
         }
     } else if (nb::object df = get_dataclass_fields(tp); df.is_valid()) {
         if (ret)
-            result = tp();
+            result = nb::dict();
+        nb::dict d;
         for (auto field : df) {
             nb::object k = field.attr(DR_STR(name));
             nb::object v = field.attr(DR_STR(type));
@@ -319,8 +333,10 @@ static nb::object traverse(nb::handle tp, nb::handle v1, nb::handle v2,
             nb::object v2_k = v2.is_valid() ? nb::getattr(v2, k) : nb::object();
             nb::object r_k = traverse(v, v1_k, v2_k, ret, cb);
             if (ret)
-                nb::setattr(result, k, r_k);
+                result[k] = r_k;
         }
+        if (ret)
+            result = tp(**result);
     } else if (tp.is(nb::type<Local>())) {
         nb::raise("drjit.Local: 'dtype' may not contain nested "
                   "'drjit.Local' instances.");
@@ -335,24 +351,27 @@ nb::handle local_type;
 
 void export_local(nb::module_ &m) {
     local_type = nb::class_<Local>(m, "Local", nb::is_generic(),
-                                   nb::sig("class Local(typing.Generic[T])"))
-        .def("__len__", &Local::len)
+                                   nb::sig("class Local(typing.Generic[T])"), doc_Local)
+        .def(nb::init<Local>(), doc_Local_Local)
+        .def("__len__", &Local::len, doc_Local___len__)
         .def("__getitem__",
              [](Local &a, nb::object index) {
                  return a.read(std::move(index), a.mask_type()(true));
              },
-             nb::sig("def __getitem__(self, arg: int | AnyArray, /) -> T"))
+             nb::sig("def __getitem__(self, arg: int | AnyArray, /) -> T"),
+             doc_Local___getitem__)
         .def("__setitem__",
              [](Local &a, nb::object index, nb::object value) {
                  a.write(std::move(index), value, a.mask_type()(true));
              },
-             nb::sig("def __setitem__(self, arg0: int | AnyArray, arg1: T, /) -> None"))
+             nb::sig("def __setitem__(self, arg0: int | AnyArray, arg1: T, /) -> None"),
+             doc_Local___setitem__)
         .def("read", &Local::read, "index"_a, "active"_a = true,
              nb::sig("def read(self, index: int | AnyArray, active: bool | "
-                     "AnyArray = True) -> T"))
+                     "AnyArray = True) -> T"), doc_Local_read)
         .def("write", &Local::write, "index"_a, "value"_a, "active"_a = true,
              nb::sig("def write(self, index: int | AnyArray, value: T, active: "
-                     "bool | AnyArray = True) -> None"))
+                     "bool | AnyArray = True) -> None"), doc_Local_write)
         .def("__repr__", &Local::repr);
 
     m.def(
@@ -363,5 +382,7 @@ void export_local(nb::module_ &m) {
         "dtype"_a, "size"_a, "value"_a = nb::none(),
         nb::rv_policy::take_ownership,
         nb::sig("def alloc_local(dtype: type[T], size: int, value: T | None = None) "
-                "-> Local[T]"));
+                "-> Local[T]"),
+        doc_alloc_local
+    );
 }

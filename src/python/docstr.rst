@@ -7615,3 +7615,84 @@
 
    Adjust the ``drjit.auto.*`` module so that it refers to types from the
    specified backend.
+
+.. topic:: Local
+
+   This generic class (parameterized by an extra type ``T``) represents a
+   *local memory buffer*---that is, a temporary scratch space with support for
+   indexed reads and writes.
+
+   See the separate documentation section on :ref:`local memory <local_memory>`
+   for details on the role of local memory and situations where it is useful.
+
+.. topic:: Local___len__
+
+   Return the length (# of entries) of the local memory buffer. This corresponds
+   to the ``size`` value passed to :py:func:`alloc_local`.
+
+.. topic:: Local_Local
+
+   Copy-constructor, creates a copy of a given local memory buffer.
+
+.. topic:: Local_read
+
+   Read the local memory buffer at index ``index`` and return a result of type
+   ``T``. An optional mask can be provided as well. Masked reads evalute to
+   zero.
+
+   .. danger::
+
+       The indices provided to this operation are unchecked by default.
+       Attempting to read beyond the end of the buffer is undefined behavior
+       and may crash the application, unless such reads are explicitly disabled
+       via the ``active`` parameter. Negative indices are not permitted.
+
+       If *debug mode* is enabled via the :py:attr:`drjit.JitFlag.Debug` flag,
+       Dr.Jit will insert range checks into the program. These checks disable
+       out-of-bound reads and furthermore report warnings to identify problematic
+       source locations:
+
+.. topic:: Local_write
+
+   Store the value ``value`` at index ``index``. An optional mask can be
+   provided as well. Masked writes are no-ops.
+
+   .. danger::
+
+       The indices provided to this operation are unchecked by default.
+       Attempting to write beyond the end of the buffer is undefined behavior
+       and may crash the application, unless such writes are explicitly disabled
+       via the ``active`` parameter. Negative indices are not permitted.
+
+       If *debug mode* is enabled via the :py:attr:`drjit.JitFlag.Debug` flag,
+       Dr.Jit will insert range checks into the program. These checks disable
+       out-of-bound writes and furthermore report warnings to identify
+       problematic source locations:
+
+.. topic:: Local___getitem__
+
+   Perform an normal read at the given index. This is equivalent to ``read(.., active=True)``.
+
+.. topic:: Local___setitem__
+
+   Perform an normal write at the given index. This is equivalent to ``write(.., active=True)``.
+
+.. topic:: alloc_local
+
+   Allocate a local memory buffer with type ``dtype`` and size ``size``.
+
+   See the separate documentation section on :ref:`local memory <local_memory>`
+   for details on the role of local memory and situations where it is useful.
+
+    Args:
+        dtype (type): Desired Dr.Jit array type or :ref:`PyTree <pytrees>`.
+
+        size (int): Number of buffer elements. This value must be statically
+          known.
+
+        value: If desired, an instance of type ``dtype``/``T`` can be provided
+          here to default-initialize all entries of the buffer. Otherwise, it is
+          let uninitialized.
+
+    Returns:
+        Local[T]: The allocated local memory buffer

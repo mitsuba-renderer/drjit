@@ -886,12 +886,12 @@ nb::object transform(const char *op, TransformCallback &tc, nb::handle h) {
                     nb::setattr(tmp, k, transform(op, tc, nb::getattr(h, k)));
                 result = std::move(tmp);
             } else if (nb::object df = get_dataclass_fields(tp); df.is_valid()) {
-                nb::object tmp = tp();
+                nb::object tmp = nb::dict();
                 for (nb::handle field : df) {
                     nb::object k = field.attr(DR_STR(name));
-                    nb::setattr(tmp, k, transform(op, tc, nb::getattr(h, k)));
+                    tmp[k] = transform(op, tc, nb::getattr(h, k));
                 }
-                result = std::move(tmp);
+                result = tp(**tmp);
             } else if (nb::object cb = get_traverse_cb_rw(tp); cb.is_valid()) {
                 cb(h, nb::cpp_function([&](uint64_t index) { return tc(index); }));
                 result = nb::borrow(h);
@@ -1029,14 +1029,13 @@ nb::object transform_pair(const char *op, TransformPairCallback &tc,
                                                nb::getattr(h2, k)));
                 return result;
             } else if (nb::object df = get_dataclass_fields(tp1); df.is_valid()) {
-                nb::object result = tp1();
+                nb::dict result;
                 for (nb::handle field : df) {
                     nb::object k = field.attr(DR_STR(name));
-                    nb::setattr(result, k,
-                                transform_pair(op, tc, nb::getattr(h1, k),
-                                               nb::getattr(h2, k)));
+                    result[k] = transform_pair(op, tc, nb::getattr(h1, k),
+                                               nb::getattr(h2, k));
                 }
-                return result;
+                return tp1(**result);
             } else {
                 return nb::none();
             }

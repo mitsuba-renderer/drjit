@@ -830,23 +830,23 @@ std::pair<nb::object, bool> VariableTracker::Impl::rebuild(dr::string &label) {
                 }
             }
         } else if (nb::object df = get_dataclass_fields(tp); df.is_valid()) {
-            nb::object tmp = tp();
+            nb::dict tmp;
             for (auto field : df) {
                 nb::object k = field.attr(DR_STR(name));
                 ScopedAppendLabel guard(label, ".", nb::str(k).c_str());
                 auto [o, n] = rebuild(label);
-                nb::setattr(tmp, k, o);
+                tmp[k] = o;
                 new_object |= n;
             }
             if (new_object) {
                 if (mutate) {
                     for (auto field : df) {
                         nb::object k = field.attr(DR_STR(name));
-                        nb::setattr(value, k, nb::getattr(tmp, k));
+                        nb::setattr(value, k, tmp[k]);
                     }
                     new_object = false;
                 } else {
-                    value = tmp;
+                    value = tp(**tmp);
                 }
             }
         } else if (!value.is(v->value)) {

@@ -13,10 +13,13 @@
 class Local {
 public:
     /**
-     * \brief Localate local memory to store a PyTree of type ``dtype`` with length
+     * \brief Allocate local memory to store a PyTree of type ``dtype`` with length
      * length ``length``. If desired, a default value can be specified.
      */
     Local(nb::handle dtype, size_t length, nb::handle value = nb::none());
+
+    /// Copy constructor
+    Local(const Local &l);
 
     // Destroy the ``Local`` object, decrease the refcounts of the array variables
     ~Local();

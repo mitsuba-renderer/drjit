@@ -848,7 +848,7 @@ nb::object full(const char *name, nb::handle dtype, nb::handle value,
 
                 return result;
             } else if (nb::object df = get_dataclass_fields(dtype); df.is_valid()) {
-                nb::object result = dtype();
+                nb::object result = nb::dict();
 
                 for (auto field : df) {
                     nb::object k = field.attr(DR_STR(name)),
@@ -865,9 +865,9 @@ nb::object full(const char *name, nb::handle dtype, nb::handle value,
                     else
                         entry = full(name, v, value, ndim, shape, opaque);
 
-                    nb::setattr(result, k, entry);
+                    result[k] = entry;
                 }
-                return result;
+                return dtype(**result);
             }
 
             if (!value.is_valid() || value.is(nb::int_(0)))
