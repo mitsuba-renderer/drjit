@@ -331,7 +331,7 @@ captured. Such fields will be ignored by traversal operations.
 Local memory
 ------------
 
-*Local memory* is a relatively advanced feature of Dr.Jit. You need it
+*Local memory* is a relatively advanced feature of Dr.Jit. You may need it
 it if you encounter the following circumstances:
 
 1. A symbolic loop in your program must *both read and write* the same
@@ -342,32 +342,51 @@ it if you encounter the following circumstances:
 
 3. The buffer is *small* (e.g., a few 100-1000s of entries).
 
-Example uses might include `insertion sort
+The :py:func:`drjit.alloc_local` function allocates a local memory buffer of
+size ``n`` and type ``T``:
+
+.. code-block:: python
+
+   buf: dr.Local[T] = dr.alloc_local(T, n)
+
+You may further specify an optional ``value=...`` argument to
+default-initialize the buffer entries. The returned instance of type
+:py:class:`drjit.Local` represents the allocation. Its elements can be accessed
+using the regular ``[]`` indexing syntax.
+
+Example uses of local memory might include a local stack to traverse a tree
+data structure, `insertion sort
 <https://en.wikipedia.org/wiki/Insertion_sort>`__ to maintain a small sorted
-list, a local stack to traverse a tree data structure, or a `LU factorization
+list, or a `LU factorization
 <https://en.wikipedia.org/wiki/LU_decomposition>`__ of a small (e.g. 32×32)
 matrix with column pivoting. In contrast to what the name might suggest, local
 memory is neither particularly fast nor local to the processor. In fact, it is
 based on standard global device memory. Local memory is also not to be confused
-with *shared memory* on CUDA architectures.
+with *shared memory* present on CUDA architectures.
 
-The point of local memory is that it exposes global memory in a different
+The purpose of local memory is that it exposes global memory in a different
 way to provide a *local scratch space* within a larger parallel computation.
 Normally, one would use :py:func:`drjit.gather` and :py:func:`drjit.scatter` to
 dynamically read and write memory. However, they cannot be used in this
 situation because *read-after-write* (RAW) dependencies would trigger variable
 evaluations that aren't permitted in a symbolic context. Local memory legalizes
-such programs because RAW dependencies among threads are not possible.
+such programs because RAW dependencies among multiple threads are simply not possible.
 
-Local memory is only temporary and does not add to the long-term memory
-requirements of a program. However, the short-term memory usage can be
-*significant* because local memory is separately allocated for each thread. On
-a CUDA device, there could be as many as 1 million simultaneously resident threads across
-thread blocks. A seemingly small local 1024-element
-single precision array then expands into a whopping 4 GiB of memory.
+Local memory may also appear similar to dynamic array types like
+:py:class:`drjit.cuda.ArrayXf`, which group multiple variables/registers into
+an array for convenience. The key difference is that ``ArrayXf`` does not
+support element access with computed indices, while local memory buffers do.
 
-Use the :py:func:`drjit.alloc_local` function to create a
-:py:class:`drjit.Local` instance that wraps local memory.
+Allocating, reading, and writing local memory are all symbolic operations that
+don't consume any memory by themselves. However, when local memory appears in a
+kernel being launched, the system must conceptually allocate extra memory for
+the duration of the kernel (the details of this are backend-dependent). While
+this does not contribute to the long-term memory requirements of a program, the
+short term memory requirements can be *significant* because local memory is
+separately allocated for each thread. On a CUDA device, there could be as many
+as 1 million simultaneously resident threads across thread blocks. A seemingly
+small local 1024-element single precision array then expands into a whopping 4
+GiB of memory.
 
 See the snippet below for an example that calls a function ``f()``  ``n`` times
 to compute a histogram (stored in local memory) of its outputs to then find the
@@ -382,7 +401,7 @@ largest histogram bucket.
 
    @dr.syntax
    def g(n: UInt32):
-       # Create zero-initialized 'hist' of type 'drjit.Local[drjit.auto.UInt32]'
+       # Create zero-initialized buffer of type 'drjit.Local[UInt32]'
        hist = dr.alloc_local(UInt32, 10, value=dr.zeros(UInt32))
 
        # Fill histogram
@@ -403,7 +422,7 @@ n2, ...)``) it will create several histograms with different numbers of
 functions evaluations in parallel. Each evaluation conceptually gets its own
 ``hist`` variable in this case.
 
-Dr.Jit can also create local memory over PyTrees :ref:`PyTrees <pytrees>`  (for
+Dr.Jit can also create local memory over :ref:`PyTrees <pytrees>` (for
 example, instead of ``dtype=Float``, we could have called
 :py:func:`drjit.alloc_local` with a complex number, 3x3 matrix, tuple, or
 dataclass). Indexing into the :py:class:`drjit.Local` instance then fetches or

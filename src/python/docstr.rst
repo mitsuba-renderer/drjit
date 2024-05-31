@@ -7627,8 +7627,8 @@
 
 .. topic:: Local___len__
 
-   Return the length (# of entries) of the local memory buffer. This corresponds
-   to the ``size`` value passed to :py:func:`alloc_local`.
+   Return the length (number of entries) of the local memory buffer. This
+   corresponds to the ``size`` value passed to :py:func:`drjit.alloc_local`.
 
 .. topic:: Local_Local
 
@@ -7637,7 +7637,7 @@
 .. topic:: Local_read
 
    Read the local memory buffer at index ``index`` and return a result of type
-   ``T``. An optional mask can be provided as well. Masked reads evalute to
+   ``T``. An optional mask can be provided as well. Masked reads evaluate to
    zero.
 
    .. danger::
@@ -7650,7 +7650,7 @@
        If *debug mode* is enabled via the :py:attr:`drjit.JitFlag.Debug` flag,
        Dr.Jit will insert range checks into the program. These checks disable
        out-of-bound reads and furthermore report warnings to identify problematic
-       source locations:
+       source locations.
 
 .. topic:: Local_write
 
@@ -7667,7 +7667,7 @@
        If *debug mode* is enabled via the :py:attr:`drjit.JitFlag.Debug` flag,
        Dr.Jit will insert range checks into the program. These checks disable
        out-of-bound writes and furthermore report warnings to identify
-       problematic source locations:
+       problematic source locations.
 
 .. topic:: Local___getitem__
 
@@ -7684,15 +7684,15 @@
    See the separate documentation section on :ref:`local memory <local_memory>`
    for details on the role of local memory and situations where it is useful.
 
-    Args:
-        dtype (type): Desired Dr.Jit array type or :ref:`PyTree <pytrees>`.
+   Args:
+       dtype (type): Desired Dr.Jit array type or :ref:`PyTree <pytrees>`.
 
-        size (int): Number of buffer elements. This value must be statically
-          known.
+       size (int): Number of buffer elements. This value must be statically
+         known.
 
-        value: If desired, an instance of type ``dtype``/``T`` can be provided
-          here to default-initialize all entries of the buffer. Otherwise, it is
-          let uninitialized.
+       value: If desired, an instance of type ``dtype``/``T`` can be provided
+         here to default-initialize all entries of the buffer. Otherwise, it is
+         left uninitialized.
 
-    Returns:
-        Local[T]: The allocated local memory buffer
+   Returns:
+       Local[T]: The allocated local memory buffer

@@ -42,42 +42,51 @@ def test02_fill_in_loop_then_read(t):
 
 @pytest.test_arrays('jit,uint32,shape=(*)')
 @pytest.mark.parametrize('variant', [0,1])
+@pytest.mark.parametrize('symbolic_loop', [True, False])
+@pytest.mark.parametrize('symbolic_cond', [True, False])
 @dr.syntax
-def test03_bubble_sort(t, variant):
+def test03_bubble_sort(t, variant, symbolic_loop, symbolic_cond):
     import sys
     n = 32
     s = dr.alloc_local(t, n)
-    rng = sys.modules[t.__module__].PCG32(10000)
     Bool = dr.mask_t(t)
 
-    i = t(0)
-    while i < n:
-        s[i] = rng.next_uint32()
-        i += 1
+    with dr.scoped_set_flag(dr.JitFlag.SymbolicLoops, symbolic_loop):
+        with dr.scoped_set_flag(dr.JitFlag.SymbolicConditionals, symbolic_cond):
+            rng = sys.modules[t.__module__].PCG32()
+            rng.state = 1234 + dr.arange(t, 10000)
+            rng.inc = t(1)
+            rng.next_uint32()
+            i = t(0)
+            while i < n:
+                s[i] = rng.next_uint32()
+                i += 1
 
 
-    i = t(0)
-    cont=Bool(True)
-    while (i < n-1) & cont:
-        j = t(0)
-        cont=Bool(variant==0)
-        while j < n-i-1:
-            if dr.hint(variant == 0, mode='scalar'):
-                s0, s1 = s[j], s[j+1]
-                if s0 > s1:
-                    s0, s1 = s1, s0
-                s[j], s[j+1] = s0, s1
-            else:
-                if s[j] > s[j+1]:
-                    s[j], s[j+1] = s[j+1], s[j]
-                    cont = Bool(True)
-            j+= 1
-        i += 1
+            i = t(0)
+            cont=Bool(True)
+            while (i < n-1) & cont:
+                j = t(0)
+                cont=Bool(variant==0)
+                while j < n-i-1:
+                    if dr.hint(variant == 0, mode='scalar'):
+                        s0, s1 = s[j], s[j+1]
+                        if s0 > s1:
+                            s0, s1 = s1, s0
+                        s[j], s[j+1] = s0, s1
+                    else:
+                        if s[j] > s[j+1]:
+                            s[j], s[j+1] = s[j+1], s[j]
+                            cont = Bool(True)
+                    j+= 1
+                i += 1
 
     result = [s[j] for j in range(n)]
     dr.eval(result)
     for i in range(len(result)-1):
         assert dr.all(result[i] <= result[i + 1])
+    q = [a[0] for a in result]
+    assert q == [25948406, 86800510, 163991264, 724914361, 798920662, 848337899, 1331190098, 1441102920, 1445257284, 1461834408, 1497151495, 1547771419, 1603554384, 1691880696, 1797163244, 1936973067, 2311034952, 2444167623, 2607360471, 2819391842, 2948902546, 2967546311, 3059896137, 3153572993, 3235986370, 3262142078, 3348457850, 3408296642, 3467369332, 3614138351, 3631189001, 3663081236]
 
 
 @pytest.test_arrays('jit,uint32,shape=(*)')

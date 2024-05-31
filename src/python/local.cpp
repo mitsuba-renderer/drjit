@@ -128,7 +128,7 @@ nb::object Local::read(nb::handle index_, nb::handle mask_) const {
     return result;
 }
 
-void Local::write(nb::handle index_, nb::handle value_, nb::handle mask_) {
+void Local::write(nb::handle value_, nb::handle index_, nb::handle mask_) {
     nb::object index =
         index_.type().is(m_index_tp) ? nb::borrow(index_) : m_index_tp(index_);
     nb::object mask =
@@ -362,15 +362,15 @@ void export_local(nb::module_ &m) {
              doc_Local___getitem__)
         .def("__setitem__",
              [](Local &a, nb::object index, nb::object value) {
-                 a.write(std::move(index), value, a.mask_type()(true));
+                 a.write(std::move(value), std::move(index), a.mask_type()(true));
              },
              nb::sig("def __setitem__(self, arg0: int | AnyArray, arg1: T, /) -> None"),
              doc_Local___setitem__)
         .def("read", &Local::read, "index"_a, "active"_a = true,
              nb::sig("def read(self, index: int | AnyArray, active: bool | "
                      "AnyArray = True) -> T"), doc_Local_read)
-        .def("write", &Local::write, "index"_a, "value"_a, "active"_a = true,
-             nb::sig("def write(self, index: int | AnyArray, value: T, active: "
+        .def("write", &Local::write, "value"_a, "index"_a, "active"_a = true,
+             nb::sig("def write(self, value: T, index: int | AnyArray, active: "
                      "bool | AnyArray = True) -> None"), doc_Local_write)
         .def("__repr__", &Local::repr);
 

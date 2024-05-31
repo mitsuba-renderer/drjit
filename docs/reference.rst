@@ -565,13 +565,13 @@ Local memory
 ------------
 
 .. autofunction:: alloc_local
-.. autoclass:: Alloc
+.. autoclass:: Local
 
    .. automethod:: __init__
    .. automethod:: read
    .. automethod:: write
-   .. automethod:: __getindex__
-   .. automethod:: __setindex__
+   .. automethod:: __getitem__
+   .. automethod:: __setitem__
    .. automethod:: __len__
 
 Digital Differential Analyzer
