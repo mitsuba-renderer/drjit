@@ -3357,9 +3357,9 @@ const char *ad_var_graphviz() {
     buffer.clear();
     buffer.put("digraph {\n"
                "    rankdir=BT;\n"
-               "    graph [dpi=50 fontname=Consolas];\n"
-               "    node [shape=record fontname=Consolas];\n"
-               "    edge [fontname=Consolas];\n");
+               "    graph [fontname=\"Ubuntu Mono\"];\n"
+               "    node [shape=record fontname=\"Ubuntu Mono\"];\n"
+               "    edge [fontname=\"Ubuntu Mono\"];\n");
 
     size_t current_hash = 0, current_depth = 1;
     std::hash<std::string> hasher;
