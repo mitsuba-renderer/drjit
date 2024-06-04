@@ -8,13 +8,15 @@ strive to document breaking API changes in the release notes below.
 Upcoming release
 ----------------
 
+Most likely the last release relying on Pybind11
+
 - Fix wavefront loops which would occasionally create new kernels
   `[8f09760] <https://github.com/mitsuba-renderer/drjit/commit/8f0976008f3662756bb078f713e383a98f944e1d>`_
 - Fix source of CUDA segfaults
   `[9aa2d87] <https://github.com/mitsuba-renderer/drjit/commit/9aa2d87a98be303368f991581ad5297782cba85a>`_
 - In C++ ``dr::binary_search`` could unexpectedly create new kernels
   `[b48701e] <https://github.com/mitsuba-renderer/drjit/commit/b48701e713511526824a4675b30245d606ee33e5>`_
-- Minor chanes to support Nvidia v555 drivers
+- Minor changes to support Nvidia v555 drivers
   `[216d921] <https://github.com/mitsuba-renderer/drjit/commit/216d921797f49ecad7e2bff44ac7cd6089b5cded>`_
 
 
