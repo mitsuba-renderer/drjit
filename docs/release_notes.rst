@@ -5,10 +5,13 @@ Being an experimental research framework, Dr.Jit does not strictly follow the
 `Semantic Versioning <https://semver.org/>`_ convention. That said, we will
 strive to document breaking API changes in the release notes below.
 
-Upcoming release
-----------------
 
-Most likely the last release relying on Pybind11
+Dr.Jit 0.4.5
+------------
+
+*June 4, 2024*
+
+Most likely the last release which uses `pybind11 <https://pybind11.readthedocs.io>`_.
 
 - Fix wavefront loops which would occasionally create new kernels
   `[8f09760] <https://github.com/mitsuba-renderer/drjit/commit/8f0976008f3662756bb078f713e383a98f944e1d>`_
