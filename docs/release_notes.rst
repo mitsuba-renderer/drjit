@@ -6,12 +6,21 @@ Being an experimental research framework, Dr.Jit does not strictly follow the
 strive to document breaking API changes in the release notes below.
 
 
-Dr.Jit 0.4.5
+Dr.Jit 0.4.6
 ------------
 
 *June 4, 2024*
 
 Most likely the last release which uses `pybind11 <https://pybind11.readthedocs.io>`_.
+
+- Set maximum pybind11 version requirement
+  `[c69f315] <https://github.com/mitsuba-renderer/drjit/commit/c69f31594702b60fccaa21a502587e9c531c5dd3>`_
+
+
+Dr.Jit 0.4.5
+------------
+
+*June 4, 2024*
 
 - Fix wavefront loops which would occasionally create new kernels
   `[8f09760] <https://github.com/mitsuba-renderer/drjit/commit/8f0976008f3662756bb078f713e383a98f944e1d>`_
