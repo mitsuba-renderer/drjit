@@ -1603,7 +1603,7 @@ auto grad(const T &value) {
     using Result = std::conditional_t<PreserveType, T, detached_t<T>>;
 
     if constexpr (is_diff_v<T> && depth_v<T> == 1) {
-        return Result::borrow(value.derived().grad_());
+        return Result::steal(value.derived().grad_());
     } else if constexpr (is_diff_v<T> && is_tensor_v<T>) {
         return Result(grad<PreserveType>(value.array()), value.shape());
     } else if constexpr (is_traversable_v<T>) {
