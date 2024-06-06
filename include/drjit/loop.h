@@ -375,7 +375,6 @@ protected:
         // Try to compile loop iteration into a single kernel
         for (uint32_t i = 0; i < m_indices.size(); ++i)
             jit_var_schedule(*m_indices[i]);
-        jit_var_schedule(cond_.index());
         jit_var_schedule(cond.index());
 
         // Should we evaluate the loop & run another iteration?

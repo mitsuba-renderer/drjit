@@ -364,11 +364,6 @@ template <typename T> struct PCG32 {
             std::swap(*it, *(begin + next_uint32_bounded((uint32_t) (it - begin + 1))));
     }
 
-    /// Register internal state of this sampler with a symbolic loop
-    void loop_put(Loop<Mask> &loop) {
-        loop.put(state);
-    }
-
     /// Equality operator
     bool operator==(const PCG32 &other) const { return state == other.state && inc == other.inc; }
 

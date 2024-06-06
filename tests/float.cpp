@@ -237,7 +237,4 @@ DRJIT_TEST_FLOAT(test20_cbrt) {
         Value(-10), Value(10),
         3
     );
-
-    assert(drjit::cbrt(T(0)) == T(0));
-    assert(drjit::cbrt(0.f) == 0.f);
 }

@@ -510,14 +510,6 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
                                      m_index, index.index(), mask.index());
     }
 
-    template <typename Mask>
-    static Derived scatter_inc_(Derived &dst, const Derived &index,
-                             const Mask &mask) {
-        static_assert(
-            std::is_same_v<detached_t<Mask>, detached_t<mask_t<Derived>>>);
-        return steal(jit_var_scatter_inc(dst.index_ptr(), index.index(), mask.index()));
-    }
-
     //! @}
     // -----------------------------------------------------------------------
 
@@ -534,13 +526,6 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
                 Backend, CallSupport::Domain, m_index, &bucket_count);
             return { buckets, bucket_count };
         }
-    }
-
-    Derived prefix_sum_(bool exclusive) const {
-        uint32_t s = size();
-        Derived output = empty_(s);
-        jit_prefix_sum(Backend, Type, exclusive, data(), s, output.data());
-        return output;
     }
 
     auto compress_() const {
@@ -566,7 +551,7 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
         }
     }
 
-    Derived block_sum_(size_t block_size) const {
+    Derived block_sum_(size_t block_size) {
         size_t input_size  = size(),
                block_count = input_size / block_size;
 

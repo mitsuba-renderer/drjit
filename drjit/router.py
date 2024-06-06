@@ -239,9 +239,9 @@ def shape(arg, /):
 
     Returns:
         tuple | NoneType: A tuple describing the dimension and shape of the
-          provided Dr.Jit input array or tensor. When the input array is *ragged*
-          (i.e., when it contains components with mismatched sizes), the function
-          returns ``None``.
+        provided Dr.Jit input array or tensor. When the input array is *ragged*
+        (i.e., when it contains components with mismatched sizes), the function
+        returns ``None``.
     '''
     if _dr.is_tensor_v(arg):
         return arg.shape
@@ -973,117 +973,6 @@ def scatter_reduce(op, target, value, index, active=True):
 
             return value.scatter_reduce_(op, target, index, active)
 
-def scatter_inc(target, index, active=True):
-    '''
-    Atomically increment a value within an unsigned 32-bit integer array
-    and return the value prior to the update.
-
-    This operation works just like the :py:func:`drjit.scatter_reduce()`
-    operation for 32-bit unsigned integer operands, but with a fixed
-    ``value=1`` parameter and ``reduce_op=ReduceOp::Add``.
-
-    The main difference is that this variant additionally returns the *old*
-    value of the target array prior to the atomic update in contrast to the
-    more general scatter-reduction, which just returns ``None``. The operation
-    also supports masking---the return value in the unmasked case is undefined.
-    Both ``target`` and ``index`` parameters must be 1D unsigned 32-bit
-    arrays.
-
-    This operation is a building block for stream compaction: threads can
-    scatter-increment a global counter to request a spot in an array and then
-    write their result there. The recipe for this is look as follows:
-
-    .. code-block:: python
-
-       ctr = UInt32(0) # Counter
-       active = drjit.ones(Bool, len(data_1)) # .. or a more complex condition
-
-       my_index = dr.scatter_inc(target=ctr, index=UInt32(0), mask=active)
-
-       dr.scatter(
-           target=data_compact_1,
-           value=data_1,
-           index=my_index,
-           mask=active
-       )
-
-       dr.scatter(
-           target=data_compact_2,
-           value=data_2,
-           index=my_index,
-           mask=active
-       )
-
-    When following this approach, be sure to provide the same mask value to the
-    :py:func:`drjit.scatter_inc()` and subsequent :py:func:`drjit.scatter()`
-    operations.
-
-    The function :py:func:`drjit.scatter_inc()` exhibits the following unusual
-    behavior compared to regular Dr.Jit operations: the return value references
-    the instantaneous state during a potentially large sequence of atomic
-    operations. This instantaneous state is not reproducible in later kernel
-    evaluations, and Dr.Jit will refuse to do so when the computed index is
-    reused. In essence, the variable is "consumed" by the process of
-    evaluation.
-
-    .. code-block:: python
-
-       my_index = dr.scatter_inc(target=ctr, index=UInt32(0), mask=active)
-       dr.scatter(
-           target=data_compact_1,
-           value=data_1,
-           index=my_index,
-           mask=active
-       )
-
-       dr.eval(data_compact_1) # Run Kernel #1
-
-       dr.scatter(
-           target=data_compact_2,
-           value=data_2,
-           index=my_index, # <-- oops, reusing my_index in another kernel.
-           mask=active     #     This raises an exception.
-       )
-
-    To get the above code to work, you will need to evaluate ``my_index`` at
-    the same time to materialize it into a stored (and therefore trivially
-    reproducible) representation. For this, ensure that the size of the
-    ``active`` mask matches ``len(data_*)`` and that it is not the trivial
-    ``True`` default mask (otherwise, the evaluated ``my_index`` will be
-    scalar).
-
-    .. code-block:: python
-
-       dr.eval(data_compact_1, my_index)
-
-    Such multi-stage evaluation is potentially inefficient and may defeat the
-    purpose of performing stream compaction in the first place. In general,
-    prefer keeping all scatter operations involving the computed index in the
-    same kernel, and then this issue does not arise.
-
-    The implementation of :py:func:`drjit.scatter_inc()` performs a local
-    reduction first, followed by a single atomic write per SIMD packet/warp.
-    This is done to reduce contention from a potentially very large number of
-    atomic operations targeting the same memory address. Fully masked updates
-    do not cause memory traffic.
-
-    There is some conceptual overlap between this function and
-    :py:func:`drjit.compress()`, which can likewise be used to reduce a stream
-    to a smaller subset of active items. The downside of
-    :py:func:`drjit.compress()` is that it requires evaluating the variables to
-    be reduced, which can be very costly in terms of of memory traffic and
-    storage footprint. Reducing through :py:func:`drjit.scatter_inc()` does not
-    have this limitation: it can operate on symbolic arrays that greatly exceed
-    the available device memory. One advantage of :py:func:`drjit.compress()`
-    is that it essentially boils down to a realtively simple prefix sum, which
-    does not require atomic memory operations (these can be slow in some
-    cases). '''
-
-    if not _dr.is_jit_v(target) or target.Type != _dr.VarType.UInt32 or \
-            type(index) is not type(target):
-        raise Exception('scatter_inc(): invalid input types!')
-    return type(target).scatter_inc_(target, index, active)
-
 
 def ravel(array, order='A'):
     '''
@@ -1128,9 +1017,9 @@ def ravel(array, order='A'):
 
     Returns:
         object: A dynamic 1D array containing the flattened representation of
-          ``array`` with the desired ordering. The type of the return value depends
-          on the type of the input. When ``array`` is already contiguous/flattened,
-          this function returns it without making a copy.
+        ``array`` with the desired ordering. The type of the return value depends
+        on the type of the input. When ``array`` is already contiguous/flattened,
+        this function returns it without making a copy.
     '''
     if not _var_is_drjit(array):
         return array
@@ -1209,7 +1098,7 @@ def unravel(dtype, array, order='F'):
 
     Returns:
         object: An instance of type ``dtype`` containing the result of the unravel
-          operation.
+        operation.
     '''
     if not isinstance(array, ArrayBase) or array.Depth != 1:
         raise Exception('unravel(): array input must be a flat array!')
@@ -3319,27 +3208,10 @@ def shuffle(perm, value):
 def compress(mask, /):
     '''
     compress(arg, /) -> int | drjit.ArrayBase
-    Compress a mask into an array of nonzero indices.
+    Compress a mask into a array of nonzero indices.
 
-    This function takes an boolean array as input and then returns an unsigned
-    32-bit integer array containing the indices of nonzero entries.
-
-    It can be used to reduce a stream to a subset of active entries via the
-    following recipe:
-
-    .. code-box:: python
-
-       # Input: an active mask and several arrays data_1, data_2, ...
-       dr.schedule(active, data_1, data_2, ...)
-       indices = dr.compress(active)
-       data_1 = dr.gather(type(data_1), data_1, indices)
-       data_2 = dr.gather(type(data_2), data_2, indices)
-       # ...
-
-    There is some conceptual overlap between this function and
-    :py:func:`drjit.cscatter_inc()`, which can likewise be used to reduce a
-    stream to a smaller subset of active items. Please see the documentation of
-    t :py:func:`drjit.cscatter_inc()` for details.
+    This function takes an boolean array as input and then returns the
+    indices of nonzero entries.
 
     .. danger::
         This function internally performs a synchronization step.
@@ -3927,68 +3799,6 @@ def hypot(a, b):
     )
 
 
-def prefix_sum(value, exclusive=True):
-    r'''
-    Compute an exclusive or inclusive prefix sum of the 1D input array.
-
-    By default, the function returns an output array :math:`\mathbf{y}` of the
-    same size as the input :math:`\mathbf{x}`, where
-
-    .. math::
-
-       y_i = \sum_{i=0}^{i-1} x_i.
-
-    which is known as an *exclusive* prefix sum, as each element of the output
-    array excludes the corresponding input in its sum. When the ``exclusive``
-    argument is set to ``False``, the function instead returns an *inclusive*
-    prefix sum defined as
-
-    .. math::
-
-       y_i = \sum_{i=0}^i x_i.
-
-    There is also a convenience alias :py:func:`drjit.cumsum` that computes an
-    inclusive sum analogous to various other nd-array frameworks.
-
-    Not all numeric data types are supported by :py:func:`prefix_sum`:
-    presently, the function accepts ``Int32``, ``UInt32``, ``UInt64``,
-    ``Float32``, and ``Float64``-typed arrays.
-
-    The CUDA backend implementation for "large" numeric types (``Float64``,
-    ``UInt64``) has the following technical limitation: when reducing 64-bit
-    integers, their values must be smaller than 2**62. When reducing double
-    precision arrays, the two least significant mantissa bits are clamped to
-    zero when forwarding the prefix from one 512-wide block to the next (at a
-    *very minor*, probably negligible loss in accuracy). See the implementation
-    for details on the rationale of this limitation.
-
-    Args:
-        value (drjit.ArrayBase): A Python or Dr.Jit arithmetic type
-
-        exclusive (bool): Specifies whether or not the prefix sum should
-          be exclusive (the default) or inclusive.
-
-    Returns:
-        drjit.ArrayBase: An array of the same type containing the computed prefix sum.
-    '''
-    if _dr.is_jit_v(value):
-        return value.prefix_sum_(exclusive)
-    else:
-        raise Exception("prefix_sum(): requires a JIT array!")
-
-def cumsum(value):
-    '''
-    Compute an cumulative sum (aka. inclusive prefix sum) of the 1D input array.
-
-    This function wraps :cpp:func:`drjit.prefix_sum` and is implemented as
-
-    .. code-block:: python
-
-       return prefix_sum(value, exclusive=False)
-    '''
-    return prefix_sum(value, exclusive=False)
-
-
 def block_sum(value, size):
     '''
     Sum over elements within blocks
@@ -4159,7 +3969,7 @@ def grad(arg, preserve_type=True):
     Returns:
         object: the gradient value associated to the input variable.
     '''
-    if _dr.is_diff_v(arg) and not _dr.is_mask_v(arg):
+    if _dr.is_diff_v(arg):
         if _dr.is_integral_v(arg):
             grads = _dr.zeros(_dr.detached_t(type(arg)))
         else:
@@ -4573,7 +4383,7 @@ def forward_from(arg, flags=_dr.ADFlag.Default):
     '''
     ta = type(arg)
     _check_grad_enabled('forward_from', ta, arg)
-    set_grad(arg, _dr.ones(ta))
+    set_grad(arg, 1)
     enqueue(_dr.ADMode.Forward, arg)
     traverse(ta, _dr.ADMode.Forward, flags)
 
@@ -4655,7 +4465,7 @@ def backward_from(arg, flags=_dr.ADFlag.Default):
     if _dr.depth_v(arg) > 1:
         arg = arg + ta(0)
 
-    set_grad(arg, _dr.ones(ta))
+    set_grad(arg, 1)
     enqueue(_dr.ADMode.Backward, arg)
     traverse(ta, _dr.ADMode.Backward, flags)
 
@@ -5912,16 +5722,12 @@ def wrap_ad(source: str, target: str):
         Forward-mode AD isn't currently supported by this operation.
 
     Args:
-        source (str | module): The AD framework used outside of the wrapped function.
-        target (str | module): The AD framework used within the wrapped function.
+        source (str): The AD framework used outside of the wrapped function.
+        target (str): The AD framework used within the wrapped function.
 
     Returns:
         The decorated function.
     '''
-    # Get module names if source and target are not already strings
-    source = source.__name__ if not isinstance(source, str) else source
-    target = target.__name__ if not isinstance(target, str) else target
-
     if not 'drjit' in [source, target]:
         raise TypeError('wrap_ad(): invalid combination of frameworks, '
                         'expected one to be drjit!', source, target)
@@ -5975,13 +5781,13 @@ def wrap_ad(source: str, target: str):
                 else:
                     return a
 
-            # Ensure gradient tensors in `a` have same shape as tensors in `b` (handles dim==0 case)
-            def torch_ensure_grad_shape(a, b):
+            # Ensure tensors in `a` have same shape as tensors in `b` (handles dim==0 case)
+            def torch_ensure_shape(a, b):
                 if isinstance(a, _Sequence) and not isinstance(a, str):
-                    return tuple(torch_ensure_grad_shape(a[i], b[i]) for i in range(len(a)))
+                    return tuple(torch_ensure_shape(a[i], b[i]) for i in range(len(a)))
                 elif isinstance(a, _Mapping):
-                    return {k: torch_ensure_grad_shape(v, b[k]) for k, v in a.items()}
-                elif is_torch_tensor(a) and a.dtype in [_torch.float, _torch.float32, _torch.float64]:
+                    return {k: torch_ensure_shape(v, b[k]) for k, v in a.items()}
+                elif is_torch_tensor(a):
                     return a.reshape(b.shape)
                 else:
                     return a
@@ -6007,7 +5813,7 @@ def wrap_ad(source: str, target: str):
                         _dr.enqueue(_dr.ADMode.Backward, ctx.res_drjit)
                         _dr.traverse(ctx.res_drjit, _dr.ADMode.Backward)
                         args_grad = drjit_to_torch(_dr.grad(ctx.args_drjit))
-                        args_grad = torch_ensure_grad_shape(args_grad, ctx.args)
+                        args_grad = torch_ensure_shape(args_grad, ctx.args)
                         del ctx.res_drjit, ctx.args_drjit
                         return args_grad
 
@@ -6026,7 +5832,7 @@ def wrap_ad(source: str, target: str):
 
                     def backward(self):
                         grad_out_torch = drjit_to_torch(self.grad_out())
-                        grad_out_torch = torch_ensure_grad_shape(grad_out_torch, self.res_torch)
+                        grad_out_torch = torch_ensure_shape(grad_out_torch, self.res_torch)
                         def flatten(values):
                             """Flatten structure in a consistent arbitrary order"""
                             result = []
@@ -6180,17 +5986,6 @@ def switch(indices, funcs, *args):
         @_dr.detail.traverse()
         def ad_copy(arg):
             return arg.copy_() if _dr.is_diff_v(arg) else arg
-
-        class ADCopyWrapper:
-            def __init__(self, func):
-                self.func = func
-
-            def __call__(self, *args, **kwargs):
-                return ad_copy(self.func(*args, **kwargs))
-
-        funcs = [
-            ADCopyWrapper(func) if func is not None else None for func in funcs
-        ]
 
         class DiffSwitch(_dr.CustomOp):
             def eval(self, indices, funcs, args):

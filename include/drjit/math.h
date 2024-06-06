@@ -995,14 +995,12 @@ namespace detail {
 template <typename X, typename Y> expr_t<X, Y> pow(const X &x, const Y &y) {
     static_assert(!is_special_v<X> && !is_special_v<Y>,
                   "pow(): requires a regular scalar/array argument!");
-    if constexpr (std::is_scalar_v<Y> || std::is_integral_v<expr_t<X, Y>>) {
+    if constexpr ((is_dynamic_v<X> && std::is_scalar_v<Y>) || std::is_integral_v<expr_t<X, Y>>) {
         if constexpr (std::is_floating_point_v<Y>) {
             if (detail::round_(y) == y)
                 return detail::powi(x, (int) y);
-            else if constexpr (is_dynamic_v<X>)
-                return pow(x, X(y));
             else
-                return exp2(log2(x) * y);
+                return pow(x, X(y));
         } else {
             return detail::powi(x, (int) y);
         }
@@ -1466,7 +1464,7 @@ template <typename Value> Value cbrt(const Value &x) {
         if constexpr (!Single)
             r -= (r - (x / sqr(r))) * third;
 
-        return select(isfinite(x) && neq(x, 0), r, x);
+        return select(isfinite(x), r, x);
     }
 }
 

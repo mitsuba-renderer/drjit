@@ -175,7 +175,6 @@ def test08_from_torch_two_args_two_outputs(m):
     assert dr.allclose(m.Float(a.grad), [4, 4, 4])
     assert dr.allclose(m.Float(b.grad), [3, 3, 3])
 
-
 def test09_to_torch_list_of_tensors_as_args(m):
     a = m.TensorXf(m.Float([1.0, 2.0, 3.0]), shape=[3])
     b = m.TensorXf(m.Float([4.0, 5.0, 6.0]), shape=[3])
@@ -193,7 +192,6 @@ def test09_to_torch_list_of_tensors_as_args(m):
     assert dr.allclose(d, [12, 15, 18])
     assert dr.allclose(dr.grad(a), [4, 4, 4])
     assert dr.allclose(dr.grad(b), [3, 3, 3])
-
 
 def test10_to_torch_list_of_tensors_as_args_and_return_nested_stucture(m):
     a = m.TensorXf(m.Float([1.0, 2.0, 3.0]), shape=[3])
@@ -219,25 +217,3 @@ def test10_to_torch_list_of_tensors_as_args_and_return_nested_stucture(m):
     assert dr.allclose(dr.grad(a), [4, 4, 4])
     assert dr.allclose(dr.grad(b), [3, 3, 3])
 
-
-def test11_from_torch_integer_tensors(m):
-    a = torch.tensor([1.0, 2.0, 3.0])
-    b = torch.tensor([4, 5, 6], dtype=torch.int32)
-    if dr.is_cuda_v(m.Float):
-        a = a.cuda()
-        b = b.cuda()
-    a.requires_grad = True
-
-    @dr.wrap_ad(source='torch', target='drjit')
-    def func(a, b):
-        return a * 4, b * 3
-
-    c, d = func(a, b)
-
-    e = (c + d).sum()
-    e.backward()
-
-    assert dr.allclose(m.Float(c), [4, 8, 12])
-    assert dr.allclose(d, [12, 15, 18])
-    assert dr.allclose(m.Float(a.grad), [4, 4, 4])
-    assert b.grad is None

@@ -19,7 +19,7 @@ VERSION_REGEX = re.compile(
 
 this_directory = os.path.abspath(os.path.dirname(__file__))
 
-with open(os.path.join(this_directory, "include/drjit/fwd.h")) as f:
+with open(os.path.join("include/drjit/fwd.h")) as f:
     matches = dict(VERSION_REGEX.findall(f.read()))
     drjit_version = "{MAJOR}.{MINOR}.{PATCH}".format(**matches)
 

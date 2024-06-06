@@ -194,7 +194,6 @@ struct BaseD {
     virtual StructFD f(const StructFD &m) = 0;
     virtual StructFD f_masked(const StructFD &m, MaskD active) = 0;
     virtual StructFD g(const StructFD &m) = 0;
-    virtual FloatD h(FloatD arg) = 0;
     DRJIT_VCALL_REGISTER(FloatD, BaseD)
     FloatD x;
 };
@@ -214,10 +213,6 @@ struct AD : BaseD {
     StructFD g(const StructFD &m) override {
         return { m.a * x, m.b * 3 };
     }
-
-    FloatD h(FloatD arg) override {
-        return arg * x;
-    }
 };
 
 struct BD : BaseD {
@@ -233,17 +228,12 @@ struct BD : BaseD {
     StructFD g(const StructFD &m) override {
         return { m.b * 4, m.a + x };
     }
-
-    FloatD h(FloatD arg) override {
-        return -arg * x;
-    }
 };
 
 DRJIT_VCALL_BEGIN(BaseD)
 DRJIT_VCALL_METHOD(f)
 DRJIT_VCALL_METHOD(f_masked)
 DRJIT_VCALL_METHOD(g)
-DRJIT_VCALL_METHOD(h)
 DRJIT_VCALL_METHOD(dummy)
 DRJIT_VCALL_END(BaseD)
 
@@ -397,9 +387,9 @@ DRJIT_TEST(test05_vcall_symbolic_ad_bwd_accessing_local) {
 
         arr->dummy();
 
-        FloatD o = dr::full<FloatD>(1, n);
+        Float o = dr::full<Float>(1, n);
 
-        StructFD input{ Array3fD(1, 2, 3) * o,
+        Struct input{ Array3fD(1, 2, 3) * o,
                       Array3fD(4, 5, 6) * o };
 
         dr::enable_grad(input);
@@ -425,45 +415,6 @@ DRJIT_TEST(test05_vcall_symbolic_ad_bwd_accessing_local) {
 
         assert(dr::grad(a->x) == 5*6*2);
         assert(dr::grad(b->x) == 5*3*10);
-        delete a;
-        delete b;
-    }
-}
-
-DRJIT_TEST(test06_vcall_ad_bwd_inputs) {
-    if constexpr (dr::is_cuda_v<Float>)
-        jit_init((uint32_t) JitBackend::CUDA);
-    else
-        jit_init((uint32_t) JitBackend::LLVM);
-
-    for (int i = 0; i < 3; ++i) {
-        AD *a = new AD();
-        BD *b = new BD();
-
-        jit_set_flag(JitFlag::VCallRecord, i != 0);
-        jit_set_flag(JitFlag::VCallOptimize, i == 2);
-
-        int n = 10;
-        MaskD m = dr::neq(dr::arange<UInt32>(n) & 1, 0);
-        BasePtrD arr = dr::select(m, (BaseD *) a, (BaseD *) b);
-        dr::enable_grad(a->x);
-        dr::enable_grad(b->x);
-
-        FloatD input = dr::full<FloatD>(1, n);
-        dr::enable_grad(input);
-
-        FloatD output = arr->h(input);
-
-        backward(output);
-        dr::eval(output, dr::grad(a->x), dr::grad(b->x));
-
-        assert(dr::all_nested(
-            dr::eq(output, dr::select(m, 10, -10))));
-
-        assert(dr::all_nested(dr::eq(dr::grad(a->x), 5)));
-        assert(dr::all_nested(dr::eq(dr::grad(b->x), -5)));
-        assert(dr::all_nested(dr::eq(dr::grad(input), dr::select(m, 10, -10))));
-
         delete a;
         delete b;
     }

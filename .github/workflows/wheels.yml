@@ -22,8 +22,8 @@ jobs:
   build_wheels:
     strategy:
       matrix:
-        os: [ubuntu-20.04, windows-latest, macos-13]
-        python: [cp38, cp39, cp310, cp311, cp312]
+        os: [ubuntu-20.04, windows-latest, macos-latest]
+        python: [cp38, cp39, cp310, cp311]
         cibw-arch: [x86_64, arm64]
         exclude:
           - os: ubuntu-20.04
@@ -34,11 +34,11 @@ jobs:
 
     name: >
       ${{ matrix.python }} wheel for ${{ matrix.os }}
-      ${{ (matrix.os == 'macos-13' && format('({0})', matrix.cibw-arch)) || '' }}
+      ${{ (matrix.os == 'macos-latest' && format('({0})', matrix.cibw-arch)) || '' }}
     runs-on: ${{ matrix.os }}
 
     steps:
-      - uses: Wandalen/wretry.action@v1.2.0
+      - uses: Wandalen/wretry.action@v1.0.36
         with:
           action: actions/checkout@v3
           with: |
@@ -59,7 +59,7 @@ jobs:
 
       - name: Install cibuildwheel
         run: |
-          python -m pip install cibuildwheel==2.16.2
+          python -m pip install cibuildwheel==2.11.2
 
       - name: Local build for macOS cross-compilation
         if: runner.os == 'macOS' && matrix.cibw-arch == 'arm64'

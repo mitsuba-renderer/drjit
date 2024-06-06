@@ -65,9 +65,8 @@ py::object switch_record_impl(UInt32 indices, py::list funcs, py::args args) {
             vcall_mask = Mask::steal(jit_var_vcall_mask(Backend));
         jit_state.set_mask(vcall_mask.index());
 
-        py::object result2;
         try {
-            result2 = funcs[i-1](*args);
+            result = funcs[i-1](*args);
         } catch (const std::exception&) {
             // Special cleanup is necessary for interactive Python sessions
             py::object modules = py::module_::import("sys").attr("modules");
@@ -77,11 +76,6 @@ py::object switch_record_impl(UInt32 indices, py::list funcs, py::args args) {
             }
             throw;
         }
-
-        // Check return type consistency
-        if (result && result2 && !py::type::handle_of(result).is(py::type::handle_of(result2)))
-            throw py::type_error("switch(): inconsistent return types!");
-        result = result2;
 
         // Collect output indices
         apply_cpp(result, py::cpp_function([&](uint32_t index){

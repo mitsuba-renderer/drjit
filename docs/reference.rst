@@ -26,7 +26,6 @@ These operations are *horizontal* in the sense that [..]
 .. autofunction:: gather
 .. autofunction:: scatter
 .. autofunction:: scatter_reduce
-.. autofunction:: scatter_inc
 .. autofunction:: ravel
 .. autofunction:: unravel
 .. autofunction:: slice
@@ -56,6 +55,7 @@ Mask operations
 .. autofunction:: isfinite
 .. autofunction:: allclose
 
+
 Miscellaneous operations
 ------------------------
 
@@ -68,12 +68,6 @@ Miscellaneous operations
 .. autofunction:: tzcnt
 .. autofunction:: lzcnt
 .. autofunction:: popcnt
-
-Function dispatching
---------------------
-
-.. autofunction:: switch
-.. autofunction:: dispatch
 
 Just-in-time compilation
 ------------------------

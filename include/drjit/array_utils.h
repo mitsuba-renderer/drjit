@@ -290,7 +290,7 @@ DRJIT_INLINE T mulhi_(T x, T y) {
         if constexpr (std::is_signed_v<T>) {
             int32_t x1 = (int32_t) (x >> 32);
             int32_t y1 = (int32_t) (y >> 32);
-            uint32_t x0y0_hi = mulhi_(x0, y0);
+            uint32_t x0y0_hi = mulhi_scalar(x0, y0);
             int64_t t = x1 * (int64_t) y0 + x0y0_hi;
             int64_t w1 = x0 * (int64_t) y1 + (t & mask);
 

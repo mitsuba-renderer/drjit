@@ -224,27 +224,3 @@ def test07_norm(m):
     a = dr.norm(m.Array3f(1, 2, 3))
     assert dr.allclose(a, 3.74166)
     assert type(a) is m.Float
-
-def test08_prefix_sum(m):
-    # Heavy-duty tests for large arrays are already performed as part of the drjit-core test suite.
-    # Here, we just exercise the bindings once for different types
-    for t in [m.Float, m.Int32, m.UInt32, m.Float64]:
-        assert dr.prefix_sum(t(1, 2, 3)) == t(0, 1, 3)
-        assert dr.prefix_sum(t(1, 2, 3), exclusive=False) == t(1, 3, 6)
-        assert dr.cumsum(t(1, 2, 3)) == t(1, 3, 6)
-
-def test09_scatter_inc(m):
-    try:
-        import numpy as np
-    except ImportError:
-        pytest.skip('NumPy is not installed')
-    n=10000
-    counter = m.UInt32(0)
-    index = dr.arange(m.UInt32, n)
-    offset = dr.scatter_inc(counter, m.UInt32(0))
-
-    out = dr.zeros(m.UInt32, n)
-    dr.scatter(out, offset, index)
-    out_np = np.array(out)
-    out_np.sort()
-    assert np.all(out_np == np.arange(n))

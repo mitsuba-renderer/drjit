@@ -608,12 +608,6 @@ value_t<Array> extract(const Array &array, const Mask &mask) {
     return array.extract_(mask);
 }
 
-template <typename Array>
-Array prefix_sum(const Array &array, bool exclusive = true) {
-    static_assert(is_dynamic_array_v<Array>);
-    return array.prefix_sum_(exclusive);
-}
-
 template <typename Mask>
 uint32_array_t<array_t<Mask>> compress(const Mask &mask) {
     static_assert(is_dynamic_array_v<Mask>);
@@ -980,9 +974,7 @@ template <typename Target, bool Permute = false, typename Source,
           typename Index, typename Mask = mask_t<Index>>
 Target gather(Source &&source, const Index &index, const Mask &mask_ = true) {
     // Broadcast mask to match shape of Index
-    mask_t<plain_t<Index>> mask = mask_;
-    DRJIT_MARK_USED(mask);
-
+    mask_t<plain_t<replace_scalar_t<Index, scalar_t<Target>>>> mask = mask_;
     if constexpr (array_depth_v<Source> > 1) {
         // Case 1: gather<Vector3fC>(const Vector3fC&, ...)
         static_assert(array_size_v<Source> == array_size_v<Target>,
@@ -1025,13 +1017,12 @@ Target gather(Source &&source, const Index &index, const Mask &mask_ = true) {
                 }
             }
         } else if constexpr (array_depth_v<Target> == array_depth_v<Index>) {
-            mask_t<plain_t<replace_scalar_t<Index, scalar_t<Target>>>> mask2 = mask_;
             if constexpr ((Target::IsPacked || Target::IsRecursive) && is_array_v<Source>)
                 // Case 2.1.0: gather<FloatC>(const FloatP&, ...)
-                return Target::template gather_<Permute>(source.data(), index, mask2);
+                return Target::template gather_<Permute>(source.data(), index, mask);
             else
                 // Case 2.1.1: gather<FloatC>(const FloatC& / const void *, ...)
-                return Target::template gather_<Permute>(source, index, mask2);
+                return Target::template gather_<Permute>(source, index, mask);
         } else {
             // Case 2.2: gather<Vector3fC>(const FloatC & / const void *, ...)
             using TargetIndex = replace_scalar_t<Target, scalar_t<Index>>;
@@ -1065,15 +1056,12 @@ Target gather(Source &&source, const Index &index, const Mask &mask_ = true) {
     }
 }
 
-
 template <bool Permute = false, typename Target, typename Value, typename Index,
           typename Mask = mask_t<Index>>
 void scatter(Target &&target, const Value &value, const Index &index,
              const Mask &mask_ = true) {
     // Broadcast mask to match shape of Index
     mask_t<plain_t<Index>> mask = mask_;
-    DRJIT_MARK_USED(mask);
-
     if constexpr (std::is_same_v<std::decay_t<Target>, std::nullptr_t>) {
         return; // Used by virtual function call dispatch when there is no return value
     } else if constexpr (array_depth_v<Target> > 1) {
@@ -1177,29 +1165,18 @@ void scatter_reduce(ReduceOp op, Target &&target, const Value &value,
 }
 
 template <typename Target, typename Value, typename Index>
-void scatter_reduce_kahan(Target &target_1, Target &target_2,
+void scatter_reduce_kahan(Target &&target_1, Target &&target_2,
                           const Value &value, const Index &index,
                           const mask_t<Value> &mask = true) {
     static_assert(
         is_jit_v<Target> &&
         is_jit_v<Value> &&
         is_jit_v<Index> &&
-        array_depth_v<Target> == 1 &&
-        array_depth_v<Value> == 1 &&
-        array_depth_v<Index> == 1,
+        array_depth_v<Value> == array_depth_v<Index> &&
+        array_depth_v<Value> == 1,
         "Only flat JIT arrays are supported at the moment");
 
     value.scatter_reduce_kahan_(target_1, target_2, index, mask);
-}
-
-template <typename Index>
-Index scatter_inc(Index &target,
-                 const Index &index,
-                 const mask_t<Index> &mask = true) {
-    static_assert(is_jit_v<Index> && array_depth_v<Index> == 1,
-                  "Only flat JIT arrays are supported at the moment");
-
-    return Index::scatter_inc_(target, index, mask);
 }
 
 template <typename T, typename TargetType>
@@ -1350,6 +1327,8 @@ DRJIT_INNER_REDUCTION(mean)
 
 #undef DRJIT_INNER_REDUCTION
 
+//! @}
+// -----------------------------------------------------------------------
 
 // -----------------------------------------------------------------------
 //! @{ \name JIT compilation and autodiff-related
@@ -1400,24 +1379,6 @@ DRJIT_INLINE void eval(const Ts&... values) {
             eval();
     }
 }
-
-/**
- * \brief Helper to modify JIT flags within a given scope
- */
-struct scoped_set_flag {
-    scoped_set_flag(JitFlag flag, bool value) :
-        flag(flag),
-        original_value(jit_flag(flag)) {
-        jit_set_flag(flag, value);
-    }
-
-    ~scoped_set_flag() {
-        jit_set_flag(flag, original_value);
-    }
-
-    JitFlag flag;
-    bool original_value;
-};
 
 DRJIT_INLINE void set_device(int32_t device) {
     jit_cuda_set_device(device);

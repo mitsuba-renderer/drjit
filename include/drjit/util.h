@@ -167,15 +167,13 @@ template <typename T> std::tuple<T, T, T> meshgrid(const T &x, const T &y, const
         return { ry, rx, rz };
 }
 
-/// Binary search with scalar starting/ending indices
 template <typename Index, typename Predicate>
 Index binary_search(scalar_t<Index> start_, scalar_t<Index> end_,
                     const Predicate &pred) {
     scalar_t<Index> iterations = (start_ < end_) ?
         (log2i(end_ - start_) + 1) : 0;
 
-    Index start = opaque<Index>(start_);
-    Index end = opaque<Index>(end_);
+    Index start(start_), end(end_);
 
     using Mask = mask_t<Index>;
 
@@ -186,11 +184,15 @@ Index binary_search(scalar_t<Index> start_, scalar_t<Index> end_,
         using Mask1 = mask_t<Index1>;
 
         if (iterations >= 2 && jit_flag(JitFlag::LoopRecord)) {
-            Index1 index = zeros<Index1>(width(pred(start)));
-            Index1 iterations1 = opaque<Index1>(iterations);
-            Loop<Mask1> loop("dr::binary_search()", start, end, index);
+            char title[80];
+            snprintf(title, sizeof(title),
+                     "dr::binary_search(size=%zu, iterations=%zu)",
+                     (size_t)(end_ - start_), (size_t) iterations);
 
-            while (loop(index < iterations1)) {
+            Index1 index = zeros<Index1>(width(pred(start)));
+            Loop<Mask1> loop(title, start, end, index);
+
+            while (loop(index < iterations)) {
                 Index middle = sr<1>(start + end);
                 Mask cond = detach(pred(middle));
 
@@ -212,52 +214,6 @@ Index binary_search(scalar_t<Index> start_, scalar_t<Index> end_,
         masked(start,  cond) = minimum(middle + 1, end);
         masked(end,   !cond) = middle;
     }
-
-    return start;
-}
-
-/**
- * \brief Binary search with non-scalar starting/ending indices
- *
- * Note: this method forcefully uses recorded loops if called in a recorded
- * context.
- */
-template <typename IndexN,
-          typename Index1 = std::conditional_t<is_static_array_v<IndexN>,
-                                               value_t<IndexN>, IndexN>,
-          typename Predicate>
-IndexN binary_search(typename std::enable_if_t<is_jit_v<Index1>, Index1> start_,
-                     typename std::enable_if_t<is_jit_v<Index1>, Index1> end_,
-                     const Predicate &pred) {
-    static_assert(drjit::array_depth_v<Index1> == 1,
-                  "Starting/ending indices array must have depth 1!");
-
-    using MaskN = mask_t<IndexN>;
-    using Mask1 = mask_t<Index1>;
-
-    Index1 iterations =
-        detach(select(start_ < end_, log2i(end_ - start_) + 1, 0));
-
-    IndexN start(start_), end(end_);
-
-    Index1 index = zeros<Index1>(width(pred(start)));
-
-    bool loop_record = jit_flag(JitFlag::LoopRecord);
-    if (jit_flag(JitFlag::Recording))
-        jit_set_flag(JitFlag::LoopRecord, true);
-
-    Loop<Mask1> loop("dr::binary_search()", start, end, index);
-    while (loop(index < iterations)) {
-        IndexN middle = sr<1>(start + end);
-        MaskN cond    = detach(pred(middle));
-
-        start = select(cond, minimum(middle + 1, end), start);
-        end   = select(cond, end, middle);
-
-        index++;
-    }
-
-    jit_set_flag(JitFlag::LoopRecord, loop_record);
 
     return start;
 }
