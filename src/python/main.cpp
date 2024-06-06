@@ -171,6 +171,7 @@ NB_MODULE(_drjit_ext, m_) {
     m.def("sync_thread", &jit_sync_thread, doc_sync_thread)
      .def("flush_kernel_cache", &jit_flush_kernel_cache, doc_flush_kernel_cache)
      .def("flush_malloc_cache", &jit_flush_malloc_cache, doc_flush_malloc_cache)
+     .def("malloc_clear_statistics", &jit_malloc_clear_statistics)
      .def("thread_count", &jit_llvm_thread_count, doc_thread_count)
      .def("set_thread_count", &jit_llvm_set_thread_count, doc_set_thread_count)
      .def("expand_threshold", &jit_llvm_expand_threshold, doc_expand_threshold)
