@@ -86,6 +86,17 @@ def test002_detach(t):
     assert dr.grad_enabled(a)
     assert not dr.grad_enabled(c)
 
+    class Foo:
+        def __init__(self) -> None:
+            self.x = t(1)
+            self.y = dr.scalar.Array3f(1)
+        DRJIT_STRUCT = { 'x': t, 'y': dr.scalar.Array3f }
+
+    a = Foo()
+    dr.enable_grad(a)
+    b = dr.detach(a, preserve_type=False)
+    assert type(a.x) is not type(b.x)
+    assert type(a.y) is type(b.y)
 
 @pytest.test_arrays('is_diff,float,-float16,shape=(*)')
 def test003_set_grad(t):
@@ -957,7 +968,12 @@ def test077_pow(t):
     assert dr.allclose(dr.grad(y),
                        t(0., 2.77259, 9.88751, 22.1807, 40.2359,
                                64.5033, 95.3496, 133.084, 177.975, 230.259))
-
+    tensor_t = dr.tensor_t(t)
+    y = dr.full(tensor_t, 2.0, shape=(5,5))
+    dr.enable_grad(y)
+    z = dr.power(y, 2.0)
+    dr.backward(z)
+    assert dr.allclose(dr.grad(y), z)
 
 @pytest.test_arrays('is_diff,float,-float16,shape=(*)')
 def test078_tan(t):
@@ -1198,6 +1214,24 @@ def test090_replace_grad(t):
     assert z[1].index_ad == y.index_ad
     assert z[2].index_ad == y.index_ad
 
+    a = dr.full(t, 0.5, 16)
+    dr.enable_grad(a)
+    b = dr.replace_grad(1.0, a)
+    assert type(b) is type(a)
+    assert dr.width(b) == dr.width(a) == 16
+    assert b.index_ad == a.index_ad
+    assert dr.allclose(b, 1.0)
+
+    a = t(1.0)
+    z = t(1.0, 2.0 ,3.0)
+    dr.enable_grad(a, z)
+    b = dr.replace_grad(z, a)
+
+    assert type(b) is type(a)
+    assert dr.width(b) == dr.width(z) == 3
+    assert dr.width(dr.grad(b) == 3)
+    assert b.index_ad != 0
+    assert b.index_ad != a.index_ad
 
 @pytest.test_arrays('is_diff,float32,shape=(*)')
 def test091_safe_functions(t):

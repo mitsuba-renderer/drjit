@@ -111,7 +111,8 @@ static nb::object detach(nb::handle h, bool preserve_type_ = true) {
         void operator()(nb::handle h1, nb::handle h2) override {
             const ArraySupplement &s1 = supp(h1.type()),
                                   &s2 = supp(h2.type());
-            s2.init_index((uint32_t) s1.index(inst_ptr(h1)), inst_ptr(h2));
+            if (s1.is_diff)
+                s2.init_index((uint32_t) s1.index(inst_ptr(h1)), inst_ptr(h2));
         }
     };
 
@@ -222,8 +223,19 @@ static nb::object replace_grad(nb::handle h0, nb::handle h1) {
                 size_t l1 = s.len(p1),
                        l2 = s.len(p2);
 
-                if (l1 != l2)
-                    nb::raise("incompatible input sizes (%zu and %zu).", l1, l2);
+                nb::object o1, o2;
+                if (l1 != l2) {
+                    if (l1 == 1) {
+                        o1 = full("zeros", h1.type(), nb::int_(0), l2);
+                        o1 = h1 + o1;
+                        p1 = inst_ptr(o1);
+                    } else if (l2 == 1) {
+                        o2 = full("zeros", h2.type(), nb::int_(0), l1);
+                        o2 = h2 + o2;
+                        p2 = inst_ptr(o2);
+                    } else
+                        nb::raise("incompatible input sizes (%zu and %zu).", l1, l2);
+                }
 
                 uint64_t i1 = s.index(p1),
                          i2 = s.index(p2),

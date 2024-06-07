@@ -107,9 +107,16 @@ static PyObject *nb_power(PyObject *h0_, PyObject *h1_) noexcept {
 
             Py_ssize_t u1 = (i1 < 0) ? -i1 : i1;
 
-            size_t size = width(h0);
-            nb::object result = array_module.attr("ones")(h0.type(), size),
-                       x = nb::borrow(h0);
+            nb::object result;
+            if (supp(h0.type()).is_tensor) {
+                nb::object shape_ = shape(h0);
+                result = array_module.attr("ones")(h0.type(), shape_);
+            } else {
+                size_t size = width(h0);
+                result = array_module.attr("ones")(h0.type(), size);
+            }
+
+            nb::object x = nb::borrow(h0);
 
             while (u1) {
                 if (u1 & 1)
