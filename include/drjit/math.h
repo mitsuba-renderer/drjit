@@ -1491,10 +1491,9 @@ template <typename Value, bool Native> Value cbrt(const Value &x) {
         if constexpr (!Single)
             r -= (r - (x / square(r))) * third;
 
-        return select(isfinite(x), r, x);
+        return select(isfinite(x) && (x != 0), r, x);
     }
 }
-
 template <typename Value, bool Native> Value erf(const Value &x) {
     if constexpr (is_detected_v<detail::has_erf, Value> && Native) {
         return x.erf_();
