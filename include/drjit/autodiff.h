@@ -504,8 +504,8 @@ struct DRJIT_TRIVIAL_ABI DiffArray
     template <size_t N, typename Index, typename Mask>
     static Array<DiffArray, N> gather_packet_(const DiffArray &src, const Index &index,
                                               const Mask &mask, ReduceMode mode) {
-        if constexpr (N & (N-1)) {
-            return Base::gather_packet_<N>(src, index, mask, mode);
+        if constexpr ((N & (N-1)) > 0) {
+            return Base::template gather_packet_<N>(src, index, mask, mode);
         } else {
             static_assert(
                 std::is_same_v<detached_t<Mask>, detached_t<mask_t<DiffArray>>>);
@@ -546,7 +546,7 @@ struct DRJIT_TRIVIAL_ABI DiffArray
                                 ReduceMode mode) {
         static_assert(
             std::is_same_v<detached_t<Mask>, detached_t<mask_t<DiffArray>>>);
-        if constexpr (N & (N-1)) {
+        if constexpr ((N & (N-1)) > 0) {
             Base::template scatter_packet_<N>(dst, source, index, mask, mode);
         } else if constexpr (IsFloat) {
             uint64_t indices[N];
@@ -587,7 +587,7 @@ struct DRJIT_TRIVIAL_ABI DiffArray
                                        ReduceOp op, ReduceMode mode) {
         static_assert(
             std::is_same_v<detached_t<Mask>, detached_t<mask_t<DiffArray>>>);
-        if constexpr (N & (N-1)) {
+        if constexpr ((N & (N-1)) > 0) {
             Base::template scatter_reduce_packet_<N>(dst, source, index, mask, op, mode);
         } else if constexpr (IsFloat) {
             uint64_t indices[N];
