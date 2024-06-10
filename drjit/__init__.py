@@ -332,6 +332,18 @@ def lerp(a, b, t):
 #     Deprecated wrappers for old Dr.Jit operations
 # -------------------------------------------------------------------
 
+def transpose(arg, /):
+    _warnings.warn("transpose(x) is deprecated, please use x.T",
+                   DeprecationWarning, stacklevel=2)
+    return arg.T
+
+
+def inverse(arg, /):
+    _warnings.warn("inverse(x) is deprecated, please use rcp(x)",
+                   DeprecationWarning, stacklevel=2)
+    return rcp(arg)
+
+
 def wrap_ad(*args, **kwargs):
     _warnings.warn("@wrap_ad is deprecated, please use @wrap",
                    DeprecationWarning, stacklevel=2)
