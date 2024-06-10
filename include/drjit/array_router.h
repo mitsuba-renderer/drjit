@@ -930,7 +930,7 @@ template <typename Target, typename Source, typename Index, typename Mask = mask
 Target gather(Source &&source, const Index &index, const Mask &mask_ = true,
               ReduceMode mode = ReduceMode::Auto) {
     // Broadcast mask to match shape of Index
-    mask_t<plain_t<replace_scalar_t<Index, scalar_t<Target>>>> mask = mask_;
+    mask_t<plain_t<Index>> mask = mask_;
     if constexpr (depth_v<Source> > 1) {
         // Case 1: gather<Vector3fC>(const Vector3fC&, ...)
         static_assert(size_v<Source> == size_v<Target>,
@@ -973,16 +973,17 @@ Target gather(Source &&source, const Index &index, const Mask &mask_ = true,
             }
         } else if constexpr (depth_v<Target> == depth_v<Index>) {
             using Index2 = plain_t<replace_scalar_t<Target, uint32_t>>;
+            mask_t<plain_t<replace_scalar_t<Index, scalar_t<Target>>>> mask2 = mask_;
             static_assert(is_array_v<Index> &&
                           is_integral_v<Index> &&
                           sizeof(typename Index::Scalar) <= 4,
                           "Second argument of gather operation must be a 32 bit index array!");
             if constexpr ((Target::IsPacked || Target::IsRecursive) && is_array_v<Source>)
                 // Case 2.1.0: gather<FloatC>(const FloatP&, ...)
-                return Target::template gather_(source.data(), Index2(index), mask, mode);
+                return Target::template gather_(source.data(), Index2(index), mask2, mode);
             else
                 // Case 2.1.1: gather<FloatC>(const FloatC& / const void *, ...)
-                return Target::template gather_(source, Index2(index), mask, mode);
+                return Target::template gather_(source, Index2(index), mask2, mode);
         } else {
             // Case 2.2: gather<Vector3fC>(const FloatC & / const void *, ...)
             return value_t<Target>::template gather_packet_<Target::Size>(source, index, mask, mode);
