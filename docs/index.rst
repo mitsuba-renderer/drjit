@@ -6,6 +6,7 @@ Dr.Jit — A Just-In-Time-Compiler for Differentiable Rendering
    :caption: Contents
 
    changelog
+   what
    general
    types
    cflow

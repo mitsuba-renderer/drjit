@@ -1,5 +1,7 @@
 .. cpp:namespace:: drjit
 
+.. _cpp_iface:
+
 C++ Interface
 =============
 
