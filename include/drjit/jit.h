@@ -368,7 +368,7 @@ struct DRJIT_TRIVIAL_ABI JitArray
         return steal(jit_var_literal(Backend, Type, &value, size));
     }
 
-    template <typename T, enable_if_t<!std::is_void_v<T> && std::is_same_v<T, Value>> = 0>
+    template <typename T, enable_if_t<!std::is_void_v<T> && std::is_convertible_v<T, Value>> = 0>
     static JitArray full_(T value, size_t size) {
         ActualValue av;
         if constexpr (!IsClass)
@@ -379,7 +379,7 @@ struct DRJIT_TRIVIAL_ABI JitArray
         return steal(jit_var_literal(Backend, Type, &av, size, false));
     }
 
-    template <typename T, enable_if_t<!std::is_void_v<T> && std::is_same_v<T, Value>> = 0>
+    template <typename T, enable_if_t<!std::is_void_v<T> && std::is_convertible_v<T, Value>> = 0>
     static JitArray opaque_(T value, size_t size) {
         ActualValue av;
         if constexpr (!IsClass)
@@ -399,7 +399,7 @@ struct DRJIT_TRIVIAL_ABI JitArray
                      JitArray((Value) start));
     }
 
-    template <typename T, enable_if_t<!std::is_void_v<T> && std::is_same_v<T, Value>> = 0>
+    template <typename T, enable_if_t<!std::is_void_v<T> && std::is_convertible_v<T, Value>> = 0>
     static JitArray linspace_(T min, T max, size_t size, bool endpoint) {
         T step = (max - min) / T(size - ((endpoint && size > 1) ? 1 : 0));
         return fmadd(JitArray(uint32_array_t<JitArray>::counter(size)),

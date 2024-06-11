@@ -638,12 +638,12 @@ struct DRJIT_TRIVIAL_ABI DiffArray
         return steal(Detached::zero_(size).release());
     }
 
-    template <typename T, enable_if_t<!std::is_void_v<T> && std::is_same_v<T, Value>> = 0>
+    template <typename T, enable_if_t<!std::is_void_v<T> && std::is_convertible_v<T, Value>> = 0>
     static DiffArray full_(T value, size_t size) {
         return steal(Detached::full_(value, size).release());
     }
 
-    template <typename T, enable_if_t<!std::is_void_v<T> && std::is_same_v<T, Value>> = 0>
+    template <typename T, enable_if_t<!std::is_void_v<T> && std::is_convertible_v<T, Value>> = 0>
     static DiffArray opaque_(T value, size_t size) {
         return steal(Detached::opaque_(value, size).release());
     }
@@ -652,7 +652,7 @@ struct DRJIT_TRIVIAL_ABI DiffArray
         return steal(Detached::arange_(start, stop, step).release());
     }
 
-    template <typename T, enable_if_t<!std::is_void_v<T> && std::is_same_v<T, Value>> = 0>
+    template <typename T, enable_if_t<!std::is_void_v<T> && std::is_convertible_v<T, Value>> = 0>
     static DiffArray linspace_(T min, T max, size_t size, bool endpoint) {
         return steal(Detached::linspace_(min, max, size, endpoint).release());
     }
@@ -776,7 +776,7 @@ struct DRJIT_TRIVIAL_ABI DiffArray
         return rv;
     }
 
-    template <typename T, enable_if_t<!std::is_void_v<T> && std::is_same_v<T, Value>> = 0>
+    template <typename T, enable_if_t<!std::is_void_v<T> && std::is_convertible_v<T, Value>> = 0>
     void set_entry(size_t offset, T value) {
         if (grad_enabled_())
             jit_raise("DiffArray::set_entry(): not permitted on attached variables!");
