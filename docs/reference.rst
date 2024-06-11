@@ -2,8 +2,32 @@
 
 .. _reference:
 
-API Reference
-=============
+API Reference (Main)
+====================
+
+This document explains the public API (behaviors, signatures) in exhaustive
+detail. If you're new to Dr.Jit, it may be easier to start by reading the other
+sections first.
+
+The reference documentation is also exposed through docstrings, which many
+visual editors (e.g., `VS Code <https://code.visualstudio.com>`__, `neovim
+<https://neovim.io>`__ with `LSP
+<https://en.wikipedia.org/wiki/Language_Server_Protocol>`__) will show during
+code completion, or when hovering over an expression.
+
+The reference extensively use `type variables
+<https://docs.python.org/3/library/typing.html#typing.TypeVar>`__ which can be
+recognized because their name equals or ends with a capital ``T`` (e.g., ``T``,
+``ArrayT``, ``MaskT``, etc.). Type variables serve as placeholders that show
+how types propagates through function calls. For example, a function with
+signature
+
+.. code-block:: python
+
+   def f(arg: T, /) -> tuple[T, T]: ...
+
+will return a pair of ``int`` instances when called with an ``int``-typed
+``arg`` value.
 
 Array creation
 --------------
@@ -526,6 +550,7 @@ differentiation).
 Debugging
 ---------
 
+.. autoenum:: LogLevel
 .. autofunction:: assert_true
 .. autofunction:: assert_false
 .. autofunction:: assert_equal

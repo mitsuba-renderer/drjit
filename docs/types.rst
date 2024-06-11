@@ -59,10 +59,10 @@ there are notable differences between them:
   complex values in an array of shape shape ``(2, N)``. Program execution along
   the dynamic dimension runs in parallel, which is important for efficiency.
 
-  Dr.Jit uses an approach denoted as *tracing* to execute programs
-  involving these vectorized types. Every operation conceptually appends
-  instructions to a progressively growing computational *kernel*. Variable
-  evaluation eventually compiles and executes this kernel on a target device.
+  Only these vectorized types employ *tracing*, and operations involving them
+  conceptually appends instructions to a progressively growing computational
+  kernel. Variable evaluation eventually compiles and executes this kernel on a
+  target device.
 
   The LLVM backend uses the `LLVM Compiler Infrastructure
   <https://llvm.org>`__ to compile kernels targeting the CPU. It vectorizes
@@ -325,7 +325,7 @@ Matrices change the behavior of various operations:
   - :py:func:`drjit.fma`
   - :py:func:`drjit.rcp`
 
-- The following operations Reciprocation via :py:func:`drjit.rcp()` returns the matrix inverse.
+- Reciprocation via :py:func:`drjit.rcp()` returns the matrix inverse.
 
 
 To give an example, if ``a``, ``b``, ``c`` below were all matrices, then the

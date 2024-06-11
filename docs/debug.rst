@@ -29,13 +29,13 @@ To enable it, set the associated flag at the beginning of your program.
 
 .. code-block:: python
 
-   dr.set_flag(drjit.JitFlag.Debug)
+   dr.set_flag(drjit.JitFlag.Debug, True)
 
 Alternatively, you can enable debug mode locally for a block of code.
 
 .. code-block:: python
 
-   with dr.scoped_flag(drjit.JitFlag.Debug):
+   with dr.scoped_set_flag(drjit.JitFlag.Debug):
 
        # .. code goes here
 

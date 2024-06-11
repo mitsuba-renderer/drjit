@@ -150,11 +150,11 @@ Here is what's new:
   which combines the benefits of both steps. This is particularly useful when
   computing the reverse-mode derivative of packet reads.
 
-- Reductions operations previously existed as *ordinary* (e.g.,
+- **Reductions operations**: reductions previously existed as *regular* (e.g.,
   :py:func:`drjit.all`) and *nested* (e.g. ``drjit.all_nested``) variants. Both
   are now subsumed by an optional ``axis`` argument similar to how this works
-  in other array programming frameworks like NumPy. Reductions can process
-  any number of axes on both regular Dr.Jit arrays and tensors.
+  in other array programming frameworks like NumPy. Reductions can now also
+  process any number of axes on both regular Dr.Jit arrays and tensors.
 
   The reduction functions (:py:func:`drjit.all` :py:func:`drjit.any`,
   :py:func:`drjit.sum`, :py:func:`drjit.prod`, :py:func:`drjit.min`,

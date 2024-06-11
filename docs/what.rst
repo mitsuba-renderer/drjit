@@ -1,14 +1,16 @@
+.. py:currentmodule:: drjit
+
 .. _what_is_drjit:
 
 What is Dr.Jit?
 ===============
 
-Dr.Jit is a library to run massively parallel programs on the GPU or CPU,
-potentially along with derivatives for gradient-based optimization. It shares
-this purpose with `many <https://cupy.dev>`__ `currently
-<https://github.com/google/jax>`__ `existing <https://www.tensorflow.org>`__
-`languages <https://www.taichi-lang.org>`__ `and
-<https://github.com/NVIDIA/warp>`__ `tools <https://pytorch.org>`__.
+Dr.Jit is a library to run massively parallel programs on the GPU or CPU, and
+to optionally compute derivatives of such programs for gradient-based
+optimization. It shares this purpose with `many <https://cupy.dev>`__
+`currently <https://github.com/google/jax>`__ `existing
+<https://www.tensorflow.org>`__ `languages <https://www.taichi-lang.org>`__
+`and <https://github.com/NVIDIA/warp>`__ `tools <https://pytorch.org>`__.
 
 Using Dr.Jit involves two steps:
 
@@ -19,22 +21,28 @@ Using Dr.Jit involves two steps:
 
 **That's it**.  It doesn't do much, but it does this *very efficiently*.
 
-Perhaps the most significant difference is that Dr.Jit is *not* a machine
-learning library. Its sweet spot are non-neural programs characterized by
-*embarrassing parallelism*, i.e., programs with large data-parallel regions. A
-good example of this are `Monte Carlo
+Perhaps the most significant difference to the majority of existing tools is
+that Dr.Jit is *not* a machine learning library. Its sweet spot are non-neural
+programs characterized by *embarrassing parallelism*---that is to say, programs
+with large data-parallel regions. A good example of this are `Monte Carlo
 <https://en.wikipedia.org/wiki/Monte_Carlo_method>`__ methods with their
-parallel sample evaluation---indeed, the reason why this project was originally
+parallel sample evaluation (indeed, the reason why this project was originally
 created was to provide the foundation of `Mitsuba 3
 <https://mitsuba.readthedocs.io/en/latest/>`__, a differentiable Monte Carlo
-renderer. That said, Dr.Jit is a general tool that also supports other kinds of
-embarrassingly parallel computation.
+renderer). Over time, Dr.Jit has become a general tool that also supports other
+kinds of parallel workloads.
 
-This documentation focuses on Python, but Dr.Jit also has a C++ interface. A
-separate :ref:`documentation section <cpp_iface>` explains how to convert
-code between the two languages.
+This documentation centers around the Python interface, but Dr.Jit can also be
+used from C++. A separate :ref:`documentation section <cpp_iface>` explains how
+to convert code between the two languages.
 
-Let's now take a look at the two steps from above in the context of a simple
+To install the latest version of Dr.Jit for Python, run the following shell command:
+
+.. code-block:: bash
+
+   $ python -m pip install --upgrade drjit
+
+With that taken care of, let's see how Dr.Jit works in the context of a simple
 example.
 
 Capturing computation
@@ -75,33 +83,33 @@ there are fundamental differences between the two:
    does this avoid loading and storing temporaries: it also makes it easy to
    parallelize the program on compute accelerators.
 
-This is just a toy example, but the key mechanism shown in the example scales:
+This is just a toy example, but the idea that it demonstrates is general.
 Dr.Jit can trace large and complicated programs with side effects, loops,
 conditionals, polymorphic indirection, atomic memory operations, texture
-fetches, hardware-accelerated ray tracing operations, etc. The principle is
-always the same: the system captures what operations are needed to calculate a
-result, postponing them for as long as possible.
+fetches, ray tracing operations, etc. The principle is always the same: the
+system captures what operations are needed to calculate a result, postponing
+them for as long as possible.
 
 Users of `JAX <https://github.com/google/jax>`__ may find this familiar: JAX
 combines tracing with tensor-based optimizations for machine learning
 workloads. JAX is generally amazing, but we find that its optimization often
 tend to backfire in large non-ML workloads, causing `crashes or timeouts
 <https://rgl.s3.eu-central-1.amazonaws.com/media/papers/Jakob2022DrJit.pdf>`__.
-Dr.Jit is tiny in comparison (~20K LOC for the compiler part versus > 1 million
+Dr.Jit is tiny compared to JAX (~20K LOC for the compiler part versus > 1 million
 for the JAX XLA backend) and what it does is simple: it really just captures
 and later replays computation in parallel without trying to be overly clever
 about it.
 
 With this added context, let's revisit the previous example line by line to
-examine the differences. The first one imports the library into an abbreviated
-``dr`` namespace containing all functions.
+examine the differences in more detail. The first line imports the library into
+an abbreviated ``dr`` namespace containing all functions.
 
 .. code-block:: python
 
    import drjit as dr
 
-Just below, there was a second
-``import`` statement that requires an explanation:
+Just below, there is a second ``import`` statement that requires an
+explanation:
 
 .. code-block:: python
 
@@ -116,7 +124,7 @@ This highlights another fundamental difference to NumPy, JAX, etc: these
 frameworks all build on a single *nd-array* type (aka. *tensor*) to represent
 data with different shapes and representations. In contrast, Dr.Jit is *not* a
 tensor library. It uses types to emphasize these properties. For example, here
-are just a few of the many different :ref:`array types <special_arrays>` provided by
+are just a few of the :ref:`many different types <special_arrays>` provided by
 the system:
 
 - :py:class:`Int <drjit.auto.Int>` (or ``Int32``): a 32-bit signed integer.
@@ -129,12 +137,12 @@ All of these are furthermore *arrays* of the concept they represent; the system
 automatically vectorizes and parallelizes along this added dimension. Basically
 you write code that "looks" like a scalar program, and Dr.Jit will efficiently
 run it many times in parallel. In contrast to tensor-based systems, there is no
-ambiguity about how this parallelization should take place. Because of its
-typed nature, operations like :py:func:`drjit.linspace` take the data
-type as a mandatory first argument.
+ambiguity about how this parallelization should take place. Because of the
+typed nature of Dr.Jit, operations like :py:func:`drjit.linspace`
+take the desired return type as a mandatory first argument.
 
-Now let's look at how this idea of tracing computation to assemble a parallel
-program works. Conceptually, a line like
+Let's now look at how *tracing* can be used to assemble a parallel
+program. Conceptually, a line like
 
 .. code-block:: python
 
@@ -146,30 +154,32 @@ can be thought of as expanding into device code equivalent to:
 
    a = malloc(...) # reserve memory for output array 'a'
 
-   # Parallel loop (SIMD and multi-core)
+   # Parallel loop (multi-core + SIMD)
    for i in range(1000000):
-       a[i] = i * 1.0 / 999999.0
+       a[i] = i * (1.0 / 999999.0)
 
-Continuing the Python program simply appends more code to the loop body.
-The next line of the original program was
+However, our original program contained a few more lines of code, so this
+device program is not yet complete. Continuing execution in Python *appends*
+further instructions to the body of the parallel loop. The next line of the
+original Python program was
 
 .. code-block:: python
 
    b = dr.sin(a**2)
 
-Since the we never end up accessing ``a`` explicitly, Dr.Jit generates a
-program that avoids storing this variable:
+Since the we never end up accessing ``a`` explicitly, Dr.Jit generates a more
+efficient device program that avoids storing this intermediate variable altogether:
 
 .. code-block:: python
 
    b = malloc(...) # reserve memory for output array 'b'
 
-   # Parallel loop (SIMD and multi-core)
+   # Parallel loop (multi-core + SIMD)
    for i in range(1000000):
        a_temp = i * (1.0 / 999999.0)
        b[i] = sin(a_temp * a_temp)
 
-The final line of the original program
+The final line of the original Python program
 
 .. code-block:: python
 
@@ -181,13 +191,125 @@ point, Dr.Jit compiles and launches a kernel containing the previous steps.
 Metaprogramming
 ---------------
 
-This was an example of an idea called *metaprogramming*: we are writing a
-program that will write a program, and this second program is what ultimately
-runs on the target device. Often, the program and metaprogram are essentially
-the same, in which case the difference is very subtle.
+This was an example of more general design pattern called *metaprogramming*: we
+wrote code in Python (called the *metaprogram*) that subsequently generated
+*another* program, and this is what finally ran on the target device.
 
+.. only:: not latex
 
-Dr.Jit automatically takes care of memory allocations partitions code into
-kernel launches, and pipes input/output data to these kernels. You can take
-control of these steps if needed.
+   .. image:: https://rgl.s3.eu-central-1.amazonaws.com/media/uploads/wjakob/2024/06/pipeline-light.svg
+     :class: only-light
+     :align: center
+
+   .. image:: https://rgl.s3.eu-central-1.amazonaws.com/media/uploads/wjakob/2024/06/pipeline-dark.svg
+     :class: only-dark
+     :align: center
+
+.. only:: latex
+
+   .. image:: https://rgl.s3.eu-central-1.amazonaws.com/media/uploads/wjakob/2024/06/pipeline-light.svg
+     :align: center
+
+Dr.Jit took care of partitioning this generated program into computational
+units (called *kernels*) and piping inputs/outputs to them as needed. The
+program and metaprogram often do the essentially same thing, in which case the
+difference between the two can be subtle.
+
+However, the program and metaprogram could also be different. For example,
+let's modify the code so that it asks the user to enter a number on the
+keyboard that is then used to to raise the integrand to a custom power:
+
+.. code-block:: python
+   :emphasize-lines: 3
+
+   a = np.linspace(0, x, 1000000, dtype=np.float32)
+   print('Enter exponent: ', end='')
+   i = int(input())
+   print(np.mean(np.sin(a**i)))
+
+This extra step is only part of the metaprogram, but it is *not* part of the
+generated device program. Dr.Jit only "sees" operations done on capitalized
+types imported from a backend (e.g., ``Int``, ``Array3f``, etc.), and
+everything else is just regular Python code that is interpreted as usual. This
+means that the metaprogram compiles to different device programs depending on
+what happens at runtime. This simple idea enables specialization of otherwise
+very general programs to a given task or dataset to improve performance.
+
+Backends
+--------
+
+Dr.Jit provides two backends with feature parity:
+
+1. The `CUDA <https://en.wikipedia.org/wiki/CUDA>`__ backend targets `NVIDIA
+   <https://www.nvidia.com>`__ GPUs with compute capability 5.0 or newer.
+   You can explicitly request this backend by importing types from
+   ``drjit.cuda`` or ``drjit.cuda.ad`` (add ``.ad`` if derivative computation is needed).
+
+2. The `LLVM <https://llvm.org>`__ backend targets Intel (``x86_64``) and ARM
+   (``aarch64``) CPUs. It parallelizes the program using the available CPU
+   cores and vector instruction set extensions such as AVX, AVX512, NEON, etc.
+   You can explicitly request this backend by importing types from
+   ``drjit.llvm`` or ``drjit.llvm.ad`` (add ``.ad`` if derivative computation is needed).
+
+   Note that LLVM >= 11.0 must be installed on your machine for this backend to
+   be available. LLVM can be installed as follows:
+
+   - **macOS**: Install `Homebrew <https://brew.sh>`__ and then enter the following
+     command:
+
+     .. code-block:: bash
+
+        $ brew install llvm
+
+   - **Linux**: Install the LLVM package using your distribution's package
+     manager. On Debian/Ubuntu, you would, e.g., type:
+
+     .. code-block:: bash
+
+        $ sudo apt install llvm
+
+   - **Windows**: Run one of the `official installers
+     <https://github.com/llvm/llvm-project/releases/>`__, for example version `18.1.6
+     <https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.6/LLVM-18.1.6-win64.exe>`__.
+
+The previously mentioned ``drjit.auto`` and ``drjit.auto.ad`` backends redirect
+to the CUDA backend if a compatible GPU was found, otherwise they fall back to
+the LLVM backend.
+
+Other backends may be added in the future.
+
+Wrap-up
+-------
+
+This concludes our discussion of a first simple example. Subsequent parts of
+this documentation explain how Dr.Jit generalizes to bigger programs:
+
+1. :ref:`Basics <basics>`: a fast-paced review of the various ways in which
+   Dr.Jit arrays can be created and modified.
+
+2. **Control flow**: how to trace ``while`` loops, ``if``
+   statements, and polymorphic indirection.
+
+3. :ref:`Evaluation <eval>`: Certain operations (such as printing the contents
+   of an array) cannot be traced and trigger an *evaluation* step. We review
+   what steps require evaluation, and how to tune this process.
+
+4. **Automatic differentiation**: How to compute gradients of differentiable
+   programs.
+
+5. **Interoperability**: How to integrate Dr.Jit with other frameworks (e.g.
+   PyTorch or JAX) and backpropagate gradients through mixed-framework
+   programs.
+
+..
+   Dr.Jit automatically takes care of memory allocations partitions code into
+   kernel launches, and pipes input/output data to these kernels.
+   When does Dr.Jit evaluate variables?
+   Taking control of variable evaluation
+   Type traits
+   custom data structures
+   random number generation
+   debugging, printing, benchmarking, pitfalls
+   how to clear the cache for benchmarking
+   faq
 

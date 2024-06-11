@@ -30,7 +30,7 @@ Carlo <https://en.wikipedia.org/wiki/Monte_Carlo_method>`_ renderer. However,
 *Dr.Jit* is a general-purpose tool that can also help with various other types
 of embarrassingly parallel computation.
 
-*Dr.Jit* principally facilitates three steps:
+*Dr.Jit* helps with three steps:
 
 - **Vectorization and tracing**: When *Dr.Jit* encounters an operation (e.g. an
   addition ``a + b``) it does not execute it right away: instead, it remembers
@@ -45,23 +45,23 @@ of embarrassingly parallel computation.
   <https://en.wikipedia.org/wiki/AVX-512>`_ or `ARM Neon
   <https://developer.arm.com/architectures/instruction-sets/simd-isas/neon>`_.
 
-  *Dr.Jit* is ideal for Monte Carlo methods, where the same computation must be
-  repeated for millions of random samples. *Dr.Jit* dynamically generates
-  specialized parallel code for the target platform.
-  As a fallback, Dr.Jit can also be used without JIT-compilation, which turns
-  the project into a header-only vector library without external dependencies.
+  Dr.Jit works particular well for Monte Carlo methods, which performs the
+  same computation on for millions of random samples. Dr.Jit dynamically
+  generates specialized parallel code for the target platform. As a fallback,
+  Dr.Jit can also be used without JIT-compilation, which turns the project into
+  a header-only vector library without external dependencies.
 
-- **Differentiation**: If desired, *Dr.Jit* can compute derivatives using
+- **Differentiation**: If desired, Dr.Jit can compute derivatives using
   *automatic differentiation* (AD), using either `forward or reverse-mode
   accumulation <https://en.wikipedia.org/wiki/Automatic_differentiation>`_.
   Differentiation and tracing go hand-in-hand to produce specialized derivative
   evaluation code.
 
-- **Python**: *Dr.Jit* types are accessible within C++17 and Python. Code can be
+- **Python**: Dr.Jit types are accessible within C++17 and Python. Code can be
   developed in either language, or even both at once. Combinations of Python
   and C++ code can be jointly traced and differentiated.
 
-*Dr.Jit* handles large programs with custom data structures, side effects, and
+Dr.Jit handles large programs with custom data structures, side effects, and
 polymorphism. It includes a mathematical support library including
 transcendental functions and types like vectors, matrices, complex numbers,
 quaternions, etc.
@@ -69,7 +69,7 @@ quaternions, etc.
 Difference to machine learning frameworks
 -----------------------------------------
 
-Why did we create *Dr.Jit*, when dynamic derivative compilation is already
+Why did we create Dr.Jit, when dynamic derivative compilation is already
 possible using Python-based ML frameworks like `JAX
 <https://github.com/google/jax>`_, `Tensorflow <https://www.tensorflow.org>`_,
 and `PyTorch <https://github.com/pytorch/pytorch>`_ along with backends like
@@ -77,7 +77,7 @@ and `PyTorch <https://github.com/pytorch/pytorch>`_ along with backends like
 <https://pytorch.org/docs/stable/jit.html>`_?
 
 The reason is related to the typical workloads: machine learning involves
-small-ish computation graphs that are, however, made of arithmetically intense
+smallish computation graphs that are, however, made of arithmetically intense
 operations like convolutions, matrix multiplications, etc. The application
 motivating *Dr.Jit* (differentiable rendering) creates giant and messy
 computation graphs consisting of 100K to millions of "trivial" nodes

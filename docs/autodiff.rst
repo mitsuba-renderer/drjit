@@ -7,6 +7,13 @@ Automatic differentiation
 
 (Most of this section still needs to be written)
 
+..
+   Common mistakes: overwriting or mutating a
+   grad-enabled variable and then not being able
+   to get its derivative when backpropagating
+
+   An output isn't a leaf.
+
 
 Differentiating loops
 ---------------------

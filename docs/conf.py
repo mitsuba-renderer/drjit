@@ -34,7 +34,8 @@ extensions = [
     'sphinx.ext.napoleon',
     'sphinx.ext.autodoc',
     'sphinxcontrib.katex',
-    'enum_tools.autoenum'
+    'enum_tools.autoenum',
+    'sphinxcontrib.rsvgconverter'
 ]
 
 # Napoleon settings
@@ -53,3 +54,9 @@ html_theme = 'furo'
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ['_static']
 html_css_files = [ 'drjit.css' ]
+
+html_title=' '
+html_theme_options = {
+    "light_logo": "../_images/drjit-logo-dark.svg",
+    "dark_logo": "../_images/drjit-logo-light.svg"
+}

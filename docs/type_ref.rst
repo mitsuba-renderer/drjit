@@ -1,12 +1,10 @@
 .. py:currentmodule:: drjit
 
-Array types
-===========
+API reference (Backends)
+========================
 
-This section of the documentation lists all array classes that are available
-in the various namespaces.
-
-TODO: insert general information about how types are organized here.
+This section lists all array classes that are available in the various
+backend-specific submodules.
 
 Dr.Jit types derive from :py:class:`drjit.ArrayBase` and generally do not
 implement any methods beyond those of the base class, which makes this section

@@ -2780,7 +2780,7 @@
 
     Many combinations of reductions and variable types are not supported. Some
     combinations depend on the *compute capability* (CC) of the underlying CUDA
-    device or on the *LLVM version* (LV) and the host architecutre (AMD64,
+    device or on the *LLVM version* (LV) and the host architecture (AMD64,
     x86_64). The following matrices display the level of support.
 
     For CUDA:
