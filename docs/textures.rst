@@ -50,6 +50,12 @@ are specified during initialization
 Moreover the :py:func:`eval_cubic()` function provides an independent interface 
 for sampling a texture using a clamped cubic B-Spline interpolant.
 
+.. note::
+
+    When evaluating a texture, the numerical precision used during the
+    interpolation is dictated by the floating point precision of the query
+    point.
+
 Hardware acceleration
 ---------------------
 
