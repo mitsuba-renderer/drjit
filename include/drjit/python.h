@@ -963,6 +963,27 @@ template <typename T, size_t Size> void bind_matrix_types(ArrayBinding &b) {
     bind_array<Matrix<float64_array_t<T>, Size>>(b);
 }
 
+template <typename T, size_t VecSize, size_t Size>
+void bind_matrix_vec_types(ArrayBinding &b) {
+    using VecF16 = Array<float16_array_t<T>, VecSize>;
+    using VecF32 = Array<float32_array_t<T>, VecSize>;
+    using VecF64 = Array<float64_array_t<T>, VecSize>;
+    using VecMask = mask_t<VecF32>;
+
+    bind_array<mask_t<Array<VecMask, Size>>>(b);
+    bind_array<Array<VecF16, Size>>(b);
+    bind_array<Array<VecF32, Size>>(b);
+    bind_array<Array<VecF64, Size>>(b);
+
+    bind_array<mask_t<Array<Array<VecMask, Size>, Size>>>(b);
+    bind_array<Array<Array<VecF16, Size>,Size>>(b);
+    bind_array<Array<Array<VecF32, Size>,Size>>(b);
+    bind_array<Array<Array<VecF64, Size>,Size>>(b);
+    bind_array<Matrix<VecF16, Size>>(b);
+    bind_array<Matrix<VecF32, Size>>(b);
+    bind_array<Matrix<VecF64, Size>>(b);
+}
+
 /// Run bind_array() for arrays, matrices, quaternions, complex numbers, and tensors
 template <typename T> void bind_all(ArrayBinding &b) {
     if constexpr (!drjit::detail::is_scalar_v<T>)
@@ -978,6 +999,11 @@ template <typename T> void bind_all(ArrayBinding &b) {
     bind_matrix_types<T, 2>(b);
     bind_matrix_types<T, 3>(b);
     bind_matrix_types<T, 4>(b);
+
+    bind_matrix_vec_types<T, 1, 4>(b);
+    bind_matrix_vec_types<T, 3, 4>(b);
+    bind_matrix_vec_types<T, 4, 3>(b);
+    bind_matrix_vec_types<T, 4, 4>(b);
 
     bind_array<Complex<float32_array_t<T>>>(b);
     bind_array<Complex<float64_array_t<T>>>(b);
