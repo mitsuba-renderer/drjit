@@ -857,6 +857,20 @@ def test16_packet_gather(t):
     dr.backward_from(r)
     assert dr.all(v.grad == [0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1])
 
+    v = dr.ones(t, 16) # Literal
+    dr.enable_grad(v)
+    a.value = v
+
+    c = BasePtr(a, a, a, b, b)
+    r = c.gather_packet(dr.uint32_array_t(t)(1, 2, 3, 4, 5))
+    assert(dr.all(r==[
+        [1, 1, 1, 0, 0],
+        [1, 1, 1, 0, 0],
+        [1, 1, 1, 0, 0],
+        [1, 1, 1, 0, 0]], axis=None))
+    dr.backward_from(r)
+    assert dr.all(v.grad == [0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1])
+
 
 @pytest.test_arrays('float32,is_diff,shape=(*)')
 def test17_packet_scatter(t):
