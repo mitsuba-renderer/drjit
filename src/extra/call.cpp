@@ -391,7 +391,7 @@ static void ad_call_reduce(JitBackend backend, const char *domain,
         else
             mask = JitVar::steal(jit_var_bool(backend, true));
 
-        mask_combined = JitVar::steal(jit_var_mask_apply(mask.index(), size));
+        mask_combined = JitVar::steal(jit_var_mask_apply(mask.index(), (uint32_t) size));
     }
 
     index = JitVar::steal(jit_var_and(index_, mask_combined.index()));
@@ -402,12 +402,12 @@ static void ad_call_reduce(JitBackend backend, const char *domain,
     index64_vector args;
     args.reserve(args_.size());
 
-    for (uint64_t index : args_) {
-        jit_var_schedule((uint32_t) index);
-        if (index >> 32)
-            args.push_back_steal(ad_var_copy(index));
+    for (uint64_t idx : args_) {
+        jit_var_schedule((uint32_t) idx);
+        if (idx >> 32)
+            args.push_back_steal(ad_var_copy(idx));
         else
-            args.push_back_borrow(index);
+            args.push_back_borrow(idx);
     }
 
     uint32_t n_inst = (uint32_t) callable_count;

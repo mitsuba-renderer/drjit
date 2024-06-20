@@ -12,6 +12,11 @@ add_library(
 
 if (NOT MSVC)
   target_compile_options(drjit-extra PRIVATE $<$<OR:$<CONFIG:Release>,$<CONFIG:MinSizeRel>>:-fno-stack-protector>)
+else()
+  # C24127 conditional expression is constant (a few in robin_hash.h)
+  # C24324 structure was padded due to alignment specifier
+  # C26294 ill-defined for-loop. Loop body not executed (false-positive)
+  target_compile_options(drjit-extra PRIVATE /wd4127 /wd4324 /wd6294)
 endif()
 
 target_compile_definitions(drjit-extra PRIVATE -DDRJIT_EXTRA_BUILD)

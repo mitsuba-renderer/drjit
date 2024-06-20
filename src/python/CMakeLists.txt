@@ -13,15 +13,15 @@ endif()
 
 configure_file(
   ../../resources/config.py.in
-  "${DRJIT_PYTHON_DST_DIR}/config.py"
+  "${DRJIT_PYTHON_SRC_DIR}/config.py"
 )
 
 set(PY_FILES
-  __init__.py ast.py detail.py interop.py dda.py _sh_eval.py _reduce.py
+  config.py __init__.py ast.py detail.py interop.py dda.py _sh_eval.py _reduce.py
   scalar/__init__.py llvm/__init__.py llvm/ad.py
   cuda/__init__.py cuda/ad.py)
 
-set(PY_FILES_OUT "${DRJIT_PYTHON_DST_DIR}/config.py")
+set(PY_FILES_OUT "")
 
 foreach(PY_FILE IN LISTS PY_FILES)
   set(IN_FILE "${DRJIT_PYTHON_SRC_DIR}/${PY_FILE}")
@@ -132,12 +132,35 @@ if (DRJIT_ENABLE_CUDA)
   target_compile_definitions(drjit-python PRIVATE -DDRJIT_ENABLE_CUDA)
 endif()
 
+# --- MSVC: Copy shared libraries to Python folders -----
+
+set(DRJIT_STUB_DEPENDS drjit-python)
+
+if (MSVC)
+  set(COPY_TARGETS drjit-core drjit-extra nanothread)
+  add_custom_target(copy-targets-drjit ALL DEPENDS ${COPY_TARGETS})
+
+  foreach(target ${COPY_TARGETS})
+    get_target_property(TARGET_FOLDER ${target} FOLDER)
+    set(COPY_TARGET_DESTINATION ${DRJIT_PYTHON_DST_DIR}/$<TARGET_FILE_NAME:${target}>)
+
+    add_custom_command(
+      TARGET copy-targets-drjit POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        $<TARGET_FILE:${target}> ${COPY_TARGET_DESTINATION}
+      DEPENDS ${target}
+    )
+  endforeach(target)
+
+  list(APPEND DRJIT_STUB_DEPENDS copy-targets-drjit)
+endif()
+
 # ------------------- Stub generation -------------------
 
 set(STUB_ARGS
   PYTHON_PATH ${DRJIT_PYTHON_DST_DIR}/..
   PATTERN_FILE ${DRJIT_PYTHON_SRC_DIR}/stubs.pat
-  DEPENDS drjit-python ${PY_FILES_OUT}
+  DEPENDS ${DRJIT_STUB_DEPENDS} ${PY_FILES_OUT}
 )
 
 # The sanitizers require preloading shared libraries into Python, and that

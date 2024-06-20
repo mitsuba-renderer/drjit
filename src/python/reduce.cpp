@@ -174,7 +174,7 @@ nb::object reduce(uint32_t op, nb::handle h, nb::handle axis_, nb::handle mode) 
 
         const ArraySupplement &s = supp(tp);
 
-        int ndim = ::ndim(h);
+        int ndim = (int)::ndim(h);
         if (ndim == 0) {
             int value;
             // Accept 0-dim tensors and axis==0 (the default); return the the
@@ -238,7 +238,7 @@ nb::object reduce(uint32_t op, nb::handle h, nb::handle axis_, nb::handle mode) 
                 nb::list l = nb::list(nb::set(new_axis));
                 l.sort();
                 axis = nb::tuple(l);
-                axis_len = nb::len(axis);
+                axis_len = (int)nb::len(axis);
             }
 
             if (axis_len == 0) {
@@ -283,10 +283,10 @@ nb::object reduce(uint32_t op, nb::handle h, nb::handle axis_, nb::handle mode) 
         int symbolic = -1;
         if (!mode.is_none()) {
             if (nb::isinstance<nb::str>(mode)) {
-                const char *s = nb::borrow<nb::str>(mode).c_str();
-                if (strcmp(s, "symbolic") == 0)
+                const char *s_ = nb::borrow<nb::str>(mode).c_str();
+                if (strcmp(s_, "symbolic") == 0)
                     symbolic = 1;
-                else if (strcmp(s, "evaluated") == 0)
+                else if (strcmp(s_, "evaluated") == 0)
                     symbolic = 0;
             }
             if (symbolic == -1)
@@ -657,7 +657,7 @@ static nb::object block_reduce(ReduceOp op,
             uint64_t new_index = ad_var_block_reduce(
                 op,
                 s.index(inst_ptr(h1)),
-                block_size,
+                (uint32_t)block_size,
                 symbolic
             );
 
