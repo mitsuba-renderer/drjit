@@ -67,8 +67,6 @@ nb::object reduce_identity(nb::type_object_t<dr::ArrayBase> tp, ReduceOp op, uin
     m.shape[0] = DRJIT_DYNAMIC;
     nb::handle tp2 = meta_get_type(m);
 
-    const ArraySupplement &s2 = supp(tp2);
-
     nb::object id_elem = nb::inst_alloc(tp2);
     uint64_t value = jit_reduce_identity((VarType) s.type, op);
     s.init_data(1, &value, inst_ptr(id_elem));

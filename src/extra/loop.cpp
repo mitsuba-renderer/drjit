@@ -521,7 +521,7 @@ public:
         if (add_index(m_backend, index >> 32, false)) {
             Input &in = m_inputs[offset];
             in.has_grad_out = true;
-            in.grad_out_offset = m_output_indices.size() - 1;
+            in.grad_out_offset = (uint32_t) m_output_indices.size() - 1;
             ad_var_inc_ref(combine(m_output_indices[in.grad_out_offset]));
         }
     }
@@ -716,7 +716,7 @@ public:
             uint64_t index;
             if (in.has_grad_out && in.has_grad_in) {
                 index = ad_var_new((uint32_t) m_state[i]);
-                tmp.push_back_borrow(m_state[offset]);
+                tmp.push_back_borrow((uint32_t) m_state[offset]);
             } else {
                 index = ad_var_inc_ref(m_state[i]);
             }

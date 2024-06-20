@@ -772,7 +772,7 @@ struct DRJIT_TRIVIAL_ABI DiffArray
 
     bool schedule_force_() {
         int rv = 0;
-        *this = steal(ad_var_schedule_force(m_index, &rv));
+        *this = steal((Index) ad_var_schedule_force(m_index, &rv));
         return rv;
     }
 
@@ -800,7 +800,7 @@ struct DRJIT_TRIVIAL_ABI DiffArray
 
     Value *data() {
         void *p = nullptr;
-        *this = steal(ad_var_data(m_index, &p));
+        *this = steal((Index) ad_var_data(m_index, &p));
         return (Value *) p;
     }
 

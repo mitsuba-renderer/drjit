@@ -1189,9 +1189,9 @@ template <bool IsMask_, typename Derived_> struct alignas(16)
 
 #if defined(DRJIT_X86_AVX2)
     template <typename Index, typename Mask>
-    static DRJIT_INLINE Derived gather_(const void *ptr, const Index &index, const Mask &mask, bool) {
+    static DRJIT_INLINE Derived gather_(const void *ptr, const Index &index, const Mask &mask, ReduceMode mode) {
         if constexpr (sizeof(scalar_t<Index>) == 4) {
-            return Base::gather_(ptr, index, mask, false);
+            return Base::gather_(ptr, index, mask, mode);
         } else {
             #if defined(DRJIT_X86_AVX512)
                 return _mm_mmask_i64gather_pd(_mm_setzero_pd(), mask.k, index.m, (const double *) ptr, 8);
@@ -1601,9 +1601,9 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(16)
 
 #if defined(DRJIT_X86_AVX2)
     template <typename Index, typename Mask>
-    static DRJIT_INLINE Derived gather_(const void *ptr, const Index &index, const Mask &mask, bool) {
+    static DRJIT_INLINE Derived gather_(const void *ptr, const Index &index, const Mask &mask, ReduceMode mode) {
         if constexpr (sizeof(scalar_t<Index>) == 4) {
-            return Base::gather_(ptr, index, mask, false);
+            return Base::gather_(ptr, index, mask, mode);
         } else {
             #if defined(DRJIT_X86_AVX512)
                 return _mm_mmask_i64gather_epi64(_mm_setzero_si128(), mask.k, index.m, (const long long *) ptr, 8);
@@ -1717,8 +1717,8 @@ template <bool IsMask_, typename Derived_> struct alignas(16)
 
 #if defined(DRJIT_X86_AVX2)
     template <typename Index, typename Mask>
-    static DRJIT_INLINE Derived gather_(const void *ptr, const Index &index, const Mask &mask, bool) {
-        return Base::gather_(ptr, index, mask & mask_(), false);
+    static DRJIT_INLINE Derived gather_(const void *ptr, const Index &index, const Mask &mask, ReduceMode mode) {
+        return Base::gather_(ptr, index, mask & mask_(), mode);
     }
 #endif
 

@@ -843,7 +843,7 @@ struct Arg {
     Arg &operator=(Arg &&a) = delete;
     void release() { weight.release(); }
 
-    ADIndex ad_index;
+    ADIndex ad_index = 0;
     JitVar weight;
 };
 
@@ -1978,6 +1978,8 @@ struct ScatterTarget : Special {
             default:
                 ad_raise("ScatterTarget::create_mask(): unsupported case!");
         }
+
+        return 0;
     }
 
     void backward(Variable *source, const Variable *target) override {
@@ -2907,8 +2909,8 @@ public:
 
         jit_var_gather_packet(n, v->grad.index(), offset.index(), mask.index(), out.data());
         for (size_t i = 0; i < n; ++i) {
-            Variable *v = state[m_output_indices[i]];
-            v->accum(JitVar::steal(out[i]), v->size);
+            Variable *v_ = state[m_output_indices[i]];
+            v_->accum(JitVar::steal(out[i]), v_->size);
             out[i] = 0;
         }
     }
@@ -3001,7 +3003,7 @@ Index ad_var_scatter(Index target, Index value, JitIndex offset, JitIndex mask,
                      ReduceOp op, ReduceMode mode) {
     JitVar target_copy;
     if (!is_detached(value) && (op == ReduceOp::Min || op == ReduceOp::Max))
-        target_copy = JitVar::borrow(target);
+        target_copy = JitVar::borrow((uint32_t) target);
 
     JitVar result = JitVar::steal(jit_var_scatter(
         jit_index(target), jit_index(value), offset, mask, op, mode));
@@ -3036,7 +3038,7 @@ Index ad_var_scatter(Index target, Index value, JitIndex offset, JitIndex mask,
                 SpecialArg(value, new Scatter(
                                       GenericArray<uint32_t>::borrow(offset),
                                       JitMask::borrow(mask),
-                                      JitVar::borrow(value), result, op, mode)),
+                                      JitVar::borrow((uint32_t) value), result, op, mode)),
                 SpecialArg(target, new ScatterTarget(
                                        GenericArray<uint32_t>::borrow(offset),
                                        JitMask::borrow(mask), target_copy,

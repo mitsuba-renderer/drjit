@@ -291,8 +291,6 @@ nb::object dispatch_impl(nb::handle_t<dr::ArrayBase> inst,
         nb::chain_error(PyExc_RuntimeError, "drjit.dispatch(): %s", e.what());
         nb::raise_python_error();
     }
-
-    return nb::none();
 }
 
 void export_switch(nb::module_& m) {
