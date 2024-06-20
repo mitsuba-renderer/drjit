@@ -931,3 +931,25 @@ def test19_nested_call(t, symbolic):
         xo = dr.dispatch(c, my_func, xi, yi)
 
     assert dr.all(xo == xi)
+
+
+@pytest.mark.parametrize("symbolic", [True, False])
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+def test20_partial_output_eval(t, symbolic):
+    pkg = get_pkg(t)
+
+    A, B, Base, BasePtr = pkg.A, pkg.B, pkg.Base, pkg.BasePtr
+    a, b = A(), B()
+
+    c = BasePtr(a, a, None, b, b)
+
+    xi = t(1, 2, 8, 3, 4)
+    yi = t(5, 6, 8, 7, 8)
+
+    with dr.scoped_set_flag(dr.JitFlag.SymbolicCalls, symbolic):
+        xo, yo = c.f(xi, yi)
+
+    dr.eval(xo)
+    zo = xo + yo
+    assert dr.all(xo == t(10, 12, 0, 21, 24))
+    assert dr.all(zo == t(9, 10, 0, 24, 28))
