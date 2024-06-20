@@ -1,7 +1,7 @@
 .. py:currentmodule:: drjit
 
-Backend API reference
-=====================
+API reference (Backends)
+========================
 
 This section lists all array classes that are available in the various
 backend-specific submodules.

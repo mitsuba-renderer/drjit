@@ -33,14 +33,14 @@ representation---they need concrete inputs. The only way to connect them is to
 evaluate the array contents, typically by switching the operations from
 symbolic to evaluated mode. This connection can be further formalized
 using the decorator discussed in the section on :ref:`interoperability
-<interop>`. This isn't a great solution since evaluated mode comes at a
-significant additional cost.
+<interop>`. It is worth noting that this isn't a great solution since evaluated
+mode comes at a significant additional cost.
 
-Could you please add a Metal/ROCm/.. backend?
----------------------------------------------
+Will you add a Metal/ROCm/.. backend?
+-------------------------------------
 
-We may add further backends in the future, but this does not have a high
-priority on our end. External contributions are certainly welcome.
+We may add further backends in the future, but doing so currently does not have
+a high priority on our TODO list---external contributions are welcome!
 
 Can I use Dr.Jit to compute higher-order derivatives?
 -----------------------------------------------------

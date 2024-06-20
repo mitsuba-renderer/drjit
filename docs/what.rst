@@ -37,7 +37,7 @@ with large data-parallel regions. A good example of this are `Monte Carlo
 parallel sample evaluation (indeed, the reason why this project was originally
 created was to provide the foundation of `Mitsuba 3
 <https://mitsuba.readthedocs.io/en/latest/>`__, a differentiable Monte Carlo
-renderer). That said, Dr.Jit is a general tool that also supports many other
+renderer). That said, Dr.Jit is a general tool that also supports other
 kinds of parallel workloads.
 
 This documentation centers around the Python interface, but Dr.Jit can also be
@@ -91,12 +91,12 @@ there are fundamental differences between the two:
    does this avoid loading and storing temporaries: it also makes it easy to
    parallelize the program on compute accelerators.
 
-This is just a toy example, but the idea it demonstrates is general. Dr.Jit can trace
-large and complicated programs with side effects, loops, conditionals,
-polymorphic indirection, atomic memory operations, texture fetches, ray tracing
-operations, etc. The principle is always the same: the system captures what
-operations are needed to calculate a result, postponing them for as long as
-possible.
+This is just a toy example, but the idea that it demonstrates is general.
+Dr.Jit can trace large and complicated programs with side effects, loops,
+conditionals, polymorphic indirection, atomic memory operations, texture
+fetches, ray tracing operations, etc. The principle is always the same: the
+system captures what operations are needed to calculate a result, postponing
+them for as long as possible.
 
 Users of `JAX <https://github.com/google/jax>`__ may find this familiar: JAX
 combines tracing with tensor-based optimizations for machine learning
@@ -168,14 +168,14 @@ can be thought of as expanding into device code equivalent to:
 
 However, this device program is still incomplete. Continuing execution in
 Python appends further instructions to the body of the parallel loop. The next
-line of the original program was
+line of the original Python program was
 
 .. code-block:: python
 
    b = dr.sin(a**2)
 
 Since the we never end up accessing ``a`` explicitly, Dr.Jit generates a more
-efficient program that avoids storing this intermediate variable altogether:
+efficient device program that avoids storing this intermediate variable altogether:
 
 .. code-block:: python
 
@@ -186,7 +186,7 @@ efficient program that avoids storing this intermediate variable altogether:
        a_temp = i * (1.0 / 999999.0)
        b[i] = sin(a_temp * a_temp)
 
-The final line of the original program
+The final line of the original Python program
 
 .. code-block:: python
 
@@ -287,12 +287,12 @@ this documentation explain how Dr.Jit generalizes to bigger programs:
 1. :ref:`Basics <basics>`: a fast-paced review of the various ways in which
    Dr.Jit arrays can be created and modified.
 
-2. **Control flow**: how to trace operations such as ``while`` loops, ``if``
+2. **Control flow**: how to trace ``while`` loops, ``if``
    statements, and polymorphic indirection.
 
-3. **Evaluation**: Certain operations (such as printing the contents of
-   an array) cannot be traced and trigger the *evaluation* of a variable. We
-   review what steps require evaluation, and how to tune this process.
+3. :ref:`Evaluation <eval>`: Certain operations (such as printing the contents
+   of an array) cannot be traced and trigger an *evaluation* step. We review
+   what steps require evaluation, and how to tune this process.
 
 4. **Automatic differentiation**: How to compute gradients of differentiable
    programs.

@@ -2,8 +2,8 @@
 
 .. _reference:
 
-Main API Reference
-==================
+API Reference (Main)
+====================
 
 This document explains the public API (behaviors, signatures) in exhaustive
 detail. If you're new to Dr.Jit, it may be easier to start by reading the other

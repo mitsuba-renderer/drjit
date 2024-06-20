@@ -72,14 +72,17 @@ The following operations all exhibit this behavior:
    Here, evaluation enforces an ordering constraint that is in general needed
    to ensure correctness in a parallel execution context.
 
-4. **Data exchange**: Casting Dr.Jit variables into nd-arrays of other
+4. **Reductions**: When using an operation such as :py:func:`dr.sum <sum>` or
+   :py:func:`dr.all <all>` to reduce along the trailing dimension of an array,
+   a prior evaluation is required. Some reductions accept an optional
+   ``mode="symbolic"`` parameter to further postpone evaluation.
+
+5. **Data exchange**: Casting Dr.Jit variables into nd-arrays of other
    frameworks (e.g. NumPy, PyTorch, etc.) requires evaluation since these
    libraries cannot represent traced computation.
 
-5. **Manual**:
-
-   Variable evaluation can also be triggered *manually* using the operation
-   :py:func:`drjit.eval()`:
+6. **Manual**: Variable evaluation can also be triggered *manually* using the
+   operation :py:func:`drjit.eval()`:
 
    .. code-block:: python
 
