@@ -773,3 +773,22 @@ def test30_packet_ravel_unravel(t, capsys, drjit_verbose):
     transcript = capsys.readouterr().out
     assert transcript.count('jit_var_gather_packet') != 0
     assert transcript.count('jit_var_scatter_packet') != 0
+
+
+@pytest.mark.parametrize('mode', [dr.ReduceMode.Local, dr.ReduceMode.Expand,
+    dr.ReduceMode.Direct, dr.ReduceMode.Auto])
+@pytest.mark.parametrize('optimize', [True, False])
+@pytest.test_arrays('uint32,is_jit,shape=(*)')
+@dr.syntax
+def test31_scatter_reduce_loop(t, mode, optimize, capsys):
+    with dr.scoped_set_flag(dr.JitFlag.OptimizeLoops, optimize):
+        i = dr.ones(t, 64)
+        v = dr.zeros(t, 64)
+        unused = t(0, 0) # Dummy variable to cause 2 x recording
+
+        while dr.hint(i < 10, exclude=[v], include=[unused]):
+            i += 1
+            dr.scatter_add(target=v, index=0, value=1, mode=mode)
+
+        assert v[0] == 64 * 9
+        assert dr.all(i == 10)
