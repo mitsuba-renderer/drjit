@@ -54,7 +54,8 @@ html_theme = 'furo'
 html_static_path = ['_static']
 html_css_files = [ 'drjit.css' ]
 
+html_title=' '
 html_theme_options = {
-    "light_logo": "logo-light-mode.png",
-    "dark_logo": "logo-dark-mode.png",
+    "light_logo": "../_images/drjit-logo-dark.svg",
+    "dark_logo": "../_images/drjit-logo-light.svg"
 }
