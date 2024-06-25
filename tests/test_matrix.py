@@ -3,7 +3,7 @@ import pytest
 import sys
 
 
-@pytest.test_arrays('matrix,shape=(2')
+@pytest.test_arrays('matrix,shape=(2, 2, *)', 'matrix,shape=(2, 2)')
 def test01_init_indexing_rowmajor(t):
     v = dr.value_t(t)
     a = t(1, 2, 3, 4)
@@ -17,12 +17,12 @@ def test01_init_indexing_rowmajor(t):
     a[1][0] = 5
     assert dr.all(a == t(1, 4, 5, 4), axis=None)
 
-@pytest.test_arrays('matrix,shape=(2')
+@pytest.test_arrays('matrix,shape=(2, 2, *)', 'matrix,shape=(2, 2)')
 def test02_init_bcast(t):
     assert dr.all(t(2) == t(2, 0, 0, 2), axis=None)
     assert dr.all(t(2) + 1 == t(3, 0, 0, 3), axis=None)
 
-@pytest.test_arrays('matrix,shape=(2')
+@pytest.test_arrays('matrix,shape=(2, 2, *)', 'matrix,shape=(2, 2)')
 def test03_add_mul(t):
     a = dr.array_t(t)
     assert dr.all(t(1, 2, 3, 4) + t(0, 1, 0, 2) == t(1, 3, 3, 6), axis=None)
@@ -34,7 +34,7 @@ def test03_add_mul(t):
     assert dr.all(dr.fma(t(1, 2, 3, 4), t(0, 1, 0, 2), t(100,100,100,100)) == t(100, 105, 100, 111), axis=None)
 
 
-@pytest.test_arrays('matrix,shape=(2')
+@pytest.test_arrays('matrix,shape=(2, 2, *)', 'matrix,shape=(2, 2)')
 def test04_mat_vec(t):
     v = dr.value_t(t)
     assert dr.all(t(1, 2, 3, 4) @ v(1, 2) == v(5, 11))
@@ -43,7 +43,7 @@ def test04_mat_vec(t):
     assert dr.all(v(1, 2) * t(1, 2, 3, 4) == v(7, 10))
 
 
-@pytest.test_arrays('matrix,shape=(2')
+@pytest.test_arrays('matrix,shape=(2, 2, *)', 'matrix,shape=(2, 2)')
 def test05_mat_scalar(t):
     v = dr.value_t(t)
     assert dr.all(t(1, 2, 3, 4) @ 2 == t(2, 4, 6, 8), axis=None)
@@ -52,20 +52,20 @@ def test05_mat_scalar(t):
     assert dr.all(2 @ t(1, 2, 3, 4) == t(2, 4, 6, 8), axis=None)
 
 
-@pytest.test_arrays('matrix,shape=(2')
+@pytest.test_arrays('matrix,shape=(2, 2, *)', 'matrix,shape=(2, 2)')
 def test06_mix_backends(t):
     assert dr.all(t(1, 2, 3, 4) @ dr.scalar.Array2f(1, 2) == dr.value_t(t)(5, 11))
     assert dr.all(dr.scalar.Matrix2f(1, 2, 3, 4) @ t(0, 1, 0, 2) == t(0, 5, 0, 11), axis=None)
 
 
-@pytest.test_arrays('matrix,shape=(2')
+@pytest.test_arrays('matrix,shape=(2, 2, *)', 'matrix,shape=(2, 2)')
 def test07_transpose(t):
     a = t(1, 2, 3, 4)
     b = t(1, 3, 2, 4)
     assert dr.all(a.T == b, axis=None)
 
 
-@pytest.test_arrays('matrix,shape=(2')
+@pytest.test_arrays('matrix,shape=(2, 2, *)', 'matrix,shape=(2, 2)')
 def test08_invert_spot_check_2d(t):
     a = t(1, 2, 3, 4)
     b = t(-2, 1, 1.5, -0.5)
@@ -75,7 +75,7 @@ def test08_invert_spot_check_2d(t):
     assert dr.allclose(2/a, 2*b)
 
 
-@pytest.test_arrays('matrix,shape=(3')
+@pytest.test_arrays('matrix,shape=(3, 3, *)', 'matrix,shape=(3, 3)')
 def test09_invert_spot_check_3d(t):
     a = t([[1, 2, 0], [3, 4, 0], [0, 1, 1]])
     b = t([[-2, 1,  0], [1.5, -0.5, 0], [-1.5, 0.5, 1]])
@@ -83,14 +83,14 @@ def test09_invert_spot_check_3d(t):
     assert dr.allclose(dr.det(a), -2)
 
 
-@pytest.test_arrays('matrix,shape=(4')
+@pytest.test_arrays('matrix,shape=(4, 4, *)', 'matrix,shape=(4, 4)')
 def test10_invert_spot_check_4d(t):
     a = t([[1, 2, 0, 0], [3, 4, 0, 1], [0, 1, 1, 0], [1, 0, 1, 2]])
     b = t([[-9, 4, 2, -2], [5, -2, -1, 1], [-5, 2, 2, -1],  [7, -3, -2, 2]])
     assert dr.allclose(dr.rcp(a), b)
     assert dr.allclose(dr.det(a), -1)
 
-@pytest.test_arrays('matrix,shape=(2')
+@pytest.test_arrays('matrix,shape=(2, 2, *)', 'matrix,shape=(2, 2)')
 def test11_diag_trace(t):
     v = dr.value_t(t)
     assert dr.all(dr.diag(t(1,2,3,4)) == dr.value_t(t)(1, 4))
@@ -98,13 +98,13 @@ def test11_diag_trace(t):
     assert dr.all(dr.diag(dr.value_t(t)(1, 3)) == t(1,0,0,3), axis=None)
 
 
-@pytest.test_arrays('matrix,shape=(4')
+@pytest.test_arrays('matrix,shape=(4, 4, *)', 'matrix,shape=(4, 4)')
 def test12_frob(t):
     m = t(*range(1, 17))
     assert dr.frob(m) == 1496
 
 
-@pytest.test_arrays('matrix,shape=(4')
+@pytest.test_arrays('matrix,shape=(4, 4, *)', 'matrix,shape=(4, 4)')
 def test13_polar(t):
     m = t(*range(1, 17)) + dr.identity(t)
     q, r = dr.polar_decomp(m)
@@ -112,7 +112,7 @@ def test13_polar(t):
     assert dr.allclose(q @ q.T, dr.identity(t))
 
 
-@pytest.test_arrays('matrix,shape=(4')
+@pytest.test_arrays('matrix,shape=(4, 4, *)', 'matrix,shape=(4, 4)')
 def test14_transform_decompose(t):
     m = sys.modules[t.__module__]
     name = t.__name__
@@ -135,7 +135,7 @@ def test14_transform_decompose(t):
     assert dr.allclose(q, q2)
 
 
-@pytest.test_arrays('matrix,shape=(4')
+@pytest.test_arrays('matrix,shape=(4, 4, *)', 'matrix,shape=(4, 4)')
 def test15_matrix_to_quat(t):
     m = sys.modules[t.__module__]
     name    = t.__name__
