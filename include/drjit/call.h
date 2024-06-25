@@ -163,7 +163,10 @@ Ret call(const Self &self, const char *domain, const char *name,
 
     if constexpr (!std::is_same_v<Ret, void>) {
         Ret2 result(std::move(state->rv));
-        update_indices(result, rv_i);
+        if (!rv_i.empty())
+            update_indices(result, rv_i);
+        else
+            result = zeros<Ret2>();
 
         if (done)
             CallStateT::cleanup(state);

@@ -2,11 +2,14 @@
 
 #include "common.h"
 #include <drjit/texture.h>
+#include <nanobind/stl/optional.h>
 
 template <typename Type, size_t Dimension>
 void bind_texture(nb::module_ &m, const char *name) {
     using Tex = dr::Texture<Type, Dimension>;
-    using Value = typename Tex::Value;
+    using Float16 = dr::replace_scalar_t<Type, dr::half>;
+    using Float32 = dr::replace_scalar_t<Type, float>;
+    using Float64 = dr::replace_scalar_t<Type, double>;
 
     auto tex = nb::class_<Tex>(m, name)
         .def("__init__", [](Tex* t, const dr::vector<size_t>& shape,
@@ -39,72 +42,134 @@ void bind_texture(nb::module_ &m, const char *name) {
                 PyTuple_SetItem(shape, i, PyLong_FromLong((long) t.shape()[i]));
             return nb::steal<nb::tuple>(shape);
         }, doc_Texture_shape)
-        .def("eval",
-                [](const Tex &texture, const dr::Array<Value, Dimension> &pos,
-                   const dr::mask_t<Value> active) {
-                    size_t channels = texture.shape()[Dimension];
-                    dr::vector<Value> result(channels);
-                    texture.eval(pos, result.data(), active);
-
-                    return result;
-                }, "pos"_a, "active"_a.sig("Bool(True)") = true, doc_Texture_eval)
-        .def("eval_fetch",
-                [](const Tex &texture, const dr::Array<Value, Dimension> &pos,
-                   const dr::mask_t<Value> active) {
-                    constexpr size_t ResultSize = 1 << Dimension;
-                    size_t channels = texture.shape()[Dimension];
-
-                    dr::Array<Value *, ResultSize> result_ptrs;
-                    dr::vector<dr::vector<Value>> result(ResultSize);
-                    for (size_t i = 0; i < ResultSize; ++i) {
-                        result[i].resize(channels);
-                        result_ptrs[i] = result[i].data();
-                    }
-                    texture.eval_fetch(pos, result_ptrs, active);
-
-                    return result;
-                }, "pos"_a, "active"_a.sig("Bool(True)") = true, doc_Texture_eval_fetch)
-        .def("eval_cubic",
-                [](const Tex &texture, const dr::Array<Value, Dimension> &pos,
-                   const dr::mask_t<Value> active, bool force_drjit) {
-                    size_t channels = texture.shape()[Dimension];
-                    dr::vector<Value> result(channels);
-                    texture.eval_cubic(pos, result.data(), active, force_drjit);
-
-                    return result;
-                }, "pos"_a, "active"_a.sig("Bool(True)") = true, "force_drjit"_a = false, doc_Texture_eval_cubic)
-        .def("eval_cubic_grad",
-                [](const Tex &texture, const dr::Array<Value, Dimension> &pos,
-                   const dr::mask_t<Value> active) {
-                    size_t channels = texture.shape()[Dimension];
-                    dr::vector<Value> value(channels);
-                    dr::vector<dr::Array<Value, Dimension>> gradient(channels);
-                    texture.eval_cubic_grad(pos, value.data(), gradient.data(), active);
-
-                    return nb::make_tuple(value, gradient);
-                }, "pos"_a, "active"_a.sig("Bool(True)") = true, doc_Texture_eval_cubic_grad)
-        .def("eval_cubic_hessian",
-                [](const Tex &texture, const dr::Array<Value, Dimension> &pos,
-                   const dr::mask_t<Value> active) {
-                    size_t channels = texture.shape()[Dimension];
-
-                    dr::vector<Value> value(channels);
-                    dr::vector<dr::Array<Value, Dimension>> gradient(channels);
-                    dr::vector<dr::Matrix<Value, Dimension>> hessian(channels);
-                    texture.eval_cubic_hessian(pos, value.data(), gradient.data(),
-                                               hessian.data(), active);
-
-                    return nb::make_tuple(value, gradient, hessian);
-                }, "pos"_a, "active"_a.sig("Bool(True)") = true, doc_Texture_eval_cubic_hessian)
-        .def("eval_cubic_helper",
-                [](const Tex &texture, const dr::Array<Value, Dimension> &pos,
-                   const dr::mask_t<Value> active) {
-                    size_t channels = texture.shape()[Dimension];
-
-                    dr::vector<Value> result(channels);
-                    texture.eval_cubic_helper(pos, result.data(), active);
-                    return result;
-                }, "pos"_a, "active"_a.sig("Bool(True)") = true, doc_Texture_eval_cubic_helper);
+        #define def_tex_eval(T)                                                \
+            def("eval",                                                        \
+                [](const Tex &texture, const dr::Array<T, Dimension> &pos,     \
+                   const std::optional<dr::mask_t<T>> active_) {               \
+                    dr::mask_t<T> active = active_.has_value() ?               \
+                                                     active_.value() :         \
+                                                     true;                     \
+                                                                               \
+                    size_t channels = texture.shape()[Dimension];              \
+                    dr::vector<T> result(channels);                            \
+                    texture.eval(pos, result.data(), active);                  \
+                                                                               \
+                    return result;                                             \
+                }, "pos"_a, "active"_a.sig("Bool(True)") = nb::none(),         \
+                doc_Texture_eval)
+        .def_tex_eval(Float32)
+        .def_tex_eval(Float16)
+        .def_tex_eval(Float64)
+        #undef def_tex_eval
+        #define def_tex_eval_fetch(T)                                          \
+            def("eval_fetch",                                                  \
+                [](const Tex &texture, const dr::Array<T, Dimension> &pos,     \
+                   const std::optional<dr::mask_t<T>> active_) {               \
+                    dr::mask_t<T> active = active_.has_value() ?               \
+                                                     active_.value() :         \
+                                                     true;                     \
+                                                                               \
+                    constexpr size_t ResultSize = 1 << Dimension;              \
+                    size_t channels = texture.shape()[Dimension];              \
+                                                                               \
+                    dr::Array<T *, ResultSize> result_ptrs;                    \
+                    dr::vector<dr::vector<T>> result(ResultSize);              \
+                    for (size_t i = 0; i < ResultSize; ++i) {                  \
+                        result[i].resize(channels);                            \
+                        result_ptrs[i] = result[i].data();                     \
+                    }                                                          \
+                    texture.eval_fetch(pos, result_ptrs, active);              \
+                                                                               \
+                    return result;                                             \
+                }, "pos"_a, "active"_a.sig("Bool(True)") = nb::none(),         \
+                doc_Texture_eval_fetch)
+        .def_tex_eval_fetch(Float32)
+        .def_tex_eval_fetch(Float16)
+        .def_tex_eval_fetch(Float64)
+        #undef def_tex_eval_fetch
+        #define def_tex_eval_cubic(T)                                          \
+            def("eval_cubic",                                                  \
+                [](const Tex &texture, const dr::Array<T, Dimension> &pos,     \
+                   const std::optional<dr::mask_t<T>> active_,                 \
+                   bool force_nonaccel) {                                      \
+                    dr::mask_t<T> active = active_.has_value() ?               \
+                                                     active_.value() :         \
+                                                     true;                     \
+                                                                               \
+                    size_t channels = texture.shape()[Dimension];              \
+                    dr::vector<T> result(channels);                            \
+                    texture.eval_cubic(                                        \
+                        pos, result.data(), active, force_nonaccel);           \
+                                                                               \
+                    return result;                                             \
+                }, "pos"_a, "active"_a.sig("Bool(True)") = nb::none(),         \
+                "force_nonaccel"_a = false, doc_Texture_eval_cubic)
+        .def_tex_eval_cubic(Float32)
+        .def_tex_eval_cubic(Float16)
+        .def_tex_eval_cubic(Float64)
+        #undef def_tex_eval_cubic
+        #define def_tex_eval_cubic_grad(T)                                     \
+            def("eval_cubic_grad",                                             \
+                [](const Tex &texture, const dr::Array<T, Dimension> &pos,     \
+                   const std::optional<dr::mask_t<T>> active_) {               \
+                    dr::mask_t<T> active = active_.has_value() ?               \
+                                                     active_.value() :         \
+                                                     true;                     \
+                                                                               \
+                    size_t channels = texture.shape()[Dimension];              \
+                    dr::vector<T> value(channels);                             \
+                    dr::vector<dr::Array<T, Dimension>> gradient(channels);    \
+                    texture.eval_cubic_grad(                                   \
+                        pos, value.data(), gradient.data(), active);           \
+                                                                               \
+                    return nb::make_tuple(value, gradient);                    \
+                }, "pos"_a, "active"_a.sig("Bool(True)") = nb::none(),         \
+                doc_Texture_eval_cubic_grad)
+        .def_tex_eval_cubic_grad(Float32)
+        .def_tex_eval_cubic_grad(Float16)
+        .def_tex_eval_cubic_grad(Float64)
+        #undef def_tex_eval_cubic_grad
+        #define def_tex_eval_cubic_hessian(T)                                  \
+            def("eval_cubic_hessian",                                          \
+                [](const Tex &texture, const dr::Array<T, Dimension> &pos,     \
+                   const std::optional<dr::mask_t<T>> active_) {               \
+                    dr::mask_t<T> active = active_.has_value() ?               \
+                                                     active_.value() :         \
+                                                     true;                     \
+                                                                               \
+                    size_t channels = texture.shape()[Dimension];              \
+                    dr::vector<T> value(channels);                             \
+                    dr::vector<dr::Array<T, Dimension>> gradient(channels);    \
+                    dr::vector<dr::Matrix<T, Dimension>> hessian(channels);    \
+                    texture.eval_cubic_hessian(pos, value.data(),              \
+                        gradient.data(), hessian.data(), active);              \
+                                                                               \
+                    return nb::make_tuple(value, gradient, hessian);           \
+                }, "pos"_a, "active"_a.sig("Bool(True)") = nb::none(),         \
+                doc_Texture_eval_cubic_hessian)
+        .def_tex_eval_cubic_hessian(Float32)
+        .def_tex_eval_cubic_hessian(Float16)
+        .def_tex_eval_cubic_hessian(Float64)
+        #undef def_tex_eval_cubic_hessian
+        #define def_tex_eval_cubic_helper(T)                                   \
+            def("eval_cubic_helper",                                           \
+                [](const Tex &texture, const dr::Array<T, Dimension> &pos,     \
+                   const std::optional<dr::mask_t<T>> active_) {               \
+                    dr::mask_t<T> active = active_.has_value() ?               \
+                                                     active_.value() :         \
+                                                     true;                     \
+                                                                               \
+                    size_t channels = texture.shape()[Dimension];              \
+                    dr::vector<T> result(channels);                            \
+                    texture.eval_cubic_helper(pos, result.data(), active);     \
+                                                                               \
+                    return result;                                             \
+                }, "pos"_a, "active"_a.sig("Bool(True)") = nb::none(),         \
+                doc_Texture_eval_cubic_helper)
+        .def_tex_eval_cubic_helper(Float32)
+        .def_tex_eval_cubic_helper(Float16)
+        .def_tex_eval_cubic_helper(Float64);
+        #undef def_tex_eval_cubic_helper
 
     tex.attr("IsTexture") = true;
 }

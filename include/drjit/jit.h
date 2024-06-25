@@ -368,7 +368,7 @@ struct DRJIT_TRIVIAL_ABI JitArray
         return steal(jit_var_literal(Backend, Type, &value, size));
     }
 
-    template <typename T, enable_if_t<!std::is_void_v<T> && std::is_same_v<T, Value>> = 0>
+    template <typename T, enable_if_t<!std::is_void_v<T> && std::is_convertible_v<T, Value>> = 0>
     static JitArray full_(T value, size_t size) {
         ActualValue av;
         if constexpr (!IsClass)
@@ -379,7 +379,7 @@ struct DRJIT_TRIVIAL_ABI JitArray
         return steal(jit_var_literal(Backend, Type, &av, size, false));
     }
 
-    template <typename T, enable_if_t<!std::is_void_v<T> && std::is_same_v<T, Value>> = 0>
+    template <typename T, enable_if_t<!std::is_void_v<T> && std::is_convertible_v<T, Value>> = 0>
     static JitArray opaque_(T value, size_t size) {
         ActualValue av;
         if constexpr (!IsClass)
@@ -399,7 +399,7 @@ struct DRJIT_TRIVIAL_ABI JitArray
                      JitArray((Value) start));
     }
 
-    template <typename T, enable_if_t<!std::is_void_v<T> && std::is_same_v<T, Value>> = 0>
+    template <typename T, enable_if_t<!std::is_void_v<T> && std::is_convertible_v<T, Value>> = 0>
     static JitArray linspace_(T min, T max, size_t size, bool endpoint) {
         T step = (max - min) / T(size - ((endpoint && size > 1) ? 1 : 0));
         return fmadd(JitArray(uint32_array_t<JitArray>::counter(size)),
@@ -458,14 +458,14 @@ struct DRJIT_TRIVIAL_ABI JitArray
 
     template <size_t N, typename Index, typename Mask>
     static Array<JitArray, N> gather_packet_(const JitArray &src, const Index &index,
-                                             const Mask &mask, ReduceMode /* mode */) {
-        if constexpr (N & (N-1)) {
-            return Base::gather_packet_(src, index, mask);
+                                             const Mask &mask, ReduceMode mode) {
+        if constexpr ((N & (N-1)) > 0) {
+            return Base::template gather_packet_<N>(src, index, mask, mode);
         } else {
             static_assert(
                 std::is_same_v<detached_t<Mask>, detached_t<mask_t<JitArray>>>);
             uint32_t tmp[N];
-            jit_var_gather_packet(src.index(), index.index(), mask.index(), tmp);
+            jit_var_gather_packet(N, src.index(), index.index(), mask.index(), tmp);
 
             Array<JitArray, N> result;
             for (size_t i = 0; i < N; ++i)
@@ -488,7 +488,7 @@ struct DRJIT_TRIVIAL_ABI JitArray
                                 ReduceMode mode) {
         static_assert(
             std::is_same_v<detached_t<Mask>, detached_t<mask_t<JitArray>>>);
-        if constexpr (N & (N-1)) {
+        if constexpr ((N & (N-1)) > 0) {
             Base::template scatter_packet_<N>(dst, source, index, mask, mode);
         } else {
             uint32_t indices[N];
@@ -516,7 +516,7 @@ struct DRJIT_TRIVIAL_ABI JitArray
                                        ReduceOp op, ReduceMode mode) {
         static_assert(
             std::is_same_v<detached_t<Mask>, detached_t<mask_t<JitArray>>>);
-        if constexpr (N & (N-1)) {
+        if constexpr ((N & (N-1)) > 0) {
             Base::template scatter_reduce_packet_<N>(dst, source, index, mask, op, mode);
         } else {
             uint32_t indices[N];

@@ -504,8 +504,8 @@ struct DRJIT_TRIVIAL_ABI DiffArray
     template <size_t N, typename Index, typename Mask>
     static Array<DiffArray, N> gather_packet_(const DiffArray &src, const Index &index,
                                               const Mask &mask, ReduceMode mode) {
-        if constexpr (N & (N-1)) {
-            return Base::gather_packet_<N>(src, index, mask, mode);
+        if constexpr ((N & (N-1)) > 0) {
+            return Base::template gather_packet_<N>(src, index, mask, mode);
         } else {
             static_assert(
                 std::is_same_v<detached_t<Mask>, detached_t<mask_t<DiffArray>>>);
@@ -546,7 +546,7 @@ struct DRJIT_TRIVIAL_ABI DiffArray
                                 ReduceMode mode) {
         static_assert(
             std::is_same_v<detached_t<Mask>, detached_t<mask_t<DiffArray>>>);
-        if constexpr (N & (N-1)) {
+        if constexpr ((N & (N-1)) > 0) {
             Base::template scatter_packet_<N>(dst, source, index, mask, mode);
         } else if constexpr (IsFloat) {
             uint64_t indices[N];
@@ -587,7 +587,7 @@ struct DRJIT_TRIVIAL_ABI DiffArray
                                        ReduceOp op, ReduceMode mode) {
         static_assert(
             std::is_same_v<detached_t<Mask>, detached_t<mask_t<DiffArray>>>);
-        if constexpr (N & (N-1)) {
+        if constexpr ((N & (N-1)) > 0) {
             Base::template scatter_reduce_packet_<N>(dst, source, index, mask, op, mode);
         } else if constexpr (IsFloat) {
             uint64_t indices[N];
@@ -638,12 +638,12 @@ struct DRJIT_TRIVIAL_ABI DiffArray
         return steal(Detached::zero_(size).release());
     }
 
-    template <typename T, enable_if_t<!std::is_void_v<T> && std::is_same_v<T, Value>> = 0>
+    template <typename T, enable_if_t<!std::is_void_v<T> && std::is_convertible_v<T, Value>> = 0>
     static DiffArray full_(T value, size_t size) {
         return steal(Detached::full_(value, size).release());
     }
 
-    template <typename T, enable_if_t<!std::is_void_v<T> && std::is_same_v<T, Value>> = 0>
+    template <typename T, enable_if_t<!std::is_void_v<T> && std::is_convertible_v<T, Value>> = 0>
     static DiffArray opaque_(T value, size_t size) {
         return steal(Detached::opaque_(value, size).release());
     }
@@ -652,7 +652,7 @@ struct DRJIT_TRIVIAL_ABI DiffArray
         return steal(Detached::arange_(start, stop, step).release());
     }
 
-    template <typename T, enable_if_t<!std::is_void_v<T> && std::is_same_v<T, Value>> = 0>
+    template <typename T, enable_if_t<!std::is_void_v<T> && std::is_convertible_v<T, Value>> = 0>
     static DiffArray linspace_(T min, T max, size_t size, bool endpoint) {
         return steal(Detached::linspace_(min, max, size, endpoint).release());
     }
@@ -776,7 +776,7 @@ struct DRJIT_TRIVIAL_ABI DiffArray
         return rv;
     }
 
-    template <typename T, enable_if_t<!std::is_void_v<T> && std::is_same_v<T, Value>> = 0>
+    template <typename T, enable_if_t<!std::is_void_v<T> && std::is_convertible_v<T, Value>> = 0>
     void set_entry(size_t offset, T value) {
         if (grad_enabled_())
             jit_raise("DiffArray::set_entry(): not permitted on attached variables!");

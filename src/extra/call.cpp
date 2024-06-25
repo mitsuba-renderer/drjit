@@ -277,6 +277,11 @@ static void ad_call_symbolic(JitBackend backend, const char *domain,
 
     {
         scoped_record guard_1(backend, name, true);
+
+        // Recording may fail due to recursion depth
+        if (!guard_1.is_valid())
+            return;
+
         scoped_isolation_boundary guard_2;
 
         // Wrap input arguments to clearly expose them as inputs of the vcall

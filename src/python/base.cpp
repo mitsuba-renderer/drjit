@@ -734,7 +734,8 @@ nb::object matmul(nb::handle h0, nb::handle h1) {
             };
 
             auto is_matrix = [n](const ArrayMeta &m) {
-                return (m.ndim == 2 || (m.ndim == 3 && m.shape[2] == DRJIT_DYNAMIC)) &&
+                return (m.is_matrix ||
+                       (m.ndim == 2 || (m.ndim == 3 && m.shape[2] == DRJIT_DYNAMIC))) &&
                        m.shape[0] == n && m.shape[1] == n;
             };
 

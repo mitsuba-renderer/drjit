@@ -116,6 +116,7 @@ Miscellaneous operations
 .. autofunction:: width
 .. autofunction:: slice_index
 .. autofunction:: meshgrid
+.. autofunction:: binary_search
 .. autofunction:: make_opaque
 .. autofunction:: copy
 
@@ -259,7 +260,13 @@ Operations for vectors and matrices
 .. autofunction:: normalize
 .. autofunction:: lerp
 .. autofunction:: sh_eval
-
+.. autofunction:: frob
+.. autofunction:: rotate
+.. autofunction:: polar_decomp
+.. autofunction:: matrix_to_quat
+.. autofunction:: quat_to_matrix
+.. autofunction:: transform_decompose
+.. autofunction:: transform_compose
 
 Operations for complex values and quaternions
 ---------------------------------------------
@@ -268,6 +275,8 @@ Operations for complex values and quaternions
 .. autofunction:: arg
 .. autofunction:: real
 .. autofunction:: imag
+.. autofunction:: quat_to_euler
+.. autofunction:: euler_to_quat
 
 Transcendental functions
 ------------------------

@@ -439,13 +439,15 @@ const char *meta_get_name(ArrayMeta meta) noexcept {
                 prefix = "Quaternion";
             } else if (meta.is_matrix) {
                 prefix = "Matrix";
-                ndim--;
             }
             buffer.put_dstr(prefix);
             suffix = type_suffix[meta.type];
         }
 
         for (int i = 0; i < ndim; ++i) {
+            if (meta.is_matrix && i == 1)
+                continue;
+
             if (meta.shape[i] == DRJIT_DYNAMIC)
                 buffer.put('X');
             else

@@ -79,7 +79,8 @@ struct scoped_record {
     }
 
     ~scoped_record() {
-        jit_record_end(backend, checkpoint, cleanup);
+        if (is_valid())
+            jit_record_end(backend, checkpoint, cleanup);
     }
 
     uint32_t checkpoint_and_rewind() {
@@ -88,6 +89,8 @@ struct scoped_record {
     }
 
     void disarm() { cleanup = false; }
+
+    bool is_valid() const { return checkpoint != (uint32_t)-1; }
 
     JitBackend backend;
     uint32_t checkpoint, scope;

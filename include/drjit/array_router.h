@@ -930,7 +930,7 @@ template <typename Target, typename Source, typename Index, typename Mask = mask
 Target gather(Source &&source, const Index &index, const Mask &mask_ = true,
               ReduceMode mode = ReduceMode::Auto) {
     // Broadcast mask to match shape of Index
-    mask_t<plain_t<replace_scalar_t<Index, scalar_t<Target>>>> mask = mask_;
+    mask_t<plain_t<Index>> mask = mask_;
     if constexpr (depth_v<Source> > 1) {
         // Case 1: gather<Vector3fC>(const Vector3fC&, ...)
         static_assert(size_v<Source> == size_v<Target>,
@@ -973,16 +973,17 @@ Target gather(Source &&source, const Index &index, const Mask &mask_ = true,
             }
         } else if constexpr (depth_v<Target> == depth_v<Index>) {
             using Index2 = plain_t<replace_scalar_t<Target, uint32_t>>;
+            mask_t<plain_t<replace_scalar_t<Index, scalar_t<Target>>>> mask2 = mask_;
             static_assert(is_array_v<Index> &&
                           is_integral_v<Index> &&
                           sizeof(typename Index::Scalar) <= 4,
                           "Second argument of gather operation must be a 32 bit index array!");
             if constexpr ((Target::IsPacked || Target::IsRecursive) && is_array_v<Source>)
                 // Case 2.1.0: gather<FloatC>(const FloatP&, ...)
-                return Target::template gather_(source.data(), Index2(index), mask, mode);
+                return Target::template gather_(source.data(), Index2(index), mask2, mode);
             else
                 // Case 2.1.1: gather<FloatC>(const FloatC& / const void *, ...)
-                return Target::template gather_(source, Index2(index), mask, mode);
+                return Target::template gather_(source, Index2(index), mask2, mode);
         } else {
             // Case 2.2: gather<Vector3fC>(const FloatC & / const void *, ...)
             return value_t<Target>::template gather_packet_<Target::Size>(source, index, mask, mode);
@@ -1504,6 +1505,35 @@ void set_label(T &value, Labels... prefix) {
             set_label(x, prefix..., l.c_str()); });
     }
 }
+
+/**
+ * \brief Helper guard to mark scopes that are independent of any
+ * ongoing symbolic computation
+ *
+ * Some scope of code might be traced as part of a symbolic section of code,
+ * even though its functionality is independent of the actual symbolic
+ * computations it is surrounded by. For example, consider a virtual function
+ * call which initializes some data structure the first time it is called. This
+ * initilization is completely detached from the symbolic inputs and is guarded
+ * only by a scalar runtime check. In such a case, any evaluation which happens
+ * in the initilization should be valid. Using this RAII helper will guarantee
+ * this behavior.
+ */
+template <typename T>
+struct scoped_symbolic_independence {
+    scoped_symbolic_independence() {
+        if constexpr(drjit::is_jit_v<T>) {
+            uint32_t index = jit_var_mask_default(T::Backend, 1);
+            jit_var_mask_push(T::Backend, index);
+            jit_var_dec_ref(index);
+        }
+    }
+
+    ~scoped_symbolic_independence() {
+        if constexpr (drjit::is_jit_v<T>)
+            jit_var_mask_pop(T::Backend);
+    }
+};
 
 template <typename T> bool grad_enabled(const T &value) {
     if constexpr (is_diff_v<T> && depth_v<T> == 1) {
