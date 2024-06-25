@@ -1,4 +1,5 @@
 import drjit as dr
+import re
 import pytest
 import sys
 
@@ -24,9 +25,15 @@ def test01_traits(t):
     if is_jit and "Int" in tn or "Float" in tn or "X" in tn:
         size = dr.Dynamic
 
+    def matches_re(pattern):
+        matches = re.compile(pattern).match(tn)
+        return int(matches is not None)
+
     depth = int("Array" in tn or "Complex" in tn or "Quaternion" in tn)
-    depth += int("Matrix" in tn)*2
-    depth += int("Array11" in tn or "Array22" in tn or "Array33" in tn or "Array44" in tn)
+    depth += int("Matrix" in tn) * 2
+    depth += matches_re(r'Matrix\d\d')
+    depth += matches_re(r'Array\d\d')
+    depth += matches_re(r'Array\d\d\d')
     depth += int(is_jit)
 
     assert dr.is_jit_v(t) == is_jit and dr.is_jit_v(v) == is_jit

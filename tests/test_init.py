@@ -7,14 +7,27 @@ def test01_init_default(t):
     if dr.is_dynamic_v(t):
         s = '[]'
     else:
-        size = dr.size_v(t)
         if dr.is_complex_v(t) or dr.is_quaternion_v(t):
             s = '0'
         else:
             s = 'False' if dr.is_mask_v(t) else '0'
-            s = '[' + ', '.join([s] * size) + ']'
-        if dr.depth_v(t) > 1:
-            s = '[' + ',\n '.join([s]*size) + ']'
+
+            def recurse(curr_t, curr_size, s_in, depth):
+                if dr.depth_v(curr_t) == 1:
+                    return '[' + ', '.join([s_in]*curr_size) + ']'
+
+                next_t = dr.value_t(curr_t)
+                next_size = dr.size_v(next_t)
+                s = recurse(next_t, next_size, s_in, depth + 1)
+
+                indent = ''.join([' '] * depth)
+                s = '[' + (',\n ' + indent).join([s]*curr_size) + ']'
+
+                return s
+
+            size = dr.size_v(t)
+            s = recurse(t, size, s, 0)
+
     assert str(t()) == s
 
 
@@ -26,11 +39,49 @@ def test02_init_broadcast(t):
         size = 1
 
     if dr.is_matrix_v(t):
-        s = '[[' + '],\n ['.join([', '.join(['1' if i == j else '0' for i in range(size)]) for j in range(size)]) + ']]'
+        depth = dr.depth_v(t)
+        if (depth == 3 and dr.is_jit_v(t)) or depth < 3:
+            s = '[[' + '],\n ['.join([', '.join(['1' if i == j else '0' for i in range(size)]) for j in range(size)]) + ']]'
+        else:
+            inner_most_size = size
+            curr_t = t
+            while dr.is_array_v(curr_t):
+                curr_size = dr.size_v(curr_t)
+                if curr_size > 0:
+                    inner_most_size = curr_size
+                curr_t = dr.value_t(curr_t)
+
+            s = (
+                '[[' +
+                '],\n ['.join(
+                    [',\n  '.join(
+                        [
+                            '[' + ', '.join(['1' for _ in range(inner_most_size)]) + ']' if i == j else
+                            '[' + ', '.join(['0' for _ in range(inner_most_size)]) + ']'
+                            for i in range(size)
+                        ])
+                        for j in range(size)
+                    ]) +
+                ']]'
+            )
+
     elif dr.is_vector_v(t):
-        s = '[' + ', '.join(['1'] * size) + ']'
-        if dr.depth_v(t) - dr.is_jit_v(t) > 1:
-            s = '[' + ',\n '.join([s]*size) + ']'
+        def recurse(curr_t, curr_size, s_in, depth):
+            if dr.depth_v(curr_t) == 1 and curr_size != -1:
+                return '[' + ', '.join([s_in]*curr_size) + ']'
+            if dr.depth_v(curr_t) == 2 and dr.is_dynamic_v(dr.value_t(t)):
+                return '[' + ', '.join([s_in]*curr_size) + ']'
+
+            next_t = dr.value_t(curr_t)
+            next_size = dr.size_v(next_t)
+            s = recurse(next_t, next_size, s_in, depth + 1)
+
+            indent = ''.join([' '] * depth)
+            s = '[' + (',\n ' + indent).join([s]*curr_size) + ']'
+
+            return s
+
+        s = recurse(t, size, '1', 0)
     else:
         s = '1'
 
@@ -90,15 +141,27 @@ def test03_init_list(t):
 
         s = str(value)
 
-        if dr.is_matrix_v(t):
-            s = '[[' + '],\n ['.join([', '.join([s for i in range(size)]) for j in range(size)]) + ']]'
-        elif dr.is_vector_v(t) or dr.size_v(t) == dr.Dynamic:
-            s = '[' + ', '.join([s] * size) + ']'
-            if dr.depth_v(t) - dr.is_jit_v(t) > 1:
-                s = '[' + ',\n '.join([s]*size) + ']'
+        def recurse(curr_t, curr_size, s_in, depth):
+            if dr.depth_v(curr_t) == 1 and curr_size != -1:
+                return '[' + ', '.join([s_in]*curr_size) + ']'
+            if dr.depth_v(curr_t) == 2 and dr.is_dynamic_v(dr.value_t(t)):
+                return '[' + ', '.join([s_in]*curr_size) + ']'
 
-        if dr.is_jit_v(t) and dr.depth_v(t) > 1:
-            s = '[' + '\n '.join(s.split('\n')) + ']' if size > 0 else '[]'
+            next_t = dr.value_t(curr_t)
+            next_size = dr.size_v(next_t)
+            s = recurse(next_t, next_size, s_in, depth + 1)
+
+            indent = ''.join([' '] * depth)
+            s = '[' + (',\n ' + indent).join([s]*curr_size) + ']'
+
+            return s
+
+        if not (dr.is_complex_v(t) or dr.is_quaternion_v(t)):
+            s = recurse(t, size, s, 1 if dr.is_dynamic_v(t) else 0)
+        if dr.is_dynamic_v(t) and dr.depth_v(t) > 1:
+            s = '[' + s + ']'
+        s = '[]' if dr.size_v(t) == 0 else s
+
 
         assert str(v1) == s
         assert str(v2) == s
