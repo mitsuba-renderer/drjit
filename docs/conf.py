@@ -63,6 +63,20 @@ html_theme_options = {
 
 # -- Options for LaTeX output -------------------------------------------------
 
+latex_engine = "pdflatex"
+
+latex_elements = {
+    'papersize': 'a4paper',
+    'pointsize': '10pt',
+    "classoptions": ",openany,oneside",
+    "preamble": r"""
+\usepackage[utf8]{inputenc}
+\DeclareUnicodeCharacter{2194}{\ensuremath{\leftrightarrow}}
+\DeclareUnicodeCharacter{274C}{\ensuremath{\times}}
+\DeclareUnicodeCharacter{26A0FE0F}{{\fontencoding{U}\fontfamily{futs}\selectfont\char66}}
+""",
+}
+
 latex_documents = [
     ('index', 'drjit.tex', 'Dr.Jit Documentation', author, 'manual'),
 ]
