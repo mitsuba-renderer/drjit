@@ -22,7 +22,7 @@ except ImportError:
 # -- Project information -----------------------------------------------------
 
 project = 'drjit'
-copyright = '2022, Realistic Graphics Lab'
+copyright = '2024, Realistic Graphics Lab'
 author = 'Realistic Graphics Lab'
 
 # -- General configuration ---------------------------------------------------
@@ -60,3 +60,9 @@ html_theme_options = {
     "light_logo": "../_images/drjit-logo-dark.svg",
     "dark_logo": "../_images/drjit-logo-light.svg"
 }
+
+# -- Options for LaTeX output -------------------------------------------------
+
+latex_documents = [
+    ('index', 'drjit.tex', 'Dr.Jit Documentation', author, 'manual'),
+]
