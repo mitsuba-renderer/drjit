@@ -1658,7 +1658,7 @@ def sh_eval(d: ArrayBase, order: int) -> list:
                    elif m < 0:
                        Y = np.sqrt(2) * Y.imag
                    r.append(Y.real)
-           return d
+           return r
 
     The Mathematica equivalent of a specific entry is given by:
 
