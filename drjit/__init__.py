@@ -466,7 +466,7 @@ def imag(arg, /):
         return arg.imag
     elif is_quaternion_v(tp):
         import sys
-        Array3f = getattr(sys.modules[tp.__module__], tp.__name__.replace('Quaternion4f', 'Array3f'), None)
+        Array3f = getattr(sys.modules[tp.__module__], 'Array3f', None)
         return Array3f(arg[0], arg[1], arg[2])
     else:
         return tp(0)
@@ -766,7 +766,7 @@ def matrix_to_quat(mtx, /):
     import sys
     tp = type(mtx)
     m = sys.modules[tp.__module__]
-    Q = getattr(m, tp.__name__.replace('Matrix4f' if s[0] == 4 else 'Matrix3f', 'Quaternion4f'), None)
+    Q = getattr(m, 'Quaternion4f', None)
 
     o = 1.0
     t0 = o + mtx[0, 0] - mtx[1, 1] - mtx[2, 2]
@@ -817,10 +817,9 @@ def quat_to_matrix(q, size=4):
     import sys
     tp = type(q)
     m = sys.modules[tp.__module__]
-    name = tp.__name__
 
-    Matrix3f = getattr(m, name.replace('Quaternion4f', 'Matrix3f'), None)
-    Matrix4f = getattr(m, name.replace('Quaternion4f', 'Matrix4f'), None)
+    Matrix3f = getattr(m, 'Matrix3f', None)
+    Matrix4f = getattr(m, 'Matrix4f', None)
 
     q = q * sqrt_two
 
@@ -864,7 +863,7 @@ def quat_to_euler(q, /):
     m = sys.modules[tp.__module__]
     name = tp.__name__
 
-    Array3f = getattr(m, name.replace('Quaternion4f', 'Array3f'), None)
+    Array3f = getattr(m, 'Array3f', None)
 
     # Clamp the result to stay in the valid range for asin
     sinp = clip(2 * fma(q.w, q.y, -q.z * q.x), -1.0, 1.0)
@@ -910,7 +909,7 @@ def euler_to_quat(a, /):
     tp = type(a)
     m = sys.modules[tp.__module__]
     name = tp.__name__
-    Quaternion4f = getattr(m, name.replace('Array3f', 'Quaternion4f'), None)
+    Quaternion4f = getattr(m, 'Quaternion4f', None)
 
     angles = a / 2.0
     sr, cr = sincos(angles.x)
@@ -954,8 +953,8 @@ def transform_decompose(a, it=10):
     tp = type(a)
     m = sys.modules[tp.__module__]
     name = tp.__name__
-    Matrix3f = getattr(m, name.replace('Matrix4f', 'Matrix3f'), None)
-    Array3f  = getattr(m, name.replace('Matrix4f', 'Array3f'), None)
+    Matrix3f = getattr(m, 'Matrix3f', None)
+    Array3f  = getattr(m, 'Array3f', None)
 
     m33 = Matrix3f(
         a[0][0], a[0][1], a[0][2],
@@ -1001,7 +1000,7 @@ def transform_compose(s, q, t, /):
     m = sys.modules[tp.__module__]
     name = tp.__name__
     Matrix3f = tp
-    Matrix4f = getattr(m, name.replace('Matrix3f', 'Matrix4f'), None)
+    Matrix4f = getattr(m, 'Matrix4f', None)
 
     m33 = Matrix3f(quat_to_matrix(q, 3) @ s)
 
