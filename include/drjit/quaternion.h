@@ -306,9 +306,9 @@ Quaternion<Value> euler_to_quat(const Array<Value, 3> &a) {
     // https://en.wikipedia.org/wiki/Conversion_between_quaternions_and_Euler_angles
 
     Array<Value, 3> angles = a * .5f;
-    auto [sr, cr] = sincos(angles.x);
-    auto [sp, cp] = sincos(angles.y);
-    auto [sy, cy] = sincos(angles.z);
+    auto [sr, cr] = sincos(angles.x());
+    auto [sp, cp] = sincos(angles.y());
+    auto [sy, cy] = sincos(angles.z());
 
     Value w = cr*cp*cy + sr*sp*sy,
           x = sr*cp*cy - cr*sp*sy,
