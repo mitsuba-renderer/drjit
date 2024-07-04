@@ -39,9 +39,9 @@ public API.
    eval
    autodiff
    types
-   optim
-   general
    interop
+   optim
+   misc
    bench
    debug
    cpp

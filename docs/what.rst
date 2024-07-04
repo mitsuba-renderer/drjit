@@ -287,19 +287,22 @@ this documentation explain how Dr.Jit generalizes to bigger programs:
 1. :ref:`Basics <basics>`: a fast-paced review of the various ways in which
    Dr.Jit arrays can be created and modified.
 
-2. **Control flow**: how to trace ``while`` loops, ``if``
+2. :ref:`Control flow <cflow>`: how to trace ``while`` loops, ``if``
    statements, and polymorphic indirection.
 
 3. :ref:`Evaluation <eval>`: Certain operations (such as printing the contents
    of an array) cannot be traced and trigger an *evaluation* step. We review
    what steps require evaluation, and how to tune this process.
 
-4. **Automatic differentiation**: How to compute gradients of differentiable
-   programs.
+4. :ref:`Automatic differentiation <autodiff>`: How to compute gradients of
+   differentiable programs.
 
-5. **Interoperability**: How to integrate Dr.Jit with other frameworks (e.g.
-   PyTorch or JAX) and backpropagate gradients through mixed-framework
-   programs.
+5. :ref:`Array types <special_arrays>`: A review of the various available
+   array types.
+
+6. :ref:`Interoperability <interop>`: How to integrate Dr.Jit with other
+   frameworks (e.g. PyTorch or JAX) and backpropagate gradients through
+   mixed-framework programs.
 
 ..
    Dr.Jit automatically takes care of memory allocations partitions code into

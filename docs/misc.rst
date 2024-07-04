@@ -1,7 +1,7 @@
 .. py:currentmodule:: drjit
 
-General information
-===================
+Miscellaneous
+=============
 
 .. _pytrees:
 

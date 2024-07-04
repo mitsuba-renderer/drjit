@@ -71,9 +71,10 @@ latex_elements = {
     "classoptions": ",openany,oneside",
     "preamble": r"""
 \usepackage[utf8]{inputenc}
+\usepackage{fourier}
 \DeclareUnicodeCharacter{2194}{\ensuremath{\leftrightarrow}}
 \DeclareUnicodeCharacter{274C}{\ensuremath{\times}}
-\DeclareUnicodeCharacter{26A0FE0F}{{\fontencoding{U}\fontfamily{futs}\selectfont\char66}}
+\DeclareUnicodeCharacter{26A0}{\warning}
 """,
 }
 

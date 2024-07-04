@@ -5,90 +5,295 @@
 Control flow
 ============
 
-This section explains how Dr.Jit handles control flow constructs such as ``if``
-statements, ``while`` loops, and dynamic dispatch.
+Dr.Jit can trace *control flow* statements like loops, conditionals, and
+indirect jumps if they are expressed in a compatible manner.
 
-``if`` statements
------------------
-
-The :py:func:`drjit.if_stmt` function provides a generalized ``if`` statement
-that works even when the conditional expression is a boolean-valued array or
-tensor. The resulting vectorized code only calls the taken branch when
-possible.
+First, let's see what can go wrong when doing this naively. The Python snippet below is meant to
+compute the `population count <https://en.wikipedia.org/wiki/Hamming_weight>`__ (i.e., the
+number of bits set to *1*) per element of an integer sequence:
 
 .. code-block:: python
 
-   x = dr.cuda.Float(...)
+   from drjit.auto import Int
 
-   # Return true_fn(*args) or false_fn(*args) depending on the value of 'cond'
-   x = dr.if_stmt(
-       args = (x,),
-       cond = x > 1,
-       true_fn = lambda x: x - 1,
-       false_fn = lambda x: x
-   )
+   def popcnt(i: Int):
+       '''Count the number of active bits in ``i``'''
+       j = Int(0)
+       while i != 0:
+           j += i & 1
+           i = i // 2
+       return j
 
+   print(popcnt(dr.arange(Int, 1024)))
 
-Since it can be tedious to write larger programs in this functional style, the
-library also provides the :py:func:`@drjit.syntax <drjit.syntax>` decorator
-that automatically rewrites ordinary Python code into the above form:
+However, running it fails with an error message:
+
+.. code-block:: pycon
+
+   Traceback (most recent call last):
+     File "popcnt.py", line 12, in <module>
+       print(popcnt(dr.arange(Int, 1024)))
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     File "popcnt.py", line 7, in popcnt
+       while i != 0:
+             ^^^^^^
+   RuntimeError: drjit.llvm.Bool.__bool__(): implicit conversion to 'bool' ↵
+   requires an array with at most 1 element (this one has 1024 elements).
+
+Why does this happen? In the example above, ``i`` is an *array* of integers,
+hence ``i != 0`` produces a Boolean array of component-wise comparisons.
+
+If these values aren't all identical, it implies that elements of ``i`` require
+different numbers of loop iterations. Unfortunately, this is something that
+regular Python *simply does not support*. Dr.Jit raises the alarm when it
+notices the user's attempt to interpret the condition ``i != 0`` as a Python
+``bool``.
+
+Annotating the function with the :py:func:`@dr.syntax <drjit.syntax>` decorator
+(change highlighted) fixes this problem:
 
 .. code-block:: python
+   :emphasize-lines: 1
 
    @dr.syntax
-   def f(x):
-       if x > 1:
-           x -= 1
+   def popcnt(i: Int):
+       ...
 
-See the section on :ref:`symbolic and evaluated modes <sym-eval>` for an
-overview of how the system compiles such control flow statements. The reference
-of :py:func:`drjit.if_stmt` discusses the ``if`` statement in full detail.
+The script now terminates and prints the following output:
 
-``while`` loops
----------------
+.. code-block:: pycon
 
-The :py:func:`drjit.while_loop` function provides a generalized ``while`` loop
-that works even when the loop condition is a boolean-valued array or
-tensor. The resulting vectorized code can run the loop for a varying number of
-operations per array/tensor element when needed.
+   [0, 1, 1, .. 1018 skipped .., 9, 9, 10]
 
-.. code-block:: python
+How does this work?
+-------------------
 
-   # Find the square root of a=1, 2, .., 10 using the Babylonian algorithm / Newton's method
-   a = dr.arange(dr.cuda.Float, 10) + 1
-   x = dr.cuda.Float(1)
+The :py:func:`@dr.syntax <drjit.syntax>` decorator provides *syntax sugar*: it
+takes a function as input and returns a slightly modified version of it. Most
+code passes through unchanged, with two exceptions: the decorator rewrites the
+declarations of loops and conditionals to make them compatible with tracing.
 
-   # Run body(*state) while cond(*state) is True, then return 'state'
-   _, x = dr.while_loop(
-       state = (a, x),
-       cond = lambda a, x: abs((x*x - a) / a) > 1e-6,
-       body = lambda a, x: .5 * (x + a/x)
-   )
+In the example above, it does this by
 
-Since it can be tedious to write larger programs in this functional style, the
-library also provides the :py:func:`@drjit.syntax <drjit.syntax>` decorator
-that automatically rewrites ordinary Python code into the above form:
+1. identifying the variables modified by the loop (``i`` and ``j``)
+
+2. encapsulating the loop condition and body in separate functions, and
+
+3. performing a call to :py:func:`dr.while_loop() <drjit.while_loop>` with all
+   of this information.
+
+This produces the following equivalent code:
 
 .. code-block:: python
+
+   def popcnt(i: Int):
+       j = Int(0)
+       i, j = dr.while_loop(
+           state=(i, j),
+           cond=lambda i, j: i != 0,
+           body=lambda i, j: (i // 2, j + (i & 1))
+       )
+       return j
+
+In the same manner, ``if`` statements will be turned into calls to
+:py:func:`dr.if_stmt() <drjit.if_stmt>`. The main feature of
+:py:func:`@dr.syntax <drjit.syntax>` is to free users from having to perform
+this transformation themselves.
+
+The functions :py:func:`dr.while_loop() <drjit.while_loop>` and
+:py:func:`dr.if_stmt() <drjit.if_stmt>` *generalize* their Python counterparts:
+when the condition is a Python ``bool``, they don't do anything special
+and just reproduce the normal behavior. When the condition is an array, the
+conditional or loop is applied separately per element of the array.
+
+Symbolic mode
+-------------
+
+Tracing control flow has certain limitations. Let's make a small change to
+illustrate one of them.
+
+.. code-block:: python
+   :emphasize-lines: 6
 
    @dr.syntax
-   def f(a, x):
-       while abs((x*x - a) / a) > 1e-6:
-           x = .5 * (x + a/x)
-       return x
+   def popcnt(i: Int):
+       '''Count the number of active bits'''
+       j = Int(0)
+       while i != 0:
+           print(f"{i=}")
+           j += i & 1
+           i = i // 2
+       return j
 
-See the section on :ref:`symbolic and evaluated modes <sym-eval>` for an
-overview of how the system compiles such control flow statements. The reference
-of :py:func:`drjit.while_loop` discusses the ``while`` loop in full detail.
+(the added ``print()`` statement is meant to show the state of variables at
+intermediate steps.)
 
-Dynamic dispatch
-----------------
+Running this modified code produces a *long* error message:
 
-The term `dynamic dispatch <https://en.wikipedia.org/wiki/Dynamic_dispatch>`__
-refers to a type of function call that targets multiple possible
-implementations based on runtime information. The functions
-:py:func:`drjit.switch` and :py:func:`drjit.dispatch` realize this type of
-control flow primitive within Dr.Jit.
+.. code-block:: pycon
+
+    Traceback (most recent call last):
+      File "popcnt.py", line 9, in _loop_body
+        print(f"{i=}")
+
+    RuntimeError: You performed an operation that tried to evalute a *symbolic*↵
+    variable, which is not permitted.
+
+    [lots of explanation text omitted here]
+
+The message explains that ``i`` and ``j`` are considered **symbolic** while
+inside the loop. Certain operations are not allowed in this context, and printing
+their contents is one of them.
+
+To understand *why* this is forbidden, recall that Dr.Jit embraces the idea of
+*tracing*, i.e., postponing computation for later evaluation. In the case of
+``popcnt()``, this means that Dr.Jit will execute the loop body *only once* to
+understand how it modifies the variables ``i`` and ``j``, but without doing any
+actual computation. Even the number of loop iterations is unknown at this
+point. All of these details are postponed to when the traced computation
+actually runs on the target device.
+
+The implication of this design is that ``i`` and ``j`` are *symbols* that don't
+have explicit values within the loop body, which is why the ``print()``
+operation failed.
+
+This way of capturing control flow is the default behavior of Dr.Jit and called
+**symbolic mode**. Dr.Jit also supports a second approach called **evaluated
+mode** that we will examine next.
+
+Evaluated mode
+--------------
+
+The inability to access the contents of symbolic variables can be inconvenient.
+We might need to print or plot intermediate steps, or to step through a program
+using a visual debugger.
+
+To do so, let's switch the loop to **evaluated mode**. We can do so at a
+statement level by annotating the loop condition with :py:func:`dr.hint(...,
+mode='evaluated') <drjit.hint>`.
+
+.. code-block:: python
+   :emphasize-lines: 5
+
+   @dr.syntax
+   def popcnt(i: Int):
+       '''Count the number of active bits'''
+       j = Int(0)
+       while dr.hint(i != 0, mode='evaluated'):
+           print(f"{i=}")
+           j += i & 1
+           i = i // 2
+       return j
+
+   popcnt(dr.arange(Int, 1024))
+
+With this change, Dr.Jit now executes all loop iterations explicitly. Accessing
+the contents of ``i`` also works without problems, and the script produces
+the following output:
+
+.. code-block:: text
+
+    i=[0, 1, 2, .. 1018 skipped .., 1021, 1022, 1023]
+    i=[0, 0, 1, .. 1018 skipped .., 510, 511, 511]
+    i=[0, 0, 0, .. 1018 skipped .., 255, 255, 255]
+    i=[0, 0, 0, .. 1018 skipped .., 127, 127, 127]
+    i=[0, 0, 0, .. 1018 skipped .., 63, 63, 63]
+    i=[0, 0, 0, .. 1018 skipped .., 31, 31, 31]
+    i=[0, 0, 0, .. 1018 skipped .., 15, 15, 15]
+    i=[0, 0, 0, .. 1018 skipped .., 7, 7, 7]
+    i=[0, 0, 0, .. 1018 skipped .., 3, 3, 3]
+    i=[0, 0, 0, .. 1018 skipped .., 1, 1, 1]
+    [0, 1, 1, .. 1018 skipped .., 9, 9, 10]
+
+Evaluated mode can also be enabled globally by disabling the flags
+:py:attr:`dr.JitFlag.SymbolicLoops <drjit.JitFlag.SymbolicLoops>` and
+:py:attr:`dr.JitFlag.SymbolicConditionals <drjit.JitFlag.SymbolicConditionals>`
+via :py:func:`dr.set_flag() <set_flag>` or :py:func:`dr.scoped_set_flag()
+<scoped_set_flag>`.
+
+.. _sym-eval:
+
+Discussion
+----------
+
+Let's take a step back and compare the properties of these two different modes.
+
+Evaluated mode
+~~~~~~~~~~~~~~
+
+As the name suggests, this mode evaluates loop variables to store them in
+memory. Each loop iteration then loads variable state and writes out new state
+at the end. The *host* (i.e., the CPU) is in charge of all control flow, which
+makes this mode simple to understand:
+
+- Debugging programs is straightforward. The user can step through program line
+  by line and examine variable contents via Python's built-in ``print()``
+  statement or more advanced graphical plotting tools to construct
+  visualizations from within loops, conditionals, and calls (tracing calls is
+  described at the bottom of this section).
+
+- The program can freely mix Dr.Jit computation with other array programming
+  frameworks like PyTorch, Tensorflow, JAX, etc.
+
+The main *disadvantage* of evaluated mode are overheads from constantly reading
+and writing from/to device memory. The resulting memory bandwidth and storage
+costs can be prohibitive.
+
+Symbolic mode
+~~~~~~~~~~~~~
+
+Symbolic mode moves the control flow onto the target device. This is a natural
+choice: Dr.Jit already traces computation to generate fused kernels, and
+this simply extends that idea to include control flow as well. For this, Dr.Jit
+must trace loops that run for an *unknown* number of iterations,
+which it does by introducing symbolic variables to capture the change from one
+iteration to the next. Symbolic variables represent unknown information that
+will only become available later when the generated code runs on the device.
+
+The advantage of symbolic mode is that it can keep variable state in fast
+CPU/GPU registers, which improves performance and reduces storage costs.
+
+The main *disadvantage* is that symbolic variables cannot be evaluated while
+tracing. They cannot be passed to othe rframeworks like like PyTorch or
+Tensorflow. Indeed, *any* attempt to reveal the content of symbolic variables
+is doomed to fail since it literally does not exist (yet). The upcoming section
+on :ref:`variable evaluation <eval>` clarifies what operations require
+evaluation. Symbolic mode is the default, since the performance benefits
+usually outweigh these disadvantages.
+
+.. note::
+
+   Here are a few more detailed notes about symbolic and evaluated loops for
+   advanced users. Feel free to skip these if you are new to Dr.Jit.
+
+   - Loops (:py:func:`drjit.while_loop`), conditionals
+     (:py:func:`drjit.if_stmt`), and dynamic dispatch (:py:func:`drjit.switch`,
+     :py:func:`drjit.dispatch`) may be arbitrarily nested. However, it is not
+     legal to nest *evaluated* operations within *symbolic* ones, as this would
+     require the evaluation of symbolic variables.
+
+   - Printing array contents is not permitted in symbolic mode, but Dr.Jit
+     also provides a requires a *symbolic* print statement implemented by
+     :py:func:`dr.print() <drjit.print>` that prints in a delayed manner
+     (i.e., asynchronously from the device to avoid this problem).
+
+   - Symbolic mode tends to create much large kernels. Indeed, the idea is to
+     preserve the entire program and generate one giant output kernel (a
+     *megakernel*). Such large kernels can be costly to compile. However,
+     this cost is generally offset by *kernel caching* discussed in the next
+     section.
+
+   - Large kernels produced by symbolic mode also tend to use a large number of
+     registers, and this may impede the latency-hiding capabilities especially
+     when targeting GPUs. Simlarly, Dr.Jit vectorizes computation (SIMD-style).
+     Divergence in highly branching code may reduce performance.
+
+Indirect calls
+--------------
+
+Dr.Jit provides the functions :py:func:`dr.switch() <drjit.switch>` and
+:py:func:`dr.dispatch() <drjit.dispatch>` to capture indirect function calls
+that target multiple possible targets. Here is an example:
 
 .. code-block:: python
 
@@ -107,182 +312,7 @@ control flow primitive within Dr.Jit.
       a, b, c
    )
 
-See the next section on :ref:`symbolic and evaluated modes <sym-eval>` for an
-overview of how the system compiles such control flow statements. The reference
-of :py:func:`drjit.switch` and :py:func:`drjit.dispatch` explains these two
-operations in full detail.
-
-.. _sym-eval:
-
-Symbolic versus evaluated modes
--------------------------------
-
-All control flow operations support compilation in either *symbolic* or
-*evaluated* modes. This section discusses them in turn.
-
-Symbolic mode
-_____________
-
-*Symbolic mode* captures the complete structure of a program and turns it into
-a single large kernel that eventually runs on the target device.
-
-Symbolic mode exists to avoid unwanted intermediate evaluation of variables,
-which would split the large kernel into multiple smaller ones. The resulting
-inter-kernel communication via device memory tends to have a *significant cost*
-in terms of both storage requirements and memory bandwidth.
-
-This is no big surprise: Dr.Jit already traces computation to generate fused
-kernels that specifically avoid these communication overheads. However, control
-flow constructs (loops, conditionals, dynamic dispatch) present a difficulty
-during this tracing process. Consider the following example:
-
-.. code-block:: python
-
-   while x > 0:
-       x = f(x)
-
-Knowing when to stop this loop requires access to the contents of ``x``. To
-keep evaluation of ``f(x)`` on the target device (e.g. the GPU) while at the
-same time avoiding intermediate evaluation, Dr.Jit must capture a loop that
-runs for an *unknown* number of iterations. Doing so preserves the control flow
-structure of the original program, by effectively replicating it within
-Dr.Jit's intermediate representation.
-
-To accomplish these goals, Dr.Jit invokes the loop body with *symbolic*
-variables to capture the change from one iteration to the next. Symbolic
-variables represent unknown information that will only become available later
-when the generated code runs on the device.
-
-Advantages
-~~~~~~~~~~
-
-Symbolic mode is highly efficient with regards to of device storage
-requirements and memory bandwidth. This is because function call arguments,
-return values, loop state variables, etc., can all be exchanged via fast
-CPU/GPU registers.
-
-The difference is particularly pronounced when compiling code for the CPU,
-where memory bandwidth can quickly become a bottleneck.
-
-Disadvantages
-~~~~~~~~~~~~~
-
-Executing code in symbolic mode can be somewhat restrictive. For example, any
-attempt to reveal the contents of a symbolic variable is doomed to fail since
-it literally does not exist (yet). Other operations requiring variable
-evaluation (:py:func:`drjit.eval`) are likewise not permitted:
-
-.. code-block::
-
-   >>> @dr.syntax
-   ... def f(i: dr.cuda.Int, x: dr.cuda.Array2f):
-   ...     while i < 10:
-   ...         x *= x
-   ...         i += 1
-   ...         print(x)                # <-- fails
-   ...         y: dr.cuda.Float = x[0] # <-- OK
-   ...         z: float         = y[0] # <-- fails
-   ...
-   >>> f(dr.cuda.Int(1, 2), dr.cuda.Array2f(3, 4))
-   You performed an operation that tried to evalute a *symbolic*
-   variable which is not permitted.
-
-   Tracing operations like dr.while_loop(), dr.if_stmt(), dr.switch(),
-   dr.dispatch(), etc., employ such symbolic variables to call code with
-   abstract inputs and record the resulting computation. It is also
-   possible that you used ordinary Python loops/if statements together
-   with the @dr.syntax decorator, which automatically rewrites code to
-   use such tracing operations. The following operations cannot be
-   performed on symbolic variables:
-
-    - You cannot use dr.eval() or dr.schedule() to evaluate them.
-
-    - You cannot print() their contents. (But you may use dr.print() to
-      print them *asynchronously*)
-
-    - You cannot perform reductions that would require evaluation of the
-      entire input array (e.g. dr.all(x > 0, axis=None) to check if the
-      elements of an array are positive).
-
-    - You cannot access specific values in 1D arrays (this would require
-      the contents to be known.)
-
-   The common pattern of these limitation is that the contents of symbolic
-   of variables are *simply not known*. Any attempt to access or otherwise
-   reveal their contents is therefore doomed to fail.
-
-   Symbolic variables can be inconvenient for debugging, where it is nice
-   to be able to stick a print() call into code, or to single-step through
-   a program and investigate intermediate results. If you wish to do this,
-   then you should switch Dr.Jit from *symbolic* into *evaluated* mode.
-
-   This mode tends to be more expensive in terms of memory storage and
-   bandwidth, which is why it is not enabled by default. Please see the
-   Dr.Jit documentation for more information on symbolic and evaluated
-   evaluation modes:
-   https://drjit.readthedocs.io/en/latest/cflow.html#symbolic-versus-evaluated-modes
-
-It is perfectly valid to index into nested Dr.Jit arrays like
-:py:class:`drjit.cuda.Array2f`, but the end result should *not* be a Python
-``int`` or ``float`` since that would require knowing the actual array
-contents.
-
-As the message above indicated, printing array contents is possible, but this
-requires a *symbolic* print statement implemented by :py:func:`drjit.print`
-that delays the output until the content of all referenced variables is
-available.
-
-Other Python array programming frameworks do not support Dr.Jit's symbolic
-inputs---this means that you cannot, e.g., use PyTorch or Tensorflow to
-evaluate a neural network within a Dr.Jit loop or indirect function call.
-
-Loops (:py:func:`drjit.while_loop`), conditionals (:py:func:`drjit.if_stmt`),
-and dynamic dispatch (:py:func:`drjit.switch`, :py:func:`drjit.dispatch`) may
-be arbitrarily nested. However, it is not legal to nest *evaluated* operations
-within *symbolic* ones, as this would require the evaluation of symbolic
-variables.
-
-Some of the above limitations may be inconvenient especially when debugging
-code, in which case you may prefer to temporarily switch to evaluated mode.
-
-Besides these points, symbolic mode has several additional disadvantages that
-we mention for completeness:
-
-- Symbolic mode tends to create large kernels, which can be costly
-  to compile. However, this cost is generally offset by *kernel caching*.
-
-- Large kernels also tend to use a large number of registers, and this may
-  impede the latency-hiding capabilities especially when targeting GPUs.
-
-- Dr.Jit vectorizes computation (SIMD-style). Divergence in highly
-  branching code may eliminate the benefits of this optimization.
-
-Symbolic mode is the default, since the performance benefits usually outweigh
-all of the above points.
-
-Evaluated mode
-______________
-
-Evaluated mode executes programs in such a way that control flow decisions such
-as the loop iteration count from the earlier example are known at trace time.
-This involves frequent kernel launches to evaluate variable contents (via
-:py:func:`drjit.eval`).
-
-Advantages
-~~~~~~~~~~
-
-Programs that use evaluated mode are easier to debug. It is possible to
-single-step through programs and examine the contents of temporary variables.
-You may use Python's built-in ``print`` statement or more advanced
-graphical plotting tools to construct visualizations from within loops and
-dynamically called functions. The program may freely mix Dr.Jit computation
-with other array programming frameworks like PyTorch, Tensorflow, JAX, etc.
-Kernels are smaller and avoid thread divergence. (For example, Dr.Jit reorders
-the inputs of calls so that the computation is 100% converged).
-
-Disadvantages
-~~~~~~~~~~~~~
-
-Evaluated mode tends to be *significantly* slower than symbolic mode, as data
-is constantly read and written from/to device memory. The required memory
-bandwidth and storage can make this mode impractical.
+The reference of :py:func:`dr.switch() <drjit.switch>` and
+:py:func:`dr.dispatch() <drjit.dispatch>` explains these two operations in full
+detail. As with the previous control flow operations, they support compilation
+in either *symbolic* or *evaluated* modes.

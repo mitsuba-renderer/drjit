@@ -5,7 +5,7 @@
 Basics
 ======
 
-This document briefly reviews various standard operations. It assumes
+This fast-paced section reviews a wide range of standard operations. It assumes
 the following import declarations
 
 .. code-block:: python
