@@ -816,7 +816,10 @@ def syntax(
             RuntimeWarning,
         )
 
-    source = inspect.getsource(f)
+    try:
+       source = inspect.getsource(f)
+    except OSError as e:
+        raise RuntimeError('You tried to apply the @dr.syntax decorator to a function that was declared on the interactive Python REPL. This is unsupported because Python cannot extract the source code of such functions.') from e
 
     if source[0].isspace():
         from textwrap import dedent
