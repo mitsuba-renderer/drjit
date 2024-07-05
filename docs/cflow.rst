@@ -254,7 +254,7 @@ The advantage of symbolic mode is that it can keep variable state in fast
 CPU/GPU registers, which improves performance and reduces storage costs.
 
 The main *disadvantage* is that symbolic variables cannot be evaluated while
-tracing. They cannot be passed to othe rframeworks like like PyTorch or
+tracing. Likewise, they cannot be passed to other frameworks like like PyTorch or
 Tensorflow. Indeed, *any* attempt to reveal the content of symbolic variables
 is doomed to fail since it literally does not exist (yet). The upcoming section
 on :ref:`variable evaluation <eval>` clarifies what operations require
@@ -275,18 +275,18 @@ usually outweigh these disadvantages.
    - Printing array contents is not permitted in symbolic mode, but Dr.Jit
      also provides a requires a *symbolic* print statement implemented by
      :py:func:`dr.print() <drjit.print>` that prints in a delayed manner
-     (i.e., asynchronously from the device to avoid this problem).
+     (i.e., asynchronously from the device) to avoid this problem.
 
    - Symbolic mode tends to create much large kernels. Indeed, the idea is to
      preserve the entire program and generate one giant output kernel (a
-     *megakernel*). Such large kernels can be costly to compile. However,
-     this cost is generally offset by *kernel caching* discussed in the next
+     *megakernel*). Such large kernels can be costly to compile, though
+     this cost is usually offset by *kernel caching* discussed in the next
      section.
 
    - Large kernels produced by symbolic mode also tend to use a large number of
-     registers, and this may impede the latency-hiding capabilities especially
-     when targeting GPUs. Simlarly, Dr.Jit vectorizes computation (SIMD-style).
-     Divergence in highly branching code may reduce performance.
+     registers, and this may impede the latency-hiding capabilities of GPUs.
+     Simlarly, Dr.Jit always vectorizes computation (SIMD-style). Divergence in
+     highly branching code produced by symbolic tracing may reduce performance.
 
 Indirect calls
 --------------
@@ -316,3 +316,132 @@ The reference of :py:func:`dr.switch() <drjit.switch>` and
 :py:func:`dr.dispatch() <drjit.dispatch>` explains these two operations in full
 detail. As with the previous control flow operations, they support compilation
 in either *symbolic* or *evaluated* modes.
+
+Pitfalls
+--------
+
+Please be aware of the following potential issues involving tracing of control
+flow.
+
+1. **Unrolling loops**. Consider a function ``f(x)``, which calls another
+   expensive function ``g(x)`` many times in a loop.
+
+   .. code-block:: python
+
+      @dr.syntax
+      def f(x):
+          for i in range(1000):
+              x = g(x)
+          return x
+
+   Since Dr.Jit only traces ``while`` loops with array-valued conditions, this
+   function actually unrolls the computation graph of ``g`` 1000 times and is
+   equivalent to
+
+   .. code-block:: python
+
+      def f(x):
+          x = g(x)
+          x = g(x)
+          # .. (998 repetitions) ..
+          return x
+
+   Compiling the resulting giant kernel can be very inefficient. Instead,
+   consider rewriting the function as follows so that the loop can be traced:
+
+   .. code-block:: python
+
+      from drjit.auto import Int
+
+      @dr.syntax
+      def f(x):
+          i = Int(0)
+          while i < 1000:
+              x = g(x)
+              i += 1
+          return x
+
+2. **Type constancy**. Tracing control flow requires the type of state
+   variables to remain consistent. For example, the following fails with an
+   error message because the body of the ``if`` statement changes ``x`` from
+   ``drjit.*.Int`` (a traced Dr.Jit type) to a lower case ``int`` (a built-in
+   Python type).
+
+   .. code-block:: python
+
+      @dr.syntax
+      def f(x: Int):
+          if x < 0:
+              x = 0
+          # ...
+
+   The problem is easily fixed by casting the assigned value to the expected
+   type:
+
+   .. code-block:: python
+
+      @dr.syntax
+      def f(x: Int):
+          if x < 0:
+              x = Int(0)
+          # ...
+
+3. **Traversal of nested objects**. The :py:func:`@dr.syntax <drjit.syntax>`
+   decorator transforms loops and conditionals into calls to
+   :py:func:`dr.while_loop() <drjit.while_loop>` and :py:func:`dr.if_stmt()
+   <drjit.if_stmt>`.
+
+   These functions then traverse local variables to track their evolution
+   during the loop or conditional statement. In the ``Accum.add_positive()``
+   example function below, both ``y`` and ``self`` are automatically identified
+   as such local variables.
+
+   .. code-block:: python
+
+      from drjit.auto import Int
+
+      class Accum:
+          def __init__(self):
+              self.value = Int(0)
+
+          @dr.syntax
+          def add_positive(self, y: Int):
+              if y > 0:
+                  self.value += y
+
+      a = Accum()
+      a.add_positive(Int(1, -1))
+      print(a.value) # Prints: [1, -1]    :-(
+
+   Unfortunately, there is a subtle bug in the above code: symbolic control
+   flow operations only traverse :ref:`PyTrees <pytrees>`, and ``self`` (which
+   is of type ``Accum``) is *not* a PyTree. The implementation therefore misses
+   the conditional nature of the change of ``self.value`` and produces the
+   incorrect output ``[1, -1]`` instead of the expected ``[1, 0]``.
+
+   Besides Dr.Jit arrays, :ref:`PyTrees <pytrees>` can consist of arbitrarily
+   nested Python containers (``list``, ``tuple``, ``dict``), `data classes
+   <https://docs.python.org/3/library/dataclasses.html>`__, and custom classes
+   with a ``DRJIT_STRUCT`` annotation.
+   The two latter options can both fix the problem, e.g., by adding an
+   annotation to ``Accum`` that explaints its sub elements
+
+   .. code-block:: python
+
+      class Accum:
+          DRJIT_STRUCT = { 'value' : Int }
+
+   Alternatively, we can switch the implementation of ``Accum`` to a data class.
+
+   .. code-block:: python
+      :emphasize-lines: 3, 5
+
+      from dataclasses import dataclass
+
+      @dataclass
+      class Accum:
+          value: Int = Int(0)
+
+          @dr.syntax
+          def add_positive(self, y: Int):
+              ...
