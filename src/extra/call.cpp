@@ -276,13 +276,15 @@ static void ad_call_symbolic(JitBackend backend, const char *domain,
                      inst_id(callable_count, 0);
 
     {
-        scoped_record guard_1(backend, name, true);
+        /* Postponed operations captured by the isolation scope should only
+         * be executed once we've exited the symbolic scope. We therefore
+         * need to declare the AD isolation guard before the recording guard. */
+        scoped_isolation_boundary guard_1(1);
 
+        scoped_record guard_2(backend, name, true);
         // Recording may fail due to recursion depth
-        if (!guard_1.is_valid())
+        if (!guard_2.is_valid())
             return;
-
-        scoped_isolation_boundary guard_2;
 
         // Wrap input arguments to clearly expose them as inputs of the vcall
         for (size_t i = 0; i < args.size(); ++i) {
@@ -299,7 +301,7 @@ static void ad_call_symbolic(JitBackend backend, const char *domain,
         {
             scoped_set_mask mask_guard(backend, jit_var_call_mask(backend));
             for (size_t i = 0; i < callable_count; ++i) {
-                checkpoints[i] = guard_1.checkpoint_and_rewind();
+                checkpoints[i] = guard_2.checkpoint_and_rewind();
                 rv2.clear();
 
                 void *ptr;
@@ -339,7 +341,7 @@ static void ad_call_symbolic(JitBackend backend, const char *domain,
                 callable_count_final++;
             }
 
-            checkpoints[callable_count_final] = guard_1.checkpoint_and_rewind();
+            checkpoints[callable_count_final] = guard_2.checkpoint_and_rewind();
         }
 
         vector<uint32_t> rv4;
@@ -359,8 +361,8 @@ static void ad_call_symbolic(JitBackend backend, const char *domain,
             rv[i] = rv4[i];
         }
 
-        guard_1.disarm();
         guard_2.disarm();
+        guard_1.disarm();
 
         if (ad)
             ad_copy_implicit_deps(implicit_in, true);

@@ -647,3 +647,35 @@ def test16_switch_loop_in_target(t, symbolic):
 
         result = dr.switch(index, c, x)
         assert dr.allclose(result, [30, 33, 30, 40, 50])
+
+
+@pytest.mark.parametrize("symbolic", [True, False])
+@pytest.test_arrays('float32,diff,shape=(*)')
+def test17_bwd_in_switch(t, symbolic):
+    with dr.scoped_set_flag(dr.JitFlag.SymbolicCalls, symbolic):
+        Float = t
+        UInt32 = dr.uint32_array_t(t)
+
+        buf1 = Float(0, 0, 0, 0)
+        dr.enable_grad(buf1)
+        buf2 = dr.gather(Float, buf1, UInt32([0, 1, 2, 3]))  # Postponed AD edge
+
+        def f1(a, b):
+            c = 3 * a
+            d = dr.gather(Float, buf2, b)
+            dr.backward(2 * d)
+
+            return d + c
+
+        def f2(a, _):
+            return a
+
+        funcs = [ f1, f2 ]
+        index = UInt32(0, 0, 1, 1)
+
+        a = Float(1, 2, 3, 4)
+        b = UInt32([0, 1, 2, 3])
+
+        result = dr.switch(index, funcs, a, b)
+        assert dr.allclose(result, [3, 6, 3, 4])
+        assert dr.allclose(buf1.grad, [2, 2, 0, 0])
