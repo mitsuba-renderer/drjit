@@ -917,6 +917,8 @@ def test19_nested_call(t, symbolic):
 
     A, B, Base, BasePtr = pkg.A, pkg.B, pkg.Base, pkg.BasePtr
     a, b = A(), B()
+    a.value = dr.ones(t, 16)
+    dr.enable_grad(a.value)
 
     U = dr.uint32_array_t(t)
     xi = t(1, 2, 8, 3, 4)
@@ -930,7 +932,7 @@ def test19_nested_call(t, symbolic):
     with dr.scoped_set_flag(dr.JitFlag.SymbolicCalls, symbolic):
         xo = dr.dispatch(c, my_func, xi, yi)
 
-    assert dr.all(xo == xi)
+    assert dr.all(xo == xi + 1)
 
 
 @pytest.mark.parametrize("symbolic", [True, False])

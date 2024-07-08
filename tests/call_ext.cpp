@@ -75,7 +75,7 @@ template <typename Float> struct A : Base<Float> {
     }
 
     virtual Float nested(Float x, UInt32 /*s*/) override {
-        return x;
+        return x + dr::gather<Float>(value, UInt32(0));
     }
 
     virtual std::pair<Sampler<Float> *, Float> sample(Sampler<Float> *s) override {
@@ -127,7 +127,7 @@ template <typename Float> struct B : Base<Float> {
     virtual Float nested(Float x, UInt32 s) override {
         using BaseArray = dr::replace_value_t<Float, Base<Float>*>;
         BaseArray self = dr::reinterpret_array<BaseArray>(s);
-        return self->nested(x,s);
+        return self->nested(x, s);
     }
 
     virtual std::pair<Sampler<Float> *, Float> sample(Sampler<Float> *s) override {
