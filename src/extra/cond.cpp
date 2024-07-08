@@ -142,8 +142,11 @@ static void ad_cond_symbolic(JitBackend backend, const char *label,
                              bool ad) {
     bool symbolic = jit_flag(JitFlag::SymbolicScope);
 
+    /* Postponed operations captured by the isolation scope should only
+     * be executed once we've exited the symbolic scope. We therefore
+     * need to declare the AD isolation guard before the recording guard. */
+    scoped_isolation_boundary isolation_guard(1);
     scoped_record record_guard(backend);
-    scoped_isolation_boundary isolation_guard; // in this order
 
     index64_vector args_t, args_f, rv_t, rv_f, cleanup;
     dr::vector<uint32_t> tmp;
@@ -178,9 +181,11 @@ static void ad_cond_symbolic(JitBackend backend, const char *label,
         }
     }
 
+    JitVar true_mask = JitVar::steal(jit_var_bool(backend, true));
+    jit_new_scope(backend);
+
     JitVar handle =
         JitVar::steal(jit_var_cond_start(label, symbolic, cond_t, cond_f));
-    JitVar true_mask = JitVar::steal(jit_var_bool(backend, true));
 
     // Execute 'true_fn'
     {

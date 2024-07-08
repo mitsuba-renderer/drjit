@@ -310,3 +310,23 @@ def test10_scatter_add_bwd(t, variant, mode):
     xg = dr.backward_to(x)
     assert dr.all(xg == [2*b1*2, 2*b1*3, 2*b1*4, 3*b2*4, 3*b2*5])
 
+
+@pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
+@pytest.test_arrays('float32,diff,shape=(*)')
+@dr.syntax(print_code=False)
+def test11_bwd_in_cond(t, mode):
+    Float = t
+    UInt32 = dr.uint32_array_t(t)
+
+    buf1 = Float(0, 0, 0, 0)
+    dr.enable_grad(buf1)
+
+    buf2 = dr.gather(Float, buf1, UInt32([0, 1, 2, 3]))  # Postponed AD edge
+    a = UInt32([0, 1, 2, 3])
+
+    index = UInt32(0, 0, 1, 1)
+    if dr.hint(index < 1, mode=mode, exclude=[buf2]):
+        d = dr.gather(Float, buf2, a)
+        dr.backward(2 * d)
+
+    assert dr.allclose(buf1.grad, [2, 2, 0, 0])
