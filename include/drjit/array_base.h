@@ -45,7 +45,7 @@ NAMESPACE_BEGIN(drjit)
 struct ArrayBase { };
 
 /// Array base class templated via the curiously recurring template pattern
-template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : ArrayBase {
+template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT {
     // -----------------------------------------------------------------------
     //! @{ \name Basic declarations (may be overridden in subclasses)
     // -----------------------------------------------------------------------
