@@ -980,10 +980,10 @@ Target gather(Source &&source, const Index &index, const Mask &mask_ = true,
                           "Second argument of gather operation must be a 32 bit index array!");
             if constexpr ((Target::IsPacked || Target::IsRecursive) && is_array_v<Source>)
                 // Case 2.1.0: gather<FloatC>(const FloatP&, ...)
-                return Target::template gather_(source.data(), Index2(index), mask2, mode);
+                return Target::template gather_<>(source.data(), Index2(index), mask2, mode);
             else
                 // Case 2.1.1: gather<FloatC>(const FloatC& / const void *, ...)
-                return Target::template gather_(source, Index2(index), mask2, mode);
+                return Target::template gather_<>(source, Index2(index), mask2, mode);
         } else {
             // Case 2.2: gather<Vector3fC>(const FloatC & / const void *, ...)
             return value_t<Target>::template gather_packet_<Target::Size>(source, index, mask, mode);
