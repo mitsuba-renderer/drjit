@@ -3,4 +3,4 @@
     url = https://github.com/mitsuba-renderer/drjit-core
 [submodule "ext/nanobind"]
     path = ext/nanobind
-    url = https://github.com/wjakob/nanobind
+    url = https://github.com/njroussel/nanobind
