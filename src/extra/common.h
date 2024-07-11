@@ -39,8 +39,8 @@ private:
 
 /// RAII AD Isolation helper
 struct scoped_isolation_boundary {
-    scoped_isolation_boundary() {
-        ad_scope_enter(drjit::ADScope::Isolate, 0, nullptr);
+    scoped_isolation_boundary(int symbolic = -1) : symbolic(symbolic) {
+        ad_scope_enter(drjit::ADScope::Isolate, 0, nullptr, symbolic);
     }
 
     ~scoped_isolation_boundary() {
@@ -49,11 +49,12 @@ struct scoped_isolation_boundary {
 
     void reset() {
         ad_scope_leave(false);
-        ad_scope_enter(drjit::ADScope::Isolate, 0, nullptr);
+        ad_scope_enter(drjit::ADScope::Isolate, 0, nullptr, symbolic);
     }
 
     void disarm() { success = true; }
 
+    int symbolic = -1;
     bool success = false;
 };
 

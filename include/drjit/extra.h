@@ -204,7 +204,7 @@ extern DRJIT_EXTRA_EXPORT const char *ad_var_graphviz();
 
 /// Indicate that the program entered a scope which modifies the AD layer's behavior
 extern DRJIT_EXTRA_EXPORT void ad_scope_enter(drjit::ADScope type, size_t size,
-                                              const uint64_t *indices);
+                                              const uint64_t *indices, int symbolic);
 
 /// Indicate that the program left a scope which modifies the AD layer's behavior
 extern DRJIT_EXTRA_EXPORT void ad_scope_leave(bool process_postponed);

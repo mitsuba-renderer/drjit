@@ -1614,14 +1614,18 @@ void ad_traverse(dr::ADMode mode, uint32_t flags) {
 // AD scope management
 // ==========================================================================
 
-void ad_scope_enter(ADScope type, size_t size, const Index *indices) {
+void ad_scope_enter(ADScope type, size_t size, const Index *indices, int symbolic) {
     std::vector<Scope> &scopes = local_state.scopes;
     Scope scope;
 
     if (!scopes.empty())
         scope = scopes.back();
 
-    scope.symbolic = jit_flag(JitFlag::SymbolicScope);
+    if (symbolic == -1)
+        scope.symbolic = jit_flag(JitFlag::SymbolicScope);
+    else
+        scope.symbolic = (symbolic != 0);
+
     scope.postponed.clear();
     scope.implicit_in.clear();
     scope.implicit_out.clear();

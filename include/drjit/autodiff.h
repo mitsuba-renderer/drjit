@@ -863,7 +863,7 @@ template <typename T> struct suspend_grad {
         is_diff_v<T> && std::is_floating_point_v<scalar_t<T>>;
     suspend_grad() : condition(true) {
         if constexpr (Enabled)
-            ad_scope_enter(ADScope::Suspend, 0, nullptr);
+            ad_scope_enter(ADScope::Suspend, 0, nullptr, -1);
     }
     template <typename... Args>
     suspend_grad(bool when, const Args &... args) : condition(when) {
@@ -871,7 +871,8 @@ template <typename T> struct suspend_grad {
             if (condition) {
                 vector<uint64_t> indices;
                 (detail::collect_indices<false>(args, indices), ...);
-                ad_scope_enter(ADScope::Suspend, indices.size(), indices.data());
+                ad_scope_enter(
+                    ADScope::Suspend, indices.size(), indices.data(), -1);
             }
         } else {
             (((void) args), ...);

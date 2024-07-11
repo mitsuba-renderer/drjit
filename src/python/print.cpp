@@ -29,7 +29,7 @@ using Buffer = nanobind::detail::Buffer;
 
 struct suspend_grad_simple {
     suspend_grad_simple() {
-        ad_scope_enter(dr::ADScope::Suspend, 0, nullptr);
+        ad_scope_enter(dr::ADScope::Suspend, 0, nullptr, -1);
     }
 
     ~suspend_grad_simple() {

@@ -630,7 +630,7 @@ void export_autodiff(nb::module_ &m) {
         .def(nb::init<dr::ADScope, dr::vector<uint64_t>>())
         .def("__enter__",
              [](ADContextManager &m) {
-                 ad_scope_enter(m.scope, m.indices.size(), m.indices.data());
+                 ad_scope_enter(m.scope, m.indices.size(), m.indices.data(), -1);
              })
         .def("__exit__",
              [](ADContextManager &, nb::handle exc_type, nb::handle, nb::handle) {
