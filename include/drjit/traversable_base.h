@@ -10,10 +10,8 @@
 NAMESPACE_BEGIN(drjit)
 
 struct TraversableBase : nanobind::intrusive_base {
-    virtual void traverse_1_cb_ro(void *,
-                                  void (*)(void *, uint64_t)) const {};
-    virtual void traverse_1_cb_rw(void *,
-                                  uint64_t (*)(void *, uint64_t)) {};
+    virtual void traverse_1_cb_ro(void *, void (*)(void *, uint64_t)) const = 0;
+    virtual void traverse_1_cb_rw(void *, uint64_t (*)(void *, uint64_t))   = 0;
 };
 
 template <typename T> struct is_ref_t<nanobind::ref<T>> : std::true_type {};
@@ -27,14 +25,16 @@ template <typename T> struct is_iterable_t<std::vector<T>> : std::true_type {};
 #define DR_TRAVERSE_CB_RO(Base, ...)                                           \
     void traverse_1_cb_ro(void *payload, void (*fn)(void *, uint64_t))         \
         const override {                                                       \
-        Base::traverse_1_cb_ro(payload, fn);                                   \
+        if constexpr (!std::is_same_v<Base, drjit::TraversableBase>)           \
+            Base::traverse_1_cb_ro(payload, fn);                               \
         DRJIT_MAP(DR_TRAVERSE_MEMBER_RO, __VA_ARGS__)                          \
     }
 
 #define DR_TRAVERSE_CB_RW(Base, ...)                                           \
     void traverse_1_cb_rw(void *payload, uint64_t (*fn)(void *, uint64_t))     \
         override {                                                             \
-        Base::traverse_1_cb_rw(payload, fn);                                   \
+        if constexpr (!std::is_same_v<Base, drjit::TraversableBase>)           \
+            Base::traverse_1_cb_rw(payload, fn);                               \
         DRJIT_MAP(DR_TRAVERSE_MEMBER_RW, __VA_ARGS__)                          \
     }
 
