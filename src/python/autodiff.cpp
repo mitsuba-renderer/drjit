@@ -111,13 +111,17 @@ static nb::object detach(nb::handle h, bool preserve_type_ = true) {
         void operator()(nb::handle h1, nb::handle h2) override {
             const ArraySupplement &s1 = supp(h1.type()),
                                   &s2 = supp(h2.type());
-            if (s1.is_diff)
+
+            if (s2.index)
                 s2.init_index((uint32_t) s1.index(inst_ptr(h1)), inst_ptr(h2));
+            else {
+                nb::object o = nb::borrow(h1);
+                nb::inst_replace_move(h2, o);
+            }
         }
     };
 
-    if ((is_drjit_array(h) && !supp(h.type()).is_diff) ||
-        (preserve_type_ && !grad_enabled(h)))
+    if ((is_drjit_array(h) && !supp(h.type()).is_diff))
         return nb::borrow(h);
 
     Detach d(preserve_type_);

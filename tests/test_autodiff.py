@@ -95,6 +95,7 @@ def test002_detach(t):
     a = Foo()
     dr.enable_grad(a)
     b = dr.detach(a, preserve_type=False)
+    assert dr.all(b.y == dr.scalar.Array3f(1))
     assert type(a.x) is not type(b.x)
     assert type(a.y) is type(b.y)
 
