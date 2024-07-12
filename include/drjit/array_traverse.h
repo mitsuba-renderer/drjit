@@ -208,6 +208,8 @@ void traverse_1_fn_ro(const Value &value, void *payload, void (*fn)(void *, uint
     } else if constexpr (is_ref_t<Value>::value){
         const auto *tmp = value.get();
         traverse_1_fn_ro(tmp, payload, fn);
+    } else {
+        // static_assert(false, "Failed to traverse field!");
     }
 }
 
@@ -237,6 +239,8 @@ void traverse_1_fn_rw(Value &value, void *payload, uint64_t (*fn)(void *, uint64
     } else if constexpr (is_ref_t<Value>::value){
         auto *tmp = value.get();
         traverse_1_fn_rw(tmp, payload, fn);
+    } else {
+        // static_assert(false, "Failed to traverse field!");
     }
 }
 
