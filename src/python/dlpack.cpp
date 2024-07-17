@@ -139,7 +139,9 @@ static nb::ndarray<> dlpack(nb::handle_t<ArrayBase> h, bool force_cpu, nb::handl
 
             if (value.index() != index) {
                 nb::object tmp = nb::inst_alloc(owner.type());
-                s2.init_index(value.index(), inst_ptr(tmp));
+                uint64_t ad_index = (s2.index(inst_ptr(owner)) & 0xFFFFFFFF00000000);
+                uint64_t new_index = (uint32_t) value.index();
+                s2.init_index(ad_index | new_index, inst_ptr(tmp));
                 nb::inst_replace_move(owner, tmp);
             }
         } else {

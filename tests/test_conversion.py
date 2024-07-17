@@ -126,3 +126,15 @@ def test11_inplace_jax(t):
     x[0,0,0] = 1
 
     assert a[0,0,0] == x[0,0,0]
+
+# Test AD index preservation after conversion
+@pytest.test_arrays('is_diff,float32,shape=(*)')
+def test12_conversion_ad(t):
+    pytest.importorskip("numpy")
+    x = dr.ones(t)
+    dr.enable_grad(x)
+    i = x.index_ad
+    y = x.numpy()
+    assert dr.grad_enabled(x)
+    assert i != 0
+    assert i == x.index_ad
