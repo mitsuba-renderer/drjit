@@ -29,6 +29,20 @@ struct Color : dr::StaticArrayImpl<Value_, 3, false, Color<Value_>> {
     DRJIT_ARRAY_IMPORT(Color, Base)
 };
 
+
+template <typename Value>
+struct CustomHolder {
+public:
+    CustomHolder() {}
+    CustomHolder(const Value &v) : m_value(v) {}
+    Value &value() { return m_value; }
+    bool schedule_force_() { return dr::detail::schedule_force(m_value); }
+
+private:
+    Value m_value;
+};
+
+
 template <JitBackend Backend> void bind(nb::module_ &m) {
     dr::ArrayBinding b;
     using Float = dr::DiffArray<Backend, float>;
@@ -44,6 +58,15 @@ template <JitBackend Backend> void bind(nb::module_ &m) {
         .def_prop_rw("b",
             [](Color3f &c) -> Float & { return c.b(); },
             [](Color3f &c, Float &value) { c.b() = value; });
+
+    using CustomFloatHolder = CustomHolder<Float>;
+    nb::class_<CustomFloatHolder>(m, "CustomFloatHolder")
+        .def(nb::init<Float>())
+        .def("value", &CustomFloatHolder::value, nanobind::rv_policy::reference);
+
+    m.def("cpp_make_opaque",
+          [](CustomFloatHolder &holder) { dr::make_opaque(holder); }
+    );
 }
 
 NB_MODULE(custom_type_ext, m) {

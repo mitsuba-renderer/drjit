@@ -55,3 +55,17 @@ def test02_struct_to_string():
   has_ray_differentials=1
 ]"""
     )
+
+@pytest.test_arrays("float32,-diff,shape=(*),jit")
+def test03_cpp_make_opaque(t):
+    pkg = get_pkg(t)
+    Float = t
+
+    v = dr.zeros(Float, 7)
+    assert v.state == dr.VarState.Literal
+
+    holder = pkg.CustomFloatHolder(v)
+    assert holder.value().state == dr.VarState.Literal
+
+    pkg.cpp_make_opaque(holder)
+    assert holder.value().state == dr.VarState.Evaluated

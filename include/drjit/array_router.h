@@ -1417,7 +1417,8 @@ namespace detail {
 template <typename... Ts>
 DRJIT_INLINE void make_opaque(Ts&... values) {
     (DRJIT_MARK_USED(values), ...);
-    if constexpr (((is_jit_v<Ts> || is_drjit_struct_v<Ts>) || ...)) {
+    if constexpr (((is_jit_v<Ts> || is_drjit_struct_v<Ts> ||
+                    is_detected_v<detail::det_schedule_force, Ts>) || ...)) {
         if (detail::schedule_force(values...))
             eval();
     }
