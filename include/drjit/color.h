@@ -24,7 +24,7 @@ template <typename Value> Value linear_to_srgb(const Value &x) {
     Value r = Scalar(12.92);
     Mask large_mask = x > Scalar(0.0031308);
 
-    if (DRJIT_LIKELY(any(large_mask))) {
+    if (DRJIT_LIKELY(any_nested_or<true>(large_mask))) {
         Value y = sqrt(x), p, q;
 
         if constexpr (Single) {
@@ -61,7 +61,7 @@ template <typename Value> Value srgb_to_linear(const Value &x) {
     Value r = Scalar(1.0 / 12.92);
     Mask large_mask = x > Scalar(0.04045);
 
-    if (DRJIT_LIKELY(any(large_mask))) {
+    if (DRJIT_LIKELY(any_nested_or<true>(large_mask))) {
         Value p, q;
 
         if constexpr (Single) {
