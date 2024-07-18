@@ -42,12 +42,20 @@ template <typename Array> Array repeat(const Array &array, size_t count) {
 template <typename Array> auto ravel(const Array &array) {
     if constexpr (depth_v<Array> <= 1) {
         return array;
+    } else if constexpr (is_dynamic_array_v<Array>) {
+        using Result = value_t<Array>;
+        using Index = uint32_array_t<Result>;
+        Result result = empty<Result>(array.size() * width(array));
+        Index indices = arange<Index>(width(array)) * (uint32_t) array.size();
+        for (uint32_t i = 0; i < (uint32_t) array.size(); i++)
+            scatter(result, array[i], indices + i);
+        return result;
     } else {
         using Result = leaf_array_t<Array>;
         using Index = uint32_array_t<Result>;
 
         size_t shape[depth_v<Array> + 1 /* avoid zero-sized array */ ] { };
-        detail::put_shape(array, shape);
+        detail::put_shape(&array, shape);
 
         size_t size = shape[0];
         for (size_t i = 1; i < depth_v<Array>; ++i)
