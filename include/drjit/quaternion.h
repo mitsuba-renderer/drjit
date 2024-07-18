@@ -281,11 +281,11 @@ Array<Value, 3> quat_to_euler(const Quaternion<Value> &q) {
     // https://en.wikipedia.org/wiki/Conversion_between_quaternions_and_Euler_angles
 
     // Clamp the result to stay in the valid range for asin
-    Value sinp = clamp(2 * fmsub(q.w(), q.y(), q.z() * q.x()), -1.0, 1.0);
-    Mask gimbal_lock = abs(sinp) > (1.f - 5e-8f);
+    Value sinp = clip(2 * fmsub(q.w(), q.y(), q.z() * q.x()), -1.0, 1.0);
+    mask_t<Value> gimbal_lock = abs(sinp) > (1.f - 5e-8f);
 
     // roll (x-axis rotation)
-    Value q_y_2 = sqr(q.y());
+    Value q_y_2 = square(q.y());
     Value sinr_cosp = 2 * fmadd(q.w(), q.x(), q.y() * q.z());
     Value cosr_cosp = fnmadd(2, fmadd(q.x(), q.x(), q_y_2), 1);
     Value roll = select(gimbal_lock, 2.f * atan2(q.x(), q.w()), atan2(sinr_cosp, cosr_cosp));
