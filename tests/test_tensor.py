@@ -417,3 +417,126 @@ def test14_preserve_attached(t):
     v3 = t(v2)
     dr.forward_to(v3)
     assert dr.all(v3.grad == [10, 20, 30])
+
+
+@pytest.test_arrays('is_tensor, float, is_jit')
+def test15_upsampling_tensor(t):
+
+    a = t([1, 2, 3, 4], shape=(2, 2))
+    assert dr.allclose(dr.upsample(a, [4, 4]).array, [1, 1, 2, 2,
+                                                      1, 1, 2, 2,
+                                                      3, 3, 4, 4,
+                                                      3, 3, 4, 4])
+
+    b = dr.upsample(a, scale_factor=[3, 3])
+    assert dr.allclose(b.array, [1, 1, 1, 2, 2, 2,
+                                 1, 1, 1, 2, 2, 2,
+                                 1, 1, 1, 2, 2, 2,
+                                 3, 3, 3, 4, 4, 4,
+                                 3, 3, 3, 4, 4, 4,
+                                 3, 3, 3, 4, 4, 4])
+
+    b = dr.upsample(a, scale_factor=[3, 1])
+    assert dr.allclose(b.array, [1, 2, 1, 2, 1, 2,
+                                 3, 4, 3, 4, 3, 4])
+
+    b = dr.upsample(a, scale_factor=[3])
+    assert dr.allclose(b.array, [1, 2, 1, 2, 1, 2,
+                                 3, 4, 3, 4, 3, 4])
+
+    b = dr.upsample(a, scale_factor=[1, 3])
+    assert dr.allclose(b.array, [1, 1, 1, 2, 2, 2,
+                                 3, 3, 3, 4, 4, 4])
+
+    a = t([1, 2, 3, 2, 3, 4, 3, 4, 5, 4, 5, 6], shape=(2, 2, 3))
+    assert dr.allclose(dr.upsample(a, [4, 4]).array, [1, 2, 3, 1, 2, 3, 2, 3, 4, 2, 3, 4,
+                                                      1, 2, 3, 1, 2, 3, 2, 3, 4, 2, 3, 4,
+                                                      3, 4, 5, 3, 4, 5, 4, 5, 6, 4, 5, 6,
+                                                      3, 4, 5, 3, 4, 5, 4, 5, 6, 4, 5, 6])
+
+    a = t([1, 2, 3, 2, 3, 4, 3, 4, 5, 4, 5, 6], shape=(2, 2, 3))
+    assert dr.allclose(dr.upsample(a, [4, 4, 3]).array, [1, 2, 3, 1, 2, 3, 2, 3, 4, 2, 3, 4,
+                                                         1, 2, 3, 1, 2, 3, 2, 3, 4, 2, 3, 4,
+                                                         3, 4, 5, 3, 4, 5, 4, 5, 6, 4, 5, 6,
+                                                         3, 4, 5, 3, 4, 5, 4, 5, 6, 4, 5, 6])
+
+    a = t([1, 2, 3, 4, 5, 6, 7, 8], shape=(2, 2, 2))
+    assert dr.allclose(dr.upsample(a, [4, 4, 4]).array, [1, 1, 2, 2, 1, 1, 2, 2, 3, 3, 4, 4, 3, 3, 4, 4,
+                                                         1, 1, 2, 2, 1, 1, 2, 2, 3, 3, 4, 4, 3, 3, 4, 4,
+                                                         5, 5, 6, 6, 5, 5, 6, 6, 7, 7, 8, 8, 7, 7, 8, 8,
+                                                         5, 5, 6, 6, 5, 5, 6, 6, 7, 7, 8, 8, 7, 7, 8, 8])
+
+    with pytest.raises(TypeError) as ei:
+        dr.upsample(a.array, [4])
+    assert "unsupported input type" in str(ei.value)
+
+    with pytest.raises(TypeError) as ei:
+        dr.upsample(a, shape=[4], scale_factor=[4])
+    assert "shape and scale_factor" in str(ei.value)
+
+    with pytest.raises(TypeError) as ei:
+        dr.upsample(a, shape=3)
+    assert "unsupported shape type" in str(ei.value)
+
+    with pytest.raises(TypeError) as ei:
+        dr.upsample(a, shape=[2, 2, 2, 2])
+    assert "invalid shape size" in str(ei.value)
+
+    with pytest.raises(TypeError) as ei:
+        dr.upsample(a, shape=[2, 2, 2.5])
+    assert "must contain integer values" in str(ei.value)
+
+    with pytest.raises(TypeError) as ei:
+        dr.upsample(a, shape=[1, 1, 1])
+    assert "must be larger" in str(ei.value)
+
+    with pytest.raises(TypeError) as ei:
+        dr.upsample(a, shape=[3, 3, 3])
+    assert "must be multiples" in str(ei.value)
+
+    with pytest.raises(TypeError) as ei:
+        dr.upsample(a, scale_factor=3)
+    assert "unsupported scale_factor type" in str(ei.value)
+
+    with pytest.raises(TypeError) as ei:
+        dr.upsample(a, scale_factor=[2, 2, 0])
+    assert "must be greater than 0" in str(ei.value)
+
+
+@pytest.test_arrays('is_tensor, float32, is_jit')
+def test15_upsampling_texture(t):
+    mod = sys.modules[t.__module__]
+    tex_t = getattr(mod, 'Texture2f')
+
+    a = tex_t(t([1, 2, 3, 4], shape=(2, 2, 1)), filter_mode=dr.FilterMode.Nearest)
+    b = dr.upsample(a, shape=[4, 4])
+    assert dr.allclose(b.tensor().array, [1, 1, 2, 2,
+                                          1, 1, 2, 2,
+                                          3, 3, 4, 4,
+                                          3, 3, 4, 4])
+
+    a = tex_t(t([1, 2, 3, 4], shape=(2, 2, 1)), filter_mode=dr.FilterMode.Nearest)
+    b = dr.upsample(a, shape=[3, 3])
+    assert dr.allclose(b.tensor().array, [1, 2, 2,
+                                          3, 4, 4,
+                                          3, 4, 4])
+
+    a = tex_t(t([1, 2, 3, 4], shape=(2, 2, 1)), filter_mode=dr.FilterMode.Linear)
+    b = dr.upsample(a, shape=[4, 4])
+    assert dr.allclose(b.tensor().array, [1.0, 1.25, 1.75, 2.0,
+                                          1.5, 1.75, 2.25, 2.5,
+                                          2.5, 2.75, 3.25, 3.5,
+                                          3.0, 3.25, 3.75, 4.0])
+
+    a = tex_t(t([1, 2, 3, 4], shape=(2, 2, 1)), filter_mode=dr.FilterMode.Linear)
+    b = dr.upsample(a, shape=[3, 3])
+    assert dr.allclose(b.tensor().array, [1.0, 1.5, 2.0,
+                                          2.0, 2.5, 3.0,
+                                          3.0, 3.5, 4.0])
+
+    a = tex_t(t([1, 1, 5, 2, 2, 6, 3, 3, 7, 4, 4, 8], shape=(2, 2, 3)), filter_mode=dr.FilterMode.Linear)
+    b = dr.upsample(a, shape=[3, 3])
+    assert dr.allclose(b.tensor().array, [1.0, 1.0, 5.0, 1.5, 1.5, 5.5, 2.0, 2.0, 6.0,
+                                          2.0, 2.0, 6.0, 2.5, 2.5, 6.5, 3.0, 3.0, 7.0,
+                                          3.0, 3.0, 7.0, 3.5, 3.5, 7.5, 4.0, 4.0, 8.0])
+
