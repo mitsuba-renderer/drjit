@@ -90,14 +90,20 @@ def test002_detach(t):
         def __init__(self) -> None:
             self.x = t(1)
             self.y = dr.scalar.Array3f(1)
-        DRJIT_STRUCT = { 'x': t, 'y': dr.scalar.Array3f }
+            self.z = 3.0
+        DRJIT_STRUCT = { 'x': t, 'y': dr.scalar.Array3f , 'z' : float }
 
     a = Foo()
     dr.enable_grad(a)
     b = dr.detach(a, preserve_type=False)
+    assert dr.all(a.y == dr.scalar.Array3f(1))
+    assert dr.all(a.z == 3.0)
     assert dr.all(b.y == dr.scalar.Array3f(1))
+    assert dr.all(b.z == 3.0)
     assert type(a.x) is not type(b.x)
     assert type(a.y) is type(b.y)
+    assert type(a.z) is type(b.z)
+
 
 @pytest.test_arrays('is_diff,float,-float16,shape=(*)')
 def test003_set_grad(t):

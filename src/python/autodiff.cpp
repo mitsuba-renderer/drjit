@@ -115,8 +115,7 @@ static nb::object detach(nb::handle h, bool preserve_type_ = true) {
             if (s2.index)
                 s2.init_index((uint32_t) s1.index(inst_ptr(h1)), inst_ptr(h2));
             else {
-                nb::object o = nb::borrow(h1);
-                nb::inst_replace_move(h2, o);
+                nb::inst_copy(h2, h1);
             }
         }
     };
@@ -425,9 +424,13 @@ public:
                 const ArraySupplement &s = supp(h1.type());
 
                 if (s.index) {
-                    uint32_t ad_index = (uint32_t) (s.index(inst_ptr(h1)) >> 32);
+                    uint64_t index = s.index(inst_ptr(h1));
+                    uint32_t jit_index = (uint32_t) index;
+                    uint32_t ad_index = (uint32_t) (index >> 32);
                     op.add_index((JitBackend) s.backend, ad_index, input);
-                    s.init_index(((uint64_t) ad_index) << 32, inst_ptr(h2));
+                    uint32_t new_idx = jit_var_copy(jit_index);
+                    s.init_index(((uint64_t) ad_index) << 32 | new_idx, inst_ptr(h2));
+                    jit_var_dec_ref(new_idx);
                 }
             }
         };
