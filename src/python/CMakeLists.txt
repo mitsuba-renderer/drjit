@@ -37,6 +37,8 @@ foreach(PY_FILE IN LISTS PY_FILES)
   list(APPEND PY_FILES_OUT ${OUT_FILE})
 endforeach()
 
+add_custom_target(copy-python-src ALL DEPENDS ${PY_FILES_OUT})
+
 # ---------------- Build the main module ----------------
 
 nanobind_add_module(
@@ -134,7 +136,7 @@ endif()
 
 # --- MSVC: Copy shared libraries to Python folders -----
 
-set(DRJIT_STUB_DEPENDS drjit-python)
+set(DRJIT_STUB_DEPENDS drjit-python copy-python-src)
 
 if (MSVC)
   set(COPY_TARGETS drjit-core drjit-extra nanothread)
@@ -160,7 +162,7 @@ endif()
 set(STUB_ARGS
   PYTHON_PATH ${DRJIT_PYTHON_DST_DIR}/..
   PATTERN_FILE ${DRJIT_PYTHON_SRC_DIR}/stubs.pat
-  DEPENDS ${DRJIT_STUB_DEPENDS} ${PY_FILES_OUT}
+  DEPENDS ${DRJIT_STUB_DEPENDS}
 )
 
 # The sanitizers require preloading shared libraries into Python, and that
