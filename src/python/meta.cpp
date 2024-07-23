@@ -137,6 +137,11 @@ ArrayMeta meta_promote(ArrayMeta a, ArrayMeta b) noexcept {
             r.shape[r.ndim++] = DRJIT_DYNAMIC;
     }
 
+    if (r.is_quaternion && r.is_vector && r.shape[0] == 4)
+        r.is_vector = 0;
+    else if (r.is_complex && r.is_vector && r.shape[0] == 2)
+        r.is_vector = 0;
+
     return r;
 }
 
@@ -377,6 +382,7 @@ void promote(nb::object *o, size_t n, bool select) {
             m.type = (uint16_t) VarType::Bool;
             m.is_quaternion = 0;
             m.is_matrix = 0;
+            m.is_complex = 0;
             h2 = meta_get_type(m);
         }
 
