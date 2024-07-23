@@ -75,7 +75,7 @@ template <typename Target, typename Source> Target unravel(const Source &source)
 
     Target target;
     size_t shape[depth_v<Target> + 1 /* avoid zero-sized array */ ] { };
-    detail::put_shape(target, shape);
+    detail::put_shape(&target, shape);
 
     size_t source_size = source.size(), size = shape[0];
     for (size_t i = 1; i < depth_v<Target> - 1; ++i)
