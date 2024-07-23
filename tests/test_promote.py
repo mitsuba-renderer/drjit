@@ -85,8 +85,6 @@ def test3_binop_promote_misc():
 
     with pytest.raises(RuntimeError, match="Incompatible arguments."):
         x = dr.zeros(dr.scalar.Complex2f64) + dr.zeros(dr.llvm.Array3f)
-    with pytest.raises(RuntimeError, match="Incompatible arguments."):
-        x = dr.zeros(dr.scalar.Complex2f64) + dr.zeros(dr.llvm.Array2f)
 
     a = dr.scalar.Array3i(1)
     with pytest.raises(RuntimeError) as ei:

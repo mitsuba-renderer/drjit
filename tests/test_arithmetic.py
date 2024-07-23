@@ -222,6 +222,38 @@ def test06_select():
                          { 'a' : l.Float(-1), 'b' : l.Float(-2) })
         assert str(result) == "{'a': [-1, -1, 1, 1], 'b': [-2, -2, 2, 2]}"
 
+        a = l.Quaternion4f(1.0, 2.0, 3.0, 4.0)
+        b = l.Quaternion4f(4.0, 3.0, 2.0, 1.0)
+        result = dr.select(dr.isnan(a), b, a)
+        assert isinstance(result, l.Quaternion4f)
+        result = dr.select(dr.isnan(a), a, 0)
+        assert isinstance(result, l.Quaternion4f)
+        result = dr.select(dr.isnan(a), 0, a)
+        assert isinstance(result, l.Quaternion4f)
+        result = dr.select(True, a, 0)
+        assert isinstance(result, l.Quaternion4f)
+        result = dr.select(l.Array4b([True, False], [False, True], [True, False], [True, True]), a, 0)
+        assert isinstance(result, l.Quaternion4f)
+        assert str(result) == '[1i+3k+4,\n 2j+4]'
+        with pytest.raises(RuntimeError) as e:
+            result = dr.select(l.Array2b(True, False), a, 0)
+
+        a = l.Complex2f(1.0, 2.0)
+        b = l.Complex2f(4.0, 3.0)
+        result = dr.select(dr.isnan(a), b, a)
+        assert isinstance(result, l.Complex2f)
+        result = dr.select(dr.isnan(a), a, 0)
+        assert isinstance(result, l.Complex2f)
+        result = dr.select(dr.isnan(a), 0, a)
+        assert isinstance(result, l.Complex2f)
+        result = dr.select(True, a, 0)
+        assert isinstance(result, l.Complex2f)
+        result = dr.select(l.Array2b([True, False], [False, True]), a, 0)
+        assert isinstance(result, l.Complex2f)
+        assert(str(result) == '[1,\n 2j]')
+        with pytest.raises(RuntimeError) as e:
+            result = dr.select(l.Array4b(True, False, True, True), a, 0)
+
 @pytest.test_arrays('type=float32,shape=(*)')
 def test07_power(t):
     assert dr.allclose(t(2)**0, t(1))
