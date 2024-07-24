@@ -11,6 +11,9 @@
 #include "common.h"
 
 class Local {
+    friend int local_tp_traverse(PyObject*, visitproc, void*);
+    friend int local_tp_clear(PyObject*);
+
 public:
     /**
      * \brief Allocate local memory to store a PyTree of type ``dtype`` with length
@@ -55,7 +58,10 @@ protected:
     nb::handle m_mask_tp;
 };
 
+
 extern nb::handle local_type;
 
 extern void export_local(nb::module_ &m);
 
+int local_tp_traverse(PyObject * self, visitproc visit, void *arg);
+int local_tp_clear(PyObject *self);
