@@ -349,8 +349,27 @@ static nb::object traverse(nb::handle tp, nb::handle v1, nb::handle v2,
 
 nb::handle local_type;
 
+int local_tp_traverse(PyObject * self, visitproc visit, void *arg) {
+    Local *o = nb::inst_ptr<Local>(self);
+    Py_VISIT(o->m_dtype.ptr());
+    Py_VISIT(o->m_value.ptr());
+    return 0;
+}
+
+int local_tp_clear(PyObject *self) {
+    Local *o = nb::inst_ptr<Local>(self);
+    o->m_dtype.reset();
+    o->m_value.reset();
+    return 0;
+};
+
+PyType_Slot slots[] = { { Py_tp_traverse, (void *) local_tp_traverse },
+                        { Py_tp_clear, (void *) local_tp_clear },
+                        { 0, nullptr } };
+
 void export_local(nb::module_ &m) {
     local_type = nb::class_<Local>(m, "Local", nb::is_generic(),
+                                   nb::type_slots(slots),
                                    nb::sig("class Local(typing.Generic[T])"), doc_Local)
         .def(nb::init<Local>(), doc_Local_Local)
         .def("__len__", &Local::len, doc_Local___len__)
