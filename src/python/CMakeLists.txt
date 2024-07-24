@@ -37,7 +37,7 @@ foreach(PY_FILE IN LISTS PY_FILES)
   list(APPEND PY_FILES_OUT ${OUT_FILE})
 endforeach()
 
-add_custom_target(copy-python-src ALL DEPENDS ${PY_FILES_OUT})
+add_custom_target(drjit-copy-python-src ALL DEPENDS ${PY_FILES_OUT})
 
 # ---------------- Build the main module ----------------
 
@@ -136,7 +136,7 @@ endif()
 
 # --- MSVC: Copy shared libraries to Python folders -----
 
-set(DRJIT_STUB_DEPENDS drjit-python copy-python-src)
+set(DRJIT_STUB_DEPENDS drjit-python drjit-copy-python-src)
 
 if (MSVC)
   set(COPY_TARGETS drjit-core drjit-extra nanothread)
