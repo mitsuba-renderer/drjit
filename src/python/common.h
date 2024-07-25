@@ -61,6 +61,8 @@ extern nb::handle DR_STR(_traverse_write);
 extern nb::handle DR_STR(_traverse_read);
 extern nb::handle DR_STR(_traverse_1_cb_rw);
 extern nb::handle DR_STR(_traverse_1_cb_ro);
+extern nb::handle DR_STR(typing);
+extern nb::handle DR_STR(get_type_hints);
 
 /// Extract the DRJIT_STRUCT element of a custom data structure type, if available
 inline nb::dict get_drjit_struct(nb::handle tp) {
@@ -73,8 +75,17 @@ inline nb::dict get_drjit_struct(nb::handle tp) {
 /// Extract the dataclass fields element of a custom data structure type, if available
 inline nb::object get_dataclass_fields(nb::handle tp) {
     nb::object result = nb::getattr(tp, DR_STR(__dataclass_fields__), nb::handle());
-    if (result.is_valid())
+    if (result.is_valid()) {
         result = nb::module_::import_(DR_STR(dataclasses)).attr(DR_STR(fields))(tp);
+
+        // Handle postponed type information
+        nb::object hints = nb::module_::import_(DR_STR(typing)).attr(DR_STR(get_type_hints))(tp);
+        for (auto field : result) {
+            nb::object field_type = field.attr(DR_STR(type));
+            if (field_type.type().is(&PyUnicode_Type))
+                field.attr(DR_STR(type)) = hints[field.attr(DR_STR(name))];
+        }
+    }
     return result;
 }
 
