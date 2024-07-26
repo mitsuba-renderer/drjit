@@ -612,6 +612,7 @@ def test25_preserve_unchanged(t, mode, variant):
     assert ai == ai2
     assert bi == bi2
 
+
 @pytest.test_arrays('uint32,jit,shape=(*)')
 @dr.syntax
 def test26_gather(t):
@@ -625,3 +626,19 @@ def test26_gather(t):
         i += 1
 
     assert dr.all(x == [6, 5])
+
+
+@pytest.test_arrays('uint32,jit,shape=(*)')
+@pytest.mark.parametrize('mode', ['symbolic', 'evaluated'])
+@dr.syntax
+def test27_partial_eval(t, mode):
+    # Test that we can use loop outputs that have already been evaluated
+    idx = dr.zeros(t)
+    val = dr.zeros(t)
+
+    while dr.hint(idx < 3, mode=mode):
+        idx += 1
+        val += 2 + idx # `val` is dependent on `idx` at each iteration
+
+    assert idx == 3 # Only evaluate loop state partially
+    assert val + idx == 15 # Re-use partially evaluated state
