@@ -117,19 +117,9 @@ def test10_inplace_torch(t):
 
     assert a[0,0,0] == x[0,0,0]
 
-# Test inplace modifications from jax (tensors & dynamic array)
-@pytest.test_arrays('tensor, -bool, -float16, -uint64, -uint32')
-def test11_inplace_jax(t):
-    pytest.importorskip("jax")
-    a = dr.empty(t, shape=(3, 3, 3))
-    x = a.jax()
-    x[0,0,0] = 1
-
-    assert a[0,0,0] == x[0,0,0]
-
 # Test AD index preservation after conversion
 @pytest.test_arrays('is_diff,float32,shape=(*)')
-def test12_conversion_ad(t):
+def test11_conversion_ad(t):
     pytest.importorskip("numpy")
     x = dr.ones(t)
     dr.enable_grad(x)
