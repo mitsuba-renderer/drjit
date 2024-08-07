@@ -242,7 +242,7 @@ nb::object bind(const ArrayBinding &b) {
             Py_ssize_t size = s.shape[0], len = PySequence_Length(o);
             if (len == -1)
                 PyErr_Clear();
-            return size == DRJIT_DYNAMIC || len == size;
+            return s.is_tensor || size == DRJIT_DYNAMIC || len == size;
         }
         return false;
     };

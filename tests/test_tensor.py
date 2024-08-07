@@ -540,3 +540,14 @@ def test15_upsampling_texture(t):
                                           2.0, 2.0, 6.0, 2.5, 2.5, 6.5, 3.0, 3.0, 7.0,
                                           3.0, 3.0, 7.0, 3.5, 3.5, 7.5, 4.0, 4.0, 8.0])
 
+@pytest.test_arrays('is_tensor, float32')
+def test16_implicit_conversion(t):
+    import numpy as np
+
+    mod = sys.modules[t.__module__]
+    tex_t = getattr(mod, 'Texture2f')
+    a = tex_t(t([1, 2, 3, 4], shape=(2, 2, 1)))
+    b = tex_t(np.array([1, 2, 3, 4]).reshape(2, 2, 1))
+    assert dr.allclose(a.tensor(), b.tensor())
+    c = tex_t([[[1],[2]], [[3],[4]]])
+    assert dr.allclose(a.tensor(), c.tensor())
