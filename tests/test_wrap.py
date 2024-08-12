@@ -346,7 +346,7 @@ def test11_nondiff_fwd(t, config):
 @pytest.mark.parametrize('config', configs_torch)
 @pytest.test_arrays('is_diff,float,shape=(*)')
 @pytest.skip_on(RuntimeError, "not implemented for 'Half'")
-def test12_flipped_nondiff_bwd(t, config):
+def test12_flipped_nondiff_fwd(t, config):
     @wrap_flipped(config)
     def test_fn(x, y, z):
         return x*2, y+1, ~z
