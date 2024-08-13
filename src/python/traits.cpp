@@ -124,6 +124,22 @@ nb::object tensor_t(nb::handle h) {
     return nb::none();
 }
 
+nb::object matrix_t(nb::handle h) {
+    nb::handle tp = h.is_type() ? h : h.type();
+    if (is_drjit_type(tp)) {
+        ArrayMeta m = supp(tp);
+        if (m.is_matrix || m.is_vector) {
+            m.is_vector = false;
+            m.is_matrix = true;
+            // Make sure corresponding Matrix binding is available
+            nb::handle t = meta_get_type(m, false);
+            if (t.is_valid())
+                return nb::borrow(t);
+        }
+    }
+    return nb::none();
+}
+
 void export_traits(nb::module_ &m) {
     m.attr("Dynamic") = -1;
 
@@ -334,6 +350,8 @@ void export_traits(nb::module_ &m) {
     m.def("itemsize_v", &itemsize_v, doc_itemsize_v);
 
     m.def("tensor_t", &tensor_t, doc_tensor_t);
+
+    m.def("matrix_t", &matrix_t, doc_matrix_t);
 
     m.def("reinterpret_array_t",
           [](nb::handle h, VarType vt) { return reinterpret_array_t(h, vt); },

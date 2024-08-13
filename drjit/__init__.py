@@ -582,9 +582,8 @@ def diag(arg, /):
         for i in range(len(arg)):
             result[i] = arg[i, i]
         return result
-    elif is_array_v(arg) and 'Array' in tp.__name__:
-        import sys
-        mat_tp = getattr(sys.modules[tp.__module__], tp.__name__.replace('Array', 'Matrix'), None)
+    elif is_array_v(arg):
+        mat_tp = matrix_t(arg)
         if mat_tp is None:
             raise Exception('drjit.diag(): unsupported type!')
         result = zeros(mat_tp, width(arg))

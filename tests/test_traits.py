@@ -86,6 +86,16 @@ def test01_traits(t):
         assert mn == 'Bool'
         assert dr.array_t(t).__name__ == "Float"
         assert dr.array_t(m).__name__ == "Bool"
+        assert dr.matrix_t(t) is None
+
+    if tn == 'Array3f':
+        assert dr.matrix_t(t).__name__ == "Matrix3f"
+
+    if tn == 'Array1f':
+        assert dr.matrix_t(t) is None
+
+    if tn == 'Array334f':
+        assert dr.matrix_t(t).__name__ == "Matrix34f"
 
     if scalar_type is int:
         assert dr.is_integral_v(t) and dr.is_integral_v(v)
