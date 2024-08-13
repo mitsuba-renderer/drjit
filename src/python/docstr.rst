@@ -168,6 +168,26 @@
     Returns:
         type: Returns a compatible tensor type or ``None``.
 
+.. topic:: matrix_t
+
+    Return a matrix type that corresponds to the provided Dr.Jit array type.
+
+    This type trait is used internally by :py:func:`diag` to initialize a matrix
+    from a Dr.Jit array type.
+
+    Example usage:
+
+    .. code-block:: python
+
+       x = dr.llvm.Array3f(...)
+       tp = dr.matrix_t(type(x)) # <-- returns dr.llvm.Matrix3f
+
+    Args:
+        arg (object): An arbitrary Python object
+
+    Returns:
+        type: Returns a compatible matrix type or ``None``.
+
 .. topic:: mask_t
 
     Return the *mask type* associated with the provided Dr.Jit array or type (i.e., the
