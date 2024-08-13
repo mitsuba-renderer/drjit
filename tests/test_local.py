@@ -181,3 +181,18 @@ def test09_oob_write(t, capsys):
 
     transcript = capsys.readouterr().err
     assert 'drjit.Local.write(): out-of-bounds write to position 99 in an array of size 10' in transcript
+
+
+@pytest.test_arrays('jit,-diff,uint32,shape=(*)')
+@dr.syntax
+def test10_loop_read_then_write(t, capsys):
+    local = dr.alloc_local(t, size=8, value=t(0))
+    size = t(0)
+    val = t(0)
+
+    while size < 5:
+        val += local[size]
+        size += 1
+        local[size] = t(4)
+
+    assert val[0] == 16
