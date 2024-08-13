@@ -429,7 +429,7 @@ template <bool IsMask_, typename Derived_> struct alignas(32)
 
 #if defined(DRJIT_X86_AVX512)
     template <typename Index, typename Mask>
-    DRJIT_INLINE void scatter_(void *ptr, const Index &index, const Mask &mask, bool) const {
+    DRJIT_INLINE void scatter_(void *ptr, const Index &index, const Mask &mask, ReduceMode) const {
         if constexpr (sizeof(scalar_t<Index>) == 4)
             _mm256_mask_i32scatter_ps(ptr, mask.k, index.m, m, 4);
         else
@@ -791,7 +791,7 @@ template <bool IsMask_, typename Derived_> struct alignas(32)
 
 #if defined(DRJIT_X86_AVX512)
     template <typename Index, typename Mask>
-    DRJIT_INLINE void scatter_(void *ptr, const Index &index, const Mask &mask, bool) const {
+    DRJIT_INLINE void scatter_(void *ptr, const Index &index, const Mask &mask, ReduceMode) const {
         if constexpr (sizeof(scalar_t<Index>) == 4)
             _mm256_mask_i32scatter_pd(ptr, mask.k, index.m, m, 8);
         else
@@ -894,7 +894,7 @@ template <bool IsMask_, typename Derived_> struct alignas(32)
 
 #if defined(DRJIT_X86_AVX512)
     template <typename Index, typename Mask>
-    DRJIT_INLINE void scatter_(void *ptr, const Index &index, const Mask &mask, bool) const {
+    DRJIT_INLINE void scatter_(void *ptr, const Index &index, const Mask &mask, ReduceMode) const {
         Base::scatter_(ptr, index, mask & mask_(), false);
     }
 #endif

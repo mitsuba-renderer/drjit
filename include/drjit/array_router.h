@@ -931,6 +931,7 @@ Target gather(Source &&source, const Index &index, const Mask &mask_ = true,
               ReduceMode mode = ReduceMode::Auto) {
     // Broadcast mask to match shape of Index
     mask_t<plain_t<Index>> mask = mask_;
+    DRJIT_MARK_USED(mask);
     if constexpr (depth_v<Source> > 1) {
         // Case 1: gather<Vector3fC>(const Vector3fC&, ...)
         static_assert(size_v<Source> == size_v<Target>,
@@ -956,7 +957,6 @@ Target gather(Source &&source, const Index &index, const Mask &mask_ = true,
                 return Target::gather_(
                     source, uint32_array_t<Source>(index), mask, mode);
             } else {
-                DRJIT_MARK_USED(mask);
                 size_t offset = index * sizeof(value_t<Target>) * Target::Size;
                 if constexpr (std::is_pointer_v<std::decay_t<Source>>) {
                     // Case 2.0.1: gather<Target>(const void *, size_t, ...)
@@ -1017,6 +1017,7 @@ Target gather(Source &&source, const Index &index, const Mask &mask_ = true,
 template <typename Target, typename Value, typename Index, typename Mask = mask_t<Index>>
 void scatter(Target &target, const Value &value, const Index &index,
              const Mask &mask_ = true, ReduceMode mode = ReduceMode::Auto) {
+    DRJIT_MARK_USED(mode);
     // Broadcast mask to match shape of Index
     mask_t<plain_t<Index>> mask = mask_;
     if constexpr (std::is_same_v<std::decay_t<Target>, std::nullptr_t>) {
