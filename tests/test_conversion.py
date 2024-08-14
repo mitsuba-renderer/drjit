@@ -124,7 +124,8 @@ def test11_conversion_ad(t):
     x = dr.ones(t)
     dr.enable_grad(x)
     i = x.index_ad
-    y = x.numpy()
+    with dr.suspend_grad():
+        y = x.numpy()
     assert dr.grad_enabled(x)
     assert i != 0
     assert i == x.index_ad

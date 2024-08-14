@@ -141,7 +141,9 @@ static nb::ndarray<> dlpack(nb::handle_t<ArrayBase> h, bool force_cpu, nb::handl
                 nb::object tmp = nb::inst_alloc(owner.type());
                 uint64_t ad_index = (s2.index(inst_ptr(owner)) & 0xFFFFFFFF00000000);
                 uint64_t new_index = (uint32_t) value.index();
+                ad_scope_enter(drjit::ADScope::Resume, 0, nullptr, false);
                 s2.init_index(ad_index | new_index, inst_ptr(tmp));
+                ad_scope_leave(false);
                 nb::inst_replace_move(owner, tmp);
             }
         } else {
