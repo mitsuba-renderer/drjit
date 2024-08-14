@@ -147,6 +147,34 @@ class _SyntaxVisitor(ast.NodeTransformer):
             self.var_w.add(node.id)
         return node
 
+    def visit_comp(self,
+                   node: Union[ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp]) -> ast.AST:
+        var_r, var_w = self.var_r, set(self.var_w)
+        self.var_r = set()
+        result = self.generic_visit(node)
+
+        comp_targets = set()
+        for comp in node.generators:
+            comp_targets.add(comp.target.id)
+
+        # Targets should not be considered, and no assigments can be made
+        self.var_r = (self.var_r - comp_targets) | var_r
+        self.var_w = var_w
+
+        return result
+
+    def visit_ListComp(self, node: ast.ListComp) -> ast.AST:
+        return self.visit_comp(node)
+
+    def visit_SetComp(self, node: ast.DictComp) -> ast.AST:
+        return self.visit_comp(node)
+
+    def visit_DictComp(self, node: ast.DictComp) -> ast.AST:
+        return self.visit_comp(node)
+
+    def visit_GeneratorExp(self, node: ast.GeneratorExp) -> ast.AST:
+        return self.visit_comp(node)
+
     # def visit_Attribute(self, node: ast.Attribute) -> ast.AST:
     #     n = node
     #     seq = []
