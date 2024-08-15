@@ -392,8 +392,15 @@ struct StaticArrayImpl<Value_, Size_, IsMask_, Derived_,
     DRJIT_INLINE decltype(auto) entry(size_t i) {
         if constexpr (Size1 == Size2)
             return ((i < Size1) ? a1 : a2).entry(i % Size1);
-        else
-            return (i < Size1) ? a1.entry(i) : a2.entry(i - Size1);
+        else {
+            // Special handling for scalar masks because we can't guarantee
+            // the types for a1.entry and a2.entry are consistent (see MaskBit)
+            // For assignment we need to be able to return a type T&
+            if constexpr (IsMask_)
+                return drjit::detail::MaskBitPacketRecursive(a1, a2, i);
+            else
+                return (i < Size1) ? a1.entry(i) : a2.entry(i - Size1);
+        }
     }
 
     DRJIT_INLINE Value *data() { return (Value *) this; }

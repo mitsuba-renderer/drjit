@@ -994,6 +994,7 @@ template <typename T> void bind_all(ArrayBinding &b) {
     bind_array_types<Array<T, 2>>(b);
     bind_array_types<Array<T, 3>>(b);
     bind_array_types<Array<T, 4>>(b);
+    bind_array_types<Array<T, 6>>(b);
     bind_array_types<DynamicArray<T>>(b);
 
     bind_matrix_types<T, 2>(b);

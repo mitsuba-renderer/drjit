@@ -37,6 +37,30 @@ private:
     size_t index;
 };
 
+template <typename Array1, typename Array2>
+struct MaskBitPacketRecursive {
+
+    MaskBitPacketRecursive(Array1& a1, Array2& a2, size_t index) :
+        a1(a1), a2(a2), index(index) {}
+
+    operator bool() const {
+        return (index < Array1::Size) ?
+            a1.entry(index) : a2.entry(index - Array1::Size);
+    }
+
+    MaskBitPacketRecursive &operator=(bool b) {
+        if (index < Array1::Size) 
+            a1.entry(index) = b;
+        else
+            a2.entry(index - Array1::Size) = b;
+        return *this;
+    }
+
+    Array1& a1;
+    Array2& a2;
+    size_t index;
+};
+
 NAMESPACE_END(detail)
 
 template <typename Value_, size_t Size_, typename Derived_>
