@@ -234,12 +234,17 @@ void export_dlpack(nb::module_ &) {
                return dlpack_device(h);
            }, doc_dlpack_device)
       .def("__array__",
-           [](nb::handle_t<ArrayBase> h, nb::handle dtype) {
+           [](nb::handle_t<ArrayBase> h, nb::handle dtype, nb::handle copy) {
                nb::object o = nb::cast(nb::ndarray<nb::numpy>(dlpack(h, true).handle()));
-               if (!dtype.is_none())
-                   o = o.attr("astype")(dtype);
+
+               nb::object current_dtype = o.attr("dtype");
+               nb::kwargs kwargs;
+               kwargs["dtype"] = dtype.is_none() ? current_dtype : dtype;
+               kwargs["copy"] = copy.is_none() ? nb::bool_(false) : copy;
+               o = o.attr("astype")(**kwargs);
+
                return o;
-           }, doc_array, "dtype"_a = nb::none())
+           }, doc_array, "dtype"_a = nb::none(), "copy"_a = nb::none())
       .def("numpy",
            [](nb::handle_t<ArrayBase> h) {
                return nb::ndarray<nb::numpy>(dlpack(h, true).handle());
