@@ -321,7 +321,9 @@ static NB_NOINLINE nb::handle tp_getattro_fallback(nb::handle h0, nb::handle h1)
                                                            : DRJIT_DYNAMIC);
 
                 try {
-                    nb::handle tp2 = meta_get_type(m2);
+                    nb::handle tp2 = swizzle_size == s0.shape[0] ?
+                        h0.type() :
+                        meta_get_type(m2);
                     const ArraySupplement &s2 = supp(tp2);
 
                     ArraySupplement::Item item = s0.item;
