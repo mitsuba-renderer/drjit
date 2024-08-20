@@ -794,3 +794,28 @@ def test28_flipped_exception(t, config):
     with pytest.raises(RuntimeError) as err:
         test_fn(torch.tensor([1, 2, 3]))
     assert 'foo' in str(err.value)
+
+
+@pytest.mark.parametrize('config', configs_torch)
+@pytest.test_arrays('is_diff,llvm,float,shape=(*)')
+@pytest.skip_on(RuntimeError, "backend does not support the requested type of atomic reduction")
+def test29_flipped_non_tensor_output_bwd(t, config):
+    @wrap_flipped(config)
+    def test_fn(x):
+        a = dr.gather(t, x.array, 0)
+        b = dr.gather(t, x.array, 1)
+        c = dr.gather(t, x.array, 2)
+        return a, b * 2, c * 3
+
+    import torch
+    dt = torch_dtype(t)
+    x = torch.arange(3, dtype=dt)
+    x.requires_grad = True
+
+    out1, out2, out3 = test_fn(x)
+    assert out1 == 0
+    assert out2 == 2
+    assert out3 == 6
+
+    (out1 + out2 + out3).backward()
+    assert torch.all(x.grad == torch.tensor([1, 2, 3], dtype=dt))
