@@ -207,3 +207,13 @@ def test17_quat_to_matrix(t):
     q = t(0.72331658, 0.49242236, 0.31087897, 0.3710628)
     assert(dr.allclose(q, dr.matrix_to_quat(dr.quat_to_matrix(q, size=3))))
     assert(dr.allclose(q, dr.matrix_to_quat(dr.quat_to_matrix(q, size=4))))
+
+@pytest.test_arrays('-float16, matrix,shape=(4, 4, *)')
+def test18_init_upcast(t):
+    mod = sys.modules[t.__module__]
+    Matrix43f = getattr(mod, 'Matrix43f')
+    Matrix41f = getattr(mod, 'Matrix41f')
+    assert dr.all(Matrix43f(2) == t(2), axis=None)
+    assert dr.all(Matrix41f(2) == t(2), axis=None)
+    with pytest.raises(TypeError):
+        t(Matrix41f(2))

@@ -239,10 +239,17 @@ nb::object bind(const ArrayBinding &b) {
         if (PyLong_CheckExact(o)) {
             return is_float(s);
         } else if (PySequence_Check(o)) {
+            if (s.is_tensor)
+                return true;
+
+            if (is_drjit_type(tp_o) && supp(tp_o).ndim > s.ndim)
+                return false;
+
             Py_ssize_t size = s.shape[0], len = PySequence_Length(o);
             if (len == -1)
                 PyErr_Clear();
-            return s.is_tensor || size == DRJIT_DYNAMIC || len == size;
+
+            return size == DRJIT_DYNAMIC || len == size;
         }
         return false;
     };
