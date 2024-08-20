@@ -113,7 +113,7 @@ static nb::ndarray<> dlpack(nb::handle_t<ArrayBase> h, bool force_cpu, nb::handl
 
             if (backend == JitBackend::CUDA && !force_cpu) {
                 device_type = nb::device::cuda::value;
-                device_id = jit_var_device(index);
+                device_id = jit_cuda_device_raw();
 
                 // https://data-apis.org/array-api/latest/API_specification/generated/array_api.array.__dlpack__.html
                 /*
