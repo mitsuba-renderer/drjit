@@ -471,10 +471,8 @@ static nb::object format_impl(const char *name, const std::string &fmt,
             jit_var_dec_ref(mask_1);
             jit_var_dec_ref(mask_2);
 
-            if (kwargs.contains("active")) {
+            if (kwargs.contains("active"))
                 active &= kwargs["active"];
-                nb::del(kwargs["active"]);
-            }
 
             nb::object counter = index_tp(0),
                        slot = scatter_inc(counter, index_tp(0), active),

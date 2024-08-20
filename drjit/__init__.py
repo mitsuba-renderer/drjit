@@ -2004,8 +2004,7 @@ def assert_true(
 
     if not flag(JitFlag.Debug):
         return
-
-    if cond is False or (not detail.any_symbolic(cond) and none(cond)):
+    if cond is True or (not detail.any_symbolic(cond) and all(cond)):
         return
 
     import traceback, sys, types
