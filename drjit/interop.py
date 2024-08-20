@@ -84,7 +84,7 @@ def from_drjit(value, target, enable_grad = False, /):
     Convert a PyTree containing Dr.Jit arrays/tensors to another array
     programming framework as identified by ``target``.
 
-    The function return sthe output PyTree as well as a sequence capturing the
+    The function returns the output PyTree as well as a sequence capturing the
     original type of each converted Dr.Jit type. This is useful when those same
     exact types should be restored in a subsequent conversion by ``to_drjit``.
     '''
@@ -383,14 +383,26 @@ def create_torch_wrapper():
             inputs = to_drjit(inputs, 'torch', enable_grad=True)
             args, kwargs = unflatten(desc, *inputs)
 
-            # Run the function and flatten the output PyTree
+            def wrap_into_tensor(value):
+                '''Helper to transform a PyTree's members to tensors'''
+                def fn(h):
+                    tp = type(h)
+                    if dr.is_array_v(tp):
+                        if not dr.is_tensor_v(h):
+                            h = dr.tensor_t(tp)(h)
+                        return h
+                    return ...
+                return apply(fn, value)
+
+            # Run the function, flatten the output PyTree and convert its members to tensors
             global torch_desc_o
             torch_desc_o, *output = flatten(func(*args, **kwargs))
+            output = wrap_into_tensor(output)
 
             # Stash inputs and outputs for later use
             ctx.inputs, ctx.output = inputs, output
 
-            # Cconvert the output and return
+            # Convert the output and return
             output_conv = from_drjit(output, 'torch')[0]
 
             return tuple(output_conv)
