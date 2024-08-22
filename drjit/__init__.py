@@ -792,7 +792,7 @@ def matrix_to_quat(mtx, /):
     t0123 = select(mask2, t01, t23)
     q0123 = select(mask2, q01, q23)
 
-    return q0123 * (rsqrt(t0123) * 0.5)
+    return Q(q0123 * (rsqrt(t0123) * 0.5))
 
 
 def quat_to_matrix(q, size=4):
