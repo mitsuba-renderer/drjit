@@ -466,7 +466,8 @@ def imag(arg, /):
         return arg.imag
     elif is_quaternion_v(tp):
         import sys
-        Array3f = getattr(sys.modules[tp.__module__], 'Array3f', None)
+        m = sys.modules[tp.__module__]
+        Array3f = replace_type_t(m.Array3f, type_v(arg))
         return Array3f(arg[0], arg[1], arg[2])
     else:
         return tp(0)
@@ -763,9 +764,8 @@ def matrix_to_quat(mtx, /):
         raise Exception('drjit.matrix_to_quat(): invalid input shape!')
 
     import sys
-    tp = type(mtx)
-    m = sys.modules[tp.__module__]
-    Q = getattr(m, 'Quaternion4f', None)
+    m = sys.modules[mtx.__module__]
+    Q = replace_type_t(m.Quaternion4f, type_v(mtx))
 
     o = 1.0
     t0 = o + mtx[0, 0] - mtx[1, 1] - mtx[2, 2]
@@ -814,11 +814,9 @@ def quat_to_matrix(q, size=4):
         raise Exception('drjit.quat_to_matrix(): Unsupported input size!')
 
     import sys
-    tp = type(q)
-    m = sys.modules[tp.__module__]
-
-    Matrix3f = getattr(m, 'Matrix3f', None)
-    Matrix4f = getattr(m, 'Matrix4f', None)
+    m = sys.modules[q.__module__]
+    Matrix3f = replace_type_t(m.Matrix3f, type_v(q))
+    Matrix4f = replace_type_t(m.Matrix4f, type_v(q))
 
     q = q * sqrt_two
 
@@ -858,11 +856,8 @@ def quat_to_euler(q, /):
         raise Exception('drjit.quat_to_euler(): unsupported input type!')
 
     import sys
-    tp = type(q)
-    m = sys.modules[tp.__module__]
-    name = tp.__name__
-
-    Array3f = getattr(m, 'Array3f', None)
+    m = sys.modules[q.__module__]
+    Array3f = replace_type_t(m.Array3f, type_v(q))
 
     # Clamp the result to stay in the valid range for asin
     sinp = clip(2 * fma(q.w, q.y, -q.z * q.x), -1.0, 1.0)
@@ -905,10 +900,8 @@ def euler_to_quat(a, /):
         raise Exception('drjit.euler_to_quat(): input has invalid shape!')
 
     import sys
-    tp = type(a)
-    m = sys.modules[tp.__module__]
-    name = tp.__name__
-    Quaternion4f = getattr(m, 'Quaternion4f', None)
+    m = sys.modules[a.__module__]
+    Quaternion4f = replace_type_t(m.Quaternion4f, type_v(a))
 
     angles = a / 2.0
     sr, cr = sincos(angles.x)
@@ -949,11 +942,9 @@ def transform_decompose(a, it=10):
         raise Exception('drjit.transform_decompose(): invalid input shape!')
 
     import sys
-    tp = type(a)
-    m = sys.modules[tp.__module__]
-    name = tp.__name__
-    Matrix3f = getattr(m, 'Matrix3f', None)
-    Array3f  = getattr(m, 'Array3f', None)
+    m = sys.modules[a.__module__]
+    Matrix3f = replace_type_t(m.Matrix3f, type_v(a))
+    Array3f  = replace_type_t(m.Array3f, type_v(a))
 
     m33 = Matrix3f(
         a[0][0], a[0][1], a[0][2],
@@ -995,11 +986,9 @@ def transform_compose(s, q, t, /):
         raise Exception('drjit.transform_decompose(): translation has invalid shape!')
 
     import sys
-    tp = type(s)
-    m = sys.modules[tp.__module__]
-    name = tp.__name__
-    Matrix3f = tp
-    Matrix4f = getattr(m, 'Matrix4f', None)
+    m = sys.modules[s.__module__]
+    Matrix3f = replace_type_t(m.Matrix3f, type_v(s))
+    Matrix4f = replace_type_t(m.Matrix4f, type_v(s))
 
     m33 = Matrix3f(quat_to_matrix(q, 3) @ s)
 
