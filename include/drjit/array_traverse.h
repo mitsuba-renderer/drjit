@@ -201,13 +201,16 @@ void traverse_1_fn_ro(const Value &value, void *payload, void (*fn)(void *, uint
                          is_detected_v<detail::det_traverse_1_cb_ro, Value>) {
         if (value)
             value->traverse_1_cb_ro(payload, fn);
-    } else if constexpr(is_iterable_t<Value>::value){
+        
+    } else if constexpr (is_iterable_t<Value>::value) {
         for (auto elem: value){
             traverse_1_fn_ro(elem, payload, fn);
         }
-    } else if constexpr (is_ref_t<Value>::value){
+    } else if constexpr (is_ref_t<Value>::value) {
         const auto *tmp = value.get();
         traverse_1_fn_ro(tmp, payload, fn);
+    } else if constexpr (is_detected_v<detail::det_traverse_1_cb_ro, Value*>) {
+        value.traverse_1_cb_ro(payload, fn);
     } else {
         // static_assert(false, "Failed to traverse field!");
     }
@@ -232,13 +235,15 @@ void traverse_1_fn_rw(Value &value, void *payload, uint64_t (*fn)(void *, uint64
                          is_detected_v<detail::det_traverse_1_cb_rw, Value>) {
         if (value)
             value->traverse_1_cb_rw(payload, fn);
-    } else if constexpr(is_iterable_t<Value>::value){
+    } else if constexpr (is_iterable_t<Value>::value) {
         for (auto elem: value){
             traverse_1_fn_rw(elem, payload, fn);
         }
-    } else if constexpr (is_ref_t<Value>::value){
+    } else if constexpr (is_ref_t<Value>::value) {
         auto *tmp = value.get();
         traverse_1_fn_rw(tmp, payload, fn);
+    } else if constexpr (is_detected_v<detail::det_traverse_1_cb_rw, Value*>) {
+        value.traverse_1_cb_rw(payload, fn);
     } else {
         // static_assert(false, "Failed to traverse field!");
     }

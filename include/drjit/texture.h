@@ -17,6 +17,7 @@
 #include <drjit/idiv.h>
 #include <drjit/jit.h>
 #include <drjit/tensor.h>
+#include "drjit/traversable_base.h"
 
 #pragma once
 
@@ -41,7 +42,7 @@ enum class CudaTextureFormat : uint32_t {
     Float16 = 1, /// Half precision storage format
 };
 
-template <typename _Storage, size_t Dimension> class Texture {
+template <typename _Storage, size_t Dimension> class Texture : TraversableBase {
 public:
     static constexpr bool IsCUDA = is_cuda_v<_Storage>;
     static constexpr bool IsDiff = is_diff_v<_Storage>;
@@ -1381,6 +1382,28 @@ private:
     WrapMode m_wrap_mode;
     bool m_use_accel = false;
     mutable bool m_migrated = false;
+
+public:
+void traverse_1_cb_ro(void *payload,
+                      void (*fn)(void *, uint64_t)) const override {
+    if constexpr (!std ::is_same_v<drjit ::TraversableBase,
+                                   drjit ::TraversableBase>)
+        drjit ::TraversableBase ::traverse_1_cb_ro(payload, fn);
+
+    DR_TRAVERSE_MEMBER_RO(m_value)
+    DR_TRAVERSE_MEMBER_RO(m_shape_opaque)
+    DR_TRAVERSE_MEMBER_RO(m_inv_resolution)
+}
+void traverse_1_cb_rw(void *payload,
+                      uint64_t (*fn)(void *, uint64_t)) override {
+    if constexpr (!std ::is_same_v<drjit ::TraversableBase,
+                                   drjit ::TraversableBase>)
+        drjit ::TraversableBase ::traverse_1_cb_rw(payload, fn);
+
+    DR_TRAVERSE_MEMBER_RW(m_value)
+    DR_TRAVERSE_MEMBER_RW(m_shape_opaque)
+    DR_TRAVERSE_MEMBER_RW(m_inv_resolution)
+}
 };
 
 NAMESPACE_END(drjit)
