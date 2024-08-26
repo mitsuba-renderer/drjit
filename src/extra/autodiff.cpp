@@ -3096,8 +3096,8 @@ public:
 
         Variable *target = state[m_output_indices[0]];
 
-        if (m_input_indices[0]) {
-            JitVar &source_grad = state[m_input_indices[0]]->grad;
+        if (m_inputs[0]) {
+            JitVar &source_grad = state[m_inputs[0]]->grad;
             if (source_grad.valid())
                 target->accum(source_grad, target->size);
         }
