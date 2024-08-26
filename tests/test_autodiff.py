@@ -2034,3 +2034,21 @@ def test129_packet_scatter_add_bwd(t, enabled):
         dr.backward_to(x, y)
         assert dr.all(x.grad == [0,1,2,3,4,5,6,7])
         assert dr.all(dr.all(y.grad == [4,5,6,7]))
+
+
+@pytest.mark.parametrize("enabled", [True, False])
+@pytest.test_arrays('is_diff,float,shape=(4, *),-quat')
+def test130_packet_scatter_fwd_target_disabled(t, enabled):
+    with dr.scoped_set_flag(dr.JitFlag.PacketOps, enabled):
+        Float = dr.value_t(t)
+        UInt32 = dr.uint32_array_t(Float)
+        x = dr.zeros(Float, 8)
+
+        y = t([1, 2], [3, 4], [5, 6], [7, 8])
+        dr.enable_grad(y)
+        y.grad = y * 10
+
+        dr.scatter(x, y, index=UInt32(0, 1))
+        xg = dr.forward_to(x)
+
+        assert dr.all(xg == [10, 30, 50, 70, 20, 40, 60, 80])
