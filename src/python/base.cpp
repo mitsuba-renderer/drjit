@@ -908,6 +908,18 @@ nb::object reinterpret_array(nb::type_object_t<dr::ArrayBase> t, nb::handle_t<dr
         }
     };
 
+    struct ReinterpretAsClass : Reinterpret {
+        nb::type_object_t<dr::ArrayBase> target_tp;
+
+        ReinterpretAsClass(VarType source_type, nb::type_object_t<dr::ArrayBase> t)
+            : Reinterpret(source_type, (VarType) supp(t).type), target_tp(t) {}
+
+        nb::handle transform_type(nb::handle tp) const override {
+            (void) tp; // unused
+            return target_tp;
+        }
+    };
+
     ArrayMeta mt = supp(t), ms = supp(h.type());
     if (mt == ms)
         return nb::borrow(h);
@@ -920,8 +932,13 @@ nb::object reinterpret_array(nb::type_object_t<dr::ArrayBase> t, nb::handle_t<dr
     if (ms != mt)
         nb::raise("drjit.reinterpret_array(): input and target type are incompatible.");
 
-    Reinterpret r(source_type, target_type);
-    return transform("drjit.reinterpret_array", r, h);
+    if (!mt.is_class) {
+        Reinterpret r(source_type, target_type);
+        return transform("drjit.reinterpret_array", r, h);
+    } else {
+        ReinterpretAsClass r(source_type, t);
+        return transform("drjit.reinterpret_array", r, h);
+    }
 }
 
 static VarState get_state(nb::handle h_) {

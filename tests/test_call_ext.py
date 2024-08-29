@@ -955,3 +955,19 @@ def test20_partial_output_eval(t, symbolic):
     zo = xo + yo
     assert dr.all(xo == t(10, 12, 0, 21, 24))
     assert dr.all(zo == t(9, 10, 0, 24, 28))
+
+
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+def test21_reinterpret_class(t):
+    pkg = get_pkg(t)
+
+    A, B, BasePtr = pkg.A, pkg.B, pkg.BasePtr
+    a, b = A(), B()
+
+    U = dr.uint32_array_t(t)
+
+    uint32_rep = dr.reinterpret_array(U, BasePtr(a, a, a, b, b))
+    assert dr.all(uint32_rep == [1, 1, 1, 2, 2])
+
+    baseptr_rep = dr.reinterpret_array(BasePtr, uint32_rep)
+    assert isinstance(baseptr_rep, BasePtr)
