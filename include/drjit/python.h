@@ -561,31 +561,45 @@ template <typename T> void bind_cast(ArrayBinding &b) {
     using Float32 = float32_array_t<T>;
     using Float64 = float64_array_t<T>;
 
-    b.cast = (ArrayBinding::Cast) +[](const ArrayBase *a, VarType vt, bool reinterpret, T *b) {
-        if (!reinterpret) {
-            switch (vt) {
-                case VarType::Int32:   new (b) T(*(const Int32 *)   a); break;
-                case VarType::UInt32:  new (b) T(*(const UInt32 *)  a); break;
-                case VarType::Int64:   new (b) T(*(const Int64 *)   a); break;
-                case VarType::UInt64:  new (b) T(*(const UInt64 *)  a); break;
-                case VarType::Float16: new (b) T(*(const Float16 *) a); break;
-                case VarType::Float32: new (b) T(*(const Float32 *) a); break;
-                case VarType::Float64: new (b) T(*(const Float64 *) a); break;
-                default: nanobind::raise("Unsupported cast.");
+    if constexpr (!T::IsClass) {
+        b.cast = (ArrayBinding::Cast) +[](const ArrayBase *a, VarType vt, bool reinterpret, T *b) {
+            if (!reinterpret) {
+                switch (vt) {
+                    case VarType::Int32:   new (b) T(*(const Int32 *)   a); break;
+                    case VarType::UInt32:  new (b) T(*(const UInt32 *)  a); break;
+                    case VarType::Int64:   new (b) T(*(const Int64 *)   a); break;
+                    case VarType::UInt64:  new (b) T(*(const UInt64 *)  a); break;
+                    case VarType::Float16: new (b) T(*(const Float16 *) a); break;
+                    case VarType::Float32: new (b) T(*(const Float32 *) a); break;
+                    case VarType::Float64: new (b) T(*(const Float64 *) a); break;
+                    default: nanobind::raise("Unsupported cast.");
+                }
+            } else {
+                switch (vt) {
+                    case VarType::Int32:   new (b) T(reinterpret_array<T>(*(const Int32 *)   a)); break;
+                    case VarType::UInt32:  new (b) T(reinterpret_array<T>(*(const UInt32 *)  a)); break;
+                    case VarType::Int64:   new (b) T(reinterpret_array<T>(*(const Int64 *)   a)); break;
+                    case VarType::UInt64:  new (b) T(reinterpret_array<T>(*(const UInt64 *)  a)); break;
+                    case VarType::Float16: new (b) T(reinterpret_array<T>(*(const Float16 *) a)); break;
+                    case VarType::Float32: new (b) T(reinterpret_array<T>(*(const Float32 *) a)); break;
+                    case VarType::Float64: new (b) T(reinterpret_array<T>(*(const Float64 *) a)); break;
+                    default: nanobind::raise("Unsupported cast.");
+                }
             }
-        } else {
-            switch (vt) {
-                case VarType::Int32:   new (b) T(reinterpret_array<T>(*(const Int32 *)   a)); break;
-                case VarType::UInt32:  new (b) T(reinterpret_array<T>(*(const UInt32 *)  a)); break;
-                case VarType::Int64:   new (b) T(reinterpret_array<T>(*(const Int64 *)   a)); break;
-                case VarType::UInt64:  new (b) T(reinterpret_array<T>(*(const UInt64 *)  a)); break;
-                case VarType::Float16: new (b) T(reinterpret_array<T>(*(const Float16 *) a)); break;
-                case VarType::Float32: new (b) T(reinterpret_array<T>(*(const Float32 *) a)); break;
-                case VarType::Float64: new (b) T(reinterpret_array<T>(*(const Float64 *) a)); break;
-                default: nanobind::raise("Unsupported cast.");
+        };
+    } else {
+        // Only allow reinterpreting Class arrays to UInt32
+        b.cast = (ArrayBinding::Cast) +[](const ArrayBase *a, VarType vt, bool reinterpret, T *b) {
+            if (!reinterpret) {
+                nanobind::raise("Unsupported cast.");
+            } else {
+                if (vt == VarType::UInt32)
+                    new (b) T(reinterpret_array<T>(*(const UInt32 *)  a));
+                else
+                    nanobind::raise("Unsupported cast.");
             }
-        }
-    };
+        };
+    }
 }
 
 inline void disable_cast(ArrayBinding &b) {
@@ -856,7 +870,7 @@ nanobind::object bind_array(ArrayBinding &b, nanobind::handle scope = {},
     } else {
         bind_base<T>(b);
 
-        if constexpr (T::IsArithmetic && T::Depth == 1 && !is_special_v<T>)
+        if constexpr ((T::IsArithmetic || T::IsClass) && T::Depth == 1 && !is_special_v<T>)
             bind_cast<T>(b);
 
         if constexpr (T::Depth == 1 && T::IsDynamic) {
@@ -898,10 +912,11 @@ nanobind::object bind_array(ArrayBinding &b, nanobind::handle scope = {},
     if constexpr (T::IsComplex)
         bind_complex<T>(b);
 
-    if constexpr (!T::IsArithmetic) {
+    if constexpr (!T::IsArithmetic)
         disable_arithmetic(b);
+
+    if constexpr (!T::IsArithmetic && !T::IsClass)
         disable_cast(b);
-    }
 
     if constexpr (!T::IsIntegral)
         disable_int_arithmetic(b);
