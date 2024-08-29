@@ -17,7 +17,7 @@ struct TraversableBase : nanobind::intrusive_base {
 
 template <typename T> struct is_ref_t<nanobind::ref<T>> : std::true_type {};
 template <typename T> struct is_ref_t<std::unique_ptr<T>> : std::true_type {};
-template <typename T> struct is_iterable_t<std::vector<T>> : std::true_type {};
+// template <typename T> struct is_iterable_t<std::vector<T>> : std::true_type {};
 
 #define DR_TRAVERSE_MEMBER_RO(member)                                          \
     drjit::log_member_open(false, #member);                                      \

@@ -172,7 +172,13 @@ template <typename T> static constexpr bool is_dynamic_traversable_v =
     is_jit_v<T> && is_dynamic_array_v<T> && is_vector_v<T> && !is_tensor_v<T>;
 
 template <typename T> struct is_ref_t: std::false_type{};
-template <typename T> struct is_iterable_t: std::false_type{};
+
+template <typename T, typename = void>
+struct is_iterable_t : std::false_type {};
+template <typename T>
+struct is_iterable_t<T, std::void_t<decltype(std::declval<T &>().begin()),
+                                    decltype(std::declval<T &>().end())>>
+    : std::true_type {};
 
 template <typename T> DRJIT_INLINE auto fields(T &&v) {
     return traversable_t<T>::fields(v);
