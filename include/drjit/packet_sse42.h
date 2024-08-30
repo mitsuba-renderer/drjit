@@ -1821,8 +1821,8 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(16)
 
 #if defined(DRJIT_X86_AVX2)
     template <typename Index, typename Mask>
-    static DRJIT_INLINE Derived gather_(const void *ptr, const Index &index, const Mask &mask, bool, ReduceMode) {
-        return Base::gather_(ptr, index, mask & mask_(), false);
+    static DRJIT_INLINE Derived gather_(const void *ptr, const Index &index, const Mask &mask, ReduceMode mode) {
+        return Base::gather_(ptr, index, mask & mask_(), mode);
     }
 #endif
 
