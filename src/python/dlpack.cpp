@@ -144,7 +144,12 @@ static nb::ndarray<> dlpack(nb::handle_t<ArrayBase> h, bool force_cpu, nb::handl
                 ad_scope_enter(drjit::ADScope::Resume, 0, nullptr, false);
                 s2.init_index(ad_index | new_index, inst_ptr(tmp));
                 ad_scope_leave(false);
-                nb::inst_replace_move(owner, tmp);
+                nb::inst_mark_ready(tmp);
+
+                if (backend == JitBackend::CUDA && force_cpu)
+                    owner = std::move(tmp);
+                else
+                    nb::inst_replace_move(owner, tmp);
             }
         } else {
             nb::object arr = nb::borrow(h);
