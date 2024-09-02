@@ -819,3 +819,29 @@ def test29_flipped_non_tensor_output_bwd(t, config):
 
     (out1 + out2 + out3).backward()
     assert torch.all(x.grad == torch.tensor([1, 2, 3], dtype=dt))
+
+
+@pytest.mark.parametrize('config', configs_torch)
+@pytest.test_arrays('is_diff,float,shape=(*)')
+def test30_nested(t, config):
+    @wrap(config)
+    def add(x, y):
+        return x + y
+
+    @wrap_flipped(config)
+    def test_fn(x, y):
+        return x * add(x, y)
+
+    import torch
+    dt = torch_dtype(t)
+    x = torch.arange(3, dtype=dt)
+    y = x * 4
+    x.requires_grad = True
+    y.requires_grad = True
+
+    out = test_fn(x, y)
+    assert torch.all(out == torch.tensor([0, 5, 20], dtype=dt))
+
+    torch.autograd.backward(out, torch.tensor([1, 2, 3], dtype=dt))
+    assert torch.all(x.grad == torch.tensor([0, 12, 36], dtype=dt))
+    assert torch.all(y.grad == torch.tensor([0, 2, 6], dtype=dt))
