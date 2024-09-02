@@ -101,11 +101,16 @@ def test08_roundtrip_vector_jax(t):
 @pytest.test_arrays('tensor, -bool, -float16, -uint64, -uint32')
 def test09_inplace_numpy(t):
     pytest.importorskip("numpy")
-    a = dr.empty(t, shape=(3, 3, 3))
+    a = dr.zeros(t, shape=(3, 3, 3))
     x = a.numpy()
     x[0,0,0] = 1
 
-    assert a[0,0,0] == x[0,0,0]
+    backend = dr.backend_v(a)
+    if backend == dr.JitBackend.LLVM or backend == dr.JitBackend.Invalid:
+        assert a[0,0,0] == x[0,0,0]
+    elif backend == dr.JitBackend.CUDA:
+        assert a[0,0,0] == 0
+        assert x[0,0,0] == 1
 
 # Test inplace modifications from torch (tensors & dynamic array)
 @pytest.test_arrays('tensor, -bool, -float16, -uint64, -uint32')
