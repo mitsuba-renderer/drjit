@@ -374,6 +374,7 @@ torch_wrapper = None
 torch_desc_o = None
 
 def create_torch_wrapper():
+    from torch import set_grad_enabled as torch_set_grad_enabled
     from torch.autograd import Function, function
 
     class TorchWrapper(Function):
@@ -396,7 +397,10 @@ def create_torch_wrapper():
 
             # Run the function, flatten the output PyTree and convert its members to tensors
             global torch_desc_o
-            torch_desc_o, *output = flatten(func(*args, **kwargs))
+            with torch_set_grad_enabled(True):
+                # Torch autograd tracing is disabled within `Function.forward`
+                # we turn it back on here in case func itself uses torch
+                torch_desc_o, *output = flatten(func(*args, **kwargs))
             output = wrap_into_tensor(output)
 
             # Stash inputs and outputs for later use
