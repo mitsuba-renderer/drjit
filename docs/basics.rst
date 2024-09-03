@@ -148,7 +148,9 @@ The library implements common transcendental functions:
 - :py:func:`dr.lgamma() <lgamma>`: Gamma function.
 
 Most of these support real and complex-valued inputs. A subset accepts
-quaternions. Integer arrays further support the following bit-level operations.
+quaternions (see the section on :ref:`array types <special_arrays>` for
+details). Integer arrays further support the following bit-level operations
+
 
 - :py:func:`dr.lzcnt() <lzcnt>`, :py:func:`dr.tzcnt() <tzcnt>`:
   Leading/trailing zero count.
@@ -210,8 +212,8 @@ with positions specified by an index array. For example:
    [20, 10]
 
 Note how the operation takes the desired output type as first argument. We can
-also gather nested arrays (stored in C-style order) by specifying a different
-output type.
+also gather nested arrays (assumed to be flattened in the source 1D
+array using C-style order) by requesting a different result type.
 
 .. code-block:: pycon
 

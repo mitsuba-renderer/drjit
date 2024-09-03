@@ -29,7 +29,7 @@ with large data-parallel regions. A good example of this are `Monte Carlo
 parallel sample evaluation (indeed, the reason why this project was originally
 created was to provide the foundation of `Mitsuba 3
 <https://mitsuba.readthedocs.io/en/latest/>`__, a differentiable Monte Carlo
-renderer). Over time, Dr.Jit has become a general tool that also supports other
+renderer). Over time, Dr.Jit has become a general tool that supports many other
 kinds of parallel workloads.
 
 This documentation centers around the Python interface, but Dr.Jit can also be
@@ -74,16 +74,16 @@ While this code can be adapted into a superficially similar Dr.Jit program
 there are fundamental differences between the two:
 
 1. In NumPy, operations like ``np.linspace``, ``np.sin``, ``**``, etc.,
-   load and store memory-backed arrays. Accessing memory is slow, which turns
-   this part into a bottleneck rather than the actual math.
+   load and store memory-backed arrays. Accessing memory is slow, hence
+   this turns into the main bottleneck rather than the actual math.
 
 2. Dr.Jit *traces* the computation instead of executing it right away. This
    means that it *pretends* to execute until reaching the last line, at which
    point it launches a kernel combining all the collected operations. Not only
-   does this avoid loading and storing temporaries: it also makes it easy to
-   parallelize the program on compute accelerators.
+   does this avoid loading and storing intermediate results: it also makes it
+   easy to parallelize the program on compute accelerators.
 
-This is just a toy example, but the idea that it demonstrates is general.
+This is just a toy example, but the idea that it demonstrates is far more general.
 Dr.Jit can trace large and complicated programs with side effects, loops,
 conditionals, polymorphic indirection, atomic memory operations, texture
 fetches, ray tracing operations, etc. The principle is always the same: the
@@ -100,7 +100,7 @@ for the JAX XLA backend) and what it does is simple: it really just captures
 and later replays computation in parallel without trying to be overly clever
 about it.
 
-With this added context, let's revisit the previous example line by line to
+With this added context, let's revisit the previous example to
 examine the differences in more detail. The first line imports the library into
 an abbreviated ``dr`` namespace containing all functions.
 
@@ -138,7 +138,7 @@ automatically vectorizes and parallelizes along this added dimension. Basically
 you write code that "looks" like a scalar program, and Dr.Jit will efficiently
 run it many times in parallel. In contrast to tensor-based systems, there is no
 ambiguity about how this parallelization should take place. Because of the
-typed nature of Dr.Jit, operations like :py:func:`drjit.linspace`
+typed nature of Dr.Jit, many operations (e.g., :py:func:`drjit.linspace`)
 take the desired return type as a mandatory first argument.
 
 Let's now look at how *tracing* can be used to assemble a parallel
@@ -154,13 +154,13 @@ can be thought of as expanding into device code equivalent to:
 
    a = malloc(...) # reserve memory for output array 'a'
 
-   # Parallel loop (multi-core + SIMD)
+   # Accelerate via multi-core + SIMD parallelism:
    for i in range(1000000):
        a[i] = i * (1.0 / 999999.0)
 
-However, our original program contained a few more lines of code, so this
-device program is not yet complete. Continuing execution in Python *appends*
-further instructions to the body of the parallel loop. The next line of the
+Recall that our original program contained a few more lines of code, so this
+device program is still incomplete. Continuing execution in Python conceptually
+*appends* further instructions to the parallel loop. The next line of the
 original Python program was
 
 .. code-block:: python
@@ -174,7 +174,7 @@ efficient device program that avoids storing this intermediate variable altogeth
 
    b = malloc(...) # reserve memory for output array 'b'
 
-   # Parallel loop (multi-core + SIMD)
+   # Accelerate via multi-core + SIMD parallelism:
    for i in range(1000000):
        a_temp = i * (1.0 / 999999.0)
        b[i] = sin(a_temp * a_temp)
@@ -185,8 +185,9 @@ The final line of the original Python program
 
    print(dr.mean(b))
 
-performs a reduction that adds values computed by different threads. At this
-point, Dr.Jit compiles and launches a kernel containing the previous steps.
+performs a reduction that adds values computed by different threads. It is at
+this point that Dr.Jit compiles and launches a kernel containing the previous
+steps.
 
 Metaprogramming
 ---------------
@@ -213,7 +214,7 @@ wrote code in Python (called the *metaprogram*) that subsequently generated
 Dr.Jit took care of partitioning this generated program into computational
 units (called *kernels*) and piping inputs/outputs to them as needed. The
 program and metaprogram often do the essentially same thing, in which case the
-difference between the two can be subtle.
+difference between the two can be quite subtle.
 
 However, the program and metaprogram could also be different. For example,
 let's modify the code so that it asks the user to enter a number on the

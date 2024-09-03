@@ -24,13 +24,13 @@ Here is what's new:
     observed speedups by a factor of ~10-20×). This should help in situations
     where performance is limited by tracing rather than kernel evaluation.
 
+  - Thorough type annotations improve static type checking and code
+    completion in editors like `VS Code <https://code.visualstudio.com>`__.
+
   - Dr.Jit can now target Python 3.12's `stable ABI
     <https://docs.python.org/3/c-api/stable.html#stable-abi>`__. This means
     that binary wheels will work on future versions of Python without
     recompilation.
-
-  - Thorough type annotations improve static type checking and code
-    completion in editors like `VS Code <https://code.visualstudio.com>`__.
 
 - **Natural syntax**: vectorized loops and conditionals can now be expressed
   using natural Python syntax. To see what this means, consider the following

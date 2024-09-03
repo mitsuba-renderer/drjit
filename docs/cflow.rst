@@ -19,9 +19,9 @@ number of bits set to *1*) per element of an integer sequence:
    def popcnt(i: Int):
        '''Count the number of active bits in ``i``'''
        j = Int(0)
-       while i != 0:
-           j += i & 1
-           i = i // 2
+       while i != 0:  # While there are remaining active bits
+           j += i & 1 # Increment counter 'j' if current bit active
+           i = i // 2 # Shift bits of 'i' to the right
        return j
 
    print(popcnt(dr.arange(Int, 1024)))
@@ -59,7 +59,7 @@ Annotating the function with the :py:func:`@dr.syntax <drjit.syntax>` decorator
    def popcnt(i: Int):
        ...
 
-The script now terminates and prints the following output:
+The script now terminates and prints the following correct output:
 
 .. code-block:: pycon
 
@@ -82,7 +82,7 @@ In the example above, it does this by
 3. performing a call to :py:func:`dr.while_loop() <drjit.while_loop>` with all
    of this information.
 
-This produces the following equivalent code:
+This produces code equivalent to:
 
 .. code-block:: python
 
@@ -95,22 +95,25 @@ This produces the following equivalent code:
        )
        return j
 
-In the same manner, ``if`` statements will be turned into calls to
-:py:func:`dr.if_stmt() <drjit.if_stmt>`. The main feature of
-:py:func:`@dr.syntax <drjit.syntax>` is to free users from having to perform
-this transformation themselves.
+The function :py:func:`dr.while_loop() <drjit.while_loop>` *generalizes* the
+built-in Python ``while`` loop: when the condition is a Python ``bool``, it
+doesn't do anything special and just reproduces the normal behavior. When the
+loop condition is an array, it runs the loop *separately for each element*,
+potentially for different numbers of iterations.
 
-The functions :py:func:`dr.while_loop() <drjit.while_loop>` and
-:py:func:`dr.if_stmt() <drjit.if_stmt>` *generalize* their Python counterparts:
-when the condition is a Python ``bool``, they don't do anything special
-and just reproduce the normal behavior. When the condition is an array, the
-conditional or loop is applied separately per element of the array.
+In the same manner, ``if`` statements will be turned into calls to
+:py:func:`dr.if_stmt() <drjit.if_stmt>` that serves the same purpose for
+conditionals.
+
+The main feature of :py:func:`@dr.syntax <drjit.syntax>` is to free users from
+having to perform this transformation themselves.
 
 Symbolic mode
 -------------
 
-Tracing control flow has certain limitations. Let's make a small change to
-illustrate one of them.
+The default way in which Dr.Jit handles control flow is called *symbolic mode*,
+which has certain limitations. Let's make a small change to the code from
+before to illustrate one of them.
 
 .. code-block:: python
    :emphasize-lines: 6
@@ -151,7 +154,7 @@ To understand *why* this is forbidden, recall that Dr.Jit embraces the idea of
 understand how it modifies the variables ``i`` and ``j``, but without doing any
 actual computation. Even the number of loop iterations is unknown at this
 point. All of these details are postponed to when the traced computation
-actually runs on the target device.
+actually runs on the target device (e.g., the GPU).
 
 The implication of this design is that ``i`` and ``j`` are *symbols* that don't
 have explicit values within the loop body, which is why the ``print()``
@@ -297,6 +300,7 @@ that target multiple possible targets. Here is an example:
 
 .. code-block:: python
 
+   # A sequence of fucntions with the same argument and return value signature
    def f1(a, b, c):
       # ...
       return x, y
@@ -305,11 +309,10 @@ that target multiple possible targets. Here is an example:
       # ...
       return x, y
 
-   # Call either 'f1' or 'f2' based on 'index', an integer array with values 0 and 1
    x, y = dr.switch(
-      targets = [f1, f2],
-      index = index,
-      a, b, c
+      targets=[f1, f2], # <-- call functions from the provided list ('f1' or 'f2')
+      index=index,      # <-- choose based on the integer array 'index' (indices must be < 2 in this example)
+      a, b, c           # <-- function parameters to forward to 'f1' and 'f2'
    )
 
 The reference of :py:func:`dr.switch() <drjit.switch>` and
@@ -334,9 +337,12 @@ flow.
               x = g(x)
           return x
 
-   Since Dr.Jit only traces ``while`` loops with array-valued conditions, this
-   function actually unrolls the computation graph of ``g`` 1000 times and is
-   equivalent to
+   This will likely not yield the expected behavior: first, Dr.Jit's
+   :py:func:`@dr.syntax <drjit.syntax>` decorator ignores ``for`` loops and
+   only considers ``while`` loops. Furthermore, it only processes loops with
+   array-valued loop stopping conditions, which is not the case here.
+   Therefore, this function actually unrolls the computation graph of ``g``
+   1000 times and is equivalent to
 
    .. code-block:: python
 
@@ -391,7 +397,7 @@ flow.
    :py:func:`dr.while_loop() <drjit.while_loop>` and :py:func:`dr.if_stmt()
    <drjit.if_stmt>`.
 
-   These functions then traverse local variables to track their evolution
+   This involves traversing local variables to detect potential changes
    during the loop or conditional statement. In the ``Accum.add_positive()``
    example function below, both ``y`` and ``self`` are automatically identified
    as such local variables.
@@ -402,12 +408,14 @@ flow.
 
       class Accum:
           def __init__(self):
+              """Create a zero-initialized accumulator"""
               self.value = Int(0)
 
           @dr.syntax
-          def add_positive(self, y: Int):
-              if y > 0:
-                  self.value += y
+          def add_positive(self, x: Int):
+              """Accumulate 'x', but only if it is positive"""
+              if x > 0:
+                  self.value += x
 
       a = Accum()
       a.add_positive(Int(1, -1))
@@ -419,19 +427,20 @@ flow.
    the conditional nature of the change of ``self.value`` and produces the
    incorrect output ``[1, -1]`` instead of the expected ``[1, 0]``.
 
-   Besides Dr.Jit arrays, :ref:`PyTrees <pytrees>` can consist of arbitrarily
-   nested Python containers (``list``, ``tuple``, ``dict``), `data classes
+   So what is a :ref:`PyTree <pytrees>`? Besides Dr.Jit arrays, they can
+   consist of arbitrarily nested Python containers (``list``, ``tuple``,
+   ``dict``), `data classes
    <https://docs.python.org/3/library/dataclasses.html>`__, and custom classes
-   with a ``DRJIT_STRUCT`` annotation.
-   The two latter options can both fix the problem, e.g., by adding an
-   annotation to ``Accum`` that explaints its sub elements
+   with a ``DRJIT_STRUCT`` annotation. To fix the problem, we can, e.g., add a
+   ``DRJIT_STRUCT`` annotation to ``Accum`` to explain its sub-elements:
 
    .. code-block:: python
 
       class Accum:
           DRJIT_STRUCT = { 'value' : Int }
 
-   Alternatively, we can switch the implementation of ``Accum`` to a data class.
+   Alternatively, we can switch the implementation of ``Accum`` to a `data
+   class <https://docs.python.org/3/library/dataclasses.html>`__:
 
    .. code-block:: python
       :emphasize-lines: 3, 5

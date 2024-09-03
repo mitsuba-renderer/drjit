@@ -5,4 +5,6 @@
 Benchmarking
 ============
 
+:ref:`kernel caching <caching>`
+
 TBD

@@ -65,7 +65,7 @@ The following operations all exhibit this behavior:
 
       a = dr.empty(Float, 3)
       dr.scatter(target=a, value=Float(0, 1, 2), index=UInt32(2, 1, 0)) # <-- traced
-      b = a + 1 # <-- evaluated
+      b = a + 1 # <-- evaluates 'a' and traces the addition
 
    Here, evaluation enforces an ordering constraint that is in general needed
    to ensure correctness in a parallel execution context.
@@ -205,6 +205,8 @@ therefore looks as follows:
 This behavior is transparent, which means that no special steps need to be
 taken on the user's side (e.g., to wait for computation to finish or to
 synchronize with the queue---Dr.Jit will do so automatically if needed).
+
+.. _caching:
 
 Kernel caching
 --------------
