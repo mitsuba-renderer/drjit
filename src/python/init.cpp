@@ -26,6 +26,11 @@
 /// Forward declaration
 static bool array_init_from_seq(PyObject *self, const ArraySupplement &s, PyObject *seq);
 
+/// Convenience function to skip costly examinations of common types
+static bool is_builtin(PyTypeObject *tp) {
+    return tp == &PyLong_Type || tp == &PyFloat_Type || tp == &PyBool_Type;
+}
+
 /// Constructor for all dr.ArrayBase subclasses (except tensors)
 int tp_init_array(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
     PyTypeObject *self_tp = Py_TYPE(self);
@@ -128,7 +133,7 @@ int tp_init_array(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
             // Try to construct from an instance created by another
             // array programming framework
             nb::object converted_complex_scalar;
-            if (is_drjit_tensor || (!arg_is_drjit && nb::ndarray_check(arg))) {
+            if (is_drjit_tensor || (!arg_is_drjit && !is_builtin(arg_tp) && nb::ndarray_check(arg))) {
                 // For scalar types we want to rely on broadcasting below
                 if (is_drjit_tensor || meta_get(arg).ndim) {
                     // Import flattened array in C-style ordering
@@ -672,7 +677,7 @@ int tp_init_tensor(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
         nb::object args_2;
         if (!shape) {
             nb::object flat;
-            if (!is_drjit_type(array_tp) && nb::ndarray_check(array)) {
+            if (!is_drjit_type(array_tp) && !is_builtin(array_tp) && nb::ndarray_check(array)) {
                 // Try to construct from an instance created by another
                 // array programming framework
                 flat = import_ndarray(s, array, &shape_vec);
