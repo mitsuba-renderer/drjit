@@ -677,7 +677,9 @@ int tp_init_tensor(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
         nb::object args_2;
         if (!shape) {
             nb::object flat;
-            if (!is_drjit_type(array_tp) && !is_builtin(array_tp) && nb::ndarray_check(array)) {
+            if(is_builtin(array_tp)){
+                flat = nb::borrow(array);
+            } else if (!is_drjit_type(array_tp) && nb::ndarray_check(array)) {
                 // Try to construct from an instance created by another
                 // array programming framework
                 flat = import_ndarray(s, array, &shape_vec);
