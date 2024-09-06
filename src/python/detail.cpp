@@ -271,6 +271,54 @@ void disable_py_tracing() {
     nb::module_::import_("sys").attr("settrace")(nb::none());
 }
 
+void traverse_py_cb_ro_impl(nb::handle self, nb::callable c){
+    struct PyTraverseCallback: TraverseCallback{
+        void operator()(nb::handle h) override{
+            auto index_fn = supp(h.type()).index;
+            if (index_fn)
+                operator()(index_fn(inst_ptr(h)));
+            }
+        void operator()(uint64_t index) override{
+            m_callback(index);
+        }
+        nb::callable m_callback;
+
+        PyTraverseCallback(nb::callable c): m_callback(c){}
+    };
+
+    PyTraverseCallback traverse_cb(std::move(c));
+
+    auto dict = nb::borrow<nb::dict>(nb::getattr(self, "__dict__"));
+
+    for (auto value: dict.values()){
+        traverse("traverse_py_cb_ro", traverse_cb, value);
+    }
+}
+
+void traverse_py_cb_rw_impl(nb::handle self, nb::callable c) {
+    struct PyTraverseCallback : TransformCallback {
+        void operator()(nb::handle h1, nb::handle h2) override {
+            const ArraySupplement &s = supp(h1.type());
+            if (s.index)
+                s.init_index(operator()(s.index(inst_ptr(h1))), inst_ptr(h2));
+        }
+        uint64_t operator()(uint64_t index) override {
+            return nb::cast<uint64_t>(m_callback(index));
+        }
+        nb::callable m_callback;
+
+        PyTraverseCallback(nb::callable c) : m_callback(c) {}
+    };
+
+    PyTraverseCallback traverse_cb(std::move(c));
+
+    auto dict = nb::borrow<nb::dict>(nb::getattr(self, "__dict__"));
+
+    for (auto value : dict.values()) {
+        transform("traverse_py_cb_rw", traverse_cb, value);
+    }
+}
+
 void export_detail(nb::module_ &) {
     nb::module_ d = nb::module_::import_("drjit.detail");
 
@@ -326,6 +374,9 @@ void export_detail(nb::module_ &) {
      .def("new_scope", &jit_new_scope, "backend"_a, doc_detail_new_scope)
      .def("scope", &jit_scope, "backend"_a, doc_detail_scope)
      .def("set_scope", &jit_set_scope, "backend"_a, "scope"_a, doc_detail_set_scope);
+
+    d.def("traverse_py_cb_ro", &traverse_py_cb_ro_impl);
+    d.def("traverse_py_cb_rw", traverse_py_cb_rw_impl);
 
     trace_func_handle = d.attr("trace_func");
 }

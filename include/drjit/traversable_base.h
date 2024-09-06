@@ -1,6 +1,7 @@
 
 #pragma once
 
+#include "drjit-core/macros.h"
 #include "array_traverse.h"
 #include "nanobind/intrusive/counter.h"
 #include "nanobind/intrusive/ref.h"
@@ -62,5 +63,26 @@ void log_member_close(){
 public:                                                                        \
     DR_TRAVERSE_CB_RO(Base, __VA_ARGS__)                                       \
     DR_TRAVERSE_CB_RW(Base, __VA_ARGS__)
+
+#define DR_TRAMPOLINE_TRAVERSE_CB(Base)                                        \
+public:                                                                        \
+    void traverse_1_cb_ro(void *payload, void (*fn)(void *, uint64_t))         \
+        const override {                                                       \
+        if constexpr (!std ::is_same_v<Base, drjit ::TraversableBase>)      \
+            Base ::traverse_1_cb_ro(payload, fn);                              \
+        drjit::traverse_py_cb_ro(this, payload, fn);                           \
+    }                                                                          \
+    void traverse_1_cb_rw(void *payload, uint64_t (*fn)(void *, uint64_t))     \
+        override {                                                             \
+        if constexpr (!std ::is_same_v<Base, drjit ::TraversableBase>)      \
+            Base ::traverse_1_cb_rw(payload, fn);                              \
+        drjit::traverse_py_cb_rw(this, payload, fn);                           \
+    }
+
+#if defined(_MSC_VER)
+#  define DRJIT_EXPORT                 __declspec(dllexport)
+#else
+#  define DRJIT_EXPORT                 __attribute__ ((visibility("default")))
+#endif
 
 NAMESPACE_END(drjit)
