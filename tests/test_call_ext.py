@@ -971,3 +971,30 @@ def test21_reinterpret_class(t):
 
     baseptr_rep = dr.reinterpret_array(BasePtr, uint32_rep)
     assert isinstance(baseptr_rep, BasePtr)
+
+
+@pytest.mark.parametrize("symbolic", [True, False])
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+def test22_bounds_checking_partial_registry(t, symbolic):
+    with dr.scoped_set_flag(dr.JitFlag.Debug, True):
+        pkg = get_pkg(t)
+
+        A, B, Base, BasePtr = pkg.A, pkg.B, pkg.Base, pkg.BasePtr
+        a1 = A()
+        b1 = B()
+        a2 = A()
+        b2 = B()
+
+        del a1, b1
+        gc.collect()
+        gc.collect()
+
+        c = BasePtr(b2, a2, None, a2, b2)
+
+        xi = t(1, 2, 8, 3, 4)
+        yi = t(5, 6, 8, 7, 8)
+
+        with dr.scoped_set_flag(dr.JitFlag.SymbolicCalls, symbolic):
+            xo, yo = c.f(xi, yi)
+        assert dr.all(xo == t(15, 12, 0, 14, 24))
+        assert dr.all(yo == t(1, -2, 0, -3, 4))
