@@ -566,9 +566,8 @@ nb::object ravel(nb::handle h, char order,
     JitBackend backend = JitBackend::None;
     VarType vt = VarType::Float32;
     bool is_dynamic = false, is_diff = false;
-    
 
-    if(tp.is(&PyFloat_Type) || tp.is(&PyLong_Type) || tp.is(&PyBool_Type)){
+    if (tp.is(&PyFloat_Type) || tp.is(&PyLong_Type) || tp.is(&PyBool_Type)) {
         return nb::borrow(h);
     } else if (is_drjit_type(tp)) {
         const ArraySupplement &s = supp(tp);
