@@ -91,7 +91,6 @@ DR_NB_BINOP(floor_divide, ArrayOp::FloorDiv)
 DR_NB_BINOP(lshift, ArrayOp::LShift)
 DR_NB_BINOP(rshift, ArrayOp::RShift)
 DR_NB_BINOP(remainder, ArrayOp::Mod)
-DR_NB_BINOP(and, ArrayOp::And)
 DR_NB_BINOP(or, ArrayOp::Or)
 DR_NB_BINOP(xor, ArrayOp::Xor)
 
@@ -281,6 +280,34 @@ static PyObject *nb_inplace_matrix_multiply(PyObject *h0, PyObject *h1) noexcept
         Py_INCREF(Py_NotImplemented);
         return Py_NotImplemented;
     }
+}
+
+template<ApplyMode Mode>
+PyObject *py_and(PyObject *h0, PyObject *h1) noexcept {
+    ArrayMeta lhs_meta = meta_get(h0);
+    ArrayMeta rhs_meta = meta_get(h1);
+
+    if (lhs_meta.type == rhs_meta.type ||
+        rhs_meta.type != (uint16_t) VarType::Bool) {
+        return apply<Mode>(ArrayOp::And, Py_nb_and,
+                           std::make_index_sequence<2>(), h0, h1);
+    } else {
+        // Zero out `False` indices in mask
+        nb::handle self_tp = nb::handle(h0).type();
+        nb::object zero =
+            array_module.attr("zeros")(self_tp, nb::handle(h0).attr("shape"));
+        nb::object result =
+            select(nb::borrow(h1), nb::borrow(h0), nb::borrow(zero));
+        return result.release().ptr();
+    }
+}
+
+static PyObject *nb_and(PyObject *h0, PyObject *h1) noexcept {
+    return py_and<Normal>(h0, h1);
+}
+
+static PyObject *nb_inplace_and(PyObject *h0, PyObject *h1) noexcept {
+    return py_and<InPlace>(h0, h1);
 }
 
 static PyObject *tp_richcompare(PyObject *h0, PyObject *h1, int slot) noexcept {

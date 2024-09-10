@@ -413,3 +413,17 @@ def test21_int_promote(t):
     Array2i = dr.int32_array_t(Array2b)
     assert type(dr.select(Array2b(True, False), 1, 2)) is Array2i
     assert type(dr.select(Array2b(True, False), -1, 1)) is Array2i
+
+@pytest.test_arrays('-bool, shape=(*)')
+def test22_and_mask(t):
+    arr = t(1, 2, 3, 4)
+    m = arr < 3
+
+    out = arr & m
+    assert dr.all(out == t(1, 2, 0, 0))
+
+    out = arr & [True, True, False, False]
+    assert dr.all(out == t(1, 2, 0, 0))
+
+    arr &= m
+    assert dr.all(arr == t(1, 2, 0, 0))
