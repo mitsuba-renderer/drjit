@@ -792,3 +792,15 @@ def test31_scatter_reduce_loop(t, mode, optimize, capsys):
 
         assert v[0] == 64 * 9
         assert dr.all(i == 10)
+
+@pytest.mark.parametrize("order", ["C", "F"])
+@pytest.test_arrays("is_jit, shape=(*)")
+def test32_ravel_builtin(t, order):
+
+    # Get value with builtin type of t
+    x = dr.ones(t, 1)[0]
+
+    y = dr.ravel(x, order = order)
+
+    assert type(x) is type(y)
+    assert x == y

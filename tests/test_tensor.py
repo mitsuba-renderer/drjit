@@ -551,3 +551,11 @@ def test16_implicit_conversion(t):
     assert dr.allclose(a.tensor(), b.tensor())
     c = tex_t([[[1],[2]], [[3],[4]]])
     assert dr.allclose(a.tensor(), c.tensor())
+
+@pytest.test_arrays('is_tensor, jit, float32')
+def test17_tensor_initialization(t):
+
+    x = t(1.0)
+
+    assert x.state == dr.VarState.Literal
+    
