@@ -174,6 +174,16 @@ ternary ("``?``") operator in C/C++.
    >>> dr.select(mask, -1, a)        # select(mask, true_value, false_value)
    [-1, -1, 0, 1, -1]
 
+Masks can also be applied to arrays in order to zero out the `False` indices by
+using the `&` operator.
+
+.. code-block:: pycon
+
+   >>> a = Float([1, 2, 3])
+   >>> mask = Bool([True, False, True])
+   >>> a & mask
+   [1, 0, 3]
+
 Reductions
 ----------
 
