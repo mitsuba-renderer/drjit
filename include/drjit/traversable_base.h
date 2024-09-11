@@ -22,10 +22,6 @@ template <typename T> struct is_ref_t<std::unique_ptr<T>> : std::true_type {};
 // template <typename T> struct is_iterable_t<std::vector<T>> : std::true_type {};
 
 #define DR_TRAVERSE_MEMBER_RO(member)                                          \
-    drjit::traverse_1_fn_ro(member, payload, fn);
-#define DR_TRAVERSE_MEMBER_RW(member)                                          \
-    drjit::traverse_1_fn_rw(member, payload, fn);
-#define DR_TRAVERSE_MEMBER_RO(member)                                          \
     drjit::log_member_open(false, #member);                                    \
     drjit::traverse_1_fn_ro(member, payload, fn);                              \
     drjit::log_member_close();
