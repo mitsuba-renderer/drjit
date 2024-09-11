@@ -22,26 +22,25 @@ template <typename T> struct is_ref_t<std::unique_ptr<T>> : std::true_type {};
 // template <typename T> struct is_iterable_t<std::vector<T>> : std::true_type {};
 
 #define DR_TRAVERSE_MEMBER_RO(member)                                          \
-    drjit::log_member_open(false, #member);                                      \
+    drjit::traverse_1_fn_ro(member, payload, fn);
+#define DR_TRAVERSE_MEMBER_RW(member)                                          \
+    drjit::traverse_1_fn_rw(member, payload, fn);
+#define DR_TRAVERSE_MEMBER_RO(member)                                          \
+    drjit::log_member_open(false, #member);                                    \
     drjit::traverse_1_fn_ro(member, payload, fn);                              \
     drjit::log_member_close();
 #define DR_TRAVERSE_MEMBER_RW(member)                                          \
-    drjit::log_member_open(true, #member);                                      \
+    drjit::log_member_open(true, #member);                                     \
     drjit::traverse_1_fn_rw(member, payload, fn);                              \
     drjit::log_member_close();
 
-void log_member_open(bool rw, const char *member){
+inline void log_member_open(bool rw, const char *member){
     jit_log(LogLevel::Debug, "%s%s{", rw ? "rw " : "ro ", member);
 }
 
-void log_member_close(){
+inline void log_member_close(){
     jit_log(LogLevel::Debug, "}");
 }
-
-// #define DR_TRAVERSE_MEMBER_RO(member)                                          \
-//     drjit::traverse_1_fn_ro(member, payload, fn);
-// #define DR_TRAVERSE_MEMBER_RW(member)                                          \
-//     drjit::traverse_1_fn_rw(member, payload, fn);
 
 #define DR_TRAVERSE_CB_RO(Base, ...)                                           \
     void traverse_1_cb_ro(void *payload, void (*fn)(void *, uint64_t))         \
