@@ -113,11 +113,10 @@ Linux.
    DYLD_INSERT_LIBRARIES=/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/15.0.0/lib/darwin/libclang_rt.asan_osx_dynamic.dylib python <...>
 
    # Linux
-   LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libasan.so.6:/usr/lib/x86_64-linux-gnu/libstdc++.so.6
+   LD_PRELOAD="$(gcc -print-file-name=libasan.so) $(gcc -print-file-name=libstdc++.so)"
 
 On Linux, both ``libasan`` and ``libstdc++`` or ``libc++`` need to be preloaded
-at the same time (be careful to use the right version of ``libasan`` in case
-multiple ones are installed on your system).
+at the same time.
 
 On macOS, the ``DYLD_INSERT_LIBRARIES`` environment variable isn't enough:
 ``libasan`` needs to be preloaded into the actual Python binary, and the
