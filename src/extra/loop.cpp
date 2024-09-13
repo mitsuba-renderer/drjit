@@ -483,6 +483,8 @@ public:
                 uint32_t ad_index = (uint32_t) (state[i] >> 32);
                 input.is_diff = true;
                 input.has_grad_in = add_index(m_backend, ad_index, true);
+                if(input.has_grad_in)
+                    input.grad_in_index = m_input_indices.size() - 1;
                 input.grad_in_offset = (uint32_t) m_diff_count++;
             }
 
@@ -805,10 +807,8 @@ public:
                 continue;
 
             if (in.has_grad_in) {
-                ad_accum_grad(
-                    combine(m_input_indices[in.grad_in_offset]),
-                    (uint32_t) m_state[offset]
-                );
+                ad_accum_grad(combine(m_input_indices[in.grad_in_index]),
+                              (uint32_t) m_state[offset]);
             }
 
             offset++;
@@ -840,7 +840,8 @@ private:
         /// Does the loop op. produce gradients for this variable?
         bool has_grad_out;
 
-        uint32_t grad_in_offset; // position in m_input_indices
+        uint32_t grad_in_index; // position in m_input_indices
+        uint32_t grad_in_offset; // offset in m_state
         uint32_t grad_out_offset; // position in m_output_indices
     };
     dr::vector<Input> m_inputs;

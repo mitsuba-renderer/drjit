@@ -1,5 +1,6 @@
 import drjit as dr
 import pytest
+import sys
 
 @pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
 @pytest.mark.parametrize("optimize", [True, False])
@@ -202,3 +203,40 @@ def test08_bwd_in_loop(t, mode):
             i += 1
 
     assert dr.all(x.grad == 4)
+
+@pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
+@pytest.test_arrays('float32,diff,shape=(*)')
+def test09_sum_loop_extra(t, mode): 
+    # Test the case, where extra loop state variables are added
+    # after the differentiable ones.
+
+    @dr.syntax
+    def loop(l: list, t):
+        mod = sys.modules[t.__module__]
+        Float = mod.Float
+        UInt = mod.UInt
+
+        y = Float(0)
+        i = dr.arange(UInt, 10)
+        dr.make_opaque(i)
+
+        while dr.hint(i < 10, mode = mode, max_iterations=-1):
+            y += l[1] + Float(i)
+            i += 1
+            
+        return y
+
+    # Construct an array so that the the m_inputs field in LoopOp looks like this:
+    # [{has_grad_in = false, ...}, {has_grad_in = true, ...}, {has_grad_in = false, ...}]
+    l = [t(1), t(2)]
+    dr.make_opaque(l[0])
+
+    dr.enable_grad(l[1])
+
+    for _ in range(10):
+        y = loop(l, t)
+
+        loss = dr.mean(dr.square(y))
+
+        dr.backward(loss)
+
