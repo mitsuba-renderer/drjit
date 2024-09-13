@@ -62,7 +62,6 @@ nb::object reduce_identity(nb::type_object_t<dr::ArrayBase> tp, ReduceOp op, uin
     ArrayMeta m { };
     m.backend = (uint64_t)JitBackend::None;
     m.ndim = 1;
-    m.is_diff = s.is_diff;
     m.type = s.type;
     m.shape[0] = DRJIT_DYNAMIC;
     nb::handle tp2 = meta_get_type(m);
