@@ -211,7 +211,7 @@ def test09_sum_loop_extra(t, mode):
     # after the differentiable ones.
 
     @dr.syntax
-    def loop(l: list, t):
+    def loop(l: list, t, mode):
         mod = sys.modules[t.__module__]
         Float = mod.Float
         UInt = mod.UInt
@@ -234,7 +234,7 @@ def test09_sum_loop_extra(t, mode):
     dr.enable_grad(l[1])
 
     for _ in range(10):
-        y = loop(l, t)
+        y = loop(l, t, mode)
 
         loss = dr.mean(dr.square(y))
 
