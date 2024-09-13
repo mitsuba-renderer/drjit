@@ -6,11 +6,15 @@ requires = [
 ]
 build-backend = "scikit_build_core.build"
 
+
 [project]
 name = "drjit"
 version = "1.0.0"
 description = "Dr.Jit: A Just-In-Time Compiler for Differentiable Rendering"
 readme = "README.rst"
+dependencies = [
+  "typing_extensions;python_version<\"3.11\""
+]
 requires-python = ">=3.8"
 authors = [
     { name = "Wenzel Jakob", email = "wenzel.jakob@epfl.ch" },
@@ -39,6 +43,7 @@ wheel.py-api = "cp312"
 cmake.verbose = true
 
 logging.level = "INFO"
+
 
 [tool.cibuildwheel]
 # Necessary to see build output from the actual compilation
