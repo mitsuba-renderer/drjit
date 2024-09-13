@@ -60,19 +60,19 @@ nb::object reduce_identity(nb::type_object_t<dr::ArrayBase> tp, ReduceOp op, uin
     const ArraySupplement &s = supp(tp);
 
     ArrayMeta m { };
-    m.backend = s.backend;
+    m.backend = (uint64_t)JitBackend::None;
     m.ndim = 1;
-    m.is_diff = s.is_diff;
     m.type = s.type;
     m.shape[0] = DRJIT_DYNAMIC;
     nb::handle tp2 = meta_get_type(m);
+    const ArraySupplement &s2 = supp(tp2);
 
     nb::object id_elem = nb::inst_alloc(tp2);
-    uint64_t value = jit_reduce_identity((VarType) s.type, op);
-    s.init_data(1, &value, inst_ptr(id_elem));
+    uint64_t value = jit_reduce_identity((VarType) s2.type, op);
+    s2.init_data(1, &value, inst_ptr(id_elem));
     nb::inst_mark_ready(id_elem);
 
-    nb::object result = nb::inst_alloc(tp2);
+    nb::object result = nb::inst_alloc(tp);
     s.init_const(size, false, id_elem[0].ptr(), inst_ptr(result));
     nb::inst_mark_ready(result);
 
