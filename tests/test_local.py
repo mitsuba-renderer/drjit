@@ -34,8 +34,8 @@ def test02_fill_in_loop_then_read(t):
     i = t(0)
 
     while i < 10:
-        i += 1
         s[i] = t(i)
+        i += 1
 
     assert s[3] == 3
 
