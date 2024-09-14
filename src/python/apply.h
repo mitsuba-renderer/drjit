@@ -58,6 +58,9 @@ struct TraverseCallback {
     // C++ code. This one just gets called with Jit/AD variable indices, an
     // associated Python/ instance/type is not available.
     virtual void operator()(uint64_t index);
+
+    // Traverse an unknown object
+    virtual void traverse_unknown(nb::handle h);
 };
 
 /// Callback for the ``traverse_pair()`` operation below

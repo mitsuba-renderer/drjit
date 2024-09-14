@@ -10,6 +10,7 @@
 
 #include "eval.h"
 #include "apply.h"
+#include "local.h"
 
 bool schedule(nb::handle h) {
     bool result_ = false;
@@ -22,6 +23,14 @@ bool schedule(nb::handle h) {
             const ArraySupplement &s = supp(h.type());
             if (s.index)
                 result |= jit_var_schedule((uint32_t) s.index(inst_ptr(h))) != 0;
+        }
+
+        void traverse_unknown(nb::handle h) override {
+            if (h.type().is(local_type)) {
+                Local & local = nb::cast<Local&>(h);
+                for (uint32_t index : local.arrays())
+                    result |= jit_var_schedule(index);
+            }
         }
     };
 

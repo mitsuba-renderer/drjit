@@ -597,6 +597,7 @@ struct recursion_guard {
 };
 
 void TraverseCallback::operator()(uint64_t) { }
+void TraverseCallback::traverse_unknown(nb::handle) { }
 
 /// Invoke the given callback on leaf elements of the pytree 'h'
 void traverse(const char *op, TraverseCallback &tc, nb::handle h) {
@@ -638,6 +639,8 @@ void traverse(const char *op, TraverseCallback &tc, nb::handle h) {
                 }
             } else if (nb::object cb = get_traverse_cb_ro(tp); cb.is_valid()) {
                 cb(h, nb::cpp_function([&](uint64_t index) { tc(index); }));
+            } else {
+                tc.traverse_unknown(h);
             }
         }
     } catch (nb::python_error &e) {
