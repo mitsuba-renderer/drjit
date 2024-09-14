@@ -8,15 +8,15 @@ import re
 def test01_simple(t, eval):
     if dr.size_v(t) == 0:
         with pytest.raises(TypeError, match="type does not contain any Jit-tracked arrays"):
-            dr.alloc_local(t, 10)
+            dr.alloc_local(t, 2)
         return
 
     if dr.size_v(t) == dr.Dynamic:
-        s = dr.alloc_local(t, 10, dr.zeros(t, 3))
+        s = dr.alloc_local(t, 2, dr.zeros(t, 3))
     else:
-        s = dr.alloc_local(t, 10, dr.zeros(t))
+        s = dr.alloc_local(t, 2, dr.zeros(t))
     v = s[0]
-    assert len(s) == 10
+    assert len(s) == 2
     assert v.state == dr.VarState.Literal
     assert dr.all(v == t(0), axis=None)
 
