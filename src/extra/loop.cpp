@@ -60,6 +60,17 @@ static bool ad_loop_symbolic(JitBackend backend, const char *name,
         indices1.release();
         indices2.clear();
 
+        // Read back the indices to update the loop state variables
+        // This is necessary to catch cases where a variable is added to the
+        // loop state twice.
+        read_cb(payload, indices1);
+        for (uint32_t i : indices1) {
+            indices2.push_back((uint32_t) i);
+        }
+        jit_var_loop_update_inner_in(loop.index(), indices2.data());
+        indices1.clear();
+        indices2.clear();
+
         do {
             // Evaluate the loop condition
             uint32_t active_initial = cond_cb(payload);
