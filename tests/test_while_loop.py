@@ -648,7 +648,7 @@ def test28_loop_state_aliasing(t):
     # Test that we can add a variable to a loop twice
 
     @dr.syntax
-    def loop(t, x: list[t], y: t, n = 10):
+    def loop(t, x, y: t, n = 10):
         
         i = t(0)
         while dr.hint(i < n):
