@@ -559,3 +559,18 @@ def test17_tensor_initialization(t):
 
     assert x.state == dr.VarState.Literal
     
+@pytest.test_arrays('is_tensor, float')
+def test18_slice_zero_dim(t):
+    x = dr.mean(t([1, 1, 4, 10], shape=(2, 2, 1)), axis=None)
+    assert x[0] == 4
+    assert type(x[0]) == float
+    assert x[0,:] == 4
+    assert x[:] == 4
+    assert x[-1] == 4
+
+    x[0] = 5
+    assert x[0] == 5
+
+    with pytest.raises(TypeError) as ei:
+        x[1]
+    assert "index 1 is out of bounds" in str(ei.value)

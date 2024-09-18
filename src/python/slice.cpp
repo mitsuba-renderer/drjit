@@ -59,8 +59,11 @@ slice_index(const nb::type_object_t<ArrayBase> &dtype,
     size_t shape_len = nb::len(shape),
            indices_len = nb::len(indices);
 
+    // Handling special case of zero-dim tensor
+    size_t zero_adjusted_shape_len = shape_len == 0 ? 1 : shape_len;
+
     std::vector<Component> components;
-    components.reserve(shape_len);
+    components.reserve(zero_adjusted_shape_len);
 
     for (nb::handle h : indices) {
         if (h.is_none()) {
@@ -68,10 +71,10 @@ slice_index(const nb::type_object_t<ArrayBase> &dtype,
             continue;
         }
 
-        if (shape_offset >= shape_len)
+        if (shape_offset >= zero_adjusted_shape_len)
             nb::raise("drjit.slice_tensor(): too many indices.");
 
-        Py_ssize_t size = nb::cast<Py_ssize_t>(shape[shape_offset++]);
+        Py_ssize_t size = shape_len == 0 ? 1 : nb::cast<Py_ssize_t>(shape[shape_offset++]);
         nb::handle tp = h.type();
 
         if (tp.is(&PyLong_Type)) {
@@ -212,12 +215,17 @@ PyObject *mp_subscript(PyObject *self, PyObject *key) noexcept {
                 nb::borrow<nb::tuple>(shape(self)), key2);
 
             nb::object source = nb::steal(s.tensor_array(self));
+            const ArraySupplement &s_array = supp(source.type());
 
-            nb::object out = gather(nb::borrow<nb::type_object>(s.array),
-                                    source, out_index, nb::borrow(Py_True));
+            if (s.ndim == 0 && s_array.len(inst_ptr(source.ptr())) == 1) {
+                return s_array.item(source.ptr(), 0);
+            } else {
+                nb::object out = gather(nb::borrow<nb::type_object>(s.array),
+                    source, out_index, nb::borrow(Py_True));
 
-            return self_tp("array"_a = out, "shape"_a = out_shape)
-                .release().ptr();
+                return self_tp("array"_a = out, "shape"_a = out_shape)
+                    .release().ptr();
+            }
         }
 
         bool complex_case = false;

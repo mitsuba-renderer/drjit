@@ -107,7 +107,7 @@ static void repr_array(Buffer &buffer, nb::handle h, size_t indent,
             } else {
                 nb::object o = h[nb::tuple(index)];
 
-                if (s.is_tensor)
+                if (s.is_tensor && is_drjit_type(o.type()))
                     o = nb::steal(s.tensor_array(o.ptr()))[0];
 
                 if (PyFloat_CheckExact(o.ptr())) {
