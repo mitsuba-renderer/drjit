@@ -68,7 +68,7 @@ static bool ad_loop_symbolic(JitBackend backend, const char *name,
             indices2.push_back((uint32_t) i);
         }
         jit_var_loop_update_inner_in(loop.index(), indices2.data());
-        indices1.clear();
+        indices1.release();
         indices2.clear();
 
         do {
