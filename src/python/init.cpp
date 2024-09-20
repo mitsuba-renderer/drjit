@@ -402,47 +402,44 @@ static bool array_init_from_seq(PyObject *self, const ArraySupplement &s, PyObje
 static void ndarray_keep_alive(JitBackend backend, uint32_t index,
                                nb::detail::ndarray_handle *p);
 
-nb::object import_ndarray(ArrayMeta m, PyObject *arg,
-                          vector<size_t> *shape_out, bool force_ad) {
-    size_t shape[4];
-    nb::detail::ndarray_req req { };
-    req.ndim = m.ndim;
-    req.shape = shape;
-    req.req_order = 'C';
-    req.req_ro = true;
+nb::object import_ndarray(ArrayMeta m, PyObject *arg, vector<size_t> *shape_out,
+                          bool force_ad) {
+    int64_t shape[4];
+    nb::detail::ndarray_config conf { };
+    conf.order = 'C';
+    conf.ro = true;
 
-    if ((VarType) m.type != VarType::Void) {
-        req.dtype = drjit_type_to_dlpack((VarType) m.type);
-        req.req_dtype = true;
-    }
+    if ((VarType) m.type != VarType::Void)
+        conf.dtype = drjit_type_to_dlpack((VarType) m.type);
 
     if (m.ndim) {
-        req.req_shape = true;
+        conf.ndim = m.ndim;
+        conf.shape = shape;
         for (size_t i = 0; i < m.ndim; ++i) {
             shape[i] = m.shape[i];
             if (shape[i] == DRJIT_DYNAMIC)
-                shape[i] = (size_t) -1;
+                shape[i] = -1;
         }
     }
 
     if (m.is_complex) {
-        for (uint32_t i = 1; i < req.ndim; ++i)
+        for (int32_t i = 1; i < conf.ndim; ++i)
             shape[i - 1] = shape[i];
-        req.dtype.code = (uint8_t) nb::dlpack::dtype_code::Complex;
-        req.dtype.bits *= 2;
-        req.ndim -= 1;
+        conf.dtype.code = (uint8_t) nb::dlpack::dtype_code::Complex;
+        conf.dtype.bits *= 2;
+        conf.ndim -= 1;
     }
 
     nb::detail::ndarray_handle *th = nb::detail::ndarray_import(
-        arg, &req, (uint8_t) nb::detail::cast_flags::convert, nullptr);
+        arg, &conf, (uint8_t) nb::detail::cast_flags::convert, nullptr);
 
     if (!th && m.ndim > 1 && m.shape[m.ndim - 1] == DRJIT_DYNAMIC) {
         // Try conversion of scalar to vectorized representation
-        req.ndim--;
+        conf.ndim--;
         th = nb::detail::ndarray_import(
-            arg, &req, (uint8_t) nb::detail::cast_flags::convert, nullptr);
+            arg, &conf, (uint8_t) nb::detail::cast_flags::convert, nullptr);
         if (!th)
-            req.ndim++;
+            conf.ndim++;
     }
 
     if (!th) {
@@ -453,23 +450,23 @@ nb::object import_ndarray(ArrayMeta m, PyObject *arg,
                 "should have the following configuration for this to succeed: ",
                 arg_name.c_str());
 
-        if (req.req_shape) {
-            buf.fmt("ndim=%u, shape=(", req.ndim);
+        if (conf.shape) {
+            buf.fmt("ndim=%u, shape=(", conf.ndim);
 
-            for (size_t i = 0; i < req.ndim; ++i) {
-                if (shape[i] == (size_t) -1)
+            for (int32_t i = 0; i < conf.ndim; ++i) {
+                if (shape[i] == -1)
                     buf.put('*');
                 else
                     buf.put_uint32((uint32_t) shape[i]);
-                if (i + 1 < req.ndim)
+                if (i + 1 < conf.ndim)
                     buf.put(", ");
             }
             buf.put("), ");
         }
 
-        if (req.req_dtype) {
+        if (conf.dtype != nb::dlpack::dtype()) {
             buf.put("dtype=");
-            nb::dlpack::dtype_code code = (nb::dlpack::dtype_code) req.dtype.code;
+            nb::dlpack::dtype_code code = (nb::dlpack::dtype_code) conf.dtype.code;
             switch (code) {
                 case nb::dlpack::dtype_code::Bool: buf.put("bool"); break;
                 case nb::dlpack::dtype_code::Int: buf.put("int"); break;
@@ -480,7 +477,7 @@ nb::object import_ndarray(ArrayMeta m, PyObject *arg,
             }
 
             if (code != nb::dlpack::dtype_code::Bool)
-                buf.put_uint32(req.dtype.bits);
+                buf.put_uint32(conf.dtype.bits);
             buf.put(", order='C'.");
         }
 
