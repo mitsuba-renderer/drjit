@@ -17,6 +17,9 @@ jobs:
       matrix:
         os: [ubuntu-20.04, windows-latest, macos-13, macos-14]
         python: [cp38, cp39, cp310, cp311, cp312, cp313]
+        exclude:
+          - os: macos-14
+            python: cp38
       fail-fast: false
 
     name: >
