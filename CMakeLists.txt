@@ -123,7 +123,6 @@ endif()
 if (DRJIT_ENABLE_JIT)
   add_subdirectory(src/extra)
   set_target_properties(drjit-extra PROPERTIES ${DRJIT_OUTPUT_DIRECTORY})
-  # install(TARGETS drjit-extra EXPORT drjitTargets)
 endif()
 
 if (DRJIT_ENABLE_PYTHON)
@@ -223,6 +222,14 @@ if (DRJIT_MASTER_PROJECT)
         DESTINATION drjit/cuda
       )
     endif()
+    install(FILES
+      ${CMAKE_CURRENT_BINARY_DIR}/drjit/auto/py.typed
+      ${CMAKE_CURRENT_BINARY_DIR}/drjit/auto/__init__.pyi
+      ${CMAKE_CURRENT_BINARY_DIR}/drjit/auto/__init__.py
+      ${CMAKE_CURRENT_BINARY_DIR}/drjit/auto/ad.pyi
+      ${CMAKE_CURRENT_BINARY_DIR}/drjit/auto/ad.py
+      DESTINATION drjit/auto
+    )
   endif()
 
   if (DRJIT_ENABLE_JIT)
