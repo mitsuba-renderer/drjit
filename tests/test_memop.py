@@ -377,7 +377,7 @@ def test17_slice(t):
     v2 = dr.slice(v, 2)
     assert type(v2) is list and v2 == v
 
-    # Pytree traversal
+    # PyTree traversal
     v = [t(1,2,3), t(3,4,5)]
     v2 = dr.slice(v, 2)
     assert type(v2) is list and len(v2) == 2 and type(v2[0]) is int and type(v2[1]) is int

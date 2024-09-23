@@ -1164,7 +1164,7 @@ def suspend_grad(*args, when=True):
        with dr.suspend_grad():
            # .. code coes here ..
 
-    You may also specify any number of Dr.Jit arrays, tensors, or :ref:`Pytrees
+    You may also specify any number of Dr.Jit arrays, tensors, or :ref:`PyTrees
     <pytrees>`. In this case, the context manager behaves differently by
     disabling gradient tracking more selectively for the specified variables.
 
@@ -1204,7 +1204,7 @@ def suspend_grad(*args, when=True):
                   not dr.grad_enabled(y)
 
     Args:
-        *args (tuple): Arbitrary list of Dr.Jit arrays, tuples, or :ref:`Pytrees
+        *args (tuple): Arbitrary list of Dr.Jit arrays, tuples, or :ref:`PyTrees
           <pytrees>`. Elements of data structures that could not possibly be
           attached to the AD graph (e.g., Python scalars) are ignored.
 
@@ -1242,7 +1242,7 @@ def resume_grad(*args, when=True):
                # In this scope, the effect of the outer context
                # manager is effectively disabled
 
-    You may also specify any number of Dr.Jit arrays, tensors, or :ref:`Pytrees
+    You may also specify any number of Dr.Jit arrays, tensors, or :ref:`PyTrees
     <pytrees>`. In this case, the context manager behaves differently by
     enabling gradient tracking more selectively for the specified variables.
 
@@ -1256,7 +1256,7 @@ def resume_grad(*args, when=True):
     be arbitrarily nested and suitably update the set of tracked variables.
 
     Args:
-        *args (tuple): Arbitrary list of Dr.Jit arrays, tuples, or :ref:`Pytrees
+        *args (tuple): Arbitrary list of Dr.Jit arrays, tuples, or :ref:`PyTrees
           <pytrees>`. Elements of data structures that could not possibly be
           attached to the AD graph (e.g., Python scalars) are ignored.
 

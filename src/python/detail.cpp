@@ -87,7 +87,7 @@ bool can_scatter_reduce(nb::type_object_t<dr::ArrayBase> tp, ReduceOp op) {
 /**
  * \brief Return Dr.Jit variable indices associated with the provided data structure.
  *
- * This function traverses Dr.Jit arrays, tensors, :ref:`Pytree <pytrees>` (lists,
+ * This function traverses Dr.Jit arrays, tensors, :ref:`PyTree <pytrees>` (lists,
  * tuples, dicts, custom data structures) and returns the indices of all detected
  * variables (in the order of traversal, may contain duplicates). The index
  * information is returned as a list of encoded 64 bit integers, where each
@@ -136,7 +136,7 @@ void collect_indices(nb::handle h, dr::vector<uint64_t> &indices, bool inc_ref) 
  * consumes an index array and produces an updated output.
  *
  * It recursively traverses and copies an input object that may be a Dr.Jit
- * array, tensor, or :ref:`Pytree <pytrees>` (list, tuple, dict, custom data
+ * array, tensor, or :ref:`PyTree <pytrees>` (list, tuple, dict, custom data
  * structure) while replacing any detected Dr.Jit variables with new ones based
  * on the provided index vector. The function returns the resulting object,
  * while leaving the input unchanged. The output array object borrows the

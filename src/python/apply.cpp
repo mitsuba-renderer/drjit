@@ -585,7 +585,7 @@ nb::object apply_ret_pair(ArrayOp op, const char *name, nb::handle_t<dr::ArrayBa
 
 static int recursion_level = 0;
 
-// Pytrees could theoretically include cycles. Catch infinite recursion below
+// PyTrees could theoretically include cycles. Catch infinite recursion below
 struct recursion_guard {
     recursion_guard() {
         if (++recursion_level >= 50) {
