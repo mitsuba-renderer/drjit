@@ -545,7 +545,7 @@ bool VariableTracker::Impl::traverse(Context &ctx, nb::handle h) {
 }
 
 uint64_t VariableTracker::Context::_traverse_write(uint64_t idx) {
-    if(!idx)
+    if (!idx)
         return 0;
     if (index_offset >= indices.size())
         nb::raise("internal error after state variable '%s': ran "
@@ -582,7 +582,7 @@ uint64_t VariableTracker::Context::_traverse_write(uint64_t idx) {
 }
 
 void VariableTracker::Context::_traverse_read(uint64_t index) {
-    if(!index)
+    if (!index)
         return;
     indices.push_back(ad_var_inc_ref(index));
     index_offset++;

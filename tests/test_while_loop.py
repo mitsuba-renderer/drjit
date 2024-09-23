@@ -642,25 +642,25 @@ def test27_partial_eval(t, mode):
 
     assert idx == 3 # Only evaluate loop state partially
     assert val + idx == 15 # Re-use partially evaluated state
-    
+
 @pytest.test_arrays('uint32,jit,shape=(*)')
 def test28_loop_state_aliasing(t):
     # Test that we can add a variable to a loop twice
 
     @dr.syntax
     def loop(t, x, y: t, n = 10):
-        
+
         i = t(0)
         while dr.hint(i < n):
             # Somewhat complicated gather that cannot be elided
-            y += dr.gather(t, x[0], y) 
+            y += dr.gather(t, x[0], y)
             i += 1
 
         return y
-    
+
     x = dr.arange(t, 100)
     y = dr.arange(t, 5)
 
     dr.make_opaque(x, y)
-    
+
     y = loop(t, [x, x], y)
