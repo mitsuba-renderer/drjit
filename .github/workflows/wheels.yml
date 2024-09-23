@@ -7,6 +7,10 @@ on:
         required: true
         default: '0'
 
+env:
+  CIBW_TEST_COMMAND: "python -c \"import drjit\""
+  CIBW_TEST_REQUIRES: ""
+
 jobs:
   build_wheels:
     strategy:
