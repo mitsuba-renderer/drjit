@@ -42,8 +42,28 @@ NAMESPACE_BEGIN(drjit)
                 return this;                                                   \
             }
 
+// TODO: merge with macro above
+#define DRJIT_CALL_TEMPLATE_INHERITED_BEGIN(Name, Parent)                      \
+    namespace drjit {                                                          \
+        template <typename Self, typename... Ts>                               \
+        struct call_support<Name<Ts...>, Self>                                 \
+                : call_support<Parent<Ts...>, Self> {                          \
+            using Base = call_support<Parent<Ts...>, Self>;                    \
+            using Base::self;                                                  \
+            using Base::Domain;                                                \
+            using Class = Name<Ts...>;                                         \
+            using Mask = mask_t<Self>;                                         \
+            call_support(const Self &self) : Base(self) { }                    \
+            const call_support *operator->() const {                           \
+                return this;                                                   \
+            }
+
+#define DRJIT_CALL_INHERITED_END(Name)                                         \
+        };                                                                     \
+    }
+
 #define DRJIT_CALL_END(Name)                                                   \
-        private:                                                               \
+        protected:                                                             \
             const Self &self;                                                  \
         };                                                                     \
     }
