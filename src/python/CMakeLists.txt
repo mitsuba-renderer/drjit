@@ -241,15 +241,21 @@ if (NOT (DRJIT_SANITIZE_ASAN OR DRJIT_SANITIZE_UBSAN))
   endif()
 endif()
 
-foreach (NAME __init__ ad)
-  add_custom_command(
-    OUTPUT ${DRJIT_PYTHON_DST_DIR}/auto/${NAME}.pyi
-    DEPENDS ${DRJIT_PYTHON_DST_DIR}/llvm/${NAME}.pyi
-    COMMAND cmake -P ${CMAKE_CURRENT_SOURCE_DIR}/../../resources/auto-stub.cmake
-      ${DRJIT_PYTHON_DST_DIR}/llvm/${NAME}.pyi
-      ${DRJIT_PYTHON_DST_DIR}/auto/${NAME}.pyi
-  )
-endforeach()
+add_custom_command(
+  OUTPUT ${DRJIT_PYTHON_DST_DIR}/auto/__init__.pyi
+  DEPENDS drjit-stub-llvm
+  COMMAND cmake -P ${CMAKE_CURRENT_SOURCE_DIR}/../../resources/auto-stub.cmake
+    ${DRJIT_PYTHON_DST_DIR}/llvm/__init__.pyi
+    ${DRJIT_PYTHON_DST_DIR}/auto/__init__.pyi
+)
+
+add_custom_command(
+  OUTPUT ${DRJIT_PYTHON_DST_DIR}/auto/ad.pyi
+  DEPENDS drjit-stub-llvm-ad
+  COMMAND cmake -P ${CMAKE_CURRENT_SOURCE_DIR}/../../resources/auto-stub.cmake
+    ${DRJIT_PYTHON_DST_DIR}/llvm/ad.pyi
+    ${DRJIT_PYTHON_DST_DIR}/auto/ad.pyi
+)
 
 add_custom_command(
   OUTPUT
