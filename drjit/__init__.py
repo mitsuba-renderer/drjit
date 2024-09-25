@@ -1562,53 +1562,6 @@ def reverse(value, axis: int = 0):
             result = tp(result)
         return result
 
-
-def mean(value: object, axis: Union[int, Tuple[int, ...], None] = 0,
-         mode: Literal['symbolic', 'evaluated', None] = None) -> object:
-    """
-    Compute the mean of the input array or tensor along one or multiple axes.
-
-    This function performs a horizontal sum reduction by adding values of the
-    input array, tensor, or Python sequence along one or multiple axes and then
-    dividing by the number of entries. By default, it sums along the outermost
-    axis; specify ``axis=None`` to sum over all of them at once. The mean
-    of an empty array is considered to be zero.
-
-    See the section on :ref:`horizontal reductions <horizontal-reductions>` for
-    important general information about their properties.
-
-    Args:
-        value (float | int | Sequence | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
-
-        axis (int | None): The axis along which to reduce (Default: ``0``). A value
-            of ``None`` causes a simultaneous reduction along all axes. Currently, only
-            values of ``0`` and ``None`` are supported.
-
-    Returns:
-        float | int | drjit.ArrayBase: Result of the reduction operation)";
-    """
-    sh = shape(value)
-    ndim = len(sh)
-
-    axis2: Tuple[int, ...]
-    if axis is None:
-        axis2 = tuple(range(ndim))
-    elif isinstance(axis, int):
-        axis2 = () if ndim == 0 else (axis, )
-    else:
-        axis2 = tuple(set(axis))
-
-    size = 1
-    for i in axis2:
-        if i < 0:
-            i += ndim
-        if i < 0 or i >= ndim:
-            raise IndexError(f"drjit.mean({type(value)}): out-of-bounds axis {i}")
-        size *= sh[i]
-
-    return sum(value, axis, mode) / size
-
-
 def sh_eval(d: ArrayBase, order: int) -> list:
     """
     Evalute real spherical harmonics basis function up to a specified order.

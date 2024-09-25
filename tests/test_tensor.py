@@ -200,7 +200,7 @@ def test06_reduce(t, drjit_verbose, capsys):
     assert msg.count('jit_any') == 1
     assert msg.count('jit_all') == 1
 
-    v_any = dr.any(v)
+    v_any = dr.any(v, axis=0)
     msg = capsys.readouterr().out
     assert msg.count('= or(') == 1
 
