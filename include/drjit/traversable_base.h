@@ -7,6 +7,7 @@
 #include <type_traits>
 #include <vector>
 #include <drjit-core/jit.h>
+#include <drjit/map.h>
 
 NAMESPACE_BEGIN(drjit)
 

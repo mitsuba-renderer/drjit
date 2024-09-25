@@ -31,7 +31,7 @@ struct Sampler : dr::TraversableBase {
     dr::PCG32<dr::uint64_array_t<T>> rng;
 };
 
-template <typename Float> struct Base : nb::intrusive_base {
+template <typename Float> struct Base : drjit::TraversableBase {
     using Mask = dr::mask_t<Float>;
     using UInt32 = dr::uint32_array_t<Float>;
 
@@ -56,6 +56,8 @@ template <typename Float> struct Base : nb::intrusive_base {
     }
 
     virtual ~Base() { jit_registry_remove(this); }
+
+    DR_TRAVERSE_CB(drjit::TraversableBase)
 };
 
 template <typename Float> struct A : Base<Float> {
@@ -106,6 +108,8 @@ template <typename Float> struct A : Base<Float> {
 
     Float value;
     Float opaque = dr::opaque<Float>(1.f);
+
+    DR_TRAVERSE_CB(Base<Float>, value, opaque)
 };
 
 template <typename Float> struct B : Base<Float> {
@@ -154,6 +158,8 @@ template <typename Float> struct B : Base<Float> {
 
     Float value;
     Float opaque = dr::opaque<Float>(2.f);
+
+    DR_TRAVERSE_CB(Base<Float>, value, opaque)
 };
 
 DRJIT_CALL_TEMPLATE_BEGIN(Base)
@@ -193,22 +199,26 @@ void bind(nb::module_ &m) {
 
     bind_traverse(sampler);
 
-    nb::class_<BaseT, nb::intrusive_base>(m, "Base")
+    auto base_cls = nb::class_<BaseT, nb::intrusive_base>(m, "Base")
         .def("f", &BaseT::f)
         .def("f_masked", &BaseT::f_masked)
         .def("g", &BaseT::g)
         .def("nested", &BaseT::nested)
         .def("sample", &BaseT::sample);
+    bind_traverse(base_cls);
 
-    nb::class_<AT, BaseT>(m, "A")
+    auto a_cls = nb::class_<AT, BaseT>(m, "A")
         .def(nb::init<>())
         .def_rw("opaque", &AT::opaque)
         .def_rw("value", &AT::value);
+    bind_traverse(a_cls);
 
-    nb::class_<BT, BaseT>(m, "B")
+    auto b_cls = nb::class_<BT, BaseT>(m, "B")
         .def(nb::init<>())
         .def_rw("opaque", &BT::opaque)
         .def_rw("value", &BT::value);
+    bind_traverse(b_cls);
+    
 
     using BaseArray = dr::DiffArray<Backend, BaseT *>;
     m.def("dispatch_f", [](BaseArray &self, Float a, Float b) {
