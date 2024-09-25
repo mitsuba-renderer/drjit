@@ -96,11 +96,11 @@ def test04_sum(t):
     m = sys.modules[t.__module__]
     assert dr.allclose(dr.sum(6.0), 6)
 
-    a = dr.sum(m.Float([1, 2, 3]), mode='evaluated')
+    a = dr.sum(m.Float([1, 2, 3]), axis=0, mode='evaluated')
     assert dr.allclose(a, 6)
     assert type(a) is m.Float
 
-    a = dr.sum(m.Float([1, 2, 3]), mode='symbolic')
+    a = dr.sum(m.Float([1, 2, 3]), axis=0, mode='symbolic')
     assert dr.allclose(a, 6)
     assert type(a) is m.Float
 

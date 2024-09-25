@@ -162,7 +162,15 @@ nb::object reduce_seq(uint32_t op, nb::handle h, nb::handle axis, nb::handle mod
 }
 
 nb::object reduce(uint32_t op, nb::handle h, nb::handle axis_, nb::handle mode) {
+
     nb::handle tp = h.type();
+    if (axis_.type().is(&PyEllipsis_Type)) {
+        if (!is_drjit_type(tp) || !supp(tp).is_tensor)
+            axis_ = nb::int_(0);
+        else
+            axis_ = nb::none();
+    }
+
     if (op >= (size_t) ReduceOpExt::OpCount || !reductions[op].skip)
         nb::raise("drjit.reduce(): unsupported reduction type.");
 
@@ -457,6 +465,11 @@ nb::object none(nb::handle h, nb::handle axis) {
         return ~result;
 }
 
+nb::object mean(nb::handle value, nb::handle axis, nb::handle mode) {
+    nb::object out = sum(value, axis, mode);
+    // mean = sum / (num_input/num_output)
+    return (out * prod(shape(out), nb::none())) / prod(shape(value), nb::none()); 
+}
 
 nb::object dot(nb::handle h0, nb::handle h1) {
     try {
@@ -687,24 +700,26 @@ static nb::object block_sum(nb::handle h, uint32_t block_size,
 
 
 void export_reduce(nb::module_ & m) {
-    m.def("reduce", &reduce_py, "op"_a, "value"_a, "axis"_a.none() = 0, "mode"_a = nb::none(), doc_reduce,
-          nb::sig("def reduce(op: ReduceOp, value: object, axis: int | tuple[int, ...] | None = 0, mode: str | None = None) -> object"))
-     .def("all", &all, "value"_a, "axis"_a.none() = 0, doc_all,
-          nb::sig("def all(value: object, axis: int | tuple[int, ...] | None = 0) -> object"))
-     .def("any", &any, "value"_a, "axis"_a.none() = 0, doc_any,
-          nb::sig("def any(value: object, axis: int | tuple[int, ...] | None = 0) -> object"))
-     .def("none", &none, "value"_a, "axis"_a.none() = 0, doc_none,
-          nb::sig("def none(value: object, axis: int | tuple[int, ...] | None = 0) -> object"))
-     .def("count", &count, "value"_a, "axis"_a.none() = 0, doc_count,
-          nb::sig("def count(value: object, axis: int | tuple[int, ...] | None = 0) -> object"))
-     .def("sum", &sum, "value"_a, "axis"_a.none() = 0, "mode"_a = nb::none(), doc_sum,
-          nb::sig("def sum(value: object, axis: int | tuple[int, ...] | None = 0, mode: str | None = None) -> object"))
-     .def("prod", &prod, "value"_a, "axis"_a.none() = 0, "mode"_a = nb::none(), doc_prod,
-          nb::sig("def prod(value: object, axis: int | tuple[int, ...] | None = 0, mode: str | None = None) -> object"))
-     .def("min", &min, "value"_a, "axis"_a.none() = 0, "mode"_a = nb::none(), doc_min,
-          nb::sig("def min(value: object, axis: int | tuple[int, ...] | None = 0, mode: str | None = None) -> object"))
-     .def("max", &max, "value"_a, "axis"_a.none() = 0, "mode"_a = nb::none(), doc_max,
-          nb::sig("def max(value: object, axis: int | tuple[int, ...] | None = 0, mode: str | None = None) -> object"))
+    m.def("reduce", &reduce_py, "op"_a, "value"_a, "axis"_a.none() = nb::ellipsis(), "mode"_a = nb::none(), doc_reduce,
+          nb::sig("def reduce(op: ReduceOp, value: object, axis: int | tuple[int, ...] | ... | None = ..., mode: str | None = None) -> object"))
+     .def("all", &all, "value"_a, "axis"_a.none() = nb::ellipsis(), doc_all,
+          nb::sig("def all(value: object, axis: int | tuple[int, ...] | ... | None = ...) -> object"))
+     .def("any", &any, "value"_a, "axis"_a.none() = nb::ellipsis(), doc_any,
+          nb::sig("def any(value: object, axis: int | tuple[int, ...] | ... | None = ...) -> object"))
+     .def("none", &none, "value"_a, "axis"_a.none() = nb::ellipsis(), doc_none,
+          nb::sig("def none(value: object, axis: int | tuple[int, ...] | ... | None = ...) -> object"))
+     .def("count", &count, "value"_a, "axis"_a.none() = nb::ellipsis(), doc_count,
+          nb::sig("def count(value: object, axis: int | tuple[int, ...] | ... | None = ...) -> object"))
+     .def("sum", &sum, "value"_a, "axis"_a.none() = nb::ellipsis(), "mode"_a = nb::none(), doc_sum,
+          nb::sig("def sum(value: object, axis: int | tuple[int, ...] | ... | None = ..., mode: str | None = None) -> object"))
+     .def("prod", &prod, "value"_a, "axis"_a.none() = nb::ellipsis(), "mode"_a = nb::none(), doc_prod,
+          nb::sig("def prod(value: object, axis: int | tuple[int, ...] | ... | None = ..., mode: str | None = None) -> object"))
+     .def("min", &min, "value"_a, "axis"_a.none() = nb::ellipsis(), "mode"_a = nb::none(), doc_min,
+          nb::sig("def min(value: object, axis: int | tuple[int, ...] | ... | None = ..., mode: str | None = None) -> object"))
+     .def("max", &max, "value"_a, "axis"_a.none() = nb::ellipsis(), "mode"_a = nb::none(), doc_max,
+          nb::sig("def max(value: object, axis: int | tuple[int, ...] | ... | None = ..., mode: str | None = None) -> object"))
+     .def("mean", &mean, "value"_a, "axis"_a.none() = nb::ellipsis(), "mode"_a = nb::none(), doc_mean,
+          nb::sig("def mean(value: object, axis: int | tuple[int, ...] | ... | None = ..., mode: str | None = None) -> object"))
      .def("dot", &dot, doc_dot)
      .def("abs_dot",
           [](nb::handle h0, nb::handle h1) -> nb::object {

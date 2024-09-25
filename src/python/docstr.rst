@@ -747,8 +747,10 @@
         value (ArrayBase | Iterable | float | int): An input Dr.Jit array,
           tensor, iterable, or scalar Python type.
 
-        axes (int | tuple[int, ...] | None): The axis/axes along which
-          to reduce. The default value is ``0``.
+        axis (int | tuple[int, ...] | ... | None): The axis/axes along which
+          to reduce. The special argument ``axis=None`` causes a simultaneous 
+          reduction over all axes. The default ``axis=...`` applies a 
+          reduction over all axes for tensor types and index ``0`` otherwise.
 
         mode (str | None): optional parameter to force an evaluation strategy.
           Must equal ``"evaluated"``, ``"symbolic"``, or ``None``.
@@ -769,8 +771,10 @@
         value (ArrayBase | Iterable | float | int): An input Dr.Jit array,
           tensor, iterable, or scalar Python type.
 
-        axes (int | tuple[int, ...] | None): The axis/axes along which
-          to reduce. The default value is ``0``.
+        axis (int | tuple[int, ...] | ... | None): The axis/axes along which
+          to reduce. The special argument ``axis=None`` causes a simultaneous 
+          reduction over all axes. The default ``axis=...`` applies a 
+          reduction over all axes for tensor types and index ``0`` otherwise.
 
         mode (str | None): optional parameter to force an evaluation strategy.
           Must equal ``"evaluated"``, ``"symbolic"``, or ``None``.
@@ -795,8 +799,10 @@
         value (ArrayBase | Iterable | float | int): An input Dr.Jit array,
           tensor, iterable, or scalar Python type.
 
-        axes (int | tuple[int, ...] | None): The axis/axes along which
-          to reduce. The default value is ``0``.
+        axis (int | tuple[int, ...] | ... | None): The axis/axes along which
+          to reduce. The special argument ``axis=None`` causes a simultaneous 
+          reduction over all axes. The default ``axis=...`` applies a 
+          reduction over all axes for tensor types and index ``0`` otherwise.
 
         mode (str | None): optional parameter to force an evaluation strategy.
           Must equal ``"evaluated"``, ``"symbolic"``, or ``None``.
@@ -821,8 +827,36 @@
         value (ArrayBase | Iterable | float | int): An input Dr.Jit array, tensor,
           iterable, or scalar Python type.
 
-        axes (int | tuple[int, ...] | None): The axis/axes along which
-          to reduce. The default value is ``0``.
+        axis (int | tuple[int, ...] | ... | None): The axis/axes along which
+          to reduce. The special argument ``axis=None`` causes a simultaneous 
+          reduction over all axes. The default ``axis=...`` applies a 
+          reduction over all axes for tensor types and index ``0`` otherwise.
+
+        mode (str | None): optional parameter to force an evaluation strategy.
+          Must equal ``"evaluated"``, ``"symbolic"``, or ``None``.
+
+    Returns:
+        The reduced array or tensor as specified above.
+
+.. topic:: mean
+    Compute the mean of the input array or tensor along one or multiple axes.
+
+    This function performs a horizontal sum reduction by adding values of the
+    input array, tensor, or Python sequence along one or multiple axes and then
+    dividing by the number of entries. The mean of an empty array is considered
+    to be zero.
+
+    See the section on :ref:`horizontal reductions <horizontal-reductions>` for
+    important general information about their properties.
+
+    Args:
+        value (ArrayBase | Iterable | float | int): An input Dr.Jit array, tensor,
+          iterable, or scalar Python type.
+
+        axis (int | tuple[int, ...] | ... | None): The axis/axes along which
+          to reduce. The special argument ``axis=None`` causes a simultaneous 
+          reduction over all axes. The default ``axis=...`` applies a 
+          reduction over all axes for tensor types and index ``0`` otherwise.
 
         mode (str | None): optional parameter to force an evaluation strategy.
           Must equal ``"evaluated"``, ``"symbolic"``, or ``None``.
@@ -837,8 +871,8 @@
     Given a boolean-valued input array, tensor, or Python sequence, this function
     reduces elements using the ``&`` (AND) operator.
 
-    By default, it reduces along index ``0``, which refers to the outermost axis.
-    Negative indices (e.g. ``-1``) count backwards from the innermost axis. The
+    Reductions along index ``0`` refer to the outermost axis and negative
+    indices (e.g. ``-1``) count backwards from the innermost axis. The
     special argument ``axis=None`` causes a simultaneous reduction over all axes.
     Note that the reduced form of an *empty* array is considered to be ``True``.
 
@@ -892,8 +926,10 @@
         value (ArrayBase | Iterable | bool): An input Dr.Jit array, tensor,
           iterable, or scalar Python type.
 
-        axes (int | tuple[int, ...] | None): The axis/axes along which
-          to reduce. The default value is ``0``.
+        axis (int | tuple[int, ...] | ... | None): The axis/axes along which
+          to reduce. The special argument ``axis=None`` causes a simultaneous 
+          reduction over all axes. The default ``axis=...`` applies a 
+          reduction over all axes for tensor types and index ``0`` otherwise.
 
     Returns:
         object: The reduced array or tensor as specified above.
@@ -905,8 +941,8 @@
     Given a boolean-valued input array, tensor, or Python sequence, this function
     reduces elements using the ``|`` (OR) operator.
 
-    By default, it reduces along index ``0``, which refers to the outermost axis.
-    Negative indices (e.g. ``-1``) count backwards from the innermost axis. The
+    Reductions along index ``0`` refer to the outermost axis and negative
+    indices (e.g. ``-1``) count backwards from the innermost axis. The
     special argument ``axis=None`` causes a simultaneous reduction over all axes.
     Note that the reduced form of an *empty* array is considered to be ``False``.
 
@@ -960,8 +996,10 @@
         value (ArrayBase | Iterable | bool): An input Dr.Jit array, tensor,
           iterable, or scalar Python type.
 
-        axes (int | tuple[int, ...] | None): The axis/axes along which
-          to reduce. The default value is ``0``.
+        axis (int | tuple[int, ...] | ... | None): The axis/axes along which
+          to reduce. The special argument ``axis=None`` causes a simultaneous 
+          reduction over all axes. The default ``axis=...`` applies a 
+          reduction over all axes for tensor types and index ``0`` otherwise.
 
     Returns:
         bool | drjit.ArrayBase: Result of the reduction operation
@@ -1024,8 +1062,10 @@
         value (ArrayBase | Iterable | bool): An input Dr.Jit array, tensor,
           iterable, or scalar Python type.
 
-        axes (int | tuple[int, ...] | None): The axis/axes along which
-          to reduce. The default value is ``0``.
+        axis (int | tuple[int, ...] | ... | None): The axis/axes along which
+          to reduce. The special argument ``axis=None`` causes a simultaneous 
+          reduction over all axes. The default ``axis=...`` applies a 
+          reduction over all axes for tensor types and index ``0`` otherwise.
 
     Returns:
         bool | drjit.ArrayBase: Result of the reduction operation
@@ -6855,8 +6895,8 @@
     ``1`` and ``False`` elements as ``0``). It returns an unsigned 32-bit version
     of the input array.
 
-    By default, it reduces along index ``0``, which refers to the outermost axis.
-    Negative indices (e.g. ``-1``) count backwards from the innermost axis. The
+    Reductions along index ``0`` refer to the outermost axis and negative 
+    indices (e.g. ``-1``) count backwards from the innermost axis. The
     special argument ``axis=None`` causes a simultaneous reduction over all axes.
     Note that the reduced form of an *empty* array is considered to be zero.
 
@@ -6866,10 +6906,10 @@
     Args:
         value (bool | Sequence | drjit.ArrayBase): A Python or Dr.Jit mask type
 
-        axis (int | None): The axis along which to reduce. The default value of
-          ``0`` refers to the outermost axis. Negative values count backwards from
-          the innermost axis. A value of ``None`` causes a simultaneous reduction
-          along all axes.
+        axis (int | tuple[int, ...] | ... | None): The axis/axes along which
+          to reduce. The special argument ``axis=None`` causes a simultaneous 
+          reduction over all axes. The default ``axis=...`` applies a 
+          reduction over all axes for tensor types and index ``0`` otherwise.
 
     Returns:
         int | drjit.ArrayBase: Result of the reduction operation
