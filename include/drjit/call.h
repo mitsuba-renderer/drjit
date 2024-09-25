@@ -42,7 +42,6 @@ NAMESPACE_BEGIN(drjit)
                 return this;                                                   \
             }
 
-// TODO: merge with macro above
 #define DRJIT_CALL_TEMPLATE_INHERITED_BEGIN(Name, Parent)                      \
     namespace drjit {                                                          \
         template <typename Self, typename... Ts>                               \
@@ -51,6 +50,7 @@ NAMESPACE_BEGIN(drjit)
             using Base = call_support<Parent<Ts...>, Self>;                    \
             using Base::self;                                                  \
             using Base::Domain;                                                \
+            using Base::is_class_ptr;                                          \
             using Class = Name<Ts...>;                                         \
             using Mask = mask_t<Self>;                                         \
             call_support(const Self &self) : Base(self) { }                    \
@@ -59,11 +59,23 @@ NAMESPACE_BEGIN(drjit)
             }
 
 #define DRJIT_CALL_INHERITED_END(Name)                                         \
+            static inline bool is_class_ptr(void *ptr) {                       \
+                /* Since instances of derived classes are part of the DrJit */ \
+                /* registry domain of their base class, we may receive      */ \
+                /* pointers to instances of type other than Class.          */ \
+                /* We use a `dynamic_cast` to skip calls on these invalid   */ \
+                /* pointers.                                                */ \
+                return (ptr != nullptr) && dynamic_cast<Class *>(              \
+                    (typename Base::Class *) ptr);                             \
+            }                                                                  \
         };                                                                     \
     }
 
 #define DRJIT_CALL_END(Name)                                                   \
         protected:                                                             \
+            static inline bool is_class_ptr(void *ptr) {                       \
+                return ptr != nullptr;                                         \
+            }                                                                  \
             const Self &self;                                                  \
         };                                                                     \
     }
@@ -90,10 +102,10 @@ private:                                                                       \
             CallStateT *state = (CallStateT *) state_p;                        \
             state->update_args(args_i);                                        \
             if constexpr (std::is_same_v<Ret, void>) {                         \
-                if (self)                                                      \
+                if (is_class_ptr(self))                                        \
                     ((Class *) self)->Name(drjit::get<Is>(state->args)...);    \
             } else {                                                           \
-                if (self)                                                      \
+                if (is_class_ptr(self))                                        \
                     state->rv = ((Class *) self)                               \
                                     ->Name(drjit::get<Is>(state->args)...);    \
                 else                                                           \
@@ -117,7 +129,7 @@ public:                                                                        \
                                    const vector<uint64_t> &,                   \
                                    vector<uint64_t> &rv_i) {                   \
             CallStateT *state = (CallStateT *) state_p;                        \
-            if (self)                                                          \
+            if (is_class_ptr(self))                                            \
                 state->rv = ((Class *) self)->Name();                          \
             else                                                               \
                 state->rv = zeros<Ret>();                                      \
