@@ -6,6 +6,7 @@
 #include <drjit/call.h>
 #include <drjit/python.h>
 #include <drjit/random.h>
+#include <drjit/traversable_base.h>
 
 namespace nb = nanobind;
 namespace dr = drjit;
