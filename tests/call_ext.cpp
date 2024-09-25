@@ -15,7 +15,7 @@ using namespace nb::literals;
 
 template <typename T>
 struct Sampler : dr::TraversableBase {
-    Sampler() : rng(1) { }
+    Sampler() : rng(1) {}
     Sampler(size_t size) : rng(size) { }
 
     T next() { return rng.next_float32(); }
@@ -218,7 +218,6 @@ void bind(nb::module_ &m) {
         .def_rw("opaque", &BT::opaque)
         .def_rw("value", &BT::value);
     bind_traverse(b_cls);
-    
 
     using BaseArray = dr::DiffArray<Backend, BaseT *>;
     m.def("dispatch_f", [](BaseArray &self, Float a, Float b) {

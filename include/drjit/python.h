@@ -1056,7 +1056,6 @@ template <typename T, typename... Args> auto& bind_traverse(nanobind::class_<T, 
 
     cls.def("_traverse_1_cb_rw", [](T *self, nb::callable c) {
         Payload payload{ std::move(c) };
-        jit_log(LogLevel::Debug, "pointer %p", &T::traverse_1_cb_rw);
         self->traverse_1_cb_rw((void *) &payload, [](void *p, uint64_t index) {
             return nb::cast<uint64_t>(((Payload *) p)->c(index));
         });
@@ -1066,35 +1065,34 @@ template <typename T, typename... Args> auto& bind_traverse(nanobind::class_<T, 
 }
 
 inline void traverse_py_cb_ro(const TraversableBase *base, void *payload,
-                       void (*fn)(void *, uint64_t)) {
-    namespace nb = nanobind;
+                              void (*fn)(void *, uint64_t)) {
+    namespace nb    = nanobind;
     nb::handle self = base->self_py();
     if (!self)
         return;
-    
+
     auto detail = nb::module_::import_("drjit.detail");
     nb::callable traverse_py_cb_ro =
         nb::borrow<nb::callable>(nb::getattr(detail, "traverse_py_cb_ro"));
 
-    traverse_py_cb_ro(self, nb::cpp_function([&](uint64_t index){
-        fn(payload, index);
-    }));
+    traverse_py_cb_ro(
+        self, nb::cpp_function([&](uint64_t index) { fn(payload, index); }));
 }
 inline void traverse_py_cb_rw(TraversableBase *base, void *payload,
-                       uint64_t (*fn)(void *, uint64_t)) {
-    
-    namespace nb = nanobind;
+                              uint64_t (*fn)(void *, uint64_t)) {
+
+    namespace nb    = nanobind;
     nb::handle self = base->self_py();
     if (!self)
         return;
-    
+
     auto detail = nb::module_::import_("drjit.detail");
     nb::callable traverse_py_cb_rw =
         nb::borrow<nb::callable>(nb::getattr(detail, "traverse_py_cb_rw"));
-    
-    traverse_py_cb_rw(self, nb::cpp_function([&](uint64_t index){
-        return fn(payload, index);
-    }));
+
+    traverse_py_cb_rw(self, nb::cpp_function([&](uint64_t index) {
+                          return fn(payload, index);
+                      }));
 }
 
 NAMESPACE_END(drjit)

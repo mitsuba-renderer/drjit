@@ -1,14 +1,13 @@
-
 #pragma once
 
-#include "drjit-core/macros.h"
 #include "array_traverse.h"
+#include "drjit-core/macros.h"
 #include "nanobind/intrusive/counter.h"
 #include "nanobind/intrusive/ref.h"
-#include <type_traits>
-#include <vector>
 #include <drjit-core/jit.h>
 #include <drjit/map.h>
+#include <type_traits>
+#include <vector>
 
 NAMESPACE_BEGIN(drjit)
 
@@ -19,7 +18,8 @@ struct TraversableBase : nanobind::intrusive_base {
 
 template <typename T> struct is_ref_t<nanobind::ref<T>> : std::true_type {};
 template <typename T> struct is_ref_t<std::unique_ptr<T>> : std::true_type {};
-// template <typename T> struct is_iterable_t<std::vector<T>> : std::true_type {};
+// template <typename T> struct is_iterable_t<std::vector<T>> : std::true_type
+// {};
 
 #define DR_TRAVERSE_MEMBER_RO(member)                                          \
     drjit::log_member_open(false, #member);                                    \
@@ -30,13 +30,11 @@ template <typename T> struct is_ref_t<std::unique_ptr<T>> : std::true_type {};
     drjit::traverse_1_fn_rw(member, payload, fn);                              \
     drjit::log_member_close();
 
-inline void log_member_open(bool rw, const char *member){
+inline void log_member_open(bool rw, const char *member) {
     jit_log(LogLevel::Debug, "%s%s{", rw ? "rw " : "ro ", member);
 }
 
-inline void log_member_close(){
-    jit_log(LogLevel::Debug, "}");
-}
+inline void log_member_close() { jit_log(LogLevel::Debug, "}"); }
 
 #define DR_TRAVERSE_CB_RO(Base, ...)                                           \
     void traverse_1_cb_ro(void *payload, void (*fn)(void *, uint64_t))         \
@@ -63,21 +61,21 @@ public:                                                                        \
 public:                                                                        \
     void traverse_1_cb_ro(void *payload, void (*fn)(void *, uint64_t))         \
         const override {                                                       \
-        if constexpr (!std ::is_same_v<Base, drjit ::TraversableBase>)      \
+        if constexpr (!std ::is_same_v<Base, drjit ::TraversableBase>)         \
             Base ::traverse_1_cb_ro(payload, fn);                              \
         drjit::traverse_py_cb_ro(this, payload, fn);                           \
     }                                                                          \
     void traverse_1_cb_rw(void *payload, uint64_t (*fn)(void *, uint64_t))     \
         override {                                                             \
-        if constexpr (!std ::is_same_v<Base, drjit ::TraversableBase>)      \
+        if constexpr (!std ::is_same_v<Base, drjit ::TraversableBase>)         \
             Base ::traverse_1_cb_rw(payload, fn);                              \
         drjit::traverse_py_cb_rw(this, payload, fn);                           \
     }
 
 #if defined(_MSC_VER)
-#  define DRJIT_EXPORT                 __declspec(dllexport)
+#define DRJIT_EXPORT __declspec(dllexport)
 #else
-#  define DRJIT_EXPORT                 __attribute__ ((visibility("default")))
+#define DRJIT_EXPORT __attribute__((visibility("default")))
 #endif
 
 NAMESPACE_END(drjit)

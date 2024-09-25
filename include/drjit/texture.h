@@ -1384,26 +1384,26 @@ private:
     mutable bool m_migrated = false;
 
 public:
-void traverse_1_cb_ro(void *payload,
-                      void (*fn)(void *, uint64_t)) const override {
-    if constexpr (!std ::is_same_v<drjit ::TraversableBase,
-                                   drjit ::TraversableBase>)
-        drjit ::TraversableBase ::traverse_1_cb_ro(payload, fn);
+    void traverse_1_cb_ro(void *payload,
+                          void (*fn)(void *, uint64_t)) const override {
+        if constexpr (!std ::is_same_v<drjit ::TraversableBase,
+                                       drjit ::TraversableBase>)
+            drjit ::TraversableBase ::traverse_1_cb_ro(payload, fn);
 
-    DR_TRAVERSE_MEMBER_RO(m_value)
-    DR_TRAVERSE_MEMBER_RO(m_shape_opaque)
-    DR_TRAVERSE_MEMBER_RO(m_inv_resolution)
-}
-void traverse_1_cb_rw(void *payload,
-                      uint64_t (*fn)(void *, uint64_t)) override {
-    if constexpr (!std ::is_same_v<drjit ::TraversableBase,
-                                   drjit ::TraversableBase>)
-        drjit ::TraversableBase ::traverse_1_cb_rw(payload, fn);
+        DR_TRAVERSE_MEMBER_RO(m_value)
+        DR_TRAVERSE_MEMBER_RO(m_shape_opaque)
+        DR_TRAVERSE_MEMBER_RO(m_inv_resolution)
+    }
+    void traverse_1_cb_rw(void *payload,
+                          uint64_t (*fn)(void *, uint64_t)) override {
+        if constexpr (!std ::is_same_v<drjit ::TraversableBase,
+                                       drjit ::TraversableBase>)
+            drjit ::TraversableBase ::traverse_1_cb_rw(payload, fn);
 
-    DR_TRAVERSE_MEMBER_RW(m_value)
-    DR_TRAVERSE_MEMBER_RW(m_shape_opaque)
-    DR_TRAVERSE_MEMBER_RW(m_inv_resolution)
-}
+        DR_TRAVERSE_MEMBER_RW(m_value)
+        DR_TRAVERSE_MEMBER_RW(m_shape_opaque)
+        DR_TRAVERSE_MEMBER_RW(m_inv_resolution)
+    }
 };
 
 NAMESPACE_END(drjit)

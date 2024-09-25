@@ -171,7 +171,7 @@ template <typename T> using enable_if_traversable_t = enable_if_t<is_traversable
 template <typename T> static constexpr bool is_dynamic_traversable_v = 
     is_jit_v<T> && is_dynamic_array_v<T> && is_vector_v<T> && !is_tensor_v<T>;
 
-template <typename T> struct is_ref_t: std::false_type{};
+template <typename T> struct is_ref_t : std::false_type {};
 
 template <typename T, typename = void>
 struct is_iterable_t : std::false_type {};
@@ -207,15 +207,15 @@ void traverse_1_fn_ro(const Value &value, void *payload, void (*fn)(void *, uint
                          is_detected_v<detail::det_traverse_1_cb_ro, Value>) {
         if (value)
             value->traverse_1_cb_ro(payload, fn);
-        
+
     } else if constexpr (is_iterable_t<Value>::value) {
-        for (auto elem: value){
+        for (auto elem : value) {
             traverse_1_fn_ro(elem, payload, fn);
         }
     } else if constexpr (is_ref_t<Value>::value) {
         const auto *tmp = value.get();
         traverse_1_fn_ro(tmp, payload, fn);
-    } else if constexpr (is_detected_v<detail::det_traverse_1_cb_ro, Value*>) {
+    } else if constexpr (is_detected_v<detail::det_traverse_1_cb_ro, Value *>) {
         value.traverse_1_cb_ro(payload, fn);
     } else {
         // static_assert(false, "Failed to traverse field!");
@@ -242,13 +242,13 @@ void traverse_1_fn_rw(Value &value, void *payload, uint64_t (*fn)(void *, uint64
         if (value)
             value->traverse_1_cb_rw(payload, fn);
     } else if constexpr (is_iterable_t<Value>::value) {
-        for (auto elem: value){
+        for (auto elem : value) {
             traverse_1_fn_rw(elem, payload, fn);
         }
     } else if constexpr (is_ref_t<Value>::value) {
         auto *tmp = value.get();
         traverse_1_fn_rw(tmp, payload, fn);
-    } else if constexpr (is_detected_v<detail::det_traverse_1_cb_rw, Value*>) {
+    } else if constexpr (is_detected_v<detail::det_traverse_1_cb_rw, Value *>) {
         value.traverse_1_cb_rw(payload, fn);
     } else {
         // static_assert(false, "Failed to traverse field!");

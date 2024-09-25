@@ -271,26 +271,24 @@ void disable_py_tracing() {
     nb::module_::import_("sys").attr("settrace")(nb::none());
 }
 
-void traverse_py_cb_ro_impl(nb::handle self, nb::callable c){
-    struct PyTraverseCallback: TraverseCallback{
-        void operator()(nb::handle h) override{
+void traverse_py_cb_ro_impl(nb::handle self, nb::callable c) {
+    struct PyTraverseCallback : TraverseCallback {
+        void operator()(nb::handle h) override {
             auto index_fn = supp(h.type()).index;
             if (index_fn)
                 operator()(index_fn(inst_ptr(h)));
-            }
-        void operator()(uint64_t index) override{
-            m_callback(index);
         }
+        void operator()(uint64_t index) override { m_callback(index); }
         nb::callable m_callback;
 
-        PyTraverseCallback(nb::callable c): m_callback(c){}
+        PyTraverseCallback(nb::callable c) : m_callback(c) {}
     };
 
     PyTraverseCallback traverse_cb(std::move(c));
 
     auto dict = nb::borrow<nb::dict>(nb::getattr(self, "__dict__"));
 
-    for (auto value: dict.values()){
+    for (auto value : dict.values()) {
         traverse("traverse_py_cb_ro", traverse_cb, value);
     }
 }
