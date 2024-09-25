@@ -5380,6 +5380,33 @@
    Check if the underlying backend supports a desired flavor of
    scatter-reduction for the given array type.
 
+.. topic:: detail_new_scope
+
+   Set a new scope identifier to separate basic blocks.
+
+   Several steps of Dr.Jit's compilation rely on the definition of
+   a "basic block", which marks the boundary for certain optimizations
+   and re-orderings to take place (e.g., common subexpression elimination).
+
+   When executing Dr.Jit computation on different threads, the user
+   has to ensure that basic blocks are separated between threads.
+   Before a thread T2 references Dr.Jit arrays created by another thread T1,
+   it must create a new scope to guarantee that dependencies between them
+   are correctly tracked and ordered during the compilation process. Dr.Jit
+   checks for violations of this condition and will raise an exception when
+   attempting to evaluate incorrectly ordered expressions.
+
+   This function sets a unique, new scope identifier (a simple 32 bit integer)
+   to separate any of the following computation from the previous basic block.
+
+.. topic:: detail_scope
+
+    Queries the scope identifier (see :py:func:`drjit.detail.new_scope())
+
+.. topic:: detail_set_scope
+
+    Manually sets a scope identifier (see :py:func:`drjit.detail.new_scope())
+
 .. topic:: JitFlag
 
     Flags that control how Dr.Jit compiles and optimizes programs.

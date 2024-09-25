@@ -321,7 +321,11 @@ void export_detail(nb::module_ &) {
 
      .def("can_scatter_reduce", &can_scatter_reduce, doc_detail_can_scatter_reduce)
 
-     .def("cuda_compute_capability", &jit_cuda_compute_capability);
+     .def("cuda_compute_capability", &jit_cuda_compute_capability)
+
+     .def("new_scope", &jit_new_scope, "backend"_a, doc_detail_new_scope)
+     .def("scope", &jit_scope, "backend"_a, doc_detail_scope)
+     .def("set_scope", &jit_set_scope, "backend"_a, "scope"_a, doc_detail_set_scope);
 
     trace_func_handle = d.attr("trace_func");
 }
