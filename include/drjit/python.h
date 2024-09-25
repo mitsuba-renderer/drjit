@@ -54,6 +54,7 @@
 #include <drjit/math.h>
 #include <drjit-core/python.h>
 #include <nanobind/stl/array.h>
+#include <nanobind/intrusive/counter.h>
 
 NAMESPACE_BEGIN(drjit)
 struct ArrayBinding;
@@ -1053,6 +1054,7 @@ template <typename T, typename... Args> auto& bind_traverse(nanobind::class_<T, 
 
     cls.def("_traverse_1_cb_rw", [](T *self, nb::callable c) {
         Payload payload{ std::move(c) };
+        jit_log(LogLevel::Debug, "pointer %p", &T::traverse_1_cb_rw);
         self->traverse_1_cb_rw((void *) &payload, [](void *p, uint64_t index) {
             return nb::cast<uint64_t>(((Payload *) p)->c(index));
         });
@@ -1060,5 +1062,10 @@ template <typename T, typename... Args> auto& bind_traverse(nanobind::class_<T, 
 
     return cls;
 }
+
+struct TraversableBase: nanobind::intrusive_base{
+    virtual void traverse_1_cb_ro(void *payload, void (*fn)(void *, uint64_t)) const = 0;
+    virtual void traverse_1_cb_rw(void *payload, uint64_t (*fn)(void *, uint64_t)) = 0;
+};
 
 NAMESPACE_END(drjit)

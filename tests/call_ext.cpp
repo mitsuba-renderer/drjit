@@ -13,16 +13,17 @@ namespace dr = drjit;
 using namespace nb::literals;
 
 template <typename T>
-struct Sampler {
+struct Sampler : dr::TraversableBase {
+    Sampler() : rng(1) { }
     Sampler(size_t size) : rng(size) { }
 
     T next() { return rng.next_float32(); }
 
-    void traverse_1_cb_ro(void *payload, void (*fn)(void *, uint64_t)) const {
+    void traverse_1_cb_ro(void *payload, void (*fn)(void *, uint64_t)) const override {
         traverse_1_fn_ro(rng, payload, fn);
     }
 
-    void traverse_1_cb_rw(void *payload, uint64_t (*fn)(void *, uint64_t)) {
+    void traverse_1_cb_rw(void *payload, uint64_t (*fn)(void *, uint64_t)) override {
         traverse_1_fn_rw(rng, payload, fn);
     }
 
@@ -184,6 +185,7 @@ void bind(nb::module_ &m) {
     using Sampler = ::Sampler<Float>;
 
     auto sampler = nb::class_<Sampler>(m, "Sampler")
+        .def(nb::init<>())
         .def(nb::init<size_t>())
         .def("next", &Sampler::next)
         .def_rw("rng", &Sampler::rng);
