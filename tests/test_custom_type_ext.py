@@ -1,6 +1,7 @@
 import drjit as dr
 import pytest
 
+dr.set_log_level(dr.LogLevel.Debug)
 
 def get_pkg(t):
     with dr.detail.scoped_rtld_deepbind():
@@ -69,3 +70,60 @@ def test03_cpp_make_opaque(t):
 
     pkg.cpp_make_opaque(holder)
     assert holder.value().state == dr.VarState.Evaluated
+
+@pytest.test_arrays("float32,-diff,shape=(*),jit")
+def test04_traverse_opaque(t):
+    pkg = get_pkg(t)
+    print(f"{dir(pkg)=}")
+    Float = t
+
+    v = dr.arange(Float, 10)
+
+    a = pkg.A(v)
+
+    assert dr.detail.collect_indices(a) == [v.index]
+
+
+@pytest.test_arrays("float32,-diff,shape=(*),jit")
+def test05_traverse_py(t):
+    Float = t
+
+    v = dr.arange(Float, 10)
+
+    class PyClass:
+        def __init__(self, v) -> None:
+            self.v = v
+
+    c = PyClass(v)
+
+    result = []
+
+    def callback(index):
+        result.append(index)
+
+    dr.detail.traverse_py_cb_ro(c, callback)
+
+    assert result == [v.index]
+
+
+@pytest.test_arrays("float32,-diff,shape=(*),jit")
+def test06_trampoline_traversal(t):
+    pkg = get_pkg(t)
+    print(f"{dir(pkg)=}")
+    Float = t
+
+    v = dr.opaque(Float, 0, 3)
+
+    class B(pkg.Base):
+        def __init__(self, v) -> None:
+            super().__init__()
+            self.v = v
+
+        def value(self):
+            return self.v
+
+    b = B(v)
+
+    b.value()
+
+    assert dr.detail.collect_indices(b) == [v.index]
