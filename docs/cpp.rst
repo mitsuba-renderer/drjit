@@ -172,7 +172,7 @@ Python interface to C++.
 The argument ``args`` must always be a tuple that will be unpacked and passed
 as arguments of ``true_fn`` and ``false_fn``. The return value of these
 function can be any tree of arbitrarily nested arrays, tuples, and other
-:ref:`custom data structures <custom_types_cpp>`. 
+:ref:`custom data structures <custom_types_cpp>`.
 
 The short-hand notation provided through the :py:func:`@drjit.syntax
 <drjit.syntax>` decorator is not available in C++.
@@ -321,6 +321,20 @@ on a Dr.Jit instance arrays. Below is an overview of the available macros:
 .. c:macro:: DRJIT_CALL_END()
 
    Demarcates the end of an interface block.
+
+.. c:macro:: DRJIT_CALL_TEMPLATE_INHERITED_BEGIN(Name, Parent)
+
+   A variant of the above macro that should be used when ``Name`` refers to a
+   template class that inherits from another template class ``Parent``.
+   The class ``Name`` should only be registered under the registry domain of ``Parent``.
+   The interface of ``Parent`` must have already been exposed with a call to
+   ``DRJIT_CALL_TEMPLATE_BEGIN(Parent) ... DRJIT_CALL_END()``.
+   The interface will then be extended with any methods listed in this block.
+
+.. c:macro:: DRJIT_CALL_INHERITED_END()
+
+   Demarcates the end of an interface block that started with
+   ``DRJIT_CALL_TEMPLATE_INHERITED_BEGIN``.
 
 .. c:macro:: DRJIT_CALL_METHOD(Name)
 
