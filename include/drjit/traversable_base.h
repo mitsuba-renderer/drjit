@@ -6,6 +6,7 @@
 #include "nanobind/intrusive/ref.h"
 #include <drjit-core/jit.h>
 #include <drjit/map.h>
+#include <memory>
 #include <type_traits>
 #include <vector>
 
