@@ -11,6 +11,7 @@
 
 NAMESPACE_BEGIN(drjit)
 
+/// Interface for traversing C++ objects.
 struct TraversableBase : nanobind::intrusive_base {
     virtual void traverse_1_cb_ro(void *, void (*)(void *, uint64_t)) const = 0;
     virtual void traverse_1_cb_rw(void *, uint64_t (*)(void *, uint64_t))   = 0;
@@ -18,13 +19,13 @@ struct TraversableBase : nanobind::intrusive_base {
 
 template <typename T> struct is_ref_t<nanobind::ref<T>> : std::true_type {};
 template <typename T> struct is_ref_t<std::unique_ptr<T>> : std::true_type {};
-// template <typename T> struct is_iterable_t<std::vector<T>> : std::true_type
-// {};
 
+/// Macro for generating call to traverse_1_fn_ro for a class member
 #define DR_TRAVERSE_MEMBER_RO(member)                                          \
     drjit::log_member_open(false, #member);                                    \
     drjit::traverse_1_fn_ro(member, payload, fn);                              \
     drjit::log_member_close();
+/// Macro for generating call to traverse_1_fn_rw for a class member
 #define DR_TRAVERSE_MEMBER_RW(member)                                          \
     drjit::log_member_open(true, #member);                                     \
     drjit::traverse_1_fn_rw(member, payload, fn);                              \
@@ -52,6 +53,8 @@ inline void log_member_close() { jit_log(LogLevel::Debug, "}"); }
         DRJIT_MAP(DR_TRAVERSE_MEMBER_RW, __VA_ARGS__)                          \
     }
 
+/// Macro to generate traverse_1_cb_ro and traverse_1_cb_rw methods for each
+/// member in the list.
 #define DR_TRAVERSE_CB(Base, ...)                                              \
 public:                                                                        \
     DR_TRAVERSE_CB_RO(Base, __VA_ARGS__)                                       \
