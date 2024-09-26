@@ -22,6 +22,7 @@ NAMESPACE_BEGIN(drjit)
     namespace drjit {                                                          \
         template <typename Self>                                               \
         struct call_support<Name, Self> {                                      \
+            using Base = void;                                                 \
             using Class = Name;                                                \
             using Mask = mask_t<Self>;                                         \
             static constexpr const char *Domain = #Name;                       \
@@ -34,6 +35,7 @@ NAMESPACE_BEGIN(drjit)
     namespace drjit {                                                          \
         template <typename Self, typename... Ts>                               \
         struct call_support<Name<Ts...>, Self> {                               \
+            using Base = void;                                                 \
             using Class = Name<Ts...>;                                         \
             using Mask = mask_t<Self>;                                         \
             static constexpr const char *Domain = #Name;                       \
@@ -50,7 +52,6 @@ NAMESPACE_BEGIN(drjit)
             using Base = call_support<Parent<Ts...>, Self>;                    \
             using Base::self;                                                  \
             using Base::Domain;                                                \
-            using Base::is_class_ptr;                                          \
             using Class = Name<Ts...>;                                         \
             using Mask = mask_t<Self>;                                         \
             call_support(const Self &self) : Base(self) { }                    \
@@ -59,23 +60,11 @@ NAMESPACE_BEGIN(drjit)
             }
 
 #define DRJIT_CALL_INHERITED_END(Name)                                         \
-            static inline bool is_class_ptr(void *ptr) {                       \
-                /* Since instances of derived classes are part of the DrJit */ \
-                /* registry domain of their base class, we may receive      */ \
-                /* pointers to instances of type other than Class.          */ \
-                /* We use a `dynamic_cast` to skip calls on these invalid   */ \
-                /* pointers.                                                */ \
-                return (ptr != nullptr) && dynamic_cast<Class *>(              \
-                    (typename Base::Class *) ptr);                             \
-            }                                                                  \
         };                                                                     \
     }
 
 #define DRJIT_CALL_END(Name)                                                   \
         protected:                                                             \
-            static inline bool is_class_ptr(void *ptr) {                       \
-                return ptr != nullptr;                                         \
-            }                                                                  \
             const Self &self;                                                  \
         };                                                                     \
     }
@@ -102,10 +91,10 @@ private:                                                                       \
             CallStateT *state = (CallStateT *) state_p;                        \
             state->update_args(args_i);                                        \
             if constexpr (std::is_same_v<Ret, void>) {                         \
-                if (is_class_ptr(self))                                        \
+                if (detail::is_valid_call_ptr<Class, Base>(self))              \
                     ((Class *) self)->Name(drjit::get<Is>(state->args)...);    \
             } else {                                                           \
-                if (is_class_ptr(self))                                        \
+                if (detail::is_valid_call_ptr<Class, Base>(self))              \
                     state->rv = ((Class *) self)                               \
                                     ->Name(drjit::get<Is>(state->args)...);    \
                 else                                                           \
@@ -129,7 +118,7 @@ public:                                                                        \
                                    const vector<uint64_t> &,                   \
                                    vector<uint64_t> &rv_i) {                   \
             CallStateT *state = (CallStateT *) state_p;                        \
-            if (is_class_ptr(self))                                            \
+            if (detail::is_valid_call_ptr<Class, Base>(self))                  \
                 state->rv = ((Class *) self)->Name();                          \
             else                                                               \
                 state->rv = zeros<Ret>();                                      \
@@ -144,6 +133,22 @@ using vectorize_rv_t =
     std::conditional_t<std::is_scalar_v<T>, replace_scalar_t<Guide, T>, T>;
 
 NAMESPACE_BEGIN(detail)
+
+/**
+ * Since instances of derived classes are part of the DrJit
+ * registry domain of their base class, CallSupport may
+ * receive pointers to instances of type other than Class.
+ * We use a `dynamic_cast` to skip calls on these invalid pointers.
+ */
+template <typename ChildClass, typename Parent>
+static inline bool is_valid_call_ptr(void *ptr) {
+    if constexpr (std::is_same_v<Parent, void>) {
+        return ptr != nullptr;
+    } else {
+        return (ptr != nullptr) && dynamic_cast<ChildClass *>(
+            (typename Parent::Class *) ptr);
+    }
+}
 
 template <typename Mask, typename ... Args>
 Mask extract_mask(drjit::tuple<Args...> &t) {
