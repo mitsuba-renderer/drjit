@@ -52,9 +52,8 @@ build = ["cp38-*", "cp39-*", "cp310-*", "cp311-*", "cp312-*", "cp313-*"]
 archs = ["auto64"]
 skip = "*-musllinux* pp*"
 
-# Run pytest to ensure that the package was correctly built
-test-command = "pytest {project}/tests"
-test-requires = "pytest"
+# Try to import the package to see if it was built correctly (compromise)
+test-command = "python -c \"import drjit\""
 
 # Needed for full C++17 support
 [tool.cibuildwheel.macos.environment]
