@@ -2,16 +2,16 @@
 requires = [
     "scikit-build-core",
     "nanobind @ git+https://github.com/wjakob/nanobind@master",
-    "typing_extensions"
+    "typing_extensions",
+    "hatch-fancy-pypi-readme"
 ]
 build-backend = "scikit_build_core.build"
 
 
 [project]
 name = "drjit"
-version = "1.0.0"
+dynamic = ["version", "readme"]
 description = "Dr.Jit: A Just-In-Time Compiler for Differentiable Rendering"
-readme = "README.rst"
 dependencies = [
   "typing_extensions;python_version<\"3.11\""
 ]
@@ -40,8 +40,10 @@ build-dir = "build/{wheel_tag}"
 # Build stable ABI wheels for CPython 3.12+
 wheel.py-api = "cp312"
 
-cmake.verbose = true
+# Tool to generate README for PyPI
+metadata.readme.provider = "scikit_build_core.metadata.fancy_pypi_readme"
 
+cmake.verbose = true
 logging.level = "INFO"
 
 
@@ -67,3 +69,38 @@ before-all = "yum install -y libatomic"
 
 [tool.pytest.ini_options]
 norecursedirs = [ "ext" ]
+
+
+[tool.scikit-build.metadata.version]
+# Fetch version number from header file
+provider = "scikit_build_core.metadata.regex"
+input = "include/drjit/fwd.h"
+regex = '''(?sx)
+\#define \s+ DRJIT_VERSION_MAJOR \s+ (?P<major>\d+) .*?
+\#define \s+ DRJIT_VERSION_MINOR \s+ (?P<minor>\d+) .*?
+\#define \s+ DRJIT_VERSION_PATCH \s+ (?P<patch>\d+) .*?
+'''
+result = "{major}.{minor}.{patch}"
+
+
+# Build PyPI compliant README file from original README.rst
+[tool.hatch.metadata.hooks.fancy-pypi-readme]
+content-type = "text/x-rst"
+
+[[tool.hatch.metadata.hooks.fancy-pypi-readme.fragments]]
+path = "README.rst"
+end-before = ".. image::"
+pattern = "(.*)"
+
+[[tool.hatch.metadata.hooks.fancy-pypi-readme.fragments]]
+text = '''
+.. image:: https://github.com/mitsuba-renderer/drjit-core/raw/master/resources/drjit-logo-dark.svg
+   :alt: Dr.Jit logo
+   :align: center
+
+'''
+
+[[tool.hatch.metadata.hooks.fancy-pypi-readme.fragments]]
+path = "README.rst"
+start-after = "</p>\n\n"
+pattern = "(.*)"
