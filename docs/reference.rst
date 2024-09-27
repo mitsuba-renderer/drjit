@@ -19,7 +19,7 @@ The reference extensively use `type variables
 <https://docs.python.org/3/library/typing.html#typing.TypeVar>`__ which can be
 recognized because their name equals or ends with a capital ``T`` (e.g., ``T``,
 ``ArrayT``, ``MaskT``, etc.). Type variables serve as placeholders that show
-how types propagates through function calls. For example, a function with
+how types propagate through function calls. For example, a function with
 signature
 
 .. code-block:: python
@@ -574,6 +574,16 @@ Profiling
 
 .. autofunction:: profile_mark
 .. autofunction:: profile_range
+
+Textures
+--------
+
+The texture implementations are defined in the various backends.
+(e.g. :py:class:`drjit.llvm.ad.Texture3f16`). However, they reference
+enumerations provided here
+
+.. autoenum:: WrapMode
+.. autoenum:: FilterMode
 
 Low-level bits
 --------------

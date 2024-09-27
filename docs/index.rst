@@ -42,8 +42,8 @@ public API.
    interop
    optim
    misc
-   bench
    debug
+   bench
    cpp
    textures
    faq

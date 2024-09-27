@@ -110,10 +110,10 @@ Linux.
 .. code-block:: bash
 
    # macOS
-   DYLD_INSERT_LIBRARIES=/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/15.0.0/lib/darwin/libclang_rt.asan_osx_dynamic.dylib python <...>
+   DYLD_INSERT_LIBRARIES="$(clang -print-file-name=libclang_rt.asan_osx_dynamic.dylib)" python <...>
 
    # Linux
-   LD_PRELOAD="$(gcc -print-file-name=libasan.so) $(gcc -print-file-name=libstdc++.so)"
+   LD_PRELOAD="$(gcc -print-file-name=libasan.so) $(gcc -print-file-name=libstdc++.so)" python
 
 On Linux, both ``libasan`` and ``libstdc++`` or ``libc++`` need to be preloaded
 at the same time.
@@ -141,9 +141,7 @@ that the sanitizer messages are visible).
 
 .. code-block:: bash
 
-   DYLD_INSERT_LIBRARIES=/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/15.0.0/lib/darwin/libclang_rt.asan_osx_dynamic.dylib
-/opt/homebrew/Cellar/python@3.12/3.12.1/Frameworks/Python.framework/Versions/3.12/Resources/Python.app/Contents/MacOS/Python
--m pytest --capture no
+   DYLD_INSERT_LIBRARIES="$(clang -print-file-name=libclang_rt.asan_osx_dynamic.dylib)" python <...> /opt/homebrew/Cellar/python@3.12/3.12.1/Frameworks/Python.framework/Versions/3.12/Resources/Python.app/Contents/MacOS/Python -m pytest --capture no
 
 On Linux, ASAN conflicts with CUDA because both very aggressively map the
 entire virtual memory space and cause each other to run out of memory. A

@@ -22,9 +22,9 @@ derivatives :math:`\partial y_i/\partial x_i`, which is instrumental when the
 program should be be optimized to accomplish a certain task.
 
 AD does this by decomposing the program into a sequence of steps that are
-individually easy to differentiate, and it then using the `chain rule
-<https://en.wikipedia.org/wiki/Chain_rule>`__ to stitch per-step derivatives
-into derivatives of the larger program.
+individually easy to differentiate. Given such a decomposition, it then applies
+the `chain rule <https://en.wikipedia.org/wiki/Chain_rule>`__ to stitch the
+per-step derivatives into derivatives of the larger program.
 
 For simplicity, let's assume at first that the computation is *pure*, i.e.,
 that it consistently produces the same output if re-run with the same input. In
@@ -104,7 +104,7 @@ learning, where it is known as *backpropagation*. In this case, the function
 :math:`f` computes a single *loss value* from a large set of neural network
 parameters, and :math:`\mathbf{J}_f` turns into a large row vector containing
 all parameter derivatives. Reverse mode efficiently computes all of these
-derivatives at once in a single pass.
+derivatives in a single pass.
 
 .. note::
 
@@ -151,7 +151,7 @@ recurse through :ref:`PyTrees <pytrees>`, which is convenient when
 differentiating many variables at once.
 
 Following this step, we can perform a computation and then either differentiate
-it operation in *forward mode* via :py:func:`dr.forward <forward>`
+it operation in *forward mode* via :py:func:`dr.forward() <forward>`
 
 .. code-block:: pycon
 
@@ -160,7 +160,7 @@ it operation in *forward mode* via :py:func:`dr.forward <forward>`
    >>> y.grad
    [20]
 
-or *reverse mode* via :py:func:`dr.backward <backward>`:
+or *reverse mode* via :py:func:`dr.backward() <backward>`:
 
 .. code-block:: pycon
 
@@ -184,7 +184,24 @@ The final gradient can be obtained via the :py:attribute:`.grad
    Note that while Dr.Jit compute first-order derivatives in forward and backward
    mode, it lacks support for higher-order differentiation (e.g. Hessian-vector products).
 
+Links to relevant methods:
+--------------------------
 
+Please review the following AD-related functions for more details:
+
+- Enabling/disabling gradient tracking: :py:func:`enable_grad`,
+  :py:func:`disable_grad`, :py:func:`set_grad_enabled`,
+  :py:func:`grad_enabled`, :py:func:`detach`.
+- Accessing/modifying gradients: :py:func:`grad`, :py:func:`set_grad`,
+  :py:func:`accum_grad`, :py:func:`replace_grad`, :py:func:`clear_grad`.
+- Computing gradients: :py:func:`forward_from`, :py:func:`forward_to`,
+  :py:func:`forward`, :py:func:`backward_from`, :py:func:`backward_to`,
+  :py:func:`backward`.
+- Manual AD interface: :py:func:`traverse`, :py:func:`enqueue`.
+- Implementing custom differentiable operations: :py:func`custom`, :py:class:`CustomOp`.
+- Context managers to temporarily suspend/resume/isolate gradients:
+  :py:func:`suspend_grad`, :py:func:`resume_grad`, :py:func:`isolate_grad`.
+- Interfacing with other AD frameworks: :py:func:`wrap`.
 
 Differentiating loops
 ---------------------

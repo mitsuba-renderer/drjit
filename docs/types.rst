@@ -45,7 +45,7 @@ one of the above depending on the backends detected at runtime.
 - :py:mod:`drjit.auto.ad`.
 
 Any given array type (e.g. ``Array3f``) actually exists in *all five* of these
-packages (e.g., ``drjit.scalar.Array3f``, ``drjit.llvm.ad.Array3f``). However,
+packages (e.g., :py:class:`drjit.scalar.Array3f`, :py:class:`drjit.llvm.ad.Array3f`). However,
 there are notable differences between them:
 
 - **Scalar backend**: types contained within ``drjit.scalar.*`` represent a
@@ -60,7 +60,7 @@ there are notable differences between them:
   the dynamic dimension runs in parallel, which is important for efficiency.
 
   Only these vectorized types employ *tracing*, and operations involving them
-  conceptually appends instructions to a progressively growing computational
+  conceptually append instructions to a progressively growing computational
   kernel. Variable evaluation eventually compiles and executes this kernel on a
   target device.
 

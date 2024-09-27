@@ -2893,6 +2893,178 @@ Tensors
 
    Derives from :py:class:`drjit.ArrayBase`.
 
+Textures
+^^^^^^^^
+.. autoclass:: drjit.auto.Texture1f16
+
+   .. automethod:: __init__
+   .. automethod:: set_value
+   .. automethod:: set_tensor
+   .. automethod:: value
+   .. automethod:: tensor
+   .. automethod:: filter_mode
+   .. automethod:: wrap_mode
+   .. automethod:: use_accel
+   .. automethod:: migrated
+   .. autoproperty:: shape
+   .. automethod:: eval
+   .. automethod:: eval_fetch
+   .. automethod:: eval_cubic
+   .. automethod:: eval_cubic_grad
+   .. automethod:: eval_cubic_hessian
+   .. automethod:: eval_cubic_helper
+
+.. autoclass:: drjit.auto.Texture2f16
+
+   .. automethod:: __init__
+   .. automethod:: set_value
+   .. automethod:: set_tensor
+   .. automethod:: value
+   .. automethod:: tensor
+   .. automethod:: filter_mode
+   .. automethod:: wrap_mode
+   .. automethod:: use_accel
+   .. automethod:: migrated
+   .. autoproperty:: shape
+   .. automethod:: eval
+   .. automethod:: eval_fetch
+   .. automethod:: eval_cubic
+   .. automethod:: eval_cubic_grad
+   .. automethod:: eval_cubic_hessian
+   .. automethod:: eval_cubic_helper
+
+.. autoclass:: drjit.auto.Texture3f16
+
+   .. automethod:: __init__
+   .. automethod:: set_value
+   .. automethod:: set_tensor
+   .. automethod:: value
+   .. automethod:: tensor
+   .. automethod:: filter_mode
+   .. automethod:: wrap_mode
+   .. automethod:: use_accel
+   .. automethod:: migrated
+   .. autoproperty:: shape
+   .. automethod:: eval
+   .. automethod:: eval_fetch
+   .. automethod:: eval_cubic
+   .. automethod:: eval_cubic_grad
+   .. automethod:: eval_cubic_hessian
+   .. automethod:: eval_cubic_helper
+
+.. autoclass:: drjit.auto.Texture1f
+
+   .. automethod:: __init__
+   .. automethod:: set_value
+   .. automethod:: set_tensor
+   .. automethod:: value
+   .. automethod:: tensor
+   .. automethod:: filter_mode
+   .. automethod:: wrap_mode
+   .. automethod:: use_accel
+   .. automethod:: migrated
+   .. autoproperty:: shape
+   .. automethod:: eval
+   .. automethod:: eval_fetch
+   .. automethod:: eval_cubic
+   .. automethod:: eval_cubic_grad
+   .. automethod:: eval_cubic_hessian
+   .. automethod:: eval_cubic_helper
+
+.. autoclass:: drjit.auto.Texture2f
+
+   .. automethod:: __init__
+   .. automethod:: set_value
+   .. automethod:: set_tensor
+   .. automethod:: value
+   .. automethod:: tensor
+   .. automethod:: filter_mode
+   .. automethod:: wrap_mode
+   .. automethod:: use_accel
+   .. automethod:: migrated
+   .. autoproperty:: shape
+   .. automethod:: eval
+   .. automethod:: eval_fetch
+   .. automethod:: eval_cubic
+   .. automethod:: eval_cubic_grad
+   .. automethod:: eval_cubic_hessian
+   .. automethod:: eval_cubic_helper
+
+.. autoclass:: drjit.auto.Texture3f
+
+   .. automethod:: __init__
+   .. automethod:: set_value
+   .. automethod:: set_tensor
+   .. automethod:: value
+   .. automethod:: tensor
+   .. automethod:: filter_mode
+   .. automethod:: wrap_mode
+   .. automethod:: use_accel
+   .. automethod:: migrated
+   .. autoproperty:: shape
+   .. automethod:: eval
+   .. automethod:: eval_fetch
+   .. automethod:: eval_cubic
+   .. automethod:: eval_cubic_grad
+   .. automethod:: eval_cubic_hessian
+   .. automethod:: eval_cubic_helper
+
+.. autoclass:: drjit.auto.Texture1f64
+
+   .. automethod:: __init__
+   .. automethod:: set_value
+   .. automethod:: set_tensor
+   .. automethod:: value
+   .. automethod:: tensor
+   .. automethod:: filter_mode
+   .. automethod:: wrap_mode
+   .. automethod:: use_accel
+   .. automethod:: migrated
+   .. autoproperty:: shape
+   .. automethod:: eval
+   .. automethod:: eval_fetch
+   .. automethod:: eval_cubic
+   .. automethod:: eval_cubic_grad
+   .. automethod:: eval_cubic_hessian
+   .. automethod:: eval_cubic_helper
+
+.. autoclass:: drjit.auto.Texture2f64
+
+   .. automethod:: __init__
+   .. automethod:: set_value
+   .. automethod:: set_tensor
+   .. automethod:: value
+   .. automethod:: tensor
+   .. automethod:: filter_mode
+   .. automethod:: wrap_mode
+   .. automethod:: use_accel
+   .. automethod:: migrated
+   .. autoproperty:: shape
+   .. automethod:: eval
+   .. automethod:: eval_fetch
+   .. automethod:: eval_cubic
+   .. automethod:: eval_cubic_grad
+   .. automethod:: eval_cubic_hessian
+   .. automethod:: eval_cubic_helper
+
+.. autoclass:: drjit.auto.Texture3f64
+
+   .. automethod:: __init__
+   .. automethod:: set_value
+   .. automethod:: set_tensor
+   .. automethod:: value
+   .. automethod:: tensor
+   .. automethod:: filter_mode
+   .. automethod:: wrap_mode
+   .. automethod:: use_accel
+   .. automethod:: migrated
+   .. autoproperty:: shape
+   .. automethod:: eval
+   .. automethod:: eval_fetch
+   .. automethod:: eval_cubic
+   .. automethod:: eval_cubic_grad
+   .. automethod:: eval_cubic_hessian
+   .. automethod:: eval_cubic_helper
 
 Random number generators
 ^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -3298,9 +3470,181 @@ Tensors
 
    Derives from :py:class:`drjit.ArrayBase`.
 
+Textures
+^^^^^^^^
+.. autoclass:: drjit.auto.ad.Texture1f16
+
+   .. automethod:: __init__
+   .. automethod:: set_value
+   .. automethod:: set_tensor
+   .. automethod:: value
+   .. automethod:: tensor
+   .. automethod:: filter_mode
+   .. automethod:: wrap_mode
+   .. automethod:: use_accel
+   .. automethod:: migrated
+   .. autoproperty:: shape
+   .. automethod:: eval
+   .. automethod:: eval_fetch
+   .. automethod:: eval_cubic
+   .. automethod:: eval_cubic_grad
+   .. automethod:: eval_cubic_hessian
+   .. automethod:: eval_cubic_helper
+
+.. autoclass:: drjit.auto.ad.Texture2f16
+
+   .. automethod:: __init__
+   .. automethod:: set_value
+   .. automethod:: set_tensor
+   .. automethod:: value
+   .. automethod:: tensor
+   .. automethod:: filter_mode
+   .. automethod:: wrap_mode
+   .. automethod:: use_accel
+   .. automethod:: migrated
+   .. autoproperty:: shape
+   .. automethod:: eval
+   .. automethod:: eval_fetch
+   .. automethod:: eval_cubic
+   .. automethod:: eval_cubic_grad
+   .. automethod:: eval_cubic_hessian
+   .. automethod:: eval_cubic_helper
+
+.. autoclass:: drjit.auto.ad.Texture3f16
+
+   .. automethod:: __init__
+   .. automethod:: set_value
+   .. automethod:: set_tensor
+   .. automethod:: value
+   .. automethod:: tensor
+   .. automethod:: filter_mode
+   .. automethod:: wrap_mode
+   .. automethod:: use_accel
+   .. automethod:: migrated
+   .. autoproperty:: shape
+   .. automethod:: eval
+   .. automethod:: eval_fetch
+   .. automethod:: eval_cubic
+   .. automethod:: eval_cubic_grad
+   .. automethod:: eval_cubic_hessian
+   .. automethod:: eval_cubic_helper
+
+.. autoclass:: drjit.auto.ad.Texture1f
+
+   .. automethod:: __init__
+   .. automethod:: set_value
+   .. automethod:: set_tensor
+   .. automethod:: value
+   .. automethod:: tensor
+   .. automethod:: filter_mode
+   .. automethod:: wrap_mode
+   .. automethod:: use_accel
+   .. automethod:: migrated
+   .. autoproperty:: shape
+   .. automethod:: eval
+   .. automethod:: eval_fetch
+   .. automethod:: eval_cubic
+   .. automethod:: eval_cubic_grad
+   .. automethod:: eval_cubic_hessian
+   .. automethod:: eval_cubic_helper
+
+.. autoclass:: drjit.auto.ad.Texture2f
+
+   .. automethod:: __init__
+   .. automethod:: set_value
+   .. automethod:: set_tensor
+   .. automethod:: value
+   .. automethod:: tensor
+   .. automethod:: filter_mode
+   .. automethod:: wrap_mode
+   .. automethod:: use_accel
+   .. automethod:: migrated
+   .. autoproperty:: shape
+   .. automethod:: eval
+   .. automethod:: eval_fetch
+   .. automethod:: eval_cubic
+   .. automethod:: eval_cubic_grad
+   .. automethod:: eval_cubic_hessian
+   .. automethod:: eval_cubic_helper
+
+.. autoclass:: drjit.auto.ad.Texture3f
+
+   .. automethod:: __init__
+   .. automethod:: set_value
+   .. automethod:: set_tensor
+   .. automethod:: value
+   .. automethod:: tensor
+   .. automethod:: filter_mode
+   .. automethod:: wrap_mode
+   .. automethod:: use_accel
+   .. automethod:: migrated
+   .. autoproperty:: shape
+   .. automethod:: eval
+   .. automethod:: eval_fetch
+   .. automethod:: eval_cubic
+   .. automethod:: eval_cubic_grad
+   .. automethod:: eval_cubic_hessian
+   .. automethod:: eval_cubic_helper
+
+.. autoclass:: drjit.auto.ad.Texture1f64
+
+   .. automethod:: __init__
+   .. automethod:: set_value
+   .. automethod:: set_tensor
+   .. automethod:: value
+   .. automethod:: tensor
+   .. automethod:: filter_mode
+   .. automethod:: wrap_mode
+   .. automethod:: use_accel
+   .. automethod:: migrated
+   .. autoproperty:: shape
+   .. automethod:: eval
+   .. automethod:: eval_fetch
+   .. automethod:: eval_cubic
+   .. automethod:: eval_cubic_grad
+   .. automethod:: eval_cubic_hessian
+   .. automethod:: eval_cubic_helper
+
+.. autoclass:: drjit.auto.ad.Texture2f64
+
+   .. automethod:: __init__
+   .. automethod:: set_value
+   .. automethod:: set_tensor
+   .. automethod:: value
+   .. automethod:: tensor
+   .. automethod:: filter_mode
+   .. automethod:: wrap_mode
+   .. automethod:: use_accel
+   .. automethod:: migrated
+   .. autoproperty:: shape
+   .. automethod:: eval
+   .. automethod:: eval_fetch
+   .. automethod:: eval_cubic
+   .. automethod:: eval_cubic_grad
+   .. automethod:: eval_cubic_hessian
+   .. automethod:: eval_cubic_helper
+
+.. autoclass:: drjit.auto.ad.Texture3f64
+
+   .. automethod:: __init__
+   .. automethod:: set_value
+   .. automethod:: set_tensor
+   .. automethod:: value
+   .. automethod:: tensor
+   .. automethod:: filter_mode
+   .. automethod:: wrap_mode
+   .. automethod:: use_accel
+   .. automethod:: migrated
+   .. autoproperty:: shape
+   .. automethod:: eval
+   .. automethod:: eval_fetch
+   .. automethod:: eval_cubic
+   .. automethod:: eval_cubic_grad
+   .. automethod:: eval_cubic_hessian
+   .. automethod:: eval_cubic_helper
 
 Random number generators
-^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. autoclass:: PCG32
 

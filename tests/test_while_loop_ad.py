@@ -206,7 +206,7 @@ def test08_bwd_in_loop(t, mode):
 
 @pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
 @pytest.test_arrays('float32,diff,shape=(*)')
-def test09_sum_loop_extra(t, mode): 
+def test09_sum_loop_extra(t, mode):
     # Test the case, where extra loop state variables are added
     # after the differentiable ones.
 
@@ -223,7 +223,7 @@ def test09_sum_loop_extra(t, mode):
         while dr.hint(i < 10, mode = mode, max_iterations=-1):
             y += l[1] + Float(i)
             i += 1
-            
+
         return y
 
     # Construct an array so that the the m_inputs field in LoopOp looks like this:
