@@ -295,7 +295,7 @@ PyObject *py_and(PyObject *h0, PyObject *h1) noexcept {
         // Zero out `False` indices in mask
         nb::handle self_tp = nb::handle(h0).type();
         nb::object zero =
-            array_module.attr("zeros")(self_tp, nb::handle(h0).attr("shape"));
+            array_module.attr("zeros")(self_tp, ::shape(h0));
         nb::object result =
             select(nb::borrow(h1), nb::borrow(h0), nb::borrow(zero));
         return result.release().ptr();
