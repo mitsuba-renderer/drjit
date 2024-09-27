@@ -4084,6 +4084,8 @@
     To support more fine-grained use cases that require this, the following
     flags can be used to control what should and should not be destructed.
 
+    Members of this enumeration can be combined using the ``|`` operator.
+
 .. topic:: ADFlag_ClearNone
 
     Clear nothing.

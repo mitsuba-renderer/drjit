@@ -319,7 +319,7 @@ Python API.
   for ``aarch64`` processors via NEON intrinsics. This is actually an old
   feature from a predecessor project (Enoki) that was finally revived.
 
-- The ``nb::setattr()`` function that was previously used to update modified
+- The ``nb::set_attr()`` function that was previously used to update modified
   fields queried by a *getter* no longer exists. Dr.Jit now uses a simpler way
   to deal with getters. The technical reason that formerly required the
   presence of this function doesn't exist anymore.

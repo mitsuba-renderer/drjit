@@ -141,7 +141,9 @@ that the sanitizer messages are visible).
 
 .. code-block:: bash
 
-   DYLD_INSERT_LIBRARIES="$(clang -print-file-name=libclang_rt.asan_osx_dynamic.dylib)" python <...> /opt/homebrew/Cellar/python@3.12/3.12.1/Frameworks/Python.framework/Versions/3.12/Resources/Python.app/Contents/MacOS/Python -m pytest --capture no
+   PYTHON_BIN="/opt/homebrew/Cellar/python@3.12/3.12.1/Frameworks/Python.framework/Versions/3.12/Resources/Python.app/Contents/MacOS/Python"
+   PYTHON_DYLD="$(clang -print-file-name=libclang_rt.asan_osx_dynamic.dylib)"
+   DYLD_INSERT_LIBRARIES=$PYTHON_DYLD $PYTHON_BIN -m pytest --capture no
 
 On Linux, ASAN conflicts with CUDA because both very aggressively map the
 entire virtual memory space and cause each other to run out of memory. A

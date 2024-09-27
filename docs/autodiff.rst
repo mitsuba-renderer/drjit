@@ -12,8 +12,8 @@ derivatives of arbitrary computation.
 Introduction
 ------------
 
-Before delving into the Python interface, let us first review mathematical
-principles of derivative computation.
+Before delving into the Python interface, let us first review relevant
+mathematical principles of derivative computation.
 
 Consider a program that consumes certain inputs :math:`x_1`, :math:`x_2`, etc.,
 performs a computation, and then generates outputs :math:`y_1`, :math:`y_2`,
@@ -26,9 +26,9 @@ individually easy to differentiate. Given such a decomposition, it then applies
 the `chain rule <https://en.wikipedia.org/wiki/Chain_rule>`__ to stitch the
 per-step derivatives into derivatives of the larger program.
 
-For simplicity, let's assume at first that the computation is *pure*, i.e.,
-that it consistently produces the same output if re-run with the same input. In
-this case, we can think of the program as a function
+For simplicity, let's assume that the computation is *pure*, i.e., that it
+consistently produces the same output if re-run with the same input. In this
+case, we can think of the program as a function
 :math:`f:\mathbb{R}^m\to\mathbb{R}^n` with an associated `Jacobian matrix
 <https://en.wikipedia.org/wiki/Jacobian_matrix_and_determinant>`__
 
@@ -49,7 +49,7 @@ A surprising insight of automatic derivative computation is that although
 compute *matrix-vector* products with :math:`\mathbf{J}_f` on the fly. The cost
 of this is dramatically lower than the naive strategy of first computing
 :math:`\mathbf{J}_f` and then doing the matrix-vector multiplication with the
-stored matrix. The key feature of AD systems is that  they can automatically
+stored matrix. The key feature of AD systems is that they can automatically
 implement these kinds of matrix-vector products for a given algorithm
 :math:`f`.
 
@@ -60,18 +60,20 @@ vector :math:`\boldsymbol{\delta}_\mathbf{x}`:
 .. math::
    :name: eq:1
 
-   \boldsymbol{\delta}_\mathbf{y} = \mathbf{J}_{\!f}\,\boldsymbol{\delta}_\mathbf{x}
+   \boldsymbol{\delta}_\mathbf{y} = \mathbf{J}_{\!f}\,\boldsymbol{\delta}_\mathbf{x}.
 
 The result :math:`\boldsymbol{\delta}_\mathbf{y}` provides a first-order
-approximation of the change in :math:`f` when shifting the evaluation point
+approximation of the change in :math:`f(\mathbf{x})` when shifting the evaluation point
 :math:`\mathbf{x}` into direction :math:`\boldsymbol{\delta}_\mathbf{x}` (in
 other words, a `directional derivative
 <https://en.wikipedia.org/wiki/Directional_derivative>`__).
 
+.. _autodiff_single_input:
+
 Forward mode is great whenever we need to compute many output derivatives with
-respect to a single input parameter :math:`x_j`. In this case, we would simply
-set the input perturbation :math:`\boldsymbol{\delta}_\mathbf{x}` to a
-zero-filled vector with a :math:`1` in the :math:`j`-th component so that the
+respect to a single input :math:`x_j`. In this case, we would simply
+set :math:`\boldsymbol{\delta}_\mathbf{x}=(0, \ldots, 1, \ldots, 0)` with
+a :math:`1` in the :math:`j`-th component so that the
 expression in Equation :math:numref:`eq:1` extracts the :math:`j`-th column of
 :math:`J_{\!f}`. Setting :math:`\boldsymbol{\delta}_\mathbf{x}` to other values
 can be used to cheaply evaluate arbitrary linear combinations of the columns of
@@ -117,15 +119,13 @@ derivatives in a single pass.
    on the target application and shape of the underlying Jacobian (i.e.,
    :math:`m` and :math:`n`).
 
-
 Basics
 ------
 
 Differentiable computation requires importing AD-enabled array types from a
-separate set of namespaces (:py:mod:`drjit.cuda.ad`, :py:mod:`drjit.llvm.ad`,
-and :py:mod:`drjit.auto.ad`). This even includes *non-differentiable* integer
-types (e.g. :py:class:`drjit.auto.ad.UInt`) that are replicated there for
-convenience.
+dedicated set of namespaces (:py:mod:`drjit.cuda.ad`, :py:mod:`drjit.llvm.ad`,
+and :py:mod:`drjit.auto.ad`). You should also include *non-differentiable*
+integer types from there for consistency (e.g., :py:class:`drjit.auto.ad.UInt`).
 
 .. code-block:: pycon
 
@@ -136,22 +136,18 @@ convenience.
    >>> from drjit.auto.ad import Float, Array3f, UInt
 
 Tracking derivatives has a computational cost and is not always desired. You
-must use :py:func:`drjit.enable_grad`, to explicitly mark every differentiable
-input of a computation:
+therefore must use :py:func:`dr.enable_grad() <drjit.enable_grad>` to
+explicitly mark every differentiable input of a computation:
 
 .. code-block:: pycon
 
    >>> x = Float(10)
    >>> dr.enable_grad(x)
-   >>> dr.grad_enabled(x) # Check that 'x' tracks derivatives
-   True
 
-Note that functions in this section generally take multiple arguments and
-recurse through :ref:`PyTrees <pytrees>`, which is convenient when
-differentiating many variables at once.
-
-Following this step, we can perform a computation and then either differentiate
-it operation in *forward mode* via :py:func:`dr.forward() <forward>`
+To differentiate in *forward mode*, perform the computation of interest and
+finally invoke :py:func:`dr.forward() <forward>` on the original input.
+Following this step, the gradient of the output variable(s) can be accessed via
+their ``.grad`` member(s).
 
 .. code-block:: pycon
 
@@ -160,7 +156,8 @@ it operation in *forward mode* via :py:func:`dr.forward() <forward>`
    >>> y.grad
    [20]
 
-or *reverse mode* via :py:func:`dr.backward() <backward>`:
+Alternatively, :py:func:`dr.backward() <backward>` computes *reverse mode*
+derivatives of input variable(s) starting from an output.
 
 .. code-block:: pycon
 
@@ -169,39 +166,171 @@ or *reverse mode* via :py:func:`dr.backward() <backward>`:
    >>> x.grad
    [20]
 
-The final gradient can be obtained via the :py:attribute:`.grad
-<ArrayBase.grad>` member or :py:func:`dr.grad <grad>` (which also works for
+That's it, for the most part. Differentiation composes with other features of
+Dr.Jit, such as memory operations (gathers/scatters), symbolic and evaluated
+control flow (loops, conditionals, indirect calls), textures, etc.
+
+The next subsections review common mistakes and pitfalls followed by a
+discussion of advanced uses of automatic differentiation.
+
+Pitfalls
+--------
+
+The following points sometimes cause confusion:
+
+Gradients of interior variables
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Consider the forward derivative of a computation with the dependency structure
+``x``→``y``→``z``:
+
+.. code-block:: pycon
+
+   >>> x = Float(1)
+   >>> dr.enable_grad(x)
+   >>> y = x*2; z = y*2
+   >>> dr.forward(x)
+   >>> z.grad
+   [4]
+   >>> y.grad
+   [0] # <-- 🤔
+
+The gradient of ``z`` is correct, but why is ``y.grad`` zero?
+
+AD operations like :py:func:`dr.forward() <forward>` and
+:py:func:`dr.backward() <backward>` traverse a graph representation of the
+underlying computation. This traversal is *destructive* by default: by
+discarding processed nodes and edges, it frees up memory storing information is
+normally not needed anymore, and this also matches the behavior other widely
+used AD frameworks (e.g., PyTorch).
+
+As a consequence, gradients are only stored in *leaf* variables, which
+refers to
+
+- **Forward mode**: a variable that isn't an input of any other calculation.
+- **Reverse mode**: an variable that was made differentiable via
+  :py:func:`drjit.enable_grad()`.
+
+If you require derivatives of interior nodes, pass the ``flags=`` parameter
+with a combination of elements from :py:class:`dr.ADFlag <drjit.ADFlag>`, e.g.,
+:py:attr:`dr.ADFlag.ClearNone <drjit.ADFlag>`:
+
+.. code-block:: pycon
+
+   >>> x = Float(1)
+   >>> dr.enable_grad(x)
+   >>> y = x*2; z = y*2
+   >>> dr.forward(x, flags=dr.ADFlag.ClearNone)
+   >>> z.grad
+   [4]
+   >>> y.grad
+   [2]
+
+Alternatively, you could use an operation like :py:func:`drjit.copy() <copy>`
+to create a new (leaf) variable that copies the gradient from ``y``.
+
+Mutation of inputs
+^^^^^^^^^^^^^^^^^^
+
+A related situation occurs when mutating inputs of a calculation differentiated
+using reverse mode.
+
+.. code-block:: pycon
+   :emphasize-lines: 3
+
+   >>> x = Float(1)
+   >>> dr.enable_grad(x)
+   >>> x *= x*2
+   >>> y = x*2
+   >>> dr.backward(y)
+   >>> x.grad
+   [0]
+
+In this case, the mutation changed the identity of the ``x`` variable, which
+now points to an interior node of the computation graph. You must either keep a
+reference to the original variable and query the gradient there, or ask
+:py:func:`dr.backward() <backward>` to perform a non-destructive AD traversal.
+
+
+.. _custom_traversals:
+
+Custom traversals
+-----------------
+
+The examples above computed a derivative of a computation with respect to a
+*single* input, which is analogous to multiplying the associated Jacobian
+matrix with a vector of the form :math:`\boldsymbol{\delta}_\mathbf{x}=(0,
+\ldots, 1, \ldots, 0)`. Given the discussion in the `introduction
+<autodiff_single_input>`__ of this section, it should also be possible to
+perform more general Jacobian-vector products.
+
+
+.. code-block:: python
+
+   a, b = Float(1), Float(2)
+   dr.enable_grad(a, b)
+   a.grad = 10
+   b.grad = 20
+   x, y = ... # computation depending on 'a' and 'b'
+   dr.forward_to(x, y)
+
+Custom operations
+-----------------
+
+TBD
+
+Visualizations
+--------------
+
+TBD
+
+Gotchas
+-------
+
+The final gradient can be obtained via the :py:attr:`.grad
+<ArrayBase.grad>` member or :py:func:`dr.grad() <grad>` (which also works for
 :ref:`PyTrees <pytrees>`).
 
 
-..
-   Common mistakes: overwriting or mutating a
-   grad-enabled variable and then not being able
-   to get its derivative when backpropagating
-   fwd mode isn't as efficient as it could be
-   An output isn't a leaf.
+Note that functions in this section generally take multiple arguments and
+recurse through :ref:`PyTrees <pytrees>`, which is convenient when
+differentiating many variables at once.
 
-   Note that while Dr.Jit compute first-order derivatives in forward and backward
-   mode, it lacks support for higher-order differentiation (e.g. Hessian-vector products).
+..
+   Write a section about the design decisions:
+   Composition of AD with tracing
+   not 100% optimal forward AD
+   checkpoints via evaluation
+
+   Note that while Dr.Jit compute first-order derivatives in forward and
+   backward mode, it lacks support for higher-order differentiation (e.g.
+   Hessian-vector products).
 
 Links to relevant methods:
 --------------------------
 
 Please review the following AD-related functions for more details:
 
-- Enabling/disabling gradient tracking: :py:func:`enable_grad`,
-  :py:func:`disable_grad`, :py:func:`set_grad_enabled`,
-  :py:func:`grad_enabled`, :py:func:`detach`.
-- Accessing/modifying gradients: :py:func:`grad`, :py:func:`set_grad`,
-  :py:func:`accum_grad`, :py:func:`replace_grad`, :py:func:`clear_grad`.
-- Computing gradients: :py:func:`forward_from`, :py:func:`forward_to`,
-  :py:func:`forward`, :py:func:`backward_from`, :py:func:`backward_to`,
-  :py:func:`backward`.
-- Manual AD interface: :py:func:`traverse`, :py:func:`enqueue`.
-- Implementing custom differentiable operations: :py:func`custom`, :py:class:`CustomOp`.
+- Gradient tracking: :py:func:`dr.enable_grad() <enable_grad>`,
+  :py:func:`dr.disable_grad() <disable_grad>`, :py:func:`dr.set_grad_enabled()
+  <set_grad_enabled>`, :py:func:`dr.grad_enabled() <grad_enabled>`,
+  :py:func:`dr.detach() <detach>`.
+- Accessing gradients: :py:func:`dr.grad() <grad>`, :py:func:`dr.set_grad()
+  <set_grad>`, :py:func:`dr.accum_grad() <accum_grad>`,
+  :py:func:`dr.replace_grad() <replace_grad>`, :py:func:`dr.clear_grad()
+  <clear_grad>`.
+- Computing gradients: :py:func:`dr.forward_from() <forward_from>`,
+  :py:func:`dr.forward_to() <forward_to>`, :py:func:`dr.forward() <forward>`,
+  :py:func:`dr.backward_from() <backward_from>`, :py:func:`dr.backward_to()
+  <backward_to>`, :py:func:`dr.backward() <backward>`.
+- Manual AD interface: :py:func:`dr.traverse() <traverse>`,
+  :py:func:`dr.enqueue() <enqueue>`.
+- Custom differentiable operations: :py:func:`dr.custom() <custom>`,
+  :py:class:`dr.CustomOp <CustomOp>`.
 - Context managers to temporarily suspend/resume/isolate gradients:
-  :py:func:`suspend_grad`, :py:func:`resume_grad`, :py:func:`isolate_grad`.
-- Interfacing with other AD frameworks: :py:func:`wrap`.
+  :py:func:`dr.suspend_grad() <suspend_grad>`, :py:func:`dr.resume_grad()
+  <resume_grad>`, :py:func:`dr.isolate_grad() <isolate_grad>`.
+- Interfacing with other AD frameworks: :py:func:`dr.wrap() <wrap>`.
 
 Differentiating loops
 ---------------------
@@ -285,7 +414,7 @@ an efficient reverse-mode derivative.
 
 In :py:func:`@dr.syntax <syntax>`-decorated functions, you can equivalently
 wrap the loop condition into a :py:func:`dr.hint(..., max_iterations=-1)
-<hint>` annotation). The original example then looks as follows:
+<hint>` annotation. The original example then looks as follows:
 
 .. code-block:: python
 
