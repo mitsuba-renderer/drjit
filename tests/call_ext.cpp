@@ -102,7 +102,15 @@ template <typename Float> struct A : Base<Float> {
         dr::scatter_add(value, arg, i);
     }
 
-    Float value;
+    /// Additional interface that will be exposed for calls to `A`
+    uint32_t a_get_property() const { return scalar_property; }
+    Float a_gather_extra_value(UInt32 idx, Mask active) const {
+        return dr::gather<Float>(extra_value, idx, active);
+    }
+
+
+    uint32_t scalar_property;
+    Float value, extra_value;
     Float opaque = dr::opaque<Float>(1.f);
 };
 
@@ -172,6 +180,12 @@ DRJIT_CALL_TEMPLATE_BEGIN(Base)
 DRJIT_CALL_END(Base)
 
 
+DRJIT_CALL_TEMPLATE_INHERITED_BEGIN(A, Base)
+    DRJIT_CALL_METHOD(a_gather_extra_value)
+    DRJIT_CALL_GETTER(a_get_property)
+DRJIT_CALL_INHERITED_END(Base)
+
+
 template <JitBackend Backend>
 void bind(nb::module_ &m) {
     using Float = dr::DiffArray<Backend, float>;
@@ -199,8 +213,12 @@ void bind(nb::module_ &m) {
 
     nb::class_<AT, BaseT>(m, "A")
         .def(nb::init<>())
+        .def("a_get_property", &AT::a_get_property)
+        .def("a_gather_extra_value", &AT::a_gather_extra_value)
         .def_rw("opaque", &AT::opaque)
-        .def_rw("value", &AT::value);
+        .def_rw("value", &AT::value)
+        .def_rw("extra_value", &AT::extra_value)
+        .def_rw("scalar_property", &AT::scalar_property);
 
     nb::class_<BT, BaseT>(m, "B")
         .def(nb::init<>())
@@ -248,6 +266,17 @@ void bind(nb::module_ &m) {
         .def("gather_packet", [](BaseArray &self, UInt32 i) { return self->gather_packet(i); })
         .def("scatter_packet", [](BaseArray &self, UInt32 i, dr::Array<Float, 4> arg) { self->scatter_packet(i, arg); })
         .def("scatter_add_packet", [](BaseArray &self, UInt32 i, dr::Array<Float, 4> arg) { self->scatter_add_packet(i, arg); });
+
+
+    dr::ArrayBinding a_ptr_b;
+    using APtr = dr::DiffArray<Backend, AT *>;
+    auto a_ptr = dr::bind_array_t<APtr>(a_ptr_b, m, "APtr")
+        .def("a_get_property", [](APtr &self, Mask m) {
+                return self->a_get_property(m);
+             }, "mask"_a = true)
+        .def("a_gather_extra_value", [](APtr &self, const UInt32 &idx, const Mask &m) {
+                return self->a_gather_extra_value(idx, m);
+             }, "idx"_a, "mask"_a);
 }
 
 NB_MODULE(call_ext, m) {

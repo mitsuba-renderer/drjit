@@ -330,6 +330,8 @@ on a Dr.Jit instance arrays. Below is an overview of the available macros:
    The interface of ``Parent`` must have already been exposed with a call to
    ``DRJIT_CALL_TEMPLATE_BEGIN(Parent) ... DRJIT_CALL_END()``.
    The interface will then be extended with any methods listed in this block.
+   Note this feature is only safe to use with polymorphic types, where C++ can
+   use RTTI to determine if a particular instance is of type ``Name``.
 
 .. c:macro:: DRJIT_CALL_INHERITED_END()
 

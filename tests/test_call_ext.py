@@ -73,18 +73,30 @@ def test01_array_operations(t):
 def test02_array_call(t, symbolic):
     pkg = get_pkg(t)
 
-    A, B, Base, BasePtr = pkg.A, pkg.B, pkg.Base, pkg.BasePtr
-    a, b = A(), B()
+    A, B, Base, BasePtr, APtr = pkg.A, pkg.B, pkg.Base, pkg.BasePtr, pkg.APtr
+    a1, a2, b = A(), A(), B()
+    a1.extra_value = t(11, 12, 13, 14, 15)
+    a1.scalar_property = 10
+    a2.extra_value = t(21, 22, 23, 24, 25)
+    a2.scalar_property = 20
 
-    c = BasePtr(a, a, None, b, b)
+    c = BasePtr(a1, a1, None, a2, b, b)
 
-    xi = t(1, 2, 8, 3, 4)
-    yi = t(5, 6, 8, 7, 8)
+    xi = t(1, 2, 8, 10, 3, 4)
+    yi = t(5, 6, 8, 11, 7, 8)
 
     with dr.scoped_set_flag(dr.JitFlag.SymbolicCalls, symbolic):
         xo, yo = c.f(xi, yi)
-    assert dr.all(xo == t(10, 12, 0, 21, 24))
-    assert dr.all(yo == t(-1, -2, 0, 3, 4))
+    assert dr.all(xo == t(10, 12, 0, 22, 21, 24))
+    assert dr.all(yo == t(-1, -2, 0, -10, 3, 4))
+
+    # We can safely make calls on instances of `A` via `APtr`
+    UInt32 = dr.uint32_array_t(t)
+    ptr_a = APtr(c)
+    assert dr.all(ptr_a.a_get_property() == UInt32(10, 10, 0, 20, 0, 0))
+    idx = UInt32([2, 3, 999, 4, 500, 4000])
+    assert dr.all(ptr_a.a_gather_extra_value(idx, mask=True) == t(13, 14, 0, 25, 0, 0))
+
 
 @pytest.mark.parametrize("symbolic", [True, False])
 @pytest.test_arrays('float32,is_diff,shape=(*)')
