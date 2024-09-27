@@ -50,9 +50,9 @@ class Object : public drjit::TraversableBase {
 };
 
 template <typename Value>
-class Base : public Object{
+class CustomBase : public Object{
 public:
-    Base() : Object() {}
+    CustomBase() : Object() {}
 
     virtual Value &value() = 0;
 
@@ -60,12 +60,12 @@ public:
 };
 
 template <typename Value>
-class PyBase : public Base<Value>{
+class PyCustomBase : public CustomBase<Value>{
 public:
-    using Base = Base<Value>;
+    using Base = CustomBase<Value>;
     NB_TRAMPOLINE(Base, 1);
 
-    PyBase() : Base() {}
+    PyCustomBase() : Base() {}
 
     Value &value() override { NB_OVERRIDE(value); }
 
@@ -73,12 +73,12 @@ public:
 };
 
 template <typename Value>
-class A: public Base<Value>{
+class CustomA: public CustomBase<Value>{
 public:
-    using Base = Base<Value>;
+    using Base = CustomBase<Value>;
 
-    A() {}
-    A(const Value &v) : m_value(v) {}
+    CustomA() {}
+    CustomA(const Value &v) : m_value(v) {}
 
     Value &value() override { return m_value; }
 
@@ -110,23 +110,23 @@ template <JitBackend Backend> void bind(nb::module_ &m) {
         .def(nb::init<Float>())
         .def("value", &CustomFloatHolder::value, nanobind::rv_policy::reference);
 
-    using Base   = Base<Float>;
-    using PyBase = PyBase<Float>;
-    using A      = A<Float>;
+    using CustomBase   = CustomBase<Float>;
+    using PyCustomBase = PyCustomBase<Float>;
+    using CustomA      = CustomA<Float>;
 
     auto object = nb::class_<Object>(
         m, "Object",
         nb::intrusive_ptr<Object>(
             [](Object *o, PyObject *po) noexcept { o->set_self_py(po); }));
 
-    auto base = nb::class_<Base, Object, PyBase>(m, "Base")
+    auto base = nb::class_<CustomBase, Object, PyCustomBase>(m, "CustomBase")
                     .def(nb::init())
-                    .def("value", &Base::value);
+                    .def("value", &CustomBase::value);
     jit_log(LogLevel::Debug, "binding base");
 
     drjit::bind_traverse(base);
 
-    auto a = nb::class_<A>(m, "A").def(nb::init<Float>());
+    auto a = nb::class_<CustomA>(m, "CustomA").def(nb::init<Float>());
 
     drjit::bind_traverse(a);
 

@@ -71,6 +71,7 @@ def test03_cpp_make_opaque(t):
     pkg.cpp_make_opaque(holder)
     assert holder.value().state == dr.VarState.Evaluated
 
+# My tests
 @pytest.test_arrays("float32,-diff,shape=(*),jit")
 def test04_traverse_opaque(t):
     pkg = get_pkg(t)
@@ -79,8 +80,7 @@ def test04_traverse_opaque(t):
 
     v = dr.arange(Float, 10)
 
-    a = pkg.A(v)
-
+    a = pkg.CustomA(v)
     assert dr.detail.collect_indices(a) == [v.index]
 
 
@@ -114,7 +114,7 @@ def test06_trampoline_traversal(t):
 
     v = dr.opaque(Float, 0, 3)
 
-    class B(pkg.Base):
+    class B(pkg.CustomBase):
         def __init__(self, v) -> None:
             super().__init__()
             self.v = v
