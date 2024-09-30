@@ -31,6 +31,10 @@ from .ast import syntax, hint
 from .interop import wrap
 import warnings as _warnings
 
+def cmake_dir():
+    import os
+    return os.path.join(os.path.abspath(os.path.dirname(__file__)), "cmake")
+
 # -------------------------------------------------------------------
 #  Predicates and comparison operations for floating point arrays
 # -------------------------------------------------------------------
