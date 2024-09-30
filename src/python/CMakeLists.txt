@@ -3,6 +3,10 @@ if (SKBUILD)
   set(DRJIT_DIST_FLAGS LTO)
 endif()
 
+if (SKBUILD AND DRJIT_STABLE_ABI)
+    list(APPEND DRJIT_DIST_FLAGS STABLE_ABI)
+endif()
+
 # ------------------- Copy Python resources -------------------
 
 set(DRJIT_PYTHON_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../drjit")
