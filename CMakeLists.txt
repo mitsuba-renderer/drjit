@@ -19,6 +19,9 @@ option(DRJIT_ENABLE_AUTODIFF  "Build Dr.Jit automatic differentation library?" O
 option(DRJIT_ENABLE_PYTHON    "Build Python extension library?" ON)
 option(DRJIT_ENABLE_TESTS     "Build Dr.Jit test suite? (Warning, this takes *very* long to compile)" OFF)
 
+option(DRJIT_STABLE_ABI       "Build Python extension using the CPython stable ABI? (Only relevant when using scikit-build)" OFF)
+mark_as_advanced(DRJIT_STABLE_ABI)
+
 # ----------------------------------------------------------
 #  Check if submodules have been checked out, or fail early
 # ----------------------------------------------------------

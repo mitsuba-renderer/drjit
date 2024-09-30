@@ -12,17 +12,22 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-20.04, windows-latest, macos-13, macos-14]
-        python: [cp38, cp39, cp310, cp311, cp312, cp313]
+        python: [cp38, cp39, cp310, cp311, cp312, cp312_stable, cp313]
         exclude:
+          # The first Python version to target Apple arm64 architectures is 3.9
           - os: macos-14
             python: cp38
       fail-fast: false
 
     name: >
       ${{ matrix.python }} wheel for ${{ matrix.os }}
+      ${{ (endsWith(matrix.python, '_stable') && '(stable ABI)') || '' }}
     runs-on: ${{ matrix.os }}
 
     steps:
+      ###########################################################
+      # Setup local environment (source code, build requirements)
+      ###########################################################
       - uses: Wandalen/wretry.action@v1.2.0
         with:
           action: actions/checkout@v3
@@ -46,9 +51,39 @@ jobs:
         run: |
           python -m pip install cibuildwheel==2.20.0
 
-      - name: Build wheels
-        env:
-          CIBW_BUILD: ${{ matrix.python }}-*
+
+      ################################################################
+      # Set up envvars to build the correct wheel (stable ABI or not)
+      ################################################################
+      - name: Prepare cibuildwheel environment (UNIX)
+        if: ${{ ! endsWith(matrix.python, '_stable') && runner.os != 'Windows' }}
+        run: |
+          echo "CIBW_BUILD=${{ matrix.python }}-*" >> $GITHUB_ENV
+
+      - name: Prepare cibuildwheel environment (Windows)
+        if: ${{ ! endsWith(matrix.python, '_stable') && runner.os == 'Windows' }}
+        run: |
+          echo "CIBW_BUILD=${{ matrix.python }}-*" >> $env:GITHUB_ENV
+
+      - name: Prepare cibuildwheel environment for stable ABI wheel (UNIX)
+        if: ${{ endsWith(matrix.python, '_stable') && runner.os != 'Windows' }}
+        run: |
+          stable_cp=$(echo ${{ matrix.python }} | cut -d_ -f1) &&
+          echo "CIBW_BUILD=${stable_cp}-*" >> $GITHUB_ENV &&
+          echo "CIBW_CONFIG_SETTINGS=\"wheel.py-api=cp312\" \"cmake.args=-DDRJIT_STABLE_ABI=ON\"" >> $GITHUB_ENV
+
+      - name: Prepare cibuildwheel environment for stable ABI wheel (Windows)
+        if: ${{ endsWith(matrix.python, '_stable') && runner.os == 'Windows' }}
+        run: |
+          $stable_cp = '${{ matrix.python }}' -split '_'
+          echo "CIBW_BUILD=$($stable_cp[0])-*" >> $env:GITHUB_ENV
+          echo "CIBW_CONFIG_SETTINGS=wheel.py-api=cp312 cmake.args=-DDRJIT_STABLE_ABI=ON" >> $env:GITHUB_ENV
+
+
+      #########################
+      # Build and store wheels
+      #########################
+      - name: Build wheel
         run: |
           python -m cibuildwheel --output-dir wheelhouse
 
@@ -64,6 +99,9 @@ jobs:
     needs: [build_wheels]
 
     steps:
+      #########################
+      # Fetch and upload wheels
+      #########################
       - uses: actions/download-artifact@v3
         with:
           name: wheels
