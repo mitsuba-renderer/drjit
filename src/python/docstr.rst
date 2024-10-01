@@ -748,8 +748,8 @@
           tensor, iterable, or scalar Python type.
 
         axis (int | tuple[int, ...] | ... | None): The axis/axes along which
-          to reduce. The special argument ``axis=None`` causes a simultaneous 
-          reduction over all axes. The default ``axis=...`` applies a 
+          to reduce. The special argument ``axis=None`` causes a simultaneous
+          reduction over all axes. The default ``axis=...`` applies a
           reduction over all axes for tensor types and index ``0`` otherwise.
 
         mode (str | None): optional parameter to force an evaluation strategy.
@@ -772,8 +772,8 @@
           tensor, iterable, or scalar Python type.
 
         axis (int | tuple[int, ...] | ... | None): The axis/axes along which
-          to reduce. The special argument ``axis=None`` causes a simultaneous 
-          reduction over all axes. The default ``axis=...`` applies a 
+          to reduce. The special argument ``axis=None`` causes a simultaneous
+          reduction over all axes. The default ``axis=...`` applies a
           reduction over all axes for tensor types and index ``0`` otherwise.
 
         mode (str | None): optional parameter to force an evaluation strategy.
@@ -800,8 +800,8 @@
           tensor, iterable, or scalar Python type.
 
         axis (int | tuple[int, ...] | ... | None): The axis/axes along which
-          to reduce. The special argument ``axis=None`` causes a simultaneous 
-          reduction over all axes. The default ``axis=...`` applies a 
+          to reduce. The special argument ``axis=None`` causes a simultaneous
+          reduction over all axes. The default ``axis=...`` applies a
           reduction over all axes for tensor types and index ``0`` otherwise.
 
         mode (str | None): optional parameter to force an evaluation strategy.
@@ -828,8 +828,8 @@
           iterable, or scalar Python type.
 
         axis (int | tuple[int, ...] | ... | None): The axis/axes along which
-          to reduce. The special argument ``axis=None`` causes a simultaneous 
-          reduction over all axes. The default ``axis=...`` applies a 
+          to reduce. The special argument ``axis=None`` causes a simultaneous
+          reduction over all axes. The default ``axis=...`` applies a
           reduction over all axes for tensor types and index ``0`` otherwise.
 
         mode (str | None): optional parameter to force an evaluation strategy.
@@ -854,8 +854,8 @@
           iterable, or scalar Python type.
 
         axis (int | tuple[int, ...] | ... | None): The axis/axes along which
-          to reduce. The special argument ``axis=None`` causes a simultaneous 
-          reduction over all axes. The default ``axis=...`` applies a 
+          to reduce. The special argument ``axis=None`` causes a simultaneous
+          reduction over all axes. The default ``axis=...`` applies a
           reduction over all axes for tensor types and index ``0`` otherwise.
 
         mode (str | None): optional parameter to force an evaluation strategy.
@@ -927,8 +927,8 @@
           iterable, or scalar Python type.
 
         axis (int | tuple[int, ...] | ... | None): The axis/axes along which
-          to reduce. The special argument ``axis=None`` causes a simultaneous 
-          reduction over all axes. The default ``axis=...`` applies a 
+          to reduce. The special argument ``axis=None`` causes a simultaneous
+          reduction over all axes. The default ``axis=...`` applies a
           reduction over all axes for tensor types and index ``0`` otherwise.
 
     Returns:
@@ -997,8 +997,8 @@
           iterable, or scalar Python type.
 
         axis (int | tuple[int, ...] | ... | None): The axis/axes along which
-          to reduce. The special argument ``axis=None`` causes a simultaneous 
-          reduction over all axes. The default ``axis=...`` applies a 
+          to reduce. The special argument ``axis=None`` causes a simultaneous
+          reduction over all axes. The default ``axis=...`` applies a
           reduction over all axes for tensor types and index ``0`` otherwise.
 
     Returns:
@@ -1063,8 +1063,8 @@
           iterable, or scalar Python type.
 
         axis (int | tuple[int, ...] | ... | None): The axis/axes along which
-          to reduce. The special argument ``axis=None`` causes a simultaneous 
-          reduction over all axes. The default ``axis=...`` applies a 
+          to reduce. The special argument ``axis=None`` causes a simultaneous
+          reduction over all axes. The default ``axis=...`` applies a
           reduction over all axes for tensor types and index ``0`` otherwise.
 
     Returns:
@@ -6895,7 +6895,7 @@
     ``1`` and ``False`` elements as ``0``). It returns an unsigned 32-bit version
     of the input array.
 
-    Reductions along index ``0`` refer to the outermost axis and negative 
+    Reductions along index ``0`` refer to the outermost axis and negative
     indices (e.g. ``-1``) count backwards from the innermost axis. The
     special argument ``axis=None`` causes a simultaneous reduction over all axes.
     Note that the reduced form of an *empty* array is considered to be zero.
@@ -6907,8 +6907,8 @@
         value (bool | Sequence | drjit.ArrayBase): A Python or Dr.Jit mask type
 
         axis (int | tuple[int, ...] | ... | None): The axis/axes along which
-          to reduce. The special argument ``axis=None`` causes a simultaneous 
-          reduction over all axes. The default ``axis=...`` applies a 
+          to reduce. The special argument ``axis=None`` causes a simultaneous
+          reduction over all axes. The default ``axis=...`` applies a
           reduction over all axes for tensor types and index ``0`` otherwise.
 
     Returns:

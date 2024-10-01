@@ -22,9 +22,9 @@ NAMESPACE_BEGIN(drjit)
     namespace drjit {                                                          \
         template <typename Self>                                               \
         struct call_support<Name, Self> {                                      \
-            using _Base = void;                                                \
-            using _Class = Name;                                               \
-            using _Mask = mask_t<Self>;                                        \
+            using Base_ = void;                                                \
+            using Class_ = Name;                                               \
+            using Mask_ = mask_t<Self>;                                        \
             static constexpr const char *Domain = #Name;                       \
             call_support(const Self &self) : self(self) { }                    \
             const call_support *operator->() const {                           \
@@ -35,9 +35,9 @@ NAMESPACE_BEGIN(drjit)
     namespace drjit {                                                          \
         template <typename Self, typename... Ts>                               \
         struct call_support<Name<Ts...>, Self> {                               \
-            using _Base = void;                                                \
-            using _Class = Name<Ts...>;                                        \
-            using _Mask = mask_t<Self>;                                        \
+            using Base_ = void;                                                \
+            using Class_ = Name<Ts...>;                                        \
+            using Mask_ = mask_t<Self>;                                        \
             static constexpr const char *Domain = #Name;                       \
             call_support(const Self &self) : self(self) { }                    \
             const call_support *operator->() const {                           \
@@ -49,12 +49,12 @@ NAMESPACE_BEGIN(drjit)
         template <typename Self, typename... Ts>                               \
         struct call_support<Name<Ts...>, Self>                                 \
                 : call_support<Parent<Ts...>, Self> {                          \
-            using _Base = call_support<Parent<Ts...>, Self>;                   \
-            using _Base::self;                                                 \
-            using _Base::Domain;                                               \
-            using _Class = Name<Ts...>;                                        \
-            using _Mask = mask_t<Self>;                                        \
-            call_support(const Self &self) : _Base(self) { }                   \
+            using Base_ = call_support<Parent<Ts...>, Self>;                   \
+            using Base_::self;                                                 \
+            using Base_::Domain;                                               \
+            using Class_ = Name<Ts...>;                                        \
+            using Mask_ = mask_t<Self>;                                        \
+            call_support(const Self &self) : Base_(self) { }                   \
             const call_support *operator->() const {                           \
                 return this;                                                   \
             }
@@ -80,7 +80,7 @@ private:                                                                       \
     template <typename... Args, size_t... Is>                                  \
     auto drjit_impl_##Name(std::index_sequence<Is...>, const Args &...args)    \
         const {                                                                \
-        using Ret = decltype(std::declval<_Class &>().Name(args...));          \
+        using Ret = decltype(std::declval<Class_ &>().Name(args...));          \
         using Ret2 = std::conditional_t<std::is_void_v<Ret>, std::nullptr_t,   \
                                         vectorize_rv_t<Self, Ret>>;            \
         using CallStateT = detail::CallState<Ret2, Args...>;                   \
@@ -91,11 +91,11 @@ private:                                                                       \
             CallStateT *state = (CallStateT *) state_p;                        \
             state->update_args(args_i);                                        \
             if constexpr (std::is_same_v<Ret, void>) {                         \
-                if (detail::is_valid_call_ptr<_Class, _Base>(self))            \
-                    ((_Class *) self)->Name(drjit::get<Is>(state->args)...);   \
+                if (detail::is_valid_call_ptr<Class_, Base_>(self))            \
+                    ((Class_ *) self)->Name(drjit::get<Is>(state->args)...);   \
             } else {                                                           \
-                if (detail::is_valid_call_ptr<_Class, _Base>(self))            \
-                    state->rv = ((_Class *) self)                              \
+                if (detail::is_valid_call_ptr<Class_, Base_>(self))            \
+                    state->rv = ((Class_ *) self)                              \
                                     ->Name(drjit::get<Is>(state->args)...);    \
                 else                                                           \
                     state->rv = zeros<Ret2>();                                 \
@@ -109,23 +109,23 @@ private:                                                                       \
 
 #define DRJIT_CALL_GETTER(Name)                                                \
 public:                                                                        \
-    auto Name(_Mask mask = true) const {                                       \
+    auto Name(Mask_ mask = true) const {                                       \
         using Ret =                                                            \
-            vectorize_rv_t<Self, decltype(std::declval<_Class &>().Name())>;   \
-        using CallStateT = detail::CallState<Ret, _Mask>;                      \
+            vectorize_rv_t<Self, decltype(std::declval<Class_ &>().Name())>;   \
+        using CallStateT = detail::CallState<Ret, Mask_>;                      \
                                                                                \
         ad_call_func callback = [](void *state_p, void *self,                  \
                                    const vector<uint64_t> &,                   \
                                    vector<uint64_t> &rv_i) {                   \
             CallStateT *state = (CallStateT *) state_p;                        \
-            if (detail::is_valid_call_ptr<_Class, _Base>(self))                \
-                state->rv = ((_Class *) self)->Name();                         \
+            if (detail::is_valid_call_ptr<Class_, Base_>(self))                \
+                state->rv = ((Class_ *) self)->Name();                         \
             else                                                               \
                 state->rv = zeros<Ret>();                                      \
             state->collect_rv(rv_i);                                           \
         };                                                                     \
                                                                                \
-        return detail::call<Self, Ret, Ret, _Mask>(self, Domain, #Name "()",   \
+        return detail::call<Self, Ret, Ret, Mask_>(self, Domain, #Name "()",   \
                                                   true, callback, mask);       \
     }
 template <typename Guide, typename T>
@@ -145,8 +145,7 @@ bool is_valid_call_ptr(void *ptr) {
     if constexpr (std::is_same_v<Parent, void>) {
         return ptr != nullptr;
     } else {
-        return (ptr != nullptr) && dynamic_cast<ChildClass *>(
-            (typename Parent::_Class *) ptr);
+        return dynamic_cast<ChildClass *>((typename Parent::Class_ *) ptr);
     }
 }
 
