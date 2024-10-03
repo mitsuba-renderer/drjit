@@ -320,7 +320,7 @@ def test09_broadcast(t):
     assert dr.all(x == dr.full(t, 4, shape=(2,2,2)), axis=None)
 
     # Broadcast with mismatched dimensions
-    # Starting from rightmost dimensions and moving left, if dimensions are 
+    # Starting from rightmost dimensions and moving left, if dimensions are
     # equal or one is equal to 1, then broadcasting is allowed
     x = dr.full(t, 2, shape=(2,1,2)) + dr.full(t, 2, shape=(3,1))
     assert dr.all(x == dr.full(t, 4, shape=(2,3,2)), axis=None)
@@ -540,6 +540,7 @@ def test15_upsampling_texture(t):
                                           2.0, 2.0, 6.0, 2.5, 2.5, 6.5, 3.0, 3.0, 7.0,
                                           3.0, 3.0, 7.0, 3.5, 3.5, 7.5, 4.0, 4.0, 8.0])
 
+
 @pytest.test_arrays('is_tensor, float32')
 def test16_implicit_conversion(t):
     import numpy as np
@@ -552,10 +553,15 @@ def test16_implicit_conversion(t):
     c = tex_t([[[1],[2]], [[3],[4]]])
     assert dr.allclose(a.tensor(), c.tensor())
 
+
 @pytest.test_arrays('is_tensor, jit, float32')
 def test17_tensor_initialization(t):
-
     x = t(1.0)
-
     assert x.state == dr.VarState.Literal
-    
+
+
+@pytest.test_arrays('is_tensor, jit, uint32')
+def test18_tensor_index_signed_vec(t):
+    x = t([1, 2, 3], shape=(1, 3))
+    A = dr.int32_array_t(dr.array_t(x))
+    assert dr.all(x[:, A([-1, 0])] == t([3, 1]))
