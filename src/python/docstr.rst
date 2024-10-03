@@ -846,8 +846,8 @@
     dividing by the number of entries. The mean of an empty array is considered
     to be zero.
 
-    See the section on :ref:`horizontal reductions <horizontal-reductions>` for
-    important general information about their properties.
+    See the discussion of :py:func:`dr.reduce() <reduce>` for important general
+    information about the properties of horizontal reductions.
 
     Args:
         value (ArrayBase | Iterable | float | int): An input Dr.Jit array, tensor,
@@ -1080,8 +1080,8 @@
     of the input arrays via :py:func:`drjit.eval` and then performs a sum reduction
     via :py:func:`drjit.sum`.
 
-    See the section on :ref:`horizontal reductions <horizontal-reductions>` for
-    details on the properties of such horizontal reductions.
+    See the discussion of :py:func:`dr.reduce() <reduce>` for important general
+    information about the properties of horizontal reductions.
 
     Args:
         arg0 (list | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
@@ -1097,8 +1097,8 @@
 
     This function implements a convenience short-hand for ``abs(dot(arg0, arg1))``.
 
-    See the section on :ref:`horizontal reductions <horizontal-reductions>` for
-    details on the properties of such horizontal reductions.
+    See the discussion of :py:func:`dr.reduce() <reduce>` for important general
+    information about the properties of horizontal reductions.
 
     Args:
         arg0 (list | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
@@ -1118,9 +1118,10 @@
 
        dr.sqrt(dr.dot(arg, arg))
 
-    The :py:func:`norm` operation performs a horizontal reduction. Please see the
-    section on :ref:`horizontal reductions <horizontal-reductions>` for details on
-    their properties.
+    The :py:func:`norm` operation performs a horizontal reduction. See the
+    discussion of :py:func:`dr.reduce() <reduce>` for important general
+    information about their properties.
+
 
     Args:
         arg (Sequence | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
@@ -1138,9 +1139,9 @@
 
        dr.dot(arg, arg)
 
-    The :py:func:`squared_norm` operation performs a horizontal reduction. Please see the
-    section on :ref:`horizontal reductions <horizontal-reductions>` for details on
-    their properties.
+    The :py:func:`squared_norm` operation performs a horizontal reduction.
+    See the discussion of :py:func:`dr.reduce() <reduce>` for important general
+    information about their properties.
 
     Args:
         arg (Sequence | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
@@ -6900,8 +6901,8 @@
     special argument ``axis=None`` causes a simultaneous reduction over all axes.
     Note that the reduced form of an *empty* array is considered to be zero.
 
-    See the section on :ref:`horizontal reductions <horizontal-reductions>` for
-    important general information about their properties.
+    See the discussion of :py:func:`dr.reduce() <reduce>` for important general
+    information about the properties of horizontal operations.
 
     Args:
         value (bool | Sequence | drjit.ArrayBase): A Python or Dr.Jit mask type

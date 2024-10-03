@@ -187,8 +187,8 @@ using the `&` operator.
 Reductions
 ----------
 
-Reductions use a given operation (e.g. addition) to combine values along one or
-several dimensions.
+Reductions use a given operation (e.g., addition) to combine values along one
+or several dimensions.
 
 - :py:func:`dr.sum() <sum>`, :py:func:`dr.prod() <prod>`: Sum and product reduction.
 - :py:func:`dr.min() <min>`, :py:func:`dr.max() <max>`: Minimum/maximum reduction.
@@ -196,9 +196,9 @@ several dimensions.
   <none>`: Boolean reductions for mask arrays.
 - :py:func:`dr.reduce() <reduce>`: Generalized reduction operator.
 
-By default, they reduce along the leading array dimension. For example, the
-following reduction is equivalent to ``a.x + a.y + a.z``. By reducing
-this value once more or specifying `axis=None`, we can sum over all entries.
+By default, they reduce arrays along the leading array dimension. For example,
+the following reduction is equivalent to ``a.x + a.y + a.z``. By reducing this
+value once more or specifying `axis=None`, we can sum over all entries.
 
 .. code-block:: pycon
 
@@ -211,7 +211,7 @@ this value once more or specifying `axis=None`, we can sum over all entries.
 Accessing memory: gather/scatter
 --------------------------------
 
-The function :py:func:`dr.gather() <gather>` fetches values from an 1D array
+The function :py:func:`dr.gather() <gather>` fetches values from a 1D array
 with positions specified by an index array. For example:
 
 .. code-block:: pycon
