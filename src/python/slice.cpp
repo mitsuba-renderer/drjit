@@ -104,7 +104,8 @@ slice_index(const nb::type_object_t<ArrayBase> &dtype,
                 size_t slice_size = nb::len(h);
                 if (vt == VarType::Int8 || vt == VarType::Int16 ||
                     vt == VarType::Int32 || vt == VarType::Int64) {
-                    o[o.attr("__lt__")(nb::cast(0))] += nb::cast(size);
+                    o = select(o.attr("__lt__")(nb::cast(0)),
+                        o + nb::cast(size), o);
                 }
 
                 if (!o.type().is(dtype))
