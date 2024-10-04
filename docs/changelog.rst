@@ -158,9 +158,11 @@ Here is what's new:
 
   The reduction functions (:py:func:`drjit.all` :py:func:`drjit.any`,
   :py:func:`drjit.sum`, :py:func:`drjit.prod`, :py:func:`drjit.min`,
-  :py:func:`drjit.max`) reduce over the outermost axis (``axis=0``) by default,
-  Specify ``axis=None`` to reduce the entire array recursively analogous to the
-  previous nested reduction.
+  :py:func:`drjit.max`) have different default axis values depending on the 
+  input type. For tensors, ``axis=None`` by default and the reduction is
+  performed along the entire underlying array recursively, analogous to the
+  previous nested reduction. For all other types, the reduction is performed
+  over the outermost axis (``axis=0``) by default.
 
   Aliases for the ``_nested`` function variants still exist to help porting but
   are deprecated and will be removed in a future release.
