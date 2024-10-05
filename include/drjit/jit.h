@@ -71,8 +71,8 @@ struct DRJIT_TRIVIAL_ABI JitArray
 
     ~JitArray() noexcept { jit_var_dec_ref(m_index); }
 
-    JitArray(const JitArray &a) : m_index(a.m_index) {
-        jit_var_inc_ref(m_index);
+    JitArray(const JitArray &a) {
+        m_index = jit_var_inc_ref(a.m_index);
     }
 
     JitArray(JitArray &&a) noexcept : m_index(a.m_index) {
@@ -122,9 +122,9 @@ struct DRJIT_TRIVIAL_ABI JitArray
     }
 
     JitArray &operator=(const JitArray &a) {
-        jit_var_inc_ref(a.m_index);
+        uint32_t index = jit_var_inc_ref(a.m_index);
         jit_var_dec_ref(m_index);
-        m_index = a.m_index;
+        m_index = index;
         return *this;
     }
 
@@ -677,8 +677,7 @@ struct DRJIT_TRIVIAL_ABI JitArray
 
     static DRJIT_INLINE JitArray borrow(Index index) {
         JitArray result;
-        jit_var_inc_ref(index);
-        result.m_index = index;
+        result.m_index = jit_var_inc_ref(index);
         return result;
     }
 
@@ -733,8 +732,7 @@ struct index32_vector : drjit::vector<uint32_t> {
 
     void push_back_steal(uint32_t index) { push_back(index); }
     void push_back_borrow(uint32_t index) {
-        jit_var_inc_ref(index);
-        push_back(index);
+        push_back(jit_var_inc_ref(index));
     }
 };
 
