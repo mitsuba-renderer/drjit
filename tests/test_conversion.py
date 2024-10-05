@@ -52,7 +52,7 @@ def test04_roundtrip_vector_torch(t):
 # Test conversions to/from tf (tensors & dynamic array)
 @pytest.test_arrays('tensor, -bool, -float16')
 def test05_roundtrip_dynamic_tf(t):
-    pytest.importorskip("tensorflow")
+    pytest.importorskip("tensorflow.config")
     a = t([[[1, 2, 3], [4, 5, 6]], [[7, 8, 9], [10, 11, 12]]])
     roundtrip = t(a.tf())
 
@@ -66,7 +66,7 @@ def test05_roundtrip_dynamic_tf(t):
 # Test conversions to/from tf (vectors)
 @pytest.test_arrays('vector, shape=(3, *), -bool, -float16')
 def test06_roundtrip_vector_tf(t):
-    pytest.importorskip("tensorflow")
+    pytest.importorskip("tensorflow.config")
     a = t([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
     roundtrip = t(a.tf())
 
