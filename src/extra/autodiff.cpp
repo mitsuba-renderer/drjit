@@ -695,11 +695,11 @@ static void ad_free(ADIndex index, Variable *v) {
     state.unused_variables.push(index);
 }
 
-Index ad_var_inc_ref_impl(Index index) JIT_NOEXCEPT {
+Index ad_var_copy_ref_impl(Index index) JIT_NOEXCEPT {
     JitIndex jit_index = ::jit_index(index);
     ADIndex ad_index = ::ad_index(index);
 
-    jit_var_inc_ref(jit_index);
+    jit_index = jit_var_inc_ref(jit_index);
 
     if (unlikely(ad_index)) {
         const std::vector<Scope> &scopes = local_state.scopes;
@@ -713,6 +713,20 @@ Index ad_var_inc_ref_impl(Index index) JIT_NOEXCEPT {
     }
 
     return combine(ad_index, jit_index);
+}
+
+Index ad_var_inc_ref_impl(Index index) JIT_NOEXCEPT {
+    JitIndex jit_index = ::jit_index(index);
+    ADIndex ad_index = ::ad_index(index);
+
+    jit_var_inc_ref(jit_index);
+
+    if (unlikely(ad_index)) {
+        std::lock_guard<std::mutex> guard(state.mutex);
+        ad_var_inc_ref_int(ad_index, state[ad_index]);
+    }
+
+    return index;
 }
 
 

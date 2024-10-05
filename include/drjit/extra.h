@@ -125,14 +125,16 @@ extern DRJIT_EXTRA_EXPORT void ad_accum_grad(uint64_t index, uint32_t value);
 /// Clear the gradient of a given variable
 extern DRJIT_EXTRA_EXPORT void ad_clear_grad(uint64_t index);
 
-/**
- * \brief Increase the reference count of the given AD variable
- *
- * This function is typically called when an AD variable is copied. It may
- * return a detached variable when an active AD scope disables differentiation
- * of the provided input variable.
- */
+/// Increase the reference count of the given AD variable
 extern DRJIT_EXTRA_EXPORT uint64_t ad_var_inc_ref_impl(uint64_t) JIT_NOEXCEPT;
+
+/**
+ * \brief Variant of 'ad_var_inc_ref' that conceptually creates a copy
+ *
+ * This function return a detached variable when an active AD scope disables
+ * differentiation of the provided input variable.
+ */
+extern DRJIT_EXTRA_EXPORT uint64_t ad_var_copy_ref_impl(uint64_t) JIT_NOEXCEPT;
 
 /// Decrease the reference count of the given AD variable
 extern DRJIT_EXTRA_EXPORT void ad_var_dec_ref_impl(uint64_t) JIT_NOEXCEPT;
@@ -484,6 +486,15 @@ DRJIT_INLINE uint64_t ad_var_inc_ref(uint64_t index) JIT_NOEXCEPT {
         return ad_var_inc_ref_impl(index);
 }
 
+DRJIT_INLINE uint64_t ad_var_copy_ref(uint64_t index) JIT_NOEXCEPT {
+    /* If 'index' is known at compile time, it can only be zero, in
+       which case we can skip the redundant call to ad_var_dec_ref */
+    if (__builtin_constant_p(index))
+        return 0;
+    else
+        return ad_var_copy_ref_impl(index);
+}
+
 DRJIT_INLINE void ad_var_dec_ref(uint64_t index) JIT_NOEXCEPT {
     if (!__builtin_constant_p(index))
         ad_var_dec_ref_impl(index);
@@ -491,6 +502,7 @@ DRJIT_INLINE void ad_var_dec_ref(uint64_t index) JIT_NOEXCEPT {
 #else
 #define ad_var_dec_ref ad_var_dec_ref_impl
 #define ad_var_inc_ref ad_var_inc_ref_impl
+#define ad_var_copy_ref ad_var_copy_ref_impl
 #endif
 
 // Return the AD reference count of a variable (for debugging)
