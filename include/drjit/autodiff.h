@@ -123,12 +123,10 @@ struct DRJIT_TRIVIAL_ABI DiffArray
     }
 
     DiffArray(const DiffArray &a) {
-        if constexpr (IsFloat) {
-            m_index = ad_var_inc_ref(a.m_index);
-        } else {
-            m_index = a.m_index;
-            jit_var_inc_ref(m_index);
-        }
+        if constexpr (IsFloat)
+            m_index = ad_var_copy_ref(a.m_index);
+        else
+            m_index = jit_var_inc_ref(a.m_index);
     }
 
     DiffArray(DiffArray &&a) noexcept : m_index(a.m_index) {
@@ -148,8 +146,8 @@ struct DRJIT_TRIVIAL_ABI DiffArray
         m_index = jit_var_cast((uint32_t) v.m_index, Type, 1);
     }
 
-    DiffArray(const Detached &v) : m_index(v.index()) {
-        jit_var_inc_ref((uint32_t) m_index);
+    DiffArray(const Detached &v) {
+        m_index = jit_var_inc_ref((uint32_t) v.index());
     }
 
     template <typename T, enable_if_scalar_t<T> = 0>
@@ -161,14 +159,15 @@ struct DRJIT_TRIVIAL_ABI DiffArray
 
     DiffArray &operator=(const DiffArray &a) {
         Index old_index = m_index;
+
         if constexpr (IsFloat) {
-            m_index = ad_var_inc_ref(a.m_index);
+            m_index = ad_var_copy_ref(a.m_index);
             ad_var_dec_ref(old_index);
         } else {
-            m_index = a.m_index;
-            jit_var_inc_ref(m_index);
+            m_index = jit_var_inc_ref(a.m_index);
             jit_var_dec_ref(old_index);
         }
+
         return *this;
     }
 
@@ -685,12 +684,10 @@ struct DRJIT_TRIVIAL_ABI DiffArray
     static DRJIT_INLINE DiffArray borrow(Index index) {
         DiffArray result;
 
-        if constexpr (IsFloat) {
+        if constexpr (IsFloat)
             result.m_index = ad_var_inc_ref(index);
-        } else {
-            jit_var_inc_ref(index);
-            result.m_index = index;
-        }
+        else
+            result.m_index = jit_var_inc_ref(index);
 
         return result;
     }
@@ -742,7 +739,7 @@ struct DRJIT_TRIVIAL_ABI DiffArray
                 m_index = ad_var_new(jit_index);
                 jit_var_dec_ref(jit_index);
             } else {
-                jit_var_inc_ref(jit_index);
+                jit_index = jit_var_inc_ref(jit_index);
                 ad_var_dec_ref(m_index);
                 m_index = jit_index;
             }
@@ -956,7 +953,7 @@ NAMESPACE_BEGIN(detail)
 template <bool IncRef> void collect_indices_fn(void *p, uint64_t index) {
     vector<uint64_t> &indices = *(vector<uint64_t> *) p;
     if constexpr (IncRef)
-        ad_var_inc_ref(index);
+        index = ad_var_inc_ref(index);
     indices.push_back(index);
 }
 
@@ -1010,7 +1007,7 @@ struct ad_index32_vector : drjit::vector<uint32_t> {
 
     void push_back_steal(uint32_t index) { push_back(index); }
     void push_back_borrow(uint32_t index) {
-        push_back(uint32_t(ad_var_inc_ref(uint64_t(index) << 32) >> 32));
+        push_back((uint32_t) (ad_var_inc_ref(uint64_t(index) << 32) >> 32));
     }
 };
 
@@ -1033,9 +1030,7 @@ struct index64_vector : drjit::vector<uint64_t> {
     }
 
     void push_back_steal(uint64_t index) { push_back(index); }
-    void push_back_borrow(uint64_t index) {
-        push_back(ad_var_inc_ref(index));
-    }
+    void push_back_borrow(uint64_t index) { push_back(ad_var_inc_ref(index)); }
 };
 
 NAMESPACE_END(detail)
