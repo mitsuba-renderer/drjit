@@ -654,9 +654,10 @@
     :py:func:`drjit.min()`, and :py:func:`drjit.max()` are convenience aliases
     that call :py:func:`drjit.reduce()` with specific values of ``op``.
 
-    By default, the reduction is along axis ``0`` (i.e., the outermost
-    one), returning an instance of the array's element type. For instance,
-    sum-reducing an array ``a`` of type :py:class:`drjit.cuda.Array3f` is
+    By default, the reduction for tensor types is performed over all axes 
+    (``axis=None``), while for all other types, the default is ``axis=0``
+    (i.e., the outermost one), returning an instance of the array's element type. 
+    For instance, sum-reducing an array ``a`` of type :py:class:`drjit.cuda.Array3f` is
     equivalent to writing ``a[0] + a[1] + a[2]`` and produces a result of type
     :py:class:`drjit.cuda.Float`. Dr.Jit can trace this operation and include
     it in the generated kernel.
@@ -725,8 +726,10 @@
 
         value (ArrayBase | Iterable | float | int): An input Dr.Jit array or tensor.
 
-        axes (int | tuple[int, ...] | None): The axis/axes along which
-          to reduce. The default value is ``0``.
+        axis (int | tuple[int, ...] | ... | None): The axis/axes along which
+          to reduce. The special argument ``axis=None`` causes a simultaneous
+          reduction over all axes. The default ``axis=...`` applies a
+          reduction over all axes for tensor types and index ``0`` otherwise.
 
         mode (str | None): optional parameter to force an evaluation strategy.
           Must equal ``"evaluated"``, ``"symbolic"``, or ``None``.
