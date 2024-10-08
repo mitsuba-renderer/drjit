@@ -156,13 +156,15 @@ nb::object reduce_seq(uint32_t op, nb::handle h, nb::handle axis, nb::handle mod
             result = std::move(o);
         else
             result = red.combine(result, o);
+
+        if (!result.is_valid())
+            nb::raise_python_error();
     }
 
     return result;
 }
 
 nb::object reduce(uint32_t op, nb::handle h, nb::handle axis_, nb::handle mode) {
-
     nb::handle tp = h.type();
     if (axis_.type().is(&PyEllipsis_Type)) {
         if (!is_drjit_type(tp) || !supp(tp).is_tensor)
@@ -599,7 +601,7 @@ nb::object prefix_sum(nb::handle_t<dr::ArrayBase> h, bool exclusive,
                         tp_name.ptr());
     } catch (const std::exception &e) {
         nb::chain_error(PyExc_RuntimeError, "drjit.prefix_sum(<%U>): %s",
-                        nb::type_name(tp).c_str(), e.what());
+                        nb::type_name(tp).ptr(), e.what());
     }
 
     return nb::object();

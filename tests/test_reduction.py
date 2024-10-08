@@ -410,3 +410,53 @@ def test12_tensor_reduce(t, op):
         y = dr.reshape(t, x, (3, 5, 7, 11))
 
         check_all(y)
+
+@pytest.mark.parametrize('reverse', [False, True])
+@pytest.mark.parametrize('exclusive', [False, True])
+@pytest.test_arrays('tensor, uint32, jit, -diff')
+def test13_test_prefix_reduction(t, reverse, exclusive):
+    try:
+        import numpy as np
+    except:
+        pytest.skip(reason="NumPy is required")
+
+    def randint(shape):
+        np.random.seed(0)
+        X = np.random.randint(low=0, high=0xFFFFFFFF, size=np.prod(shape), dtype=np.uint32)
+        return np.reshape(X, shape)
+
+    def test_red(shape, axis):
+        X = randint(shape)
+
+        Xt = t(X)
+        if reverse:
+            Xr1 = np.flip(np.cumsum(np.flip(X, axis), axis=axis), axis)
+        else:
+            Xr1 = np.cumsum(X, axis=axis)
+
+        if exclusive:
+            Xr1 = np.swapaxes(Xr1, 0, axis)
+            if reverse:
+                Xr1[0:-1, ...] =  Xr1[1:, ...]
+                Xr1[-1, ...] = 0
+            else:
+                Xr1[1:, ...] =  Xr1[0:-1, ...]
+                Xr1[0, ...] = 0
+            Xr1 = np.swapaxes(Xr1, 0, axis)
+
+        Xr2 = dr.prefix_reduce(op=dr.ReduceOp.Add, value=Xt,
+                               axis=axis, exclusive=exclusive,
+                               reverse=reverse)
+
+        assert dr.all(t(Xr1) == Xr2, axis=None)
+
+    test_red((1, ), 0)
+    test_red((17, ), 0)
+    test_red((1, 1), 0)
+    test_red((1, 1), 1)
+    test_red((13, 17), 1)
+    test_red((13, 17), 0)
+    test_red((9, 5, 7), 0)
+    test_red((9, 5, 7), 1)
+    test_red((9, 5, 7), 2)
+    test_red((9, 5, 7), -1)

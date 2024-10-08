@@ -2038,6 +2038,76 @@ def assert_equal(
         **kwargs,
     )
 
+def prefix_reduce(op: ReduceOp, value: object, axis: int | tuple[int, ...], exclusive: bool = True, reverse: bool = False):
+    r"""
+    Compute an exclusive or inclusive prefix reduction of the input array,
+    tensor, or iterable along the specified axis/axes.
+
+    The function returns an output array :math:`\mathbf{y}` of the same shape
+    as the input. The ``op`` paramater selects the operation to be performed.
+
+    For example, when reducing a 1D array using ``exclusive=True`` (the
+    default), this produces the following output
+
+    - :py:attr:`drjit.ReduceOp.Add`: ``[0, a[0], a[0] + a[1], ...]``.
+    - :py:attr:`drjit.ReduceOp.Mul`: ``[1, a[0], a[0] * a[1], ...]``.
+    - :py:attr:`drjit.ReduceOp.Min`: ``[inf, a[0], min(a[0], a[1]), ...]``.
+    - :py:attr:`drjit.ReduceOp.Max`: ``[-inf, a[0], max(a[0], a[1]), ...]``.
+    - :py:attr:`drjit.ReduceOp.Or`: ``[0, a[0], a[0] | a[1], ...]`` (integer arrays only).
+    - :py:attr:`drjit.ReduceOp.And`: ``[-1, a[0], a[0] & a[1], ...]`` (integer arrays only).
+
+    With ``inclusive=False``, the function instead performs an *inclusive*
+    prefix reduction, which effectively shifts the output by one entry:
+
+    - :py:attr:`drjit.ReduceOp.Add`: ``[a[0], a[0] + a[1], ...]``.
+    - :py:attr:`drjit.ReduceOp.Mul`: ``[a[0], a[0] * a[1], ...]``.
+    - :py:attr:`drjit.ReduceOp.Min`: ``[a[0], min(a[0], a[1]), ...]``.
+    - :py:attr:`drjit.ReduceOp.Max`: ``[a[0], max(a[0], a[1]), ...]``.
+    - :py:attr:`drjit.ReduceOp.Or`: ``[a[0], a[0] | a[1], ...]`` (integer arrays only).
+    - :py:attr:`drjit.ReduceOp.And`: ``[a[0], a[0] & a[1], ...]`` (integer arrays only).
+
+    Not all numeric data types are supported by :py:func:`prefix_sum`:
+    presently, the function accepts ``Int32``, ``UInt32``, ``UInt64``,
+    ``Float32``, and ``Float64``-typed arrays.
+
+    By default, the reduction is along axis ``0`` (i.e., the outermost one),
+    returning an instance of the array's element type. For instance, performing
+    an exclusive prefix sum of an array ``a`` of type
+    :py:class:`drjit.cuda.Array3f` is equivalent to writing ``Array3f(0, a[1],
+    a[0] + a[1])``. Dr.Jit can trace this operation and include it in the
+    generated kernel.
+
+    Negative indices (e.g. ``axis=-1``) count backward from the innermost
+    axis. Multiple axes can be specified as a tuple.
+
+    Args:
+        op (ReduceOp): The operation that should be applied along the
+          reduced axis/axes.
+
+        value (ArrayBase | Iterable | float | int): An input Dr.Jit array or tensor.
+
+        axis (int | tuple[int, ...]): The axis/axes along which
+          to reduce. The default value is ``0``.
+
+        exclusive (bool): Whether to perform an exclusive (the default) or
+          inclusive prefix reduction.
+
+        reverse (bool): if set to ``True``, the prefix sum is done from
+          the *end* of the selected axis.
+
+    Returns:
+        The prefix-reduced array or tensor as specified above.
+    """
+
+    from ._reduce import prefix_reduce as impl
+
+    if isinstance(axis, tuple):
+        for a in reverse(axis):
+            value = impl(op, value, a, exclusive, reverse)
+        return value
+    else:
+        return impl(op, value, axis, exclusive, reverse)
+
 newaxis = None
 
 del overload, Optional

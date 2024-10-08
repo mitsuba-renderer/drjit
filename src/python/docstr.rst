@@ -725,7 +725,7 @@
 
         value (ArrayBase | Iterable | float | int): An input Dr.Jit array or tensor.
 
-        axes (int | tuple[int, ...] | None): The axis/axes along which
+        axis (int | tuple[int, ...] | None): The axis/axes along which
           to reduce. The default value is ``0``.
 
         mode (str | None): optional parameter to force an evaluation strategy.
