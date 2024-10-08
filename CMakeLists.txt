@@ -25,6 +25,9 @@ if (NOT MSVC)
   option(DRJIT_SANITIZE_INTENSE "Add costly internal instrumentation to catch undefined behavior." OFF)
 endif()
 
+option(DRJIT_STABLE_ABI "Build Python extension using the CPython stable ABI? (Only relevant when using scikit-build)" OFF)
+mark_as_advanced(DRJIT_STABLE_ABI)
+
 # ----------------------------------------------------------
 #  Check if submodules have been checked out, or fail early
 # ----------------------------------------------------------
@@ -129,7 +132,6 @@ endif()
 if (DRJIT_ENABLE_JIT)
   add_subdirectory(src/extra)
   set_target_properties(drjit-extra PROPERTIES ${DRJIT_OUTPUT_DIRECTORY})
-  # install(TARGETS drjit-extra EXPORT drjitTargets)
 endif()
 
 if (DRJIT_ENABLE_PYTHON)
@@ -229,6 +231,14 @@ if (DRJIT_MASTER_PROJECT)
         DESTINATION drjit/cuda
       )
     endif()
+    install(FILES
+      ${CMAKE_CURRENT_BINARY_DIR}/drjit/auto/py.typed
+      ${CMAKE_CURRENT_BINARY_DIR}/drjit/auto/__init__.pyi
+      ${CMAKE_CURRENT_BINARY_DIR}/drjit/auto/__init__.py
+      ${CMAKE_CURRENT_BINARY_DIR}/drjit/auto/ad.pyi
+      ${CMAKE_CURRENT_BINARY_DIR}/drjit/auto/ad.py
+      DESTINATION drjit/auto
+    )
   endif()
 
   if (DRJIT_ENABLE_JIT)

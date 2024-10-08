@@ -1,6 +1,10 @@
 if (SKBUILD)
   # Enable LTO only for release builds targeting PyPI (~5% binary size reduction)
-  set(DRJIT_DIST_FLAGS LTO STABLE_ABI)
+  set(DRJIT_DIST_FLAGS LTO)
+endif()
+
+if (SKBUILD AND DRJIT_STABLE_ABI)
+    list(APPEND DRJIT_DIST_FLAGS STABLE_ABI)
 endif()
 
 # ------------------- Copy Python resources -------------------
