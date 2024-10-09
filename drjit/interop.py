@@ -12,10 +12,17 @@ def pytorch_fp_check(value, /):
     '''Returns ``True`` if ``value`` is a PyTorch floating point tensor'''
     return type(value).__module__ == 'torch' and type(value).__name__ == 'Tensor' and value.dtype.is_floating_point
 
-
 def jax_check(value, /):
     '''Returns ``True`` if ``value`` is a JAX tensor'''
     return type(value).__module__.startswith('jaxlib')
+
+def tf_check(value,/):
+    '''Returns ``True`` if ``value`` is a TensorFlow tensor'''
+    return type(value).__module__.startswith('tensorflow')
+
+def tf_var_check(value,/):
+    '''Returns ``True`` if ``value`` is a TensorFlow variable'''
+    return type(value).__name__ == 'ResourceVariable'
 
 def pytree_check(value, /):
     '''Returns ``True`` if ``value`` is a structural element of a PyTree'''
@@ -122,15 +129,20 @@ def to_drjit(value, source, value_tp = None, enable_grad = None):
         nonlocal tp_index
         tp = value_tp[tp_index] if value_tp is not None else None
         tp_index += 1
-
         if (source == 'torch' and pytorch_check(h)) or \
-           (source == 'jax'   and jax_check(h)):
-            r = dr.detail.import_tensor(h, True)
+            (source == 'jax'   and jax_check(h)) or \
+            (source == 'tf' and tf_check(h)):
+            if source == 'tf' and tf_var_check(h) :
+                r = dr.detail.import_tensor(h.value(), True)
+            else:
+                r = dr.detail.import_tensor(h, True)
             if type(r) is not tp and dr.is_array_v(tp):
                 r = tp(r)
             if source == 'torch' and enable_grad:
                 if h.requires_grad:
                     dr.enable_grad(r)
+            if source == 'tf' and enable_grad:
+                dr.enable_grad(r)
             return r
         return ...
 
