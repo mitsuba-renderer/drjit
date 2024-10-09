@@ -76,7 +76,7 @@ def test_arrays(*queries, name='t'):
 
     return wrapped
 
-def skip_on(exception, reason):
+def skip_on(exception, reason, msg=None):
     from functools import wraps
     def wrapped(func):
         @wraps(func)
@@ -87,9 +87,9 @@ def skip_on(exception, reason):
                 m = str(e)
                 c = str(e.__cause__)
                 if reason in m:
-                    pytest.skip(m)
+                    pytest.skip(msg if msg is not None else m)
                 elif reason in c:
-                    pytest.skip(c)
+                    pytest.skip(msg if msg is not None else c)
                 else:
                     raise e
 
