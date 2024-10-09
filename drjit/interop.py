@@ -591,7 +591,7 @@ def wrap(source: typing.Union[str, types.ModuleType],
     # Get module names if source and target are not already strings
     source = source.__name__ if not isinstance(source, str) else source
     target = target.__name__ if not isinstance(target, str) else target
-    valid_types = ('drjit', 'torch', 'jax')
+    valid_types = ('drjit', 'torch', 'jax', 'tf')
 
     if source not in valid_types:
         raise Exception("drjit.wrap(): unknown 'source' argument.")
@@ -625,6 +625,28 @@ def wrap(source: typing.Union[str, types.ModuleType],
                 rv = unflatten(torch_desc_o, *rv)
                 torch_desc_o = None
                 return rv
+
+            return wrapper_2
+
+        return wrapper
+
+    elif target == 'drjit' and source == 'tf':
+        import tensorflow as tf
+        def wrapper(func):
+
+            @tf.custom_gradient
+            def wrapper_2(*args, **kwargs):
+                inputs = to_drjit(*args, 'tf', enable_grad=True)
+                outputs = func(inputs, **kwargs)
+                results = from_drjit(outputs, 'tf')[0]
+
+                def grad(dy):
+                    grad_outputs = to_drjit(dy, 'tf')
+                    dr.set_grad(outputs, grad_outputs)
+                    grads = dr.backward_to(inputs)
+                    return from_drjit(grads, 'tf')[0]
+
+                return results, grad
 
             return wrapper_2
 
