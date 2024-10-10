@@ -346,7 +346,13 @@ class WrapADOp(dr.CustomOp):
         self.func = func
 
         # Evaluate the function using another array programming framework
-        self.out = func(*self.args, **self.kwargs)
+        tensor = flatten(self.args)[1]
+        if tf_check(tensor):
+            import tensorflow as tf
+            with tf.device(tensor.device):
+                self.out = func(*self.args, **self.kwargs)
+        else:
+            self.out = func(*self.args, **self.kwargs)
 
         # Convert the out PyTree to Dr.Jit
         return to_drjit(self.out, target)
@@ -378,12 +384,13 @@ class WrapADOp(dr.CustomOp):
             )
         elif target == 'tf':
             import tensorflow as tf
+            primals = list(self.args) + list(self.kwargs.values())
             with tf.autodiff.ForwardAccumulator(
-                primals=self.args + list(self.kwargs.values()),
-                tangents=grad_args + list(grad_kwargs.values())
+                primals=primals,
+                tangents=list(grad_args) + list(grad_kwargs.values())
             ) as acc:
                 out = self.func(*self.args, **self.kwargs)
-            grad_out = acc.jvp()
+            grad_out = acc.jvp(primals=primals)
         else:
             raise RuntimeError('WrapADOp.forward(): unsupported framework!')
 
@@ -412,13 +419,15 @@ class WrapADOp(dr.CustomOp):
             grad_args, grad_kwargs = vjp_fun(grad_out)
         elif target == 'tf':
             import tensorflow as tf
-            with tf.GradientTape() as tape:
-                tape.watch(self.args)
-                tape.watch(self.kwargs.values())
-                out = self.func(*self.args, **self.kwargs)
-            grad_inputs = tape.gradient(out,
-                                        list(self.args) + list(self.kwargs.values()),
-                                        output_gradients=grad_out)
+            tensor = flatten(self.args)[1]
+            with tf.device(tensor.device):
+                with tf.GradientTape() as tape:
+                    tape.watch(self.args)
+                    tape.watch(self.kwargs.values())
+                    out = self.func(*self.args, **self.kwargs)
+                grad_inputs = tape.gradient(out,
+                                            list(self.args) + list(self.kwargs.values()),
+                                            output_gradients=grad_out)
             grad_args = grad_inputs[:len(self.args)]
             grad_kwargs_values = grad_inputs[len(self.args):]
             grad_kwargs = dict(zip(self.kwargs.keys(), grad_kwargs_values))
