@@ -1065,7 +1065,7 @@ void scatter(Target &target, const Value &value, const Index &index,
 
         if (mask) {
             if constexpr (is_array_v<Target>)
-                target[index] = value;
+                target.set_entry(index, value);
             else
                 ((Value *) target)[index] = value;
         }
