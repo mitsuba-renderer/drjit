@@ -633,7 +633,6 @@ def wrap(source: typing.Union[str, types.ModuleType],
     elif target == 'drjit' and source == 'tf':
         import tensorflow as tf
         def wrapper(func):
-
             @tf.custom_gradient
             def wrapper_2(*args, **kwargs):
                 inputs = to_drjit((args, kwargs), 'tf', enable_grad=True)
@@ -643,9 +642,12 @@ def wrap(source: typing.Union[str, types.ModuleType],
                 def grad(dy):
                     grad_outputs = to_drjit(dy, 'tf')
                     dr.set_grad(outputs, grad_outputs)
-                    grads = dr.backward_to(inputs[0]) # Only gradients for args are computed due to a TF bug https://github.com/tensorflow/tensorflow/issues/77559
+                    vars = flatten(inputs[0])[1:] # Only gradients for args are computed due to a TF bug https://github.com/tensorflow/tensorflow/issues/77559
+                    grads = dr.backward_to(vars) 
                     grads = from_drjit(grads, 'tf')[0]
-                    return flatten(grads)[1:]
+                    grads = [(g if dr.grad_enabled(vars[i]) else None) \
+                                for i, g in enumerate(flatten(grads)[1:])] # Set gradients for non-differentiable tensors to None
+                    return grads
 
                 return results, grad
 
