@@ -1064,7 +1064,9 @@ void scatter(Target &target, const Value &value, const Index &index,
                       "provide a suitable DRJIT_STRUCT() declaration?");
 
         if (mask) {
-            if constexpr (is_array_v<Target>)
+            if constexpr (is_jit_v<Target>)
+                target.set_entry(index, value);
+            else if constexpr (is_array_v<Target>)
                 target[index] = value;
             else
                 ((Value *) target)[index] = value;
