@@ -636,15 +636,16 @@ def wrap(source: typing.Union[str, types.ModuleType],
 
             @tf.custom_gradient
             def wrapper_2(*args, **kwargs):
-                inputs = to_drjit(*args, 'tf', enable_grad=True)
-                outputs = func(inputs, **kwargs)
+                inputs = to_drjit((args, kwargs), 'tf', enable_grad=True)
+                outputs = func(*inputs[0], **inputs[1])
                 results = from_drjit(outputs, 'tf')[0]
 
                 def grad(dy):
                     grad_outputs = to_drjit(dy, 'tf')
                     dr.set_grad(outputs, grad_outputs)
-                    grads = dr.backward_to(inputs)
-                    return from_drjit(grads, 'tf')[0]
+                    grads = dr.backward_to(inputs[0]) # Only gradients for args are computed due to a TF bug https://github.com/tensorflow/tensorflow/issues/77559
+                    grads = from_drjit(grads, 'tf')[0]
+                    return flatten(grads)[1:]
 
                 return results, grad
 
