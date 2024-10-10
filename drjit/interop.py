@@ -24,11 +24,16 @@ def tf_var_check(value,/):
     '''Returns ``True`` if ``value`` is a TensorFlow variable'''
     return type(value).__name__ == 'ResourceVariable'
 
+def tf_fp_check(value):
+    '''Returns True if value is a TensorFlow floating point tensor'''
+    return tf_check(value) and value.dtype.is_floating
+
 def pytree_check(value, /):
     '''Returns ``True`` if ``value`` is a structural element of a PyTree'''
     tp = type(value)
     return tp is list or tp is tuple or \
            tp is dict or getattr(tp, 'DRJIT_STRUCT', None) is not None
+
 
 def apply(fn, a, /):
     '''Helper function to recursively map a PyTree through the function ``fn``'''
@@ -85,6 +90,7 @@ def apply2(fn, a, b, /):
             return result
         else:
             return a
+
 
 def from_drjit(value, target, enable_grad = False, /):
     '''
@@ -207,6 +213,29 @@ def pytorch_make_dual(a, b, /):
     return apply2(fn, a, b)
 
 
+def tensorflow_make_dual(a, b, /):
+    '''Build combined primal/tangent structures for TensorFlow forward-mode AD'''
+
+    def fn(a, b):
+        if type(b) is float and b == 0.0:
+            # Allow non-differentiable types when assigning tangents to unknown types
+            # (In this case, the function will be called by pytorch_make_dual
+            # with the output of drjit.grad, which equals float(0))
+            return a
+
+        if type(a) is type(b):
+            if tf_fp_check(a):
+                # Use ForwardAccumulator for forward-mode AD in TensorFlow
+                from tensorflow.autodiff import ForwardAccumulator
+                with ForwardAccumulator(primals=a, tangents=b) as acc:
+                    dual = acc.jvp()
+                return dual
+        else:
+            return a
+
+    return apply2(fn, a, b)
+
+
 def fixup_grad(a, b, target, /):
     '''
     Fix up gradients so that they are accepted by routines like ``jax.vjp``,
@@ -307,7 +336,7 @@ def unflatten(desc, *flat):
 class WrapADOp(dr.CustomOp):
     '''
     Dr.Jit custom operation that wraps differentiable computation performed
-    using another AD framework (e.g., PyTorch)
+    using another AD framework (e.g., PyTorch, TensorFlow)
     '''
     def eval(self, func, target, *args, **kwargs):
         # Convert input PyTrees from Dr.Jit
@@ -347,6 +376,14 @@ class WrapADOp(dr.CustomOp):
             _, grad_out = jax.jvp(
                 wrapper, (self.args, self.kwargs), (grad_args, grad_kwargs)
             )
+        elif target == 'tf':
+            import tensorflow as tf
+            with tf.autodiff.ForwardAccumulator(
+                primals=self.args + list(self.kwargs.values()),
+                tangents=grad_args + list(grad_kwargs.values())
+            ) as acc:
+                out = self.func(*self.args, **self.kwargs)
+            grad_out = acc.jvp()
         else:
             raise RuntimeError('WrapADOp.forward(): unsupported framework!')
 
@@ -373,6 +410,18 @@ class WrapADOp(dr.CustomOp):
 
             primals, vjp_fun = jax.vjp(wrapper, self.args, self.kwargs)
             grad_args, grad_kwargs = vjp_fun(grad_out)
+        elif target == 'tf':
+            import tensorflow as tf
+            with tf.GradientTape() as tape:
+                tape.watch(self.args)
+                tape.watch(self.kwargs.values())
+                out = self.func(*self.args, **self.kwargs)
+            grad_inputs = tape.gradient(out,
+                                        list(self.args) + list(self.kwargs.values()),
+                                        output_gradients=grad_out)
+            grad_args = grad_inputs[:len(self.args)]
+            grad_kwargs_values = grad_inputs[len(self.args):]
+            grad_kwargs = dict(zip(self.kwargs.keys(), grad_kwargs_values))
         else:
             raise RuntimeError('WrapADOp.backward(): unsupported framework!')
 
@@ -638,7 +687,6 @@ def wrap(source: typing.Union[str, types.ModuleType],
                 inputs = to_drjit((args, kwargs), 'tf', enable_grad=True)
                 outputs = func(*inputs[0], **inputs[1])
                 results = from_drjit(outputs, 'tf')[0]
-
                 def grad(dy):
                     grad_outputs = to_drjit(dy, 'tf')
                     dr.set_grad(outputs, grad_outputs)
@@ -648,13 +696,8 @@ def wrap(source: typing.Union[str, types.ModuleType],
                     grads = [(g if dr.grad_enabled(vars[i]) else None) \
                                 for i, g in enumerate(flatten(grads)[1:])] # Set gradients for non-differentiable tensors to None
                     return grads
-
                 return results, grad
-
             return wrapper_2
-
         return wrapper
     else:
         raise Exception("drjit.wrap(): unsupported combination of 'source' and 'target'.")
-
-    return None
