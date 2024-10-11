@@ -168,6 +168,18 @@ def pytorch_filter_fp(value, /):
     apply(fn, value)
     return result
 
+def tf_filter_fp(value, /):
+    '''Extract a flat list of floating point TensorFlow tensors from the PyTree ``value``'''
+
+    result = []
+
+    def fn(h, /):
+        if tf_fp_check(h):
+            result.append(h)
+        return ...
+
+    apply(fn, value)
+    return result
 
 def pytorch_grad(value, /):
     '''Extract a the gradients of PyTorch tensors from the PyTree ``value``'''
@@ -213,25 +225,7 @@ def pytorch_make_dual(a, b, /):
     return apply2(fn, a, b)
 
 
-def tensorflow_make_dual(a, b, /):
-    '''Build combined primal/tangent structures for TensorFlow forward-mode AD'''
 
-    def fn(a, b):
-        if type(b) is float and b == 0.0:
-            # Allow non-differentiable types when assigning tangents to unknown types
-            # (In this case, the function will be called by pytorch_make_dual
-            # with the output of drjit.grad, which equals float(0))
-            return a
-
-        if type(a) is type(b):
-            if tf_fp_check(a):
-                # Use ForwardAccumulator for forward-mode AD in TensorFlow
-                from tensorflow.autodiff import ForwardAccumulator
-                with ForwardAccumulator(primals=a, tangents=b) as acc:
-                    dual = acc.jvp()
-                return dual
-        else:
-            return a
 
     return apply2(fn, a, b)
 
@@ -384,14 +378,15 @@ class WrapADOp(dr.CustomOp):
         elif target == 'tf':
             import tensorflow as tf
             primals = list(self.args) + list(self.kwargs.values())
+            tangents = list(grad_args) + list(grad_kwargs.values())
             tensor = flatten(self.args)[1]
             with tf.device(tensor.device):
                 with tf.autodiff.ForwardAccumulator(
-                    primals=primals,
-                    tangents=list(grad_args) + list(grad_kwargs.values())
+                    primals=tf_filter_fp(primals),
+                    tangents=tf_filter_fp(tangents)
                 ) as acc:
                     out = self.func(*self.args, **self.kwargs)
-                grad_out = acc.jvp(out)
+                grad_out = acc.jvp(tf.nest.map_structure(tf.convert_to_tensor, out))
         else:
             raise RuntimeError('WrapADOp.forward(): unsupported framework!')
         self.set_grad_out(to_drjit(grad_out, target))
@@ -405,7 +400,6 @@ class WrapADOp(dr.CustomOp):
             import torch
             torch.autograd.backward(pytorch_filter_fp(self.out),
                                     pytorch_filter_fp(grad_out))
-
             grad_args = pytorch_grad(self.args)
             grad_kwargs = pytorch_grad(self.kwargs)
         elif target == 'jax':
@@ -420,19 +414,20 @@ class WrapADOp(dr.CustomOp):
             import tensorflow as tf
             tensor = flatten(self.args)[1]
             with tf.device(tensor.device):
-                with tf.GradientTape() as tape:
-                    tape.watch(self.args)
-                    tape.watch(self.kwargs.values())
+                args = tf.nest.map_structure(tf.convert_to_tensor, self.args)
+                kwargs = tf.nest.map_structure(tf.convert_to_tensor, self.kwargs)
+                with tf.GradientTape(persistent=True) as tape:
+                    tape.watch([args, kwargs])
                     out = self.func(*self.args, **self.kwargs)
-                grad_inputs = tape.gradient(out,
-                                            list(self.args) + list(self.kwargs.values()),
+                    out = tf.nest.map_structure(tf.convert_to_tensor, out)
+                grad_args = tape.gradient(out,
+                                          args,
+                                          output_gradients=grad_out)
+                grad_kwargs = tape.gradient(out,
+                                            kwargs,
                                             output_gradients=grad_out)
-            grad_args = grad_inputs[:len(self.args)]
-            grad_kwargs_values = grad_inputs[len(self.args):]
-            grad_kwargs = dict(zip(self.kwargs.keys(), grad_kwargs_values))
         else:
             raise RuntimeError('WrapADOp.backward(): unsupported framework!')
-
         self.set_grad_in('args',   to_drjit(grad_args,   target, self.args_tp))
         self.set_grad_in('kwargs', to_drjit(grad_kwargs, target, self.kwargs_tp))
 
