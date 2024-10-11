@@ -81,6 +81,17 @@ def torch_dtype(t):
     else:
         raise Exception("Unsupported variable type")
 
+def tf_dtype(t):
+    import tensorflow as tf
+    vt = dr.type_v(t)
+    if vt == dr.VarType.Float16:
+        return tf.float16
+    elif vt == dr.VarType.Float32:
+        return tf.float32
+    elif vt == dr.VarType.Float64:
+        return tf.float64
+    else:
+        raise Exception("Unsupported variable type")
 
 @pytest.mark.parametrize('is_diff', [True, False])
 @pytest.mark.parametrize('config', configs)
@@ -106,7 +117,7 @@ def test01_simple_bwd(t, config, is_diff):
 
 @pytest.mark.parametrize('scalar_deriv', [True, False])
 @pytest.mark.parametrize('is_diff', [True, False])
-@pytest.mark.parametrize('config', configs_torch)
+@pytest.mark.parametrize('config', configs_torch + configs_tf)
 @pytest.test_arrays('is_diff,float,shape=(*)')
 @pytest.skip_on(RuntimeError, "backend does not support the requested type of atomic reduction")
 def test02_flipped_simple_bwd(t, config, is_diff, scalar_deriv):
@@ -115,23 +126,44 @@ def test02_flipped_simple_bwd(t, config, is_diff, scalar_deriv):
         assert dr.is_array_v(x)
         return x * 2
 
-    import torch
-    dt = torch_dtype(t)
-    x = torch.arange(3, dtype=dt)
-    x.requires_grad = is_diff
+    if config[0] == 'torch':
+        import torch
+        dt = torch_dtype(t)
+        x = torch.arange(3, dtype=dt)
+        x.requires_grad = is_diff
 
-    y = test_fn(x)
-    assert torch.all(y == torch.arange(3, dtype=dt) * 2)
+        y = test_fn(x)
+        assert torch.all(y == torch.arange(3, dtype=dt) * 2)
 
-    if is_diff:
-        if scalar_deriv:
-            y.sum().backward()
-            assert torch.all(x.grad == torch.tensor([2, 2, 2], dtype=dt))
+        if is_diff:
+            if scalar_deriv:
+                y.sum().backward()
+                assert torch.all(x.grad == torch.tensor([2, 2, 2], dtype=dt))
+            else:
+                torch.autograd.backward(y, torch.tensor([10, 20, 30], dtype=dt))
+                assert torch.all(x.grad == torch.tensor([20, 40, 60], dtype=dt))
         else:
-            torch.autograd.backward(y, torch.tensor([10, 20, 30], dtype=dt))
-            assert torch.all(x.grad == torch.tensor([20, 40, 60], dtype=dt))
-    else:
-        assert y.grad is None
+            assert y.grad is None
+
+    elif config[0] == 'tf':
+        import tensorflow as tf
+        dt = tf_dtype(t)
+        x = tf.cast(tf.range(3), dt)
+        y = test_fn(x)
+        assert tf.reduce_all(y == x * 2)
+        if is_diff:
+            if scalar_deriv:
+                with tf.GradientTape() as tape:
+                    tape.watch(x)
+                    out = test_fn(x)
+                grad = tape.gradient(out, x)
+                assert tf.reduce_all(grad == tf.constant([2, 2, 2], dtype=dt))
+            else:
+                with tf.GradientTape() as tape:
+                    tape.watch(x)
+                    out = test_fn(x)
+                grad = tape.gradient(out, x, output_gradients=tf.constant([10, 20, 30], dtype=dt))
+                assert tf.reduce_all(grad == tf.constant([20, 40, 60], dtype=dt))
 
 @pytest.mark.parametrize('config', configs)
 @pytest.test_arrays('is_diff,float,shape=(*)')
