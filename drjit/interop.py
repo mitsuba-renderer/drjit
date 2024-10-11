@@ -364,7 +364,6 @@ class WrapADOp(dr.CustomOp):
         grad_kwargs, _ = from_drjit(self.grad_in('kwargs'), target)
         grad_args      = fixup_grad(grad_args, self.args, target)
         grad_kwargs    = fixup_grad(grad_kwargs, self.kwargs, target)
-
         if target == 'torch':
             import torch.autograd.forward_ad as fa
 
@@ -385,20 +384,20 @@ class WrapADOp(dr.CustomOp):
         elif target == 'tf':
             import tensorflow as tf
             primals = list(self.args) + list(self.kwargs.values())
-            with tf.autodiff.ForwardAccumulator(
-                primals=primals,
-                tangents=list(grad_args) + list(grad_kwargs.values())
-            ) as acc:
-                out = self.func(*self.args, **self.kwargs)
-            grad_out = acc.jvp(primals=primals)
+            tensor = flatten(self.args)[1]
+            with tf.device(tensor.device):
+                with tf.autodiff.ForwardAccumulator(
+                    primals=primals,
+                    tangents=list(grad_args) + list(grad_kwargs.values())
+                ) as acc:
+                    out = self.func(*self.args, **self.kwargs)
+                grad_out = acc.jvp(out)
         else:
             raise RuntimeError('WrapADOp.forward(): unsupported framework!')
-
         self.set_grad_out(to_drjit(grad_out, target))
 
     def backward(self):
         target = self.target
-
         grad_out, _ = from_drjit(self.grad_out(), target)
         grad_out    = fixup_grad(grad_out, self.out, target)
 

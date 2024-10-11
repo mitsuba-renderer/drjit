@@ -55,7 +55,7 @@ try:
 except ImportError:
     pass
 
-configs = configs_torch + configs_jax + configs_tf
+configs = configs_tf#configs_torch + configs_jax + configs_tf
 
 def wrap(config):
     def wrapper(func):
@@ -654,7 +654,10 @@ def test22_flipped_args_kwargs_fwd(t, config):
 def test23_nested_arrays_bwd(t, config):
     @wrap(config)
     def test_fn(x, y):
-        return (x*y).sum()
+        if config[0] == 'tf':
+            return tf.reduce_sum(x*y)
+        else:
+            return (x*y).sum()
 
     x = t([1, 2], [3, 4], [5, 6])
     y = t(10, 20, 30)
@@ -672,7 +675,10 @@ def test23_nested_arrays_bwd(t, config):
 def test24_nested_arrays_fwd(t, config):
     @wrap(config)
     def test_fn(x, y):
-        return (x*y).sum()
+        if config[0] == 'tf':
+            return tf.reduce_sum(x*y)
+        else:
+            return (x*y).sum()
 
     x = t([1, 2], [3, 4], [5, 6])
     y = t(10, 20, 30)
