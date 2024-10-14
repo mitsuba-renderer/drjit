@@ -658,7 +658,7 @@ static nb::object format_impl(const char *name, const std::string &fmt,
             file.attr("write")(str);
             return nb::none();
         } else {
-            return str;
+            return std::move(str);
         }
     } catch (nb::python_error &e) {
         nb::raise_from(e, PyExc_RuntimeError,

@@ -39,18 +39,18 @@ def reduce_recursive(
     Helper function that compiles a tensor reduction into nested loops
     containing a gather operation.
     """
-    UInt32 = dr.uint32_array_t(value)
+    Index = dr.uint32_array_t(value)
     if shape == ():
         return _reduce_ops[op](accum, dr.gather(type(value), value, offset))
     else:
         return dr.while_loop(
             label=f"Reduction {len(shape)}",
             labels=("k", "offset", "value", "accum"),
-            state=(UInt32(0), UInt32(offset), value, accum),
-            cond=lambda *args: args[0] < UInt32(shape[0]),
+            state=(Index(0), Index(offset), value, accum),
+            cond=lambda *args: args[0] < Index(shape[0]),
             body=lambda k, offset, value, accum: (
                 k + 1,
-                offset + UInt32(strides[0]),
+                offset + Index(strides[0]),
                 value,
                 reduce_recursive(op, value, shape[1:], strides[1:], offset, accum),
             ),
@@ -217,3 +217,132 @@ def tensor_reduce(
         )
 
     return Tensor(out_array, out_shape)
+
+class PrefixRedOp(dr.CustomOp):
+    def eval(self, op: dr.ReduceOp, value: ArrayT, axis: int, exclusive: bool, reverse: bool) -> ArrayT:
+        self.op = op
+        self.axis = axis
+        self.exclusive = exclusive
+        self.reverse = reverse
+
+        return dr.prefix_reduce(
+            op=op,
+            value=value,
+            axis=axis,
+            exclusive=exclusive,
+            reverse=reverse
+        )
+
+    def forward(self):
+        grad_out = dr.prefix_reduce(
+            op=self.op,
+            value=self.grad_in('value'),
+            axis=self.axis,
+            exclusive=self.exclusive,
+            reverse=self.reverse
+        )
+        self.set_grad_out(grad_out)
+
+    def backward(self):
+        grad_in = dr.prefix_reduce(
+            value=self.grad_out(),
+            op=self.op,
+            axis=self.axis,
+            exclusive=self.exclusive,
+            reverse=not self.reverse
+        )
+        self.set_grad_in('value', grad_in)
+
+def prefix_reduce(
+    op: dr.ReduceOp,
+    value: ArrayT,
+    axis: int,
+    exclusive: bool,
+    reverse: bool
+) -> ArrayT:
+
+    if dr.grad_enabled(value):
+        if op != dr.ReduceOp.Add:
+            raise RuntimeError("drjit.prefix_reduce(): for now, differentiation support has only been implemented for add-reductions");
+        return dr.custom(PrefixRedOp, op, value, axis, exclusive, reverse)
+
+    Value = type(value)
+    Array = dr.array_t(Value)
+    Index = dr.uint32_array_t(Array)
+    shape = dr.shape(value)
+    ndim = len(shape)
+
+    if axis < 0:
+        axis += ndim
+    if axis < 0 or axis >= ndim:
+        raise RuntimeError("drjit.prefix_reduce(): axis is out of bounds!")
+
+    # Strides
+    strides, size = [], 1
+    for s in reversed(shape):
+        strides.append(size)
+        size *= s
+    strides.reverse()
+
+    # Use precompiled fast path if the data is contiguous in memory
+    if strides[axis] == 1:
+        result = dr.block_prefix_reduce(
+            op=op,
+            block_size=shape[axis],
+            value=value.array,
+            exclusive=exclusive,
+            reverse=reverse
+        )
+
+        if dr.is_tensor_v(value):
+            return Value(result, shape)
+        else:
+            return result
+
+    # Compute the base offset
+    counter = dr.arange(Index, size)
+    offset, index = Index(0), Index(0)
+    for i, s in enumerate(strides):
+        tmp = counter // s
+        counter = dr.fma(-tmp, s, counter)
+        if i == axis:
+            offset += counter
+            break
+        else:
+            offset = dr.fma(tmp, s, offset)
+
+    step = Index(strides[axis])
+
+    if reverse:
+        offset = dr.fma(step, shape[axis] - 1, offset)
+        step = ~step + 1
+
+    result = dr.empty(Value, shape=value.shape)
+    input, output = value.array, result.array
+    accum = dr.detail.reduce_identity(Array, op)
+    red_op = _reduce_ops[op]
+
+    def reduce_cond(index, offset, accum):
+        return index < shape[axis]
+
+    def reduce_body(index, offset, accum):
+        value = dr.gather(Array, input, offset)
+
+        if not exclusive:
+            accum = red_op(accum, value)
+
+        dr.scatter(output, accum, offset)
+
+        if exclusive:
+            accum = red_op(accum, value)
+
+        return index + 1, offset + step, accum
+
+    dr.while_loop(
+        state=(index, offset, accum),
+        cond=reduce_cond,
+        body=reduce_body
+    )
+
+    return result
+

@@ -541,22 +541,32 @@ def test22_repeat(t):
     y = dr.repeat(x, 3)
     assert dr.all(y == [1, 1, 1, 2, 2, 2])
 
-@pytest.test_arrays('jit,float32,shape=(*)')
+@pytest.test_arrays('shape=(*),-bool')
 def test23_block_sum(t):
     x = t(1, 2, 3, 4, 5, 6)
     assert dr.all(dr.block_sum(x, 1) == x)
     assert dr.all(dr.block_sum(x, 2) == [3, 7, 11])
     assert dr.all(dr.block_sum(x, 3) == [6, 15])
+    assert dr.all(dr.block_sum(x, 4) == [10, 11])
+    assert dr.all(dr.block_sum(x, 5) == [15, 6])
     assert dr.all(dr.block_sum(x, 6) == [21])
-    with pytest.raises(RuntimeError, match=r"variable size \(6\) must be an integer multiple of 'block_size' \(4\)"):
-        dr.block_sum(x, 4)
+
+@pytest.test_arrays('shape=(*),-bool')
+def test24_block_prefix_sum(t):
+    x = t(1, 2, 3, 4, 5, 6)
+    assert dr.all(dr.block_prefix_sum(x, 1) == [0, 0, 0, 0, 0, 0])
+    assert dr.all(dr.block_prefix_sum(x, 2) == [0, 1, 0, 3, 0, 5])
+    assert dr.all(dr.block_prefix_sum(x, 3) == [0, 1, 3, 0, 4, 9])
+    assert dr.all(dr.block_prefix_sum(x, 4) == [0, 1, 3, 6, 0, 5])
+    assert dr.all(dr.block_prefix_sum(x, 5) == [0, 1, 3, 6, 10, 0])
+    assert dr.all(dr.block_prefix_sum(x, 6) == [0, 1, 3, 6, 10, 15])
 
 @pytest.mark.parametrize('op',
     [dr.ReduceOp.Add, dr.ReduceOp.Min, dr.ReduceOp.Max,
      dr.ReduceOp.And, dr.ReduceOp.Or])
 @pytest.skip_on(RuntimeError, "backend does not support the requested type of atomic reduction")
 @pytest.test_arrays('shape=(*), uint32, jit')
-def test24_block_reduce_intense(t, op):
+def test25_block_reduce_intense(t, op):
     size = 4096*1024
     mod = sys.modules[t.__module__]
     rng = mod.PCG32(size)
@@ -583,7 +593,7 @@ def test24_block_reduce_intense(t, op):
 
 @pytest.mark.parametrize('variant', [0, 1])
 @pytest.test_arrays('diff, float32, shape=(*)')
-def test25_elide_scatter(t, variant):
+def test26_elide_scatter(t, variant):
     # Test that scatters are not performed when their result is not used
     UInt = dr.uint32_array_t(t)
     with dr.scoped_set_flag(dr.JitFlag.KernelHistory):
@@ -612,7 +622,7 @@ def test25_elide_scatter(t, variant):
 
 @pytest.mark.parametrize('variant', [0, 1])
 @pytest.test_arrays('diff, float32, shape=(*)')
-def test25_elide_scatter_in_call(t, variant):
+def test27_elide_scatter_in_call(t, variant):
     # Test that scatters are not performed when their result is not used
     UInt = dr.uint32_array_t(t)
     with dr.scoped_set_flag(dr.JitFlag.KernelHistory):
@@ -639,7 +649,7 @@ def test25_elide_scatter_in_call(t, variant):
         assert ir.count('call void @llvm.masked.scatter') == variant
 
 @pytest.test_arrays('-bool, -diff, shape=(*)')
-def test2t_scalar_reductions(t):
+def test28_scalar_reductions(t):
     x = dr.full(t, 3, 4)
     assert dr.sum(x) == 12
     assert dr.prod(x) == 81
@@ -648,7 +658,7 @@ def test2t_scalar_reductions(t):
 
 @pytest.mark.parametrize('psize', [2, 4, 8, 16])
 @pytest.test_arrays('-diff, jit, shape=(*, *)')
-def test27_packet_gather(t, psize):
+def test29_packet_gather(t, psize):
     mod = sys.modules[t.__module__]
 
     size = 1024
@@ -683,7 +693,7 @@ def test27_packet_gather(t, psize):
 
 @pytest.mark.parametrize('psize', [2, 4, 8, 16])
 @pytest.test_arrays('-diff, jit, shape=(*, *)')
-def test28_packet_scatter(t, psize):
+def test30_packet_scatter(t, psize):
     np = pytest.importorskip("numpy")
     mod = sys.modules[t.__module__]
 
@@ -724,7 +734,7 @@ def test28_packet_scatter(t, psize):
 
 @pytest.mark.parametrize('psize', [2, 4, 8, 16])
 @pytest.test_arrays('-diff, jit, int, shape=(*, *)')
-def test29_packet_scatter_add(t, psize):
+def test31_packet_scatter_add(t, psize):
     np = pytest.importorskip("numpy")
     mod = sys.modules[t.__module__]
 
@@ -761,7 +771,7 @@ def test29_packet_scatter_add(t, psize):
 
 
 @pytest.test_arrays('jit, -bool, -quat, -diff, shape=(4, *)')
-def test30_packet_ravel_unravel(t, capsys, drjit_verbose):
+def test32_packet_ravel_unravel(t, capsys, drjit_verbose):
     # Test that packet memory operations are used in ravel/unravel
 
     q = t([0,1],[0,1],[1,0],[1,0])
@@ -780,7 +790,7 @@ def test30_packet_ravel_unravel(t, capsys, drjit_verbose):
 @pytest.mark.parametrize('optimize', [True, False])
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
 @dr.syntax
-def test31_scatter_reduce_loop(t, mode, optimize, capsys):
+def test33_scatter_reduce_loop(t, mode, optimize, capsys):
     with dr.scoped_set_flag(dr.JitFlag.OptimizeLoops, optimize):
         i = dr.ones(t, 64)
         v = dr.zeros(t, 64)
@@ -795,7 +805,7 @@ def test31_scatter_reduce_loop(t, mode, optimize, capsys):
 
 @pytest.mark.parametrize("order", ["C", "F"])
 @pytest.test_arrays("is_jit, shape=(*)")
-def test32_ravel_builtin(t, order):
+def test34_ravel_builtin(t, order):
 
     # Get value with builtin type of t
     x = dr.ones(t, 1)[0]

@@ -2001,20 +2001,33 @@ struct ScatterTarget : Special {
 };
 
 
-struct PrefixSumEdge : Special {
-    PrefixSumEdge(bool exclusive) : m_exclusive(exclusive) { }
+struct BlockPrefixReduceEdge : Special {
+    BlockPrefixReduceEdge(ReduceOp op, uint32_t block_size, bool exclusive,
+                          bool reverse)
+        : m_op(op), m_block_size(block_size), m_exclusive(exclusive),
+          m_reverse(reverse) { }
 
     void forward(const Variable *source, Variable *target) override {
+        if (m_op != ReduceOp::Add)
+            ad_raise("BlockPrefixReduceEdge: forward mode differentiation of "
+                     "dr.block_prefix_reduce() has only been implemented for "
+                     "drjit.ReduceOp.Add so far.");
+
         JitVar value = source->grad;
 
         if (value.size() != source->size)
             value.resize(source->size);
 
-        value = dr::prefix_sum(value, m_exclusive);
+        value = dr::block_prefix_reduce(m_op, value, m_block_size, m_exclusive, m_reverse);
         target->accum(value, source->size);
     }
 
     void backward(Variable *source, const Variable *target) override {
+        if (m_op != ReduceOp::Add)
+            ad_raise("BlockPrefixReduceEdge: reverse mode differentiation of "
+                     "dr.block_prefix_reduce() has only been implemented for "
+                     "drjit.ReduceOp.Add so far.");
+
         JitVar value = target->grad;
         if (!value.valid())
             return;
@@ -2023,11 +2036,14 @@ struct PrefixSumEdge : Special {
             value.resize(target->size);
 
         jit_set_backend(value.index());
-        value = dr::reverse(dr::prefix_sum(dr::reverse(value), m_exclusive));
+        value = dr::block_prefix_reduce(m_op, value, m_block_size, m_exclusive, !m_reverse);
         source->accum(value, value.size());
     }
 
+    ReduceOp m_op;
+    uint32_t m_block_size;
     bool m_exclusive;
+    bool m_reverse;
 };
 
 struct BlockReduceEdge : Special {
@@ -3269,15 +3285,17 @@ void ad_var_scatter_add_kahan(Index *target_1, Index *target_2, Index value,
 
 // ==========================================================================
 
-Index ad_var_prefix_sum(Index index, int exclusive) {
-    JitVar result =
-        JitVar::steal(jit_var_prefix_sum(jit_index(index), exclusive));
+Index ad_var_block_prefix_reduce(ReduceOp op, Index index, uint32_t block_size, int exclusive, int reverse) {
+    JitVar result = JitVar::steal(jit_var_block_prefix_reduce(
+        op, jit_index(index), block_size, exclusive, reverse));
 
     if (is_detached(index))
         return result.release();
     else
-        return ad_var_new("prefix_sum", std::move(result),
-                          SpecialArg(index, new PrefixSumEdge(exclusive != 0)));
+        return ad_var_new("block_prefix_reduce", std::move(result),
+                          SpecialArg(index, new BlockPrefixReduceEdge(
+                                                op, block_size, exclusive != 0,
+                                                reverse != 0)));
 }
 
 Index ad_var_shrink(Index i0, size_t size) {

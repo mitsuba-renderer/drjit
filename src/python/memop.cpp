@@ -52,14 +52,14 @@ nb::object gather(nb::type_object dtype, nb::object source,
             if (!dtype.is(&PyList_Type))
                 return dtype(result);
             else
-                return result;
+                return std::move(result);
         } else if (source_tp.is(&PyDict_Type)) {
             nb::dict result;
             for (auto [k, v] : nb::borrow<nb::dict>(source))
                 result[k] = gather(nb::borrow<nb::type_object>(v.type()),
                                    nb::borrow(v), index, active, mode);
 
-            return result;
+            return std::move(result);
         } else {
             nb::object dstruct = nb::getattr(dtype, "DRJIT_STRUCT", nb::handle());
             if (dstruct.is_valid() && dstruct.type().is(&PyDict_Type)) {
@@ -982,7 +982,7 @@ static nb::object reshape(nb::type_object dtype, nb::handle value,
                 for (nb::handle item : nb::borrow<nb::list>(value))
                     tmp.append(reshape(nb::borrow<nb::type_object>(item.type()),
                                        item, target_shape, order, shrink));
-                return tmp;
+                return std::move(tmp);
             } else if (tp.is(&PyTuple_Type)) {
                 nb::list tmp;
                 for (nb::handle item : nb::borrow<nb::tuple>(value))
@@ -994,7 +994,7 @@ static nb::object reshape(nb::type_object dtype, nb::handle value,
                 for (auto [k, v] : nb::borrow<nb::dict>(value))
                     tmp[k] = reshape(nb::borrow<nb::type_object>(v.type()), v,
                                      target_shape, order, shrink);
-                return tmp;
+                return std::move(tmp);
             } else {
                 nb::object dstruct = nb::getattr(tp, "DRJIT_STRUCT", nb::handle());
                 if (dstruct.is_valid() && dstruct.type().is(&PyDict_Type)) {

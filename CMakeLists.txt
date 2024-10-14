@@ -19,12 +19,6 @@ option(DRJIT_ENABLE_AUTODIFF  "Build Dr.Jit automatic differentation library?" O
 option(DRJIT_ENABLE_PYTHON    "Build Python extension library?" ON)
 option(DRJIT_ENABLE_TESTS     "Build Dr.Jit test suite? (Warning, this takes *very* long to compile)" OFF)
 
-if (NOT MSVC)
-  option(DRJIT_SANITIZE_UBSAN   "Enable the address sanitizer (GCC, Clang)" OFF)
-  option(DRJIT_SANITIZE_ASAN    "Enable the undefined behavior sanitizer (GCC, Clang)" OFF)
-  option(DRJIT_SANITIZE_INTENSE "Add costly internal instrumentation to catch undefined behavior." OFF)
-endif()
-
 # ----------------------------------------------------------
 #  Check if submodules have been checked out, or fail early
 # ----------------------------------------------------------

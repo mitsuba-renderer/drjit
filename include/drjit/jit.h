@@ -336,8 +336,8 @@ struct DRJIT_TRIVIAL_ABI JitArray
 
     #undef DRJIT_HORIZONTAL_OP
 
-    JitArray prefix_sum_(bool exclusive) const {
-        return steal(jit_var_prefix_sum(m_index, exclusive));
+    JitArray block_prefix_reduce_(ReduceOp op, uint32_t block_size, bool exclusive, bool reverse) const {
+        return steal(jit_var_block_prefix_reduce(op, m_index, block_size, exclusive, reverse));
     }
 
     JitArray dot_(const JitArray &a) const { return sum(*this * a); }
@@ -694,26 +694,6 @@ protected:
 
 template <typename Value> using CUDAArray = JitArray<JitBackend::CUDA, Value>;
 template <typename Value> using LLVMArray = JitArray<JitBackend::LLVM, Value>;
-
-template <typename T> T block_reduce(ReduceOp op, const T &value, size_t block_size, int symbolic = -1) {
-    if constexpr (is_traversable_v<T>) {
-        T result;
-        traverse_2(
-            fields(result), fields(value),
-            [op, block_size, symbolic](auto &x, const auto &y) {
-                x = block_reduce(op, y, block_size, symbolic);
-            });
-        return result;
-    } if constexpr (is_jit_v<T>) {
-        return value.block_reduce_(op, block_size, symbolic);
-    } else {
-        return value;
-    }
-}
-
-template <typename T> T block_sum(const T &value, size_t block_size, int symbolic = -1) {
-    return block_reduce(ReduceOp::Add, value, block_size, symbolic);
-}
 
 template <typename T> T tile(const T &value, size_t count) {
     if constexpr (is_traversable_v<T>) {

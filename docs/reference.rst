@@ -50,25 +50,23 @@ Control flow
 .. autofunction:: switch
 .. autofunction:: dispatch
 
-.. _horizontal-reductions-ref:
-
-Horizontal operations
----------------------
-
-These operations are *horizontal* in the sense that [..]
+Scatter/gather operations
+-------------------------
 
 .. autofunction:: gather
 .. autofunction:: scatter
-
-.. autoenum:: ReduceOp
-.. autoenum:: ReduceMode
 
 .. autofunction:: scatter_reduce
 .. autofunction:: scatter_add
 .. autofunction:: scatter_add_kahan
 .. autofunction:: scatter_inc
-.. autofunction:: block_reduce
-.. autofunction:: block_sum
+.. autofunction:: slice
+
+Reductions
+----------
+
+.. autoenum:: ReduceOp
+.. autoenum:: ReduceMode
 
 .. autofunction:: reduce
 .. autofunction:: sum
@@ -86,15 +84,30 @@ These operations are *horizontal* in the sense that [..]
 .. autofunction:: abs_dot
 .. autofunction:: squared_norm
 .. autofunction:: norm
+
+Prefix reductions
+-----------------
+
+.. autofunction:: prefix_reduce
 .. autofunction:: prefix_sum
 .. autofunction:: cumsum
-.. autofunction:: reverse
 
+Block reductions
+----------------
+
+.. autofunction:: block_reduce
+.. autofunction:: block_sum
+.. autofunction:: block_prefix_reduce
+.. autofunction:: block_prefix_sum
+
+Rearranging array contents
+--------------------------
+
+.. autofunction:: reverse
 .. autofunction:: compress
 .. autofunction:: ravel
 .. autofunction:: unravel
 .. autofunction:: reshape
-.. autofunction:: slice
 .. autofunction:: tile
 .. autofunction:: repeat
 
