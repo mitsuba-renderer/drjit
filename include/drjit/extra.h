@@ -144,9 +144,12 @@ extern DRJIT_EXTRA_EXPORT uint64_t ad_var_reduce(JitBackend, VarType,
 /// Dot product reduction
 extern DRJIT_EXTRA_EXPORT uint64_t ad_var_reduce_dot(uint64_t i0, uint64_t i1);
 
-/// Compute an exclusive or inclusive prefix sum
-extern DRJIT_EXTRA_EXPORT uint64_t ad_var_prefix_sum(uint64_t index,
-                                                     int exclusive);
+/// Compute an exclusive or inclusive prefix reduction
+extern DRJIT_EXTRA_EXPORT uint64_t ad_var_block_prefix_reduce(ReduceOp op,
+                                                              uint64_t index,
+                                                              uint32_t block_size,
+                                                              int exclusive,
+                                                              int reverse);
 
 /// Compute the sum of adjacent blocks of size 'block_size'
 extern DRJIT_EXTRA_EXPORT uint64_t ad_var_block_reduce(ReduceOp op,

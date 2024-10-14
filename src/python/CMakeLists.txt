@@ -122,6 +122,8 @@ target_compile_definitions(drjit-python PRIVATE -DDRJIT_PYTHON_BUILD)
 
 if (MSVC)
   target_compile_options(drjit-python PRIVATE /wd4714) # function marked as __forceinline not inlined
+else()
+  target_compile_options(drjit-python PRIVATE -Wno-redundant-move)
 endif()
 
 target_link_libraries(drjit-python PRIVATE drjit drjit-core drjit-extra)

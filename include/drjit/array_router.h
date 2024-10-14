@@ -748,6 +748,50 @@ bool allclose(const T1 &a, const T2 &b, float rtol = 1e-5f, float atol = 1e-8f,
     return all_nested(cond);
 }
 
+template <typename T> T block_reduce(ReduceOp op, const T &value, size_t block_size, int symbolic = -1) {
+    if constexpr (is_traversable_v<T>) {
+        T result;
+        traverse_2(
+            fields(result), fields(value),
+            [op, block_size, symbolic](auto &x, const auto &y) {
+                x = block_reduce(op, y, block_size, symbolic);
+            });
+        return result;
+    } if constexpr (is_dynamic_array_v<T>) {
+        return value.block_reduce_(op, block_size, symbolic);
+    } else {
+        return value;
+    }
+}
+
+template <typename T> T block_sum(const T &value, size_t block_size, int symbolic = -1) {
+    return block_reduce(ReduceOp::Add, value, block_size, symbolic);
+}
+
+template <typename T> T block_prefix_reduce(ReduceOp op, const T &value, uint32_t block_size, bool exclusive = true, bool reverse = false) {
+    if constexpr (is_traversable_v<T>) {
+        T result;
+        traverse_2(
+            fields(result), fields(value),
+            [op, block_size, exclusive, reverse](auto &x, const auto &y) {
+                x = block_prefix_reduce(op, y, block_size, exclusive, reverse);
+            });
+        return result;
+    } if constexpr (is_dynamic_array_v<T>) {
+        return value.block_prefix_reduce_(op, block_size, exclusive, reverse);
+    } else {
+        return value;
+    }
+}
+
+template <typename T> T block_prefix_sum(const T &value, uint32_t block_size, bool exclusive = true, bool reverse = false) {
+    return block_prefix_reduce(ReduceOp::Add, value, block_size, exclusive, reverse);
+}
+
+template <typename T> T prefix_sum(const T &value, bool exclusive = true, bool reverse = false) {
+    return block_prefix_reduce(ReduceOp::Add, value, value.size(), exclusive, reverse);
+}
+
 //! @}
 // -----------------------------------------------------------------------
 
@@ -1241,33 +1285,6 @@ template <typename Array> Array reverse(const Array &value) {
 
         for (size_t i = 0; i < size; ++i)
             result.entry(i) = value.entry(size - 1 - i);
-
-        return result;
-    }
-}
-
-template <typename Array> Array prefix_sum(const Array &value, bool exclusive = true) {
-    if constexpr (depth_v<Array> == 1 && is_dynamic_v<Array>) {
-        return value.prefix_sum_(exclusive);
-    } else {
-        uint32_t size = (uint32_t) value.size();
-
-        Array result;
-        if constexpr (Array::Size == Dynamic)
-            result = empty<Array>(size);
-
-        value_t<Array> accum = 0;
-        if (exclusive) {
-            for (size_t i = 0; i < size; ++i) {
-                result.entry(i) = accum;
-                accum += value.entry(i);
-            }
-        } else {
-            for (size_t i = 0; i < size; ++i) {
-                accum += value.entry(i);
-                result.entry(i) = accum;
-            }
-        }
 
         return result;
     }

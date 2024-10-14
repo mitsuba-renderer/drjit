@@ -85,17 +85,17 @@ private:                                                                       \
                                         vectorize_rv_t<Self, Ret>>;            \
         using CallStateT = detail::CallState<Ret2, Args...>;                   \
                                                                                \
-        ad_call_func callback = [](void *state_p, void *self,                  \
+        ad_call_func callback = [](void *state_p, void *self_,                 \
                                    const vector<uint64_t> &args_i,             \
                                    vector<uint64_t> &rv_i) {                   \
             CallStateT *state = (CallStateT *) state_p;                        \
             state->update_args(args_i);                                        \
             if constexpr (std::is_same_v<Ret, void>) {                         \
-                if (detail::is_valid_call_ptr<Class_, Base_>(self))            \
-                    ((Class_ *) self)->Name(drjit::get<Is>(state->args)...);   \
+                if (detail::is_valid_call_ptr<Class_, Base_>(self_))           \
+                    ((Class_ *) self_)->Name(drjit::get<Is>(state->args)...);  \
             } else {                                                           \
-                if (detail::is_valid_call_ptr<Class_, Base_>(self))            \
-                    state->rv = ((Class_ *) self)                              \
+                if (detail::is_valid_call_ptr<Class_, Base_>(self_))           \
+                    state->rv = ((Class_ *) self_)                             \
                                     ->Name(drjit::get<Is>(state->args)...);    \
                 else                                                           \
                     state->rv = zeros<Ret2>();                                 \
@@ -114,12 +114,12 @@ public:                                                                        \
             vectorize_rv_t<Self, decltype(std::declval<Class_ &>().Name())>;   \
         using CallStateT = detail::CallState<Ret, Mask_>;                      \
                                                                                \
-        ad_call_func callback = [](void *state_p, void *self,                  \
+        ad_call_func callback = [](void *state_p, void *self_,                 \
                                    const vector<uint64_t> &,                   \
                                    vector<uint64_t> &rv_i) {                   \
             CallStateT *state = (CallStateT *) state_p;                        \
-            if (detail::is_valid_call_ptr<Class_, Base_>(self))                \
-                state->rv = ((Class_ *) self)->Name();                         \
+            if (detail::is_valid_call_ptr<Class_, Base_>(self_))               \
+                state->rv = ((Class_ *) self_)->Name();                        \
             else                                                               \
                 state->rv = zeros<Ret>();                                      \
             state->collect_rv(rv_i);                                           \

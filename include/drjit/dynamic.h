@@ -14,6 +14,7 @@
 #pragma once
 
 #include <drjit/array.h>
+#include <limits>
 
 NAMESPACE_BEGIN(drjit)
 
@@ -238,6 +239,165 @@ struct DynamicArray
         }
     }
 
+    DynamicArray block_reduce_(ReduceOp op, size_t block_size, int) const {
+        if constexpr (IsMask) {
+            drjit_fail("Unsupported argument type!");
+        } else {
+            size_t blocks = (m_size + block_size - 1) / block_size;
+            DynamicArray result;
+            result.init_(blocks);
+            using Intermediate = std::conditional_t<std::is_same_v<Value, half>, float, Value>;
+
+            for (size_t i = 0; i < blocks; ++i) {
+                size_t start = i * block_size,
+                       end = drjit::minimum(start + block_size, m_size);
+
+                Intermediate value = m_data[start];
+
+                switch (op) {
+                    case ReduceOp::Add:
+                        for (size_t j = start + 1; j != end; ++j)
+                            value += m_data[j];
+                    break;
+
+                    case ReduceOp::Mul:
+                        for (size_t j = start + 1; j != end; ++j)
+                            value *= m_data[j];
+                    break;
+
+                    case ReduceOp::Min:
+                        for (size_t j = start + 1; j != end; ++j)
+                            value = drjit::minimum(value, m_data[j]);
+                        break;
+
+                    case ReduceOp::Max:
+                        for (size_t j = start + 1; j != end; ++j)
+                            value = drjit::maximum(value, m_data[j]);
+                        break;
+
+                    case ReduceOp::Or:
+                        if constexpr (drjit::is_integral_v<Scalar>) {
+                            for (size_t j = start + 1; j != end; ++j)
+                                value = value | m_data[j];
+                        }
+                        break;
+
+                    case ReduceOp::And:
+                        if constexpr (drjit::is_integral_v<Scalar>) {
+                            for (size_t j = start + 1; j != end; ++j)
+                                value = value & m_data[j];
+                        }
+                        break;
+
+                    default:
+                        drjit_fail("Unsupported reduction type!");
+                }
+
+                result[i] = (Value) value;
+            }
+
+            return result;
+        }
+    }
+
+    DynamicArray block_prefix_reduce_(ReduceOp op, uint32_t block_size, bool exclusive, bool reverse) const {
+        if constexpr (IsMask) {
+            drjit_fail("Unsupported argument type!");
+        } else {
+            size_t blocks = (m_size + block_size - 1) / block_size;
+            DynamicArray result;
+            result.init_(m_size);
+            using Intermediate = std::conditional_t<std::is_same_v<Value, half>, float, Value>;
+
+            for (size_t i = 0; i < blocks; ++i) {
+                size_t start = i * block_size,
+                       end = drjit::minimum(start + block_size, m_size);
+                int step = 1;
+
+                if (reverse) {
+                    size_t tmp = start;
+                    start = end - 1;
+                    end = tmp - 1;
+                    step = -1;
+                }
+
+                Intermediate value;
+
+                switch (op) {
+                    case ReduceOp::Add:
+                        value = 0;
+                        for (size_t j = start; j != end; j += step) {
+                            Intermediate before = value;
+                            value += m_data[j];
+                            result[j] = Value(exclusive ? before : value);
+                        }
+                        break;
+
+                    case ReduceOp::Mul:
+                        value = 1;
+                        for (size_t j = start; j != end; j += step) {
+                            Intermediate before = value;
+                            value *= m_data[j];
+                            result[j] = Value(exclusive ? before : value);
+                        }
+                        break;
+
+                    case ReduceOp::Min:
+                        if constexpr (std::is_floating_point_v<Scalar>)
+                            value = std::numeric_limits<Scalar>::infinity();
+                        else
+                            value = std::numeric_limits<Scalar>::max();
+
+                        for (size_t j = start; j != end; j += step) {
+                            Intermediate before = value;
+                            value *= m_data[j];
+                            result[j] = Value(exclusive ? before : value);
+                        }
+                        break;
+
+                    case ReduceOp::Max:
+                        if constexpr (std::is_floating_point_v<Scalar>)
+                            value = -std::numeric_limits<Scalar>::infinity();
+                        else
+                            value = std::numeric_limits<Scalar>::min();
+
+                        for (size_t j = start; j != end; j += step) {
+                            Intermediate before = value;
+                            value *= m_data[j];
+                            result[j] = exclusive ? before : value;
+                        }
+                        break;
+
+                    case ReduceOp::And:
+                        if constexpr (drjit::is_integral_v<Scalar>) {
+                            value = (Scalar) -1;
+                            for (size_t j = start; j != end; j += step) {
+                                Intermediate before = value;
+                                value &= m_data[j];
+                                result[j] = Value(exclusive ? before : value);
+                            }
+                        }
+                        break;
+
+                    case ReduceOp::Or:
+                        if constexpr (drjit::is_integral_v<Scalar>) {
+                            value = 0;
+                            for (size_t j = start; j != end; j += step) {
+                                Intermediate before = value;
+                                value |= m_data[j];
+                                result[j] = Value(exclusive ? before : value);
+                            }
+                        }
+                        break;
+
+                    default:
+                        drjit_fail("Unsupported reduction type!");
+                }
+            }
+
+            return result;
+        }
+    }
 
     void init_(size_t size) {
         if (size == 0)

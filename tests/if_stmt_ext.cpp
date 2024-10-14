@@ -45,7 +45,7 @@ bool packet_cond() {
 
     x = dr::if_stmt(
         dr::make_tuple(x),
-        x < 10,
+        x < 10.f,
         [](Float x_) { return -x_; },
         [](Float x_) { return  x_; }
     );

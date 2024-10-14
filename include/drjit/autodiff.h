@@ -381,18 +381,18 @@ struct DRJIT_TRIVIAL_ABI DiffArray
 
     #undef DRJIT_HORIZONTAL_OP
 
-    DiffArray prefix_sum_(bool exclusive) const {
-        if constexpr (IsFloat)
-            return steal(ad_var_prefix_sum(m_index, exclusive));
-        else
-            return steal(jit_var_prefix_sum(m_index, exclusive));
-    }
-
     DiffArray block_reduce_(ReduceOp op, size_t block_size, int symbolic) const {
         if constexpr (IsFloat)
             return steal(ad_var_block_reduce(op, m_index, (uint32_t) block_size, symbolic));
         else
             return steal(jit_var_block_reduce(op, m_index, (uint32_t) block_size, symbolic));
+    }
+
+    DiffArray block_prefix_reduce_(ReduceOp op, uint32_t block_size, bool exclusive, bool reverse) const {
+        if constexpr (IsFloat)
+            return steal(ad_var_block_prefix_reduce(op, m_index, block_size, exclusive, reverse));
+        else
+            return steal(jit_var_block_prefix_reduce(op, m_index, block_size, exclusive, reverse));
     }
 
     DiffArray tile_(size_t count) const {

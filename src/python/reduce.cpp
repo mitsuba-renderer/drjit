@@ -10,6 +10,7 @@
 
 #include "reduce.h"
 #include "base.h"
+#include "drjit/python.h"
 #include "meta.h"
 #include "shape.h"
 #include "memop.h"
@@ -156,13 +157,47 @@ nb::object reduce_seq(uint32_t op, nb::handle h, nb::handle axis, nb::handle mod
             result = std::move(o);
         else
             result = red.combine(result, o);
+
+        if (!result.is_valid())
+            nb::raise_python_error();
     }
 
     return result;
 }
 
-nb::object reduce(uint32_t op, nb::handle h, nb::handle axis_, nb::handle mode) {
+nb::object prefix_reduce_seq(ReduceOp op, nb::handle h, int axis, bool exclusive, bool reverse) {
+    Reduction red = reductions[(size_t) op];
 
+    size_t size = nb::len(h);
+
+    if (axis != 0)
+        nb::raise("for reductions over (non-Dr.Jit) iterable types, 'axis' must equal 0.");
+
+    nb::object value = red.init();
+    nb::list result;
+
+    for (size_t i = 0; i < size; ++i) {
+        nb::object o = nb::borrow(h[reverse ? size - 1 - i : i]);
+        nb::object value_prev = value;
+
+        if (i == 0)
+            value = std::move(o);
+        else
+            value = red.combine(value, o);
+
+        if (!result.is_valid())
+            nb::raise_python_error();
+
+        result.append(exclusive ? value_prev : value);
+    }
+
+    if (is_drjit_array(h))
+        return h.type()(result);
+
+    return std::move(result);
+}
+
+nb::object reduce(uint32_t op, nb::handle h, nb::handle axis_, nb::handle mode) {
     nb::handle tp = h.type();
     if (axis_.type().is(&PyEllipsis_Type)) {
         if (!is_drjit_type(tp) || !supp(tp).is_tensor)
@@ -541,70 +576,6 @@ nb::object dot(nb::handle h0, nb::handle h1) {
     return { };
 }
 
-nb::object prefix_sum(nb::handle_t<dr::ArrayBase> h, bool exclusive,
-                      std::optional<int> axis) {
-    nb::handle tp = h.type();
-    try {
-        const ArraySupplement &s = supp(tp);
-
-        if (!axis)
-            nb::raise("the prefix sum reduction is not implemented for the axis=None case!");
-
-        if (axis.value() != 0)
-            nb::raise("the prefix sum reduction are currently limited to axis=0!");
-
-        void *op = s.op[(int) ArrayOp::PrefixSum];
-        if (op == DRJIT_OP_NOT_IMPLEMENTED)
-            nb::raise_type_error("the provided array type is not compatible with this reduction.");
-
-        if (op != DRJIT_OP_DEFAULT) {
-            nb::object result = nb::inst_alloc(tp);
-            ((ArraySupplement::PrefixSum) op)(inst_ptr(h), exclusive, inst_ptr(result));
-            nb::inst_mark_ready(result);
-            return result;
-        }
-
-        if (s.is_tensor && s.tensor_shape(inst_ptr(h)).size() <= 1) {
-            nb::object arr = nb::steal(s.tensor_array(h.ptr()));
-            nb::object result = prefix_sum(arr, exclusive, axis);
-            return tp(result, shape(h));
-        }
-
-        vector<size_t> shape;
-        if (!shape_impl(h, shape))
-            nb::raise("input array is ragged!");
-
-        nb::object result = full("zeros", tp, nb::int_(0), shape.size(),
-                                 shape.data()),
-                   accum = nb::int_(0);
-
-        size_t it = 0;
-        for (nb::handle h2 : h) {
-            if (exclusive) {
-                result[it] = accum;
-                accum += h2;
-            } else {
-                accum += h2;
-                result[it] = accum;
-            }
-            it++;
-        }
-
-        return result;
-    } catch (nb::python_error &e) {
-        nb::str tp_name = nb::type_name(tp);
-        e.restore();
-        nb::chain_error(PyExc_RuntimeError,
-                        "drjit.prefix_sum(<%U>): failed (see above)!",
-                        tp_name.ptr());
-    } catch (const std::exception &e) {
-        nb::chain_error(PyExc_RuntimeError, "drjit.prefix_sum(<%U>): %s",
-                        nb::type_name(tp).c_str(), e.what());
-    }
-
-    return nb::object();
-}
-
 nb::object compress(nb::handle_t<dr::ArrayBase> h) {
     nb::handle tp = h.type();
     const ArraySupplement &s = supp(tp);
@@ -621,61 +592,56 @@ nb::object compress(nb::handle_t<dr::ArrayBase> h) {
     return result;
 }
 
+
+static nb::object prefix_reduce(ReduceOp op, nb::handle h, nb::handle axis, bool exclusive, bool reverse) {
+
+    if (nb::isinstance<nb::tuple>(axis)) {
+        nb::object o = nb::borrow(h);
+        nb::tuple t = nb::cast<nb::tuple>(axis);
+        for (size_t i = 0, s = t.size(); i < s; ++i)
+            o = prefix_reduce(op, h, t[s - 1 - i], exclusive, reverse);
+        return o;
+    }
+    int axis_i;
+
+    if (!nb::try_cast(axis, axis_i))
+        nb::raise("drjit.prefix_reduce(): 'axis' must be of type 'int' or 'tuple[int, ...]'!");
+
+    nb::handle tp = h.type();
+    if (is_drjit_type(tp)) {
+        const ArraySupplement &s = supp(tp);
+        if (s.is_tensor || (s.ndim == 1 && s.shape[0] == DRJIT_DYNAMIC))
+            return nb::module_::import_("drjit._reduce")
+                .attr("prefix_reduce")(op, h, axis, exclusive, reverse);
+    }
+
+    if (nb::isinstance<nb::sequence>(h))
+        return prefix_reduce_seq(op, h, axis_i, exclusive, reverse);
+
+    nb::raise_type_error("drjit.prefix_reduce(): 'value' must be a sequence type!");
+}
+
 static nb::object block_reduce(ReduceOp op,
                                nb::handle h, uint32_t block_size,
                                std::optional<dr::string> mode) {
     struct BlockReduceOp : TransformCallback {
         ReduceOp op;
-        size_t block_size;
+        uint32_t block_size;
         int symbolic;
 
-        BlockReduceOp(ReduceOp op, size_t block_size, int symbolic)
+        BlockReduceOp(ReduceOp op, uint32_t block_size, int symbolic)
             : op(op), block_size(block_size), symbolic(symbolic) { }
 
         void operator()(nb::handle h1, nb::handle h2) override {
             const ArraySupplement &s = supp(h1.type());
-            if (!s.index) {
-                // Scalar fallback implementation
-                size_t size = nb::len(h1), i = 0, k = 0;
-                s.init(size / block_size, inst_ptr(h2));
-                while (i != size) {
-                    nb::object accum = h1[i++];
 
-                    for (size_t j = 1; j < block_size; ++j) {
-                        nb::object value = h1[i++];
+            if (!s.block_reduce)
+                nb::raise_type_error("drjit.block_reduce(): type '%s' does not "
+                                     "implement the block reduction operation!",
+                                     inst_name(h1).c_str());
 
-                        switch (op) {
-                            case ReduceOp::Add:  accum += value; break;
-                            case ReduceOp::Mul:  accum *= value; break;
-                            case ReduceOp::Or:   accum |= value; break;
-                            case ReduceOp::And:  accum &= value; break;
-                            case ReduceOp::Min:
-                                if (nb::cast<bool>(value < accum))
-                                    accum = value;
-                                break;
-                            case ReduceOp::Max:
-                                if (nb::cast<bool>(value > accum))
-                                    accum = value;
-                                break;
-                            default:
-                                nb::raise("Unsupported case!");
-                        }
-                    }
-
-                    h2[k++] = accum;
-                }
-                return;
-            }
-
-            uint64_t new_index = ad_var_block_reduce(
-                op,
-                s.index(inst_ptr(h1)),
-                (uint32_t)block_size,
-                symbolic
-            );
-
-            s.init_index(new_index, inst_ptr(h2));
-            ad_var_dec_ref(new_index);
+            s.block_reduce(inst_ptr(h1), op, block_size, symbolic, inst_ptr(h2));
+            inst_mark_ready(h2);
         }
     };
 
@@ -691,6 +657,35 @@ static nb::object block_reduce(ReduceOp op,
 
     BlockReduceOp r(op, block_size, symbolic);
     return transform("drjit.block_reduce", r, h);
+}
+
+static nb::object block_prefix_reduce(ReduceOp op, nb::handle h,
+                                      uint32_t block_size, bool exclusive,
+                                      bool reverse) {
+    struct BlockPrefixReduceOp : TransformCallback {
+        ReduceOp op;
+        uint32_t block_size;
+        bool exclusive;
+        bool reverse;
+
+        BlockPrefixReduceOp(ReduceOp op, uint32_t block_size, bool exclusive, bool reverse)
+            : op(op), block_size(block_size), exclusive(exclusive), reverse(reverse) { }
+
+        void operator()(nb::handle h1, nb::handle h2) override {
+            const ArraySupplement &s = supp(h1.type());
+
+            if (!s.block_reduce)
+                nb::raise_type_error("drjit.block_prefix_reduce(): type '%s' does not "
+                                     "implement the block prefix reduction operation!",
+                                     inst_name(h1).c_str());
+
+            s.block_prefix_reduce(inst_ptr(h1), op, block_size, exclusive, reverse, inst_ptr(h2));
+            inst_mark_ready(h2);
+        }
+    };
+
+    BlockPrefixReduceOp r(op, block_size, exclusive, reverse);
+    return transform("drjit.block_prefix_reduce", r, h);
 }
 
 static nb::object block_sum(nb::handle h, uint32_t block_size,
@@ -720,6 +715,8 @@ void export_reduce(nb::module_ & m) {
           nb::sig("def max(value: object, axis: int | tuple[int, ...] | ... | None = ..., mode: str | None = None) -> object"))
      .def("mean", &mean, "value"_a, "axis"_a.none() = nb::ellipsis(), "mode"_a = nb::none(), doc_mean,
           nb::sig("def mean(value: object, axis: int | tuple[int, ...] | ... | None = ..., mode: str | None = None) -> object"))
+     .def("prefix_reduce", &prefix_reduce, "op"_a, "value"_a, "axis"_a = 0, "exclusive"_a = true, "reverse"_a = false,
+          nb::sig("def prefix_reduce(op: ReduceOp, value: T, axis: int | tuple[int, ...] = 0, exclusive: bool = True, reverse: bool = False) -> T"))
      .def("dot", &dot, doc_dot)
      .def("abs_dot",
           [](nb::handle h0, nb::handle h1) -> nb::object {
@@ -735,13 +732,25 @@ void export_reduce(nb::module_ & m) {
           [](nb::handle h) -> nb::object {
               return array_module.attr("dot")(h, h);
           }, doc_squared_norm)
-     .def("prefix_sum", &prefix_sum,
-          "value"_a, "exclusive"_a = true,
-          "axis"_a.none() = 0, doc_prefix_sum,
-          nb::sig("def prefix_sum(value: ArrayT, exclusive: bool = True, axis: int | None = 0) -> ArrayT"))
-     .def("compress", &compress, doc_compress)
+     .def("block_prefix_reduce", &block_prefix_reduce, "op"_a, "value"_a, "block_size"_a, "exclusive"_a = true, "reverse"_a = false,
+          doc_block_prefix_reduce,
+          nb::sig("def block_prefix_reduce(op: ReduceOp, value: ArrayT, block_size: int, exclusive: bool = True, reverse: bool = False) -> ArrayT"))
      .def("block_reduce", &block_reduce, "op"_a, "value"_a, "block_size"_a, "mode"_a = nb::none(), doc_block_reduce,
           nb::sig("def block_reduce(op: ReduceOp, value: T, block_size: int, mode: Literal['evaluated', 'symbolic', None] = None) -> T"))
      .def("block_sum", &block_sum, "value"_a, "block_size"_a, "mode"_a = nb::none(), doc_block_sum,
-          nb::sig("def block_sum(value: T, block_size: int, mode: Literal['evaluated', 'symbolic', None] = None) -> T"));
+          nb::sig("def block_sum(value: T, block_size: int, mode: Literal['evaluated', 'symbolic', None] = None) -> T"))
+     .def("compress", &compress, doc_compress)
+     .def("cumsum", [](nb::handle value, nb::handle axis, bool reverse) {
+             return prefix_reduce(ReduceOp::Add, value, axis, false, reverse);
+          }, "value"_a, "axis"_a = 0, "reverse"_a = false, doc_cumsum,
+          nb::sig("def cumsum(value: T, axis: Union[int, tuple[int, ...]] = 0, reverse: bool = False) -> T"))
+     .def("prefix_sum", [](nb::handle value, nb::handle axis, bool reverse) {
+             return prefix_reduce(ReduceOp::Add, value, axis, true, reverse);
+          }, "value"_a, "axis"_a = 0, "reverse"_a = false, doc_prefix_sum,
+          nb::sig("def prefix_sum(value: T, axis: Union[int, tuple[int, ...]] = 0, reverse: bool = False) -> T"))
+     .def("block_prefix_sum",
+          [](nb::handle value, uint32_t block_size, bool exclusive, bool reverse) {
+              return block_prefix_reduce(ReduceOp::Add, value, block_size, exclusive, reverse);
+          }, "value"_a, "block_size"_a, "exclusive"_a = true, "reverse"_a = false, doc_block_prefix_sum,
+          nb::sig("def block_prefix_sum(value: T, block_size: int, exclusive: bool = True, reverse: bool = False) -> T"));
 }

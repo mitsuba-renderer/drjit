@@ -1152,49 +1152,57 @@
     Returns:
         float | int | drjit.ArrayBase: squared 2-norm of the input
 
-.. topic:: prefix_sum
+.. topic:: block_prefix_reduce
 
-    Compute an exclusive or inclusive prefix sum of the input array.
+    Compute a blocked exclusive or inclusive prefix reduction of the input array.
 
-    By default, the function returns an output array :math:`\mathbf{y}` of the
-    same size as the input :math:`\mathbf{x}`, where
+    Starting from the identity element of the specified reduction ``op``, this
+    function reduces along increasingly large prefixes, returning an output
+    array of the same size and type.
 
-    .. math::
+    For example, when reducing a 1D array using ``exclusive=True`` (the
+    default), this produces the following output
 
-       y_i = \sum_{j=0}^{i-1} x_j.
+    - :py:attr:`drjit.ReduceOp.Add`: ``[0, a[0], a[0] + a[1], ...]``.
+    - :py:attr:`drjit.ReduceOp.Mul`: ``[1, a[0], a[0] * a[1], ...]``.
+    - :py:attr:`drjit.ReduceOp.Min`: ``[inf, a[0], min(a[0], a[1]), ...]``.
+    - :py:attr:`drjit.ReduceOp.Max`: ``[-inf, a[0], max(a[0], a[1]), ...]``.
+    - :py:attr:`drjit.ReduceOp.Or`: ``[0, a[0], a[0] | a[1], ...]`` (integer arrays only).
+    - :py:attr:`drjit.ReduceOp.And`: ``[-1, a[0], a[0] & a[1], ...]`` (integer arrays only).
 
-    which is known as an *exclusive* prefix sum, as each element of the output
-    array excludes the corresponding input in its sum. When the ``exclusive``
-    argument is set to ``False``, the function instead returns an *inclusive*
-    prefix sum defined as
+    With ``inclusive=False``, the function instead performs an *inclusive*
+    prefix reduction, which effectively shifts the output by one entry:
 
-    .. math::
+    - :py:attr:`drjit.ReduceOp.Add`: ``[a[0], a[0] + a[1], ...]``.
+    - :py:attr:`drjit.ReduceOp.Mul`: ``[a[0], a[0] * a[1], ...]``.
+    - :py:attr:`drjit.ReduceOp.Min`: ``[a[0], min(a[0], a[1]), ...]``.
+    - :py:attr:`drjit.ReduceOp.Max`: ``[a[0], max(a[0], a[1]), ...]``.
+    - :py:attr:`drjit.ReduceOp.Or`: ``[a[0], a[0] | a[1], ...]`` (integer arrays only).
+    - :py:attr:`drjit.ReduceOp.And`: ``[a[0], a[0] & a[1], ...]`` (integer arrays only).
 
-       y_i = \sum_{j=0}^i x_j.
+    The reduction is furthermore *blocked*, which means that it restarts after
+    ``block_size`` entries. To reduce the entire array, simply set
+    ``block_size=len(value)``.
 
-    There is also a convenience alias :py:func:`drjit.cumsum` that computes an
-    inclusive sum analogous to various other nd-array frameworks.
+    Finally, the reduction can optionally be done from the *end* of each block
+    by specifying ``reverse=True``.
 
-    Not all numeric data types are supported by :py:func:`prefix_sum`:
-    presently, the function accepts ``Int32``, ``UInt32``, ``UInt64``,
-    ``Float32``, and ``Float64``-typed arrays.
-
-    The CUDA backend implementation for "large" numeric types (``Float64``,
-    ``UInt64``) has the following technical limitation: when reducing 64-bit
-    integers, their values must be smaller than :math:`2^{62}`. When reducing
-    double precision arrays, the two least significant mantissa bits are clamped to
-    zero when forwarding the prefix from one 512-wide block to the next (at a *very
-    minor*, probably negligible loss in accuracy). See the implementation for
-    details on the rationale of this limitation.
+    This operation traverses PyTrees and transforms any dynamically
+    sized Dr.Jit arrays it encounters. Everything else is left as-is.
 
     Args:
-        value (drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+        value (object): A Dr.Jit array or PyTree
+
+        block_size (int): The size of contiguous blocks to be reduced.
 
         exclusive (bool): Specifies whether or not the prefix sum should
           be exclusive (the default) or inclusive.
 
+        reverse (bool): if set to ``True``, the reduction is done from
+          the end of each block.
+
     Returns:
-        drjit.ArrayBase: An array of the same type containing the computed prefix sum.
+        The block-reduced array or PyTree as specified above.
 
 .. topic:: sqrt
 
@@ -7485,10 +7493,11 @@
       :py:func:`drjit.eval()` and then launches a specialized reduction kernel.
 
       On the CUDA backend, this kernel makes efficient use of shared memory and
-      cooperative warp instructions with the limitation that it requires
-      ``block_size`` to be a power of two. The LLVM backend parallelizes the
-      operation via the built-in thread pool and has no ``block_size``
-      limitations.
+      cooperative warp instructions. The LLVM backend parallelizes the
+      operation via the built-in thread pool.
+
+      This strategy uses an increased intermediate precision (single precision)
+      when reducing half precision arrays.
 
     - ``mode="symbolic"`` uses :py:func:`drjit.scatter_reduce()` to atomically
       scatter-reduce values into the output array. This strategy can be
@@ -7515,8 +7524,7 @@
         :ref:`is supported by the backend <scatter_reduce_supported>`.
 
       - Evaluated mode is admissible when the input does not involve symbolic
-        variables. On the CUDA backend ``block_size`` must furthermore be a
-        power of two.
+        variables.
 
       - If only one strategy remains, then pick that one. Raise an exception
         when no strategy works out.
@@ -7527,27 +7535,36 @@
 
       - Use symbolic mode in all other cases.
 
-    For some inputs, no strategy works out (e.g., multiplicative reduction of
-    an array with a non-power-of-two block size on the CUDA backend). The
-    function will raise an exception in such cases.
-
-    Since evaluated mode can be quite a bit faster and is guaranteed to be
-    deterministic, it is recommended that you design your program so that it
-    invokes :py:func:`drjit.block_reduce` with a power-of-two ``block_size``.
+    On the CUDA backend, you may observe speedups you design your program so
+    that it invokes :py:func:`drjit.block_reduce` with power-of-two block
+    sizes, as the underlying kernel optimizes this case.
 
     .. note::
 
-        Tensor inputs are not supported. To reduce blocks within tensors, apply
-        the regular axis-wide reductions (:py:func:`drjit.sum`,
-        :py:func:`drjit.prod`, :py:func:`drjit.min`, :py:func:`drjit.max`) to
-        reshaped tensors. For example, to sum-reduce a ``(16, 16)`` tensor by a
-        factor of ``(4, 2)`` (i.e., to a ``(4, 8)``-sized tensor), write
-        ``dr.sum(dr.reshape(value, shape=(4, 4, 8, 2)), axis=(1, 3))``.
+        This operation traverses PyTrees and transforms any dynamically
+        sized Dr.Jit arrays it encounters. Everything else is left as-is.
+
+        Tensors are not supported and will cause an exception to be raised.
+        While :py:func:`drjit.block-reduce` is internally used by Dr.Jit when
+        reducing tensors, the function on its own does not support
+        tensor-valued inputs.
+
+        To reduce blocks within a tensor, reshape it and call the regular
+        tensor-compatible reduction operations (e.g., :py:func:`drjit.sum`,
+        :py:func:`drjit.prod`, :py:func:`drjit.min`, :py:func:`drjit.max`,
+        or the general :py:func:`drjit.reduce`).
+
+        For example, to sum-reduce a ``(16, 16)`` tensor by a factor of ``(4,
+        2)`` (i.e., to a ``(4, 8)``-sized tensor), write
+
+        .. code-block:: python
+
+           result = dr.sum(dr.reshape(value, shape=(4, 4, 8, 2)), axis=(1, 3))
 
     Args:
         value (object): A Dr.Jit array or PyTree
 
-        block_size (int): size of the block
+        block_size (int): The size of contiguous blocks to be reduced.
 
         mode (str | None): optional parameter to force an evaluation strategy.
 
@@ -7789,3 +7806,79 @@
 
    Returns:
        Local[T]: The allocated local memory buffer
+
+.. topic:: prefix_reduce
+
+    Compute an exclusive or inclusive prefix reduction of the input array,
+    tensor, or iterable along the specified axis/axes.
+
+    The function returns an output array :math:`\mathbf{y}` of the same shape
+    as the input. The ``op`` paramater selects the operation to be performed.
+
+    For example, when reducing a 1D array using ``exclusive=True`` (the
+    default), this produces the following output
+
+    - :py:attr:`drjit.ReduceOp.Add`: ``[0, a[0], a[0] + a[1], ...]``.
+    - :py:attr:`drjit.ReduceOp.Mul`: ``[1, a[0], a[0] * a[1], ...]``.
+    - :py:attr:`drjit.ReduceOp.Min`: ``[inf, a[0], min(a[0], a[1]), ...]``.
+    - :py:attr:`drjit.ReduceOp.Max`: ``[-inf, a[0], max(a[0], a[1]), ...]``.
+    - :py:attr:`drjit.ReduceOp.Or`: ``[0, a[0], a[0] | a[1], ...]`` (integer arrays only).
+    - :py:attr:`drjit.ReduceOp.And`: ``[-1, a[0], a[0] & a[1], ...]`` (integer arrays only).
+
+    With ``inclusive=False``, the function instead performs an *inclusive*
+    prefix reduction, which effectively shifts the output by one entry:
+
+    - :py:attr:`drjit.ReduceOp.Add`: ``[a[0], a[0] + a[1], ...]``.
+    - :py:attr:`drjit.ReduceOp.Mul`: ``[a[0], a[0] * a[1], ...]``.
+    - :py:attr:`drjit.ReduceOp.Min`: ``[a[0], min(a[0], a[1]), ...]``.
+    - :py:attr:`drjit.ReduceOp.Max`: ``[a[0], max(a[0], a[1]), ...]``.
+    - :py:attr:`drjit.ReduceOp.Or`: ``[a[0], a[0] | a[1], ...]`` (integer arrays only).
+    - :py:attr:`drjit.ReduceOp.And`: ``[a[0], a[0] & a[1], ...]`` (integer arrays only).
+
+    Not all numeric data types are supported by :py:func:`prefix_reduce`:
+    presently, the function accepts ``Int32``, ``UInt32``, ``UInt64``,
+    ``Float32``, and ``Float64``-typed arrays.
+
+    By default, the reduction is along axis ``0`` (i.e., the outermost one).
+    Negative indices (e.g. ``axis=-1``) count backward from the innermost axis.
+    Multiple axes can be specified as a tuple and are handled iteratively.
+
+    Args:
+        op (ReduceOp): The operation that should be applied along the
+          specified axis/axes.
+
+        value (ArrayBase | Iterable | float | int): An input Dr.Jit array or tensor.
+
+        axis (int | tuple[int, ...]): The axis/axes along which
+          to reduce. The default value is ``0``.
+
+        exclusive (bool): Whether to perform an exclusive (the default) or
+          inclusive prefix reduction.
+
+        reverse (bool): if set to ``True``, the prefix reduction is done from
+          the *end* of the selected axis.
+
+    Returns:
+        The prefix-reduced array or tensor as specified above. It has
+        the same shape and type as the input.
+
+.. topic:: cumsum
+    Compute an cumulative sum (aka. inclusive prefix sum) of the input array.
+
+    This function is a convenience wrapper that internally calls
+    :py:func:`drjit.prefix_reduce(dr.ReduceOp.Add, arg, exclusive=False, ...)
+    <prefix_reduce>`. Please refer to this function for further detail.
+
+.. topic:: prefix_sum
+
+    Compute an exclusive prefix sum of the input array.
+
+    This function is a convenience wrapper that internally calls
+    :py:func:`drjit.prefix_reduce(dr.ReduceOp.Add, arg, exclusive=True, ...)
+    <prefix_reduce>`. Please refer to this function for further detail.
+
+.. topic:: block_prefix_sum
+
+    Convenience wrapper around
+   :py:func:`dr.block_prefix_reduce(dr.ReduceOp.Add, ...)
+   <block_prefix_reduce>`.

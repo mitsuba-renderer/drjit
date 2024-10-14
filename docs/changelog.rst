@@ -150,7 +150,7 @@ Here is what's new:
   which combines the benefits of both steps. This is particularly useful when
   computing the reverse-mode derivative of packet reads.
 
-- **Reductions operations**: reductions previously existed as *regular* (e.g.,
+- **Reductions**: reduction operations previously existed as *regular* (e.g.,
   :py:func:`drjit.all`) and *nested* (e.g. ``drjit.all_nested``) variants. Both
   are now subsumed by an optional ``axis`` argument similar to how this works
   in other array programming frameworks like NumPy. Reductions can now also
@@ -158,7 +158,7 @@ Here is what's new:
 
   The reduction functions (:py:func:`drjit.all` :py:func:`drjit.any`,
   :py:func:`drjit.sum`, :py:func:`drjit.prod`, :py:func:`drjit.min`,
-  :py:func:`drjit.max`) have different default axis values depending on the 
+  :py:func:`drjit.max`) have different default axis values depending on the
   input type. For tensors, ``axis=None`` by default and the reduction is
   performed along the entire underlying array recursively, analogous to the
   previous nested reduction. For all other types, the reduction is performed
@@ -166,6 +166,16 @@ Here is what's new:
 
   Aliases for the ``_nested`` function variants still exist to help porting but
   are deprecated and will be removed in a future release.
+
+- **Prefix reductions**: the functions :py:func:`drjit.cumsum`,
+  :py:func:`drjit.prefix_sum` compute inclusive or exclusive prefix sums along
+  arbitrary axes of a tensor or array. They wrap for the more general
+  :py:func:`drjit.prefix_reduce` that also supports other arithmetic operations
+  (e.g. minimum/maximum/product/and/or reductions), reverse reductions, etc.
+
+- **Block reductions**: the new functions :py:func:`drjit.block_reduce` and
+  :py:func:`drjit.block_prefix_reduce` compute reductions within contiguous
+  blocks of an array.
 
 - **Local memory**: kernels can now allocate temporary thread-local memory and
   perform arbitrary indexed reads and writes. This is useful to implement a

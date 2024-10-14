@@ -1404,20 +1404,6 @@ def mulsign(arg0, arg1, /):
     return select(arg1 >= 0, arg0, -arg0)
 
 
-def cumsum(arg, /):
-    '''
-    Compute an cumulative sum (aka. inclusive prefix sum) of the input array.
-
-    This function wraps :py:func:`drjit.prefix_sum` and is implemented as
-
-    .. code-block:: python
-
-       def cumsum(arg, /):
-           return prefix_sum(arg, exclusive=False)
-    '''
-    return prefix_sum(arg, exclusive=False)
-
-
 def hypot(a, b, /):
     '''
     Computes :math:`\\sqrt{a^2+b^2}` while avoiding overflow and underflow.
@@ -2037,6 +2023,7 @@ def assert_equal(
         tb_skip=tb_skip+1,
         **kwargs,
     )
+
 
 newaxis = None
 

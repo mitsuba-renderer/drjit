@@ -9,6 +9,10 @@
     BSD-style license that can be found in the LICENSE.txt file.
 */
 
+#if defined (_MSC_VER)
+#  pragma warning (disable: 4324) // structure was padded due to alignment specifier
+#endif
+
 #include "tracker.h"
 #include "base.h"
 #include "shape.h"

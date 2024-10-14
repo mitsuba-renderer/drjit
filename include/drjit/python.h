@@ -182,7 +182,6 @@ enum class ArrayOp {
     Prod,
     Min,
     Max,
-    PrefixSum,
 
     // Miscellaneous
     Richcmp,
@@ -236,10 +235,11 @@ struct ArraySupplement : ArrayMeta {
                                      ArrayBase *);
     using UnaryOp  = void (*)(const ArrayBase *, ArrayBase *);
     using BinaryOp = void (*)(const ArrayBase *, const ArrayBase *, ArrayBase *);
-    using PrefixSum = void (*)(const ArrayBase *, bool, ArrayBase *);
 
     using TensorShape = vector<size_t> & (*) (ArrayBase *) noexcept;
     using TensorArray = PyObject * (*) (PyObject *) noexcept;
+    using BlockReduceOp = void (*)(const ArrayBase *, ReduceOp, uint32_t, int, ArrayBase *);
+    using BlockPrefixReduceOp = void (*)(const ArrayBase *, ReduceOp, uint32_t, bool, bool, ArrayBase *);
 
     // Pointer to the associated array, mask, and element type
     PyObject *array, *mask, *value;
@@ -296,6 +296,12 @@ struct ArraySupplement : ArrayMeta {
 
             /// Compress a mask vector
             UnaryOp compress;
+
+            /// Reduce an array within blocks
+            BlockReduceOp block_reduce;
+
+            /// Prefix-reduce an array within blocks
+            BlockPrefixReduceOp block_prefix_reduce;
 
             /// Additional operations
             void *op[(int) ArrayOp::OpCount];
@@ -545,9 +551,6 @@ template <typename T> void bind_arithmetic(ArrayBinding &b) {
         b[ArrayOp::Prod] = (void *) +[](const T *a, T *b) { new (b) T(a->prod_()); };
         b[ArrayOp::Min] = (void *) +[](const T *a, T *b) { new (b) T(a->min_()); };
         b[ArrayOp::Max] = (void *) +[](const T *a, T *b) { new (b) T(a->max_()); };
-        b[ArrayOp::PrefixSum] = (void *) +[](const T *a, bool exclusive, T *b) {
-            new (b) T(a->prefix_sum_(exclusive));
-        };
     }
 }
 
@@ -811,6 +814,18 @@ template <typename T> void bind_memop(ArrayBinding &b) {
             (ArraySupplement::ScatterAddKahan) +
             [](const T *a, const UInt32 *b, const Mask *c, T *d, T *e) {
                 scatter_add_kahan(*d, *e, *a, *b, *c);
+            };
+    }
+
+    if constexpr (!is_mask_v<T>) {
+        b.block_reduce = (ArraySupplement::BlockReduceOp) +
+            [](const T *a, ReduceOp op, uint32_t block_size, int symbolic, T *out) {
+                new (out) T(block_reduce(op, *a, block_size, symbolic));
+            };
+
+        b.block_prefix_reduce = (ArraySupplement::BlockPrefixReduceOp) +
+            [](const T *a, ReduceOp op, uint32_t block_size, bool exclusive, bool reverse, T *out) {
+                new (out) T(block_prefix_reduce(op, *a, block_size, exclusive, reverse));
             };
     }
 }

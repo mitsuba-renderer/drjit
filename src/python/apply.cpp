@@ -94,7 +94,6 @@ static const char *op_names[] = {
     "prod",
     "min",
     "max",
-    "prefix_sum",
 
     // Miscellaneous
     "__richcmp__",
@@ -1007,7 +1006,7 @@ nb::object transform_pair(const char *op, TransformPairCallback &tc,
             for (size_t i = 0; i < len1; ++i)
                 result.append(transform_pair(op, tc, l1[i], l2[i]));
 
-            return result;
+            return std::move(result);
         } else if (tp1.is(&PyDict_Type)) {
             nb::dict d1 = nb::borrow<nb::dict>(h1),
                      d2 = nb::borrow<nb::dict>(h2);
@@ -1022,7 +1021,7 @@ nb::object transform_pair(const char *op, TransformPairCallback &tc,
             for (nb::handle k : k1)
                 result[k] = transform_pair(op, tc, d1[k], d2[k]);
 
-            return result;
+            return std::move(result);
         } else {
             if (nb::dict ds = get_drjit_struct(tp1); ds.is_valid()) {
                 nb::object result = tp1();

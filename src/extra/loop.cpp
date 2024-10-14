@@ -64,7 +64,7 @@ static bool ad_loop_symbolic(JitBackend backend, const char *name,
         // This is necessary to catch cases where a variable is added to the
         // loop state twice.
         read_cb(payload, indices1);
-        for (uint32_t i : indices1)
+        for (uint64_t i : indices1)
             indices2.push_back((uint32_t) i);
         jit_var_loop_update_inner_in(loop.index(), indices2.data());
         indices1.release();
@@ -494,7 +494,7 @@ public:
                 input.is_diff = true;
                 input.has_grad_in = add_index(m_backend, ad_index, true);
                 if (input.has_grad_in)
-                    input.grad_in_index = m_input_indices.size() - 1;
+                    input.grad_in_index = (uint32_t) m_input_indices.size() - 1;
                 input.grad_in_offset = (uint32_t) m_diff_count++;
             }
 

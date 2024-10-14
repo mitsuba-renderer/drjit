@@ -1273,7 +1273,7 @@ def test092_prefix_sum_fwd(t):
 
     x = t([1,2,3,4])
     dr.enable_grad(x)
-    y = dr.prefix_sum(x, False)
+    y = dr.cumsum(x)
     assert dr.allclose(y, [1, 3, 6, 10])
     dr.set_grad(x, [1.1, 1.2, 1.3, 1.4])
     dr.forward_to(y)
@@ -1281,7 +1281,7 @@ def test092_prefix_sum_fwd(t):
 
     x = t([1,2,3,4])
     dr.enable_grad(x)
-    y = dr.prefix_sum(x, False)
+    y = dr.cumsum(x)
     dr.forward_from(x)
     assert dr.allclose(dr.grad(y), [1, 2, 3, 4])
 
@@ -1298,7 +1298,7 @@ def test093_prefix_sum_bwd(t):
 
     x = t([1, 2, 3, 4])
     dr.enable_grad(x)
-    y = dr.prefix_sum(x, False)
+    y = dr.cumsum(x)
     dr.set_grad(y, 1)
     dr.backward_to(x)
     assert dr.allclose(dr.grad(x), [4, 3, 2, 1])
@@ -2052,3 +2052,18 @@ def test130_packet_scatter_fwd_target_disabled(t, enabled):
         xg = dr.forward_to(x)
 
         assert dr.all(xg == [10, 30, 50, 70, 20, 40, 60, 80])
+
+
+@pytest.mark.parametrize("axis", [0, 1])
+@pytest.test_arrays('is_diff,tensor,float32')
+def test131_prefix_sum_tensor(t, axis):
+    x = dr.ones(t, (3, 3))
+    dr.make_opaque(x)
+    dr.enable_grad(x)
+    y = dr.cumsum(x, axis=axis)
+    dr.backward_from(y)
+
+    if axis == 1:
+        assert dr.all(x.grad == t([[3, 2, 1], [3, 2, 1], [3, 2, 1]]))
+    else:
+        assert dr.all(x.grad == t([[3, 3, 3], [2, 2, 2], [1, 1, 1]]))

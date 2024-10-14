@@ -22,7 +22,7 @@ static nb::object graphviz(bool ad, bool as_string) {
         string = nb::str(jit_var_graphviz());
 
     if (as_string)
-        return string;
+        return std::move(string);
 
     try {
         return nb::module_::import_("graphviz").attr("Source")(string);
@@ -44,7 +44,7 @@ static nb::object whos(bool ad, bool as_string) {
         string = nb::str(jit_var_whos());
 
     if (as_string) {
-        return string;
+        return std::move(string);
     } else {
         nb::print(string);
         return nb::none();
