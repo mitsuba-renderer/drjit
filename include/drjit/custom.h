@@ -20,6 +20,7 @@
 
 #include <nanobind/intrusive/counter.h>
 #include <nanobind/intrusive/ref.h>
+#include <drjit/traversable_base.h>
 
 NAMESPACE_BEGIN(drjit)
 NAMESPACE_BEGIN(detail)

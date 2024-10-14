@@ -54,6 +54,7 @@
 #include <drjit/math.h>
 #include <drjit-core/python.h>
 #include <nanobind/stl/array.h>
+#include <drjit/traversable_base.h>
 
 NAMESPACE_BEGIN(drjit)
 struct ArrayBinding;
@@ -1060,25 +1061,87 @@ template <typename T> void bind_all(ArrayBinding &b) {
 // Expose already existing object tree traversal callbacks (T::traverse_1_..) in Python.
 // This functionality is needed to traverse custom/opaque C++ classes and correctly
 // update their members when they are used in vectorized loops, function calls, etc.
-template <typename T, typename... Args> auto& bind_traverse(nanobind::class_<T, Args...> &cls) {
+template <typename T, typename... Args> auto &bind_traverse(nanobind::class_<T, Args...> &cls)
+{
     namespace nb = nanobind;
-    struct Payload { nb::callable c; };
+    struct Payload {
+        nb::callable c;
+    };
+
+    static_assert(std::is_base_of_v<TraversableBase, T>);
 
     cls.def("_traverse_1_cb_ro", [](const T *self, nb::callable c) {
         Payload payload{ std::move(c) };
-        self->traverse_1_cb_ro((void *) &payload, [](void *p, uint64_t index) {
-            ((Payload *) p)->c(index);
-        });
+        self->traverse_1_cb_ro((void *) &payload,
+            [](void *p, uint64_t index, const char *variant, const char *domain) {
+                ((Payload *) p)->c(index, variant, domain);
+            });
     });
 
     cls.def("_traverse_1_cb_rw", [](T *self, nb::callable c) {
         Payload payload{ std::move(c) };
-        self->traverse_1_cb_rw((void *) &payload, [](void *p, uint64_t index) {
-            return nb::cast<uint64_t>(((Payload *) p)->c(index));
+        self->traverse_1_cb_rw((void *) &payload, [](void *p, uint64_t index,
+                                                     const char *variant,
+                                                     const char *domain) {
+            return nb::cast<uint64_t>(
+                ((Payload *) p)->c(index, variant, domain));
         });
     });
 
     return cls;
+}
+
+/**
+ * \brief This function traverses a python object, that inherits from a
+ * trampoline class.
+ *
+ * Internally, this function calls the ``traverse_py_cb_ro_impl`` function,
+ * exposed through ``drjit.detail``, with the object and the callback.
+ */
+inline void traverse_py_cb_ro(const TraversableBase *base, void *payload,
+                              void (*fn)(void *, uint64_t, const char *variant,
+                                         const char *domain)) {
+    namespace nb    = nanobind;
+    nb::handle self = base->self_py();
+    if (!self)
+        return;
+
+    auto detail = nb::module_::import_("drjit.detail");
+    nb::callable traverse_py_cb_ro_fn =
+        nb::borrow<nb::callable>(nb::getattr(detail, "traverse_py_cb_ro"));
+
+    traverse_py_cb_ro_fn(self,
+        nb::cpp_function([&](uint64_t index, const char *variant,
+                           const char *domain) {
+            fn(payload, index, variant, domain);
+        }));
+}
+
+/**
+ * \brief This function traverses a python object, that inherits from a
+ * trampoline class.
+ *
+ * Internally, this function calls the ``traverse_py_cb_rw_impl`` function,
+ * exposed through ``drjit.detail``, with the object and the callback.
+ */
+inline void traverse_py_cb_rw(TraversableBase *base, void *payload,
+                              uint64_t (*fn)(void *, uint64_t, const char *,
+                                             const char *)) {
+
+    namespace nb    = nanobind;
+    nb::handle self = base->self_py();
+    if (!self)
+        return;
+
+    auto detail = nb::module_::import_("drjit.detail");
+    nb::callable traverse_py_cb_rw_fn =
+        nb::borrow<nb::callable>(nb::getattr(detail, "traverse_py_cb_rw"));
+
+    traverse_py_cb_rw_fn(self,
+    nb::cpp_function([&](uint64_t index, const char *variant,
+                       const char *domain) {
+        return fn(payload, index, variant, domain);
+    }));
 }
 
 NAMESPACE_END(drjit)

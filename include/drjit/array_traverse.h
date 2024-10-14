@@ -15,6 +15,8 @@
 
 #pragma once
 
+#include <type_traits>
+
 #define DRJIT_STRUCT_NODEF(Name, ...)                                          \
     Name(const Name &) = default;                                              \
     Name(Name &&) = default;                                                   \
@@ -140,6 +142,18 @@ namespace detail {
     using det_traverse_1_cb_rw =
         decltype(T(nullptr)->traverse_1_cb_rw(nullptr, nullptr));
 
+    template <typename T>
+    using det_get = decltype(std::declval<T&>().get());
+
+    template <typename T>
+    using det_const_get = decltype(std::declval<const T &>().get());
+
+    template<typename T>
+    using det_begin = decltype(std::declval<T &>().begin());
+
+    template<typename T>
+    using det_end = decltype(std::declval<T &>().end());
+
     inline drjit::string get_label(const char *s, size_t i) {
         auto skip = [](char c) {
             return c == ' ' || c == '\r' || c == '\n' || c == '\t' || c == ',';
@@ -168,7 +182,7 @@ template <typename T> using traversable_t = detail::traversable<std::decay_t<T>>
 template <typename T> static constexpr bool is_traversable_v = traversable_t<T>::value;
 template <typename T> using enable_if_traversable_t = enable_if_t<is_traversable_v<T>>;
 
-template <typename T> static constexpr bool is_dynamic_traversable_v = 
+template <typename T> static constexpr bool is_dynamic_traversable_v =
     is_jit_v<T> && is_dynamic_array_v<T> && is_vector_v<T> && !is_tensor_v<T>;
 
 template <typename T> DRJIT_INLINE auto fields(T &&v) {
@@ -179,11 +193,33 @@ template <typename T> auto labels(const T &v) {
     return traversable_t<T>::labels(v);
 }
 
+/**
+ * This function traverses C++ objects, that have one of the following features:
+ *
+ * 1. They represent Jit arrays, in which case the callback is called with
+ *    optional domain and variant arguments.
+ * 2. They fall under the \c traversable trait (see above), for example
+ *    DRJIT_STRUCTs or tuples
+ * 3. They represent dynamic arrays.
+ * 4. They themselves implement the function \c traverse_1_cb_ro, in which case
+ *    this function is called.
+ * 5. They represent iterables with a \c begin and \c end function, such as
+ *    \c std::vector or \c drjit::vector.
+ * 6. They represent unique pointers, with a constant get method, such as
+ *    \c std::unique_ptr.
+ */
 template <typename Value>
-void traverse_1_fn_ro(const Value &value, void *payload, void (*fn)(void *, uint64_t)) {
-    (void) payload; (void) fn;
+void traverse_1_fn_ro(const Value &value, void *payload,
+                      void (*fn)(void *, uint64_t, const char *,
+                                 const char *)) {
+    DRJIT_MARK_USED(payload);
+    DRJIT_MARK_USED(fn);
     if constexpr (is_jit_v<Value> && depth_v<Value> == 1) {
-        fn(payload, value.index_combined());
+        if constexpr(Value::IsClass)
+            fn(payload, value.index_combined(), Value::CallSupport::Variant,
+               Value::CallSupport::Domain);
+        else
+            fn(payload, value.index_combined(), "", "");
     } else if constexpr (is_traversable_v<Value>) {
         traverse_1(fields(value), [payload, fn](auto &x) {
             traverse_1_fn_ro(x, payload, fn);
@@ -198,14 +234,48 @@ void traverse_1_fn_ro(const Value &value, void *payload, void (*fn)(void *, uint
                          is_detected_v<detail::det_traverse_1_cb_ro, Value>) {
         if (value)
             value->traverse_1_cb_ro(payload, fn);
+
+    } else if constexpr (is_detected_v<detail::det_begin, Value> &&
+                         is_detected_v<detail::det_end, Value>) {
+        for (auto elem : value)
+            traverse_1_fn_ro(elem, payload, fn);
+    } else if constexpr (is_detected_v<detail::det_const_get, Value>) {
+        const auto *tmp = value.get();
+        traverse_1_fn_ro(tmp, payload, fn);
+    } else if constexpr (is_detected_v<detail::det_traverse_1_cb_ro, Value *>) {
+        value.traverse_1_cb_ro(payload, fn);
     }
 }
 
+/**
+ * This function traverses C++ objects, that have one of the following features:
+ *
+ * 1. They represent Jit arrays, in which case the callback is called with
+ *    optional domain and variant arguments.
+ * 2. They fall under the \c traversable trait (see above), for example
+ *    DRJIT_STRUCTs or tuples
+ * 3. They represent dynamic arrays.
+ * 4. They themselves implement the function \c traverse_1_cb_rw, in which case
+ *    this function is called.
+ * 5. They represent iterables with a \c begin and \c end function, such as
+ *    \c std::vector or \c drjit::vector.
+ * 6. They represent unique pointers, with a get method, such as
+ *    \c std::unique_ptr.
+ */
 template <typename Value>
-void traverse_1_fn_rw(Value &value, void *payload, uint64_t (*fn)(void *, uint64_t)) {
-    (void) payload; (void) fn;
+void traverse_1_fn_rw(Value &value, void *payload,
+                      uint64_t (*fn)(void *, uint64_t, const char *,
+                                     const char *)) {
+    DRJIT_MARK_USED(payload);
+    DRJIT_MARK_USED(fn);
     if constexpr (is_jit_v<Value> && depth_v<Value> == 1) {
-        value = Value::borrow((typename Value::Index) fn(payload, value.index_combined()));
+        if constexpr(Value::IsClass)
+            value = Value::borrow((typename Value::Index) fn(
+                payload, value.index_combined(), Value::CallSupport::Variant,
+                Value::CallSupport::Domain));
+        else
+            value = Value::borrow((typename Value::Index) fn(
+                payload, value.index_combined(), "", ""));
     } else if constexpr (is_traversable_v<Value>) {
         traverse_1(fields(value), [payload, fn](auto &x) {
             traverse_1_fn_rw(x, payload, fn);
@@ -220,6 +290,15 @@ void traverse_1_fn_rw(Value &value, void *payload, uint64_t (*fn)(void *, uint64
                          is_detected_v<detail::det_traverse_1_cb_rw, Value>) {
         if (value)
             value->traverse_1_cb_rw(payload, fn);
+    } else if constexpr (is_detected_v<detail::det_begin, Value> &&
+                         is_detected_v<detail::det_end, Value>) {
+        for (auto elem : value)
+            traverse_1_fn_rw(elem, payload, fn);
+    } else if constexpr (is_detected_v<detail::det_get, Value>) {
+        auto *tmp = value.get();
+        traverse_1_fn_rw(tmp, payload, fn);
+    } else if constexpr (is_detected_v<detail::det_traverse_1_cb_rw, Value *>) {
+        value.traverse_1_cb_rw(payload, fn);
     }
 }
 
