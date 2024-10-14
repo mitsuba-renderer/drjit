@@ -15,6 +15,7 @@
 
 #pragma once
 
+#include <type_traits>
 #define DRJIT_STRUCT_NODEF(Name, ...)                                          \
     Name(const Name &) = default;                                              \
     Name(Name &&) = default;                                                   \
@@ -140,6 +141,18 @@ namespace detail {
     using det_traverse_1_cb_rw =
         decltype(T(nullptr)->traverse_1_cb_rw(nullptr, nullptr));
 
+    template <typename T>
+    using det_get = decltype(std::declval<T&>().get());
+
+    template <typename T>
+    using det_const_get = decltype(std::declval<const T &>().get());
+
+    template<typename T>
+    using det_begin = decltype(std::declval<T &>().begin());
+
+    template<typename T>
+    using det_end = decltype(std::declval<T &>().begin());
+
     inline drjit::string get_label(const char *s, size_t i) {
         auto skip = [](char c) {
             return c == ' ' || c == '\r' || c == '\n' || c == '\t' || c == ',';
@@ -198,6 +211,19 @@ void traverse_1_fn_ro(const Value &value, void *payload, void (*fn)(void *, uint
                          is_detected_v<detail::det_traverse_1_cb_ro, Value>) {
         if (value)
             value->traverse_1_cb_ro(payload, fn);
+
+    } else if constexpr (is_detected_v<detail::det_begin, Value> &&
+                         is_detected_v<detail::det_end, Value>) {
+        for (auto elem : value) {
+            traverse_1_fn_ro(elem, payload, fn);
+        }
+    } else if constexpr (is_detected_v<detail::det_const_get, Value>) {
+        const auto *tmp = value.get();
+        traverse_1_fn_ro(tmp, payload, fn);
+    } else if constexpr (is_detected_v<detail::det_traverse_1_cb_ro, Value *>) {
+        value.traverse_1_cb_ro(payload, fn);
+    } else {
+        // static_assert(false, "Failed to traverse field!");
     }
 }
 
@@ -220,6 +246,18 @@ void traverse_1_fn_rw(Value &value, void *payload, uint64_t (*fn)(void *, uint64
                          is_detected_v<detail::det_traverse_1_cb_rw, Value>) {
         if (value)
             value->traverse_1_cb_rw(payload, fn);
+    } else if constexpr (is_detected_v<detail::det_begin, Value> &&
+                         is_detected_v<detail::det_end, Value>) {
+        for (auto elem : value) {
+            traverse_1_fn_rw(elem, payload, fn);
+        }
+    } else if constexpr (is_detected_v<detail::det_get, Value>) {
+        auto *tmp = value.get();
+        traverse_1_fn_rw(tmp, payload, fn);
+    } else if constexpr (is_detected_v<detail::det_traverse_1_cb_rw, Value *>) {
+        value.traverse_1_cb_rw(payload, fn);
+    } else {
+        // static_assert(false, "Failed to traverse field!");
     }
 }
 
