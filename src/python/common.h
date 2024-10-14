@@ -88,6 +88,13 @@ inline nb::object get_dataclass_fields(nb::handle tp) {
     }
     return result;
 }
+/// Return a pointer to the underlying C++ class if the Python object inherits
+/// from TraversableBase or null otherwise
+inline drjit::TraversableBase *get_traversable_base(nb::handle h) {
+    drjit::TraversableBase *result = nullptr;
+    nb::try_cast(h, result);
+    return result;
+}
 
 /// Extract a read-only callback to traverse custom data structures
 inline nb::object get_traverse_cb_ro(nb::handle tp) {
