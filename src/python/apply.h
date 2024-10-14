@@ -57,7 +57,8 @@ struct TraverseCallback {
     // Type-erased form which is needed in some cases to traverse into opaque
     // C++ code. This one just gets called with Jit/AD variable indices, an
     // associated Python/ instance/type is not available.
-    virtual void operator()(uint64_t index);
+    virtual uint64_t operator()(uint64_t index, const char *variant = nullptr,
+                                const char *domain = nullptr);
 
     // Traverse an unknown object
     virtual void traverse_unknown(nb::handle h);
@@ -80,9 +81,16 @@ struct TransformCallback {
     /// Initialize 'h2' (already allocated) based on 'h1'
     virtual void operator()(nb::handle h1, nb::handle h2) = 0;
 
-    // Type-erased form which is needed in some cases to traverse into opaque
-    // C++ code. This one just gets called with Jit/AD variable indices, an
-    // associated Python/ instance/type is not available.
+    /** Type-erased form which is needed in some cases to traverse into opaque
+     * C++ code. This one just gets called with Jit/AD variable indices, an
+     * associated Python/ instance/type is not available.
+     * This can optionally return a non-owning jit_index, that will be assigned
+     * to the underlying variable if \c traverse is called with the \c rw
+     * argument set to \c true. This can be used to modify JIT variables of
+     * PyTrees and their C++ objects in-place. For example, when applying
+     * operations such as \c jit_var_schedule_force to every JIT variable in a
+     * PyTree.
+     */
     virtual uint64_t operator()(uint64_t index);
 };
 
@@ -96,9 +104,27 @@ struct TransformPairCallback {
     virtual nb::object transform_unknown(nb::handle h1, nb::handle h2) const;
 };
 
-/// Invoke the given callback on leaf elements of the pytree 'h'
-extern void traverse(const char *op, TraverseCallback &callback,
-                     nb::handle h);
+/**
+ * \brief Invoke the given callback on leaf elements of the pytree 'h',
+ *     including JIT indices in c++ objects, inheriting from
+ *     \c drjit::TraversableBase.
+ *
+ * \param op:
+ *     Name of the operation that is performed, this will be used in the
+ *     exceptions that might be raised during traversal.
+ *
+ * \param callback:
+ *     The \c TraverseCallback, called for every Jit variable in the pytree.
+ *
+ * \param rw:
+ *     Boolean, indicating if C++ objects should be traversed in read-write
+ *     mode. If this is set to \c true, the result from the method
+ *     \c operator()(uint64_t) of the callback will be assigned to the
+ *     underlying variable. This does not change how Python objects are
+ *     traversed.
+ */
+extern void traverse(const char *op, TraverseCallback &callback, nb::handle h,
+                     bool rw = false);
 
 /// Parallel traversal of two compatible pytrees 'h1' and 'h2'
 extern void traverse_pair(const char *op, TraversePairCallback &callback,
