@@ -6,6 +6,7 @@
 #include <drjit/call.h>
 #include <drjit/python.h>
 #include <drjit/random.h>
+#include <drjit/traversable_base.h>
 
 namespace nb = nanobind;
 namespace dr = drjit;
@@ -13,29 +14,25 @@ namespace dr = drjit;
 using namespace nb::literals;
 
 template <typename T>
-struct Sampler {
+struct Sampler : dr::TraversableBase {
+    Sampler() : rng(1) {}
     Sampler(size_t size) : rng(size) { }
 
     T next() { return rng.next_float32(); }
 
-    void traverse_1_cb_ro(void *payload, void (*fn)(void *, uint64_t)) const {
-        traverse_1_fn_ro(rng, payload, fn);
-    }
-
-    void traverse_1_cb_rw(void *payload, uint64_t (*fn)(void *, uint64_t)) {
-        traverse_1_fn_rw(rng, payload, fn);
-    }
-
     dr::PCG32<dr::uint64_array_t<T>> rng;
+
+    DR_TRAVERSE_CB(dr::TraversableBase, rng);
 };
 
-template <typename Float> struct Base : nb::intrusive_base {
+template <typename Float> struct Base : drjit::TraversableBase {
     using Mask = dr::mask_t<Float>;
     using UInt32 = dr::uint32_array_t<Float>;
 
     virtual std::pair<Float, Float> f(Float x, Float y) = 0;
     virtual std::pair<Float, Float> f_masked(const std::pair<Float, Float> &xy, Mask active) = 0;
     virtual Float g(Float, Mask) = 0;
+    virtual Float h(Float) = 0;
     virtual Float nested(Float x, UInt32 s) = 0;
     virtual void dummy() = 0;
     virtual float scalar_getter() = 0;
@@ -50,10 +47,12 @@ template <typename Float> struct Base : nb::intrusive_base {
 
     Base() {
         if constexpr (dr::is_jit_v<Float>)
-            jit_registry_put("", "Base", this);
+            drjit::registry_put("", "Base", this);
     }
 
     virtual ~Base() { jit_registry_remove(this); }
+
+    DR_TRAVERSE_CB(drjit::TraversableBase)
 };
 
 template <typename Float> struct A : Base<Float> {
@@ -72,6 +71,10 @@ template <typename Float> struct A : Base<Float> {
 
     virtual Float g(Float, Mask) override {
         return value;
+    }
+
+    virtual Float h(Float x) override{
+        return value + x;
     }
 
     virtual Float nested(Float x, UInt32 /*s*/) override {
@@ -112,6 +115,8 @@ template <typename Float> struct A : Base<Float> {
     uint32_t scalar_property;
     Float value, extra_value;
     Float opaque = dr::opaque<Float>(1.f);
+
+    DR_TRAVERSE_CB(Base<Float>, value, opaque)
 };
 
 template <typename Float> struct B : Base<Float> {
@@ -130,6 +135,10 @@ template <typename Float> struct B : Base<Float> {
 
     virtual Float g(Float x, Mask) override {
         return value*x;
+    }
+
+    virtual Float h(Float x) override{
+        return value - x;
     }
 
     virtual Float nested(Float x, UInt32 s) override {
@@ -160,6 +169,8 @@ template <typename Float> struct B : Base<Float> {
 
     Float value;
     Float opaque = dr::opaque<Float>(2.f);
+
+    DR_TRAVERSE_CB(Base<Float>, value, opaque)
 };
 
 DRJIT_CALL_TEMPLATE_BEGIN(Base)
@@ -167,6 +178,7 @@ DRJIT_CALL_TEMPLATE_BEGIN(Base)
     DRJIT_CALL_METHOD(f_masked)
     DRJIT_CALL_METHOD(dummy)
     DRJIT_CALL_METHOD(g)
+    DRJIT_CALL_METHOD(h)
     DRJIT_CALL_METHOD(nested)
     DRJIT_CALL_METHOD(sample)
     DRJIT_CALL_METHOD(gather_packet)
@@ -198,20 +210,22 @@ void bind(nb::module_ &m) {
     using Sampler = ::Sampler<Float>;
 
     auto sampler = nb::class_<Sampler>(m, "Sampler")
+        .def(nb::init<>())
         .def(nb::init<size_t>())
         .def("next", &Sampler::next)
         .def_rw("rng", &Sampler::rng);
 
     bind_traverse(sampler);
 
-    nb::class_<BaseT, nb::intrusive_base>(m, "Base")
+    auto base_cls = nb::class_<BaseT, nb::intrusive_base>(m, "Base")
         .def("f", &BaseT::f)
         .def("f_masked", &BaseT::f_masked)
         .def("g", &BaseT::g)
         .def("nested", &BaseT::nested)
         .def("sample", &BaseT::sample);
+    bind_traverse(base_cls);
 
-    nb::class_<AT, BaseT>(m, "A")
+    auto a_cls = nb::class_<AT, BaseT>(m, "A")
         .def(nb::init<>())
         .def("a_get_property", &AT::a_get_property)
         .def("a_gather_extra_value", &AT::a_gather_extra_value)
@@ -219,11 +233,13 @@ void bind(nb::module_ &m) {
         .def_rw("value", &AT::value)
         .def_rw("extra_value", &AT::extra_value)
         .def_rw("scalar_property", &AT::scalar_property);
+    bind_traverse(a_cls);
 
-    nb::class_<BT, BaseT>(m, "B")
+    auto b_cls = nb::class_<BT, BaseT>(m, "B")
         .def(nb::init<>())
         .def_rw("opaque", &BT::opaque)
         .def_rw("value", &BT::value);
+    bind_traverse(b_cls);
 
     using BaseArray = dr::DiffArray<Backend, BaseT *>;
     m.def("dispatch_f", [](BaseArray &self, Float a, Float b) {
@@ -243,6 +259,7 @@ void bind(nb::module_ &m) {
         .def("g",
              [](BaseArray &self, Float x, Mask m) { return self->g(x, m); },
              "x"_a, "mask"_a = true)
+        .def("h", [](BaseArray &self, Float x) { return self->h(x); }, "x"_a)
         .def("nested",
              [](BaseArray &self, Float x, UInt32 s) { return self->nested(x, s); },
              "x"_a, "s"_a)
