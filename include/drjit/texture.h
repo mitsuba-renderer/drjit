@@ -18,6 +18,8 @@
 #include <drjit/jit.h>
 #include <drjit/tensor.h>
 #include <drjit/util.h>
+#include <drjit/traversable_base.h>
+#include <vector>
 
 #pragma once
 
@@ -42,7 +44,7 @@ enum class CudaTextureFormat : uint32_t {
     Float16 = 1, /// Half precision storage format
 };
 
-template <typename Storage_, size_t Dimension> class Texture {
+template <typename Storage_, size_t Dimension> class Texture : TraversableBase {
 public:
     static constexpr bool IsCUDA = is_cuda_v<Storage_>;
     static constexpr bool IsDiff = is_diff_v<Storage_>;
@@ -1591,6 +1593,48 @@ private:
     mutable bool m_tensor_dirty = false;    /* Flag to indicate whether
                                                public-facing unpadded tensor
                                                needs to be updated */
+
+public:
+    void
+    traverse_1_cb_ro(void *payload,
+                     drjit ::detail ::traverse_callback_ro fn) const override {
+        // Only traverse the texture for frozen functions, since accidentally
+        // traversing the scene in loops or vcalls can cause issues.
+        if (!jit_flag(JitFlag::EnableObjectTraversal))
+            return;
+
+        DRJIT_MAP(DR_TRAVERSE_MEMBER_RO, m_value, m_unpadded_value,
+                  m_resolution_opaque, m_inv_resolution);
+        if constexpr (HasCudaTexture) {
+            uint32_t n_textures = 1 + ((m_channels - 1) / 4);
+            std::vector<uint32_t> indices(n_textures);
+            jit_cuda_tex_get_indices(m_handle, indices.data());
+            for (uint32_t i = 0; i < n_textures; i++) {
+                fn(payload, indices[i], "", "");
+            }
+        }
+    }
+    void traverse_1_cb_rw(void *payload,
+                          drjit ::detail ::traverse_callback_rw fn) override {
+        // Only traverse the texture for frozen functions, since accidentally
+        // traversing the scene in loops or vcalls can cause issues.
+        if (!jit_flag(JitFlag::EnableObjectTraversal))
+            return;
+
+        DRJIT_MAP(DR_TRAVERSE_MEMBER_RW, m_value, m_unpadded_value,
+                  m_resolution_opaque, m_inv_resolution);
+        if constexpr (HasCudaTexture) {
+            uint32_t n_textures = 1 + ((m_channels - 1) / 4);
+            std::vector<uint32_t> indices(n_textures);
+            jit_cuda_tex_get_indices(m_handle, indices.data());
+            for (uint32_t i = 0; i < n_textures; i++) {
+                uint64_t new_index = fn(payload, indices[i], "", "");
+                if (new_index != indices[i])
+                    jit_raise("A texture was changed by traversing it. This is "
+                              "not supported!");
+            }
+        }
+    }
 };
 
 NAMESPACE_END(drjit)
