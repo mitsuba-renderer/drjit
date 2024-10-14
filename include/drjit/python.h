@@ -54,6 +54,9 @@
 #include <drjit/math.h>
 #include <drjit-core/python.h>
 #include <nanobind/stl/array.h>
+#include <nanobind/intrusive/counter.h>
+#include "nanobind/nanobind.h"
+#include "drjit/traversable_base.h"
 
 NAMESPACE_BEGIN(drjit)
 struct ArrayBinding;
@@ -1074,6 +1077,37 @@ template <typename T, typename... Args> auto& bind_traverse(nanobind::class_<T, 
     });
 
     return cls;
+}
+
+inline void traverse_py_cb_ro(const TraversableBase *base, void *payload,
+                              void (*fn)(void *, uint64_t)) {
+    namespace nb    = nanobind;
+    nb::handle self = base->self_py();
+    if (!self)
+        return;
+
+    auto detail = nb::module_::import_("drjit.detail");
+    nb::callable traverse_py_cb_ro =
+        nb::borrow<nb::callable>(nb::getattr(detail, "traverse_py_cb_ro"));
+
+    traverse_py_cb_ro(
+        self, nb::cpp_function([&](uint64_t index) { fn(payload, index); }));
+}
+inline void traverse_py_cb_rw(TraversableBase *base, void *payload,
+                              uint64_t (*fn)(void *, uint64_t)) {
+
+    namespace nb    = nanobind;
+    nb::handle self = base->self_py();
+    if (!self)
+        return;
+
+    auto detail = nb::module_::import_("drjit.detail");
+    nb::callable traverse_py_cb_rw =
+        nb::borrow<nb::callable>(nb::getattr(detail, "traverse_py_cb_rw"));
+
+    traverse_py_cb_rw(self, nb::cpp_function([&](uint64_t index) {
+                          return fn(payload, index);
+                      }));
 }
 
 NAMESPACE_END(drjit)
