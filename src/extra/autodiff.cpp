@@ -44,6 +44,7 @@
 
 #include "common.h"
 #include "drjit-core/jit.h"
+#include <drjit/extra.h>
 #include <drjit-core/half.h>
 #include <drjit/jit.h>
 #include <drjit/math.h>
@@ -1836,6 +1837,18 @@ void ad_scope_leave(bool process_postponed) {
         if (!scope.postponed.empty())
             ad_raise("ad_scope_leave(): internal error: postponed is nonempty");
         scopes.pop_back();
+    }
+}
+
+void ad_scope_postponed(drjit::vector<uint32_t> *dst) {
+    LocalState &ls             = local_state;
+    std::vector<Scope> &scopes = ls.scopes;
+    if (scopes.empty())
+        ad_raise("ad_scope_leave(): scope underflow!");
+    Scope &scope = scopes.back();
+
+    for (auto &er : scope.postponed) {
+        dst->push_back(er.target);
     }
 }
 

@@ -8,7 +8,7 @@
     BSD-style license that can be found in the LICENSE.txt file.
 */
 
-#define NB_INTRUSIVE_EXPORT NB_EXPORT
+#define NB_INTRUSIVE_EXPORT NB_IMPORT
 
 #include <nanobind/nanobind.h>
 #include <nanobind/intrusive/counter.h>
@@ -22,6 +22,7 @@
 #include "cuda.h"
 #include "reduce.h"
 #include "eval.h"
+#include "freeze.h"
 #include "iter.h"
 #include "init.h"
 #include "memop.h"
@@ -107,6 +108,9 @@ NB_MODULE(_drjit_ext, m_) {
         .value("ScatterReduceLocal", JitFlag::ScatterReduceLocal, doc_JitFlag_ScatterReduceLocal)
         .value("SymbolicConditionals", JitFlag::SymbolicConditionals, doc_JitFlag_SymbolicConditionals)
         .value("SymbolicScope", JitFlag::SymbolicScope, doc_JitFlag_SymbolicScope)
+        .value("KernelFreezing", JitFlag::KernelFreezing, doc_JitFlag_KernelFreezing)
+        .value("FreezingScope", JitFlag::FreezingScope, doc_JitFlag_FreezingScope)
+        .value("EnableObjectTraversal", JitFlag::EnableObjectTraversal, doc_JitFlag_EnableObjectTraversal)
         .value("Default", JitFlag::Default, doc_JitFlag_Default)
 
         // Deprecated aliases
@@ -237,6 +241,7 @@ NB_MODULE(_drjit_ext, m_) {
     export_iter(detail);
     export_reduce(m);
     export_eval(m);
+    export_freeze(m);
     export_memop(m);
     export_slice(m);
     export_dlpack(m);
