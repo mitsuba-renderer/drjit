@@ -172,6 +172,8 @@ void bind_texture(nb::module_ &m, const char *name) {
         #undef def_tex_eval_cubic_helper
 
     tex.attr("IsTexture") = true;
+
+    drjit::bind_traverse(tex);
 }
 
 template <typename Type>

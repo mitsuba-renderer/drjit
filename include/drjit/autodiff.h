@@ -973,7 +973,9 @@ NAMESPACE_BEGIN(detail)
 /// Internal operations for traversing nested data structures and fetching or
 /// storing indices. Used in ``call.h`` and ``loop.h``.
 
-template <bool IncRef> void collect_indices_fn(void *p, uint64_t index) {
+template <bool IncRef>
+void collect_indices_fn(void *p, uint64_t index, const char * /*variant*/,
+                        const char * /*domain*/) {
     vector<uint64_t> &indices = *(vector<uint64_t> *) p;
     if constexpr (IncRef)
         index = ad_var_inc_ref(index);
@@ -985,7 +987,8 @@ struct update_indices_payload {
     size_t &pos;
 };
 
-inline uint64_t update_indices_fn(void *p, uint64_t) {
+inline uint64_t update_indices_fn(void *p, uint64_t, const char * /*variant*/,
+                                  const char * /*domain*/) {
     update_indices_payload &payload = *(update_indices_payload *) p;
     return payload.indices[payload.pos++];
 }
