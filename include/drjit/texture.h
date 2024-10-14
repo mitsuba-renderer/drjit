@@ -18,6 +18,7 @@
 #include <drjit/jit.h>
 #include <drjit/tensor.h>
 #include <drjit/util.h>
+#include <drjit/traversable_base.h>
 
 #pragma once
 
@@ -42,7 +43,7 @@ enum class CudaTextureFormat : uint32_t {
     Float16 = 1, /// Half precision storage format
 };
 
-template <typename _Storage, size_t Dimension> class Texture {
+template <typename _Storage, size_t Dimension> class Texture : TraversableBase {
 public:
     static constexpr bool IsCUDA = is_cuda_v<_Storage>;
     static constexpr bool IsDiff = is_diff_v<_Storage>;
@@ -1494,11 +1495,14 @@ private:
     WrapMode m_wrap_mode;
     bool m_use_accel = false;
     mutable bool m_migrated = false;        /* CUDA backend flag to indicate
-                                               whether texture data is 
+                                               whether texture data is
                                                exclusively on the device */
     mutable bool m_tensor_dirty = false;    /* Flag to indicate whether
                                                public-facing unpadded tensor
                                                needs to be updated */
+
+    DR_TRAVERSE_CB(drjit::TraversableBase, m_value, m_shape_opaque,
+                   m_inv_resolution);
 };
 
 NAMESPACE_END(drjit)
