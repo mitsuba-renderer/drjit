@@ -3,6 +3,7 @@
 #include <drjit-core/python.h>
 #include <drjit/packet.h>
 #include <drjit/random.h>
+#include <drjit/traversable_base.h>
 
 namespace nb = nanobind;
 namespace dr = drjit;
@@ -37,11 +38,13 @@ struct Sampler {
 
     T next() { return rng.next_float32(); }
 
-    void traverse_1_cb_ro(void *payload, void (*fn)(void *, uint64_t)) const {
+    void traverse_1_cb_ro(void *payload,
+                          dr::detail::traverse_callback_ro fn) const {
         traverse_1_fn_ro(rng, payload, fn);
     }
 
-    void traverse_1_cb_rw(void *payload, uint64_t (*fn)(void *, uint64_t)) {
+    void traverse_1_cb_rw(void *payload,
+                          dr::detail::traverse_callback_rw fn) {
         traverse_1_fn_rw(rng, payload, fn);
     }
 

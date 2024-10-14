@@ -19,12 +19,12 @@ with detail.scoped_rtld_deepbind():
 import sys as _sys
 if _sys.version_info < (3, 11):
     try:
-        from typing_extensions import overload, Optional, Type, Tuple, List, Sequence, Union, Literal, Callable
+        from typing_extensions import overload, Optional, Type, Tuple, List, Sequence, Union, Literal, Callable, TypeVar
     except ImportError:
         raise RuntimeError(
             "Dr.Jit requires the 'typing_extensions' package on Python <3.11")
 else:
-    from typing import overload, Optional, Type, Tuple, List, Sequence, Union, Literal, Callable
+    from typing import overload, Optional, Type, Tuple, List, Sequence, Union, Literal, Callable, TypeVar
 
 from .ast import syntax, hint
 from .interop import wrap
@@ -2401,6 +2401,211 @@ def binary_search(start, end, pred):
 
     return start
 
+# Represents the frozen function passed to the decorator without arguments
+F = TypeVar("F")
+# Represents the frozen function passed to the decorator with arguments
+F2 = TypeVar("F2")
+
+@overload
+def freeze(
+    f: None = None,
+    *,
+    state: Optional[Callable],
+    max_cache_size: Optional[int] = None,
+    warn_recording_count: int = 10,
+    backend: Optional[JitBackend] = None,
+) -> Callable[[F], F]:
+    """
+    Decorator to freeze a function for replaying kernels without re-tracing.
+
+    This decorator wraps a function, and enables replaying it in order remove the
+    need for tracing python operations. The first time a frozen function is called,
+    it is executed regularly, while all operations performed are recorded. When the
+    frozen function is called again, with compatible arguments, the recorded
+    operations are replayed instead of launching the Python function. This saves on
+    the overhead that is inherent when tracing and compiling python operations into
+    kernels. The frozen function keeps a record of all previously recorded calls,
+    and associates them with the input layout. Since the kernels might be compiled
+    differently when changing certain attributes of variables, the frozen function
+    will be re-recorded if the inputs are no longer compatible with previous
+    recordings. We also track the layout of any container and the values of Python
+    types of the inputs to the frozen function. The following are the input
+    attributes which are tracked and might cause the function to be re-recorded if
+    changed.
+
+    - Type of any variable or container
+    - Number of members in a container, such as the length of a list
+    - Key or field names, such as dictionary keys or dataclass field names
+    - The `Dr.Jit` type of any variable
+    - Whether a variable has size $1$
+    - Whether the memory, referenced by a variable is unaligned (only applies to
+      mapped NumPy arrays)
+    - Whether the variable has gradients enabled
+    - The sets of variables that have the same size
+    - The hash of any Python variable, that is not a Dr.Jit variable or a container
+
+    Generally, the widths of the DrJit variables in the input can be changed in
+    each call without triggering a retracing of the function.
+    However, variables that had the same width during recording must keep the
+    same width in future calls, otherwise the function must be traced again.
+
+    Please be particularly wary of using `dr.width()` within a recorded function.
+    Usage such as `dr.arange(UInt32, dr.width(a))` is allowed, since `dr.arange`
+    uses the width only implicitly, via the launch dimension of the kernel.
+    But direct usage, or computations on the width, would no longer be correct
+    in subsequent launches of the frozen function if the width of the inputs changes,
+    for example:
+
+    ```python
+    y = dr.gather(type(x), x, dr.width(x)//2)
+    ```
+
+    Similarly, calculating the mean of a variable relies on the number of entries,
+    which will be baked into the frozen function. To avoid this, we suggest
+    supplying the number of entries as a Dr.Jit literal in the arguments to the
+    function.
+
+    Args:
+        f: The function to be frozen
+
+        state (Optional[Callable]): An optional function, specifying additional
+          state. It is called with the same arguments as the function will be,
+          and should return a traversable object such as list or tuple, which will
+          be added to the input state.
+
+        max_cache_size (Optional[int]): An optional integer, specifying the maximum
+          number of recordings kept of the function. If more recordings have to be
+          made, the least recently used one will be dropped.
+
+        warn_recording_count (int): An integer, specifying the number of recordings
+          after which a warning will be generated, explaining which variables changed
+          between calls to the function.
+
+        backend (Optional[JitBackend]): If no inputs are given when calling the
+          frozen function, the backend used has to be specified using this argument.
+          It has to be the same backend that is used for variables inside the function,
+          otherwise recording will fail and variables may be leaked.
+    """
+
+
+@overload
+def freeze(
+    f: F,
+    *,
+    state: Optional[Callable] = None,
+    max_cache_size: Optional[int] = None,
+    warn_recording_count: int = 10,
+    backend: Optional[JitBackend] = None,
+) -> F: ...
+
+
+def freeze(
+    f: Optional[F] = None,
+    *,
+    state: Optional[Callable] = None,
+    max_cache_size: Optional[int] = None,
+    warn_recording_count: int = 10,
+    backend: Optional[JitBackend] = None,
+) -> Union[F, Callable[[F2], F2]]:
+    max_cache_size = max_cache_size if max_cache_size is not None else -1
+    backend = backend if backend is not None else JitBackend.Invalid
+
+    def decorator(f):
+        """
+        Internal decorator, returned in ``dr.freeze`` was used with arguments.
+        """
+        import functools
+        import inspect
+
+        def inner(closure, *args, **kwargs):
+            """
+            This inner function is the one that gets actually frozen. It receives
+            any additional state such as closures or state specified with the
+            ``state`` lambda, and allows for traversal of it.
+            """
+            return f(*args, **kwargs)
+
+        class FrozenFunction:
+            def __init__(self, f) -> None:
+                closure = inspect.getclosurevars(f)
+                self.closure = (closure.nonlocals, closure.globals)
+                self.frozen = detail.FrozenFunction(
+                    inner,
+                    max_cache_size,
+                    warn_recording_count,
+                    backend,
+                )
+
+            def __call__(self, *args, **kwargs):
+                _state = state(*args, **kwargs) if state is not None else None
+                return self.frozen([self.closure, _state], *args, **kwargs)
+
+            @property
+            def n_recordings(self):
+                """
+                Represents the number of times the function was recorded. This
+                includes occasions where it was recorded due to a dry-run failing.
+                It does not necessarily correspond to the number of recordings
+                currently cached see ``n_cached_recordings`` for that.
+                """
+                return self.frozen.n_recordings
+
+            @property
+            def n_cached_recordings(self):
+                """
+                Represents the number of recordings currently cached of the frozen
+                function. If a recording fails in dry-run mode, it will not create
+                a new recording, but replace the recording that was attemted to be
+                replayed. The number of recordings can also be limited with
+                the ``max_cache_size`` argument.
+                """
+                return self.frozen.n_cached_recordings
+
+            def clear(self):
+                """
+                Clears the recordings of the frozen function, and resets the
+                ``n_recordings`` counter. The reference to the function is still
+                kept, and the frozen function can be called again to re-trace
+                new recordings.
+                """
+                return self.frozen.clear()
+
+            def __get__(self, obj, type=None):
+                if obj is None:
+                    return self
+                else:
+                    return FrozenMethod(self.frozen, self.closure, obj)
+
+        class FrozenMethod(FrozenFunction):
+            """
+            A FrozenMethod currying the object into the __call__ method.
+
+            If the ``freeze`` decorator is applied to a method of some class, it has
+            to call the internal frozen function with the ``self`` argument. To this
+            end we implement the ``__get__`` method of the frozen function, to
+            return a ``FrozenMethod``, which holds a reference to the object.
+            The ``__call__`` method of the ``FrozenMethod`` then supplies the object
+            in addition to the arguments to the internal function.
+            """
+            def __init__(self, frozen, closure, obj) -> None:
+                self.obj = obj
+                self.frozen = frozen
+                self.closure = closure
+
+            def __call__(self, *args, **kwargs):
+                _state = state(self.obj, *args, **kwargs) if state is not None else None
+                return self.frozen([self.closure, _state], self.obj, *args, **kwargs)
+
+        return functools.wraps(f)(FrozenFunction(f))
+
+    if f is not None:
+        return decorator(f)
+    else:
+        return decorator
+
+
+del F
+del F2
 
 def assert_true(
     cond,
