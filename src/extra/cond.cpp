@@ -35,7 +35,7 @@ static void ad_cond_evaluated(JitBackend backend, const char *label,
     index64_vector args_t, args_f;
     size_t cond_size = jit_var_size((uint32_t) cond_t);
 
-    /// For differentiable inputs, create masked AD variables
+    // For differentiable inputs, create masked AD variables
     for (size_t i = 0; i < args.size(); ++i) {
         uint64_t index = args[i];
         uint32_t index_lo = (uint32_t) index;
@@ -43,6 +43,11 @@ static void ad_cond_evaluated(JitBackend backend, const char *label,
         bool is_diff = index != index_lo;
 
         if (is_diff && (size == cond_size || size == 1 || cond_size == 1)) {
+            // Force the creation of AD variables even when in an AD-suspended
+            // scope. This is so that we can preserve the AD status of variables
+            // that aren't changed by the loop
+            scoped_force_grad_guard guard;
+
             uint64_t idx_t = ad_var_select(cond_t, index, index_lo),
                      idx_f = ad_var_select(cond_f, index, index_lo);
             uint32_t ad_idx_t = (uint32_t) (idx_t >> 32),
@@ -145,18 +150,22 @@ static void ad_cond_symbolic(JitBackend backend, const char *label,
     /* Postponed operations captured by the isolation scope should only
      * be executed once we've exited the symbolic scope. We therefore
      * need to declare the AD isolation guard before the recording guard. */
-    scoped_isolation_boundary isolation_guard(1);
+    scoped_isolation_guard isolation_guard(1);
     scoped_record record_guard(backend);
 
     index64_vector args_t, args_f, rv_t, rv_f, cleanup;
     dr::vector<uint32_t> tmp;
-
 
     // For differentiable inputs, create new disconnected AD variables
     for (size_t i = 0; i < args.size(); ++i) {
         uint64_t index = args[i];
         uint32_t index_lo = (uint32_t) index;
         if (ad && (args[i] >> 32)) {
+            // Force the creation of AD variables even when in an AD-suspended
+            // scope. This is so that we can preserve the AD status of variables
+            // that aren't changed by the loop
+            scoped_force_grad_guard guard;
+
             uint64_t idx_t = ad_var_new(index_lo),
                      idx_f = ad_var_new(index_lo);
 
@@ -259,6 +268,8 @@ static void ad_cond_symbolic(JitBackend backend, const char *label,
         // Unchanged differentiable outputs can be piped through directly
         // without being outputs of the CustomOp
         if (ad && ((idx_f >> 32) || (idx_t >> 32))) {
+            // Force the creation of AD variables even when in an AD-suspended
+            scoped_force_grad_guard guard;
             idx_t = ad_var_map_get(idx_t);
             idx_f = ad_var_map_get(idx_f);
 
@@ -627,7 +638,7 @@ bool ad_cond(JitBackend backend, int symbolic, const char *label, void *payload,
                              output_offsets, implicit_in, implicit_out, ad);
         }
 
-        if (!input_offsets.empty() || !output_offsets.empty()) {
+        if ((!input_offsets.empty() || !output_offsets.empty()) && !ad_grad_suspended()) {
             nanobind::ref<CondOp> op = new CondOp(
                 backend, label, payload, cond, body_cb, delete_cb, args, rv,
                 input_offsets, output_offsets, implicit_in, implicit_out);
@@ -641,7 +652,7 @@ bool ad_cond(JitBackend backend, int symbolic, const char *label, void *payload,
             op->disable(rv);
         }
     } else {
-        scoped_isolation_boundary guard;
+        scoped_isolation_guard guard;
         ad_cond_evaluated(backend, label, payload, true_mask.index(),
                           false_mask.index(), args, rv, body_cb);
         guard.disarm();
