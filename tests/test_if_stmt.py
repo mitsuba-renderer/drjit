@@ -584,3 +584,32 @@ def test17_mutate_other_containers(t, tt, mutate, mode):
     assert dr.all(x == (10 + (mutate and tt != 'nested'), 20))
     assert dr.all(y == (30, 40))
 
+
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+@pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
+def test18_if_stmt_preserve_unused_ad(t, mode):
+    with dr.scoped_set_flag(dr.JitFlag.SymbolicConditionals, False):
+        x = t(0, 1)
+        y = t(1, 3)
+        dr.enable_grad(x, y)
+        print(x.index)
+        print(y.index)
+
+        with dr.suspend_grad():
+            def true_fn(x, y):
+                return x + y, y
+
+            def false_fn(x, y):
+                return x, y
+
+            x, y = dr.if_stmt(
+                args=(x, y),
+                cond=x<.5,
+                arg_labels=('x', 'y'),
+                true_fn=true_fn,
+                false_fn=false_fn,
+                mode=mode
+            )
+
+        assert not dr.grad_enabled(x)
+        assert dr.grad_enabled(y)

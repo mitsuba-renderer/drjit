@@ -45,7 +45,7 @@ static bool ad_loop_symbolic(JitBackend backend, const char *name,
         /* Postponed operations captured by the isolation scope should only
          * be executed once we've exited the symbolic scope. We therefore
          * need to declare the AD isolation guard before the recording guard. */
-        scoped_isolation_boundary isolation_guard(1);
+        scoped_isolation_guard isolation_guard(1);
         scoped_record record_guard(backend);
 
         // Rewrite the loop state variables
@@ -980,7 +980,7 @@ bool ad_loop(JitBackend backend, int symbolic, int compress,
                       "drjit.while_loop() for general information on symbolic and "
                       "evaluated loops, as well as their limitations.");
 
-        scoped_isolation_boundary guard;
+        scoped_isolation_guard guard;
         ad_loop_evaluated(backend, name, payload, read_cb, write_cb,
                           cond_cb, body_cb, compress);
         guard.disarm();

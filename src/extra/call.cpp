@@ -90,7 +90,7 @@ static void ad_call_getter(JitBackend backend, const char *domain,
             "ad_call_getter(\"%s%s%s\", index=r%u, mask=r%u)", domain_or_empty,
             separator, name, index, mask.index());
 
-    scoped_isolation_boundary guard;
+    scoped_isolation_guard guard;
     {
         scoped_record rec(backend, name, true);
 
@@ -279,7 +279,7 @@ static void ad_call_symbolic(JitBackend backend, const char *domain,
         /* Postponed operations captured by the isolation scope should only
          * be executed once we've exited the symbolic scope. We therefore
          * need to declare the AD isolation guard before the recording guard. */
-        scoped_isolation_boundary guard_1(1);
+        scoped_isolation_guard guard_1(1);
 
         scoped_record guard_2(backend, name, true);
         // Recording may fail due to recursion depth
@@ -631,7 +631,7 @@ public:
 
     /// Implements f(arg..., grad(rv)...) -> grad(arg) ...
     void backward() override {
-        scoped_isolation_boundary isolation_guard;
+        scoped_isolation_guard isolation_guard;
         std::string name = m_name + " [ad, bwd]";
 
         index64_vector args, rv;
