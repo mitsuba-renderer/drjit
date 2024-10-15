@@ -38,12 +38,12 @@ private:
 };
 
 /// RAII AD Isolation helper
-struct scoped_isolation_boundary {
-    scoped_isolation_boundary(int symbolic = -1) : symbolic(symbolic) {
+struct scoped_isolation_guard {
+    scoped_isolation_guard(int symbolic = -1) : symbolic(symbolic) {
         ad_scope_enter(drjit::ADScope::Isolate, 0, nullptr, symbolic);
     }
 
-    ~scoped_isolation_boundary() {
+    ~scoped_isolation_guard() {
         ad_scope_leave(success);
     }
 
@@ -57,6 +57,13 @@ struct scoped_isolation_boundary {
     int symbolic = -1;
     bool success = false;
 };
+
+struct scoped_force_grad_guard {
+    scoped_force_grad_guard() { value = ad_set_force_grad(1); }
+    ~scoped_force_grad_guard() { ad_set_force_grad(value); }
+    bool value;
+};
+
 
 /// RAII helper to temporarily push a mask onto the Dr.Jit mask stack
 struct scoped_push_mask {

@@ -119,6 +119,12 @@ extern DRJIT_EXTRA_EXPORT uint32_t ad_grad(uint64_t index, bool null_ok = false)
 /// Check if gradient tracking is enabled for the given variable
 extern DRJIT_EXTRA_EXPORT int ad_grad_enabled(uint64_t index);
 
+/// Check if gradient tracking is disabled (can't create new AD variables)
+extern DRJIT_EXTRA_EXPORT int ad_grad_suspended();
+
+/// Temporarily enforce gradient tracking without creating a new scope
+extern DRJIT_EXTRA_EXPORT int ad_set_force_grad(int status);
+
 /// Accumulate into the gradient associated with a given variable
 extern DRJIT_EXTRA_EXPORT void ad_accum_grad(uint64_t index, uint32_t value);
 

@@ -506,6 +506,9 @@ struct Scope {
      */
     bool isolate = false;
 
+    /// Flag to temporarily force gradient tracking in an ad-disabled scope
+    bool force_grad = false;
+
     // Current ``state.counter`` value when entering this scope
     uint64_t counter = 0;
 
@@ -537,7 +540,7 @@ struct Scope {
 
     /// Check if a variable has gradients enabled
     bool enabled(ADIndex index) const {
-        return (indices.find(index) != indices.end()) != complement;
+        return (indices.find(index) != indices.end()) != complement || force_grad;
     }
 
     /// Potentially zero out 'index' if the variable has gradients disabled
@@ -549,7 +552,7 @@ struct Scope {
 
     /// Track gradients for the given variable
     void enable(ADIndex index) {
-        if (!index)
+        if (!index || force_grad)
             return;
 
         if (complement)
@@ -967,7 +970,7 @@ DRJIT_NOINLINE Index ad_var_new_impl(const char *label, JitVar &&result,
                 active |= scope.maybe_disable(args[i].ad_index);
         }
 
-        if (!active)
+        if (!active && !scope.force_grad)
             return (Index) result.release();
     }
 
@@ -1782,6 +1785,25 @@ int ad_grad_enabled(Index index) {
     if (!scopes.empty())
         scopes.back().maybe_disable(ad_index);
     return ad_index != 0;
+}
+
+int ad_grad_suspended() {
+    const std::vector<Scope> &scopes = local_state.scopes;
+    if (scopes.empty())
+        return false;
+    else
+        return scopes.back().complement == false;
+}
+
+/// Temporarily enforce gradient tracking without creating a new scope
+int ad_set_force_grad(int status) {
+    std::vector<Scope> &scopes = local_state.scopes;
+    if (scopes.empty())
+        return 0;
+    Scope &scope = scopes.back();
+    bool old = scope.force_grad;
+    scope.force_grad = (bool) status;
+    return (int) old;
 }
 
 // ==========================================================================
@@ -2825,12 +2847,11 @@ Index ad_var_cast(Index i0, VarType vt) {
 void ad_var_map_put(Index source, Index target) {
     uint32_t ad_index_source = ad_index(source),
              ad_index_target = ad_index(target);
-
-    if ((ad_index_source == 0) != (ad_index_target == 0))
-        ad_raise("ad_var_map_put(): mixed attached/detached inputs!");
+    if (ad_index_target == 0)
+        return;
 
     if (ad_index_source == 0)
-        return;
+        ad_raise("ad_var_map_put(): mixed attached/detached inputs!");
 
     ad_log("ad_var_map_put(): a%u -> a%u", ad_index_source, ad_index_target);
 
