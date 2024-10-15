@@ -168,6 +168,7 @@ def pytorch_filter_fp(value, /):
     apply(fn, value)
     return result
 
+
 def tf_filter_fp(value, /):
     '''Extract a flat list of floating point TensorFlow tensors from the PyTree ``value``'''
 
@@ -180,6 +181,7 @@ def tf_filter_fp(value, /):
 
     apply(fn, value)
     return result
+
 
 def pytorch_grad(value, /):
     '''Extract a the gradients of PyTorch tensors from the PyTree ``value``'''
@@ -414,12 +416,19 @@ class WrapADOp(dr.CustomOp):
             import tensorflow as tf
             tensor = flatten(self.args)[1]
             with tf.device(tensor.device):
-                args = tf.nest.map_structure(tf.convert_to_tensor, self.args)
-                kwargs = tf.nest.map_structure(tf.convert_to_tensor, self.kwargs)
+                def convert(h):
+                    """Replace all atoms in a structure by a TF tensor or -1 if
+                    conversion is not possible"""
+                    try:
+                        return tf.convert_to_tensor(h)
+                    except:
+                        return tf.constant(-1, tf.float32)
+                args = tf.nest.map_structure(convert, self.args)
+                kwargs = tf.nest.map_structure(convert, self.kwargs)
                 with tf.GradientTape(persistent=True) as tape:
                     tape.watch([args, kwargs])
                     out = self.func(*self.args, **self.kwargs)
-                    out = tf.nest.map_structure(tf.convert_to_tensor, out)
+                    out = tf.nest.map_structure(convert, out)
                 grad_args = tape.gradient(out,
                                           args,
                                           output_gradients=grad_out)
@@ -690,11 +699,16 @@ def wrap(source: typing.Union[str, types.ModuleType],
                 inputs = to_drjit((args, kwargs), 'tf', enable_grad=True)
                 outputs = func(*inputs[0], **inputs[1])
                 results = from_drjit(outputs, 'tf')[0]
-                def grad(dy):
+                def grad(*dy):
+                    if len(dy) == 1:
+                        dy=dy[0]
                     grad_outputs = to_drjit(dy, 'tf')
-                    dr.set_grad(outputs, grad_outputs)
+                    out = flatten(outputs)[1:]
+                    if len(out)==1:
+                        out = out[0]
+                    dr.set_grad(out, grad_outputs)
                     vars = flatten(inputs[0])[1:] # Only gradients for args are computed due to a TF bug https://github.com/tensorflow/tensorflow/issues/77559
-                    grads = dr.backward_to(vars) 
+                    grads = dr.backward_to(vars)
                     grads = from_drjit(grads, 'tf')[0]
                     grads = [(g if dr.grad_enabled(vars[i]) else None) \
                                 for i, g in enumerate(flatten(grads)[1:])] # Set gradients for non-differentiable tensors to None
