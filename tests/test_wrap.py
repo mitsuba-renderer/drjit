@@ -607,7 +607,7 @@ def test16_flipped_custom_class_bwd(t, config):
 
     assert torch.all(x.grad == torch.tensor([10, 20, 30], dtype=dt))
 
-@pytest.mark.parametrize('config', configs_torch)
+@pytest.mark.parametrize('config', configs_torch + configs_tf)
 @pytest.test_arrays('is_diff,float,shape=(*)')
 def test17_custom_class_fwd(t, config):
     class MyClass:
@@ -825,6 +825,29 @@ def test25_pytree_bwd(t, config):
     assert dr.all(x.grad == [100, 200, 300])
     assert dr.all(y.grad == [200, 400, 600])
 
+@pytest.mark.parametrize('config', configs)
+@pytest.test_arrays('is_diff,float,shape=(*)')
+def test25_pytree_fwd(t, config):
+    @wrap(config)
+    def test_fn(x):
+        return {
+            123:(x[0]["hello"] + 2*x[1]["world"][0])
+        }
+    x = t(1, 2, 3)
+    y = t(4, 5, 6)
+    dr.enable_grad(x, y)
+    xt = [
+        { 'hello' : x },
+        { 'world' : (y,) }
+    ]
+    rt = test_fn(xt)
+    r = rt[123]
+    x.grad=[10,20,30]
+    y.grad=[40,50,60]
+    dr.forward_to(r)
+
+    assert dr.all(r.grad == [90, 120, 150])
+
 @pytest.mark.parametrize('config', configs_torch + configs_tf)
 @pytest.test_arrays('is_diff,float,shape=(*)')
 def test26_flipped_pytree_bwd(t, config):
@@ -866,30 +889,10 @@ def test26_flipped_pytree_bwd(t, config):
         assert tf.reduce_all(grad[0] == tf.constant([100, 200, 300], dtype=dt))
         assert tf.reduce_all(grad[1] == tf.constant([200, 400, 600], dtype=dt))
 
-@pytest.mark.parametrize('config', configs)
-@pytest.test_arrays('is_diff,float,shape=(*)')
-def test25_pytree_fwd(t, config):
-    @wrap(config)
-    def test_fn(x):
-        return {
-            123:(x[0]["hello"] + 2*x[1]["world"][0])
-        }
-    x = t(1, 2, 3)
-    y = t(4, 5, 6)
-    dr.enable_grad(x, y)
-    xt = [
-        { 'hello' : x },
-        { 'world' : (y,) }
-    ]
-    rt = test_fn(xt)
-    r = rt[123]
-    x.grad=[10,20,30]
-    y.grad=[40,50,60]
-    dr.forward_to(r)
-
-    assert dr.all(r.grad == [90, 120, 150])
-
-@pytest.mark.parametrize('config', configs_torch)
+@pytest.mark.parametrize('config',
+                         [pytest.param(c, marks=pytest.mark.skipif(c[0]=='tf',
+                                       reason="Skipped due to limited support of tf.custom_gradient for forward-mode AD."))
+                          for c in configs_torch + configs_tf])
 @pytest.test_arrays('is_diff,float,shape=(*)')
 def test26_flipped_pytree_fwd(t, config):
     @wrap_flipped(config)
@@ -930,18 +933,21 @@ def test27_exception(t, config):
         test_fn(t(1, 2, 3))
     assert 'foo' in str(err.value.__cause__)
 
-@pytest.mark.parametrize('config', configs_torch)
+@pytest.mark.parametrize('config', configs_torch + configs_tf)
 @pytest.test_arrays('is_diff,float32,shape=(*)')
 def test28_flipped_exception(t, config):
     @wrap_flipped(config)
     def test_fn(x):
         raise RuntimeError('foo')
     with pytest.raises(RuntimeError) as err:
-        test_fn(torch.tensor([1, 2, 3]))
+        if config[0] == 'torch':
+            test_fn(torch.tensor([1, 2, 3]))
+        elif config[0] == 'tf':
+            test_fn(tf.constant([1, 2, 3]))
     assert 'foo' in str(err.value)
 
-@pytest.mark.parametrize('config', configs_torch)
-@pytest.test_arrays('is_diff,llvm,float,shape=(*)')
+@pytest.mark.parametrize('config', configs_torch + configs_tf)
+@pytest.test_arrays('is_diff,float,shape=(*)')
 @pytest.skip_on(RuntimeError, "backend does not support the requested type of atomic reduction")
 def test29_flipped_non_tensor_output_bwd(t, config):
     @wrap_flipped(config)
@@ -951,20 +957,38 @@ def test29_flipped_non_tensor_output_bwd(t, config):
         c = dr.gather(t, x.array, 2)
         return a, b * 2, c * 3
 
-    import torch
-    dt = torch_dtype(t)
-    x = torch.arange(3, dtype=dt)
-    x.requires_grad = True
+    if config[0] == 'torch':
+        dt = torch_dtype(t)
+        device = 'cuda' if 'cuda' in str(t) else 'cpu'
+        with torch.device(device):
+            x = torch.arange(3, dtype=dt)
+            x.requires_grad = True
 
-    out1, out2, out3 = test_fn(x)
-    assert out1 == 0
-    assert out2 == 2
-    assert out3 == 6
+            out1, out2, out3 = test_fn(x)
+            assert out1 == 0
+            assert out2 == 2
+            assert out3 == 6
 
-    (out1 + out2 + out3).backward()
-    assert torch.all(x.grad == torch.tensor([1, 2, 3], dtype=dt))
+            (out1 + out2 + out3).backward()
+            assert torch.all(x.grad == torch.tensor([1, 2, 3], dtype=dt))
 
-@pytest.mark.parametrize('config', configs_torch)
+    elif config[0] == 'tf':
+        dt = tf_dtype(t)
+        device = 'gpu' if 'cuda' in str(t) else 'cpu'
+        with tf.device(device):
+            x = tf.constant([0, 1, 2], dtype=dt)
+            with tf.GradientTape() as tape:
+                tape.watch(x)
+                out1, out2, out3 = test_fn(x)
+                assert out1 == 0
+                assert out2 == 2
+                assert out3 == 6
+
+                z = out1 + out2 + out3
+            grad = tape.gradient(z, x)
+            assert tf.reduce_all(grad == tf.constant([1, 2, 3], dtype=dt))
+
+@pytest.mark.parametrize('config', configs_torch + configs_tf)
 @pytest.test_arrays('is_diff,float,shape=(*)')
 def test30_nested(t, config):
     @wrap(config)
@@ -975,16 +999,31 @@ def test30_nested(t, config):
     def test_fn(x, y):
         return x * add(x, y)
 
-    import torch
-    dt = torch_dtype(t)
-    x = torch.arange(3, dtype=dt)
-    y = x * 4
-    x.requires_grad = True
-    y.requires_grad = True
+    if config[0] == 'torch':
+        dt = torch_dtype(t)
+        x = torch.arange(3, dtype=dt)
+        y = x * 4
+        x.requires_grad = True
+        y.requires_grad = True
 
-    out = test_fn(x, y)
-    assert torch.all(out == torch.tensor([0, 5, 20], dtype=dt))
+        out = test_fn(x, y)
+        assert torch.all(out == torch.tensor([0, 5, 20], dtype=dt))
 
-    torch.autograd.backward(out, torch.tensor([1, 2, 3], dtype=dt))
-    assert torch.all(x.grad == torch.tensor([0, 12, 36], dtype=dt))
-    assert torch.all(y.grad == torch.tensor([0, 2, 6], dtype=dt))
+        torch.autograd.backward(out, torch.tensor([1, 2, 3], dtype=dt))
+        assert torch.all(x.grad == torch.tensor([0, 12, 36], dtype=dt))
+        assert torch.all(y.grad == torch.tensor([0, 2, 6], dtype=dt))
+
+    elif config[0] == 'tf':
+        dt = tf_dtype(t)
+        x = tf.constant([0, 1, 2], dtype=dt)
+        y = x * 4
+
+        with tf.GradientTape() as tape:
+            tape.watch([x, y])
+            out = test_fn(x, y)
+        grad = tape.gradient(out, [x, y],
+                             output_gradients=tf.constant([1, 2, 3], dtype=dt))
+
+        assert tf.reduce_all(out == tf.constant([0, 5, 20], dtype=dt))
+        assert tf.reduce_all(grad[0] == tf.constant([0, 12, 36], dtype=dt))
+        assert tf.reduce_all(grad[1] == tf.constant([0, 2, 6], dtype=dt))
