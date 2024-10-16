@@ -45,7 +45,7 @@ static bool ad_loop_symbolic(JitBackend backend, const char *name,
         /* Postponed operations captured by the isolation scope should only
          * be executed once we've exited the symbolic scope. We therefore
          * need to declare the AD isolation guard before the recording guard. */
-        scoped_isolation_boundary isolation_guard(1);
+        scoped_isolation_guard isolation_guard(1);
         scoped_record record_guard(backend);
 
         // Rewrite the loop state variables
@@ -155,6 +155,7 @@ static size_t ad_loop_evaluated_mask(JitBackend backend, const char *name,
     index64_vector indices2;
     JitVar active_it;
     size_t it = 0;
+    bool grad_suspended = ad_grad_suspended();
 
     while (true) {
         // Evaluate the loop state
@@ -189,8 +190,15 @@ static size_t ad_loop_evaluated_mask(JitBackend backend, const char *name,
         }
 
         for (size_t i = 0; i < indices2.size(); ++i) {
-            uint64_t i1 = indices2[i];
-            uint64_t i2 = ad_var_copy(i1);
+            // Kernel caching: Must create an AD copy so that gradient
+            // computation steps involving this variable (even if unchangecd
+            // & only used as a read-only dependency) are correctly placed
+            // within their associated loop iterations. This does not create
+            // a copy of the underlying JIT variable.
+
+            uint64_t i1 = indices2[i],
+                     i2 = grad_suspended ? ad_var_inc_ref(i1) : ad_var_copy(i1);
+
             ad_var_dec_ref(i1);
             ad_mark_loop_boundary(i2);
             int unused = 0;
@@ -980,7 +988,7 @@ bool ad_loop(JitBackend backend, int symbolic, int compress,
                       "drjit.while_loop() for general information on symbolic and "
                       "evaluated loops, as well as their limitations.");
 
-        scoped_isolation_boundary guard;
+        scoped_isolation_guard guard;
         ad_loop_evaluated(backend, name, payload, read_cb, write_cb,
                           cond_cb, body_cb, compress);
         guard.disarm();

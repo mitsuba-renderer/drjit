@@ -664,3 +664,31 @@ def test28_loop_state_aliasing(t):
     dr.make_opaque(x, y)
 
     y = loop(t, [x, x], y)
+
+
+@pytest.test_arrays('float32,diff,shape=(*)')
+@pytest.mark.parametrize('mode', ['symbolic', 'evaluated'])
+def test29_preserve_differentiability_suspend(t, mode):
+    x = t(0, 0)
+    y = t(1, 2)
+    dr.enable_grad(x, y)
+    y_id = y.index_ad
+
+    with dr.suspend_grad():
+        def cond_fn(x, _):
+            return x < 10
+
+        def body_fn(x, y):
+            return x + y, y
+
+        x, y = dr.while_loop(
+            state=(x, y),
+            cond=cond_fn,
+            labels=('x', 'y'),
+            body=body_fn,
+            mode=mode
+        )
+
+    assert not dr.grad_enabled(x)
+    assert dr.grad_enabled(y)
+    assert y.index_ad == y_id
