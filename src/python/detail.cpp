@@ -383,20 +383,14 @@ void export_detail(nb::module_ &) {
      .def("scope", &jit_scope, "backend"_a, doc_detail_scope)
      .def("set_scope", &jit_set_scope, "backend"_a, "scope"_a, doc_detail_set_scope);
 
-<<<<<<< HEAD
 #if defined(DRJIT_DISABLE_LEAK_WARNINGS)
     set_leak_warnings(false);
 #endif
 
     d.def("leak_warnings", &leak_warnings, doc_leak_warnings);
     d.def("set_leak_warnings", &set_leak_warnings, doc_set_leak_warnings);
-=======
     d.def("traverse_py_cb_ro", &traverse_py_cb_ro_impl);
     d.def("traverse_py_cb_rw", traverse_py_cb_rw_impl);
-
-    d.def("traverse_py_cb_ro", &traverse_py_cb_ro_impl);
-    d.def("traverse_py_cb_rw", traverse_py_cb_rw_impl);
->>>>>>> 2db44b1b (Added traversal helpers for trampoline classes)
 
     trace_func_handle = d.attr("trace_func");
 }
