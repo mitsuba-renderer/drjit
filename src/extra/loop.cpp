@@ -155,6 +155,7 @@ static size_t ad_loop_evaluated_mask(JitBackend backend, const char *name,
     index64_vector indices2;
     JitVar active_it;
     size_t it = 0;
+    bool grad_suspended = ad_grad_suspended();
 
     while (true) {
         // Evaluate the loop state
@@ -189,8 +190,15 @@ static size_t ad_loop_evaluated_mask(JitBackend backend, const char *name,
         }
 
         for (size_t i = 0; i < indices2.size(); ++i) {
-            uint64_t i1 = indices2[i];
-            uint64_t i2 = ad_var_copy(i1);
+            // Kernel caching: Must create an AD copy so that gradient
+            // computation steps involving this variable (even if unchangecd
+            // & only used as a read-only dependency) are correctly placed
+            // within their associated loop iterations. This does not create
+            // a copy of the underlying JIT variable.
+
+            uint64_t i1 = indices2[i],
+                     i2 = grad_suspended ? ad_var_inc_ref(i1) : ad_var_copy(i1);
+
             ad_var_dec_ref(i1);
             ad_mark_loop_boundary(i2);
             int unused = 0;
@@ -926,8 +934,26 @@ bool ad_loop(JitBackend backend, int symbolic, int compress,
                                         write_cb, cond_cb, body_cb, indices_in,
                                         implicit_in, implicit_out);
         }
+        needs_ad &= ad;
 
-        if (needs_ad && ad) {
+        if (needs_ad && ad_grad_suspended()) {
+            // Maintain differentiability of unchanged variables
+            bool rewrite = false;
+            index64_vector indices_out;
+
+            read_cb(payload, indices_out);
+            for (size_t i = 0; i < indices_out.size(); ++i) {
+                if ((uint32_t) indices_in[i] == (uint32_t) indices_out[i] &&
+                    indices_in[i] != indices_out[i]) {
+                    ad_var_inc_ref(indices_in[i]);
+                    jit_var_dec_ref((uint32_t) indices_out[i]);
+                    indices_out[i] = indices_in[i];
+                    rewrite = true;
+                }
+            }
+            if (rewrite)
+                write_cb(payload, indices_out, false);
+        } else if (needs_ad) {
             index64_vector indices_out;
             read_cb(payload, indices_out);
 

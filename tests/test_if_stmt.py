@@ -592,8 +592,7 @@ def test18_if_stmt_preserve_unused_ad(t, mode):
         x = t(0, 1)
         y = t(1, 3)
         dr.enable_grad(x, y)
-        print(x.index)
-        print(y.index)
+        y_id = y.index_ad
 
         with dr.suspend_grad():
             def true_fn(x, y):
@@ -613,3 +612,4 @@ def test18_if_stmt_preserve_unused_ad(t, mode):
 
         assert not dr.grad_enabled(x)
         assert dr.grad_enabled(y)
+        assert y.index_ad == y_id
