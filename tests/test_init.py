@@ -602,7 +602,7 @@ def test26_make_opaque(t):
 
 # Test dr.zeros applied to a dataclass
 @pytest.test_arrays('float32, shape=(*), jit')
-def test08_zeros_dataclass(t):
+def test27_zeros_dataclass(t):
     from dataclasses import dataclass
 
     @dataclass
@@ -613,3 +613,14 @@ def test08_zeros_dataclass(t):
     assert isinstance(v, Test)
     assert isinstance(v.x, t)
     assert len(v.x) == 10
+
+
+@pytest.test_arrays('float32, shape=(*), jit')
+def test28_width(t):
+    # dr.width only cares about Dr.Jit arrays
+    assert dr.width([1,2,3,"hello"]) == 1
+    assert dr.width(t()) == 0
+    assert dr.width(t(1, 2)) == 2
+    assert dr.width([t(1, 2), t(1)]) == 2
+    with pytest.raises(RuntimeError, match='ragged'):
+        dr.width([t(1, 2), t(2, 3, 3)])

@@ -150,15 +150,23 @@ nb::object shape(nb::handle h) {
 
 size_t width(nb::handle h) {
     struct TraverseOp : TraverseCallback {
-        size_t width = 1;
         bool ragged = false;
+        size_t width = 0, items = 0;
 
         void operator()(nb::handle h) override {
             size_t value = len(h);
-            if (width != 1 && value != 1 && width != value)
+            if (items++ == 0)
+                width = value;
+            else if (width != 1 && value != 1 && width != value)
                 ragged = true;
             if (value > width)
                 width = value;
+        }
+
+        void traverse_unknown(nb::handle) override {
+            if (width == 0)
+                width = 1;
+            items++;
         }
     };
 
