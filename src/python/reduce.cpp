@@ -715,7 +715,7 @@ void export_reduce(nb::module_ & m) {
           nb::sig("def max(value: object, axis: int | tuple[int, ...] | ... | None = ..., mode: str | None = None) -> object"))
      .def("mean", &mean, "value"_a, "axis"_a.none() = nb::ellipsis(), "mode"_a = nb::none(), doc_mean,
           nb::sig("def mean(value: object, axis: int | tuple[int, ...] | ... | None = ..., mode: str | None = None) -> object"))
-     .def("prefix_reduce", &prefix_reduce, "op"_a, "value"_a, "axis"_a = 0, "exclusive"_a = true, "reverse"_a = false,
+     .def("prefix_reduce", &prefix_reduce, "op"_a, "value"_a, "axis"_a = 0, "exclusive"_a = true, "reverse"_a = false, doc_prefix_reduce,
           nb::sig("def prefix_reduce(op: ReduceOp, value: T, axis: int | tuple[int, ...] = 0, exclusive: bool = True, reverse: bool = False) -> T"))
      .def("dot", &dot, doc_dot)
      .def("abs_dot",
