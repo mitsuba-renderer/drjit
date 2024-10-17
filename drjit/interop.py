@@ -346,6 +346,15 @@ def wrap_into_tensor(value):
         return ...
     return apply(fn, value)
 
+def wrap_into_tf_tensor(value):
+    '''Helper to transform a PyTree's members to TF tensors'''
+    import tensorflow as tf
+    def fn(h):
+        try:
+            return tf.convert_to_tensor(h)
+        except:
+            return tf.constant(-1, tf.float32)
+    return tf.nest.map_structure(fn, value)
 
 class WrapADOp(dr.CustomOp):
     '''
@@ -363,7 +372,7 @@ class WrapADOp(dr.CustomOp):
         tensor = flatten(self.args)[1]
         if tf_check(tensor):
             import tensorflow as tf
-            with tf.device(tensor.device):
+            with tf.device(tensor.device): # Ensure that TF runs on the correct device
                 self.out = func(*self.args, **self.kwargs)
         else:
             self.out = func(*self.args, **self.kwargs)
@@ -406,14 +415,7 @@ class WrapADOp(dr.CustomOp):
                     tangents=tf_filter_fp(tangents)
                 ) as acc:
                     out = self.func(*self.args, **self.kwargs)
-                def convert(h):
-                    """Replace all atoms in a structure by a TF tensor or -1 if
-                    conversion is not possible"""
-                    try:
-                        return tf.convert_to_tensor(h)
-                    except:
-                        return tf.convert_to_tensor(-1)
-                grad_out = acc.jvp(tf.nest.map_structure(convert, out))
+                grad_out = acc.jvp(wrap_into_tf_tensor(out))
         else:
             raise RuntimeError('WrapADOp.forward(): unsupported framework!')
         self.set_grad_out(to_drjit(grad_out, target))
@@ -440,26 +442,15 @@ class WrapADOp(dr.CustomOp):
         elif target == 'tf':
             import tensorflow as tf
             tensor = flatten(self.args)[1]
-            with tf.device(tensor.device):
-                def convert(h):
-                    """Replace all atoms in a structure by a TF tensor or -1 if
-                    conversion is not possible"""
-                    try:
-                        return tf.convert_to_tensor(h)
-                    except:
-                        return tf.constant(-1, tf.float32)
-                args = tf.nest.map_structure(convert, self.args)
-                kwargs = tf.nest.map_structure(convert, self.kwargs)
+            with tf.device(tensor.device): # Ensure that computations run on the correct device
+                args, kwargs = wrap_into_tf_tensor([self.args, self.kwargs])
                 with tf.GradientTape(persistent=True) as tape:
                     tape.watch([args, kwargs])
                     out = self.func(*self.args, **self.kwargs)
-                    out = tf.nest.map_structure(convert, out)
-                grad_args = tape.gradient(out,
-                                          args,
-                                          output_gradients=grad_out)
-                grad_kwargs = tape.gradient(out,
-                                            kwargs,
-                                            output_gradients=grad_out)
+                    out = wrap_into_tf_tensor(out)
+                grad_args, grad_kwargs = tape.gradient(out,
+                                             [args, kwargs],
+                                             output_gradients=grad_out)
         else:
             raise RuntimeError('WrapADOp.backward(): unsupported framework!')
         self.set_grad_in('args',   to_drjit(grad_args,   target, self.args_tp))
@@ -605,7 +596,21 @@ def wrap(source: typing.Union[str, types.ModuleType],
          - .. centered:: ✅
          - .. centered:: ✅
          - .. centered:: ✅
-         - Everything just works.
+         - You may want to further annotate the wrapped function with
+           ``tf.function`` to trace and just-in-time compile it in the
+           Tensorflow environment, i.e.,
+
+           .. code-block:: python
+
+              @dr.wrap(source='drjit', target='jax')
+              @jtf.function(jit_compile=False) # Set to True for XLA mode
+
+           **Limitation**: There is an issue for tf.int32 tensors which are
+           wrongly placed on CPU by DLPack. This can lead to inconsistent device
+           placement of tensors.
+
+           An `issue <https://github.com/tensorflow/tensorflow/issues/78091>`__
+           was filed on the TensorFlow bugtracker.
 
        * - ``tf`` → ``drjit``
          - .. centered:: ✅
@@ -614,15 +619,16 @@ def wrap(source: typing.Union[str, types.ModuleType],
          - TensorFlow has some limitiations with respect to custom gradients
            in foward-mode AD.
 
-         - **Limitation**: TensorFlow does not allow for non-tensor
+           **Limitation**: TensorFlow does not allow for non-tensor
            input structures in fuctions with
-           `custom gradients <https://www.tensorflow.org/api_docs/python/tf/custom_gradient>`.
+           `custom gradients
+           <https://www.tensorflow.org/api_docs/python/tf/custom_gradient>`__.
 
            TensorFlow has a bug for functions with custom gradients and
            keyword arguments.
 
-           An `issue <https://github.com/tensorflow/tensorflow/issues/77559>`__ was
-           filed on the TensorFlow bugtracker.
+           An `issue <https://github.com/tensorflow/tensorflow/issues/77559>`__
+           was filed on the TensorFlow bugtracker.
 
        * - ``drjit`` → ``jax``
          - .. centered:: ✅
@@ -680,12 +686,12 @@ def wrap(source: typing.Union[str, types.ModuleType],
     Args:
         source (str | module): The framework used *outside* of the wrapped
           function. The argument is currently limited to either ``'drjit'``,
-          ``'torch'``, or ``jax'``. For convenience, the associated Python
+          ``'torch'``, ``'tf'``, or ``jax'``. For convenience, the associated Python
           module can be specified as well.
 
         target (str | module): The framework used *inside* of the wrapped
           function. The argument is currently limited to either ``'drjit'``,
-          ``'torch'``, or ``'jax'``. For convenience, the associated Python
+          ``'torch'``, ``'tf'``, or ``'jax'``. For convenience, the associated Python
           module can be specified as well.
 
     Returns:
@@ -735,8 +741,11 @@ def wrap(source: typing.Union[str, types.ModuleType],
         return wrapper
 
     elif target == 'drjit' and source == 'tf':
+
         import tensorflow as tf
+
         def wrapper(func):
+
             @tf.custom_gradient
             def wrapper_2(*args, **kwargs):
                 inputs = to_drjit((args, kwargs), 'tf', enable_grad=True)
@@ -746,14 +755,18 @@ def wrap(source: typing.Union[str, types.ModuleType],
                     out = flatten(outputs)[1:]
                     out = wrap_into_tensor(out)
                     dr.set_grad(out, grad_outputs)
-                    vars = flatten(inputs[0])[1:] # Only gradients for args are computed due to a TF bug https://github.com/tensorflow/tensorflow/issues/77559
+                    vars = flatten(inputs[0])[1:] # Only gradients for args are computed due
+                                                  # to a TF bug https://github.com/tensorflow/tensorflow/issues/77559
                     grads = dr.backward_to(vars)
                     grads = from_drjit(grads, 'tf')[0]
+                    # Set gradients for non-differentiable tensors to None
                     grads = [(g if dr.grad_enabled(vars[i]) else None) \
-                                for i, g in enumerate(flatten(grads)[1:])] # Set gradients for non-differentiable tensors to None
+                                for i, g in enumerate(flatten(grads)[1:])] 
                     return grads
                 return from_drjit(outputs, 'tf')[0], grad
+
             return wrapper_2
+
         return wrapper
     else:
         raise Exception("drjit.wrap(): unsupported combination of 'source' and 'target'.")
