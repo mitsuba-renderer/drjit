@@ -24,6 +24,7 @@ struct IfState {
     dr::vector<dr::string> arg_labels;
     dr::vector<dr::string> rv_labels;
     VariableTracker tracker;
+    bool reinitialize_following_reset = false;
 
     IfState(nb::object &&args, nb::callable &&true_fn, nb::callable &&false_fn,
             dr::vector<dr::string> &&arg_labels,
@@ -41,7 +42,15 @@ static void if_stmt_body_cb(void *p, bool cond_val,
     nb::gil_scoped_acquire guard;
 
     // Reset the input state
-    is->tracker.write(is->args, args_i, true, is->arg_labels, "args");
+    if (!is->reinitialize_following_reset) {
+        // Bring 'args' into its original state, and overwrite the indices with 'args_i'
+        is->args = is->tracker.restore(is->arg_labels, "args", &args_i, true);
+    } else {
+        // Special case: we are re-evaluating the 'if' statement during the derivative
+        // pass, and 'args' is just an empty copy
+        is->tracker.write(is->args, args_i, false, is->arg_labels, "args");
+        is->reinitialize_following_reset = false;
+    }
 
     // Run the 'true' or 'false' branch
     is->rv = tuple_call(cond_val ? is->true_fn
@@ -140,17 +149,15 @@ nb::object if_stmt(nb::tuple args, nb::handle cond, nb::callable true_fn,
             ad_cond(backend, symbolic, name_cstr, is.get(), cond_index, args_i,
                     rv_i, if_stmt_body_cb, if_stmt_delete_cb, true);
 
-        is->tracker.write(is->rv, rv_i, false, is->rv_labels, "rv");
+        is->tracker.restore(is->arg_labels, "args");
+        nb::object rv = is->tracker.rebuild(is->rv_labels, "rv", &rv_i);
         is->rv.reset();
         is->sr.clear();
 
-        is->tracker.restore(is->arg_labels, "args");
-        is->tracker.restore(is->rv_labels, "rv");
-
-        nb::object rv = is->tracker.rebuild(is->rv_labels, "rv");
-
         if (!all_done) {
             is->args = ::reset(is->args);
+            is->reinitialize_following_reset = true;
+            args_i.release();
             is->tracker.clear();
             is.release();
         }

@@ -140,10 +140,10 @@ struct VariableTracker::Impl {
     bool traverse(Context &ctx, nb::handle h);
 
     /// Undo all changes and restore tracked variables to their original state
-    nb::object restore(dr::string &label);
+    nb::object restore(Context &ctx);
 
     /// Rebuild the final state of a PyTree following an operation
-    std::pair<nb::object, bool> rebuild(dr::string &label);
+    std::pair<nb::object, bool> rebuild(Context &ctx);
 };
 
 
@@ -156,7 +156,7 @@ struct VariableTracker::Impl {
  */
 struct VariableTracker::Context {
     /// A vector of indices passed to or returned from the traversal
-    dr::vector<uint64_t> &indices;
+    dr::vector<uint64_t> *indices;
 
     /// Are we writing or reading variable state?
     bool write;
@@ -176,7 +176,7 @@ struct VariableTracker::Context {
     /// Temporary index into 'indices' during traversal
     size_t index_offset;
 
-    Context(dr::vector<uint64_t> &indices, bool write, bool preserve_dirty,
+    Context(dr::vector<uint64_t> *indices, bool write, bool preserve_dirty,
             bool check_size)
         : indices(indices), write(write), preserve_dirty(preserve_dirty),
           check_size(check_size), index_offset(0) { }
@@ -233,7 +233,7 @@ void VariableTracker::read(nb::handle state, dr::vector<uint64_t> &indices,
                            const dr::vector<dr::string> &labels,
                            const char *default_label) {
     Context ctx(
-        /* indices = */ indices,
+        /* indices = */ &indices,
         /* write = */ false,
         /* preserve_dirty = */ false,
         /* check_size = */ m_impl->check_size
@@ -248,7 +248,7 @@ void VariableTracker::write(nb::handle state,
                             const dr::vector<dr::string> &labels,
                             const char *default_label) {
     Context ctx(
-        /* indices = */ const_cast<dr::vector<uint64_t>&>(indices),
+        /* indices = */ const_cast<dr::vector<uint64_t> *>(&indices),
         /* write = */ true,
         /* preserve_dirty = */ preserve_dirty,
         /* check_size = */ m_impl->check_size
@@ -280,9 +280,9 @@ void VariableTracker::Impl::traverse(Context &ctx, nb::handle state_,
         }
     }
 
-    if (ctx.index_offset != ctx.indices.size())
+    if (ctx.index_offset != ctx.indices->size())
         nb::raise("internal error, only consumed %zu/%zu variable indices",
-                  ctx.index_offset, ctx.indices.size());
+                  ctx.index_offset, ctx.indices->size());
 }
 
 static size_t size_valid(Variable *v, const dr::string &label, nb::handle h, size_t size) {
@@ -353,11 +353,11 @@ bool VariableTracker::Impl::traverse(Context &ctx, nb::handle h) {
                 // through drjit.detail.reset(), which creates a structural copy
                 // with uninitialized Dr.Jit arrays.
 
-                if (ctx.index_offset >= ctx.indices.size())
+                if (ctx.index_offset >= ctx.indices->size())
                     nb::raise("internal error at state variable '%s': ran "
                               "out of indices", ctx.label.c_str());
 
-                idx = ctx.indices[ctx.index_offset];
+                idx = (*ctx.indices)[ctx.index_offset];
                 s.reset_index(idx, inst_ptr(h));
             }
 
@@ -404,17 +404,17 @@ bool VariableTracker::Impl::traverse(Context &ctx, nb::handle h) {
                     v->index = ad_var_inc_ref(idx);
                     ad_var_dec_ref(old);
                 }
-                ctx.indices.push_back(ad_var_inc_ref(idx));
+                ctx.indices->push_back(ad_var_inc_ref(idx));
                 ctx.index_offset++;
                 #if defined(DEBUG_TRACKER)
                     printf("-> read: a%u r%u\n", (uint32_t) (idx >> 32), (uint32_t) idx);
                 #endif
             } else {
-                if (ctx.index_offset >= ctx.indices.size())
+                if (ctx.index_offset >= ctx.indices->size())
                     nb::raise("internal error at state variable '%s': ran "
                               "out of indices", ctx.label.c_str());
 
-                uint64_t idx_new = ctx.indices[ctx.index_offset++];
+                uint64_t idx_new = (*ctx.indices)[ctx.index_offset++];
                 VarInfo vi_new = jit_set_backend((uint32_t) idx_new);
 
                 if (vi_new.size != vi.size && vi_new.size != 1 &&
@@ -451,7 +451,7 @@ bool VariableTracker::Impl::traverse(Context &ctx, nb::handle h) {
 
         if (!ctx.write) {
             for (uint32_t idx: arrays) {
-                ctx.indices.push_back(ad_var_inc_ref(idx));
+                ctx.indices->push_back(ad_var_inc_ref(idx));
                 ctx.index_offset++;
                 #if defined(DEBUG_TRACKER)
                     printf("read '%s' (array): r%u\n", ctx.label.c_str(), (uint32_t) idx);
@@ -459,11 +459,11 @@ bool VariableTracker::Impl::traverse(Context &ctx, nb::handle h) {
             }
         } else {
             for (uint32_t &idx: arrays) {
-                if (ctx.index_offset >= ctx.indices.size())
+                if (ctx.index_offset >= ctx.indices->size())
                     nb::raise("internal error at state variable '%s': ran "
                               "out of indices", ctx.label.c_str());
 
-                uint64_t idx_new = ctx.indices[ctx.index_offset++];
+                uint64_t idx_new = (*ctx.indices)[ctx.index_offset++];
                 if (!ctx.preserve_dirty) {
                     jit_var_dec_ref(idx);
                     jit_var_inc_ref((uint32_t)idx_new);
@@ -551,19 +551,20 @@ bool VariableTracker::Impl::traverse(Context &ctx, nb::handle h) {
 uint64_t VariableTracker::Context::_traverse_write(uint64_t idx) {
     if (!idx)
         return 0;
-    if (index_offset >= indices.size())
+
+    if (index_offset >= indices->size())
         nb::raise("internal error after state variable '%s': ran "
                   "out of indices", label.c_str());
 
-    uint64_t idx_new = indices[index_offset++];
+    uint64_t idx_new = (*indices)[index_offset++];
 
     if (!idx_new)
         nb::raise("internal error after state variable "
                   "'%s': uninitialized variable",
                   label.c_str());
 
-    VarInfo vi = jit_set_backend((uint32_t)idx),
-            vi_new = jit_set_backend((uint32_t)idx_new);
+    VarInfo vi = jit_set_backend((uint32_t) idx),
+            vi_new = jit_set_backend((uint32_t) idx_new);
 
     if (vi.size != vi_new.size && vi.size != 1 && vi_new.size != 1 &&
         check_size)
@@ -588,7 +589,7 @@ uint64_t VariableTracker::Context::_traverse_write(uint64_t idx) {
 void VariableTracker::Context::_traverse_read(uint64_t index) {
     if (!index)
         return;
-    indices.push_back(ad_var_inc_ref(index));
+    indices->push_back(ad_var_inc_ref(index));
     index_offset++;
 }
 
@@ -617,44 +618,39 @@ void VariableTracker::verify_size(size_t size) {
 }
 
 nb::object VariableTracker::restore(const dr::vector<dr::string> &labels,
-                                    const char *default_label) {
+                                    const char *default_label,
+                                    const dr::vector<uint64_t> *indices,
+                                    bool preserve_dirty) {
 
-    dr::string label;
+    Context ctx(
+        /* indices = */ (dr::vector<uint64_t> *) indices,
+        /* write = */ true,
+        /* preserve_dirty = */ preserve_dirty,
+        /* check_size = */ false
+    );
+
     if (labels.empty()) {
-        label = default_label;
-        return m_impl->restore(label);
+        ctx.label = default_label;
+        return m_impl->restore(ctx);
     } else {
         nb::object result = nb::steal(PyTuple_New(labels.size()));
         for (size_t i = 0; i < labels.size(); ++i) {
-            label = labels[i];
-            NB_TUPLE_SET_ITEM(result.ptr(), i, m_impl->restore(label).release().ptr());
+            ctx.label = labels[i];
+            NB_TUPLE_SET_ITEM(result.ptr(), i, m_impl->restore(ctx).release().ptr());
         }
         return result;
     }
+
+    if (indices && ctx.index_offset != indices->size())
+        nb::raise("internal error, only consumed %zu/%zu variable indices",
+                  ctx.index_offset, ctx.indices->size());
 }
 
-nb::object VariableTracker::rebuild(const dr::vector<dr::string> &labels,
-                                    const char *default_label) {
-
-    dr::string label;
-    if (labels.empty()) {
-        label = default_label;
-        return m_impl->rebuild(label).first;
-    } else {
-        nb::object result = nb::steal(PyTuple_New(labels.size()));
-        for (size_t i = 0; i < labels.size(); ++i) {
-            label = labels[i];
-            NB_TUPLE_SET_ITEM(result.ptr(), i, m_impl->rebuild(label).first.release().ptr());
-        }
-        return result;
-    }
-}
-
-nb::object VariableTracker::Impl::restore(dr::string &label) {
-    VariableMap::iterator it = state.find(label);
+nb::object VariableTracker::Impl::restore(Context &ctx) {
+    VariableMap::iterator it = state.find(ctx.label);
     if (it == state.end())
         nb::raise("VariableTracker::restore(): could not find variable "
-                  "named \"%s\"", label.c_str());
+                  "named \"%s\"", ctx.label.c_str());
 
     Variable *v = &it.value();
     nb::object value = v->value_orig;
@@ -667,51 +663,86 @@ nb::object VariableTracker::Impl::restore(dr::string &label) {
             return value;
 
         if (s.is_tensor) {
-            ScopedAppendLabel guard(label, ".array");
+            ScopedAppendLabel guard(ctx.label, ".array");
             nb::inst_replace_copy(
                 nb::steal(s.tensor_array(value.ptr())),
-                restore(label));
+                restore(ctx));
         } else if (s.ndim > 1) {
-            size_t size = size_valid(v, label, value, nb::len(value));
+            size_t size = size_valid(v, ctx.label, value, nb::len(value));
             for (size_t i = 0; i < size; ++i) {
-                ScopedAppendLabel guard(label, "[", i, "]");
+                ScopedAppendLabel guard(ctx.label, "[", i, "]");
                 nb::inst_replace_copy(
                     nb::steal(s.item(value.ptr(), (Py_ssize_t) i)),
-                    restore(label));
+                    restore(ctx));
             }
         } else if (s.index) {
-            s.reset_index(v->index_orig, inst_ptr(value));
+            uint64_t idx_new = v->index_orig;
+            bool keep = false;
+
+            if (ctx.preserve_dirty) {
+                uint64_t idx_cur = s.index(inst_ptr(value));
+                if (jit_var_is_dirty(idx_cur)) {
+                    idx_new = idx_cur;
+                    keep = true;
+                }
+            }
+
+            if (ctx.indices && !keep) {
+                if (ctx.index_offset >= ctx.indices->size())
+                    nb::raise("internal error at state variable '%s': ran "
+                              "out of indices", ctx.label.c_str());
+                idx_new = (*ctx.indices)[ctx.index_offset++];
+            }
+
+            s.reset_index(idx_new, inst_ptr(value));
+        }
+    } else if (tp.is(local_type)) {
+        Local & local = nb::cast<Local&>(value);
+        dr::vector<uint32_t> &arrays = local.arrays();
+
+        if (ctx.indices) {
+            for (uint32_t &idx: arrays) {
+                if (ctx.index_offset >= ctx.indices->size())
+                    nb::raise("internal error at state variable '%s': ran "
+                              "out of indices", ctx.label.c_str());
+                uint32_t idx_new = (*ctx.indices)[ctx.index_offset++];
+                if (!ctx.preserve_dirty) {
+                    jit_var_dec_ref(idx);
+                    jit_var_inc_ref((uint32_t) idx_new);
+                    idx = (uint32_t) idx_new;
+                }
+            }
         }
     } else if (tp.is(&PyTuple_Type)) {
-        size_valid(v, label, value, nb::len(value));
+        size_valid(v, ctx.label, value, nb::len(value));
         for (size_t i = 0; i < v->size; ++i) {
-            ScopedAppendLabel guard(label, "[", i, "]");
-            (void) restore(label);
+            ScopedAppendLabel guard(ctx.label, "[", i, "]");
+            (void) restore(ctx);
         }
     } else if (tp.is(&PyList_Type)) {
         nb::list l = nb::borrow<nb::list>(value);
-        size_t size = size_valid(v, label, value, nb::len(l));
+        size_t size = size_valid(v, ctx.label, value, nb::len(l));
         for (size_t i = 0; i < size; ++i) {
-            ScopedAppendLabel guard(label, "[", i, "]");
-            l[i] = restore(label);
+            ScopedAppendLabel guard(ctx.label, "[", i, "]");
+            l[i] = restore(ctx);
         }
     } else if (tp.is(&PyDict_Type)) {
         nb::dict d = nb::borrow<nb::dict>(value);
         for (nb::handle k: d.keys()) {
-            ScopedAppendLabel guard(label, "[", nb::repr(k).c_str(), "]");
-            d[k] = restore(label);
+            ScopedAppendLabel guard(ctx.label, "[", nb::repr(k).c_str(), "]");
+            d[k] = restore(ctx);
         }
     } else {
         if (nb::dict ds = get_drjit_struct(tp); ds.is_valid()) {
             for (auto [k, _] : ds) {
-                ScopedAppendLabel guard(label, ".", nb::str(k).c_str());
-                nb::setattr(value, k, restore(label));
+                ScopedAppendLabel guard(ctx.label, ".", nb::str(k).c_str());
+                nb::setattr(value, k, restore(ctx));
             }
         } else if (nb::object df = get_dataclass_fields(tp); df.is_valid()) {
             for (nb::handle field : df) {
                 nb::object k = field.attr(DR_STR(name));
-                ScopedAppendLabel guard(label, ".", nb::str(k).c_str());
-                nb::setattr(value, k, restore(label));
+                ScopedAppendLabel guard(ctx.label, ".", nb::str(k).c_str());
+                nb::setattr(value, k, restore(ctx));
             }
         }
     }
@@ -719,11 +750,40 @@ nb::object VariableTracker::Impl::restore(dr::string &label) {
     return value;
 }
 
-std::pair<nb::object, bool> VariableTracker::Impl::rebuild(dr::string &label) {
-    VariableMap::iterator it = state.find(label);
+
+nb::object VariableTracker::rebuild(const dr::vector<dr::string> &labels,
+                                    const char *default_label,
+                                    const dr::vector<uint64_t> *indices) {
+    Context ctx(
+        /* indices = */ const_cast<dr::vector<uint64_t> *>(indices),
+        /* write = */ true,
+        /* preserve_dirty = */ true,
+        /* check_size = */ false
+    );
+
+    dr::string label;
+    if (labels.empty()) {
+        ctx.label = default_label;
+        return m_impl->rebuild(ctx).first;
+    } else {
+        nb::object result = nb::steal(PyTuple_New(labels.size()));
+        for (size_t i = 0; i < labels.size(); ++i) {
+            ctx.label = labels[i];
+            NB_TUPLE_SET_ITEM(result.ptr(), i, m_impl->rebuild(ctx).first.release().ptr());
+        }
+        return result;
+    }
+    if (indices && ctx.index_offset != indices->size())
+        nb::raise("internal error, only consumed %zu/%zu variable indices",
+                  ctx.index_offset, ctx.indices->size());
+}
+
+
+std::pair<nb::object, bool> VariableTracker::Impl::rebuild(Context &ctx) {
+    VariableMap::iterator it = state.find(ctx.label);
     if (it == state.end())
         nb::raise("VariableTracker::rebuild(): could not find variable "
-                  "named \"%s\"", label.c_str());
+                  "named \"%s\"", ctx.label.c_str());
 
     Variable *v = &it.value();
     nb::object value = v->value_orig;
@@ -737,8 +797,8 @@ std::pair<nb::object, bool> VariableTracker::Impl::rebuild(dr::string &label) {
             return { value, false };
 
         if (s.is_tensor) {
-            ScopedAppendLabel guard(label, ".array");
-            auto [o, n] = rebuild(label);
+            ScopedAppendLabel guard(ctx.label, ".array");
+            auto [o, n] = rebuild(ctx);
             if (n) {
                 if (mutate) {
                     jit_raise(
@@ -750,11 +810,11 @@ std::pair<nb::object, bool> VariableTracker::Impl::rebuild(dr::string &label) {
                 }
             }
         } else if (s.ndim > 1) {
-            size_t size = size_valid(v, label, value, nb::len(value));
+            size_t size = size_valid(v, ctx.label, value, nb::len(value));
             nb::list tmp;
             for (size_t i = 0; i < size; ++i) {
-                ScopedAppendLabel guard(label, "[", i, "]");
-                auto [o, n] = rebuild(label);
+                ScopedAppendLabel guard(ctx.label, "[", i, "]");
+                auto [o, n] = rebuild(ctx);
                 tmp.append(o);
                 new_object |= n;
             }
@@ -770,23 +830,54 @@ std::pair<nb::object, bool> VariableTracker::Impl::rebuild(dr::string &label) {
             }
         } else if (s.index) {
             ArrayBase *ptr = inst_ptr(value);
-            if (v->index == s.index(ptr)) {
+            uint64_t idx_cur = s.index(inst_ptr(value)),
+                     idx_new = v->index;
+            bool keep = false;
+
+            if (ctx.preserve_dirty && jit_var_is_dirty(idx_cur)) {
+                idx_new = idx_cur;
+            } else if (ctx.indices) {
+                if (ctx.index_offset >= ctx.indices->size())
+                    nb::raise("internal error at state variable '%s': ran "
+                              "out of indices", ctx.label.c_str());
+                idx_new = (*ctx.indices)[ctx.index_offset++];
+            }
+
+            if (idx_new == idx_cur) {
                 // unchanged
             } else if (mutate) {
-                s.reset_index(v->index, ptr);
+                s.reset_index(idx_new, ptr);
             } else {
                 value = inst_alloc(tp);
-                s.init_index(v->index, inst_ptr(value));
+                s.init_index(idx_new, inst_ptr(value));
                 nb::inst_mark_ready(value);
                 new_object = true;
             }
         }
+    } else if (tp.is(local_type)) {
+        printf("A.\n");
+        Local & local = nb::cast<Local&>(value);
+        dr::vector<uint32_t> &arrays = local.arrays();
+
+        if (ctx.indices) {
+            for (uint32_t &idx: arrays) {
+                if (ctx.index_offset >= ctx.indices->size())
+                    nb::raise("internal error at state variable '%s': ran "
+                              "out of indices", ctx.label.c_str());
+                uint32_t idx_new = (*ctx.indices)[ctx.index_offset++];
+                if (!ctx.preserve_dirty) {
+                    jit_var_dec_ref(idx);
+                    jit_var_inc_ref((uint32_t) idx_new);
+                    idx = (uint32_t) idx_new;
+                }
+            }
+        }
     } else if (tp.is(&PyTuple_Type) || tp.is(&PyList_Type)) {
-        size_t size = size_valid(v, label, value, nb::len(value));
+        size_t size = size_valid(v, ctx.label, value, nb::len(value));
         nb::list tmp;
         for (size_t i = 0; i < size; ++i) {
-            ScopedAppendLabel guard(label, "[", i, "]");
-            auto [o, n] = rebuild(label);
+            ScopedAppendLabel guard(ctx, "[", i, "]");
+            auto [o, n] = rebuild(ctx);
             tmp.append(o);
             new_object |= n;
         }
@@ -803,8 +894,8 @@ std::pair<nb::object, bool> VariableTracker::Impl::rebuild(dr::string &label) {
     } else if (tp.is(&PyDict_Type)) {
         nb::dict tmp, value_d = nb::borrow<nb::dict>(value);
         for (nb::handle k: value_d.keys()) {
-            ScopedAppendLabel guard(label, "[", nb::repr(k).c_str(), "]");
-            auto [o, n] = rebuild(label);
+            ScopedAppendLabel guard(ctx.label, "[", nb::repr(k).c_str(), "]");
+            auto [o, n] = rebuild(ctx);
             tmp[k] = o;
             new_object |= n;
         }
@@ -820,8 +911,8 @@ std::pair<nb::object, bool> VariableTracker::Impl::rebuild(dr::string &label) {
         if (nb::dict ds = get_drjit_struct(tp); ds.is_valid()) {
             nb::object tmp = tp();
             for (auto [k, _] : ds) {
-                ScopedAppendLabel guard(label, ".", nb::str(k).c_str());
-                auto [o, n] = rebuild(label);
+                ScopedAppendLabel guard(ctx.label, ".", nb::str(k).c_str());
+                auto [o, n] = rebuild(ctx);
                 nb::setattr(tmp, k, o);
                 new_object |= n;
             }
@@ -838,8 +929,8 @@ std::pair<nb::object, bool> VariableTracker::Impl::rebuild(dr::string &label) {
             nb::dict tmp;
             for (auto field : df) {
                 nb::object k = field.attr(DR_STR(name));
-                ScopedAppendLabel guard(label, ".", nb::str(k).c_str());
-                auto [o, n] = rebuild(label);
+                ScopedAppendLabel guard(ctx.label, ".", nb::str(k).c_str());
+                auto [o, n] = rebuild(ctx);
                 tmp[k] = o;
                 new_object |= n;
             }
@@ -921,11 +1012,11 @@ void export_tracker(nb::module_ &m) {
              doc_detail_VariableTracker_clear)
         .def("restore", &VariableTracker::restore,
              "labels"_a = nb::tuple(),
-             "default_label"_a = "state",
+             "default_label"_a = "state", "indices"_a = nb::none(), "preserve_dirty"_a = false,
              doc_detail_VariableTracker_restore)
         .def("rebuild", &VariableTracker::rebuild,
              "labels"_a = nb::tuple(),
-             "default_label"_a = "state",
+             "default_label"_a = "state", "indices"_a = nb::none(),
              doc_detail_VariableTracker_rebuild);
 
     nb::class_<VariableTracker::Context>(trk, "Context")

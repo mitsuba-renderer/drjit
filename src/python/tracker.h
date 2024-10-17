@@ -104,11 +104,22 @@ public:
     /// \brief Clear all variable state stored by the variable tracker
     void clear();
 
-    /// Undo all changes and restore tracked variables to their original state
-    nb::object restore(
-       const dr::vector<dr::string> &labels = {},
-       const char *default_label = "state"
-    );
+    /**
+     * \brief Undo all changes and restore tracked variables to their original
+     * state
+     *
+     * This function traverses the original PyTree captured by the first call to
+     * \ref read() it undoes any structural changes (e.g., variable aliasing due
+     * to assignments), if detected.
+     *
+     * If ``indices`` is provided, the function uses them to reinitialize any
+     * encountered Dr.Jit arrays with a different set of IDs. Dirty arrays, if
+     * found, will be left as-is if \ref preserve_dirty is specified.
+     */
+    nb::object restore(const dr::vector<dr::string> &labels = {},
+                       const char *default_label = "state",
+                       const dr::vector<uint64_t> *indices = nullptr,
+                       bool preserve_dirty = false);
 
     /**
      * \brief Create a new copy of the PyTree representing the final
@@ -118,11 +129,14 @@ public:
      * is created lazily, and it references the original one whenever values
      * were unchanged. This function also propagates in-place updates when
      * they are detected.
+     *
+     * If ``indices`` is provided, the function uses them to reinitialize any
+     * encountered Dr.Jit arrays with a different set of IDs.
      */
     nb::object rebuild(
        const dr::vector<dr::string> &labels = {},
-       const char *default_label = "state"
-    );
+       const char *default_label = "state",
+       const dr::vector<uint64_t> *indices = nullptr);
 
     /// Check that the PyTree is compatible with size ``size``.
     void verify_size(size_t size);

@@ -664,3 +664,30 @@ def test28_loop_state_aliasing(t):
     dr.make_opaque(x, y)
 
     y = loop(t, [x, x], y)
+
+@pytest.mark.parametrize('variant', [0, 1])
+@pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
+@pytest.test_arrays('float32,jit,shape=(*)')
+@dr.syntax
+def test28_while_loop_struct_var_aliasing(t, variant, mode):
+    class Struct:
+        v: t
+        DRJIT_STRUCT = {'v': t }
+
+    n = 8
+    si = dr.zeros(Struct, n)
+    v = dr.linspace(t, 0, 1, n)
+    while dr.hint(v < 0.5, mode=mode):
+        si.v = v
+        if dr.hint(variant == 0, mode='scalar'):
+            v = v + 1
+        else:
+            v += 1
+
+    l = dr.linspace(t, 0, 1, n)
+
+    assert dr.all(v == dr.select(l < .5, l + 1, l))
+    if variant == 0:
+        assert dr.all(si.v == dr.select(l < .5, l, 0))
+    else:
+        assert dr.all(si.v == dr.select(l < .5, l + 1, 0))

@@ -101,6 +101,7 @@ def test04_conditional(t):
         s[0] = 11
 
     for i in range(2): # evaluate twice (intentional)
+        print(s[0])
         assert dr.all(s[0] == [11, 10])
 
 
