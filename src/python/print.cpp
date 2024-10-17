@@ -73,7 +73,7 @@ static void repr_array(Buffer &buffer, nb::handle h, size_t indent,
                 continue;
 
             if (prev || d < 0)
-                buffer.put(d < -1 ? '-' : '+');
+                buffer.put(d < 0 ? '-' : '+');
             buffer.fmt("%g", fabs(d));
             prev = true;
 
