@@ -373,50 +373,52 @@ namespace detail {
     }
 }
 
-template <typename T> DRJIT_INLINE T sign(const T &v) {
-    if constexpr (is_floating_point_v<scalar_t<T>> && !is_diff_v<T>)
-        return detail::or_(T(1), detail::and_(detail::sign_mask<T>(), v));
+template <typename T> DRJIT_INLINE mask_t<T> signbit(const T &v) {
+    if constexpr (is_floating_point_v<scalar_t<T>>)
+        return reinterpret_array<int_array_t<T>>(v) < 0;
     else
-        return select(v >= 0, T(1), T(-1));
+        return v < 0;
 }
+
 
 template <typename T1, typename T2>
 DRJIT_INLINE T1 copysign(const T1 &v1, const T2 &v2) {
-    if constexpr (is_floating_point_v<scalar_t<T2>> && !is_diff_v<T2>) {
-        return detail::or_(abs(v1), detail::and_(detail::sign_mask<T2>(), v2));
-    } else {
-        T1 v1_a = abs(v1);
-        return select(v2 >= 0, v1_a, -v1_a);
-    }
+    T1 v1_a = abs(v1);
+
+    if constexpr (is_floating_point_v<scalar_t<T2>> && !is_diff_v<T2>)
+        return detail::or_(v1_a, detail::and_(detail::sign_mask<T2>(), v2));
+    else
+        return select(signbit(v2), -v1_a, v1_a);
 }
 
 template <typename T1, typename T2>
 DRJIT_INLINE T1 copysign_neg(const T1 &v1, const T2 &v2) {
-    if constexpr (is_floating_point_v<scalar_t<T2>> && !is_diff_v<T2>) {
-        return detail::or_(abs(v1), detail::andnot_(detail::sign_mask<T2>(), v2));
-    } else {
-        T1 v1_a = abs(v1);
-        return select(v2 >= 0, -v1_a, v1_a);
-    }
+    T1 v1_a = abs(v1);
+
+    if constexpr (is_floating_point_v<scalar_t<T2>> && !is_diff_v<T2>)
+        return detail::or_(v1_a, detail::andnot_(detail::sign_mask<T2>(), v2));
+    else
+        return select(signbit(v2), v1_a, -v1_a);
 }
 
 template <typename T1, typename T2>
 DRJIT_INLINE T1 mulsign(const T1 &v1, const T2 &v2) {
-    if constexpr (is_floating_point_v<scalar_t<T2>> && !is_diff_v<T2>) {
+    if constexpr (is_floating_point_v<scalar_t<T2>> && !is_diff_v<T2>)
         return detail::xor_(v1, detail::and_(detail::sign_mask<T2>(), v2));
-    } else {
-        return select(v2 >= 0, v1, -v1);
-    }
+    else
+        return select(signbit(v2), -v1, v1);
 }
 
 template <typename T1, typename T2>
 DRJIT_INLINE T1 mulsign_neg(const T1 &v1, const T2 &v2) {
-    // TODO add support for binary op for floats
-    // if constexpr (drjit::is_floating_point_v<scalar_t<T2>> && !is_diff_v<T2>) {
-    //     return detail::xor_(v1, detail::andnot_(detail::sign_mask<T2>(), v2));
-    // } else {
-        return select(v2 >= 0, -v1, v1);
-    // }
+    if constexpr (drjit::is_floating_point_v<scalar_t<T2>> && !is_diff_v<T2>)
+        return detail::xor_(v1, detail::andnot_(detail::sign_mask<T2>(), v2));
+    else
+        return select(signbit(v2), v1, -v1);
+}
+
+template <typename T> DRJIT_INLINE T sign(const T &v) {
+    return copysign(T(1), v);
 }
 
 /// Fast implementation to compute ``floor(log2(value))`` for integer ``value``
