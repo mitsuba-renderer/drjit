@@ -277,12 +277,24 @@ perform more general Jacobian-vector products.
 Custom operations
 -----------------
 
+.. note::
+
+   Quite a bit of documentation about the automatic differentiation system is still
+   missing. We will add this in the next weeks.
+
 TBD
 
 Visualizations
 --------------
 
 TBD
+
+PyTrees
+-------
+
+Note that functions in this section generally take multiple arguments and
+recurse through :ref:`PyTrees <pytrees>`, which is convenient when
+differentiating many variables at once.
 
 Gotchas
 -------
@@ -291,10 +303,6 @@ The final gradient can be obtained via the :py:attr:`.grad
 <ArrayBase.grad>` member or :py:func:`dr.grad() <grad>` (which also works for
 :ref:`PyTrees <pytrees>`).
 
-
-Note that functions in this section generally take multiple arguments and
-recurse through :ref:`PyTrees <pytrees>`, which is convenient when
-differentiating many variables at once.
 
 ..
    Write a section about the design decisions:
