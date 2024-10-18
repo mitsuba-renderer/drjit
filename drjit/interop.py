@@ -19,12 +19,12 @@ def jax_check(value, /):
     return type(value).__module__.startswith('jaxlib')
 
 
-def tf_check(value,/):
+def tf_check(value, /):
     '''Returns ``True`` if ``value`` is a TensorFlow tensor'''
     return type(value).__module__.startswith('tensorflow')
 
 
-def tf_var_check(value,/):
+def tf_var_check(value, /):
     '''Returns ``True`` if ``value`` is a TensorFlow variable'''
     return type(value).__name__ == 'ResourceVariable'
 
@@ -142,8 +142,9 @@ def to_drjit(value, source, value_tp = None, enable_grad = None):
         tp = value_tp[tp_index] if value_tp is not None else None
         tp_index += 1
         if (source == 'torch' and pytorch_check(h)) or \
-            (source == 'jax'   and jax_check(h)) or \
-            (source == 'tf' and tf_check(h)):
+           (source == 'jax'   and jax_check(h)) or \
+           (source == 'tf'    and tf_check(h)):
+
             if source == 'tf' and tf_var_check(h) :
                 r = dr.detail.import_tensor(h.value(), True)
             else:
@@ -154,7 +155,14 @@ def to_drjit(value, source, value_tp = None, enable_grad = None):
                 if h.requires_grad:
                     dr.enable_grad(r)
             if source == 'tf' and enable_grad:
-                dr.enable_grad(r)
+                # There is no TF equivalent to h.requires_grad.
+                # We hence enable gradients for all trainable variables
+                # and tensors of floating dtype.
+                if tf_var_check(h):
+                    if h.trainable:
+                        dr.enable_grad(r)
+                elif h.dtype.is_floating:
+                    dr.enable_grad(r)
             return r
         return ...
 
@@ -229,11 +237,6 @@ def pytorch_make_dual(a, b, /):
         else:
             return a
         return ...
-
-    return apply2(fn, a, b)
-
-
-
 
     return apply2(fn, a, b)
 
@@ -335,8 +338,8 @@ def unflatten(desc, *flat):
         list(reversed(desc)))
 
 
-def wrap_into_tensor(value):
-    '''Helper to transform a PyTree's members to tensors'''
+def wrap_into_dr_tensor(value):
+    '''Helper to transform a PyTree's members to Dr.Jit tensors'''
     def fn(h):
         tp = type(h)
         if dr.is_array_v(tp):
@@ -352,7 +355,7 @@ def wrap_into_tf_tensor(value):
     def fn(h):
         try:
             return tf.convert_to_tensor(h)
-        except:
+        except ValueError:
             return tf.constant(-1, tf.float32)
     return tf.nest.map_structure(fn, value)
 
@@ -444,13 +447,12 @@ class WrapADOp(dr.CustomOp):
             tensor = flatten(self.args)[1]
             with tf.device(tensor.device): # Ensure that computations run on the correct device
                 args, kwargs = wrap_into_tf_tensor([self.args, self.kwargs])
-                with tf.GradientTape(persistent=True) as tape:
+                with tf.GradientTape(persistent=False) as tape:
                     tape.watch([args, kwargs])
                     out = self.func(*self.args, **self.kwargs)
                     out = wrap_into_tf_tensor(out)
-                grad_args, grad_kwargs = tape.gradient(out,
-                                             [args, kwargs],
-                                             output_gradients=grad_out)
+                grad_args, grad_kwargs = tape.gradient(out, [args, kwargs],
+                                                       output_gradients=grad_out)
         else:
             raise RuntimeError('WrapADOp.backward(): unsupported framework!')
         self.set_grad_in('args',   to_drjit(grad_args,   target, self.args_tp))
@@ -479,7 +481,7 @@ def create_torch_wrapper():
                 # Torch autograd tracing is disabled within `Function.forward`
                 # we turn it back on here in case func itself uses torch
                 torch_desc_o, *output = flatten(func(*args, **kwargs))
-            output = wrap_into_tensor(output)
+            output = wrap_into_dr_tensor(output)
 
             # Stash inputs and outputs for later use
             ctx.inputs, ctx.output = inputs, output
@@ -753,7 +755,7 @@ def wrap(source: typing.Union[str, types.ModuleType],
                 def grad(*dy):
                     grad_outputs = to_drjit(dy, 'tf')
                     out = flatten(outputs)[1:]
-                    out = wrap_into_tensor(out)
+                    out = wrap_into_dr_tensor(out)
                     dr.set_grad(out, grad_outputs)
                     vars = flatten(inputs[0])[1:] # Only gradients for args are computed due
                                                   # to a TF bug https://github.com/tensorflow/tensorflow/issues/77559
@@ -761,7 +763,7 @@ def wrap(source: typing.Union[str, types.ModuleType],
                     grads = from_drjit(grads, 'tf')[0]
                     # Set gradients for non-differentiable tensors to None
                     grads = [(g if dr.grad_enabled(vars[i]) else None) \
-                                for i, g in enumerate(flatten(grads)[1:])] 
+                             for i, g in enumerate(flatten(grads)[1:])] 
                     return grads
                 return from_drjit(outputs, 'tf')[0], grad
 
