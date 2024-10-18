@@ -147,7 +147,7 @@ struct StaticArrayBase : ArrayBaseT<Value_, IsMask_, Derived_> {
     void store_(void *mem) const {
         static_assert(!is_dynamic_v<value_t<T>>,
                       "store(): nested dynamic array not "
-                      "supported! Did you mean to use drjit::gather?");
+                      "supported! Did you mean to use drjit::scatter?");
 
         if constexpr (drjit::detail::is_scalar_v<Value>) {
             memcpy(mem, derived().data(), sizeof(Value) * Derived::Size);
