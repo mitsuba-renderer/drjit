@@ -281,6 +281,51 @@ bool leak_warnings() {
     return nb::leak_warnings() || jit_leak_warnings() || ad_leak_warnings();
 }
 
+void traverse_py_cb_ro_impl(nb::handle self, nb::callable c) {
+    struct PyTraverseCallback : TraverseCallback {
+        void operator()(nb::handle h) override {
+            auto index_fn = supp(h.type()).index;
+            if (index_fn)
+                operator()(index_fn(inst_ptr(h)));
+        }
+        void operator()(uint64_t index) override { m_callback(index); }
+        nb::callable m_callback;
+
+        PyTraverseCallback(nb::callable c) : m_callback(c) {}
+    };
+
+    PyTraverseCallback traverse_cb(std::move(c));
+
+    auto dict = nb::borrow<nb::dict>(nb::getattr(self, "__dict__"));
+
+    for (auto value : dict.values()) {
+        traverse("traverse_py_cb_ro", traverse_cb, value);
+    }
+}
+
+void traverse_py_cb_rw_impl(nb::handle self, nb::callable c) {
+    struct PyTraverseCallback : TransformCallback {
+        void operator()(nb::handle h1, nb::handle h2) override {
+            const ArraySupplement &s = supp(h1.type());
+            if (s.index)
+                s.init_index(operator()(s.index(inst_ptr(h1))), inst_ptr(h2));
+        }
+        uint64_t operator()(uint64_t index) override {
+            return nb::cast<uint64_t>(m_callback(index));
+        }
+        nb::callable m_callback;
+
+        PyTraverseCallback(nb::callable c) : m_callback(c) {}
+    };
+
+    PyTraverseCallback traverse_cb(std::move(c));
+
+    auto dict = nb::borrow<nb::dict>(nb::getattr(self, "__dict__"));
+
+    for (auto value : dict.values()) {
+        transform("traverse_py_cb_rw", traverse_cb, value);
+    }
+}
 
 void export_detail(nb::module_ &) {
     nb::module_ d = nb::module_::import_("drjit.detail");
@@ -344,6 +389,8 @@ void export_detail(nb::module_ &) {
 
     d.def("leak_warnings", &leak_warnings, doc_leak_warnings);
     d.def("set_leak_warnings", &set_leak_warnings, doc_set_leak_warnings);
+    d.def("traverse_py_cb_ro", &traverse_py_cb_ro_impl);
+    d.def("traverse_py_cb_rw", traverse_py_cb_rw_impl);
 
     trace_func_handle = d.attr("trace_func");
 }
