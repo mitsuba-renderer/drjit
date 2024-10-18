@@ -349,6 +349,7 @@ def wrap_into_dr_tensor(value):
         return ...
     return apply(fn, value)
 
+
 def wrap_into_tf_tensor(value):
     '''Helper to transform a PyTree's members to TF tensors'''
     import tensorflow as tf
@@ -358,6 +359,25 @@ def wrap_into_tf_tensor(value):
         except ValueError:
             return tf.constant(-1, tf.float32)
     return tf.nest.map_structure(fn, value)
+
+
+def find_first_tf_tensor(value):
+    '''Finds the first TensorFlow tensor in a PyTree'''
+    if isinstance(value, (list, tuple)):
+        for item in value:
+            result = find_first_tf_tensor(item)
+            if tf_check(result):
+                return result
+    elif isinstance(value, dict):
+        for key in value:
+            result = find_first_tf_tensor(value[key])
+            if tf_check(result):
+                return result
+    else:
+        if tf_check(value):
+            return value
+        return None
+
 
 class WrapADOp(dr.CustomOp):
     '''
@@ -372,11 +392,15 @@ class WrapADOp(dr.CustomOp):
         self.func = func
 
         # Evaluate the function using another array programming framework
-        tensor = flatten(self.args)[1]
-        if tf_check(tensor):
+        if target == 'tf':
             import tensorflow as tf
-            with tf.device(tensor.device): # Ensure that TF runs on the correct device
-                self.out = func(*self.args, **self.kwargs)
+            self.watched_vars = wrap_into_tf_tensor([self.args, self.kwargs])
+            self.device = find_first_tf_tensor([self.args, self.kwargs]).device
+            with tf.device(self.device): # Ensure that TF runs on the correct device
+                with tf.GradientTape() as tape:
+                    tape.watch(self.watched_vars)
+                    self.out = func(*self.args, **self.kwargs)
+                self.tape = tape
         else:
             self.out = func(*self.args, **self.kwargs)
 
@@ -411,8 +435,7 @@ class WrapADOp(dr.CustomOp):
             import tensorflow as tf
             primals = list(self.args) + list(self.kwargs.values())
             tangents = list(grad_args) + list(grad_kwargs.values())
-            tensor = flatten(self.args)[1]
-            with tf.device(tensor.device):
+            with tf.device(self.device):
                 with tf.autodiff.ForwardAccumulator(
                     primals=tf_filter_fp(primals),
                     tangents=tf_filter_fp(tangents)
@@ -440,19 +463,14 @@ class WrapADOp(dr.CustomOp):
             def wrapper(args, kwargs):
                 return self.func(*args, **kwargs)
 
-            primals, vjp_fun = jax.vjp(wrapper, self.args, self.kwargs)
+            _, vjp_fun = jax.vjp(wrapper, self.args, self.kwargs)
             grad_args, grad_kwargs = vjp_fun(grad_out)
         elif target == 'tf':
             import tensorflow as tf
-            tensor = flatten(self.args)[1]
-            with tf.device(tensor.device): # Ensure that computations run on the correct device
-                args, kwargs = wrap_into_tf_tensor([self.args, self.kwargs])
-                with tf.GradientTape(persistent=False) as tape:
-                    tape.watch([args, kwargs])
-                    out = self.func(*self.args, **self.kwargs)
-                    out = wrap_into_tf_tensor(out)
-                grad_args, grad_kwargs = tape.gradient(out, [args, kwargs],
-                                                       output_gradients=grad_out)
+            with tf.device(self.device): # Ensure that TF runs on the correct device
+                out = wrap_into_tf_tensor(self.out)
+                grad_args, grad_kwargs = self.tape.gradient(out, self.watched_vars,
+                                                            output_gradients=grad_out)
         else:
             raise RuntimeError('WrapADOp.backward(): unsupported framework!')
         self.set_grad_in('args',   to_drjit(grad_args,   target, self.args_tp))
@@ -753,6 +771,8 @@ def wrap(source: typing.Union[str, types.ModuleType],
                 inputs = to_drjit((args, kwargs), 'tf', enable_grad=True)
                 outputs = func(*inputs[0], **inputs[1])
                 def grad(*dy):
+                    if kwargs:
+                        raise TypeError("Keyword arguments are not allowed for 'tf->drjit'")
                     grad_outputs = to_drjit(dy, 'tf')
                     out = flatten(outputs)[1:]
                     out = wrap_into_dr_tensor(out)
