@@ -1,11 +1,6 @@
-import sys
-sys.path.append('../../../build/python')
-
-import drjit as dr
 import pytest
 import warnings
-
-from interop import wrap as drwrap
+import drjit as dr
 
 configs_jax = []
 configs_torch = []
@@ -52,6 +47,10 @@ try:
     import tensorflow as tf
     supports_bool = True
     configs_tf.append(('tf', supports_bool, 'eager'))
+
+    # Test configurations which are only used 
+    # for the 'drjit'->'tf' direction, where
+    # the TF function is executed in Graph or XLA mode
     configs_tf_jit.append(('tf', supports_bool, 'graph'))
     configs_tf_jit.append(('tf', supports_bool, 'xla'))
 
@@ -66,12 +65,12 @@ def wrap(config):
             func = jax.jit(func)
         elif config[0] == 'tf' and config[2] != 'eager':
             func = tf.function(jit_compile=config[2]=='xla')(func)
-        return drwrap(source='drjit', target=config[0])(func)
+        return dr.wrap(source='drjit', target=config[0])(func)
     return wrapper
 
 def wrap_flipped(config):
     def wrapper(func):
-        return drwrap(target='drjit', source=config[0])(func)
+        return dr.wrap(target='drjit', source=config[0])(func)
     return wrapper
 
 def torch_dtype(t):
@@ -97,6 +96,13 @@ def tf_dtype(t):
         return tf.float64
     else:
         raise Exception("Unsupported variable type")
+
+def skip_tf_int32_graph_mode(config, t):
+    """Helper function to mark a specific test case for TF which is expected to fail"""
+    if config[0] == "tf" and config[2] == "graph" \
+        and dr.backend_v(t) == dr.JitBackend.CUDA:
+            pytest.xfail("Expected to fail due to TF dlpack issue for int32,"
+                        " see https://github.com/tensorflow/tensorflow/issues/78091")
 
 @pytest.mark.parametrize('is_diff', [True, False])
 @pytest.mark.parametrize('config', configs + configs_tf_jit)
@@ -186,12 +192,12 @@ def test03_simple_fwd(t, config):
     assert dr.all(y == [0, 2, 4])
     assert dr.all(y.grad == [20, 40, 60])
 
-@pytest.mark.parametrize('config',
-                         [pytest.param(c, marks=pytest.mark.skipif(c[0]=='tf',
-                                       reason="Skipped due to limited support of tf.custom_gradient for forward-mode AD."))
-                          for c in configs_torch + configs_tf])
+@pytest.mark.parametrize('config', configs_torch + configs_tf)
 @pytest.test_arrays('is_diff,float,shape=(*)')
 def test04_flipped_simple_fwd(t, config):
+    if config[0] == "tf":
+        pytest.skip("Skipped due to limited support of `tf.custom_gradient()`"
+                    " for forward-mode AD.")
     import torch.autograd.forward_ad as fwd_ad
 
     @wrap_flipped(config)
@@ -316,13 +322,13 @@ def test07_simple_multiarg_fwd(t, config):
     assert dr.all(b.grad == [40])
     assert dr.all(c.grad == [10, 20, 30])
 
-@pytest.mark.parametrize('config',
-                         [pytest.param(c, marks=pytest.mark.skipif(c[0]=='tf',
-                                       reason="Skipped due to limited support of tf.custom_gradient for forward-mode AD."))
-                          for c in configs_torch + configs_tf])
+@pytest.mark.parametrize('config', configs_torch + configs_tf)
 @pytest.test_arrays('is_diff,float,shape=(*)')
 @pytest.skip_on(RuntimeError, "not implemented for 'Half'")
 def test08_filled_simple_multiarg_fwd(t, config):
+    if config[0] == "tf":
+        pytest.skip("Skipped due to limited support of `tf.custom_gradient()`"
+                    " for forward-mode AD.")
     @wrap_flipped(config)
     def test_fn(x, y):
         return x + y, y + 1, x + 1
@@ -348,9 +354,8 @@ def test08_filled_simple_multiarg_fwd(t, config):
 
 @pytest.mark.parametrize('config', configs + configs_tf_jit)
 @pytest.test_arrays('is_diff,float32,shape=(*)')
-@pytest.skip_on(RuntimeError, "drjit.custom(<interop.WrapADOp>)",
-                "Expected to fail due to TF dlpack issue for int32, see https://github.com/tensorflow/tensorflow/issues/78091" )
 def test09_nondiff_bwd(t, config):
+    skip_tf_int32_graph_mode(config, t)
     @wrap(config)
     def test_fn(x, y, z):
         return x, y, z
@@ -418,9 +423,8 @@ def test10_flipped_nondiff_bwd(t, config):
 
 @pytest.mark.parametrize('config', configs + configs_tf_jit)
 @pytest.test_arrays('is_diff,float32,shape=(*)')
-@pytest.skip_on(RuntimeError, "drjit.custom(<interop.WrapADOp>)",
-                "Expected to fail due to TF dlpack issue for int32, see https://github.com/tensorflow/tensorflow/issues/78091" )
 def test11_nondiff_fwd(t, config):
+    skip_tf_int32_graph_mode(config, t)
     @wrap(config)
     def test_fn(x, y, z):
         return x, y, z
@@ -441,13 +445,14 @@ def test11_nondiff_fwd(t, config):
 
     assert dr.all(a.grad == [10, 20, 30])
 
-@pytest.mark.parametrize('config',
-                         [pytest.param(c, marks=pytest.mark.skipif(c[0]=='tf',
-                                       reason="Skipped due to limited support of tf.custom_gradient for forward-mode AD."))
-                          for c in configs_torch + configs_tf])
+@pytest.mark.parametrize('config', configs_torch + configs_tf)
 @pytest.test_arrays('is_diff,float,shape=(*)')
 @pytest.skip_on(RuntimeError, "not implemented for 'Half'")
 def test12_flipped_nondiff_fwd(t, config):
+    if config[0] == "tf":
+        pytest.skip("Skipped due to limited support of `tf.custom_gradient()`"
+                    " for forward-mode AD.")
+
     @wrap_flipped(config)
     def test_fn(x, y, z):
         return x*2, y+1, ~z
@@ -476,9 +481,8 @@ def test12_flipped_nondiff_fwd(t, config):
 
 @pytest.mark.parametrize('config', configs + configs_tf_jit)
 @pytest.test_arrays('is_diff,float,shape=(*)')
-@pytest.skip_on(RuntimeError, "drjit.custom(<interop.WrapADOp>)",
-                "Expected to fail due to TF dlpack issue for int32, see https://github.com/tensorflow/tensorflow/issues/78091" )
 def test13_scalar_bwd(t, config):
+    skip_tf_int32_graph_mode(config, t)
     @wrap(config)
     def test_fn(x, y, z):
         return x*2, y, z
@@ -529,9 +533,8 @@ def test14_flipped_scalar_bwd(t, config):
 
 @pytest.mark.parametrize('config', configs + configs_tf_jit)
 @pytest.test_arrays('is_diff,float,shape=(*)')
-@pytest.skip_on(RuntimeError, "drjit.custom(<interop.WrapADOp>)",
-                "Expected to fail due to TF dlpack issue for int32, see https://github.com/tensorflow/tensorflow/issues/78091" )
 def test15_scalar_fwd(t, config):
+    skip_tf_int32_graph_mode(config, t)
     @wrap(config)
     def test_fn(x, y, z):
         return x, y, z
@@ -547,13 +550,14 @@ def test15_scalar_fwd(t, config):
 
     assert dr.all(a.grad == [10, 20, 30])
 
-@pytest.mark.parametrize('config',
-                         [pytest.param(c, marks=pytest.mark.skipif(c[0]=='tf',
-                                       reason="Skipped due to limited support of tf.custom_gradient for forward-mode AD."))
-                          for c in configs_torch + configs_tf])
+@pytest.mark.parametrize('config', configs_torch + configs_tf)
 @pytest.test_arrays('is_diff,float,shape=(*)')
-@pytest.mark.skip(reason='Skipped until issue https://github.com/pytorch/pytorch/issues/117491 is fixed.')
 def test14_flipped_scalar_fwd(t, config):
+    if config[0] == 'torch':
+        pytest.skip('Skipped until issue https://github.com/pytorch/pytorch/issues/117491 is fixed.')
+    if config[0] == "tf":
+        pytest.skip("Skipped due to limited support of `tf.custom_gradient()`"
+                    " for forward-mode AD.")
     @wrap_flipped(config)
     def test_fn(x, y, z):
         return x*2, y+1, z+1
@@ -568,12 +572,14 @@ def test14_flipped_scalar_fwd(t, config):
         a, b, c = test_fn(x, 4, 5.0)
         assert torch.all(a == x*2) and torch.all(b == 5) and torch.all(c == 6)
         a, ad = fwd_ad.unpack_dual(a)
-        assert torch.all(xd == torch.tensor([20, 40, 60], dtype=dt))
+        assert torch.all(ad == torch.tensor([20, 40, 60], dtype=dt))
 
 @pytest.mark.parametrize('config', configs_torch + configs_tf + configs_tf_jit)
 @pytest.test_arrays('is_diff,float,shape=(*)')
-@pytest.skip_on(RuntimeError, "drjit.custom(<interop.WrapADOp>)", "TF Graph/XLA mode does not support class inputs.")
 def test15_custom_class_bwd(t, config):
+    if config[0] == "tf" and config[2] in ['graph', 'xla']:
+        pytest.skip("Skipped since TF Graph/XLA mode does not support class inputs.")
+
     class MyClass:
         pass
 
@@ -593,15 +599,13 @@ def test15_custom_class_bwd(t, config):
     dr.backward_to(x)
     assert dr.all(x.grad == [10, 20, 30])
 
-@pytest.mark.parametrize('config',
-                         [pytest.param(c, marks=pytest.mark.skipif(c[0]=='tf',
-                                       reason="Skipped since tf.custom_gradient only supports " + \
-                                              "Tensor inputs (see " + \
-                                              "https://www.tensorflow.org/api_docs/python/tf/custom_gradient)."))
-                          for c in configs_torch + configs_tf])
+@pytest.mark.parametrize('config', configs_torch + configs_tf)
 @pytest.test_arrays('is_diff,float,shape=(*)')
 @pytest.skip_on(RuntimeError, "not implemented for 'Half'")
 def test16_flipped_custom_class_bwd(t, config):
+    pytest.skip("Skipped since tf.custom_gradient only supports " + \
+                "Tensor inputs (see " + \
+                "https://www.tensorflow.org/api_docs/python/tf/custom_gradient).")
     class MyClass:
         pass
 
@@ -623,8 +627,10 @@ def test16_flipped_custom_class_bwd(t, config):
 
 @pytest.mark.parametrize('config', configs_torch + configs_tf + configs_tf_jit)
 @pytest.test_arrays('is_diff,float,shape=(*)')
-@pytest.skip_on(RuntimeError, "drjit.custom(<interop.WrapADOp>)", "TF Graph/XLA mode does not support class inputs.")
 def test17_custom_class_fwd(t, config):
+    if config[0] == "tf" and config[2] in ['graph', 'xla']:
+        pytest.skip("Skipped since TF Graph/XLA mode does not support class inputs.")
+
     class MyClass:
         pass
 
@@ -644,13 +650,14 @@ def test17_custom_class_fwd(t, config):
 
     assert dr.all(a.grad == [10, 20, 30])
 
-@pytest.mark.parametrize('config',
-                         [pytest.param(c, marks=pytest.mark.skipif(c[0]=='tf',
-                                       reason="Skipped due to limited support of tf.custom_gradient for forward-mode AD."))
-                          for c in configs_torch + configs_tf])
-@pytest.mark.skip(reason='Skipped until issue https://github.com/pytorch/pytorch/issues/117491 is fixed.')
+@pytest.mark.parametrize('config', configs_torch + configs_tf)
 @pytest.test_arrays('is_diff,float,shape=(*)')
 def test18_flipped_custom_class_fwd(t, config):
+    if config[0] == 'torch':
+        pytest.skip('Skipped until issue https://github.com/pytorch/pytorch/issues/117491 is fixed.')
+    if config[0] == "tf":
+        pytest.skip("Skipped due to limited support of `tf.custom_gradient()`"
+                    " for forward-mode AD.")
     class MyClass:
         pass
 
@@ -692,10 +699,7 @@ def test19_args_kwargs_bwd(t, config):
     assert dr.all(x.grad == [40, 80, 120])
     assert dr.all(y.grad == [80])
 
-@pytest.mark.parametrize('config',
-                         [pytest.param(c, marks=pytest.mark.skipif(c[0]=='tf',
-                                       reason="Skipped until issue https://github.com/tensorflow/tensorflow/issues/77559 is fixed."))
-                          for c in configs_torch + configs_tf])
+@pytest.mark.parametrize('config', configs_torch + configs_tf)
 @pytest.test_arrays('is_diff,float,shape=(*)')
 @pytest.skip_on(RuntimeError, "backend does not support the requested type of atomic reduction")
 def test20_flipped_args_kwargs_bwd(t, config):
@@ -725,10 +729,10 @@ def test20_flipped_args_kwargs_bwd(t, config):
         with tf.GradientTape() as tape:
             tape.watch([x, y])
             r = test_fn(x, y=y)
-        grad = tape.gradient(r, [x, y], output_gradients=tf.constant([10, 20, 30], dtype=dt))
 
-        assert tf.reduce_all(grad[0] == tf.constant([40, 80, 120], dtype=dt))
-        assert tf.reduce_all(grad[1] == tf.constant([80], dtype=dt))
+        # See issue https://github.com/tensorflow/tensorflow/issues/77559
+        with pytest.raises(TypeError, match="Keyword arguments are not allowed for 'tf->drjit'"):
+            grad = tape.gradient(r, [x, y], output_gradients=tf.constant([10, 20, 30], dtype=dt))
 
 @pytest.mark.parametrize('config', configs + configs_tf_jit)
 @pytest.test_arrays('is_diff,float,shape=(*)')
@@ -748,13 +752,13 @@ def test21_args_kwargs_fwd(t, config):
 
     assert dr.all(g == [40, 120, 200])
 
-@pytest.mark.parametrize('config',
-                         [pytest.param(c, marks=pytest.mark.skipif(c[0]=='tf',
-                                       reason="Skipped due to limited support of tf.custom_gradient for forward-mode AD."))
-                          for c in configs_torch + configs_tf])
+@pytest.mark.parametrize('config', configs_torch + configs_tf)
 @pytest.test_arrays('is_diff,float,shape=(*)')
 @pytest.skip_on(RuntimeError, "not implemented for 'Half'")
 def test22_flipped_args_kwargs_fwd(t, config):
+    if config[0] == "tf":
+        pytest.skip("Skipped due to limited support of `tf.custom_gradient()`"
+                    " for forward-mode AD.")
     @wrap_flipped(config)
     def test_fn(*args, **kwargs):
         return args[0] * kwargs["y"]
@@ -904,12 +908,13 @@ def test26_flipped_pytree_bwd(t, config):
         assert tf.reduce_all(grad[0] == tf.constant([100, 200, 300], dtype=dt))
         assert tf.reduce_all(grad[1] == tf.constant([200, 400, 600], dtype=dt))
 
-@pytest.mark.parametrize('config',
-                         [pytest.param(c, marks=pytest.mark.skipif(c[0]=='tf',
-                                       reason="Skipped due to limited support of tf.custom_gradient for forward-mode AD."))
-                          for c in configs_torch + configs_tf])
+@pytest.mark.parametrize('config', configs_torch + configs_tf)
 @pytest.test_arrays('is_diff,float,shape=(*)')
 def test26_flipped_pytree_fwd(t, config):
+    if config[0] == "tf":
+        pytest.skip("Skipped due to limited support of `tf.custom_gradient()`"
+                    " for forward-mode AD.")
+
     @wrap_flipped(config)
     def test_fn(x):
         return {
