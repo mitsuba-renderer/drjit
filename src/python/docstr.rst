@@ -7812,8 +7812,8 @@
     Compute an exclusive or inclusive prefix reduction of the input array,
     tensor, or iterable along the specified axis/axes.
 
-    The function returns an output array :math:`\mathbf{y}` of the same shape
-    as the input. The ``op`` paramater selects the operation to be performed.
+    The function returns an output array of the same shape as the input. The
+    ``op`` paramater selects the operation to be performed.
 
     For example, when reducing a 1D array using ``exclusive=True`` (the
     default), this produces the following output
@@ -7834,10 +7834,6 @@
     - :py:attr:`drjit.ReduceOp.Max`: ``[a[0], max(a[0], a[1]), ...]``.
     - :py:attr:`drjit.ReduceOp.Or`: ``[a[0], a[0] | a[1], ...]`` (integer arrays only).
     - :py:attr:`drjit.ReduceOp.And`: ``[a[0], a[0] & a[1], ...]`` (integer arrays only).
-
-    Not all numeric data types are supported by :py:func:`prefix_reduce`:
-    presently, the function accepts ``Int32``, ``UInt32``, ``UInt64``,
-    ``Float32``, and ``Float64``-typed arrays.
 
     By default, the reduction is along axis ``0`` (i.e., the outermost one).
     Negative indices (e.g. ``axis=-1``) count backward from the innermost axis.
