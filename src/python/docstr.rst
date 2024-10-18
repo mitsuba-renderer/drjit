@@ -7878,3 +7878,14 @@
     Convenience wrapper around
    :py:func:`dr.block_prefix_reduce(dr.ReduceOp.Add, ...)
    <block_prefix_reduce>`.
+
+.. topic:: set_leak_warnings
+
+   Dr.Jit tracks and can report leaks of various types (Python instance leaks,
+   Dr.Jit-Core variable leaks, AD variable leaks). Since benign warnings can
+   sometimes occur, they are disabled by default for PyPI release builds.
+   Use this function to enable/disable them explicitly.
+
+.. topic:: leak_warnings
+
+   Query whether leak warnings are enabled. See :py:func:`drjit.detail.set_leak_warnings()`.

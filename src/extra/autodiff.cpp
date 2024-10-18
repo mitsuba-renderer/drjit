@@ -391,6 +391,9 @@ struct State {
     /// Counter to establish an ordering among variables
     uint64_t counter = 0;
 
+    /// Are memory leak warnings enabled?
+    bool leak_warnings = true;
+
     State() {
         variables.resize(1);
         edges.resize(1);
@@ -400,26 +403,28 @@ struct State {
         size_t vars_used  = variables.size() - unused_variables.size() - 1,
                edges_used = edges.size() - unused_edges.size() - 1;
 
-        if (vars_used) {
-            ad_warn("AD variable leak detected (%zu variables remain in use)!",
-                    vars_used);
-            size_t count = 0;
+        if (leak_warnings) {
+            if (vars_used) {
+                ad_warn("AD variable leak detected (%zu variables remain in use)!",
+                        vars_used);
+                size_t count = 0;
 
-            for (size_t i = 0; i < variables.size(); ++i) {
-                if (variables[i].ref_count == 0)
-                    continue;
+                for (size_t i = 0; i < variables.size(); ++i) {
+                    if (variables[i].ref_count == 0)
+                        continue;
 
-                ad_warn(" - variable a%zu (%u references)", i, variables[i].ref_count);
-                if (++count == 10) {
-                    ad_warn(" - (skipping the rest)");
-                    break;
+                    ad_warn(" - variable a%zu (%u references)", i, variables[i].ref_count);
+                    if (++count == 10) {
+                        ad_warn(" - (skipping the rest)");
+                        break;
+                    }
                 }
             }
-        }
 
-        if (edges_used != 0)
-            ad_warn("AD sdge leak detected (%zu edges remain in use)!",
-                    edges_used);
+            if (edges_used != 0)
+                ad_warn("AD edge leak detected (%zu edges remain in use)!",
+                        edges_used);
+        }
     }
 
     Variable *operator[](ADIndex index) {
@@ -3546,6 +3551,9 @@ const char *ad_var_graphviz() {
 
     return buffer.get();
 }
+
+void ad_set_leak_warnings(int value) { state.leak_warnings = (bool) value; }
+int ad_leak_warnings() { return (int) state.leak_warnings; }
 
 // ==========================================================================
 // Functionality to track implicit inputs of recorded computation

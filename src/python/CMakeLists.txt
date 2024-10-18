@@ -136,6 +136,11 @@ if (DRJIT_ENABLE_CUDA)
   target_compile_definitions(drjit-python PRIVATE -DDRJIT_ENABLE_CUDA)
 endif()
 
+# Disable leak warnings by default in PyPI release builds
+if (SKBUILD)
+  target_compile_definitions(drjit-python PRIVATE -DDRJIT_DISABLE_LEAK_WARNINGS)
+endif()
+
 # --- MSVC: Copy shared libraries to Python folders -----
 
 set(DRJIT_STUB_DEPENDS drjit-python drjit-copy-python-src)

@@ -612,6 +612,11 @@ Low-level bits
 .. autofunction:: kernel_history
 .. autofunction:: kernel_history_clear
 
+.. py:currentmodule:: drjit.detail
+.. autofunction:: set_leak_warnings
+.. autofunction:: leak_warnings
+.. py:currentmodule:: drjit
+
 Typing
 ------
 

@@ -470,6 +470,10 @@ extern DRJIT_EXTRA_EXPORT void ad_var_map_put(uint64_t source, uint64_t target);
 /// Query the mapping created by ad_var_map() for a given target
 extern DRJIT_EXTRA_EXPORT uint64_t ad_var_map_get(uint64_t index);
 
+/// Query/set the status of variable leak warnings
+extern DRJIT_EXTRA_EXPORT int ad_leak_warnings();
+extern DRJIT_EXTRA_EXPORT void ad_set_leak_warnings(int value);
+
 #if defined(__GNUC__)
 DRJIT_INLINE uint64_t ad_var_inc_ref(uint64_t index) JIT_NOEXCEPT {
     /* If 'index' is known at compile time, it can only be zero, in

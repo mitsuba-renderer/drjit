@@ -271,6 +271,17 @@ void disable_py_tracing() {
     nb::module_::import_("sys").attr("settrace")(nb::none());
 }
 
+void set_leak_warnings(bool value) {
+    nb::set_leak_warnings(value);
+    jit_set_leak_warnings(value);
+    ad_set_leak_warnings(value);
+}
+
+bool leak_warnings() {
+    return nb::leak_warnings() || jit_leak_warnings() || ad_leak_warnings();
+}
+
+
 void export_detail(nb::module_ &) {
     nb::module_ d = nb::module_::import_("drjit.detail");
 
@@ -326,6 +337,13 @@ void export_detail(nb::module_ &) {
      .def("new_scope", &jit_new_scope, "backend"_a, doc_detail_new_scope)
      .def("scope", &jit_scope, "backend"_a, doc_detail_scope)
      .def("set_scope", &jit_set_scope, "backend"_a, "scope"_a, doc_detail_set_scope);
+
+#if defined(DRJIT_DISABLE_LEAK_WARNINGS)
+    set_leak_warnings(false);
+#endif
+
+    d.def("leak_warnings", &leak_warnings, doc_leak_warnings);
+    d.def("set_leak_warnings", &set_leak_warnings, doc_set_leak_warnings);
 
     trace_func_handle = d.attr("trace_func");
 }
