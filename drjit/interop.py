@@ -24,7 +24,7 @@ def tf_check(value,/):
     return type(value).__module__.startswith('tensorflow')
 
 
-def tf_var_check(value,/):
+def tf_var_check(value, /):
     '''Returns ``True`` if ``value`` is a TensorFlow variable'''
     return type(value).__name__ == 'ResourceVariable'
 
