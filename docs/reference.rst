@@ -586,7 +586,7 @@ Profiling
 ---------
 
 .. autofunction:: profile_mark
-.. autofunction:: profile_range
+.. autoclass:: profile_range
 
 Textures
 --------
