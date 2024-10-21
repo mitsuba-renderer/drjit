@@ -1827,7 +1827,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(16)
 #endif
 
 #if defined(DRJIT_X86_AVX512)
-    template <bool, typename Index, typename Mask>
+    template <typename Index, typename Mask>
     DRJIT_INLINE void scatter_(void *ptr, const Index &index, const Mask &mask, ReduceMode mode) const {
         Base::scatter_(ptr, index, mask & mask_(), mode);
     }
