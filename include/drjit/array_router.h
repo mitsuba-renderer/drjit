@@ -264,8 +264,9 @@ DRJIT_INLINE auto select(const M &m, const T &t, const F &f) {
             });
         return result;
     } else {
-        using E = replace_scalar_t<array_t<typename detail::deepest<T, F, M>::type>,
-                                   typename detail::expr<scalar_t<T>, scalar_t<F>>::type>;
+        using E_ = replace_scalar_t<array_t<typename detail::deepest<T, F, M>::type>,
+                                    typename detail::expr<scalar_t<T>, scalar_t<F>>::type>;
+        using E = std::conditional_t<is_mask_v<T>, mask_t<E_>, E_>;
         using EM = mask_t<E>;
 
         if constexpr (!is_array_v<E>) {
