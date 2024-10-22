@@ -36,7 +36,7 @@ arrays, PyTorch tensors, etc.):
 
    x = Float([1, 2, 3, 4])
 
-Nested array types store several variable---for example, :py:class:`Array3f
+Nested array types store several variables---for example, :py:class:`Array3f
 <drjit.auto.Array3f>` is just a wrapper around 3 :py:class:`Float
 <drjit.auto.Float>` instances. They can be passed to the constructor
 explicitly, or via implicit conversion from constants, lists, etc.

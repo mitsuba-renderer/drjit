@@ -51,13 +51,13 @@ there are notable differences between them:
 - **Scalar backend**: types contained within ``drjit.scalar.*`` represent a
   single element of the underlying concept. For example,
   :py:class:`drjit.scalar.Complex2f` stores the real and imaginary part of a
-  single complex value in an array of shape shape ``(2,)``.
+  single complex value in an array of shape ``(2,)``.
 
 - **Vectorized backends**: types within all of the other packages are
   *vectorized*, i.e., they represent arbitrarily many elements. For example,
   :py:class:`drjit.cuda.Complex2f` stores a dynamically sized sequence of
-  complex values in an array of shape shape ``(2, N)``. Program execution along
-  the dynamic dimension runs in parallel, which is important for efficiency.
+  complex values in an array of shape ``(2, N)``. Program execution along the
+  dynamic dimension runs in parallel, which is important for efficiency.
 
   Only these vectorized types employ *tracing*, and operations involving them
   conceptually append instructions to a progressively growing computational
@@ -75,8 +75,8 @@ there are notable differences between them:
   `CUDA <https://developer.nvidia.com/cuda-toolkit>`__ and the `PTX
   intermediate representation
   <https://docs.nvidia.com/cuda/parallel-thread-execution/index.html>`__. This
-  backend only depends on users having having a suitable graphics card and
-  driver (notably, users do not need to install the CUDA SDK.)
+  backend only depends on users having a suitable graphics card and driver
+  (notably, users do not need to install the CUDA SDK.)
 
 - **Automatic differentiation**: types within packages having the ``.ad`` suffix
   additionally track differentiable operations to enable subsequent forward- or
@@ -256,7 +256,7 @@ flavors of 2D arrays are available:
    * - ``Array2f64``
      - Double precision 2D array
 
-It is legal build nested arrays from flat arrays of different sizes. Usually,
+It is legal to build nested arrays from flat arrays of different sizes. Usually,
 some of the elements will have size ``1``, which means that they can broadcast
 to any other size as needed. Operations like ``print()`` already perform this
 broadcasting step internally:

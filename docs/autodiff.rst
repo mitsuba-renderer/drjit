@@ -411,9 +411,9 @@ These three sets *may not overlap*. In the above example,
 3. ``y`` is a differentiable output accumulating an expression that depends on
    the variables in categories 1 and 2 (``y += f(x, i)``).
 
-In contrast is *not* important that the loop counter ``i`` linearly increases,
-that there is a loop counter at all, or that the loop runs for a uniform number
-of iterations.
+In contrast it is *not* important that the loop counter ``i`` linearly
+increases, that there is a loop counter at all, or that the loop runs for a
+uniform number of iterations.
 
 When the conditions explained above are satisfied, specify
 ``max_iterations=-1`` to :py:func:`dr.while_loop() <while_loop>`. This tells

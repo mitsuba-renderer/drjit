@@ -161,9 +161,9 @@ device memory. In contrast, a large evaluated array can easily take up
 gigabytes of device memory. Because of this, some care is often advisable to
 avoid superfluous variable evaluation.
 
-One evaluated, variables behave exactly the same way in subsequent computations
-except that any use in kernels causes them to be *loaded* instead of
-*recomputed*. Passing an already evaluated array to :py:func:`dr.eval()
+Once evaluated, variables behave exactly the same way in subsequent
+computations except that any use in kernels causes them to be *loaded* instead
+of *recomputed*. Passing an already evaluated array to :py:func:`dr.eval()
 <eval>` a second time is a no-op.
 
 Asynchronous execution

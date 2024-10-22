@@ -110,8 +110,8 @@ Hardware-accelerated Dr.Jit textures work differently: they *migrate* texture
 data into a CUDA texture object that is no longer directly accessible to
 Dr.Jit. This makes methods such as :py:func:`.tensor()
 <drjit.cuda.Texture2f.tensor>` and :py:func:`.value()
-<drjit.cuda.Texture2f.value>` rather expensive, since they must undo the
-conversion.
+<drjit.cuda.Texture2f.value>` rather expensive, since they must copy the
+texture data from the CUDA object back into memory.
 
 If you desire access to a hardware-accelerated texture *and* at the
 same time retain the tensor representation, specify ``migrate=False``
@@ -154,9 +154,7 @@ hardware-accelerated textures here rely on GPU intrinsics,
 such textures are indeed still differentiable. Internally, while
 the primal lookup operation is hardware-accelerated, a subsequent
 non-accelerated lookup is additionally performed *solely* to record each
-individual operation into the AD graph. More importantly, computing gradients
-does *not* require disabling migration and texture data can continue to
-exclusively be stored as a CUDA texture object.
+individual operation into the AD graph.
 
 C++ interface
 -------------
