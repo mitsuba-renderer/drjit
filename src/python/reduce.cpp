@@ -311,15 +311,23 @@ nb::object reduce(uint32_t op, nb::handle h, nb::handle axis_, nb::handle mode) 
                 value = reduce(op, value, axis, mode);
                 return tp(value, nb::tuple());
             } else {
-                if (op >= (uint32_t) ReduceOp::Count) {
+                if (op == (uint32_t) ReduceOpExt::Count) {
                     if (axis_len == 1 && red_axis == 0)
                         return reduce_seq(op, h, nb::int_(0), mode);
                     nb::raise_type_error("tensor type is not compatible with "
                                          "the requested reduction.");
                 }
                 // Complex case, defer to a separate Python implementation
+                ReduceOp reduceOp;
+                if (op < (uint32_t) ReduceOp::Count) {
+                    reduceOp = static_cast<ReduceOp>(op);
+                } else if (op == (uint32_t) ReduceOpExt::All) {
+                    reduceOp = ReduceOp::And;
+                } else if (op == (uint32_t) ReduceOpExt::Any) {
+                    reduceOp = ReduceOp::Or;
+                }
                 return nb::module_::import_("drjit._reduce")
-                    .attr("tensor_reduce")(ReduceOp(op), h, axis, mode);
+                    .attr("tensor_reduce")(reduceOp, h, axis, mode);
             }
         }
 
