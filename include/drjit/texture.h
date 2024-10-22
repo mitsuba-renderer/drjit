@@ -453,6 +453,8 @@ public:
 
                 if constexpr (IsDiff) {
                     if (grad_enabled(m_value, pos)) {
+                        tensor(); // Will un-migrate the data if necessary
+
                         const size_t channels = m_value.shape(Dimension);
 
                         ArrayX out_nonaccel = empty<ArrayX>(channels);
@@ -613,6 +615,8 @@ public:
 
                 if constexpr (IsDiff) {
                     if (grad_enabled(m_value, pos)) {
+                        tensor(); // Will un-migrate the data if necessary
+
                         const size_t channels = m_value.shape(Dimension);
                         constexpr size_t out_size = 1 << Dimension;
 
@@ -866,6 +870,7 @@ public:
                replace the AD graph. The result is unused (and never computed)
                and only the AD graph is replaced. */
             if (grad_enabled(m_value, pos)) {
+                tensor(); // Will un-migrate the data if necessary
                 ArrayX result_diff = empty<ArrayX>(channels);
                 eval_cubic_helper(pos, result_diff.data(), active); // AD graph only
                 for (size_t ch = 0; ch < channels; ++ch)
