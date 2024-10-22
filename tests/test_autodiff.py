@@ -2067,3 +2067,40 @@ def test131_prefix_sum_tensor(t, axis):
         assert dr.all(x.grad == t([[3, 2, 1], [3, 2, 1], [3, 2, 1]]))
     else:
         assert dr.all(x.grad == t([[3, 3, 3], [2, 2, 2], [1, 1, 1]]))
+
+@pytest.test_arrays('is_diff,quat')
+def test132_forward_from_quaternion(t):
+    # Propagating from a Quaternion, propagates from all its components
+    a = t(1.0)
+    dr.enable_grad(a.y) # Gradients on `j` component
+    b = 2 * a
+    dr.forward_from(a)
+    y = dr.grad(b)
+    assert dr.allclose(y, t(0, 2, 0, 0))
+
+@pytest.test_arrays('is_diff,quat')
+def test133_backward_from_quaternion(t):
+    # Propagating from a Quaternion, propagates from all its components
+    a = t(1.0)
+    dr.enable_grad(a.y) # Gradients on `j` component
+    b = 2 * a
+    dr.backward_from(b)
+    assert dr.allclose(dr.grad(a), t(0, 2, 0, 0))
+
+@pytest.test_arrays('is_diff,complex')
+def test134_forward_from_complex(t):
+    # Propagating from a Quaternion, propagates from all its components
+    a = t(1.0)
+    dr.enable_grad(a.imag) # Gradients on imaginary component
+    b = 2 * a
+    dr.forward_from(a)
+    assert dr.allclose(dr.grad(b), t(0, 2))
+
+@pytest.test_arrays('is_diff,complex')
+def test135_backward_from_complex(t):
+    # Propagating from a Quaternion, propagates from all its components
+    a = t(1.0)
+    dr.enable_grad(a.imag) # Gradients on imaginary component
+    b = 2 * a
+    dr.backward_from(b)
+    assert dr.allclose(dr.grad(a), t(0, 2))
