@@ -1,6 +1,7 @@
 import drjit as dr
 import pytest
 import sys
+from dataclasses import dataclass
 
 @pytest.test_arrays('-bool,shape=(*)')
 def test01_gather_simple(t):
@@ -144,9 +145,18 @@ def test07_gather_pytree(t):
         def __init__(self, a: t = t()):
             self.a = a
 
-    x = MyStruct(x)
-    r = dr.gather(MyStruct, x, i)
+    s = MyStruct(x)
+    r = dr.gather(MyStruct, s, i)
     assert type(r) is MyStruct
+    assert dr.all(r.a == t([2, 1]))
+
+    @dataclass 
+    class MyDataclass:
+        a : t
+
+    s = MyDataclass(x)
+    r = dr.gather(MyDataclass, s, i)
+    assert type(r) is MyDataclass
     assert dr.all(r.a == t([2, 1]))
 
 
@@ -169,15 +179,29 @@ def test08_scatter_pytree(t):
         def __init__(self, a: t):
             self.a = a
 
-    x = MyStruct(x)
-    x.a = dr.zeros(t, 4)
+    s = MyStruct(x)
+    s.a = dr.zeros(t, 4)
     dr.scatter(
-        x,
+        s,
         MyStruct(t(1, 2)),
         (1, 0),
         (True, False)
     )
-    assert dr.all(x.a == [0, 1, 0, 0])
+    assert dr.all(s.a == [0, 1, 0, 0])
+
+    @dataclass 
+    class MyDataclass:
+        a : t
+
+    s = MyDataclass(x)
+    s.a = dr.zeros(t, 4)
+    dr.scatter(
+        s,
+        MyDataclass(t(1, 2)),
+        (1, 0),
+        (True, False)
+    )
+    assert dr.all(s.a == [0, 1, 0, 0])
 
 
 def test09_ravel_scalar():
