@@ -297,8 +297,12 @@ static bool check_grad_enabled(const char *name, nb::handle h, uint32_t flags) {
 
 static void forward_from(nb::handle_t<dr::ArrayBase> h, uint32_t flags) {
     if (check_grad_enabled("drjit.forward_from", h, flags)) {
+        // Full for quaternion and complex types won't fill all components
+        // so make sure we use corresponding array type
+        nb::handle tp = h.type();
+        nb::handle at = is_drjit_type(tp) ? supp(tp).array : tp.ptr();
         ::clear_grad(h);
-        ::accum_grad(h, h.type()(1.0));
+        ::accum_grad(h, full("ones", at, nb::int_(1), 1));
         enqueue_impl(dr::ADMode::Forward, h);
         nb::gil_scoped_release r;
         ad_traverse(dr::ADMode::Forward, flags);
@@ -307,8 +311,12 @@ static void forward_from(nb::handle_t<dr::ArrayBase> h, uint32_t flags) {
 
 static void backward_from(nb::handle_t<dr::ArrayBase> h, uint32_t flags) {
     if (check_grad_enabled("drjit.backward_from", h, flags)) {
+        // Full for quaternion and complex types won't fill all components
+        // so make sure we use corresponding array type
+        nb::handle tp = h.type();
+        nb::handle at = is_drjit_type(tp) ? supp(tp).array : tp.ptr();
         ::clear_grad(h);
-        ::accum_grad(h, h.type()(1.0));
+        ::accum_grad(h, full("ones", at, nb::int_(1), 1));
         enqueue_impl(dr::ADMode::Backward, h);
         nb::gil_scoped_release r;
         ad_traverse(dr::ADMode::Backward, flags);

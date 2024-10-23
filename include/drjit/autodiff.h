@@ -908,7 +908,13 @@ void backward_from(T &value, uint32_t flags = (uint32_t) ADFlag::Default) {
     if constexpr (depth_v<T> > 1)
         value = value + T(0);
 
-    set_grad(value, 1.f);
+    if constexpr (is_complex_v<T>)
+        set_grad(value, T(1.f, 1.f));
+    else if constexpr (is_quaternion_v<T>)
+        set_grad(value, T(1.f, 1.f, 1.f, 1.f));
+    else
+        set_grad(value, full<T>(1.f));
+
     enqueue(ADMode::Backward, value);
     traverse<T>(ADMode::Backward, flags);
 }
@@ -923,7 +929,14 @@ void backward_to(const T &value, uint32_t flags = (uint32_t) ADFlag::Default) {
 template <typename T>
 void forward_from(T &value, uint32_t flags = (uint32_t) ADFlag::Default) {
     detail::check_grad_enabled("forward_from", value);
-    set_grad(value, 1.f);
+    
+    if constexpr (is_complex_v<T>)
+        set_grad(value, T(1.f, 1.f));
+    else if constexpr (is_quaternion_v<T>)
+        set_grad(value, T(1.f, 1.f, 1.f, 1.f));
+    else
+        set_grad(value, full<T>(1.f));
+
     enqueue(ADMode::Forward, value);
     traverse(ADMode::Forward, flags);
 }
