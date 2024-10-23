@@ -4,7 +4,7 @@ How to make a new release?
 1. Ensure that the most recent version of Dr.Jit is checked out (including all
    submodules).
 
-2. Check that the ``nanobind`` dependency verison in ``pyroject.toml`` matches
+2. Check that the ``nanobind`` dependency version in ``pyroject.toml`` matches
    the version used in the submodule.
 
 3. Ensure that the changelog is up to date in ``docs/changelog.rst``.
