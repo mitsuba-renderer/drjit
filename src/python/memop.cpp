@@ -61,18 +61,24 @@ nb::object gather(nb::type_object dtype, nb::object source,
 
             return std::move(result);
         } else {
-            nb::object dstruct = nb::getattr(dtype, "DRJIT_STRUCT", nb::handle());
-            if (dstruct.is_valid() && dstruct.type().is(&PyDict_Type)) {
-                nb::dict dstruct_dict = nb::borrow<nb::dict>(dstruct);
+            if (nb::dict ds = get_drjit_struct(dtype); ds.is_valid()) {
                 nb::object out = dtype();
-
-                for (auto [k, v] : dstruct_dict) {
+                for (auto [k, v] : ds) {
                     if (!v.is_type())
                         throw nb::type_error("DRJIT_STRUCT invalid, expected types!");
                     nb::type_object sub_dtype = nb::borrow<nb::type_object>(v);
                     nb::setattr(out, k, gather(sub_dtype, nb::getattr(source, k), index, active, mode));
                 }
                 return out;
+            } else if (nb::object df = get_dataclass_fields(dtype); df.is_valid()) {
+                nb::list l;
+                for (nb::handle field : df) {
+                    nb::object k = field.attr(DR_STR(name));
+                    nb::object v = nb::getattr(source, k);
+                    l.append(gather(nb::borrow<nb::type_object>(v.type()), v, index, active, mode));
+                }
+                // Python unpack args
+                return dtype(*l);
             }
         }
     }
@@ -250,13 +256,22 @@ static void scatter_generic(const char *name, ReduceOp op, nb::object target,
             return;
         }
 
-        nb::object dstruct = nb::getattr(target_tp, "DRJIT_STRUCT", nb::handle());
-        if (dstruct.is_valid() && dstruct.type().is(&PyDict_Type)) {
-            nb::dict dstruct_dict = nb::borrow<nb::dict>(dstruct);
+        if (nb::dict ds = get_drjit_struct(target_tp); ds.is_valid()) {
+            nb::dict dstruct_dict = nb::borrow<nb::dict>(ds);
 
-            for (auto [k, v] : dstruct_dict)
+            for (auto [k, v] : ds)
                 scatter_generic(name, op, nb::getattr(target, k),
                                 nb::getattr(value, k), index, active, mode);
+
+            return;
+        }
+
+        if (nb::object df = get_dataclass_fields(target_tp); df.is_valid()) {
+            for (nb::handle field : df) {
+                nb::object k = field.attr(DR_STR(name));
+                scatter_generic(name, op, nb::getattr(target, k),
+                                nb::getattr(value, k), index, active, mode);
+            }
 
             return;
         }
