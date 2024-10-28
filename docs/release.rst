@@ -35,3 +35,5 @@ How to make a new release?
 14. Create a `release on GitHub <https://github.com/mitsuba-renderer/drjit/releases/new>`__
     from the tag created at step 10. The changelog can be copied from step 2.
 
+15. Checkout the ``stable`` branch and run ``git pull --ff-only origin vX.Y.Z``
+    and ``git push ``
