@@ -18,22 +18,6 @@
 
 NAMESPACE_BEGIN(drjit)
 
-NAMESPACE_BEGIN(detail)
-
-template <typename T>
-using has_domain_override = decltype(T::domain_());
-
-template <typename CallSupport>
-constexpr const char *get_domain(const char *fallback) {
-    if constexpr (is_detected_v<has_domain_override, CallSupport>) {
-        return CallSupport::domain_();
-    } else {
-        return fallback;
-    }
-}
-
-NAMESPACE_END(detail)
-
 #define DRJIT_CALL_BEGIN(Name)                                                 \
     namespace drjit {                                                          \
         template <typename Self>                                               \
@@ -41,7 +25,7 @@ NAMESPACE_END(detail)
             using Base_ = void;                                                \
             using Class_ = Name;                                               \
             using Mask_ = mask_t<Self>;                                        \
-            using CallSupport_ = call_support<Name, Self>;                     \
+            static constexpr const char *Domain = #Name;                       \
             call_support(const Self &self) : self(self) { }                    \
             const call_support *operator->() const {                           \
                 return this;                                                   \
@@ -54,7 +38,7 @@ NAMESPACE_END(detail)
             using Base_ = void;                                                \
             using Class_ = Name<Ts...>;                                        \
             using Mask_ = mask_t<Self>;                                        \
-            using CallSupport_ = call_support<Name<Ts...>, Self>;              \
+            static constexpr const char *Domain = #Name;                       \
             call_support(const Self &self) : self(self) { }                    \
             const call_support *operator->() const {                           \
                 return this;                                                   \
@@ -80,11 +64,6 @@ NAMESPACE_END(detail)
     }
 
 #define DRJIT_CALL_END(Name)                                                   \
-        public:                                                                \
-            /* Define `Domain` at the end so that the optional `domain_()` */  \
-            /* method provided by the user can be detected (if given).     */  \
-            static constexpr const char *Domain =                              \
-                detail::get_domain<CallSupport_>(#Name);                       \
         protected:                                                             \
             const Self &self;                                                  \
         };                                                                     \
@@ -146,8 +125,8 @@ public:                                                                        \
             state->collect_rv(rv_i);                                           \
         };                                                                     \
                                                                                \
-        return detail::call<Self, Ret, Ret, Mask_>(                            \
-            self, Domain, #Name "()", true, callback, mask);                   \
+        return detail::call<Self, Ret, Ret, Mask_>(self, Domain, #Name "()",   \
+                                                  true, callback, mask);       \
     }
 template <typename Guide, typename T>
 using vectorize_rv_t =
