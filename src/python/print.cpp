@@ -533,9 +533,46 @@ static nb::object format_impl(const char *name, const std::string &fmt,
             } else if (is_drjit_type(active.type())) {
                 // Try to reduce the input
                 try {
-                    nb::object indices = ::compress(active);
-                    if (nb::len(indices) == 0)
+                    nb::handle mask_tp = active.type();
+                    nb::object active2 = nb::inst_alloc(mask_tp);
+
+                    // Combine active argument with top of mask stack
+                    {
+                        const ArraySupplement &s = supp(mask_tp);
+                        uint32_t index = (uint32_t) s.index(inst_ptr(active));
+
+                        if (!index)
+                            return nb::none();
+
+                        uint32_t mask_2 = jit_var_mask_apply(index, 
+                            (uint32_t) examine.size);
+                        s.init_index(mask_2, inst_ptr(active2));
+                        nb::inst_mark_ready(active2);
+                        jit_var_dec_ref(mask_2);
+                    }
+
+                    nb::object indices = ::compress(active2);
+                    size_t len = nb::len(indices);
+                    if (len == 0)
                         return nb::none();
+
+                    struct scoped_default_mask {
+                        scoped_default_mask(JitBackend backend, size_t len) :
+                            backend(backend) {
+                            default_mask = jit_var_mask_default(backend, len);
+                            jit_var_mask_push(backend, default_mask);
+                        }
+
+                        ~scoped_default_mask() {
+                            jit_var_mask_pop(backend);
+                            jit_var_dec_ref(default_mask);
+                        }
+
+                        JitBackend backend;
+                        uint32_t default_mask;
+                    };
+
+                    scoped_default_mask mask_guard(examine.backend, len);
                     nb::list args2;
                     nb::dict kwargs2;
                     for (nb::handle h: args) {
