@@ -15,6 +15,19 @@ class Buffer:
             raise Exception("A string was already set")
         self.value = value
 
+class AppendBuffer:
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self.value = None
+
+    def write(self, value):
+        if self.value is not None:
+            self.value += value
+        else:
+            self.value = value
+
 
 def test01_format_basics():
     assert dr.format('Hello') == 'Hello'
@@ -219,3 +232,37 @@ def test12_active_non_symbolic(t):
     dr.print("{}", v, file=b, active=v>1)
     assert b.value == '[2, 3]\n'
     b.reset()
+
+@pytest.test_arrays('shape=(*), uint32, jit')
+def test13_evaluated_print(t):
+    b = Buffer()
+    dr.print(t([1, 2, 3]), file=b, end='', mode='evaluate')
+    assert b.value == '[1, 2, 3]'
+
+    i = t([1, 2, 3])
+    b = Buffer()
+    dr.print(i, file=b, end='', active=i==2, mode='evaluate')
+    assert b.value == '[2]'
+
+    @dr.syntax
+    def foo(i, b, mask=True):
+        while dr.hint(i < 3, mode='evaluated'):
+            dr.print(i, file=b, end='', active=mask, mode='evaluate')
+            i += 1
+        return i
+
+    i = t([1, 2, 3])
+    b = AppendBuffer()
+    foo(i, b)
+    assert b.value == '[1, 2, 3][2, 3, 3]'
+
+    i = t([1, 2, 3])
+    b = AppendBuffer()
+    foo(i, b, i < 3)
+    assert b.value == '[1, 2][2]'
+
+    i = t([1, 2, 3])
+    j = t([2, 1, 0])
+    b = AppendBuffer()
+    foo(i, b, j < 2)
+    assert b.value == '[2]'
