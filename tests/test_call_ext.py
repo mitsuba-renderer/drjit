@@ -1010,3 +1010,39 @@ def test22_bounds_checking_partial_registry(t, symbolic):
             xo, yo = c.f(xi, yi)
         assert dr.all(xo == t(15, 12, 0, 14, 24))
         assert dr.all(yo == t(1, -2, 0, -3, 4))
+
+
+@pytest.mark.parametrize("symbolic", [True, False])
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+def test23_dispatch_partial_registry_bwd(t, symbolic):
+    pkg = get_pkg(t)
+
+    A, B, BasePtr = pkg.A, pkg.B, pkg.BasePtr
+    a1 = A()
+    a1.value = t(1)
+    a2 = A()
+    a2.value = t(3)
+    b2 = B()
+    b2.value = t(4)
+    b3 = B()
+    b3.value = t(4)
+
+    del a1
+    gc.collect()
+    gc.collect()
+
+    dr.enable_grad(b2.value)
+
+    def my_func(self):
+        return self.value * 2
+
+    c = BasePtr(a2, None, b2)
+
+    with dr.scoped_set_flag(dr.JitFlag.SymbolicCalls, symbolic):
+        out = dr.dispatch(c, my_func)
+
+    dr.backward(out)
+
+    assert dr.all(a2.value.grad == t(0))
+    assert dr.all(b2.value.grad == t(2))
+    assert dr.all(b3.value.grad == t(0))
