@@ -300,8 +300,9 @@ static void ad_call_symbolic(JitBackend backend, const char *domain,
         size_t callable_count_final = 0;
         {
             scoped_set_mask mask_guard(backend, jit_var_call_mask(backend));
+            checkpoints[0] = guard_2.checkpoint_and_rewind();
+
             for (size_t i = 0; i < callable_count; ++i) {
-                checkpoints[i] = guard_2.checkpoint_and_rewind();
                 rv2.clear();
 
                 void *ptr;
@@ -338,10 +339,9 @@ static void ad_call_symbolic(JitBackend backend, const char *domain,
                     rv_ad[j] |= (index2 >> 32) != 0;
                     rv3.push_back_borrow((uint32_t) index2);
                 }
-                callable_count_final++;
-            }
 
-            checkpoints[callable_count_final] = guard_2.checkpoint_and_rewind();
+                checkpoints[++callable_count_final] = guard_2.checkpoint_and_rewind();
+            }
         }
 
         vector<uint32_t> rv4;
