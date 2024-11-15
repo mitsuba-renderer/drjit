@@ -3705,6 +3705,8 @@
 
     Forward-propagate gradients to the provided set of Dr.Jit arrays/tensors.
 
+    The operation is equivalent to
+
     .. code-block:: python
 
        dr.enqueue(dr.ADMode.Backward, *args)
@@ -3804,6 +3806,8 @@
 .. topic:: backward_to
 
     Backpropagate gradients to the provided set of Dr.Jit arrays/tensors.
+
+    The operation is equivalent to
 
     .. code-block:: python
 

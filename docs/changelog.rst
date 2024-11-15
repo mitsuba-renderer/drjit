@@ -68,8 +68,10 @@ Here is what's new:
 
 - **Differentiable control flow**: symbolic control flow constructs (loops)
   previously failed with an error message when they detected differentiable
-  variables. All symbolic operations (loops, function calls, and conditionals)
-  now support differentiation in forward and reverse modes.
+  variables. In the new version of Dr.Jit, symbolic operations (loops, function
+  calls, and conditionals) are now differentiable in both forward and reverse
+  modes, with one exception: the reverse-mode derivative of loops is still
+  incomplete and will be added in the next version of Dr.Jit.
 
 - **Documentation**: every Dr.Jit function now comes with extensive reference
   documentation that clearly specifies its behavior and accepted inputs. The
