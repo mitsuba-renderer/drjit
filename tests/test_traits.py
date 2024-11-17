@@ -147,6 +147,16 @@ def test01_traits(t):
         assert dr.is_signed_v(t) is not unsigned and dr.is_signed_v(v) is not unsigned
         assert dr.is_unsigned_v(t) is unsigned and dr.is_unsigned_v(v) is unsigned
 
+    is_diff = "ad" in tm
+    assert is_diff == dr.is_diff_v(t)
+    
+    if is_jit:
+        assert dr.is_diff_v(dr.diff_array_t(t))
+        assert not dr.is_diff_v(dr.detached_t(t))
+    else:
+        assert not dr.is_diff_v(dr.diff_array_t(t))
+        assert not dr.is_diff_v(dr.detached_t(t))
+    
     #  assert dr.uint32_array_t(float) is int
     #  assert dr.bool_array_t(float) is bool
     #  assert dr.float32_array_t(int) is float

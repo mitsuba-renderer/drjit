@@ -429,6 +429,17 @@ void export_traits(nb::module_ &m) {
               return nb::hasattr(tp, "DRJIT_STRUCT");
           }, doc_is_struct_v);
 
+    m.def("diff_array_t",
+          [](nb::handle h) {
+              nb::handle tp = h.is_type() ? h : h.type();
+              if (is_drjit_type(tp)) {
+                  ArrayMeta m = supp(tp);
+                  m.is_diff = true;
+                  tp = meta_get_type(m);
+              }
+              return tp;
+          }, doc_diff_array_t);
+
     m.def("detached_t",
           [](nb::handle h) {
               nb::handle tp = h.is_type() ? h : h.type();
