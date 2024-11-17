@@ -2482,6 +2482,28 @@
     Returns:
         type: Result of the conversion as described above.
 
+.. topic:: diff_array_t
+
+    Converts the provided Dr.Jit array/tensor type into an differentiable
+    version.
+
+    This function implements the following set of behaviors:
+
+    1. When invoked with a non-differentiable Dr.Jit array *type* (e.g.
+       :py:class:`drjit.cuda.Array3f`), it returns a differentiable version
+       (e.g. :py:class:`drjit.cuda.ad.Array3f`).
+
+    2. When the input is not a type, it returns ``diff_array_t(type(arg))``.
+
+    3. When the input type is differentiable or not a Dr.Jit array type, the
+       function returns it unchanged.
+
+    Args:
+        arg (object): An arbitrary Python object
+
+    Returns:
+        type: Result of the conversion as described above.
+
 .. topic:: detached_t
 
     Converts the provided Dr.Jit array/tensor type into an non-differentiable
