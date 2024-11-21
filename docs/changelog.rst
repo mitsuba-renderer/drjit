@@ -5,10 +5,10 @@
 Changelog
 #########
 
-DrJit 1.0.0 (TBA)
------------------
+DrJit 1.0.0 (November 21, 2024)
+-------------------------------
 
-The 1.0 release of Dr.Jit marks major new phase of this project. We addressed
+The 1.0 release of Dr.Jit marks a major new phase of this project. We addressed
 long-standing limitations and thoroughly documented every part of Dr.Jit.
 Due to the magnitude of the changes, some incompatibilities are unavoidable:
 bullet points with an exclamation mark highlight changes with an impact on
