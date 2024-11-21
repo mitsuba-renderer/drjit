@@ -40,6 +40,9 @@ def dda_bruteforce(
 
         for i in range(n):
             if ray_d[i] == 0:
+                if ray_o[i] < idx[i] or ray_o[i] > (idx[i] + 1):
+                    valid = False
+                    break
                 continue
 
             t_min_i = (idx[i] - ray_o[i]) / ray_d[i]
@@ -430,3 +433,61 @@ def test17_rev_ad_random(t):
     rng = m.PCG32(16)
     grad_val = rng.next_float32()*2-1
     check_grad(t, rng, vol, n_samples=1024, diff='rev', rtol=1e-4, grad_val=grad_val)
+
+@pytest.mark.parametrize("corner", range(8))
+@pytest.mark.parametrize("direction", range(6))
+def test18_edges(corner, direction):
+    """Test a ray that goes along the edges of the grid"""
+    ray_o = [corner&4 != 0, corner&2 != 0, corner&1 != 0]
+    ray_o = [2 * v - 1 for v in ray_o]
+    
+    ray_d = [0, 0, 0]
+    ray_d[direction//2] = 2 * (direction&1) - 1
+
+    dda_check(
+        ray_o = ray_o,
+        ray_d = ray_d,
+        grid_res = (3, 3, 3),
+        grid_min = (-1, -1, -1),
+        grid_max = (1, 1, 1)
+    )
+
+@pytest.mark.parametrize("face", range(6))
+@pytest.mark.parametrize("direction", range(2))
+def test19_negative_zero_direction(face, direction):
+    """Test a ray with a negative zero direction"""
+    
+    ray_o = [-0.0, -0.0, -0.0]
+    ray_o[face//2] = 2 * (face&1) - 1 
+
+    ray_d = [-0.0, -0.0, -0.0]
+    ray_d[face//2] = 2 * direction - 1
+
+    dda_check(
+        ray_o = ray_o,
+        ray_d = ray_d,
+        grid_res = (3, 3, 3),
+        grid_min = (-1, -1, -1),
+        grid_max = (1, 1, 1)
+    )
+
+@pytest.mark.parametrize("face", range(6))
+@pytest.mark.parametrize("direction", range(4))
+def test20_zero_direction_no_hit(face, direction):
+    """Test a ray with a zero direction that does not hit the grid"""
+    eps = 1e-6
+
+    ray_o = [0, 0, 0]
+    ray_o[face//2] = 2 * (face&1) - 1 + (2 * (face&1) - 1) * eps
+
+    ray_d = [0, 0, 0]
+    ray_d[(face//2 + 1) % 3] = 2 * (direction & 2 != 0) - 1
+    ray_d[(face//2 + 2) % 3] = 2 * (direction & 1 != 0) - 1
+    
+    dda_check(
+        ray_o = ray_o,
+        ray_d = ray_d,
+        grid_res = (3, 3, 3),
+        grid_min = (-1, -1, -1),
+        grid_max = (1, 1, 1)
+    )
