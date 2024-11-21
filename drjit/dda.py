@@ -177,8 +177,8 @@ def dda(
     t_max_v2 = dr.maximum(t_min_v, t_max_v)
 
     # Disable extent computation for dims where the ray direction is zero
-    t_min_v[inf_t] = -dr.inf
-    t_max_v[inf_t] =  dr.inf
+    t_max_v2[inf_t] = dr.inf
+    t_min_v2[inf_t] = -dr.inf
 
     # Reduce constraints to a single ray interval
     t_min = dr.maximum(dr.max(t_min_v2), 0)
@@ -186,6 +186,10 @@ def dda(
 
     # Only run the DDA algorithm if the interval is nonempty
     active = active & (t_max > t_min) & dr.isfinite(t_max) # type: ignore
+
+    # Deactivate rays that have zero direction along any axis 
+    # and whose origin along that axis is outside the grid bounds
+    active = active & dr.all(~inf_t | ((0 <= ray_o) & (ray_o <= grid_res_f)))
 
     # Advance the ray to the start of the interval
     ray_o = dr.fma(ray_d, t_min, ray_o)
@@ -203,7 +207,7 @@ def dda(
 
     # Step size to next interaction
     dt_v = dr.select(ray_d >= 0, dr.fma(-p0, rcp_d, rcp_d), -p0 * rcp_d)
-    dt_v[inf_t] = rcp_d
+    dt_v[inf_t] = dr.inf
 
     def body_fn(
         active: BoolT, state: StateT, dt_v: ArrayNfT, p0: ArrayNfT, pi: ArrayNiT, t_rem: Any,
