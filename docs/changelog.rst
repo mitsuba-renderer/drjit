@@ -5,6 +5,12 @@
 Changelog
 #########
 
+DrJit 1.0.1 (November 23, 2024)
+-------------------------------
+
+- Fixes to various edges cases of :py:func:`drjit.dda.dda` (commit `4ce97d
+  <https://github.com/mitsuba-renderer/drjit/commit/4ce97dc4a5396c74887a6b123e2219e8def680d6>`__).
+
 DrJit 1.0.0 (November 21, 2024)
 -------------------------------
 

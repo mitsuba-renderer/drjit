@@ -36,4 +36,4 @@ How to make a new release?
     from the tag created at step 10. The changelog can be copied from step 2.
 
 15. Checkout the ``stable`` branch and run ``git pull --ff-only origin vX.Y.Z``
-    and ``git push ``
+    and ``git push``
