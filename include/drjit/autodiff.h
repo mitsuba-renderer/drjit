@@ -768,7 +768,8 @@ struct DRJIT_TRIVIAL_ABI DiffArray
         if constexpr (!IsClass)
             return out;
         else
-            return (Value) jit_registry_ptr(Backend, CallSupport::Domain, out);
+            return (Value) jit_registry_ptr(
+                CallSupport::Variant, CallSupport::Domain, out);
     }
 
     bool schedule_() const { return jit_var_schedule((uint32_t) m_index); }
@@ -936,7 +937,7 @@ void backward_to(const T &value, uint32_t flags = (uint32_t) ADFlag::Default) {
 template <typename T>
 void forward_from(T &value, uint32_t flags = (uint32_t) ADFlag::Default) {
     detail::check_grad_enabled("forward_from", value);
-    
+
     if constexpr (is_complex_v<T>)
         set_grad(value, T(1.f, 1.f));
     else if constexpr (is_quaternion_v<T>)
