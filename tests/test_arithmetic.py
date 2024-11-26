@@ -157,6 +157,8 @@ def test06_select():
     assert isinstance(result, s.ArrayXi) and dr.all(result == s.ArrayXi(1, 2))
     result = dr.select(s.ArrayXb(True, False), 1, 2.0)
     assert isinstance(result, s.ArrayXf) and dr.all(result == s.ArrayXf(1, 2))
+    result = dr.select(s.ArrayXb(True, False, True), True, False)
+    assert isinstance(result, s.ArrayXb) and dr.all(result == s.ArrayXb(True, False, True))
 
     result = dr.select(s.Array2b(True, False), s.Array2i(3, 4), s.Array2i(5, 6))
     assert isinstance(result, s.Array2i) and dr.all(result == s.Array2i(3, 6))
@@ -185,6 +187,8 @@ def test06_select():
         assert isinstance(result, l.ArrayXi) and dr.all(result == l.ArrayXi(1, 2))
         result = dr.select(l.ArrayXb(True, False), 1, 2.0)
         assert isinstance(result, l.ArrayXf) and dr.all(result == l.ArrayXf(1, 2))
+        result = dr.select(l.ArrayXb(True, False, True), True, False)
+        assert isinstance(result, l.ArrayXb) and dr.all(result == l.ArrayXb(True, False, True))
 
         result = dr.select(l.Array2b(True, False), l.Array2i(3, 4), l.Array2i(5, 6))
         assert isinstance(result, l.Array2i) and dr.all(result == l.Array2i(3, 6))
