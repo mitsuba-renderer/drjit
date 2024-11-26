@@ -883,7 +883,7 @@ nb::object select(nb::handle h0, nb::handle h1, nb::handle h2) {
     nb::handle tp = h1.type();
 
     if (is_drjit_type(tp) || !tp.is(h2.type()) ||
-        tp.is(&PyLong_Type) || tp.is(&PyFloat_Type)) {
+        tp.is(&PyLong_Type) || tp.is(&PyFloat_Type) || tp.is(&PyBool_Type)) {
         PyObject *o = apply<Select>(ArrayOp::Select, "select", 
             std::make_index_sequence<3>(), h0.ptr(), h1.ptr(), h2.ptr());
 
