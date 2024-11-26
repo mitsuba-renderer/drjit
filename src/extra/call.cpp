@@ -64,14 +64,13 @@ static void ad_call_check_rv(JitBackend backend, size_t size,
                              const vector<uint64_t> &rv2);
 
 // Strategy 1: this is a getter. turn the call into a gather operation
-static void ad_call_getter(JitBackend backend, const char *domain,
-                           const char *name, size_t size, uint32_t index,
-                           uint32_t mask_, size_t callable_count,
-                           const vector<uint64_t> args,
+static void ad_call_getter(JitBackend backend, const char *variant,
+                           const char *domain, const char *name,
+                           size_t size, uint32_t index, uint32_t mask_,
+                           size_t callable_count, const vector<uint64_t> args,
                            vector<uint64_t> &rv, vector<bool> &rv_ad,
                            ad_call_func func, void *payload,
-                           dr::vector<uint32_t> &implicit_in,
-                           bool ad) {
+                           dr::vector<uint32_t> &implicit_in, bool ad) {
 
     index64_vector args2; // unused
     vector<uint64_t> rv2;
@@ -99,7 +98,7 @@ static void ad_call_getter(JitBackend backend, const char *domain,
 
             void *ptr;
             if (domain) {
-                ptr = jit_registry_ptr(backend, domain, (uint32_t) i + 1);
+                ptr = jit_registry_ptr(variant, domain, (uint32_t) i + 1);
                 if (!ptr)
                     continue;
             } else {
@@ -241,14 +240,13 @@ static void ad_call_getter(JitBackend backend, const char *domain,
 }
 
 // Strategy 2: perform indirection symbolically by tracing all callables
-static void ad_call_symbolic(JitBackend backend, const char *domain,
-                             const char *name, size_t size, uint32_t index,
-                             uint32_t mask_, size_t callable_count,
-                             const vector<uint64_t> args,
+static void ad_call_symbolic(JitBackend backend, const char *variant,
+                             const char *domain, const char *name, size_t size,
+                             uint32_t index, uint32_t mask_,
+                             size_t callable_count, const vector<uint64_t> args,
                              vector<uint64_t> &rv, vector<bool> &rv_ad,
                              ad_call_func func, void *payload,
-                             dr::vector<uint32_t> &implicit_in,
-                             bool ad) {
+                             dr::vector<uint32_t> &implicit_in, bool ad) {
     (void) domain;
     (void) size;
 
@@ -307,7 +305,7 @@ static void ad_call_symbolic(JitBackend backend, const char *domain,
 
                 void *ptr;
                 if (domain) {
-                    ptr = jit_registry_ptr(backend, domain, (uint32_t) i + 1);
+                    ptr = jit_registry_ptr(variant, domain, (uint32_t) i + 1);
                     if (!ptr)
                         continue;
                 } else {
@@ -373,12 +371,12 @@ static void ad_call_symbolic(JitBackend backend, const char *domain,
 }
 
 // Strategy 3: group the arguments and evaluate a kernel per callable
-static void ad_call_reduce(JitBackend backend, const char *domain,
-                            const char *name, size_t size, uint32_t index_,
-                            uint32_t mask_, size_t callable_count,
-                            const vector<uint64_t> args_,
-                            vector<uint64_t> &rv,
-                            ad_call_func func, void *payload) {
+static void ad_call_reduce(JitBackend backend, const char *variant,
+                           const char *domain, const char *name,
+                           size_t size, uint32_t index_, uint32_t mask_,
+                           size_t callable_count, const vector<uint64_t> args_,
+                           vector<uint64_t> &rv, ad_call_func func,
+                           void *payload) {
     (void) name; // unused
     const char *domain_or_empty = domain ? domain : "",
                *separator = domain ? "::" : "";
@@ -415,7 +413,7 @@ static void ad_call_reduce(JitBackend backend, const char *domain,
 
     uint32_t n_inst = (uint32_t) callable_count;
     CallBucket *buckets =
-        jit_var_call_reduce(backend, domain, index.index(), &n_inst);
+        jit_var_call_reduce(backend, variant, domain, index.index(), &n_inst);
 
     index64_vector args2(args.size(), 0);
     args2.clear();
@@ -456,7 +454,7 @@ static void ad_call_reduce(JitBackend backend, const char *domain,
 
         void *ptr;
         if (domain) {
-            ptr = jit_registry_ptr(backend, domain, buckets[i].id);
+            ptr = jit_registry_ptr(variant, domain, buckets[i].id);
             if (!ptr)
                 jit_raise(
                     "ad_call_reduce(\"%s%s%s\"): instance %u does not exist (or no longer exists).",
@@ -559,13 +557,13 @@ static void ad_call_check_rv(JitBackend backend, size_t size,
 /// CustomOp that hooks a recorded virtual function call into the AD graph
 struct CallOp : public dr::detail::CustomOpBase {
 public:
-    CallOp(JitBackend backend, std::string &&name, const char *domain,
-            uint32_t index, uint32_t mask, size_t callable_count,
-            const vector<uint64_t> &args, size_t rv_size, void *payload,
-            ad_call_func func, ad_call_cleanup cleanup)
-        : m_name(std::move(name)), m_domain(domain), m_index(index), m_mask(mask),
-          m_callable_count(callable_count), m_payload(payload),
-          m_func(func), m_cleanup(cleanup) {
+    CallOp(JitBackend backend, std::string &&name, const char *variant,
+           const char *domain, uint32_t index, uint32_t mask,
+           size_t callable_count, const vector<uint64_t> &args, size_t rv_size,
+           void *payload, ad_call_func func, ad_call_cleanup cleanup)
+        : m_name(std::move(name)), m_variant(variant), m_domain(domain),
+          m_index(index), m_mask(mask), m_callable_count(callable_count),
+          m_payload(payload), m_func(func), m_cleanup(cleanup) {
         m_backend = backend;
 
         jit_var_inc_ref(m_index);
@@ -611,8 +609,8 @@ public:
             args.push_back_steal(ad_grad(combine(m_input_indices[i])));
 
         ad_call(
-            m_backend, m_domain, 1, m_callable_count, name.c_str(), false,
-            m_index, m_mask, args, rv, this,
+            m_backend, m_variant, m_domain, 1, m_callable_count,
+            name.c_str(), false, m_index, m_mask, args, rv, this,
             [](void *ptr, void *self, const vector<uint64_t> &args,
                vector<uint64_t> &rv) {
                 ((CallOp *) ptr)->forward_cb(self, args, rv);
@@ -644,8 +642,8 @@ public:
             args.push_back_steal(ad_grad(combine(m_output_indices[i])));
 
         ad_call(
-            m_backend, m_domain, 1, m_callable_count, name.c_str(), false,
-            m_index, m_mask, args, rv, this,
+            m_backend, m_variant, m_domain, 1, m_callable_count,
+            name.c_str(), false, m_index, m_mask, args, rv, this,
             [](void *ptr, void *self, const vector<uint64_t> &args,
                vector<uint64_t> &rv) {
                 ((CallOp *) ptr)->backward_cb(self, args, rv);
@@ -766,6 +764,7 @@ public:
 
 private:
     std::string m_name, m_name_op;
+    const char *m_variant;
     const char *m_domain;
     uint32_t m_index, m_mask;
     size_t m_callable_count;
@@ -782,11 +781,11 @@ private:
 };
 
 // Generic checks, then forward either to ad_call_symbolic or ad_call_reduce
-bool ad_call(JitBackend backend, const char *domain, int symbolic,
-             size_t callable_count, const char *name, bool is_getter,
-             uint32_t index, uint32_t mask, const vector<uint64_t> &args,
-             vector<uint64_t> &rv, void *payload, ad_call_func func,
-             ad_call_cleanup cleanup, bool ad) {
+bool ad_call(JitBackend backend, const char *variant, const char *domain,
+             int symbolic, size_t callable_count,
+             const char *name, bool is_getter, uint32_t index, uint32_t mask,
+             const vector<uint64_t> &args, vector<uint64_t> &rv, void *payload,
+             ad_call_func func, ad_call_cleanup cleanup, bool ad) {
     try {
         const char *domain_or_empty = domain ? domain : "",
                    *separator = domain ? "::" : "";
@@ -815,7 +814,7 @@ bool ad_call(JitBackend backend, const char *domain, int symbolic,
             jit_raise("ad_call(): 'symbolic' must be -1, 0, or 1!");
 
         if (domain)
-            callable_count = jit_registry_id_bound(backend, domain);
+            callable_count = jit_registry_id_bound(variant, domain);
 
         size_t size = jit_var_size(index);
         if (mask) {
@@ -865,11 +864,11 @@ bool ad_call(JitBackend backend, const char *domain, int symbolic,
         dr::detail::ad_index32_vector implicit_in;
 
         if (is_getter) {
-            ad_call_getter(backend, domain, name, size, index, mask,
+            ad_call_getter(backend, variant, domain, name, size, index, mask,
                            callable_count, args, rv, rv_ad, func, payload,
                            implicit_in, ad);
         } else if (symbolic) {
-            ad_call_symbolic(backend, domain, name, size, index, mask,
+            ad_call_symbolic(backend, variant, domain, name, size, index, mask,
                              callable_count, args, rv, rv_ad, func, payload,
                              implicit_in, ad);
         } else {
@@ -881,8 +880,8 @@ bool ad_call(JitBackend backend, const char *domain, int symbolic,
                     "documentation of drjit.JitFlag.SymbolicCalls and drjit.switch() for general\n"
                     "information on symbolic and evaluated calls, as well as their limitations.");
 
-            ad_call_reduce(backend, domain, name, size, index, mask,
-                           callable_count, args, rv, func, payload);
+            ad_call_reduce(backend, variant, domain, name, size, index,
+                           mask, callable_count, args, rv, func, payload);
             ad = false; // derivative already tracked, no CustomOp needed
         }
 
@@ -898,8 +897,8 @@ bool ad_call(JitBackend backend, const char *domain, int symbolic,
             }
 
             nanobind::ref<CallOp> op = new CallOp(
-                backend, std::move(combined), domain, index, mask, callable_count,
-                args, rv.size(), payload, func, cleanup);
+                backend, std::move(combined), variant, domain, index,
+                mask, callable_count, args, rv.size(), payload, func, cleanup);
 
             for (size_t i = 0; i < args.size(); ++i)
                 op->add_input(i, args[i]);

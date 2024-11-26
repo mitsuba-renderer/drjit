@@ -18,6 +18,22 @@
 
 NAMESPACE_BEGIN(drjit)
 
+NAMESPACE_BEGIN(detail)
+
+template <typename T>
+using has_variant_override = decltype(T::variant_());
+
+template <typename CallSupport>
+constexpr const char *get_variant(const char *fallback) {
+    if constexpr (is_detected_v<has_variant_override, CallSupport>) {
+        return CallSupport::variant_();
+    } else {
+        return fallback;
+    }
+}
+
+NAMESPACE_END(detail)
+
 #define DRJIT_CALL_BEGIN(Name)                                                 \
     namespace drjit {                                                          \
         template <typename Self>                                               \
@@ -25,7 +41,7 @@ NAMESPACE_BEGIN(drjit)
             using Base_ = void;                                                \
             using Class_ = Name;                                               \
             using Mask_ = mask_t<Self>;                                        \
-            static constexpr const char *Domain = #Name;                       \
+            using CallSupport_ = call_support<Name, Self>;                     \
             call_support(const Self &self) : self(self) { }                    \
             const call_support *operator->() const {                           \
                 return this;                                                   \
@@ -38,7 +54,7 @@ NAMESPACE_BEGIN(drjit)
             using Base_ = void;                                                \
             using Class_ = Name<Ts...>;                                        \
             using Mask_ = mask_t<Self>;                                        \
-            static constexpr const char *Domain = #Name;                       \
+            using CallSupport_ = call_support<Name<Ts...>, Self>;              \
             call_support(const Self &self) : self(self) { }                    \
             const call_support *operator->() const {                           \
                 return this;                                                   \
@@ -51,6 +67,7 @@ NAMESPACE_BEGIN(drjit)
                 : call_support<Parent<Ts...>, Self> {                          \
             using Base_ = call_support<Parent<Ts...>, Self>;                   \
             using Base_::self;                                                 \
+            using Base_::Variant;                                              \
             using Base_::Domain;                                               \
             using Class_ = Name<Ts...>;                                        \
             using Mask_ = mask_t<Self>;                                        \
@@ -64,6 +81,12 @@ NAMESPACE_BEGIN(drjit)
     }
 
 #define DRJIT_CALL_END(Name)                                                   \
+        public:                                                                \
+            static constexpr const char *Domain = #Name;                       \
+            /* Define `Variant` at the end so that the optional `variant_()`*/ \
+            /* method provided by the user can be detected (if given).      */ \
+            static constexpr const char *Variant =                             \
+                detail::get_variant<CallSupport_>("");                         \
         protected:                                                             \
             const Self &self;                                                  \
         };                                                                     \
@@ -104,7 +127,7 @@ private:                                                                       \
         };                                                                     \
                                                                                \
         return detail::call<Self, Ret, Ret2, Args...>(                         \
-            self, Domain, #Name "()", false, callback, args...);               \
+            self, Variant, Domain, #Name "()", false, callback, args...);      \
     }
 
 #define DRJIT_CALL_GETTER(Name)                                                \
@@ -125,8 +148,8 @@ public:                                                                        \
             state->collect_rv(rv_i);                                           \
         };                                                                     \
                                                                                \
-        return detail::call<Self, Ret, Ret, Mask_>(self, Domain, #Name "()",   \
-                                                  true, callback, mask);       \
+        return detail::call<Self, Ret, Ret, Mask_>(                            \
+            self, Variant, Domain, #Name "()", true, callback, mask);          \
     }
 template <typename Guide, typename T>
 using vectorize_rv_t =
@@ -183,8 +206,9 @@ template <typename Ret, typename... Args> struct CallState {
 };
 
 template <typename Self, typename Ret, typename Ret2, typename... Args>
-Ret call(const Self &self, const char *domain, const char *name,
-         bool is_getter, ad_call_func callback, const Args &...args) {
+Ret call(const Self &self, const char *variant, const char *domain,
+         const char *name, bool is_getter, ad_call_func callback,
+         const Args &...args) {
     using Mask = mask_t<Self>;
     using CallStateT = CallState<Ret2, Args...>;
     CallStateT *state = new CallStateT(args...);
@@ -193,7 +217,7 @@ Ret call(const Self &self, const char *domain, const char *name,
 
     index64_vector args_i, rv_i;
     collect_indices<true>(state->args, args_i);
-    bool done = ad_call(Self::Backend, domain, -1, 0, name, is_getter,
+    bool done = ad_call(Self::Backend, variant, domain, -1, 0, name, is_getter,
                         self.index(), mask.index(), args_i, rv_i, state,
                         callback, &CallStateT::cleanup, true);
 
@@ -242,8 +266,8 @@ auto dispatch_impl(std::index_sequence<Is...>, const Self &self, const Func &fun
     };
 
     return detail::call<Self, Ret, Ret2, Func, Args...>(
-        self, Self::CallSupport::Domain, "drjit::dispatch()", false, callback,
-        func, args...);
+        self, Self::CallSupport::Variant, Self::CallSupport::Domain,
+        "drjit::dispatch()", false, callback, func, args...);
 }
 
 NAMESPACE_END(detail)
