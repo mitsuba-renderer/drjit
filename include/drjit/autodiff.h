@@ -762,7 +762,7 @@ struct DRJIT_TRIVIAL_ABI DiffArray
             return out;
         else
             return (Value) jit_registry_ptr(
-                CallSupport::Variant, CallSupport::Domain, /* TODO: scope */ 0, out);
+                CallSupport::Variant, CallSupport::Domain, out);
     }
 
     bool schedule_() const { return jit_var_schedule((uint32_t) m_index); }

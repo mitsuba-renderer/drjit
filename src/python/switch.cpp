@@ -167,7 +167,7 @@ nb::object switch_impl(nb::handle index_, nb::sequence targets,
 
         bool done = ad_call(
             (JitBackend) s.backend, /* variant */ nullptr, /* domain */ nullptr,
-            /* scope */ 0, symbolic, nb::len(targets), label.c_str(), false,
+            symbolic, nb::len(targets), label.c_str(), false,
             (uint32_t) s.index(inst_ptr(index)),
             mask.is_valid() ? ((uint32_t) s.index(inst_ptr(mask))) : 0u, args_i,
             rv_i, state, func, cleanup, true);
@@ -198,7 +198,6 @@ nb::object dispatch_impl(nb::handle_t<dr::ArrayBase> inst,
         JitBackend backend;
         nb::str variant_name;
         nb::str domain_name;
-        uint32_t scope;
 
         ~State() {
             if (!nb::is_alive())
@@ -242,7 +241,7 @@ nb::object dispatch_impl(nb::handle_t<dr::ArrayBase> inst,
 
             if (!self) {
                 self = jit_registry_peek(state.variant_name.c_str(),
-                                         state.domain_name.c_str(), state.scope);
+                                         state.domain_name.c_str());
             }
 
             nb::object self_o = nb::steal(nb::detail::nb_type_put(
@@ -265,8 +264,7 @@ nb::object dispatch_impl(nb::handle_t<dr::ArrayBase> inst,
             nb::object(),
             (JitBackend) s.backend,
             nb::borrow<nb::str>(variant_name),
-            nb::borrow<nb::str>(domain_name),
-            /* TODO: scope */ 0,
+            nb::borrow<nb::str>(domain_name)
         };
 
         ad_call_cleanup cleanup = [](void *ptr) {
@@ -287,8 +285,8 @@ nb::object dispatch_impl(nb::handle_t<dr::ArrayBase> inst,
 
         bool done =
             ad_call((JitBackend) s.backend, state->variant_name.c_str(),
-                    state->domain_name.c_str(), state->scope, symbolic, 0,
-                    label.c_str(), false, (uint32_t) s.index(inst_ptr(inst)),
+                    state->domain_name.c_str(), symbolic, 0, label.c_str(),
+                    false, (uint32_t) s.index(inst_ptr(inst)),
                     mask.is_valid() ? ((uint32_t) s.index(inst_ptr(mask))) : 0u,
                     args_i, rv_i, state, target_cb, cleanup, true);
 

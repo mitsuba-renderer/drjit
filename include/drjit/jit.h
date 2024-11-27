@@ -435,9 +435,8 @@ struct DRJIT_TRIVIAL_ABI JitArray
             uint32_t *temp = new uint32_t[size];
             jit_memcpy(Backend, temp, data(), size * sizeof(uint32_t));
             for (uint32_t i = 0; i < size; i++)
-                ((void **) ptr)[i] =
-                    jit_registry_ptr(CallSupport::Variant, CallSupport::Domain,
-                                     /* TODO: scope */ 0, temp[i]);
+                ((void **) ptr)[i] = jit_registry_ptr(
+                    CallSupport::Variant, CallSupport::Domain, temp[i]);
             delete[] temp;
         }
     }
@@ -557,8 +556,8 @@ struct DRJIT_TRIVIAL_ABI JitArray
         } else {
             uint32_t bucket_count = 0;
             CallBucket *buckets   = jit_var_call_reduce(
-                Backend, CallSupport::Variant, CallSupport::Domain,
-                /* TODO: scope */ 0, m_index, &bucket_count);
+                Backend, CallSupport::Variant, CallSupport::Domain, m_index,
+                &bucket_count);
             return { buckets, bucket_count };
         }
     }
@@ -625,8 +624,7 @@ struct DRJIT_TRIVIAL_ABI JitArray
             return out;
         else
             return (Value) jit_registry_ptr(CallSupport::Variant,
-                                            CallSupport::Domain,
-                                            /* TODO: scope */ 0, out);
+                                            CallSupport::Domain, out);
     }
 
     template <typename T, enable_if_t<!std::is_void_v<T> && std::is_same_v<T, Value>> = 0>

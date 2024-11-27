@@ -332,10 +332,10 @@ typedef void (*ad_call_cleanup)(void*);
  */
 extern DRJIT_EXTRA_EXPORT bool
 ad_call(JitBackend backend, const char *variant, const char *domain,
-        uint32_t scope, int symbolic, size_t callable_count, const char *name,
-        bool is_getter, uint32_t index, uint32_t mask,
-        const drjit::vector<uint64_t> &args, drjit::vector<uint64_t> &rv,
-        void *payload, ad_call_func callback, ad_call_cleanup cleanup, bool ad);
+        int symbolic, size_t callable_count, const char *name, bool is_getter,
+        uint32_t index, uint32_t mask, const drjit::vector<uint64_t> &args,
+        drjit::vector<uint64_t> &rv, void *payload, ad_call_func callback,
+        ad_call_cleanup cleanup, bool ad);
 
 // Callbacks used by \ref ad_loop() below. See the interface for details
 typedef void (*ad_loop_read)(void *payload, drjit::vector<uint64_t> &);

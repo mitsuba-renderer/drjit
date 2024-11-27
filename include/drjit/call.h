@@ -127,8 +127,7 @@ private:                                                                       \
         };                                                                     \
                                                                                \
         return detail::call<Self, Ret, Ret2, Args...>(                         \
-            self, Variant, Domain, /* TODO: scope */ 0, #Name "()", false,     \
-            callback, args...);                                                \
+            self, Variant, Domain, #Name "()", false, callback, args...);      \
     }
 
 #define DRJIT_CALL_GETTER(Name)                                                \
@@ -150,8 +149,7 @@ public:                                                                        \
         };                                                                     \
                                                                                \
         return detail::call<Self, Ret, Ret, Mask_>(                            \
-            self, Variant, Domain, /* TODO: scope */ 0, #Name "()", true,      \
-            callback, mask);                                                   \
+            self, Variant, Domain, #Name "()", true, callback, mask);          \
     }
 template <typename Guide, typename T>
 using vectorize_rv_t =
@@ -209,8 +207,8 @@ template <typename Ret, typename... Args> struct CallState {
 
 template <typename Self, typename Ret, typename Ret2, typename... Args>
 Ret call(const Self &self, const char *variant, const char *domain,
-         uint32_t scope, const char *name, bool is_getter,
-         ad_call_func callback, const Args &...args) {
+         const char *name, bool is_getter, ad_call_func callback,
+         const Args &...args) {
     using Mask = mask_t<Self>;
     using CallStateT = CallState<Ret2, Args...>;
     CallStateT *state = new CallStateT(args...);
@@ -219,9 +217,9 @@ Ret call(const Self &self, const char *variant, const char *domain,
 
     index64_vector args_i, rv_i;
     collect_indices<true>(state->args, args_i);
-    bool done = ad_call(Self::Backend, variant, domain, scope, -1, 0, name,
-                        is_getter, self.index(), mask.index(), args_i, rv_i,
-                        state, callback, &CallStateT::cleanup, true);
+    bool done = ad_call(Self::Backend, variant, domain, -1, 0, name, is_getter,
+                        self.index(), mask.index(), args_i, rv_i, state,
+                        callback, &CallStateT::cleanup, true);
 
     if constexpr (!std::is_same_v<Ret, void>) {
         Ret2 result(std::move(state->rv));
@@ -269,8 +267,7 @@ auto dispatch_impl(std::index_sequence<Is...>, const Self &self, const Func &fun
 
     return detail::call<Self, Ret, Ret2, Func, Args...>(
         self, Self::CallSupport::Variant, Self::CallSupport::Domain,
-        /* TODO: scope */ 0, "drjit::dispatch()", false, callback, func,
-        args...);
+        "drjit::dispatch()", false, callback, func, args...);
 }
 
 NAMESPACE_END(detail)
