@@ -377,6 +377,7 @@ _____
 .. autofunction:: lgamma
 .. autofunction:: rad2deg
 .. autofunction:: deg2rad
+.. autofunction:: sphdir
 
 Safe mathematical functions
 ---------------------------

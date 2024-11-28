@@ -1489,6 +1489,30 @@ def deg2rad(arg: T, /) -> T:
     '''
     return arg * (pi / 180.0)
 
+def sphdir(theta, phi):
+    '''
+    Spherical coordinate parameterization of the unit sphere
+
+    Args:
+        theta (float | drjit.ArrayBase): Elevation angle in radians, measured
+            from the positive Z axis. Valid range is [0, π].
+
+        phi (float | drjit.ArrayBase): Azimuth angle in radians, measured from
+            the positive X axis in the XY plane. Valid range is [0, 2π].
+
+    Returns:
+        drjit.ArrayBase: A 3D unit direction vector corresponding to the input
+        spherical coordinates. The result is a 3-component array with unit length.
+    '''
+    st, ct = sincos(theta)
+    sp, cp = sincos(phi)
+
+    import sys
+    tp = type(theta)
+    m = sys.modules[tp.__module__]
+    Array3f = replace_type_t(m.Array3f, type_v(theta))
+
+    return Array3f(cp * st, sp * st, ct)
 
 def normalize(arg: T, /) -> T:
     '''
