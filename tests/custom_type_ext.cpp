@@ -1,6 +1,9 @@
 #include <drjit/python.h>
 #include <drjit/autodiff.h>
 #include <drjit/packet.h>
+#include <drjit/traversable_base.h>
+#include <nanobind/nanobind.h>
+#include <nanobind/trampoline.h>
 
 namespace nb = nanobind;
 namespace dr = drjit;
@@ -42,6 +45,51 @@ private:
     Value m_value;
 };
 
+class Object : public drjit::TraversableBase {
+    DR_TRAVERSE_CB(drjit::TraversableBase);
+};
+
+template <typename Value>
+class CustomBase : public Object{
+public:
+    CustomBase() : Object() {}
+
+    virtual Value &value() {
+        jit_raise("test");
+    };
+
+    DR_TRAVERSE_CB(Object);
+};
+
+template <typename Value>
+class PyCustomBase : public CustomBase<Value>{
+public:
+    using Base = CustomBase<Value>;
+    NB_TRAMPOLINE(Base, 1);
+
+    PyCustomBase() : Base() {}
+
+    Value &value() override { NB_OVERRIDE_PURE(value); }
+
+    DR_TRAMPOLINE_TRAVERSE_CB(Base);
+};
+
+template <typename Value>
+class CustomA: public CustomBase<Value>{
+public:
+    using Base = CustomBase<Value>;
+
+    CustomA() {}
+    CustomA(const Value &v) : m_value(v) {}
+
+    Value &value() override { return m_value; }
+
+private:
+    Value m_value;
+
+    DR_TRAVERSE_CB(Base, m_value);
+};
+
 
 template <JitBackend Backend> void bind(nb::module_ &m) {
     dr::ArrayBinding b;
@@ -64,12 +112,42 @@ template <JitBackend Backend> void bind(nb::module_ &m) {
         .def(nb::init<Float>())
         .def("value", &CustomFloatHolder::value, nanobind::rv_policy::reference);
 
+    using CustomBase   = CustomBase<Float>;
+    using PyCustomBase = PyCustomBase<Float>;
+    using CustomA      = CustomA<Float>;
+
+    auto object = nb::class_<Object>(
+        m, "Object",
+        nb::intrusive_ptr<Object>(
+            [](Object *o, PyObject *po) noexcept { o->set_self_py(po); }));
+
+    auto base = nb::class_<CustomBase, Object, PyCustomBase>(m, "CustomBase")
+                    .def(nb::init())
+                    .def("value", nb::overload_cast<>(&CustomBase::value));
+    jit_log(LogLevel::Debug, "binding base");
+
+    drjit::bind_traverse(base);
+
+    auto a = nb::class_<CustomA>(m, "CustomA").def(nb::init<Float>());
+
+    drjit::bind_traverse(a);
+
     m.def("cpp_make_opaque",
           [](CustomFloatHolder &holder) { dr::make_opaque(holder); }
     );
 }
 
 NB_MODULE(custom_type_ext, m) {
+    nb::intrusive_init(
+        [](PyObject *o) noexcept {
+            nb::gil_scoped_acquire guard;
+            Py_INCREF(o);
+        },
+        [](PyObject *o) noexcept {
+            nb::gil_scoped_acquire guard;
+            Py_DECREF(o);
+        });
+
 #if defined(DRJIT_ENABLE_LLVM)
     nb::module_ llvm = m.def_submodule("llvm");
     bind<JitBackend::LLVM>(llvm);
