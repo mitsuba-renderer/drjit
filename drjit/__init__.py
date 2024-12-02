@@ -315,7 +315,7 @@ def lerp(a, b, t):
 
     .. math::
 
-       \mathrm{lerp}(t) = (1-t) a + t b
+       \mathrm{lerp}(a, b, t) = (1-t) a + t b
 
     In other words, it linearly blends between :math:`a` and :math:`b` based on
     the value :math:`t` that is typically on the interval :math:`[0, 1]`.
@@ -324,9 +324,9 @@ def lerp(a, b, t):
     improve performance and avoid numerical errors.
 
     Args:
-        value (int | float | drjit.ArrayBase): A Python or Dr.Jit type
-        min (int | float | drjit.ArrayBase): A Python or Dr.Jit type
-        max (int | float | drjit.ArrayBase): A Python or Dr.Jit type
+        a (int | float | drjit.ArrayBase): A Python or Dr.Jit type
+        b (int | float | drjit.ArrayBase): A Python or Dr.Jit type
+        t (int | float | drjit.ArrayBase): A Python or Dr.Jit type
 
     Returns:
         float | drjit.ArrayBase: Interpolated result
