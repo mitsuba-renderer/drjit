@@ -247,6 +247,11 @@ extern DRJIT_EXTRA_EXPORT bool ad_release_one_output(drjit::detail::CustomOpBase
 extern DRJIT_EXTRA_EXPORT void ad_copy_implicit_deps(drjit::vector<uint32_t> &,
                                                      bool input);
 
+/// Retrieve a list of ad indices, that are the target of edges, that have been
+/// postponed by the current scope
+extern DRJIT_EXTRA_EXPORT void ad_scope_postponed(drjit::vector<uint32_t> &);
+
+
 /// Kahan-compensated floating point atomic scatter-addition
 extern DRJIT_EXTRA_EXPORT void
 ad_var_scatter_add_kahan(uint64_t *target_1, uint64_t *target_2, uint64_t value,
