@@ -68,6 +68,7 @@ nanobind_add_module(
   reduce.h      reduce.cpp
   apply.h       apply.cpp
   eval.h        eval.cpp
+  freeze.h      freeze.cpp
   memop.h       memop.cpp
   slice.h       slice.cpp
   dlpack.h      dlpack.cpp

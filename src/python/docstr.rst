@@ -5970,6 +5970,14 @@
     Note that this information can also be queried in a more fine-grained
     manner (per variable) using the :py:attr:`drjit.ArrayBase.state` field.
 
+.. topic:: JitFlag_KernelFreezing
+
+    Enable recording of functions annotated with :py:func:`freeze`.
+
+    If KernelFreezing is enabled, all Dr.Jit operations executed in a function 
+    annotated with :py:func:`freeze` are recorded at it's first call and 
+    replayed on subsequent calls.
+
 .. topic:: JitFlag_Default
 
     The default set of optimization flags consisting of
