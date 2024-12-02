@@ -17,7 +17,11 @@
 #include "pyerrors.h"
 #include "shape.h"
 #include "tupleobject.h"
+#include <bitset>
 #include <cxxabi.h>
+#include <ios>
+#include <ostream>
+#include <sstream>
 #include <tsl/robin_map.h>
 #include <tsl/robin_set.h>
 #include <vector>
@@ -112,56 +116,79 @@ struct Layout {
     nb::object py_object = nb::none();
 
     bool operator==(const Layout &rhs) const {
-        if (!(this->type.equal(rhs.type))) {
-            jit_log(LogLevel::Warn, "    type");
+        if (!(this->type.equal(rhs.type)))
             return false;
-        }
-        if (this->num != rhs.num) {
-            jit_log(LogLevel::Warn, "    num: %u != %u", this->num, rhs.num);
+
+        if (this->num != rhs.num)
             return false;
-        }
-        if (this->fields.size() != rhs.fields.size()) {
-            jit_log(LogLevel::Warn, "    fields.size");
+
+        if (this->fields.size() != rhs.fields.size())
             return false;
-        }
+
         for (uint32_t i = 0; i < this->fields.size(); ++i) {
-            if (!(this->fields[i].equal(rhs.fields[i]))) {
-                jit_log(LogLevel::Warn, "    fields[%u]", i);
+            if (!(this->fields[i].equal(rhs.fields[i])))
                 return false;
-            }
         }
-        if (this->vt != rhs.vt) {
-            jit_log(LogLevel::Warn, "    vt");
+        if (this->vt != rhs.vt)
             return false;
-        }
-        if (this->vs != rhs.vs) {
-            jit_log(LogLevel::Warn, "    vs: %u != %u", (uint32_t) this->vs,
-                    (uint32_t) rhs.vs);
+
+        if (this->vs != rhs.vs)
             return false;
-        }
-        if (this->flags != rhs.flags) {
-            jit_log(LogLevel::Warn, "    flags");
+
+        if (this->flags != rhs.flags)
             return false;
-        }
-        if (this->index != rhs.index) {
-            jit_log(LogLevel::Warn, "    index");
+
+        if (this->index != rhs.index)
             return false;
-        }
-        if (this->size_index != rhs.size_index) {
-            jit_log(LogLevel::Warn, "    size_index");
+
+        if (this->size_index != rhs.size_index)
             return false;
-        }
-        if (this->literal != rhs.literal) {
-            jit_log(LogLevel::Warn, "    literal");
+
+        if (this->literal != rhs.literal)
             return false;
-        }
-        if (!this->py_object.equal(rhs.py_object)) {
-            jit_log(LogLevel::Warn, "    object");
+        if (!this->py_object.equal(rhs.py_object))
             return false;
-        }
+
         return true;
     }
 };
+
+static void log_layouts(const std::vector<Layout> &layouts, std::ostream &os,
+                       uint32_t &index, std::string &padding) {
+    const Layout &layout = layouts[index++];
+
+    auto tp_name = nb::type_name(layout.type).c_str();
+    os << padding << "type = " << tp_name << std::endl;
+    os << padding << "num: " << layout.num << std::endl;
+    os << padding << "vt: " << (uint32_t) layout.vt << std::endl;
+    os << padding << "vs: " << (uint32_t) layout.vs << std::endl;
+    os << padding << "flats: " <<  std::bitset<8>(layout.flags) << std::endl;
+    os << padding << "literal: " << std::hex << layout.literal << std::endl;
+    os << padding << "index: " << layout.index << std::endl;
+    os << padding << "size_index: " << layout.size_index << std::endl;
+    os << padding << "py_object: " << nb::str(layout.py_object).c_str() << std::endl;
+
+    if (layout.fields.size() == 0)
+        for (uint32_t i = 0; i < layout.num; i++){
+            os << padding << "Layout[" << std::endl;
+            padding.append("    ");
+            
+            log_layouts(layouts, os, index, padding);
+            
+            padding.resize(padding.length() - 4);
+            os << padding << "]" << std::endl;
+        }
+    else
+        for (const auto &field: layout.fields){
+            os << padding << nb::str(field).c_str() << ": Layout[" << std::endl;
+            padding.append("    ");
+            
+            log_layouts(layouts, os, index, padding);
+            
+            padding.resize(padding.length() - 4);
+            os << padding << "]" << std::endl;
+        }
+}
 
 // Additional context required when traversing the inputs
 struct TraverseContext {
@@ -1104,15 +1131,39 @@ struct FlatVariables {
         }
         jit_log(LogLevel::Debug, "}");
     }
-
-    void log_layout() const {
-        for (uint32_t i = this->layout_index; i < this->layout.size(); ++i) {
-            const Layout &layout = this->layout[i];
-            jit_log(LogLevel::Debug, "layout.type=%s, layout.num=%u",
-                    nb::type_name(layout.type).c_str(), layout.num);
-        }
-    }
 };
+
+std::ostream &operator<<(std::ostream &os, const FlatVariables &r) {
+    std::string offset = "    ";
+    
+    os << "FlatVariables[" << std::endl;
+
+    std::string padding("    ");
+    uint32_t index = 0;
+
+    os << padding << "variables = [";
+    for (uint64_t index: r.variables){
+        os << "r%u, ";
+    }
+    os << "]" << std::endl;
+    
+    os << padding << "sizes = [";
+    for (uint64_t index: r.variables){
+        os << "%u, ";
+    }
+    os << "]" << std::endl;
+    
+    os << padding << "Layout[" << std::endl;
+
+    padding.append("    ");
+    log_layouts(r.layout, os, index, padding);
+    padding.resize(padding.length() - 4);
+
+    os << padding << "]" << std::endl;
+
+    os << "]" << std::endl;
+    return os;
+}
 
 void traverse_traversable(drjit::TraversableBase *traversable,
                           TraverseCallback &cb, bool rw = false) {
@@ -1393,81 +1444,28 @@ struct RecordingKey {
     bool operator==(const RecordingKey &rhs) const {
         return this->layout == rhs.layout && this->flags == rhs.flags;
     }
-
-    void log_diff(const RecordingKey *rhs, LogLevel log_level) const {
-        jit_log(log_level, "Key difference:");
-        if (this->flags != rhs->flags)
-            jit_log(log_level, "    flags: %u != %u", this->flags, rhs->flags);
-
-        if (this->layout.size() != rhs->layout.size()) {
-            jit_log(log_level, "    n_layout: %u != %u", this->layout.size(),
-                    rhs->layout.size());
-            return;
-        }
-
-        for (uint32_t i = 0; i < this->layout.size(); ++i) {
-            const Layout &lhs_layout = this->layout[i];
-            const Layout &rhs_layout = rhs->layout[i];
-
-            // if (lhs_layout == rhs_layout)
-            //     continue;
-
-            jit_log(log_level, "    layout %u:", i);
-            if (!lhs_layout.type.is_none() && !rhs_layout.type.is_none() &&
-                !lhs_layout.type.equal(rhs_layout.type))
-                jit_log(log_level, "    type: %s != %s",
-                        nb::type_name(lhs_layout.type).c_str(),
-                        nb::type_name(rhs_layout.type).c_str());
-            if (lhs_layout.num != rhs_layout.num)
-                jit_log(log_level, "    num: %u != %u", lhs_layout.num,
-                        rhs_layout.num);
-            if (lhs_layout.vt != rhs_layout.vt)
-                jit_log(log_level, "    vt: %u != %u", lhs_layout.vt,
-                        rhs_layout.vt);
-            if (lhs_layout.vs != rhs_layout.vs)
-                jit_log(log_level, "    vs: %u != %u", lhs_layout.vs,
-                        rhs_layout.vs);
-            if (lhs_layout.flags != rhs_layout.flags)
-                jit_log(log_level, "    singleton_array: %u != %u",
-                        lhs_layout.flags, rhs_layout.flags);
-            if (lhs_layout.literal != rhs_layout.literal)
-                jit_log(log_level, "    literal: %u != %u", lhs_layout.literal,
-                        rhs_layout.literal);
-            if (lhs_layout.index != rhs_layout.index)
-                jit_log(log_level, "    index: %u != %u", lhs_layout.index,
-                        rhs_layout.index);
-            if (lhs_layout.size_index != rhs_layout.size_index)
-                jit_log(log_level, "    size_index: %u != %u",
-                        lhs_layout.size_index, rhs_layout.size_index);
-            if (!(lhs_layout.py_object.equal(rhs_layout.py_object)))
-                jit_log(log_level, "    py_object: %s != %s",
-                        nb::str(lhs_layout.py_object).c_str(),
-                        nb::str(rhs_layout.py_object).c_str());
-        }
-    }
-    void log() {
-        jit_log(LogLevel::Debug, "RecordingKey{");
-        jit_log(LogLevel::Debug, "    flags = %u", this->flags);
-
-        jit_log(LogLevel::Debug, "    layout = [");
-        for (Layout &layout : layout) {
-            jit_log(LogLevel::Debug, "        Layout{");
-            if (!layout.type.is_none())
-                jit_log(LogLevel::Debug, "            type = %s,",
-                        nb::type_name(layout.type).c_str());
-            jit_log(LogLevel::Debug, "            num = %u,", layout.num);
-            jit_log(LogLevel::Debug, "            vt = %u,",
-                    (uint32_t) layout.vt);
-            jit_log(LogLevel::Debug, "            vs = %u,",
-                    (uint32_t) layout.vs);
-            jit_log(LogLevel::Debug, "            flags = %u,", layout.flags);
-            jit_log(LogLevel::Debug, "        },");
-        }
-        jit_log(LogLevel::Debug, "    ]");
-
-        jit_log(LogLevel::Debug, "}");
-    }
 };
+
+std::ostream &operator<<(std::ostream &os, const RecordingKey &r) {
+    std::string offset = "    ";
+    
+    os << "RecordingKey[" << std::endl;
+    os << "    flags = " << r.flags << std::endl;
+
+    std::string padding("    ");
+    uint32_t index = 0;
+    
+    os << padding << "Layout[" << std::endl;
+
+    padding.append("    ");
+    log_layouts(r.layout, os, index, padding);
+    padding.resize(padding.length() - 4);
+
+    os << padding << "]" << std::endl;
+
+    os << "]" << std::endl;
+    return os;
+}
 
 struct RecordingKeyHasher {
     size_t operator()(const RecordingKey &key) const {
@@ -1781,11 +1779,21 @@ nb::object FrozenFunction::operator()(nb::args args, nb::kwargs kwargs) {
         auto it        = this->recordings.find(key);
 
         if (it == this->recordings.end()) {
+#ifndef NDEBUG
             if (this->recordings.size() >= 1) {
                 jit_log(LogLevel::Info,
                         "Function input missmatch! Function will be retraced.");
-                key.log_diff(&prev_key, LogLevel::Debug);
+
+                std::ostringstream repr;
+                repr << key;
+                
+                std::ostringstream repr_prev;
+                repr_prev << prev_key;
+
+                jit_log(LogLevel::Debug, "new key: %s", repr.str().c_str());
+                jit_log(LogLevel::Debug, "old key: %s", repr_prev.str().c_str());
             }
+#endif
             // FunctionRecording recording;
             auto recording = std::make_unique<FunctionRecording>();
 
