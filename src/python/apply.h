@@ -57,7 +57,7 @@ struct TraverseCallback {
     // Type-erased form which is needed in some cases to traverse into opaque
     // C++ code. This one just gets called with Jit/AD variable indices, an
     // associated Python/ instance/type is not available.
-    virtual void operator()(uint64_t index);
+    virtual uint64_t operator()(uint64_t index);
 
     // Traverse an unknown object
     virtual void traverse_unknown(nb::handle h);
@@ -93,8 +93,8 @@ struct TransformPairCallback {
 };
 
 /// Invoke the given callback on leaf elements of the pytree 'h'
-extern void traverse(const char *op, TraverseCallback &callback,
-                     nb::handle h);
+extern void traverse(const char *op, TraverseCallback &callback, nb::handle h,
+                     bool rw = false);
 
 /// Parallel traversal of two compatible pytrees 'h1' and 'h2'
 extern void traverse_pair(const char *op, TraversePairCallback &callback,

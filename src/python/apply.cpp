@@ -595,11 +595,12 @@ struct recursion_guard {
     ~recursion_guard() { recursion_level--; }
 };
 
-void TraverseCallback::operator()(uint64_t) { }
+uint64_t TraverseCallback::operator()(uint64_t) { return 0; }
 void TraverseCallback::traverse_unknown(nb::handle) { }
 
 /// Invoke the given callback on leaf elements of the pytree 'h'
-void traverse(const char *op, TraverseCallback &tc, nb::handle h) {
+void traverse(const char *op, TraverseCallback &tc, nb::handle h,
+              bool rw) {
     nb::handle tp = h.type();
     recursion_guard guard;
 
@@ -614,30 +615,32 @@ void traverse(const char *op, TraverseCallback &tc, nb::handle h) {
                     len = s.len(inst_ptr(h));
 
                 for (Py_ssize_t i = 0; i < len; ++i)
-                    traverse(op, tc, nb::steal(s.item(h.ptr(), i)));
+                    traverse(op, tc, nb::steal(s.item(h.ptr(), i)), rw);
             } else  {
                 tc(h);
             }
         } else if (tp.is(&PyTuple_Type)) {
             for (nb::handle h2 : nb::borrow<nb::tuple>(h))
-                traverse(op, tc, h2);
+                traverse(op, tc, h2, rw);
         } else if (tp.is(&PyList_Type)) {
             for (nb::handle h2 : nb::borrow<nb::list>(h))
-                traverse(op, tc, h2);
+                traverse(op, tc, h2, rw);
         } else if (tp.is(&PyDict_Type)) {
             for (nb::handle h2 : nb::borrow<nb::dict>(h).values())
-                traverse(op, tc, h2);
+                traverse(op, tc, h2, rw);
         } else {
             if (nb::dict ds = get_drjit_struct(tp); ds.is_valid()) {
                 for (auto [k, v] : ds)
-                    traverse(op, tc, nb::getattr(h, k));
+                    traverse(op, tc, nb::getattr(h, k), rw);
             } else if (nb::object df = get_dataclass_fields(tp); df.is_valid()) {
                 for (nb::handle field : df) {
                     nb::object k = field.attr(DR_STR(name));
-                    traverse(op, tc, nb::getattr(h, k));
+                    traverse(op, tc, nb::getattr(h, k), rw);
                 }
-            } else if (nb::object cb = get_traverse_cb_ro(tp); cb.is_valid()) {
+            } else if (nb::object cb = get_traverse_cb_ro(tp); cb.is_valid() && !rw) {
                 cb(h, nb::cpp_function([&](uint64_t index) { tc(index); }));
+            } else if (nb::object cb = get_traverse_cb_rw(tp); cb.is_valid() && rw) {
+                cb(h, nb::cpp_function([&](uint64_t index) { return tc(index); }));
             } else {
                 tc.traverse_unknown(h);
             }

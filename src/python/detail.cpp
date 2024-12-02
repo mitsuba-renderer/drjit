@@ -114,10 +114,11 @@ void collect_indices(nb::handle h, dr::vector<uint64_t> &indices, bool inc_ref) 
                 operator()(index_fn(inst_ptr(h)));
         }
 
-        void operator()(uint64_t index) override {
+        uint64_t operator()(uint64_t index) override {
             if (inc_ref)
                 ad_var_inc_ref(index);
             result.push_back(index);
+            return 0;
         }
     };
 
@@ -288,7 +289,7 @@ void traverse_py_cb_ro_impl(nb::handle self, nb::callable c) {
             if (index_fn)
                 operator()(index_fn(inst_ptr(h)));
         }
-        void operator()(uint64_t index) override { m_callback(index); }
+        uint64_t operator()(uint64_t index) override { m_callback(index); return 0; }
         nb::callable m_callback;
 
         PyTraverseCallback(nb::callable c) : m_callback(c) {}
@@ -304,11 +305,11 @@ void traverse_py_cb_ro_impl(nb::handle self, nb::callable c) {
 }
 
 void traverse_py_cb_rw_impl(nb::handle self, nb::callable c) {
-    struct PyTraverseCallback : TransformCallback {
-        void operator()(nb::handle h1, nb::handle h2) override {
-            const ArraySupplement &s = supp(h1.type());
+    struct PyTraverseCallback : TraverseCallback {
+        void operator()(nb::handle h) override {
+            const ArraySupplement &s = supp(h.type());
             if (s.index)
-                s.init_index(operator()(s.index(inst_ptr(h1))), inst_ptr(h2));
+                s.reset_index(operator()(s.index(inst_ptr(h))), inst_ptr(h));
         }
         uint64_t operator()(uint64_t index) override {
             return nb::cast<uint64_t>(m_callback(index));
@@ -323,7 +324,7 @@ void traverse_py_cb_rw_impl(nb::handle self, nb::callable c) {
     auto dict = nb::borrow<nb::dict>(nb::getattr(self, "__dict__"));
 
     for (auto value : dict.values()) {
-        transform("traverse_py_cb_rw", traverse_cb, value);
+        traverse("traverse_py_cb_rw", traverse_cb, value);
     }
 }
 
