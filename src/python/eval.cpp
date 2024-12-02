@@ -57,12 +57,8 @@ static void make_opaque(nb::handle h) {
             if (rv)
                 result = true;
 
-            if (index != index_new) {
-                nb::object tmp = nb::inst_alloc(tp);
-                s.init_index(index_new, inst_ptr(tmp));
-                nb::inst_mark_ready(tmp);
-                nb::inst_replace_move(h, tmp);
-            }
+            if (index != index_new)
+                s.reset_index(index_new, inst_ptr(h));
 
             ad_var_dec_ref(index_new);
         }
