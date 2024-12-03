@@ -54,6 +54,7 @@
 #include <nanobind/intrusive/counter.inl>
 #include <queue>
 #include <mutex>
+#include <string>
 
 namespace dr = drjit;
 
