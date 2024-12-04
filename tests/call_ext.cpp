@@ -50,7 +50,7 @@ template <typename Float> struct Base : nb::intrusive_base {
 
     Base() {
         if constexpr (dr::is_jit_v<Float>)
-            jit_registry_put(dr::backend_v<Float>, "Base", this);
+            jit_registry_put("", "Base", this);
     }
 
     virtual ~Base() { jit_registry_remove(this); }

@@ -952,8 +952,10 @@ nanobind::object bind_array(ArrayBinding &b, nanobind::handle scope = {},
         nb::object result = bind_func(nb::cast((void *) &b));
     #endif
 
-    if constexpr (std::is_pointer_v<value_t<T>>)
+    if constexpr (std::is_pointer_v<value_t<T>>) {
+        result.attr("Variant") = T::CallSupport::Variant;
         result.attr("Domain") = T::CallSupport::Domain;
+    }
 
     return result;
 }

@@ -166,8 +166,9 @@ nb::object switch_impl(nb::handle index_, nb::sequence targets,
         }
 
         bool done = ad_call(
-            (JitBackend) s.backend, nullptr, symbolic, nb::len(targets),
-            label.c_str(), false, (uint32_t) s.index(inst_ptr(index)),
+            (JitBackend) s.backend, /* variant */ nullptr, /* domain */ nullptr,
+            symbolic, nb::len(targets), label.c_str(), false,
+            (uint32_t) s.index(inst_ptr(index)),
             mask.is_valid() ? ((uint32_t) s.index(inst_ptr(mask))) : 0u, args_i,
             rv_i, state, func, cleanup, true);
 
@@ -195,6 +196,7 @@ nb::object dispatch_impl(nb::handle_t<dr::ArrayBase> inst,
         nb::object target_o;
         nb::object rv_o;
         JitBackend backend;
+        nb::str variant_name;
         nb::str domain_name;
 
         ~State() {
@@ -204,6 +206,7 @@ nb::object dispatch_impl(nb::handle_t<dr::ArrayBase> inst,
             args_o.reset();
             target_o.reset();
             rv_o.reset();
+            variant_name.reset();
             domain_name.reset();
         }
     };
@@ -211,6 +214,11 @@ nb::object dispatch_impl(nb::handle_t<dr::ArrayBase> inst,
     const ArraySupplement &s = supp(inst.type());
     if (!s.is_class || s.ndim != 1)
         nb::raise("drjit.dispatch(): 'inst' parameter must be an instance array.");
+
+    nb::object variant_name = nb::getattr(inst.type(), "Variant", nb::handle());
+    if (!variant_name.is_valid() || !nb::isinstance<nb::str>(variant_name))
+        nb::raise("drjit.dispatch(): The instance array type ('%s') lacks the "
+                  "'Variant' name attribute.", nb::type_name(inst.type()).c_str());
 
     nb::object domain_name = nb::getattr(inst.type(), "Domain", nb::handle());
     if (!domain_name.is_valid() || !nb::isinstance<nb::str>(domain_name))
@@ -231,8 +239,10 @@ nb::object dispatch_impl(nb::handle_t<dr::ArrayBase> inst,
             state.args_o =
                 nb::borrow<nb::tuple>(update_indices(state.args_o, args_i));
 
-            if (!self)
-                self = jit_registry_peek(state.backend, state.domain_name.c_str());
+            if (!self) {
+                self = jit_registry_peek(state.variant_name.c_str(),
+                                         state.domain_name.c_str());
+            }
 
             nb::object self_o = nb::steal(nb::detail::nb_type_put(
                 state.type, self, nb::rv_policy::reference, nullptr));
@@ -253,6 +263,7 @@ nb::object dispatch_impl(nb::handle_t<dr::ArrayBase> inst,
             target,
             nb::object(),
             (JitBackend) s.backend,
+            nb::borrow<nb::str>(variant_name),
             nb::borrow<nb::str>(domain_name)
         };
 
@@ -272,11 +283,12 @@ nb::object dispatch_impl(nb::handle_t<dr::ArrayBase> inst,
             mask = mask_tp(mask);
         }
 
-        bool done = ad_call(
-            (JitBackend) s.backend, state->domain_name.c_str(), symbolic, 0,
-            label.c_str(), false, (uint32_t) s.index(inst_ptr(inst)),
-            mask.is_valid() ? ((uint32_t) s.index(inst_ptr(mask))) : 0u, args_i,
-            rv_i, state, target_cb, cleanup, true);
+        bool done =
+            ad_call((JitBackend) s.backend, state->variant_name.c_str(),
+                    state->domain_name.c_str(), symbolic, 0, label.c_str(),
+                    false, (uint32_t) s.index(inst_ptr(inst)),
+                    mask.is_valid() ? ((uint32_t) s.index(inst_ptr(mask))) : 0u,
+                    args_i, rv_i, state, target_cb, cleanup, true);
 
         nb::object result = ::update_indices(state->rv_o, rv_i);
 
