@@ -83,8 +83,9 @@ enum class LayoutFlag : uint32_t {
 struct Layout {
     /// Nanobind type of the container/variable
     nb::type_object type;
-    /// Number of members in this container
-    size_t num = 0;
+    /// Number of members in this container.
+    /// Can be used to traverse the layout without knowing the type.
+    uint32_t num = 0;
     /// Optional field identifiers of the container
     /// for example: keys in dictionary
     std::vector<nb::object> fields;
@@ -92,13 +93,6 @@ struct Layout {
     VarType vt = VarType::Void;
     /// Optional evaluation state of the variable
     VarState vs = VarState::Invalid;
-    /// Whether the variable is an array with a single entry.
-    /// Such arrays are handled differently by the compiler.
-    // bool singleton_array = false;
-    // bool unaligned = false;
-    // /// Whether this variable represents a value and it's gradient
-    // /// The actual value and gradient layout is handled by the children.
-    // bool grad_enabled = false;
     uint32_t flags = 0;
     /// The literal data
     uint64_t literal = 0;
@@ -468,7 +462,7 @@ struct FlatVariables {
                     Layout layout;
                     layout.type      = nb::borrow<nb::type_object>(tp);
                     layout.py_object = shape(h);
-                    layout.num       = width(array);
+                    layout.literal       = width(array);
                     this->layout.push_back(layout);
 
                     traverse(nb::steal(array), ctx);
@@ -797,7 +791,7 @@ struct FlatVariables {
                 if (s.is_tensor) {
                     const Layout &array_layout = this->layout[layout_index++];
                     nb::object array =
-                        construct_ad_var(array_layout, layout.num);
+                        construct_ad_var(array_layout, layout.literal);
 
                     return layout.type(array, layout.py_object);
                 } else if (s.ndim != 1) {
