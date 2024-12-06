@@ -253,6 +253,28 @@ void FlatVariables::traverse_jit_index(uint32_t index, TraverseContext &ctx,
     }
     this->layout.push_back(layout);
 }
+
+/**
+ * Construct a variable, given it's layout.
+ * This is the counterpart to `traverse_jit_index`.
+ */
+uint32_t FlatVariables::construct_jit_index(const Layout &layout) {
+    if (layout.vs == VarState::Literal) {
+        uint32_t index = jit_var_literal(this->backend, layout.vt,
+                                         &layout.literal, layout.index);
+
+        return index;
+    } else {
+        uint32_t index = this->variables[layout.index];
+        jit_log(LogLevel::Debug, "    uses output[%u] = r%u", layout.index,
+                index);
+
+        jit_var_inc_ref(index);
+
+        return index;
+    }
+}
+
 /**
  * Add an ad variable by it's index. Both the value and gradient are added
  * to the flattened variables. If the ad index has been marked as postponed
@@ -296,6 +318,70 @@ void FlatVariables::traverse_ad_index(uint64_t index, TraverseContext &ctx,
 }
 
 /**
+ * Construct/assign the variable index given a layout.
+ * This corresponds to `traverse_ad_index`>
+ *
+ * This function is also used for assignment to ad-variables.
+ * If a `prev_index` is provided, and it is an ad-variable the gradient and
+ * value of the flat variables will be applied to the ad variable,
+ * preserving the ad_idnex.
+ *
+ * It returns an owning reference.
+ */
+uint64_t FlatVariables::construct_ad_index(const Layout &layout,
+                                           uint32_t shrink,
+                                           uint64_t prev_index) {
+    uint64_t index;
+    if ((layout.flags & (uint32_t) LayoutFlag::GradEnabled) != 0) {
+        bool postponed = (layout.flags & (uint32_t) LayoutFlag::Postponed);
+
+        Layout &val_layout = this->layout[layout_index++];
+        uint32_t val       = construct_jit_index(val_layout);
+
+        Layout &grad_layout = this->layout[layout_index++];
+        uint32_t grad       = construct_jit_index(grad_layout);
+
+        // Resize the gradient if it is a literal
+        if ((VarState) jit_var_state(grad) == VarState::Literal) {
+            uint32_t new_grad = jit_var_resize(grad, jit_var_size(val));
+            jit_var_dec_ref(grad);
+            grad = new_grad;
+        }
+
+        // If the prev_index variable is provided we assign the new value
+        // and gradient to the ad variable of that index instead of creating
+        // a new one.
+        uint32_t ad_index = (uint32_t) (prev_index >> 32);
+        if (ad_index) {
+            index = (((uint64_t) ad_index) << 32) | ((uint64_t) val);
+            ad_var_inc_ref(index);
+        } else
+            index = ad_var_new(val);
+
+        jit_log(LogLevel::Debug, " -> ad_var r%zu", index);
+        jit_var_dec_ref(val);
+
+        // Equivalent to set_grad
+        ad_clear_grad(index);
+        ad_accum_grad(index, grad);
+        jit_var_dec_ref(grad);
+
+        // Variables, that have been postponed by the isolate gradient scope
+        // will be enqueued, which propagates their gradeint to previous
+        // functions.
+        if (ad_index && postponed) {
+            ad_enqueue(drjit::ADMode::Backward, index);
+        }
+    } else {
+        index = construct_jit_index(layout);
+    }
+
+    if (shrink > 0)
+        index = ad_var_shrink(index, shrink);
+    return index;
+}
+
+/**
  * Wrapper aground traverse_ad_index for a python handle.
  */
 void FlatVariables::traverse_ad_var(nb::handle h, TraverseContext &ctx) {
@@ -307,6 +393,50 @@ void FlatVariables::traverse_ad_var(nb::handle h, TraverseContext &ctx) {
     uint64_t index = s.index(inst_ptr(h));
 
     this->traverse_ad_index(index, ctx, h.type());
+}
+
+/**
+ * Construct an ad variable given it's layout.
+ * This corresponds to `traverse_ad_var`
+ */
+nb::object FlatVariables::construct_ad_var(const Layout &layout,
+                                           uint32_t shrink) {
+    uint64_t index = construct_ad_index(layout, shrink);
+
+    auto result              = nb::inst_alloc_zero(layout.type);
+    const ArraySupplement &s = supp(result.type());
+    s.init_index(index, inst_ptr(result));
+
+    // We have to release the reference, since assignment will borrow from
+    // it.
+    ad_var_dec_ref(index);
+
+    return result;
+}
+
+/**
+ * Assigns an ad variable.
+ * Corresponds to `traverse_ad_var`.
+ * This uses `construct_ad_index` to either construct a new ad variable or
+ * assign the value and gradient to an already existing one.
+ */
+void FlatVariables::assign_ad_var(Layout &layout, nb::handle dst) {
+    const ArraySupplement &s = supp(layout.type);
+
+    uint64_t index;
+    if (s.index) {
+        // ``construct_ad_index`` is used for assignment
+        index = construct_ad_index(layout, 0, s.index(inst_ptr(dst)));
+    } else
+        index = construct_ad_index(layout);
+
+    s.reset_index(index, inst_ptr(dst));
+    jit_log(LogLevel::Debug, "index=%zu, grad_enabled=%u, ad_grad_enabled=%u",
+            index, grad_enabled(dst), ad_grad_enabled(index));
+
+    // Release reference, since ``construct_ad_index`` returns owning
+    // reference and ``s.reset_index`` borrows from it.
+    ad_var_dec_ref(index);
 }
 
 /**
@@ -339,6 +469,71 @@ void FlatVariables::traverse_cb(const drjit::TraversableBase *traversable,
         });
 
     this->layout[layout_index].num = payload.num_fields;
+}
+
+/**
+ * Helper function, used to assign a callback variable.
+ *
+ * \param tmp
+ *     This vector is populated with the indices to variables that have been
+ *     constructed. It is required to release the references, since the
+ *     references created by `construct_ad_index` are owning and they are
+ *     borrowed after the callback returns.
+ */
+uint64_t FlatVariables::assign_cb_internal(uint64_t index,
+                                           index64_vector &tmp) {
+    if (!index)
+        return index;
+    Layout &layout = this->layout[layout_index++];
+
+    uint64_t new_index = this->construct_ad_index(layout, 0, index);
+
+    if (layout.vt != (VarType) jit_var_type(index))
+        jit_raise("VarType missmatch %u != %u while assigning (a%u, r%u) "
+                  "-> (a%u, r%u)!",
+                  (uint32_t) layout.vt, (uint32_t) jit_var_type(index),
+                  (uint32_t) (index >> 32), (uint32_t) index,
+                  (uint32_t) (new_index >> 32), (uint32_t) new_index);
+
+    tmp.push_back_steal(new_index);
+    return new_index;
+}
+
+/**
+ * Assigns variables using it's `traverse_cb_rw` callback.
+ * This corresponds to `traverse_cb`.
+ */
+void FlatVariables::assign_cb(drjit::TraversableBase *traversable) {
+    Layout &layout = this->layout[layout_index++];
+
+    struct Payload {
+        FlatVariables *flat_vars;
+        index64_vector tmp;
+        uint32_t num_fields;
+        uint32_t field_counter;
+    };
+    jit_log(LogLevel::Debug, "    layout.num=%u", layout.num);
+    Payload payload{ this, index64_vector(), (uint32_t) layout.num, 0 };
+    traversable->traverse_1_cb_rw(
+        (void *) &payload, [](void *p, uint64_t index) {
+            if (!index)
+                return index;
+            Payload *payload = (Payload *) p;
+            jit_log(LogLevel::Debug, "    field_counter=%u",
+                    payload->field_counter);
+            if (payload->field_counter >= payload->num_fields)
+                jit_raise("While traversing an object "
+                          "for assigning inputs, the number of variables to "
+                          "assign did not match the number of variables "
+                          "traversed when recording!");
+            payload->field_counter++;
+
+            return payload->flat_vars->assign_cb_internal(index, payload->tmp);
+        });
+    if (payload.field_counter != layout.num)
+        jit_raise("While traversing and object for assigning inputs, the "
+                  "number of variables to assign did not match the number "
+                  "of variables traversed when recording!");
 }
 
 /**
@@ -508,170 +703,6 @@ void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
 }
 
 /**
- * First traverses the PyTree, then the registry. This ensures that
- * additional data to vcalls is tracked correctly.
- */
-void FlatVariables::traverse_with_registry(nb::handle h, TraverseContext &ctx) {
-
-    // Traverse the handle
-    traverse(h, ctx);
-
-    // Traverse the registry
-    {
-        ProfilerPhase profiler("traverse_registry");
-        Layout layout;
-        layout.type         = nb::borrow<nb::type_object>(nb::none());
-        size_t layout_index = this->layout.size();
-        this->layout.push_back(layout);
-
-        uint32_t num_fields = 0;
-
-        jit_log(LogLevel::Debug, "registry{");
-        uint32_t registry_bound = jit_registry_id_bound(backend, nullptr);
-        std::vector<void *> registry_pointers;
-        registry_pointers.resize(registry_bound);
-        jit_registry_get_pointers(backend, registry_pointers.data());
-
-        jit_log(LogLevel::Debug, "registry_bound=%u", registry_bound);
-        jit_log(LogLevel::Debug, "layout_index=%u", this->layout.size());
-        for (void *ptr : registry_pointers) {
-            jit_log(LogLevel::Debug, "ptr=%p", ptr);
-            if (!ptr)
-                continue;
-
-            // WARN: very unsafe cast!
-            auto base = (nb::intrusive_base *) ptr;
-            auto self = base->self_py();
-
-            if (self)
-                traverse(self, ctx);
-
-            const drjit::TraversableBase *traversable =
-                dynamic_cast<const drjit::TraversableBase *>(base);
-
-            if (!traversable) {
-                int status;
-                jit_fail("Could not cast intrusive_base to TraversableBase! "
-                         "The typename was: %s",
-                         abi::__cxa_demangle(typeid(*base).name(), nullptr,
-                                             nullptr, &status));
-                continue;
-            }
-
-            traverse_cb(traversable, ctx);
-            num_fields++;
-        }
-        jit_log(LogLevel::Debug, "}");
-
-        this->layout[layout_index].num = num_fields;
-    }
-}
-
-/**
- * Construct a variable, given it's layout.
- * This is the counterpart to `traverse_jit_index`.
- */
-uint32_t FlatVariables::construct_jit_index(const Layout &layout) {
-    if (layout.vs == VarState::Literal) {
-        uint32_t index = jit_var_literal(this->backend, layout.vt,
-                                         &layout.literal, layout.index);
-
-        return index;
-    } else {
-        uint32_t index = this->variables[layout.index];
-        jit_log(LogLevel::Debug, "    uses output[%u] = r%u", layout.index,
-                index);
-
-        jit_var_inc_ref(index);
-
-        return index;
-    }
-}
-
-/**
- * Construct/assign the variable index given a layout.
- * This corresponds to `traverse_ad_index`>
- *
- * This function is also used for assignment to ad-variables.
- * If a `prev_index` is provided, and it is an ad-variable the gradient and
- * value of the flat variables will be applied to the ad variable,
- * preserving the ad_idnex.
- *
- * It returns an owning reference.
- */
-uint64_t FlatVariables::construct_ad_index(const Layout &layout,
-                                           uint32_t shrink,
-                                           uint64_t prev_index) {
-    uint64_t index;
-    if ((layout.flags & (uint32_t) LayoutFlag::GradEnabled) != 0) {
-        bool postponed = (layout.flags & (uint32_t) LayoutFlag::Postponed);
-
-        Layout &val_layout = this->layout[layout_index++];
-        uint32_t val       = construct_jit_index(val_layout);
-
-        Layout &grad_layout = this->layout[layout_index++];
-        uint32_t grad       = construct_jit_index(grad_layout);
-
-        // Resize the gradient if it is a literal
-        if ((VarState) jit_var_state(grad) == VarState::Literal) {
-            uint32_t new_grad = jit_var_resize(grad, jit_var_size(val));
-            jit_var_dec_ref(grad);
-            grad = new_grad;
-        }
-
-        // If the prev_index variable is provided we assign the new value
-        // and gradient to the ad variable of that index instead of creating
-        // a new one.
-        uint32_t ad_index = (uint32_t) (prev_index >> 32);
-        if (ad_index) {
-            index = (((uint64_t) ad_index) << 32) | ((uint64_t) val);
-            ad_var_inc_ref(index);
-        } else
-            index = ad_var_new(val);
-
-        jit_log(LogLevel::Debug, " -> ad_var r%zu", index);
-        jit_var_dec_ref(val);
-
-        // Equivalent to set_grad
-        ad_clear_grad(index);
-        ad_accum_grad(index, grad);
-        jit_var_dec_ref(grad);
-
-        // Variables, that have been postponed by the isolate gradient scope
-        // will be enqueued, which propagates their gradeint to previous
-        // functions.
-        if (ad_index && postponed) {
-            ad_enqueue(drjit::ADMode::Backward, index);
-        }
-    } else {
-        index = construct_jit_index(layout);
-    }
-
-    if (shrink > 0)
-        index = ad_var_shrink(index, shrink);
-    return index;
-}
-
-/**
- * Construct an ad variable given it's layout.
- * This corresponds to `traverse_ad_var`
- */
-nb::object FlatVariables::construct_ad_var(const Layout &layout,
-                                           uint32_t shrink) {
-    uint64_t index = construct_ad_index(layout, shrink);
-
-    auto result              = nb::inst_alloc_zero(layout.type);
-    const ArraySupplement &s = supp(result.type());
-    s.init_index(index, inst_ptr(result));
-
-    // We have to release the reference, since assignment will borrow from
-    // it.
-    ad_var_dec_ref(index);
-
-    return result;
-}
-
-/**
  * This is the counterpart to the traverse method, used to construct the
  * output of a frozen function. Given a layout vector and flat_variables, it
  * re-constructs the PyTree.
@@ -764,96 +795,6 @@ nb::object FlatVariables::construct() {
                         nb::type_name(layout.type).ptr(), e.what());
         nb::raise_python_error();
     }
-}
-
-/**
- * Assigns an ad variable.
- * Corresponds to `traverse_ad_var`.
- * This uses `construct_ad_index` to either construct a new ad variable or
- * assign the value and gradient to an already existing one.
- */
-void FlatVariables::assign_ad_var(Layout &layout, nb::handle dst) {
-    const ArraySupplement &s = supp(layout.type);
-
-    uint64_t index;
-    if (s.index) {
-        // ``construct_ad_index`` is used for assignment
-        index = construct_ad_index(layout, 0, s.index(inst_ptr(dst)));
-    } else
-        index = construct_ad_index(layout);
-
-    s.reset_index(index, inst_ptr(dst));
-    jit_log(LogLevel::Debug, "index=%zu, grad_enabled=%u, ad_grad_enabled=%u",
-            index, grad_enabled(dst), ad_grad_enabled(index));
-
-    // Release reference, since ``construct_ad_index`` returns owning
-    // reference and ``s.reset_index`` borrows from it.
-    ad_var_dec_ref(index);
-}
-
-/**
- * Helper function, used to assign a callback variable.
- *
- * \param tmp
- *     This vector is populated with the indices to variables that have been
- *     constructed. It is required to release the references, since the
- *     references created by `construct_ad_index` are owning and they are
- *     borrowed after the callback returns.
- */
-uint64_t FlatVariables::assign_cb_internal(uint64_t index,
-                                           index64_vector &tmp) {
-    if (!index)
-        return index;
-    Layout &layout = this->layout[layout_index++];
-
-    uint64_t new_index = this->construct_ad_index(layout, 0, index);
-
-    if (layout.vt != (VarType) jit_var_type(index))
-        jit_raise("VarType missmatch %u != %u while assigning (a%u, r%u) "
-                  "-> (a%u, r%u)!",
-                  (uint32_t) layout.vt, (uint32_t) jit_var_type(index),
-                  (uint32_t) (index >> 32), (uint32_t) index,
-                  (uint32_t) (new_index >> 32), (uint32_t) new_index);
-
-    tmp.push_back_steal(new_index);
-    return new_index;
-}
-
-/**
- * Assigns variables using it's `traverse_cb_rw` callback.
- * This corresponds to `traverse_cb`.
- */
-void FlatVariables::assign_cb(drjit::TraversableBase *traversable) {
-    Layout &layout = this->layout[layout_index++];
-
-    struct Payload {
-        FlatVariables *flat_vars;
-        index64_vector tmp;
-        uint32_t num_fields;
-        uint32_t field_counter;
-    };
-    jit_log(LogLevel::Debug, "    layout.num=%u", layout.num);
-    Payload payload{ this, index64_vector(), (uint32_t) layout.num, 0 };
-    traversable->traverse_1_cb_rw(
-        (void *) &payload, [](void *p, uint64_t index) {
-            if (!index)
-                return index;
-            Payload *payload = (Payload *) p;
-            jit_log(LogLevel::Debug, "    field_counter=%u",
-                    payload->field_counter);
-            if (payload->field_counter >= payload->num_fields)
-                jit_raise("While traversing an object "
-                          "for assigning inputs, the number of variables to "
-                          "assign did not match the number of variables "
-                          "traversed when recording!");
-            payload->field_counter++;
-
-            return payload->flat_vars->assign_cb_internal(index, payload->tmp);
-        });
-    if (payload.field_counter != layout.num)
-        jit_raise("While traversing and object for assigning inputs, the "
-                  "number of variables to assign did not match the number "
-                  "of variables traversed when recording!");
 }
 
 /**
@@ -973,6 +914,66 @@ void FlatVariables::assign(nb::handle dst) {
     }
 
     jit_log(LogLevel::Debug, "}");
+}
+
+/**
+ * First traverses the PyTree, then the registry. This ensures that
+ * additional data to vcalls is tracked correctly.
+ */
+void FlatVariables::traverse_with_registry(nb::handle h, TraverseContext &ctx) {
+
+    // Traverse the handle
+    traverse(h, ctx);
+
+    // Traverse the registry
+    {
+        ProfilerPhase profiler("traverse_registry");
+        Layout layout;
+        layout.type         = nb::borrow<nb::type_object>(nb::none());
+        size_t layout_index = this->layout.size();
+        this->layout.push_back(layout);
+
+        uint32_t num_fields = 0;
+
+        jit_log(LogLevel::Debug, "registry{");
+        uint32_t registry_bound = jit_registry_id_bound(backend, nullptr);
+        std::vector<void *> registry_pointers;
+        registry_pointers.resize(registry_bound);
+        jit_registry_get_pointers(backend, registry_pointers.data());
+
+        jit_log(LogLevel::Debug, "registry_bound=%u", registry_bound);
+        jit_log(LogLevel::Debug, "layout_index=%u", this->layout.size());
+        for (void *ptr : registry_pointers) {
+            jit_log(LogLevel::Debug, "ptr=%p", ptr);
+            if (!ptr)
+                continue;
+
+            // WARN: very unsafe cast!
+            auto base = (nb::intrusive_base *) ptr;
+            auto self = base->self_py();
+
+            if (self)
+                traverse(self, ctx);
+
+            const drjit::TraversableBase *traversable =
+                dynamic_cast<const drjit::TraversableBase *>(base);
+
+            if (!traversable) {
+                int status;
+                jit_fail("Could not cast intrusive_base to TraversableBase! "
+                         "The typename was: %s",
+                         abi::__cxa_demangle(typeid(*base).name(), nullptr,
+                                             nullptr, &status));
+                continue;
+            }
+
+            traverse_cb(traversable, ctx);
+            num_fields++;
+        }
+        jit_log(LogLevel::Debug, "}");
+
+        this->layout[layout_index].num = num_fields;
+    }
 }
 
 /**
@@ -1157,6 +1158,22 @@ static void traverse_with_registry(const char *op, TraverseCallback &tc,
     traverse(op, tc, h);
 }
 
+/**
+ * Schedules all variables in this PyTree, including the ones in C++ objects
+ * traversable through the `traverse_1_cb_rw` methods. It uses
+ * ``jit_var_schedule_force`` to force evaluation of literals. This function is
+ * called before traversing the inputs and outputs of a frozen function. Inputs
+ * and outputs have to be scheduled, since we use pointers to track variables,
+ * so all variables have to be evaluated.
+ *
+ * \param eval
+ *     If this boolean is set to ``true``, ``jit_eval`` is called if variables
+ *     have been scheduled. If it is set to ``false``, we only schedule the
+ *     variables.
+ *
+ * \param registry
+ *     Boolean, indicating whether we should schedule the registry as well.
+ */
 static void deep_make_opaque(nb::handle h, bool eval = true,
                              bool registry = false) {
     jit_log(LogLevel::Debug, "make_opaque");
