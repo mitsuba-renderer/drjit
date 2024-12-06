@@ -460,3 +460,22 @@ def test13_test_prefix_reduction(t, reverse, exclusive):
     test_red((9, 5, 7), 1)
     test_red((9, 5, 7), 2)
     test_red((9, 5, 7), -1)
+
+@pytest.test_arrays('tensor, bool')
+def test14_any_all_multidimensional_tensors(t):
+    v_all = t([[True, False, True],
+               [True, True, True],
+               [True, False, True],
+               [True, True, True]
+               ])
+    assert list(dr.all(v_all, axis=0)) == [True, False, True]
+    assert list(dr.all(v_all, axis=1)) == [False, True, False, True]
+
+    v_any = t([[False, False, False],
+               [False, True, False],
+               [False, True, False],
+               [False, True, False]
+               ])
+
+    assert list(dr.any(v_any, axis=0)) == [False, True, False]
+    assert list(dr.any(v_any, axis=1)) == [False, True, True, True]
