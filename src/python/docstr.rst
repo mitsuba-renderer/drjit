@@ -7923,3 +7923,12 @@
 .. topic:: leak_warnings
 
    Query whether leak warnings are enabled. See :py:func:`drjit.detail.set_leak_warnings()`.
+
+.. topic:: freeze
+
+   Freeze a function for cached kernel compilation
+
+   This decorator wraps a function, and enables replaying it in order remove
+   the need for tracing python operations. The first time a frozen function is
+   called, it is executed regularely, while all operations performed are 
+   recorded.
