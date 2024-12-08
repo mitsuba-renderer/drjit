@@ -2221,8 +2221,6 @@ def test54_read_while_frozen(t):
 
 @pytest.test_arrays("float32, jit, diff, shape=(*)")
 def test55_var_upload(t):
-    # FIX: leaks variables
-
     def func(x):
 
         arrays = []
