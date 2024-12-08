@@ -206,7 +206,7 @@ void FlatVariables::traverse_jit_index(uint32_t index, TraverseContext &ctx,
     if (jit_var_type(index) == VarType::Pointer) {
         // We do not support pointers as inputs. It might be possible with
         // some extra handling, but they are never used directly.
-        jit_raise("Pointer inputs not yet supported!");
+        jit_raise("Pointer inputs not supported!");
     }
 
     uint32_t var_size = jit_var_size(index);
@@ -776,8 +776,10 @@ nb::object FlatVariables::construct() {
             return layout.type(**dict);
         } else {
             if (layout.py_object.is_none()) {
-                nb::raise("Tried to construct a variable that is not "
-                          "constructable!");
+                nb::raise(
+                    "Tried to construct a variable of type %s that is not "
+                    "constructable!",
+                    nb::type_name(layout.type).c_str());
             }
             return layout.py_object;
         }
@@ -1012,7 +1014,7 @@ void FlatVariables::assign_with_registry(nb::handle dst) {
         if (!traversable) {
             int status;
             // TODO: should we put that behind the debug flag?
-            jit_raise("Could not cast intrusive_base to TraversableBase! "
+            jit_fail("Could not cast intrusive_base to TraversableBase! "
                       "The typename was: %s",
                       abi::__cxa_demangle(typeid(*base).name(), nullptr,
                                           nullptr, &status));
@@ -1489,11 +1491,10 @@ nb::object FunctionRecording::record(nb::callable func,
         Recording *recording = jit_freeze_stop(backend, nullptr, 0);
         jit_freeze_destroy(recording);
 
-        nb::raise("freeze(): backend missmatch error (backend %u of "
-                  "output "
-                  "variables did not match backend %u of input "
-                  "variables)",
-                  (uint32_t) out_variables.backend, (uint32_t) backend);
+        nb::raise(
+            "freeze(): backend missmatch error (backend %u of "
+            "output variables did not match backend %u of input variables)",
+            (uint32_t) out_variables.backend, (uint32_t) backend);
     }
 
     recording = jit_freeze_stop(backend, out_variables.variables.data(),
@@ -1655,15 +1656,14 @@ nb::object FrozenFunction::operator()(nb::args args, nb::kwargs kwargs) {
             try {
                 result = recording->record(func, this, input, in_variables);
             } catch (nb::python_error &e) {
-                jit_log(LogLevel::Debug, "failed recording!");
                 in_variables.release();
                 jit_freeze_abort(in_variables.backend);
                 jit_set_flag(JitFlag::KernelFreezing, true);
-                nb::raise_from(e, PyExc_RuntimeError,
-                               "record(): error encountered while recording a "
-                               "function (see above).");
+                nb::raise_from(
+                    e, PyExc_RuntimeError,
+                    "record(): error encountered while recording a frozen"
+                    "function (see above).");
             } catch (const std::exception &e) {
-                jit_log(LogLevel::Debug, "failed recording!");
                 in_variables.release();
                 jit_freeze_abort(in_variables.backend);
                 jit_set_flag(JitFlag::KernelFreezing, true);
