@@ -17,6 +17,10 @@
 #include <tsl/robin_set.h>
 #include <drjit-core/hash.h>
 
+struct FrozenFunction;
+
+namespace detail {
+
 using index64_vector = drjit::detail::index64_vector;
 
 enum class LayoutFlag : uint32_t {
@@ -272,8 +276,6 @@ struct RecordingKeyHasher {
     size_t operator()(const RecordingKey &key) const;
 };
 
-struct FrozenFunction;
-
 struct FunctionRecording {
     Recording *recording = nullptr;
     FlatVariables out_variables;
@@ -317,11 +319,13 @@ using RecordingMap =
     tsl::robin_map<RecordingKey, std::unique_ptr<FunctionRecording>,
                    RecordingKeyHasher>;
 
+} // namespace detail
+
 struct FrozenFunction {
     nb::callable func;
 
-    RecordingMap recordings;
-    RecordingKey prev_key;
+    detail::RecordingMap recordings;
+    detail::RecordingKey prev_key;
     uint32_t recording_counter = 0;
 
     FrozenFunction(nb::callable func) : func(func) {}
@@ -334,10 +338,10 @@ struct FrozenFunction {
 
     uint32_t saved_recordings() { return this->recordings.size(); }
 
+    void clear();
+
     nb::object operator()(nb::args args, nb::kwargs kwargs);
 };
-
-struct FrozenFunction;
 
 extern FrozenFunction freeze(nb::callable);
 extern void export_freeze(nb::module_ &);

@@ -62,9 +62,7 @@ struct ADScopeContext {
 };
 
 
-static const char *doc_freeze = R"(
-    
-)";
+using namespace detail;
 
 bool Layout::operator==(const Layout &rhs) const {
     if (!(this->type.equal(rhs.type)))
@@ -1261,6 +1259,20 @@ static void deep_make_opaque(nb::handle h, bool eval = true,
     }
 }
 
+/**
+ * Similarly to ``deep_make_opaque`` this function schedules all variables in
+ * the PyTree, including the C++ objects. However, it uses ``jitc_var_schedule``
+ * instead of ``jitc_ar_schedule_force``, not evaluating literals. This function
+ * is used to evaluate the output of frozen functions.
+ *
+ * \param eval
+ *     If this boolean is set to ``true``, ``jit_eval`` is called if variables
+ *     have been scheduled. If it is set to ``false``, we only schedule the
+ *     variables.
+ *
+ * \param registry
+ *     Boolean, indicating whether we should schedule the registry as well.
+ */
 static void deep_eval(nb::handle h, bool eval = true) {
     jit_log(LogLevel::Debug, "deep eval");
 
@@ -1366,6 +1378,7 @@ std::ostream &operator<<(std::ostream &os, const RecordingKey &r) {
 
 size_t RecordingKeyHasher::operator()(const RecordingKey &key) const {
     // Hash the layout
+    // NOTE: string hashing seems to be less efficient
     size_t hash = key.layout.size();
     for (const Layout &layout : key.layout) {
         hash_combine(hash, py_object_hash(layout.type));
@@ -1439,7 +1452,7 @@ nb::object FunctionRecording::record(nb::callable func,
 
     // Pause recording before traversal as to not accidentally record
     // unwanted operations.
-    // jit_freeze_pause(backend);
+    jit_freeze_pause(backend);
 
     // TODO: validate, that gradients wheren't enabled for inputs inside the
     // frozen function.
@@ -1489,7 +1502,7 @@ nb::object FunctionRecording::record(nb::callable func,
     jit_log(LogLevel::Info, "Recording done (n_outputs=%u)",
             out_variables.variables.size());
 
-    // For catching input assignment missmatches, we asign the input and
+    // For catching input assignment mismatches, we assign the input and
     // output
     {
         // Enter Resume scope, so we can track gradients
@@ -1564,7 +1577,7 @@ nb::object FunctionRecording::replay(nb::callable func,
         }
     }
 
-    // out_variables is assigned by jit_record_replay, which transfers
+    // out_variables is assigned by ``jit_record_replay``, which transfers
     // ownership to this array. Therefore, we have to drop the variables
     // afterwards.
     out_variables.release();
@@ -1681,6 +1694,12 @@ nb::object FrozenFunction::operator()(nb::args args, nb::kwargs kwargs) {
     return result;
 }
 
+void FrozenFunction::clear(){
+    recordings.clear();
+    prev_key = RecordingKey();
+    recording_counter = 0;
+}
+
 FrozenFunction freeze(nb::callable func) { return FrozenFunction(func); }
 
 void export_freeze(nb::module_ &m) {
@@ -1702,5 +1721,6 @@ void export_freeze(nb::module_ &m) {
             "n_cached_recordings",
             [](FrozenFunction &self) { return self.saved_recordings(); })
         .def_ro("n_recordings", &FrozenFunction::recording_counter)
+        .def("clear", &FrozenFunction::clear)
         .def("__call__", &FrozenFunction::operator());
 }
