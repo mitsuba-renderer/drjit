@@ -59,7 +59,7 @@ def test02_flush_kernel_cache(t):
 
 
 @pytest.test_arrays("uint32, jit, shape=(*)")
-def test02_output_tuple(t):
+def test03_output_tuple(t):
     @dr.freeze
     def func(x, y):
         return (x + y, x * y)
@@ -80,7 +80,7 @@ def test02_output_tuple(t):
 
 
 @pytest.test_arrays("uint32, jit, shape=(*)")
-def test03_output_list(t):
+def test04_output_list(t):
     @dr.freeze
     def func(x, y):
         return [x + y, x * y]
@@ -101,7 +101,7 @@ def test03_output_list(t):
 
 
 @pytest.test_arrays("uint32, jit, shape=(*)")
-def test04_output_dict(t):
+def test05_output_dict(t):
     @dr.freeze
     def func(x, y):
         return {"add": x + y, "mul": x * y}
@@ -126,7 +126,7 @@ def test04_output_dict(t):
 
 
 @pytest.test_arrays("uint32, jit, shape=(*)")
-def test05_nested_tuple(t):
+def test06_nested_tuple(t):
     @dr.freeze
     def func(x):
         return (x + 1, x + 2, (x + 3, x + 4))
@@ -143,7 +143,7 @@ def test05_nested_tuple(t):
 
 
 @pytest.test_arrays("uint32, jit, shape=(*)")
-def test06_drjit_struct(t):
+def test07_drjit_struct(t):
     class Point:
         x: t
         y: t
@@ -174,7 +174,7 @@ def test06_drjit_struct(t):
 
 
 @pytest.test_arrays("uint32, jit, shape=(*)")
-def test06_dataclass(t):
+def test08_dataclass(t):
     @dataclass
     class Point:
         x: t
@@ -203,7 +203,7 @@ def test06_dataclass(t):
 
 
 @pytest.test_arrays("float32, jit, shape=(*)")
-def test07_traverse_cb(t):
+def test09_traverse_cb(t):
     pkg = get_pkg(t)
     Sampler = pkg.Sampler
 
@@ -236,7 +236,7 @@ def test07_traverse_cb(t):
 
 
 @pytest.test_arrays("uint32, jit, shape=(*)")
-def test07_scatter(t):
+def test10_scatter(t):
     @dr.freeze
     def func(x):
         dr.scatter(x, 0, dr.arange(t, 3))
@@ -258,7 +258,7 @@ def test07_scatter(t):
 
 
 @pytest.test_arrays("float32, jit, is_diff, shape=(*)")
-def test08_optimization(t):
+def test11_optimization(t):
     @dr.freeze
     def func(state, ref):
         for k, x in state.items():
@@ -285,7 +285,7 @@ def test08_optimization(t):
 
 
 @pytest.test_arrays("uint32, jit, shape=(*)")
-def test09_resized(t):
+def test12_resized(t):
     @dr.freeze
     def func(x, y):
         return x + y
@@ -306,7 +306,7 @@ def test09_resized(t):
 
 
 @pytest.test_arrays("uint32, jit, shape=(*)")
-def test10_changed_input_dict(t):
+def test13_changed_input_dict(t):
     @dr.freeze
     def func(d: dict):
         d["y"] = d["x"] + 1
@@ -325,7 +325,7 @@ def test10_changed_input_dict(t):
 
 
 @pytest.test_arrays("uint32, jit, shape=(*)")
-def test11_changed_input_dataclass(t):
+def test14_changed_input_dataclass(t):
     @dataclass
     class Point:
         x: t
@@ -346,7 +346,7 @@ def test11_changed_input_dataclass(t):
 
 
 @pytest.test_arrays("uint32, jit, shape=(*)")
-def test12_kwargs(t):
+def test15_kwargs(t):
     @dr.freeze
     def func(x=t(0, 1, 2)):
         return x + 1
@@ -359,7 +359,7 @@ def test12_kwargs(t):
 
 
 @pytest.test_arrays("uint32, jit, shape=(*)")
-def test13_opaque(t):
+def test16_opaque(t):
     @dr.freeze
     def func(x, y):
         return x + y
@@ -380,7 +380,7 @@ def test13_opaque(t):
 
 
 @pytest.test_arrays("float32, jit, -is_diff, shape=(*)")
-def test14_performance(t):
+def test17_performance(t):
     import time
 
     n = 1024
@@ -414,7 +414,7 @@ def test14_performance(t):
 
 
 @pytest.test_arrays("uint32, jit, shape=(*)")
-def test15_aliasing(t):
+def test18_aliasing(t):
     @dr.freeze
     def func(x, y):
         return x + y
@@ -440,7 +440,7 @@ def test15_aliasing(t):
 
 
 @pytest.test_arrays("uint32, jit, shape=(*)")
-def test16_non_jit_types(t):
+def test19_non_jit_types(t):
     @dr.freeze
     def func(x, y):
         return x + y
@@ -453,7 +453,7 @@ def test16_non_jit_types(t):
 
 
 @pytest.test_arrays("uint32, jit, cuda, -is_diff, shape=(*)")
-def test17_literal(t):
+def test20_literal(t):
     # dr.set_log_level(dr.LogLevel.Trace)
     # dr.set_flag(dr.JitFlag.KernelHistory, True)
 
@@ -488,7 +488,7 @@ def test17_literal(t):
 
 
 @pytest.test_arrays("uint32, jit, shape=(*)")
-def test18_pointers(t):
+def test21_pointers(t):
     UInt32 = dr.uint32_array_t(t)
 
     @dr.freeze
@@ -502,7 +502,7 @@ def test18_pointers(t):
     print(y)
 
 @pytest.test_arrays("uint32, jit, shape=(*)")
-def test19_gather_memcpy(t):
+def test22_gather_memcpy(t):
     """
     The gather operation might be elided in favor of a memcpy 
     if the index is a literal of size 1.
@@ -541,7 +541,7 @@ def get_pkg(t):
 
 @pytest.mark.parametrize("symbolic", [True])
 @pytest.test_arrays("float32, jit, -is_diff, shape=(*)")
-def test19_vcall(t, symbolic):
+def test23_vcall(t, symbolic):
     pkg = get_pkg(t)
 
     A, B, Base, BasePtr = pkg.A, pkg.B, pkg.Base, pkg.BasePtr
@@ -578,7 +578,7 @@ def test19_vcall(t, symbolic):
 @pytest.mark.parametrize("optimize", [True, False])
 @pytest.mark.parametrize("opaque", [True, False])
 @pytest.test_arrays("float32, -is_diff, jit, shape=(*)")
-def test20_vcall_optimize(t, symbolic, optimize, opaque):
+def test24_vcall_optimize(t, symbolic, optimize, opaque):
     print(f"{symbolic=}")
     print(f"{optimize=}")
     print(f"{opaque=}")
@@ -642,7 +642,7 @@ def test20_vcall_optimize(t, symbolic, optimize, opaque):
 @pytest.mark.parametrize("optimize", [True, False])
 @pytest.mark.parametrize("opaque", [True, False])
 @pytest.test_arrays("float32, -is_diff, jit, shape=(*)")
-def test21_multiple_vcalls(t, symbolic, optimize, opaque):
+def test25_multiple_vcalls(t, symbolic, optimize, opaque):
     print(f"{symbolic=}")
     print(f"{optimize=}")
     print(f"{opaque=}")
@@ -705,7 +705,7 @@ def test21_multiple_vcalls(t, symbolic, optimize, opaque):
 
 
 @pytest.test_arrays("float32, jit, shape=(*)")
-def test01_freeze(t):
+def test26_freeze(t):
     UInt32 = dr.uint32_array_t(t)
     Float = dr.float32_array_t(t)
 
@@ -733,7 +733,7 @@ def test01_freeze(t):
 
 @pytest.mark.parametrize("freeze_first", (True, False))
 @pytest.test_arrays("float32, jit, shape=(*)")
-def test12_calling_frozen_from_frozen(t, freeze_first):
+def test27_calling_frozen_from_frozen(t, freeze_first):
     mod = sys.modules[t.__module__]
     Float = mod.Float32
     Array3f = mod.Array3f
@@ -775,7 +775,7 @@ def test12_calling_frozen_from_frozen(t, freeze_first):
 
 
 @pytest.test_arrays("float32, jit, shape=(*)")
-def test17_no_inputs(t):
+def test28_no_inputs(t):
     mod = sys.modules[t.__module__]
     UInt32 = mod.UInt32
     Float = mod.Float
@@ -800,7 +800,7 @@ def test17_no_inputs(t):
 
 
 @pytest.test_arrays("float32, jit, shape=(*)")
-def test18_with_gathers(t):
+def test29_with_gathers(t):
     import numpy as np
 
     n = 20
@@ -842,7 +842,7 @@ def test18_with_gathers(t):
 
 
 @pytest.test_arrays("float32, cuda, jit, shape=(*)")
-def test20_scatter_with_op(t):
+def test30_scatter_with_op(t):
     import numpy as np
 
     n = 16
@@ -960,7 +960,7 @@ def test_segv(t):
 
 
 @pytest.test_arrays("float32, jit, shape=(*)")
-def test21_with_gather_and_scatter(t):
+def test31_with_gather_and_scatter(t):
     # TODO: this function seems to be causing some problems with pytest,
     # something about `repr()` being called on a weird / uninitialized JIT variable.
     # This crash is triggered even when the test should otherwise pass.
@@ -1020,7 +1020,7 @@ def test21_with_gather_and_scatter(t):
 
 @pytest.mark.parametrize("relative_size", ["<", "=", ">"])
 @pytest.test_arrays("float32, jit, shape=(*)")
-def test22_gather_only_pointer_as_input(t, relative_size):
+def test32_gather_only_pointer_as_input(t, relative_size):
     mod = sys.modules[t.__module__]
     Array3f = mod.Array3f
     Float = mod.Float32
@@ -1144,7 +1144,7 @@ def test22_gather_only_pointer_as_input(t, relative_size):
 
 
 @pytest.test_arrays("float32, jit, shape=(*)")
-def test24_multiple_kernels(t):
+def test33_multiple_kernels(t):
     def fn(x: dr.ArrayBase, y: dr.ArrayBase, flag: bool):
         # TODO: test with gathers and scatters, which is a really important use-case.
         # TODO: test with launches of different sizes (including the auto-sizing logic)
@@ -1198,7 +1198,7 @@ def test24_multiple_kernels(t):
 
 
 @pytest.test_arrays("float32, jit, shape=(*)")
-def test27_global_flag(t):
+def test34_global_flag(t):
     Float = t
 
     @dr.freeze
@@ -1227,7 +1227,7 @@ def test27_global_flag(t):
 @pytest.mark.parametrize("struct_style", ["drjit", "dataclass"])
 # @pytest.test_arrays("float32, llvm, jit, -is_diff, shape=(*)")
 @pytest.test_arrays("float32, jit, shape=(*)")
-def test28_return_types(t, struct_style):
+def test35_return_types(t, struct_style):
     # WARN: only working on CUDA!
     mod = sys.modules[t.__module__]
     Float = t
@@ -1345,7 +1345,7 @@ def test28_return_types(t, struct_style):
 
 
 @pytest.test_arrays("float32, jit, shape=(*)")
-def test29_drjit_struct_and_matrix(t):
+def test36_drjit_struct_and_matrix(t):
     package = sys.modules[t.__module__]
     Float = package.Float
     Array4f = package.Array4f
@@ -1423,7 +1423,7 @@ def test29_drjit_struct_and_matrix(t):
 
 
 @pytest.test_arrays("float32, jit, shape=(*)")
-def test30_with_dataclass_in_out(t):
+def test37_with_dataclass_in_out(t):
     mod = sys.modules[t.__module__]
     Int32 = mod.Int32
     UInt32 = mod.UInt32
@@ -1462,7 +1462,7 @@ def test30_with_dataclass_in_out(t):
 
 
 @pytest.test_arrays("float32, jit, shape=(*)")
-def test32_allocated_scratch_buffer(t):
+def test38_allocated_scratch_buffer(t):
     # FIX: leaks types, memory and variables
     """
     Frozen functions may want to allocate some scratch space, scatter to it
@@ -1568,7 +1568,7 @@ def test32_allocated_scratch_buffer(t):
 
 
 @pytest.test_arrays("float32, jit, shape=(*)")
-def test33_simple_reductions(t):
+def test39_simple_reductions(t):
     import numpy as np
 
     mod = sys.modules[t.__module__]
@@ -1619,7 +1619,7 @@ def test33_simple_reductions(t):
         check_expected(sum_not_returned_single, np.sum(x_np).item() + 4)
 
 @pytest.test_arrays("float32, jit, shape=(*)")
-def test34_prefix_reductions(t):
+def test40_prefix_reductions(t):
     import numpy as np
     
     mod = sys.modules[t.__module__]
@@ -1645,7 +1645,7 @@ def test34_prefix_reductions(t):
 
 
 @pytest.test_arrays("float32, jit, is_diff, shape=(*)")
-def test34_reductions_with_ad(t):
+def test41_reductions_with_ad(t):
     Float = t
     n = 37
 
@@ -1717,7 +1717,7 @@ def test34_reductions_with_ad(t):
 
 
 @pytest.test_arrays("float32, jit, shape=(*)")
-def test36_size_aliasing(t):
+def test42_size_aliasing(t):
     def func(x, y):
         return x + 1, y + 2
 
@@ -1741,7 +1741,7 @@ def test36_size_aliasing(t):
 
 
 @pytest.test_arrays("float32, jit, -is_diff, shape=(*)")
-def test37_pointer_aliasing(t):
+def test43_pointer_aliasing(t):
     """
     Dr.Jit employs a memory cache, which means that two variables
     get allocated the same memory region, if one is destroyed
@@ -1771,7 +1771,7 @@ def test37_pointer_aliasing(t):
 
 
 @pytest.test_arrays("float32, jit, is_diff, shape=(*)")
-def test38_simple_ad_fully_inside(t):
+def test44_simple_ad_fully_inside(t):
     mod = sys.modules[t.__module__]
     Float = mod.Float
 
@@ -1816,7 +1816,7 @@ def test38_simple_ad_fully_inside(t):
 @pytest.mark.parametrize("params_start_enabled", (True,))
 @pytest.mark.parametrize("freeze", (True,))
 @pytest.test_arrays("float32, jit, is_diff, shape=(*)")
-def test39_suspend_resume(
+def test45_suspend_resume(
     t,
     params_start_enabled,
     params_end_enabled,
@@ -1914,7 +1914,7 @@ def test39_suspend_resume(
 @pytest.test_arrays("float32, jit, is_diff, shape=(*)")
 @pytest.mark.parametrize("freeze", (True,))
 @pytest.mark.parametrize("change_params_width", (False,))
-def test40_with_grad_scatter(t, freeze: bool, change_params_width):
+def test46_with_grad_scatter(t, freeze: bool, change_params_width):
     mod = sys.modules[t.__module__]
     Float = mod.Float32
     UInt32 = mod.UInt32
@@ -1986,7 +1986,7 @@ def test40_with_grad_scatter(t, freeze: bool, change_params_width):
 
 
 @pytest.test_arrays("float32, jit, is_diff, shape=(*)")
-def test41_tutorial_example(t):
+def test47_tutorial_example(t):
     mod = sys.modules[t.__module__]
     Float = mod.Float32
     UInt32 = mod.UInt32
@@ -2030,7 +2030,7 @@ def test41_tutorial_example(t):
 
 
 @pytest.test_arrays("uint32, jit, shape=(*)")
-def test42_compress(t):
+def test48_compress(t):
 
     mod = sys.modules[t.__module__]
     Float = mod.Float32
@@ -2059,7 +2059,7 @@ def test42_compress(t):
 
 
 @pytest.test_arrays("uint32, llvm, -is_diff, jit, shape=(*)")
-def test43_scatter_reduce_expanded(t):
+def test49_scatter_reduce_expanded(t):
 
     def func(target: t, src: t):
         dr.scatter_reduce(dr.ReduceOp.Add, target, src, dr.arange(t, dr.width(src)) % 2)
@@ -2085,7 +2085,7 @@ def test43_scatter_reduce_expanded(t):
     assert frozen.n_recordings == 4
     
 @pytest.test_arrays("uint32, llvm, -is_diff, jit, shape=(*)")
-def test44_scatter_reduce_expanded_identity(t):
+def test50_scatter_reduce_expanded_identity(t):
 
     def func(src: t):
         target = dr.zeros(t, 5)
@@ -2108,7 +2108,7 @@ def test44_scatter_reduce_expanded_identity(t):
     assert frozen.n_recordings == 1
 
 @pytest.test_arrays("uint32, llvm, -is_diff, jit, shape=(*)")
-def test45_scatter_reduce_expanded_no_memset(t):
+def test51_scatter_reduce_expanded_no_memset(t):
 
     def func(src: t):
         target = dr.full(t, 5)
@@ -2132,7 +2132,7 @@ def test45_scatter_reduce_expanded_no_memset(t):
     assert frozen.n_cached_recordings == 1
 
 @pytest.test_arrays("uint32, jit, shape=(*)")
-def test44_python_inputs(t):
+def test52_python_inputs(t):
 
     def func(x: t, neg: bool):
         if neg:
@@ -2154,7 +2154,7 @@ def test44_python_inputs(t):
 
 
 @pytest.test_arrays("uint32, jit, shape=(*)")
-def test35_scatter_inc(t):
+def test53_scatter_inc(t):
 
     mod = sys.modules[t.__module__]
     Float = mod.Float32
@@ -2206,7 +2206,7 @@ def test35_scatter_inc(t):
 
 
 @pytest.test_arrays("uint32, jit, shape=(*)")
-def test36_read_while_frozen(t):
+def test54_read_while_frozen(t):
     # dr.set_flag(dr.JitFlag.KernelFreezing, True)
     assert dr.flag(dr.JitFlag.KernelFreezing)
 
@@ -2220,7 +2220,7 @@ def test36_read_while_frozen(t):
         frozen(x)
 
 @pytest.test_arrays("float32, jit, diff, shape=(*)")
-def test37_var_upload(t):
+def test55_var_upload(t):
     # FIX: leaks variables
 
     def func(x):
@@ -2251,7 +2251,7 @@ def test37_var_upload(t):
         # assert dr.allclose(z, func(x))
 
 @pytest.test_arrays("float32, jit, diff, shape=(*)")
-def test38_grad_isolate(t):
+def test56_grad_isolate(t):
     dr.set_flag(dr.JitFlag.ReuseIndices, False)
 
     def f(x):
@@ -2292,7 +2292,7 @@ def test38_grad_isolate(t):
         assert dr.allclose(ref, res)
 
 @pytest.test_arrays("float32, jit, diff, shape=(*)")
-def test39_isolate_grad_fwd(t):
+def test57_isolate_grad_fwd(t):
 
     def f(x):
         return x*x
@@ -2340,7 +2340,7 @@ def test39_isolate_grad_fwd(t):
         
         
 @pytest.test_arrays("float32, jit, diff, shape=(*)")
-def test40_grad_postponed_part(t):
+def test58_grad_postponed_part(t):
     dr.set_flag(dr.JitFlag.ReuseIndices, False)
 
     def f(x):
@@ -2392,7 +2392,7 @@ def test40_grad_postponed_part(t):
             assert dr.allclose(ref, res)
 
 @pytest.test_arrays("float32, jit, diff, shape=(*)")
-def test40_nested(t):
+def test59_nested(t):
     
     pkg = get_pkg(t)
     mod = sys.modules[t.__module__]
@@ -2434,7 +2434,7 @@ def test40_nested(t):
         assert dr.all(xfrozen == xref)
 
 @pytest.test_arrays("float32, jit, diff, shape=(*)")
-def test41_call_raise(t):
+def test60_call_raise(t):
     
     mod = sys.modules[t.__module__]
     pkg = get_pkg(t)
@@ -2458,7 +2458,7 @@ def test41_call_raise(t):
         dr.dispatch(c, g, t(1, 1, 2, 2, 2))
 
 @pytest.test_arrays("float32, jit, diff, shape=(*)")
-def test42_reduce_dot(t):
+def test61_reduce_dot(t):
     def func(x, y):
         return dr.dot(x, y)
 
@@ -2474,6 +2474,23 @@ def test42_reduce_dot(t):
         assert dr.allclose(result, reference)
 
     assert frozen.n_recordings == 1
+
+@pytest.test_arrays("float32, jit, shape=(*)")
+def test62_clear(t):
+    @dr.freeze
+    def func(x):
+        return x + 1
+
+    x = dr.arange(t, 10)
+    y = func(x)
+    assert func.n_recordings == 1
+    
+    func.clear()
+    assert func.n_recordings == 0
+    
+    x = dr.arange(t, 10)
+    y = func(x)
+    assert func.n_recordings == 1
         
 # @pytest.test_arrays("float32, jit, diff, shape=(*)")
 # def test42_raise(t):
