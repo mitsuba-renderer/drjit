@@ -1338,25 +1338,6 @@ static void deep_eval(nb::handle h, bool eval = true) {
     }
 }
 
-inline size_t py_object_hash(nb::handle h) {
-    if (!h)
-        return 0;
-    Py_hash_t hash = PyObject_Hash(h.ptr());
-    if (hash == -1 && PyErr_Occurred())
-        nb::raise_python_error();
-    return (ssize_t) hash;
-}
-
-inline void hash_combine(size_t &seed, size_t value) {
-    /// From CityHash (https://github.com/google/cityhash)
-    const size_t mult = 0x9ddfea08eb382d69ull;
-    size_t a          = (value ^ seed) * mult;
-    a ^= (a >> 47);
-    size_t b = (seed ^ a) * mult;
-    b ^= (b >> 47);
-    seed = b * mult;
-}
-
 std::ostream &operator<<(std::ostream &os, const RecordingKey &r) {
     std::string offset = "    ";
     
@@ -1378,25 +1359,37 @@ std::ostream &operator<<(std::ostream &os, const RecordingKey &r) {
     return os;
 }
 
+inline void hash_combine(size_t &seed, size_t value) {
+    /// From CityHash (https://github.com/google/cityhash)
+    const size_t mult = 0x9ddfea08eb382d69ull;
+    size_t a          = (value ^ seed) * mult;
+    a ^= (a >> 47);
+    size_t b = (seed ^ a) * mult;
+    b ^= (b >> 47);
+    seed = b * mult;
+}
+
 size_t RecordingKeyHasher::operator()(const RecordingKey &key) const {
     ProfilerPhase profiler("hash");
     // Hash the layout
     // NOTE: string hashing seems to be less efficient
     size_t hash = key.layout.size();
     for (const Layout &layout : key.layout) {
-        hash_combine(hash, py_object_hash(layout.type));
         hash_combine(hash, layout.num);
         hash_combine(hash, layout.fields.size());
-        for (auto &field : layout.fields) {
-            hash_combine(hash, py_object_hash(field));
-        }
         hash_combine(hash, (size_t) layout.vt);
         hash_combine(hash, (size_t) layout.vs);
         hash_combine(hash, (size_t) layout.flags);
         hash_combine(hash, (size_t) layout.literal);
         hash_combine(hash, (size_t) layout.index);
         hash_combine(hash, (size_t) layout.size_index);
-        hash_combine(hash, py_object_hash(layout.py_object));
+        if (layout.type)
+            hash_combine(hash, nb::hash(layout.type));
+        if (layout.py_object)
+            hash_combine(hash, nb::hash(layout.py_object));
+        for (auto &field : layout.fields) {
+            hash_combine(hash, nb::hash(field));
+        }
     }
 
     hash_combine(hash, (size_t) key.flags);
