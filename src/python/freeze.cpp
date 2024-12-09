@@ -26,7 +26,6 @@
 
 struct ProfilerPhase {
     std::string m_message;
-    bool m_free_message = false;
     ProfilerPhase(const char *message) : m_message(message) {
         jit_log(LogLevel::Debug, "profiler start: %s", message);
         jit_profile_range_push(message);
@@ -34,15 +33,13 @@ struct ProfilerPhase {
 
     ProfilerPhase(const drjit::TraversableBase *traversable) {
         int status;
-        const char *name = abi::__cxa_demangle(typeid(*traversable).name(),
-                                               nullptr, nullptr, &status);
+        const char *name =typeid(*traversable).name();
         char *message    = (char *) std::malloc(1024);
         snprintf(message, 1024, "traverse_cb %s", name);
 
         jit_log(LogLevel::Debug, "profiler start: %s", message);
         jit_profile_range_push(message);
-        m_message      = message;
-        m_free_message = true;
+        m_message = message;
     }
 
     ~ProfilerPhase() {
@@ -65,7 +62,7 @@ struct ADScopeContext {
 using namespace detail;
 
 bool Layout::operator==(const Layout &rhs) const {
-    if (!(this->type.equal(rhs.type)))
+    if (((bool) this->type != (bool) rhs.type) || !(this->type.equal(rhs.type)))
         return false;
 
     if (this->num != rhs.num)
@@ -95,7 +92,9 @@ bool Layout::operator==(const Layout &rhs) const {
 
     if (this->literal != rhs.literal)
         return false;
-    if (!this->py_object.equal(rhs.py_object))
+
+    if (((bool) this->py_object != (bool) rhs.py_object) ||
+        !this->py_object.equal(rhs.py_object))
         return false;
 
     return true;
@@ -193,6 +192,10 @@ void FlatVariables::traverse_jit_index(uint32_t index, TraverseContext &ctx,
     // ProfilerPhase profiler("traverse_jit_index");
     VarInfo info           = jit_set_backend(index);
     JitBackend var_backend = info.backend;
+    VarType vtype          = jit_var_type(index);
+    uint32_t var_size      = jit_var_size(index);
+    VarState vs            = jit_var_state(index);
+    bool unaligned         = jit_var_is_unaligned(index);
 
     if (backend == var_backend || this->backend == JitBackend::None) {
         backend = var_backend;
@@ -203,23 +206,20 @@ void FlatVariables::traverse_jit_index(uint32_t index, TraverseContext &ctx,
                   backend == JitBackend::CUDA ? "CUDA" : "LLVM");
     }
 
-    if (jit_var_type(index) == VarType::Pointer) {
+    if (vtype == VarType::Pointer) {
         // We do not support pointers as inputs. It might be possible with
         // some extra handling, but they are never used directly.
         jit_raise("Pointer inputs not supported!");
     }
 
-    uint32_t var_size = jit_var_size(index);
-
     Layout layout;
-    VarState vs       = jit_var_state(index);
-    layout.type       = nb::borrow<nb::type_object>(tp);
+    if (tp)
+        layout.type       = nb::borrow<nb::type_object>(tp);
     layout.vs         = vs;
-    layout.vt         = jit_var_type(index);
+    layout.vt         = vtype;
     layout.size_index = this->add_size(var_size);
 
     if (vs == VarState::Literal) {
-        // jit_fail("test r%u", index);
         // Special case, where the variable is a literal. This should not
         // occur, as all literals are made opaque in beforehand, however it
         // is nice to have a fallback.
@@ -232,24 +232,21 @@ void FlatVariables::traverse_jit_index(uint32_t index, TraverseContext &ctx,
         void *data   = nullptr;
         uint32_t tmp = jit_var_data(index, &data);
         if (tmp != index)
-            jit_fail("traverse(): An evaluated variable changed during "
+            jit_fail("traverse(): The evaluated variable index changed during "
                      "evaluation!");
         jit_var_dec_ref(tmp);
 
         layout.index   = this->add_variable_index(index);
-        bool unaligned = jit_var_is_unaligned(index);
 
         layout.flags |=
             (var_size == 1 ? (uint32_t) LayoutFlag::SingletonArray : 0);
-        layout.flags |=
-            (jit_var_is_unaligned(index) ? (uint32_t) LayoutFlag::Unaligned
-                                         : 0);
+        layout.flags |= (unaligned ? (uint32_t) LayoutFlag::Unaligned : 0);
 
     } else {
         jit_raise("collect(): found variable %u in unsupported state %u!",
                   index, (uint32_t) vs);
     }
-    this->layout.push_back(layout);
+    this->layout.push_back(std::move(layout));
 }
 
 /**
@@ -285,13 +282,14 @@ void FlatVariables::traverse_ad_index(uint64_t index, TraverseContext &ctx,
                                       nb::handle tp) {
     // ProfilerPhase profiler("traverse_ad_index");
     int grad_enabled = ad_grad_enabled(index);
-    jit_log(LogLevel::Debug, "traverse_ad_index(): a%u, r%u",
-            (uint32_t) (index >> 32), (uint32_t) index, grad_enabled);
+    // jit_log(LogLevel::Debug, "traverse_ad_index(): a%u, r%u",
+    //         (uint32_t) (index >> 32), (uint32_t) index, grad_enabled);
     if (grad_enabled) {
         uint32_t ad_index = (uint32_t) (index >> 32);
 
         Layout layout;
-        layout.type = nb::borrow<nb::type_object>(tp);
+        if (tp)
+            layout.type = nb::borrow<nb::type_object>(tp);
         layout.num  = 2;
         layout.vt   = jit_var_type(index);
 
@@ -304,7 +302,7 @@ void FlatVariables::traverse_ad_index(uint64_t index, TraverseContext &ctx,
             layout.flags |= (uint32_t) LayoutFlag::Postponed;
         }
 
-        this->layout.push_back(layout);
+        this->layout.push_back(std::move(layout));
 
         traverse_jit_index((uint32_t) index, ctx, tp);
         uint32_t grad = ad_grad(index);
@@ -317,7 +315,7 @@ void FlatVariables::traverse_ad_index(uint64_t index, TraverseContext &ctx,
 
 /**
  * Construct/assign the variable index given a layout.
- * This corresponds to `traverse_ad_index`>
+ * This corresponds to `traverse_ad_index`.
  *
  * This function is also used for assignment to ad-variables.
  * If a `prev_index` is provided, and it is an ad-variable the gradient and
@@ -404,6 +402,7 @@ nb::object FlatVariables::construct_ad_var(const Layout &layout,
     auto result              = nb::inst_alloc_zero(layout.type);
     const ArraySupplement &s = supp(result.type());
     s.init_index(index, inst_ptr(result));
+    nb::inst_mark_ready(result);
 
     // We have to release the reference, since assignment will borrow from
     // it.
@@ -447,7 +446,7 @@ void FlatVariables::traverse_cb(const drjit::TraversableBase *traversable,
     Layout layout;
     layout.type         = nb::borrow<nb::type_object>(type);
     size_t layout_index = this->layout.size();
-    this->layout.push_back(layout);
+    this->layout.push_back(std::move(layout));
 
     uint32_t num_fileds = 0;
 
@@ -738,6 +737,7 @@ nb::object FlatVariables::construct() {
                 for (size_t i = 0; i < size; ++i) {
                     result[i] = construct();
                 }
+                nb::inst_mark_ready(result);
                 return result;
             } else {
                 return construct_ad_var(layout);
@@ -774,14 +774,12 @@ nb::object FlatVariables::construct() {
                 dict[k] = construct();
             }
             return layout.type(**dict);
-        } else {
-            if (layout.py_object.is_none()) {
-                nb::raise(
-                    "Tried to construct a variable of type %s that is not "
-                    "constructable!",
-                    nb::type_name(layout.type).c_str());
-            }
+        } else if (layout.py_object){
             return layout.py_object;
+        } else {
+            nb::raise("Tried to construct a variable of type %s that is not "
+                      "constructable!",
+                      nb::type_name(layout.type).c_str());
         }
     } catch (nb::python_error &e) {
         nb::raise_from(e, PyExc_RuntimeError,
@@ -1341,6 +1339,8 @@ static void deep_eval(nb::handle h, bool eval = true) {
 }
 
 inline size_t py_object_hash(nb::handle h) {
+    if (!h)
+        return 0;
     Py_hash_t hash = PyObject_Hash(h.ptr());
     if (hash == -1 && PyErr_Occurred())
         nb::raise_python_error();
@@ -1379,6 +1379,7 @@ std::ostream &operator<<(std::ostream &os, const RecordingKey &r) {
 }
 
 size_t RecordingKeyHasher::operator()(const RecordingKey &key) const {
+    ProfilerPhase profiler("hash");
     // Hash the layout
     // NOTE: string hashing seems to be less efficient
     size_t hash = key.layout.size();
