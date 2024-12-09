@@ -24,19 +24,21 @@ namespace detail {
 using index64_vector = drjit::detail::index64_vector;
 
 enum class LayoutFlag : uint32_t {
+    /// Whether this variable has size 1
     SingletonArray = (1 << 0),
-    Unaligned      = (1 << 1),
-    GradEnabled    = (1 << 2),
-    Postponed      = (1 << 3),
-    Registry       = (1 << 4),
+    /// Whether this variable is unaligned in memory
+    Unaligned = (1 << 1),
+    /// Whether this variable has gradients enabled
+    GradEnabled = (1 << 2),
+    /// Did this variable have gradient edges attached when recording, that
+    /// where postponed by the ``isolate_grad`` function?
+    Postponed = (1 << 3),
 };
 
 /// Stores information about python objects, such as their type, their number of
 /// sub-elements or their field keys. This can be used to reconstruct a PyTree
 /// from a flattened variable array.
 struct Layout {
-    /// Nanobind type of the container/variable
-    nb::type_object type;
     /// Number of members in this container.
     /// Can be used to traverse the layout without knowing the type.
     uint32_t num = 0;
@@ -61,7 +63,10 @@ struct Layout {
     /// If a non drjit type is passed as function arguments or result, we simply
     /// cache it here.
     /// TODO: possibly do the same for literals?
-    nb::object py_object = nb::none();
+    nb::object py_object;
+    
+    /// Nanobind type of the container/variable
+    nb::type_object type;
 
     bool operator==(const Layout &rhs) const;
 };
@@ -147,7 +152,7 @@ struct FlatVariables {
      * variables. An optional type python type can be supplied if it is known.
      */
     void traverse_jit_index(uint32_t index, TraverseContext &ctx,
-                            nb::handle tp = nb::none());
+                            nb::handle tp = nullptr);
     /**
      * Add an ad variable by it's index. Both the value and gradient are added
      * to the flattened variables. If the ad index has been marked as postponed
@@ -157,7 +162,7 @@ struct FlatVariables {
      * it is known.
      */
     void traverse_ad_index(uint64_t index, TraverseContext &ctx,
-                           nb::handle tp = nb::none());
+                           nb::handle tp = nullptr);
 
     /**
      * Wrapper aground traverse_ad_index for a python handle.
