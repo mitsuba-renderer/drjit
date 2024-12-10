@@ -119,7 +119,7 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 endif()
 
 if (MSVC)
-   add_compile_options("/execution-charset:utf-8")
+   add_compile_options(/utf-8)  # Ensure source and execution charset is UTF-8
    add_compile_options(/wd4251) # "warning C4251: X needs to have dll-interface to be used by clients of struct Y"
    add_compile_options(/wd4127) # "warning C4127 : conditional expression is constant, consider using 'if constexpr' statement instead"
 endif()
