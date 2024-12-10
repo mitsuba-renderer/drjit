@@ -5970,6 +5970,14 @@
     Note that this information can also be queried in a more fine-grained
     manner (per variable) using the :py:attr:`drjit.ArrayBase.state` field.
 
+.. topic:: JitFlag_KernelFreezing
+
+    Enable recording of functions annotated with :py:func:`freeze`.
+
+    If KernelFreezing is enabled, all Dr.Jit operations executed in a function 
+    annotated with :py:func:`freeze` are recorded at it's first call and 
+    replayed on subsequent calls.
+
 .. topic:: JitFlag_Default
 
     The default set of optimization flags consisting of
@@ -7915,3 +7923,12 @@
 .. topic:: leak_warnings
 
    Query whether leak warnings are enabled. See :py:func:`drjit.detail.set_leak_warnings()`.
+
+.. topic:: freeze
+
+   Freeze a function for cached kernel compilation
+
+   This decorator wraps a function, and enables replaying it in order remove
+   the need for tracing python operations. The first time a frozen function is
+   called, it is executed regularely, while all operations performed are 
+   recorded.
