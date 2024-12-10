@@ -1414,14 +1414,11 @@ nb::object FunctionRecording::record(nb::callable func,
                      in_variables.variables.size());
 
     // Record the function
-    // bool tmp = jit_flag(JitFlag::KernelFreezing);
-    jit_set_flag(JitFlag::KernelFreezing, false);
     nb::object output;
     {
         ProfilerPhase profiler("function");
         output = func(*input[0], **input[1]);
     }
-    jit_set_flag(JitFlag::KernelFreezing, true);
 
     // output.append(result);
     // output.append(input);
@@ -1583,11 +1580,15 @@ nb::object FunctionRecording::replay(nb::callable func,
 nb::object FrozenFunction::operator()(nb::args args, nb::kwargs kwargs) {
     nb::object result;
     {
-        // Enter Isolate grad scope, so that gradients don't traverse
+        // Enter Isolate grad scope, so that gradients are not propagated
         // outside of the function scope.
         ADScopeContext ad_scope(drjit::ADScope::Isolate, 0, nullptr, -1, true);
 
-        if (!jit_flag(JitFlag::KernelFreezing)) {
+        // Kernel freezing can be enabled or disabled with the
+        // ``JitFlag::KernelFreezing``. Alternatively, when calling a frozen
+        // function from another one, we simply record the inner function.
+        if (!jit_flag(JitFlag::KernelFreezing) ||
+            jit_flag(JitFlag::FreezingScope)) {
             ProfilerPhase profiler("function");
             return func(*args, **kwargs);
         }
@@ -1652,7 +1653,6 @@ nb::object FrozenFunction::operator()(nb::args args, nb::kwargs kwargs) {
             } catch (nb::python_error &e) {
                 in_variables.release();
                 jit_freeze_abort(in_variables.backend);
-                jit_set_flag(JitFlag::KernelFreezing, true);
                 nb::raise_from(
                     e, PyExc_RuntimeError,
                     "record(): error encountered while recording a frozen"
@@ -1660,7 +1660,6 @@ nb::object FrozenFunction::operator()(nb::args args, nb::kwargs kwargs) {
             } catch (const std::exception &e) {
                 in_variables.release();
                 jit_freeze_abort(in_variables.backend);
-                jit_set_flag(JitFlag::KernelFreezing, true);
 
                 nb::chain_error(PyExc_RuntimeError, "record(): %s", e.what());
                 nb::raise_python_error();
