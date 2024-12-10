@@ -984,7 +984,9 @@ Target gather(Source &&source, const Index &index, const Mask &mask_ = true,
         static_assert(size_v<Source> == size_v<Target>,
                       "When gathering from a nested array source, the source "
                       "and target types must be compatible!");
-        using Index2 = plain_t<replace_scalar_t<Target, scalar_t<Index>>>;
+        using Index2 = std::conditional_t<is_array_v<Index>,
+            plain_t<replace_scalar_t<Target, scalar_t<Index>>>,
+            plain_t<replace_value_t<Target, Index>>>;
         Target result;
         if constexpr (Target::Size == Dynamic)
             result = empty<Target>(source.size());
@@ -1004,7 +1006,7 @@ Target gather(Source &&source, const Index &index, const Mask &mask_ = true,
                 return Target::gather_(
                     source, uint32_array_t<Source>(index), mask, mode);
             } else {
-                size_t offset = index * sizeof(value_t<Target>) * Target::Size;
+                size_t offset = index * sizeof(value_t<Source>);
                 if constexpr (std::is_pointer_v<std::decay_t<Source>>) {
                     // Case 2.0.1: gather<Target>(const void *, size_t, ...)
                     return select(mask, load<Target>((const uint8_t *)source + offset), 0);
