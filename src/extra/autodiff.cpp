@@ -2119,7 +2119,7 @@ struct BlockReduceEdge : Special {
 
             case ReduceOp::Min:
             case ReduceOp::Max: {
-                    JitVar value_tile = dr::tile(m_value_out, m_block_size);
+                    JitVar value_tile = dr::repeat(m_value_out, m_block_size);
                     result = dr::block_sum(source_grad & (value_tile == m_value_in), m_block_size, m_symbolic);
                 }
                 break;
@@ -2142,18 +2142,18 @@ struct BlockReduceEdge : Special {
         JitVar result;
         switch (m_op) {
             case ReduceOp::Add:
-                result = dr::tile(target_grad, m_block_size);
+                result = dr::repeat(target_grad, m_block_size);
                 break;
 
             case ReduceOp::Mul:
-                result = dr::tile(target_grad * m_value_out, m_block_size) / m_value_in;
+                result = dr::repeat(target_grad * m_value_out, m_block_size) / m_value_in;
                 break;
 
             case ReduceOp::Min:
             case ReduceOp::Max:
                 result = dr::select(
-                    dr::tile(m_value_out, m_block_size) == m_value_in,
-                    dr::tile(target_grad, m_block_size), scalar(m_value_in.index(), 0.0));
+                    dr::repeat(m_value_out, m_block_size) == m_value_in,
+                    dr::repeat(target_grad, m_block_size), scalar(m_value_in.index(), 0.0));
                 break;
 
             default:
