@@ -1250,7 +1250,7 @@ def test35_return_types(t, struct_style):
     else:
         assert struct_style == "dataclass"
 
-        @dataclass(kw_only=True, frozen=True)
+        @dataclass(frozen=True)
         class ToyDataclass:
             a: Float
             b: Float
@@ -1361,17 +1361,17 @@ def test36_drjit_struct_and_matrix(t):
             self.matrix = matrix
             self.inverse = inverse
 
-    @dataclass(kw_only=False, frozen=False)
+    @dataclass(frozen=False)
     class Camera:
         to_world: MyTransform4f
 
-    @dataclass(kw_only=False, frozen=False)
+    @dataclass(frozen=False)
     class Batch:
         camera: Camera
         value: float = 0.5
         offset: float = 0.5
 
-    @dataclass(kw_only=False, frozen=False)
+    @dataclass(frozen=False)
     class Result:
         value: Float
         constant: int = 5
@@ -1429,7 +1429,7 @@ def test37_with_dataclass_in_out(t):
     UInt32 = mod.UInt32
     Bool = mod.Bool
 
-    @dataclass(kw_only=True, frozen=False)
+    @dataclass(frozen=False)
     class MyRecord:
         step_in_segment: Int32
         total_steps: UInt32
