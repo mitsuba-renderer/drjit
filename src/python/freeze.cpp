@@ -947,24 +947,12 @@ void FlatVariables::traverse_with_registry(nb::handle h, TraverseContext &ctx) {
                 continue;
 
             // WARN: very unsafe cast!
-            auto base = (nb::intrusive_base *) ptr;
-            auto self = base->self_py();
+            auto traversable = (drjit::TraversableBase *) ptr;
+            auto self = traversable->self_py();
 
             if (self)
                 traverse(self, ctx);
-
-            const drjit::TraversableBase *traversable =
-                dynamic_cast<const drjit::TraversableBase *>(base);
-
-            if (!traversable) {
-                int status;
-                jit_fail("Could not cast intrusive_base to TraversableBase! "
-                         "The typename was: %s",
-                         abi::__cxa_demangle(typeid(*base).name(), nullptr,
-                                             nullptr, &status));
-                continue;
-            }
-
+            
             traverse_cb(traversable, ctx);
             num_fields++;
         }
@@ -1000,24 +988,11 @@ void FlatVariables::assign_with_registry(nb::handle dst) {
             continue;
 
         // WARN: very unsafe cast!
-        auto base = (nb::intrusive_base *) ptr;
-        auto self = base->self_py();
+        auto traversable = (drjit::TraversableBase *) ptr;
+        auto self = traversable->self_py();
 
         if (self)
             assign(self);
-
-        drjit::TraversableBase *traversable =
-            dynamic_cast<drjit::TraversableBase *>(base);
-
-        if (!traversable) {
-            int status;
-            // TODO: should we put that behind the debug flag?
-            jit_fail("Could not cast intrusive_base to TraversableBase! "
-                      "The typename was: %s",
-                      abi::__cxa_demangle(typeid(*base).name(), nullptr,
-                                          nullptr, &status));
-            continue;
-        }
 
         assign_cb(traversable);
         num_fields++;
@@ -1096,23 +1071,11 @@ static void traverse_with_registry(const char *op, TraverseCallback &tc,
                 continue;
 
             // WARN: very unsafe cast!
-            auto base = (nb::intrusive_base *) ptr;
-            auto self = base->self_py();
+            auto traversable = (drjit::TraversableBase *) ptr;
+            auto self = traversable->self_py();
 
             if (self)
                 traverse(op, tc, self, rw);
-
-            drjit::TraversableBase *traversable =
-                dynamic_cast<drjit::TraversableBase *>(base);
-
-            if (!traversable) {
-                int status;
-                jit_fail("Could not cast intrusive_base to TraversableBase! "
-                         "The typename was: %s",
-                         abi::__cxa_demangle(typeid(*base).name(), nullptr,
-                                             nullptr, &status));
-                continue;
-            }
 
             traverse_traversable(traversable, tc, rw);
         }
@@ -1130,23 +1093,11 @@ static void traverse_with_registry(const char *op, TraverseCallback &tc,
                 continue;
 
             // WARN: very unsafe cast!
-            auto base = (nb::intrusive_base *) ptr;
-            auto self = base->self_py();
+            auto traversable = (drjit::TraversableBase *) ptr;
+            auto self = traversable->self_py();
 
             if (self)
                 traverse(op, tc, self, rw);
-
-            drjit::TraversableBase *traversable =
-                dynamic_cast<drjit::TraversableBase *>(base);
-
-            if (!traversable) {
-                int status;
-                jit_fail("Could not cast intrusive_base to TraversableBase! "
-                         "The typename was: %s",
-                         abi::__cxa_demangle(typeid(*base).name(), nullptr,
-                                             nullptr, &status));
-                continue;
-            }
 
             traverse_traversable(traversable, tc, rw);
         }
