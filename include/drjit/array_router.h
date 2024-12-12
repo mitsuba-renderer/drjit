@@ -984,7 +984,9 @@ Target gather(Source &&source, const Index &index, const Mask &mask_ = true,
         static_assert(size_v<Source> == size_v<Target>,
                       "When gathering from a nested array source, the source "
                       "and target types must be compatible!");
-        using Index2 = plain_t<replace_scalar_t<Target, scalar_t<Index>>>;
+        using Index2 = std::conditional_t<is_array_v<Index>,
+            plain_t<replace_scalar_t<Target, scalar_t<Index>>>,
+            plain_t<replace_value_t<Target, Index>>>;
         Target result;
         if constexpr (Target::Size == Dynamic)
             result = empty<Target>(source.size());
