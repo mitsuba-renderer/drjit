@@ -9,8 +9,16 @@
 
 NAMESPACE_BEGIN(drjit)
 
+#if !defined(DRJIT_EXPORT)
+#if defined(_MSC_VER)
+#define DRJIT_EXPORT __declspec(dllexport)
+#else
+#define DRJIT_EXPORT __attribute__((visibility("default")))
+#endif
+#endif
+
 /// Interface for traversing C++ objects.
-struct TraversableBase : nanobind::intrusive_base {
+struct DRJIT_EXPORT TraversableBase : public nanobind::intrusive_base {
     virtual void traverse_1_cb_ro(void *, void (*)(void *, uint64_t)) const = 0;
     virtual void traverse_1_cb_rw(void *, uint64_t (*)(void *, uint64_t))   = 0;
 };
@@ -69,11 +77,5 @@ public:                                                                        \
             Base ::traverse_1_cb_rw(payload, fn);                              \
         drjit::traverse_py_cb_rw(this, payload, fn);                           \
     }
-
-#if defined(_MSC_VER)
-#define DRJIT_EXPORT __declspec(dllexport)
-#else
-#define DRJIT_EXPORT __attribute__((visibility("default")))
-#endif
 
 NAMESPACE_END(drjit)
