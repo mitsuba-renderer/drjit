@@ -947,6 +947,7 @@ void FlatVariables::traverse_with_registry(nb::handle h, TraverseContext &ctx) {
                 continue;
 
             // WARN: very unsafe cast!
+            // We assume, that any object added to the registry inherits from TraversableBase.
             auto traversable = (drjit::TraversableBase *) ptr;
             auto self = traversable->self_py();
 
@@ -988,6 +989,7 @@ void FlatVariables::assign_with_registry(nb::handle dst) {
             continue;
 
         // WARN: very unsafe cast!
+        // We assume, that any object added to the registry inherits from TraversableBase.
         auto traversable = (drjit::TraversableBase *) ptr;
         auto self = traversable->self_py();
 
@@ -1071,6 +1073,7 @@ static void traverse_with_registry(const char *op, TraverseCallback &tc,
                 continue;
 
             // WARN: very unsafe cast!
+            // We assume, that any object added to the registry inherits from TraversableBase.
             auto traversable = (drjit::TraversableBase *) ptr;
             auto self = traversable->self_py();
 
@@ -1093,6 +1096,7 @@ static void traverse_with_registry(const char *op, TraverseCallback &tc,
                 continue;
 
             // WARN: very unsafe cast!
+            // We assume, that any object added to the registry inherits from TraversableBase.
             auto traversable = (drjit::TraversableBase *) ptr;
             auto self = traversable->self_py();
 
