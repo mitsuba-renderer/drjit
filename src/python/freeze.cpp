@@ -11,7 +11,6 @@
 #include "drjit/fwd.h"
 #include "drjit/traversable_base.h"
 #include "listobject.h"
-#include "nanobind/intrusive/counter.h"
 #include "nanobind/nanobind.h"
 #include "object.h"
 #include "pyerrors.h"
