@@ -933,10 +933,10 @@ void FlatVariables::traverse_with_registry(nb::handle h, TraverseContext &ctx) {
         uint32_t num_fields = 0;
 
         jit_log(LogLevel::Debug, "registry{");
-        uint32_t registry_bound = jit_registry_id_bound("", nullptr);
+        uint32_t registry_bound = jit_registry_id_bound(nullptr, nullptr);
         std::vector<void *> registry_pointers;
         registry_pointers.resize(registry_bound);
-        jit_registry_get_pointers("", registry_pointers.data());
+        jit_registry_get_pointers(nullptr, registry_pointers.data());
 
         jit_log(LogLevel::Debug, "registry_bound=%u", registry_bound);
         jit_log(LogLevel::Debug, "layout_index=%u", this->layout.size());
@@ -946,7 +946,9 @@ void FlatVariables::traverse_with_registry(nb::handle h, TraverseContext &ctx) {
                 continue;
 
             // WARN: very unsafe cast!
-            // We assume, that any object added to the registry inherits from TraversableBase.
+            // We assume, that any object added to the registry inherits from
+            // TraversableBase. This is ensured by the signature of the
+            // ``drjit::registry_put`` function.
             auto traversable = (drjit::TraversableBase *) ptr;
             auto self = traversable->self_py();
 
@@ -975,10 +977,10 @@ void FlatVariables::assign_with_registry(nb::handle dst) {
     Layout &layout      = this->layout[layout_index++];
     uint32_t num_fields = 0;
     jit_log(LogLevel::Debug, "registry{");
-    uint32_t registry_bound = jit_registry_id_bound("", nullptr);
+    uint32_t registry_bound = jit_registry_id_bound(nullptr, nullptr);
     std::vector<void *> registry_pointers;
     registry_pointers.resize(registry_bound);
-    jit_registry_get_pointers("", registry_pointers.data());
+    jit_registry_get_pointers(nullptr, registry_pointers.data());
 
     jit_log(LogLevel::Debug, "registry_bound=%u", registry_bound);
     jit_log(LogLevel::Debug, "layout_index=%u", this->layout_index);
@@ -988,7 +990,9 @@ void FlatVariables::assign_with_registry(nb::handle dst) {
             continue;
 
         // WARN: very unsafe cast!
-        // We assume, that any object added to the registry inherits from TraversableBase.
+        // We assume, that any object added to the registry inherits from
+        // TraversableBase. This is ensured by the signature of the
+        // ``drjit::registry_put`` function.
         auto traversable = (drjit::TraversableBase *) ptr;
         auto self = traversable->self_py();
 
@@ -1063,16 +1067,18 @@ static void traverse_with_registry(const char *op, TraverseCallback &tc,
     {
 
         uint32_t registry_bound =
-            jit_registry_id_bound("", nullptr);
+            jit_registry_id_bound(nullptr, nullptr);
         registry_pointers.resize(registry_bound);
-        jit_registry_get_pointers("", registry_pointers.data());
+        jit_registry_get_pointers(nullptr, registry_pointers.data());
 
         for (void *ptr : registry_pointers) {
             if (!ptr)
                 continue;
 
             // WARN: very unsafe cast!
-            // We assume, that any object added to the registry inherits from TraversableBase.
+            // We assume, that any object added to the registry inherits from
+            // TraversableBase. This is ensured by the signature of the
+            // ``drjit::registry_put`` function.
             auto traversable = (drjit::TraversableBase *) ptr;
             auto self = traversable->self_py();
 

@@ -78,4 +78,9 @@ public:                                                                        \
         drjit::traverse_py_cb_rw(this, payload, fn);                           \
     }
 
+static uint32_t registry_put(const char *variant, const char *domain,
+                             TraversableBase *ptr) {
+    return jit_registry_put(variant, domain, (void *) ptr);
+}
+
 NAMESPACE_END(drjit)

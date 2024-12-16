@@ -53,7 +53,7 @@ template <typename Float> struct Base : drjit::TraversableBase {
 
     Base() {
         if constexpr (dr::is_jit_v<Float>)
-            jit_registry_put("", "Base", this);
+            drjit::registry_put("", "Base", this);
     }
 
     virtual ~Base() { jit_registry_remove(this); }
