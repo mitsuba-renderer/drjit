@@ -196,3 +196,73 @@ def test10_loop_read_then_write(t, capsys):
         local[size] = t(4)
 
     assert val[0] == 16
+
+@pytest.test_arrays('jit,uint32,shape=(*)')
+@dr.syntax
+def test11_write_mask_simple(t):
+    Bool = dr.mask_t(t)
+    s = dr.alloc_local(t, 1, value = dr.zeros(t))
+    mask = True
+    value = t(1, 1, 1)
+
+    s.write(value, t(0), active=mask) 
+
+    assert dr.all(s[0] == [1, 1, 1])
+
+    mask = Bool(True, False, True)
+    s = dr.alloc_local(t, 1, value = dr.zeros(t))
+    s.write(value, t(0), active=mask) 
+
+    assert dr.all(s[0] == [1, 0, 1])
+
+@pytest.test_arrays('jit,uint32,shape=(*)')
+@dr.syntax
+def test12_write_mask_conditional(t):
+    Bool = dr.mask_t(t)
+    s = dr.alloc_local(t, 1, value = dr.zeros(t))
+    mask = Bool(True, False, True)
+
+    i = t(0, 1, 1)
+
+    if i > 0:
+        s.write(t(1), t(0), active=mask) 
+
+    assert dr.all(s[0] == [0, 0, 1])
+
+@pytest.test_arrays('jit,uint32,shape=(*)')
+@dr.syntax
+def test13_read_mask_simple(t):
+    Bool = dr.mask_t(t)
+    s = dr.alloc_local(t, 1, value = dr.zeros(t))
+    s[0] = 1
+    mask = True
+
+    x = dr.zeros(t, 3)
+    x += s.read(t(0), active=mask)
+
+    assert dr.all(x == [1, 1, 1])
+
+    mask = Bool(True, False, True)
+    s = dr.alloc_local(t, 1, value = dr.zeros(t))
+    s[0] = 1
+    x = dr.zeros(t, 3)
+    x += s.read(t(0), mask)
+
+    assert dr.all(x == [1, 0, 1])
+
+@pytest.test_arrays('jit,uint32,shape=(*)')
+@dr.syntax
+def test14_read_mask_conditional(t):
+    Bool = dr.mask_t(t)
+    s = dr.alloc_local(t, 1, value = dr.zeros(t))
+    s[0] = 1
+    mask = Bool(True, False, True)
+
+    i = t(0, 1, 1)
+
+    x = dr.zeros(t, 3)
+
+    if i > 0:
+        x += s.read(t(0), active=mask) 
+
+    assert dr.all(x == [0, 0, 1])
