@@ -654,9 +654,9 @@
     :py:func:`drjit.min()`, and :py:func:`drjit.max()` are convenience aliases
     that call :py:func:`drjit.reduce()` with specific values of ``op``.
 
-    By default, the reduction for tensor types is performed over all axes 
+    By default, the reduction for tensor types is performed over all axes
     (``axis=None``), while for all other types, the default is ``axis=0``
-    (i.e., the outermost one), returning an instance of the array's element type. 
+    (i.e., the outermost one), returning an instance of the array's element type.
     For instance, sum-reducing an array ``a`` of type :py:class:`drjit.cuda.Array3f` is
     equivalent to writing ``a[0] + a[1] + a[2]`` and produces a result of type
     :py:class:`drjit.cuda.Float`. Dr.Jit can trace this operation and include
@@ -6360,7 +6360,7 @@
     The main difference is that this variant additionally returns the *old* value
     of the target array prior to the atomic update in contrast to the more general
     scatter-reduction, which just returns ``None``. The operation also supports
-    masking---the return value in the unmasked case is undefined. Both ``target``
+    masking---the return value in the masked case is undefined. Both ``target``
     and ``index`` parameters must be 1D unsigned 32-bit arrays.
 
     This operation is a building block for stream compaction: threads can
