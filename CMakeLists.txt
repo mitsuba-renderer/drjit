@@ -122,6 +122,12 @@ if (MSVC)
    add_compile_options(/utf-8)  # Ensure source and execution charset is UTF-8
    add_compile_options(/wd4251) # "warning C4251: X needs to have dll-interface to be used by clients of struct Y"
    add_compile_options(/wd4127) # "warning C4127 : conditional expression is constant, consider using 'if constexpr' statement instead"
+
+  # Workaround to avoid a particular crash due to MS VC++ runtime library binary 
+  # incompatibility. In general the runtime version needs to be at least as new 
+  # as toolset version but this define provides one such "escape hatch" if that 
+  # strictly isn't the case to combat against a commonly encountered reported crash
+  add_compile_options(-D_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR)
 endif()
 
 if (DRJIT_ENABLE_JIT)
