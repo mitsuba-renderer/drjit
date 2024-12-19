@@ -2907,13 +2907,13 @@
          - ❌
        * - :py:attr:`ReduceOp.Min`
          - ❌
-         - ❌
+         - ✅
          - ⚠️  CC≥90
          - ❌
          - ❌
        * - :py:attr:`ReduceOp.Max`
          - ❌
-         - ❌
+         - ✅
          - ⚠️  CC≥90
          - ❌
          - ❌

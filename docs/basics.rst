@@ -84,11 +84,20 @@ members:
 
 Static 1-4D arrays also support `swizzling
 <https://en.wikipedia.org/wiki/Swizzling_(computer_graphics)>`__, which
-arbitrarily reorders elements:
+arbitrarily reorders elements. For example, the following compact compact
+notation updates and combines entries of a larger array.
 
 .. code-block:: python
 
-   a.xy = a.xx + a.yx
+   a.xy += a.xx + a.zx
+
+Beware that swizzle accesses besides direct assignent or in-place updates
+create new arrays. As a consequence, the following statement does not modify
+``a`` as intended, since ``a.x`` created a new 1D array.
+
+.. code-block:: python
+
+   a.x[a.x < 0] = 0 # Warning: this does not work
 
 Arithmetic operations
 ---------------------
