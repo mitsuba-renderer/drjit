@@ -16,6 +16,7 @@
 #include <tsl/robin_map.h>
 #include <tsl/robin_set.h>
 #include <drjit-core/hash.h>
+#include <drjit-core/jit.h>
 
 struct FrozenFunction;
 
