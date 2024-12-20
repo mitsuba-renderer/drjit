@@ -21,6 +21,7 @@ NAMESPACE_BEGIN(drjit)
 struct DRJIT_EXPORT TraversableBase : public nanobind::intrusive_base {
     virtual void traverse_1_cb_ro(void *, void (*)(void *, uint64_t)) const = 0;
     virtual void traverse_1_cb_rw(void *, uint64_t (*)(void *, uint64_t))   = 0;
+    virtual const char *get_variant() const { return nullptr; };
 };
 
 /// Macro for generating call to traverse_1_fn_ro for a class member
@@ -78,7 +79,7 @@ public:                                                                        \
         drjit::traverse_py_cb_rw(this, payload, fn);                           \
     }
 
-static uint32_t registry_put(const char *variant, const char *domain,
+inline uint32_t registry_put(const char *variant, const char *domain,
                              TraversableBase *ptr) {
     return jit_registry_put(variant, domain, (void *) ptr);
 }

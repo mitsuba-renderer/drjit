@@ -1078,6 +1078,10 @@ template <typename T, typename... Args> auto& bind_traverse(nanobind::class_<T, 
         });
     });
 
+    cls.def("_get_variant", [](T *self){
+        return self->get_variant();
+    });
+
     return cls;
 }
 

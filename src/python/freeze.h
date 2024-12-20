@@ -108,6 +108,7 @@ struct FlatVariables {
     /// objects. The information is stored in DFS order.
     std::vector<Layout> layout;
     JitBackend backend = JitBackend::None;
+    std::string variant;
 
     // Whether variables should be borrowed, instead of stealing them
     bool borrow = true;

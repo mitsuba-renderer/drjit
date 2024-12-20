@@ -20,7 +20,6 @@
 #include <cxxabi.h>
 #include <ios>
 #include <ostream>
-#include <sstream>
 #include <vector>
 
 struct ProfilerPhase {
@@ -645,6 +644,12 @@ void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
             }
         } else if (nb::object cb = get_traverse_cb_ro(tp); cb.is_valid()) {
             ProfilerPhase profiler("traverse cb");
+
+            nb::object get_variant = get_variant_fn(tp);
+            if (this->variant.empty())
+                this->variant = nb::borrow<nb::str>(get_variant(h)).c_str();
+                
+            
             Layout layout;
             layout.type         = nb::borrow<nb::type_object>(tp);
             size_t layout_index = this->layout.size();
@@ -933,10 +938,11 @@ void FlatVariables::traverse_with_registry(nb::handle h, TraverseContext &ctx) {
         uint32_t num_fields = 0;
 
         jit_log(LogLevel::Debug, "registry{");
-        uint32_t registry_bound = jit_registry_id_bound(nullptr, nullptr);
+        uint32_t registry_bound =
+            jit_registry_id_bound(variant.c_str(), nullptr);
         std::vector<void *> registry_pointers;
         registry_pointers.resize(registry_bound);
-        jit_registry_get_pointers(nullptr, registry_pointers.data());
+        jit_registry_get_pointers(variant.c_str(), registry_pointers.data());
 
         jit_log(LogLevel::Debug, "registry_bound=%u", registry_bound);
         jit_log(LogLevel::Debug, "layout_index=%u", this->layout.size());
@@ -977,10 +983,10 @@ void FlatVariables::assign_with_registry(nb::handle dst) {
     Layout &layout      = this->layout[layout_index++];
     uint32_t num_fields = 0;
     jit_log(LogLevel::Debug, "registry{");
-    uint32_t registry_bound = jit_registry_id_bound(nullptr, nullptr);
+    uint32_t registry_bound = jit_registry_id_bound(variant.c_str(), nullptr);
     std::vector<void *> registry_pointers;
     registry_pointers.resize(registry_bound);
-    jit_registry_get_pointers(nullptr, registry_pointers.data());
+    jit_registry_get_pointers(variant.c_str(), registry_pointers.data());
 
     jit_log(LogLevel::Debug, "registry_bound=%u", registry_bound);
     jit_log(LogLevel::Debug, "layout_index=%u", this->layout_index);

@@ -61,6 +61,7 @@ extern nb::handle DR_STR(_traverse_write);
 extern nb::handle DR_STR(_traverse_read);
 extern nb::handle DR_STR(_traverse_1_cb_rw);
 extern nb::handle DR_STR(_traverse_1_cb_ro);
+extern nb::handle DR_STR(_get_variant);
 extern nb::handle DR_STR(typing);
 extern nb::handle DR_STR(get_type_hints);
 
@@ -97,4 +98,8 @@ inline nb::object get_traverse_cb_ro(nb::handle tp) {
 /// Extract a read-write callback to traverse custom data structures
 inline nb::object get_traverse_cb_rw(nb::handle tp) {
     return nb::getattr(tp, DR_STR(_traverse_1_cb_rw), nb::handle());
+}
+
+inline nb::object get_variant_fn(nb::handle tp) {
+    return nb::getattr(tp, DR_STR(_get_variant), nb::handle());
 }
