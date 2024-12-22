@@ -646,10 +646,16 @@ void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
             ProfilerPhase profiler("traverse cb");
 
             nb::object get_variant = get_variant_fn(tp);
+            auto h_variant = nb::borrow<nb::str>(get_variant(h));
             if (this->variant.empty())
-                this->variant = nb::borrow<nb::str>(get_variant(h)).c_str();
-                
-            
+                this->variant = h_variant.c_str();
+            else if (this->variant != h_variant.c_str())
+                jit_raise("traverse(): Variant missmatch! All arguments to a "
+                          "frozen function have to have the same variant. "
+                          "Variant %s of a previos argument does not match "
+                          "variant %s of this argument.",
+                          this->variant.c_str(), h_variant.c_str());
+
             Layout layout;
             layout.type         = nb::borrow<nb::type_object>(tp);
             size_t layout_index = this->layout.size();
