@@ -252,6 +252,9 @@ struct struct_support;
 template <typename T, typename Array>
 struct call_support {
     call_support(const Array &) { }
+public:
+    static constexpr const char *Domain  = nullptr;
+    static constexpr const char *Variant = nullptr;
 };
 
 struct StringBuffer;

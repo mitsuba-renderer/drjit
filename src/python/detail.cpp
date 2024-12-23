@@ -111,10 +111,11 @@ void collect_indices(nb::handle h, dr::vector<uint64_t> &indices, bool inc_ref) 
         void operator()(nb::handle h) override {
             auto index_fn = supp(h.type()).index;
             if (index_fn)
-                operator()(index_fn(inst_ptr(h)));
+                operator()(index_fn(inst_ptr(h)), nullptr, nullptr);
         }
 
-        uint64_t operator()(uint64_t index) override {
+        uint64_t operator()(uint64_t index, const char *variant,
+                            const char *domain) override {
             if (inc_ref)
                 ad_var_inc_ref(index);
             result.push_back(index);
@@ -285,11 +286,23 @@ bool leak_warnings() {
 void traverse_py_cb_ro_impl(nb::handle self, nb::callable c) {
     struct PyTraverseCallback : TraverseCallback {
         void operator()(nb::handle h) override {
-            auto index_fn = supp(h.type()).index;
-            if (index_fn)
-                operator()(index_fn(inst_ptr(h)));
+            const ArraySupplement &s = supp(h.type());
+            auto index_fn = s.index;
+            if (index_fn){
+                if (s.is_class)
+                    operator()(
+                        index_fn(inst_ptr(h)),
+                        nb::borrow<nb::str>(nb::getattr(h, "Variant")).c_str(),
+                        nb::borrow<nb::str>(nb::getattr(h, "Domain")).c_str());
+                else
+                    operator()(index_fn(inst_ptr(h)), "", "");
+            }
         }
-        uint64_t operator()(uint64_t index) override { m_callback(index); return 0; }
+        uint64_t operator()(uint64_t index, const char *variant,
+                            const char *domain) override {
+            m_callback(index, variant, domain);
+            return 0;
+        }
         nb::callable m_callback;
 
         PyTraverseCallback(nb::callable c) : m_callback(c) {}
@@ -309,9 +322,9 @@ void traverse_py_cb_rw_impl(nb::handle self, nb::callable c) {
         void operator()(nb::handle h) override {
             const ArraySupplement &s = supp(h.type());
             if (s.index)
-                s.reset_index(operator()(s.index(inst_ptr(h))), inst_ptr(h));
+                s.reset_index(operator()(s.index(inst_ptr(h)), nullptr, nullptr), inst_ptr(h));
         }
-        uint64_t operator()(uint64_t index) override {
+        uint64_t operator()(uint64_t index, const char *variant, const char *domain) override {
             return nb::cast<uint64_t>(m_callback(index));
         }
         nb::callable m_callback;

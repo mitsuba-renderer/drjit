@@ -19,8 +19,10 @@ NAMESPACE_BEGIN(drjit)
 
 /// Interface for traversing C++ objects.
 struct DRJIT_EXPORT TraversableBase : public nanobind::intrusive_base {
-    virtual void traverse_1_cb_ro(void *, void (*)(void *, uint64_t)) const = 0;
-    virtual void traverse_1_cb_rw(void *, uint64_t (*)(void *, uint64_t))   = 0;
+    virtual void traverse_1_cb_ro(void *,
+                                  void (*)(void *, uint64_t, const char *,
+                                           const char *)) const           = 0;
+    virtual void traverse_1_cb_rw(void *, uint64_t (*)(void *, uint64_t)) = 0;
     virtual const char *get_variant() const { return nullptr; };
 };
 
@@ -42,8 +44,9 @@ inline void log_member_open(bool rw, const char *member) {
 inline void log_member_close() { jit_log(LogLevel::Debug, "}"); }
 
 #define DR_TRAVERSE_CB_RO(Base, ...)                                           \
-    void traverse_1_cb_ro(void *payload, void (*fn)(void *, uint64_t))         \
-        const override {                                                       \
+    void traverse_1_cb_ro(void *payload,                                       \
+                          void (*fn)(void *, uint64_t, const char *,           \
+                                     const char *)) const override {           \
         if constexpr (!std::is_same_v<Base, drjit::TraversableBase>)           \
             Base::traverse_1_cb_ro(payload, fn);                               \
         DRJIT_MAP(DR_TRAVERSE_MEMBER_RO, __VA_ARGS__)                          \
@@ -66,8 +69,9 @@ public:                                                                        \
 
 #define DR_TRAMPOLINE_TRAVERSE_CB(Base)                                        \
 public:                                                                        \
-    void traverse_1_cb_ro(void *payload, void (*fn)(void *, uint64_t))         \
-        const override {                                                       \
+    void traverse_1_cb_ro(void *payload,                                       \
+                          void (*fn)(void *, uint64_t, const char *,           \
+                                     const char *)) const override {           \
         if constexpr (!std ::is_same_v<Base, drjit ::TraversableBase>)         \
             Base ::traverse_1_cb_ro(payload, fn);                              \
         drjit::traverse_py_cb_ro(this, payload, fn);                           \

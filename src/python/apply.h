@@ -57,7 +57,8 @@ struct TraverseCallback {
     // Type-erased form which is needed in some cases to traverse into opaque
     // C++ code. This one just gets called with Jit/AD variable indices, an
     // associated Python/ instance/type is not available.
-    virtual uint64_t operator()(uint64_t index);
+    virtual uint64_t operator()(uint64_t index, const char *variant = nullptr,
+                                const char *domain = nullptr);
 
     // Traverse an unknown object
     virtual void traverse_unknown(nb::handle h);

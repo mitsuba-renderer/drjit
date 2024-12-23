@@ -129,6 +129,8 @@ struct FlatVariables {
         }
     }
 
+    void add_domain(const char *variant, const char *domain);
+
     /**
      * Adds a variable to the flattened array, deduplicating it.
      * This allows for checking for aliasing conditions, as aliasing inputs map

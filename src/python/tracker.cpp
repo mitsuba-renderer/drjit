@@ -183,7 +183,7 @@ struct VariableTracker::Context {
 
     // Internal API for type-erased traversal
     uint64_t _traverse_write(uint64_t idx);
-    void _traverse_read(uint64_t index);
+    void _traverse_read(uint64_t index, const char *, const char *);
 };
 
 // Temporarily push a value onto the stack
@@ -585,7 +585,7 @@ uint64_t VariableTracker::Context::_traverse_write(uint64_t idx) {
     return idx_new;
 }
 
-void VariableTracker::Context::_traverse_read(uint64_t index) {
+void VariableTracker::Context::_traverse_read(uint64_t index, const char *, const char *) {
     if (!index)
         return;
     indices.push_back(ad_var_inc_ref(index));

@@ -192,11 +192,20 @@ template <typename T> auto labels(const T &v) {
     return traversable_t<T>::labels(v);
 }
 
+using TraverseCallbackRO = void (*)(void *, uint64_t, const char *, const char *);
+
 template <typename Value>
-void traverse_1_fn_ro(const Value &value, void *payload, void (*fn)(void *, uint64_t)) {
-    (void) payload; (void) fn;
+void traverse_1_fn_ro(const Value &value, void *payload,
+                      void (*fn)(void *, uint64_t, const char *,
+                                 const char *)) {
+    (void) payload;
+    (void) fn;
     if constexpr (is_jit_v<Value> && depth_v<Value> == 1) {
-        fn(payload, value.index_combined());
+        if constexpr(Value::IsClass)
+            fn(payload, value.index_combined(), Value::CallSupport::Variant,
+               Value::CallSupport::Domain);
+        else
+            fn(payload, value.index_combined(), "", "");
     } else if constexpr (is_traversable_v<Value>) {
         traverse_1(fields(value), [payload, fn](auto &x) {
             traverse_1_fn_ro(x, payload, fn);

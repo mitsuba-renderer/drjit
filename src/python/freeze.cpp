@@ -19,6 +19,7 @@
 #include <bitset>
 #include <cxxabi.h>
 #include <ios>
+#include <optional>
 #include <ostream>
 #include <vector>
 
@@ -133,6 +134,23 @@ static void log_layouts(const std::vector<Layout> &layouts, std::ostream &os,
             padding.resize(padding.length() - 4);
             os << padding << "]" << std::endl;
         }
+}
+
+void FlatVariables::add_domain(const char *variant, const char *domain){
+    if (variant && strcmp(variant, "") != 0) {
+        if (this->variant.empty())
+            this->variant = variant;
+        else if (this->variant != variant)
+            jit_raise("traverse(): Variant missmatch! All arguments to a "
+                      "frozen function have to have the same variant. "
+                      "Variant %s of a previos argument does not match "
+                      "variant %s of this argument.",
+                      this->variant.c_str(), variant);
+    }
+
+    if (domain && strcmp(domain, "") != 0) {
+        jit_log(LogLevel::Warn, "variant=%s, domain=%s", variant, domain);
+    }
 }
 
 /**
@@ -380,6 +398,12 @@ uint64_t FlatVariables::construct_ad_index(const Layout &layout,
  */
 void FlatVariables::traverse_ad_var(nb::handle h, TraverseContext &ctx) {
     auto s = supp(h.type());
+    
+    if (s.is_class){
+        auto variant = nb::borrow<nb::str>(nb::getattr(h, "Variant"));
+        auto domain  = nb::borrow<nb::str>(nb::getattr(h, "Domain"));
+        add_domain(variant.c_str(), domain.c_str());
+    }
 
     raise_if(s.index == nullptr, "freeze(): ArraySupplement index function "
                                  "pointer is nullptr.");
@@ -455,7 +479,8 @@ void FlatVariables::traverse_cb(const drjit::TraversableBase *traversable,
     };
     Payload payload{ this, 0, &ctx };
     traversable->traverse_1_cb_ro(
-        (void *) &payload, [](void *p, uint64_t index) {
+        (void *) &payload,
+        [](void *p, uint64_t index, const char *, const char *) {
             if (!index)
                 return;
             Payload *payload = (Payload *) p;
@@ -645,16 +670,16 @@ void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
         } else if (nb::object cb = get_traverse_cb_ro(tp); cb.is_valid()) {
             ProfilerPhase profiler("traverse cb");
 
-            nb::object get_variant = get_variant_fn(tp);
-            auto h_variant = nb::borrow<nb::str>(get_variant(h));
-            if (this->variant.empty())
-                this->variant = h_variant.c_str();
-            else if (this->variant != h_variant.c_str())
-                jit_raise("traverse(): Variant missmatch! All arguments to a "
-                          "frozen function have to have the same variant. "
-                          "Variant %s of a previos argument does not match "
-                          "variant %s of this argument.",
-                          this->variant.c_str(), h_variant.c_str());
+            // nb::object get_variant = get_variant_fn(tp);
+            // auto h_variant = nb::borrow<nb::str>(get_variant(h));
+            // if (this->variant.empty())
+            //     this->variant = h_variant.c_str();
+            // else if (this->variant != h_variant.c_str())
+            //     jit_raise("traverse(): Variant missmatch! All arguments to a "
+            //               "frozen function have to have the same variant. "
+            //               "Variant %s of a previos argument does not match "
+            //               "variant %s of this argument.",
+            //               this->variant.c_str(), h_variant.c_str());
 
             Layout layout;
             layout.type         = nb::borrow<nb::type_object>(tp);
@@ -664,16 +689,20 @@ void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
             uint32_t num_fields = 0;
 
             // Traverse the opaque C++ object
-            cb(h, nb::cpp_function([&](uint64_t index) {
-                   if (!index)
-                       return;
-                   jit_log(LogLevel::Debug,
-                           "traverse(): traverse_cb[%u] = a%u r%u", num_fields,
-                           (uint32_t) (index >> 32), (uint32_t) index);
-                   num_fields++;
-                   this->traverse_ad_index(index, ctx, nb::none());
-                   return;
-               }));
+            cb(h, nb::cpp_function(
+                      [&](uint64_t index, const char *variant,
+                          const char *domain) {
+                          if (!index)
+                              return;
+                          add_domain(variant, domain);
+                          jit_log(LogLevel::Debug,
+                                  "traverse(): traverse_cb[%u] = a%u r%u",
+                                  num_fields, (uint32_t) (index >> 32),
+                                  (uint32_t) index);
+                          num_fields++;
+                          this->traverse_ad_index(index, ctx, nb::none());
+                          return;
+                      }));
 
             // Update layout number of fields
             this->layout[layout_index].num = num_fields;
@@ -1065,7 +1094,7 @@ void traverse_traversable(drjit::TraversableBase *traversable,
             });
     } else {
         traversable->traverse_1_cb_ro((void *) &payload,
-                                      [](void *p, uint64_t index) {
+                                      [](void *p, uint64_t index, const char *, const char *) {
                                           Payload *payload = (Payload *) p;
                                           payload->cb(index);
                                       });
@@ -1138,7 +1167,8 @@ static void deep_make_opaque(nb::handle h, bool eval = true,
                 s.reset_index(operator()(s.index(inst_ptr(h))), inst_ptr(h));
         }
 
-        uint64_t operator()(uint64_t index) override {
+        uint64_t operator()(uint64_t index, const char *variant = nullptr,
+                            const char *domain = nullptr) override {
             if (!index)
                 return index;
             uint64_t new_index;
@@ -1235,10 +1265,10 @@ static void deep_eval(nb::handle h, bool eval = true) {
         void operator()(nb::handle h) override {
             const ArraySupplement &s = supp(h.type());
             if (s.index)
-                s.reset_index(operator()(s.index(inst_ptr(h))), inst_ptr(h));
+                s.reset_index(operator()(s.index(inst_ptr(h)), nullptr, nullptr), inst_ptr(h));
         }
 
-        uint64_t operator()(uint64_t index) override {
+        uint64_t operator()(uint64_t index, const char *variant, const char *domain) override {
             if (ad_grad_enabled(index)) {
                 int rv = 0;
 
