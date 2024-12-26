@@ -150,6 +150,15 @@ void FlatVariables::add_domain(const char *variant, const char *domain){
 
     if (domain && strcmp(domain, "") != 0) {
         jit_log(LogLevel::Warn, "variant=%s, domain=%s", variant, domain);
+        bool contains = false;
+        for (std::string &d : domains) {
+            if (d == domain) {
+                contains = true;
+                break;
+            }
+        }
+        if (!contains)
+            domains.push_back(domain);
     }
 }
 
@@ -973,13 +982,17 @@ void FlatVariables::traverse_with_registry(nb::handle h, TraverseContext &ctx) {
         uint32_t num_fields = 0;
 
         jit_log(LogLevel::Debug, "registry{");
-        uint32_t registry_bound =
-            jit_registry_id_bound(variant.c_str(), nullptr);
-        std::vector<void *> registry_pointers;
-        registry_pointers.resize(registry_bound);
-        jit_registry_get_pointers(variant.c_str(), registry_pointers.data());
 
-        jit_log(LogLevel::Debug, "registry_bound=%u", registry_bound);
+        std::vector<void *> registry_pointers;
+        for (std::string &domain: domains){
+            uint32_t registry_bound = jit_registry_id_bound(variant.c_str(), nullptr);
+            uint32_t offset = registry_pointers.size();
+            registry_pointers.resize(registry_pointers.size() + registry_bound);
+            jit_registry_get_pointers(variant.c_str(), domain.c_str(),
+                                      &registry_pointers[offset]);
+        }
+
+        jit_log(LogLevel::Debug, "registry_bound=%u", registry_pointers.size());
         jit_log(LogLevel::Debug, "layout_index=%u", this->layout.size());
         for (void *ptr : registry_pointers) {
             jit_log(LogLevel::Debug, "ptr=%p", ptr);
@@ -1017,13 +1030,20 @@ void FlatVariables::assign_with_registry(nb::handle dst) {
     // Assign registry
     Layout &layout      = this->layout[layout_index++];
     uint32_t num_fields = 0;
+    
     jit_log(LogLevel::Debug, "registry{");
-    uint32_t registry_bound = jit_registry_id_bound(variant.c_str(), nullptr);
-    std::vector<void *> registry_pointers;
-    registry_pointers.resize(registry_bound);
-    jit_registry_get_pointers(variant.c_str(), registry_pointers.data());
 
-    jit_log(LogLevel::Debug, "registry_bound=%u", registry_bound);
+    std::vector<void *> registry_pointers;
+    for (std::string &domain : domains) {
+        uint32_t registry_bound =
+            jit_registry_id_bound(variant.c_str(), nullptr);
+        uint32_t offset = registry_pointers.size();
+        registry_pointers.resize(registry_pointers.size() + registry_bound);
+        jit_registry_get_pointers(variant.c_str(), domain.c_str(),
+                                  &registry_pointers[offset]);
+    }
+
+    jit_log(LogLevel::Debug, "registry_bound=%u", registry_pointers.size());
     jit_log(LogLevel::Debug, "layout_index=%u", this->layout_index);
     for (void *ptr : registry_pointers) {
         jit_log(LogLevel::Debug, "ptr=%p", ptr);
@@ -1106,11 +1126,10 @@ static void traverse_with_registry(const char *op, TraverseCallback &tc,
 
     std::vector<void *> registry_pointers;
     {
-
         uint32_t registry_bound =
             jit_registry_id_bound(nullptr, nullptr);
         registry_pointers.resize(registry_bound);
-        jit_registry_get_pointers(nullptr, registry_pointers.data());
+        jit_registry_get_pointers(nullptr, nullptr, registry_pointers.data());
 
         for (void *ptr : registry_pointers) {
             if (!ptr)

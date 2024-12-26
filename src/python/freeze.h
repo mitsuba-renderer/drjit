@@ -109,6 +109,7 @@ struct FlatVariables {
     std::vector<Layout> layout;
     JitBackend backend = JitBackend::None;
     std::string variant;
+    std::vector<std::string> domains;
 
     // Whether variables should be borrowed, instead of stealing them
     bool borrow = true;
