@@ -125,6 +125,8 @@ public:
         m_handle = other.m_handle;
         other.m_handle = nullptr;
         m_size = other.m_size;
+        m_channels = other.m_channels;
+        m_packet_size = other.m_packet_size;
         m_shape_opaque = std::move(other.m_shape_opaque);
         m_value = std::move(other.m_value);
         for (size_t i = 0; i < Dimension; ++i)
@@ -141,6 +143,8 @@ public:
         m_handle = other.m_handle;
         other.m_handle = nullptr;
         m_size = other.m_size;
+        m_channels = other.m_channels;
+        m_packet_size = other.m_packet_size;
         m_shape_opaque = std::move(other.m_shape_opaque);
         m_value = std::move(other.m_value);
         for (size_t i = 0; i < Dimension; ++i)
@@ -211,6 +215,8 @@ public:
                 }
             }
         }
+
+        // Massage data
 
         m_value.array() = value;
     }
@@ -364,11 +370,11 @@ public:
         using PosF = Array<Value, Dimension>;
         using PosI = int32_array_t<PosF>;
         using Mask = mask_t<Value>;
+        using Packet = DynamicArray<_Storage>;
 
         if constexpr (!is_array_v<Mask>)
             active = true;
 
-        const uint32_t channels = (uint32_t) m_value.shape(Dimension);
         if (DRJIT_UNLIKELY(m_filter_mode == FilterMode::Nearest)) {
             const PosF pos_f = pos * PosF(m_shape_opaque);
             const PosI pos_i = floor2int<PosI>(pos_f);
@@ -376,8 +382,9 @@ public:
 
             UInt32 idx = index(pos_i_w);
 
-            for (uint32_t ch = 0; ch < channels; ++ch)
-                out[ch] = Value(gather<_Storage>(m_value.array(), idx + ch, active));
+            Packet packet = tex_gather_packet(m_value.array(), idx, active);
+            for (uint32_t ch = 0; ch < m_channels; ++ch)
+                out[ch] = Value(packet[ch]);
         } else {
             using InterpOffset = Array<Int32, ipow(2, Dimension)>;
             using InterpPosI = Array<InterpOffset, Dimension>;
@@ -392,17 +399,18 @@ public:
             pos_i_w = wrap(pos_i_w);
             InterpIdx idx = index(pos_i_w);
 
-            for (uint32_t ch = 0; ch < channels; ++ch)
+            for (uint32_t ch = 0; ch < m_channels; ++ch)
                 out[ch] = zeros<Value>();
 
             #define DR_TEX_ACCUM(index, weight)                                \
                 {                                                              \
                     UInt32 index_ = index;                                     \
                     Value weight_ = weight;                                    \
-                    for (uint32_t ch = 0; ch < channels; ++ch)                 \
+                    Packet packet = tex_gather_packet(                         \
+                        m_value.array(), index_, active);                      \
+                    for (uint32_t ch = 0; ch < m_channels; ++ch)               \
                         out[ch] = fmadd(                                       \
-                            Value(gather<_Storage>(                            \
-                                m_value.array(), index_ + ch, active)),        \
+                            packet[ch],                                        \
                             weight_,                                           \
                             out[ch]);                                          \
                 }
@@ -455,12 +463,10 @@ public:
                     if (grad_enabled(m_value, pos)) {
                         tensor(); // Will un-migrate the data if necessary
 
-                        const size_t channels = m_value.shape(Dimension);
-
-                        ArrayX out_nonaccel = empty<ArrayX>(channels);
+                        ArrayX out_nonaccel = empty<ArrayX>(m_channels);
                         eval_nonaccel(pos, out_nonaccel.data(), active);
 
-                        for (size_t ch = 0; ch < channels; ++ch)
+                        for (size_t ch = 0; ch < m_channels; ++ch)
                             out[ch] = replace_grad(out[ch], out_nonaccel[ch]);
                     }
                 }
@@ -554,6 +560,32 @@ public:
                 out[i][ch] = zeros<Value>();
     }
 
+    template <typename Value, typename Index , typename Mask, enable_if_t<drjit::detail::is_scalar_v<Value>> = 0>
+    DynamicArray<Value> tex_gather_packet(DynamicArray<Value>& value, Index& index, Mask& mask) const {
+        using Packet = DynamicArray<Value>;
+        assert(0);
+        Packet result = empty<Packet>(m_channels);
+        return result;
+    }
+
+    template <typename Value, typename Index , typename Mask, enable_if_t<!drjit::detail::is_scalar_v<Value>> = 0>
+    DynamicArray<Value> tex_gather_packet(Value& value, Index& index, Mask& mask) const {
+        using Packet = DynamicArray<Value>;
+        Packet result = empty<Packet>(m_packet_size);
+
+        uint32_t *res_indices = (uint32_t *) alloca(sizeof(uint32_t) * m_packet_size);
+        jit_var_gather_packet(m_packet_size, 
+            value.index_combined(), 
+            index.index(), 
+            mask.index(), res_indices);
+
+
+        for (size_t i = 0; i < m_packet_size; ++i)
+            result[i] = Value::steal(res_indices[i]);
+
+        return result;
+    }
+
     /**
      * \brief Fetch the texels that would be referenced in a texture lookup with
      * linear interpolation without actually performing this interpolation.
@@ -574,6 +606,7 @@ public:
         using InterpOffset = Array<Int32, 1 << Dimension>;
         using InterpPosI = Array<InterpOffset, Dimension>;
         using InterpIdx = uint32_array_t<InterpOffset>;
+        using Packet = DynamicArray<_Storage>;
 
         if constexpr (!is_array_v<Mask>)
             active = true;
@@ -587,10 +620,11 @@ public:
         pos_i_w = wrap(pos_i_w);
         InterpIdx idx = index(pos_i_w);
 
-        const uint32_t channels = (uint32_t) m_value.shape(Dimension);
-        for (size_t i = 0; i < InterpOffset::Size; ++i)
-            for (uint32_t ch = 0; ch < channels; ++ch)
-                out[i][ch] = Value(gather<_Storage>(m_value.array(), idx[i] + ch, active));
+        for (size_t i = 0; i < InterpOffset::Size; ++i) {
+            Packet packet = tex_gather_packet(m_value.array(), idx[i], active);
+            for (uint32_t ch = 0; ch < m_channels; ++ch)
+                out[i][ch] = Value(packet[ch]);
+        }
     }
 
     /**
@@ -1257,7 +1291,13 @@ protected:
         if (channels == 0)
             jit_raise("Texture::Texture(): must have at least 1 channel!");
 
-        m_size = channels;
+        m_channels = channels;
+        m_packet_size = 1;
+        while (m_packet_size < m_channels)
+            m_packet_size *= 2;
+
+        m_size = m_packet_size;
+
         size_t tensor_shape[Dimension + 1]{};
 
         for (size_t i = 0; i < Dimension; ++i) {
@@ -1266,7 +1306,7 @@ protected:
             m_inv_resolution[Dimension - 1 - i] = divisor<int32_t>((int32_t) shape[i]);
             m_size *= shape[i];
         }
-        tensor_shape[Dimension] = channels;
+        tensor_shape[Dimension] = m_packet_size;
 
         if (init_tensor)
             m_value = TensorXf(zeros<Storage>(m_size), Dimension + 1, tensor_shape);
@@ -1368,14 +1408,14 @@ private:
                 m_shape_opaque.x(), Index(pos.x())));
         }
 
-        uint32_t channels = (uint32_t) m_value.shape(Dimension);
-
-        return index * channels;
+        return index;
     }
 
 private:
     void *m_handle = nullptr;
     size_t m_size = 0;
+    size_t m_channels = 0;
+    size_t m_packet_size = 0;
     mutable TensorXf m_value;
 
     // Stored in this order: width, height, depth
