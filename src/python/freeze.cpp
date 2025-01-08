@@ -118,9 +118,9 @@ static void log_layouts(const std::vector<Layout> &layouts, std::ostream &os,
         for (uint32_t i = 0; i < layout.num; i++){
             os << padding << "Layout[" << std::endl;
             padding.append("    ");
-            
+
             log_layouts(layouts, os, index, padding);
-            
+
             padding.resize(padding.length() - 4);
             os << padding << "]" << std::endl;
         }
@@ -128,9 +128,9 @@ static void log_layouts(const std::vector<Layout> &layouts, std::ostream &os,
         for (const auto &field: layout.fields){
             os << padding << nb::str(field).c_str() << ": Layout[" << std::endl;
             padding.append("    ");
-            
+
             log_layouts(layouts, os, index, padding);
-            
+
             padding.resize(padding.length() - 4);
             os << padding << "]" << std::endl;
         }
@@ -1694,20 +1694,22 @@ void FrozenFunction::clear(){
 FrozenFunction freeze(nb::callable func) { return FrozenFunction(func); }
 
 void export_freeze(nb::module_ &m) {
-    m.def("freeze", &freeze, doc_freeze);
-    nb::class_<FrozenFunction>(m, "FrozenFunction")
-        .def("__get__",
-             [](nb::object self, nb::object instance, nb::object) {
-                 if (instance.is_none()) {
-                     return self;
-                 } else {
-                     return nb::cpp_function(
-                         [self, instance](nb::args args, nb::kwargs kwargs) {
-                             return self(instance, *args, **kwargs);
-                         },
-                         nb::rv_policy::move);
-                 }
-             })
+    // m.def("freeze", &freeze, doc_freeze);
+    nb::module_ d = nb::module_::import_("drjit.detail");
+    nb::class_<FrozenFunction>(d, "FrozenFunction")
+        .def(nb::init<nb::callable>())
+        // .def("__get__",
+        //      [](nb::object self, nb::object instance, nb::object) {
+        //          if (instance.is_none()) {
+        //              return self;
+        //          } else {
+        //              return nb::cpp_function(
+        //                  [self, instance](nb::args args, nb::kwargs kwargs) {
+        //                      return self(instance, *args, **kwargs);
+        //                  },
+        //                  nb::rv_policy::move);
+        //          }
+        //      })
         .def_prop_ro(
             "n_cached_recordings",
             [](FrozenFunction &self) { return self.saved_recordings(); })

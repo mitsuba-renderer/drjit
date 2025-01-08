@@ -1878,6 +1878,31 @@ def binary_search(start, end, pred):
 
     return start
 
+def freeze(f):
+    import functools
+
+    class FF:
+        def __init__(self, f) -> None:
+            self.ff = detail.FrozenFunction(f)
+
+        def __call__(self, *args, **kwargs):
+            return self.ff(*args, **kwargs)
+
+        @property
+        def n_recordings(self):
+            return self.ff.n_recordings
+
+        @property
+        def n_cached_recordings(self):
+            return self.ff.n_cached_recordings
+
+        def clear(self):
+            return self.ff.clear()
+
+        def __get__(self, obj, type=None):
+            return functools.partial(self, obj)
+
+    return functools.wraps(f)(FF(f))
 
 def assert_true(
     cond,

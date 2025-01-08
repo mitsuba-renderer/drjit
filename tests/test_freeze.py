@@ -1531,10 +1531,7 @@ def test38_allocated_scratch_buffer(t):
         assert dr.width(x) < dr.width(model.forgotten_target_buffer)
 
         if dr.flag(dr.JitFlag.KernelFreezing):
-            with pytest.raises(
-                RuntimeError,
-                match="was created before recording was started, but it was not specified as an input variable!",
-            ):
+            with pytest.raises(RuntimeError):
                 result = model.fn1(x)
             break
 

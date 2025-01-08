@@ -20,13 +20,7 @@ struct Sampler : dr::TraversableBase {
 
     T next() { return rng.next_float32(); }
 
-    void traverse_1_cb_ro(void *payload, void (*fn)(void *, uint64_t)) const override {
-        traverse_1_fn_ro(rng, payload, fn);
-    }
-
-    void traverse_1_cb_rw(void *payload, uint64_t (*fn)(void *, uint64_t)) override {
-        traverse_1_fn_rw(rng, payload, fn);
-    }
+    DR_TRAVERSE_CB(dr::TraversableBase, rng);
 
     dr::PCG32<dr::uint64_array_t<T>> rng;
 };
