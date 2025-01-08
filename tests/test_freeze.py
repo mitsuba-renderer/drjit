@@ -411,7 +411,6 @@ def test17_performance(t):
 
         dr.sync_thread()
         elapsed = time.time() - t0
-        print(f"{name}: average {1000 * elapsed / n_iter:.3f} ms / iteration")
 
 
 @pytest.test_arrays("uint32, jit, shape=(*)")
@@ -420,19 +419,16 @@ def test18_aliasing(t):
     def func(x, y):
         return x + y
 
-    print("aliased:")
     x = t(0, 1, 2)
     y = x
     z = func(x, y)
     assert dr.all(t(0, 2, 4) == z)
 
-    print("aliased:")
     x = t(1, 2, 3)
     y = x
     z = func(x, y)
     assert dr.all(t(2, 4, 6) == z)
 
-    print("non-aliased:")
     x = t(1, 2, 3)
     y = t(2, 3, 4)
     z = func(x, y)
@@ -481,7 +477,6 @@ def test20_literal(t):
     x = t(0, 1, 2)
     y = t(2)
     z = func(x, y)
-    print(f"{y.index=}")
     assert func.n_recordings == 1
 
 
@@ -496,8 +491,6 @@ def test21_pointers(t):
         return dr.gather(t, x, idx)
 
     y = func(t(0, 1, 2, 3, 4, 5, 6))
-
-    print(y)
 
 
 @pytest.test_arrays("uint32, jit, shape=(*)")
@@ -520,8 +513,6 @@ def test22_gather_memcpy(t):
         dr.make_opaque(x)
         ref = func(x, 2)
         result = frozen(x, 2)
-
-        print(f"{result=}")
 
         assert dr.all(ref == result)
 
@@ -578,9 +569,6 @@ def test23_vcall(t, symbolic):
 @pytest.mark.parametrize("opaque", [True, False])
 @pytest.test_arrays("float32, -is_diff, jit, shape=(*)")
 def test24_vcall_optimize(t, symbolic, optimize, opaque):
-    print(f"{symbolic=}")
-    print(f"{optimize=}")
-    print(f"{opaque=}")
     pkg = get_pkg(t)
 
     A, B, Base, BasePtr = pkg.A, pkg.B, pkg.Base, pkg.BasePtr
@@ -592,8 +580,6 @@ def test24_vcall_optimize(t, symbolic, optimize, opaque):
 
     a.value = t(2)
     b.value = t(3)
-
-    print(f"{a.value.index=}")
 
     if opaque:
         dr.make_opaque(a.value, b.value)
@@ -642,9 +628,6 @@ def test24_vcall_optimize(t, symbolic, optimize, opaque):
 @pytest.mark.parametrize("opaque", [True, False])
 @pytest.test_arrays("float32, -is_diff, jit, shape=(*)")
 def test25_multiple_vcalls(t, symbolic, optimize, opaque):
-    print(f"{symbolic=}")
-    print(f"{optimize=}")
-    print(f"{opaque=}")
     pkg = get_pkg(t)
 
     A, B, Base, BasePtr = pkg.A, pkg.B, pkg.Base, pkg.BasePtr
@@ -656,8 +639,6 @@ def test25_multiple_vcalls(t, symbolic, optimize, opaque):
 
     a.value = t(2)
     b.value = t(3)
-
-    print(f"{a.value.index=}")
 
     if opaque:
         dr.make_opaque(a.value, b.value)
@@ -717,17 +698,13 @@ def test26_freeze(t):
         return result, x_int, result_int
 
     for i in range(3):
-        print(f"------------------------------ {i}")
         x = Float([1.0, 2.0, 3.0]) + dr.opaque(Float, i)
 
         y, x_int, y_int = my_kernel(x)
         dr.schedule(y, x_int, y_int)
-        print("Input was:", x)
-        print("Outputs were:", y, x_int, y_int)
         assert dr.allclose(y, dr.square(x))
         assert dr.allclose(x_int, UInt32(x))
         assert dr.allclose(y_int, UInt32(y))
-        print("------------------------------")
 
 
 @pytest.mark.parametrize("freeze_first", (True, False))
@@ -859,7 +836,6 @@ def test30_scatter_with_op(t):
     func_frozen = dr.freeze(func)
 
     # 1. Recording call
-    print("-------------------- start result1")
     x1 = t(rng.uniform(low=-1, high=1, size=[n]))
     x1_copy = t(x1)
     x1_copy_copy = t(x1)
@@ -871,7 +847,6 @@ def test30_scatter_with_op(t):
     assert dr.allclose(result1, func(x1_copy, idx1))
 
     # 2. Different source as during recording
-    print("-------------------- start result2")
     # TODO: problem: during trace, the actual x1 Python variable changes
     #       from index r2 to index r12 as a result of the `scatter`.
     #       But in subsequent launches, even if we successfully create a new
@@ -879,11 +854,8 @@ def test30_scatter_with_op(t):
     x2 = t(rng.uniform(low=-2, high=-1, size=[n]))
     x2_copy = t(x2)
     idx2 = idx1
-    # print(f'Before: {x2.index=}, {idx2.index=}')
 
     result2 = func_frozen(x2, idx2)
-    # print(f'After : {x2.index=}, {idx2.index=}')
-    print("-------------------- done with result2")
     assert dr.allclose(result2, func(x2_copy, idx2))
     # assert dr.allclose(x2, x2_copy)
 
@@ -894,7 +866,6 @@ def test30_scatter_with_op(t):
     assert dr.allclose(result3, func(x3_copy, idx3))
     # assert dr.allclose(x3, x3_copy)
 
-    print("=====================================")
     # # 3. Same source as during recording
     result4 = func_frozen(x1_copy_copy, idx1)
     assert dr.allclose(result4, result1)
@@ -925,7 +896,6 @@ def test_segv(t):
 
     func_frozen = dr.freeze(func)
 
-    print("-------------------- start result1")
     x0 = t(rng.uniform(low=-1, high=1, size=[n]))
     # x1 = t(x0)
     x1 = x0
@@ -1108,7 +1078,6 @@ def test32_gather_only_pointer_as_input(t, relative_size):
 
         v = rng.uniform(size=[n_lanes, 3])
         result = fun_freeze(Float(v.ravel()))
-        # print(f'{i=}, {n_lanes=}, {v.shape=}, {result.numpy().shape=}')
 
         expected_width = {
             "<": n_lanes,
@@ -1251,8 +1220,6 @@ def test35_return_types(t, struct_style):
             a: Float
             b: Float
 
-    print("T1")
-
     # 1. Many different types
     @dr.freeze
     def toy1(x: Float) -> Float:
@@ -1264,7 +1231,6 @@ def test35_return_types(t, struct_style):
         input = Float(np.full(17, i))
         # input = dr.full(Float, i, 17)
         result = toy1(input)
-        # print(f"{input=}")
         assert isinstance(result[0], Float)
         assert isinstance(result[1], Float)
         assert isinstance(result[2], Float)
@@ -1408,8 +1374,6 @@ def test36_drjit_struct_and_matrix(t):
 
         assert len(results) == len(expected)
         for result_i, (value, expected) in enumerate(zip(results, expected)):
-            print(f"{result_i}: {value=}")
-            print(f"{result_i}: {expected=}")
 
             assert type(value) == type(expected)
             if isinstance(value, Result):
@@ -1656,8 +1620,6 @@ def test41_reductions_with_ad(t):
         # loss = dr.mean(result)
         dr.backward(loss)
 
-        print(f"{dr.grad(intermediate).index=}")
-
         return result, intermediate
 
     @dr.freeze
@@ -1782,7 +1744,6 @@ def test44_simple_ad_fully_inside(t):
         my_kernel_frozen = dr.freeze(my_kernel)
 
         for i in range(3):
-            print(f"------------------------------ {i=}, {start_enabled=}")
             x = Float([1.0, 2.0, 3.0]) + dr.opaque(Float, i)
             if start_enabled:
                 dr.enable_grad(x)
@@ -1791,8 +1752,6 @@ def test44_simple_ad_fully_inside(t):
             grad_x = dr.grad(x)
             grad_y = dr.grad(y)
             dr.schedule(y, grad_x, grad_y)
-            print(f"Input was: {x=}")
-            print(f"Outputs were: {y=}, {grad_y=}, {grad_x=}")
             assert dr.allclose(y, dr.square(x))
             assert dr.allclose(grad_y, 0)
             assert dr.allclose(grad_x, 2 * x)
@@ -1800,7 +1759,6 @@ def test44_simple_ad_fully_inside(t):
             # Status of grad_enabled should be restored (side-effect of the function),
             #  even if it wasn't enabled at first
             assert dr.grad_enabled(x)
-            print("------------------------------")
 
 
 @pytest.mark.parametrize("set_some_literal_grad", (False,))
@@ -1852,35 +1810,26 @@ def test45_suspend_resume(
                 if set_some_literal_grad:
                     # If grads are not enabled, this will get ignored, which is fine
                     dr.set_grad(x, Float(6.66))
-                print(f"resumed: {dr.grad_enabled(x)=}")
 
-            print(f"suspended: {dr.grad_enabled(x)=}")
             return result
 
     model = MyModel(params=Float([1, 2, 3, 4, 5]))
 
     for i in range(3):
-        print(f"------------------------------ {i=}")
         # Inputs of different widths
         x = Float([0.1, 0.2, 0.3, 0.4, 0.5, 0.6] * (i + 1)) + dr.opaque(Float, i)
 
         dr.set_grad_enabled(model.params, params_start_enabled)
         dr.set_grad_enabled(x, inputs_start_enabled)
 
-        # print(f'Before: {model.params.index=}, {dr.grad(model.params).index=}, {dr.grad(model.params).is_literal_()}')
-
         dr.eval(x, dr.grad(x))
-        print(f"{dr.grad_enabled(x)=}, {x.index=}, {x.index_ad=}")
 
         with dr.suspend_grad():
-            with dr.resume_grad():
-                print(f"{dr.grad_enabled(x)=}, {x.index=}, {x.index_ad=}")
             result = model.frozen_eval(
                 model, x, params_end_enabled, inputs_end_enabled, set_some_literal_grad
             )
 
         # dr.eval(result, model.params, dr.grad(model.params))
-        print(f"After: {model.params.index=}, {dr.grad(model.params).index=} ")
         assert not dr.grad_enabled(result)
         assert dr.grad_enabled(model.params) == params_end_enabled
         assert dr.grad_enabled(x) == inputs_end_enabled
@@ -1937,7 +1886,6 @@ def test46_with_grad_scatter(t, freeze: bool, change_params_width):
     my_kernel_frozen = dr.freeze(my_kernel) if freeze else my_kernel
 
     for i in range(6):
-        print(f"------------------------------ {i=}")
         # Different width at each iteration
         x = Float([1.0, 2.0, 3.0] * (i + 1)) + dr.opaque(Float, i)
 
@@ -1958,8 +1906,6 @@ def test46_with_grad_scatter(t, freeze: bool, change_params_width):
         grad_x = dr.grad(x)
         grad_y = dr.grad(y)
         grad_p = dr.grad(model.params)
-        print(f"Input was: {x=}")
-        print(f"Outputs were: {y=}, {grad_y=}, {grad_x=}, {grad_p=}")
         # assert dr.allclose(y, dr.sqr(x))
 
         # Expected grads
@@ -1969,7 +1915,6 @@ def test46_with_grad_scatter(t, freeze: bool, change_params_width):
         idx = dr.arange(UInt32, dr.width(x)) % dr.width(model.params)
         dr.scatter_reduce(dr.ReduceOp.Add, grad_p_expected, x, idx)
         assert dr.allclose(grad_p, grad_p_expected)
-        print(f"------------------------------")
 
 
 @pytest.test_arrays("float32, jit, is_diff, shape=(*)")
@@ -2060,7 +2005,6 @@ def test49_scatter_reduce_expanded(t):
         result = t([0] * (i + 2))
         dr.make_opaque(result)
         frozen(result, src)
-        print(f"{result=}")
 
         reference = t([0] * (i + 2))
         dr.make_opaque(reference)
@@ -2087,7 +2031,6 @@ def test50_scatter_reduce_expanded_identity(t):
         dr.make_opaque(src)
 
         result = frozen(src)
-        print(f"{result=}")
 
         reference = func(src)
 
@@ -2111,7 +2054,6 @@ def test51_scatter_reduce_expanded_no_memset(t):
         dr.make_opaque(src)
 
         result = frozen(src)
-        print(f"{result=}")
 
         reference = func(src)
 
@@ -2257,7 +2199,6 @@ def test56_grad_isolate(t):
 
     for i in range(3):
 
-        print("Reference:")
         x = dr.arange(t, 3)
         dr.make_opaque(x)
         dr.enable_grad(x)
@@ -2268,7 +2209,6 @@ def test56_grad_isolate(t):
 
         ref = dr.grad(x)
 
-        print("Frozen:")
         x = dr.arange(t, 3)
         dr.make_opaque(x)
         dr.enable_grad(x)
@@ -2323,8 +2263,6 @@ def test57_isolate_grad_fwd(t):
 
         res = dr.grad(y)
 
-        print(f"{res=}")
-
         assert dr.allclose(ref, res)
 
 
@@ -2346,7 +2284,6 @@ def test58_grad_postponed_part(t):
     frozen = dr.freeze(func)
 
     def run(i, name, func):
-        print(f"{name}:")
         x1 = dr.arange(t, 3) + i
         dr.make_opaque(x1)
         dr.enable_grad(x1)

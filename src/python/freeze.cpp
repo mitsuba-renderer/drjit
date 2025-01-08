@@ -32,7 +32,7 @@ struct ProfilerPhase {
 
     ProfilerPhase(const drjit::TraversableBase *traversable) {
         int status;
-        const char *name =typeid(*traversable).name();
+        const char *name = typeid(*traversable).name();
         char *message    = (char *) std::malloc(1024);
         snprintf(message, 1024, "traverse_cb %s", name);
 
@@ -56,7 +56,6 @@ struct ADScopeContext {
     }
     ~ADScopeContext() { ad_scope_leave(process_postponed); }
 };
-
 
 using namespace detail;
 
@@ -100,7 +99,7 @@ bool Layout::operator==(const Layout &rhs) const {
 }
 
 static void log_layouts(const std::vector<Layout> &layouts, std::ostream &os,
-                       uint32_t &index, std::string &padding) {
+                        uint32_t &index, std::string &padding) {
     const Layout &layout = layouts[index++];
 
     auto tp_name = nb::type_name(layout.type).c_str();
@@ -108,14 +107,15 @@ static void log_layouts(const std::vector<Layout> &layouts, std::ostream &os,
     os << padding << "num: " << layout.num << std::endl;
     os << padding << "vt: " << (uint32_t) layout.vt << std::endl;
     os << padding << "vs: " << (uint32_t) layout.vs << std::endl;
-    os << padding << "flats: " <<  std::bitset<8>(layout.flags) << std::endl;
+    os << padding << "flats: " << std::bitset<8>(layout.flags) << std::endl;
     os << padding << "literal: " << std::hex << layout.literal << std::endl;
     os << padding << "index: " << layout.index << std::endl;
     os << padding << "size_index: " << layout.size_index << std::endl;
-    os << padding << "py_object: " << nb::str(layout.py_object).c_str() << std::endl;
+    os << padding << "py_object: " << nb::str(layout.py_object).c_str()
+       << std::endl;
 
     if (layout.fields.size() == 0)
-        for (uint32_t i = 0; i < layout.num; i++){
+        for (uint32_t i = 0; i < layout.num; i++) {
             os << padding << "Layout[" << std::endl;
             padding.append("    ");
 
@@ -125,7 +125,7 @@ static void log_layouts(const std::vector<Layout> &layouts, std::ostream &os,
             os << padding << "]" << std::endl;
         }
     else
-        for (const auto &field: layout.fields){
+        for (const auto &field : layout.fields) {
             os << padding << nb::str(field).c_str() << ": Layout[" << std::endl;
             padding.append("    ");
 
@@ -136,7 +136,7 @@ static void log_layouts(const std::vector<Layout> &layouts, std::ostream &os,
         }
 }
 
-void FlatVariables::add_domain(const char *variant, const char *domain){
+void FlatVariables::add_domain(const char *variant, const char *domain) {
     if (variant && strcmp(variant, "") != 0) {
         if (this->variant.empty())
             this->variant = variant;
@@ -239,7 +239,7 @@ void FlatVariables::traverse_jit_index(uint32_t index, TraverseContext &ctx,
 
     Layout layout;
     if (tp)
-        layout.type       = nb::borrow<nb::type_object>(tp);
+        layout.type = nb::borrow<nb::type_object>(tp);
     layout.vs         = vs;
     layout.vt         = vtype;
     layout.size_index = this->add_size(var_size);
@@ -261,7 +261,7 @@ void FlatVariables::traverse_jit_index(uint32_t index, TraverseContext &ctx,
                      "evaluation!");
         jit_var_dec_ref(tmp);
 
-        layout.index   = this->add_variable_index(index);
+        layout.index = this->add_variable_index(index);
 
         layout.flags |=
             (var_size == 1 ? (uint32_t) LayoutFlag::SingletonArray : 0);
@@ -315,8 +315,8 @@ void FlatVariables::traverse_ad_index(uint64_t index, TraverseContext &ctx,
         Layout layout;
         if (tp)
             layout.type = nb::borrow<nb::type_object>(tp);
-        layout.num  = 2;
-        layout.vt   = jit_var_type(index);
+        layout.num = 2;
+        layout.vt  = jit_var_type(index);
 
         // Set flags
         layout.flags |= (uint32_t) LayoutFlag::GradEnabled;
@@ -407,8 +407,8 @@ uint64_t FlatVariables::construct_ad_index(const Layout &layout,
  */
 void FlatVariables::traverse_ad_var(nb::handle h, TraverseContext &ctx) {
     auto s = supp(h.type());
-    
-    if (s.is_class){
+
+    if (s.is_class) {
         auto variant = nb::borrow<nb::str>(nb::getattr(h, "Variant"));
         auto domain  = nb::borrow<nb::str>(nb::getattr(h, "Domain"));
         add_domain(variant.c_str(), domain.c_str());
@@ -684,7 +684,8 @@ void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
             // if (this->variant.empty())
             //     this->variant = h_variant.c_str();
             // else if (this->variant != h_variant.c_str())
-            //     jit_raise("traverse(): Variant missmatch! All arguments to a "
+            //     jit_raise("traverse(): Variant missmatch! All arguments to a
+            //     "
             //               "frozen function have to have the same variant. "
             //               "Variant %s of a previos argument does not match "
             //               "variant %s of this argument.",
@@ -698,20 +699,18 @@ void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
             uint32_t num_fields = 0;
 
             // Traverse the opaque C++ object
-            cb(h, nb::cpp_function(
-                      [&](uint64_t index, const char *variant,
-                          const char *domain) {
-                          if (!index)
-                              return;
-                          add_domain(variant, domain);
-                          jit_log(LogLevel::Debug,
-                                  "traverse(): traverse_cb[%u] = a%u r%u",
-                                  num_fields, (uint32_t) (index >> 32),
-                                  (uint32_t) index);
-                          num_fields++;
-                          this->traverse_ad_index(index, ctx, nb::none());
-                          return;
-                      }));
+            cb(h, nb::cpp_function([&](uint64_t index, const char *variant,
+                                       const char *domain) {
+                   if (!index)
+                       return;
+                   add_domain(variant, domain);
+                   jit_log(LogLevel::Debug,
+                           "traverse(): traverse_cb[%u] = a%u r%u", num_fields,
+                           (uint32_t) (index >> 32), (uint32_t) index);
+                   num_fields++;
+                   this->traverse_ad_index(index, ctx, nb::none());
+                   return;
+               }));
 
             // Update layout number of fields
             this->layout[layout_index].num = num_fields;
@@ -822,7 +821,7 @@ nb::object FlatVariables::construct() {
                 dict[k] = construct();
             }
             return layout.type(**dict);
-        } else if (layout.py_object){
+        } else if (layout.py_object) {
             return layout.py_object;
         } else {
             nb::raise("Tried to construct a variable of type %s that is not "
@@ -984,8 +983,9 @@ void FlatVariables::traverse_with_registry(nb::handle h, TraverseContext &ctx) {
         jit_log(LogLevel::Debug, "registry{");
 
         std::vector<void *> registry_pointers;
-        for (std::string &domain: domains){
-            uint32_t registry_bound = jit_registry_id_bound(variant.c_str(), nullptr);
+        for (std::string &domain : domains) {
+            uint32_t registry_bound =
+                jit_registry_id_bound(variant.c_str(), nullptr);
             uint32_t offset = registry_pointers.size();
             registry_pointers.resize(registry_pointers.size() + registry_bound);
             jit_registry_get_pointers(variant.c_str(), domain.c_str(),
@@ -1004,11 +1004,11 @@ void FlatVariables::traverse_with_registry(nb::handle h, TraverseContext &ctx) {
             // TraversableBase. This is ensured by the signature of the
             // ``drjit::registry_put`` function.
             auto traversable = (drjit::TraversableBase *) ptr;
-            auto self = traversable->self_py();
+            auto self        = traversable->self_py();
 
             if (self)
                 traverse(self, ctx);
-            
+
             traverse_cb(traversable, ctx);
             num_fields++;
         }
@@ -1030,7 +1030,7 @@ void FlatVariables::assign_with_registry(nb::handle dst) {
     // Assign registry
     Layout &layout      = this->layout[layout_index++];
     uint32_t num_fields = 0;
-    
+
     jit_log(LogLevel::Debug, "registry{");
 
     std::vector<void *> registry_pointers;
@@ -1055,7 +1055,7 @@ void FlatVariables::assign_with_registry(nb::handle dst) {
         // TraversableBase. This is ensured by the signature of the
         // ``drjit::registry_put`` function.
         auto traversable = (drjit::TraversableBase *) ptr;
-        auto self = traversable->self_py();
+        auto self        = traversable->self_py();
 
         if (self)
             assign(self);
@@ -1068,24 +1068,24 @@ void FlatVariables::assign_with_registry(nb::handle dst) {
 
 std::ostream &operator<<(std::ostream &os, const FlatVariables &r) {
     std::string offset = "    ";
-    
+
     os << "FlatVariables[" << std::endl;
 
     std::string padding("    ");
     uint32_t index = 0;
 
     os << padding << "variables = [";
-    for (uint64_t index: r.variables){
+    for (uint64_t index : r.variables) {
         os << "r%u, ";
     }
     os << "]" << std::endl;
-    
+
     os << padding << "sizes = [";
-    for (uint64_t index: r.variables){
+    for (uint64_t index : r.variables) {
         os << "%u, ";
     }
     os << "]" << std::endl;
-    
+
     os << padding << "Layout[" << std::endl;
 
     padding.append("    ");
@@ -1113,11 +1113,12 @@ void traverse_traversable(drjit::TraversableBase *traversable,
                 return new_index;
             });
     } else {
-        traversable->traverse_1_cb_ro((void *) &payload,
-                                      [](void *p, uint64_t index, const char *, const char *) {
-                                          Payload *payload = (Payload *) p;
-                                          payload->cb(index);
-                                      });
+        traversable->traverse_1_cb_ro(
+            (void *) &payload,
+            [](void *p, uint64_t index, const char *, const char *) {
+                Payload *payload = (Payload *) p;
+                payload->cb(index);
+            });
     }
 }
 
@@ -1126,8 +1127,7 @@ static void traverse_with_registry(const char *op, TraverseCallback &tc,
 
     std::vector<void *> registry_pointers;
     {
-        uint32_t registry_bound =
-            jit_registry_id_bound(nullptr, nullptr);
+        uint32_t registry_bound = jit_registry_id_bound(nullptr, nullptr);
         registry_pointers.resize(registry_bound);
         jit_registry_get_pointers(nullptr, nullptr, registry_pointers.data());
 
@@ -1140,7 +1140,7 @@ static void traverse_with_registry(const char *op, TraverseCallback &tc,
             // TraversableBase. This is ensured by the signature of the
             // ``drjit::registry_put`` function.
             auto traversable = (drjit::TraversableBase *) ptr;
-            auto self = traversable->self_py();
+            auto self        = traversable->self_py();
 
             if (self)
                 traverse(op, tc, self, rw);
@@ -1284,10 +1284,13 @@ static void deep_eval(nb::handle h, bool eval = true) {
         void operator()(nb::handle h) override {
             const ArraySupplement &s = supp(h.type());
             if (s.index)
-                s.reset_index(operator()(s.index(inst_ptr(h)), nullptr, nullptr), inst_ptr(h));
+                s.reset_index(operator()(s.index(inst_ptr(h)), nullptr,
+                                         nullptr),
+                              inst_ptr(h));
         }
 
-        uint64_t operator()(uint64_t index, const char *variant, const char *domain) override {
+        uint64_t operator()(uint64_t index, const char *variant,
+                            const char *domain) override {
             if (ad_grad_enabled(index)) {
                 int rv = 0;
 
@@ -1338,13 +1341,13 @@ static void deep_eval(nb::handle h, bool eval = true) {
 
 std::ostream &operator<<(std::ostream &os, const RecordingKey &r) {
     std::string offset = "    ";
-    
+
     os << "RecordingKey[" << std::endl;
     os << "    flags = " << r.flags << std::endl;
 
     std::string padding("    ");
     uint32_t index = 0;
-    
+
     os << padding << "Layout[" << std::endl;
 
     padding.append("    ");
@@ -1635,12 +1638,13 @@ nb::object FrozenFunction::operator()(nb::args args, nb::kwargs kwargs) {
 
                 std::ostringstream repr;
                 repr << key;
-                
+
                 std::ostringstream repr_prev;
                 repr_prev << prev_key;
 
                 jit_log(LogLevel::Debug, "new key: %s", repr.str().c_str());
-                jit_log(LogLevel::Debug, "old key: %s", repr_prev.str().c_str());
+                jit_log(LogLevel::Debug, "old key: %s",
+                        repr_prev.str().c_str());
             }
 #endif
             // FunctionRecording recording;
@@ -1685,9 +1689,9 @@ nb::object FrozenFunction::operator()(nb::args args, nb::kwargs kwargs) {
     return result;
 }
 
-void FrozenFunction::clear(){
+void FrozenFunction::clear() {
     recordings.clear();
-    prev_key = RecordingKey();
+    prev_key          = RecordingKey();
     recording_counter = 0;
 }
 
