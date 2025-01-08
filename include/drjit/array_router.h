@@ -1749,11 +1749,12 @@ template <typename Value> DRJIT_INLINE Value safe_rsqrt(const Value &a) {
 }
 
 template <typename Value> DRJIT_INLINE Value safe_cbrt(const Value &a) {
-    Value result = cbrt(maximum(a, 0));
+    Value result = cbrt(a);
 
     if constexpr (is_diff_v<Value>) {
         if (grad_enabled(a))
-            result = replace_grad(result, cbrt(maximum(a, Epsilon<Value>)));
+            result = replace_grad(
+                result, cbrt(sign(a) * maximum(abs(a), Epsilon<Value>)));
     }
 
     return result;
