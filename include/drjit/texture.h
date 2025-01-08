@@ -17,6 +17,7 @@
 #include <drjit/idiv.h>
 #include <drjit/jit.h>
 #include <drjit/tensor.h>
+#include <drjit/util.h>
 
 #pragma once
 
@@ -56,7 +57,20 @@ public:
     using Int32 = int32_array_t<_Storage>;
     using UInt32 = uint32_array_t<_Storage>;
     using Storage = std::conditional_t<IsDynamic, _Storage, DynamicArray<_Storage>>;
+    using Packet = std::conditional_t<is_jit_v<_Storage>,
+        dr::DynamicArray<_Storage>, _Storage*>;
     using TensorXf = Tensor<Storage>;
+
+    #define DR_TEX_ALLOC_PACKET(name, size)                     \
+        Packet _packet;                                         \
+        _Storage* name;                                         \
+                                                                \
+        if constexpr (is_jit_v<Value>) {                        \
+            _packet = empty<Packet>(m_channels_storage);        \
+            name = _packet.data();                              \
+        } else {                                                \
+            name = (_Storage*)alloca(sizeof(_Storage) * size);  \
+        }
 
     /// Default constructor: create an invalid texture object
     Texture() = default;
@@ -125,14 +139,19 @@ public:
         m_handle = other.m_handle;
         other.m_handle = nullptr;
         m_size = other.m_size;
-        m_shape_opaque = std::move(other.m_shape_opaque);
+        m_channels = other.m_channels;
+        m_channels_storage = other.m_channels_storage;
+        for (size_t i = 0; i < Dimension + 1; ++i)
+            m_shape[i] = std::move(other.m_shape[i]);
         m_value = std::move(other.m_value);
+        m_resolution_opaque = std::move(other.m_resolution_opaque);
         for (size_t i = 0; i < Dimension; ++i)
             m_inv_resolution[i] = std::move(other.m_inv_resolution[i]);
         m_filter_mode = other.m_filter_mode;
         m_wrap_mode = other.m_wrap_mode;
         m_use_accel = other.m_use_accel;
         m_migrated = other.m_migrated;
+        m_tensor_dirty = other.m_tensor_dirty;
     }
 
     Texture &operator=(Texture &&other) noexcept {
@@ -141,14 +160,19 @@ public:
         m_handle = other.m_handle;
         other.m_handle = nullptr;
         m_size = other.m_size;
-        m_shape_opaque = std::move(other.m_shape_opaque);
+        m_channels = other.m_channels;
+        m_channels_storage = other.m_channels_storage;
+        for (size_t i = 0; i < Dimension + 1; ++i)
+            m_shape[i] = std::move(other.m_shape[i]);
         m_value = std::move(other.m_value);
+        m_resolution_opaque = std::move(other.m_resolution_opaque);
         for (size_t i = 0; i < Dimension; ++i)
             m_inv_resolution[i] = std::move(other.m_inv_resolution[i]);
         m_filter_mode = other.m_filter_mode;
         m_wrap_mode = other.m_wrap_mode;
         m_use_accel = other.m_use_accel;
         m_migrated = other.m_migrated;
+        m_tensor_dirty = other.m_tensor_dirty;
         return *this;
     }
 
@@ -168,8 +192,8 @@ public:
     /// Return the texture dimension plus one (for the "channel dimension")
     size_t ndim() const { return Dimension + 1; }
 
-    // Return the texture shape
-    const size_t *shape() const { return m_value.shape().data(); }
+    /// Return the texture shape
+    const size_t *shape() const { return m_shape; }
 
     FilterMode filter_mode() const { return m_filter_mode; }
     WrapMode wrap_mode() const { return m_wrap_mode; }
@@ -183,36 +207,55 @@ public:
      * is *fully* migrated to GPU texture memory to avoid redundant storage.
      */
     void set_value(const Storage &value, bool migrate=false) {
-        if (value.size() != m_size)
-            jit_raise("Texture::set_value(): unexpected array size!");
 
-        drjit::eval(value);
+        if constexpr (!is_jit_v<_Storage>) {
+            if (value.size() != m_size)
+                jit_raise("Texture::set_value(): unexpected array size!");
+            m_value.array() = value;
+        } else /* JIT variant */ {
+            Storage padded_value = value;
 
-        if constexpr (HasCudaTexture) {
-            if (m_use_accel) {
-                value.eval_(); // Sync the value before copying to texture memory
+            if (m_channels_storage != m_channels) {
+                using Mask = mask_t<_Storage>;
+                UInt32 idx = dr::arange<UInt32>(m_size);
+                UInt32 pixels_idx = idx / m_channels_storage;
+                UInt32 channel_idx = idx % m_channels_storage;
+                Mask active = channel_idx < m_channels;
+                idx = dr::fmadd(pixels_idx, m_channels, channel_idx);
+                padded_value = dr::gather<Storage>(value, idx, active);
+            }
 
-                size_t tex_shape[Dimension + 1];
-                reverse_tensor_shape(tex_shape, true);
-                jit_cuda_tex_memcpy_d2t(Dimension, tex_shape, value.data(), m_handle);
+            if (padded_value.size() != m_size)
+                jit_raise("Texture::set_value(): unexpected array size!");
 
-                if (migrate) {
-                    Storage dummy = zeros<Storage>(m_size);
+            if constexpr (HasCudaTexture) {
+                if (m_use_accel) {
+                    padded_value.eval_(); // Sync the value before copying to texture memory
 
-                    // Fully migrate to texture memory, set m_value to zero
-                    if constexpr (IsDiff)
-                        m_value.array() = replace_grad(dummy, value);
-                    else
-                        m_value.array() = dummy;
+                    size_t tex_shape[Dimension + 1];
+                    reverse_tensor_shape(tex_shape, true);
+                    jit_cuda_tex_memcpy_d2t(Dimension, tex_shape,
+                        padded_value.data(), m_handle);
 
-                    m_migrated = true;
+                    if (migrate) {
+                        Storage dummy = zeros<Storage>(m_size);
 
-                    return;
+                        // Fully migrate to texture memory, set m_value to zero
+                        if constexpr (IsDiff)
+                            m_value.array() = replace_grad(dummy, padded_value);
+                        else
+                            m_value.array() = dummy;
+
+                        m_migrated = true;
+
+                        return;
+                    }
                 }
             }
-        }
 
-        m_value.array() = value;
+            m_value.array() = padded_value;
+            m_tensor_dirty = true;
+        }
     }
 
     /**
@@ -282,25 +325,30 @@ public:
      * \brief Return the texture data as a tensor object
      */
     const TensorXf &tensor() const {
-        if constexpr (HasCudaTexture) {
-            if (m_use_accel && m_migrated) {
-                Storage primal = empty<Storage>(m_size);
 
-                size_t tex_shape[Dimension + 1];
-                reverse_tensor_shape(tex_shape, true);
-                jit_cuda_tex_memcpy_t2d(Dimension, tex_shape, m_handle,
-                                        primal.data());
+        if constexpr (!is_jit_v<_Storage>) {
+            return m_value;
+        } else {
+            sync_host_data();
+            if (m_tensor_dirty) {
 
-                if constexpr (IsDiff)
-                    m_value.array() = replace_grad(primal, m_value.array());
-                else
-                    m_value.array() = primal;
+                m_unpadded_value = m_value;
 
-                m_migrated = false;
+                if (m_channels != m_channels_storage) {
+                    UInt32 idx = dr::arange<UInt32>((m_size * m_channels)
+                        / m_channels_storage);
+                    UInt32 pixels_idx = idx / m_channels;
+                    UInt32 channel_idx = idx % m_channels;
+                    idx = dr::fmadd(pixels_idx, m_channels_storage, channel_idx);
+                    m_unpadded_value = TensorXf(
+                        dr::gather<Storage>(m_value.array(), idx),
+                        Dimension + 1, m_shape);
+                }
+                m_tensor_dirty = false;
             }
-        }
 
-        return m_value;
+            return m_unpadded_value;
+        }
     }
 
     /**
@@ -327,14 +375,13 @@ public:
         using Float32 = float32_array_t<Value>;
         using PosF32 = Array<Float32, Dimension>;
 
-        const size_t channels = m_value.shape(Dimension);
         PosF32 pos(pos_);
 
         if constexpr (HasCudaTexture && (sizeof(scalar_t<Value>) <= 4)) {
             if (m_use_accel) {
                 uint32_t pos_idx[Dimension];
                 uint32_t *out_idx =
-                    (uint32_t *) alloca(channels * sizeof(uint32_t));
+                    (uint32_t *) alloca(m_channels_storage * sizeof(uint32_t));
                 for (size_t i = 0; i < Dimension; ++i)
                     pos_idx[i] = pos[i].index();
 
@@ -342,13 +389,18 @@ public:
                 jit_cuda_tex_lookup(Dimension, m_handle, pos_idx,
                                     active.index(), out_idx);
 
-                for (size_t ch = 0; ch < channels; ++ch)
-                    out[ch] = Value(Float32::steal(out_idx[ch]));
+                for (size_t ch = 0; ch < m_channels_storage; ++ch) {
+                    Float32 v = Float32::steal(out_idx[ch]);
+
+                    if (ch < m_channels)
+                        out[ch] = Value(v);
+                }
+
                 return;
             }
         }
         DRJIT_MARK_USED(pos); DRJIT_MARK_USED(active);
-        for (size_t ch = 0; ch < channels; ++ch)
+        for (size_t ch = 0; ch < m_channels; ++ch)
             out[ch] = zeros<Value>();
     }
 
@@ -368,22 +420,22 @@ public:
         if constexpr (!is_array_v<Mask>)
             active = true;
 
-        const uint32_t channels = (uint32_t) m_value.shape(Dimension);
         if (DRJIT_UNLIKELY(m_filter_mode == FilterMode::Nearest)) {
-            const PosF pos_f = pos * PosF(m_shape_opaque);
+            const PosF pos_f = pos * PosF(m_resolution_opaque);
             const PosI pos_i = floor2int<PosI>(pos_f);
             const PosI pos_i_w = wrap(pos_i);
 
             UInt32 idx = index(pos_i_w);
-
-            for (uint32_t ch = 0; ch < channels; ++ch)
-                out[ch] = Value(gather<_Storage>(m_value.array(), idx + ch, active));
+            DR_TEX_ALLOC_PACKET(packet, m_channels_storage);
+            gather_packet_dynamic(m_channels_storage, m_value.array(), idx, packet, active);
+            for (uint32_t ch = 0; ch < m_channels; ++ch)
+                out[ch] = Value(packet[ch]);
         } else {
             using InterpOffset = Array<Int32, ipow(2, Dimension)>;
             using InterpPosI = Array<InterpOffset, Dimension>;
             using InterpIdx = uint32_array_t<InterpOffset>;
 
-            const PosF pos_f = fmadd(pos, PosF(m_shape_opaque), -.5f);
+            const PosF pos_f = fmadd(pos, PosF(m_resolution_opaque), -.5f);
             const PosI pos_i = floor2int<PosI>(pos_f);
 
             int32_t offset[2] = { 0, 1 };
@@ -392,17 +444,19 @@ public:
             pos_i_w = wrap(pos_i_w);
             InterpIdx idx = index(pos_i_w);
 
-            for (uint32_t ch = 0; ch < channels; ++ch)
+            for (uint32_t ch = 0; ch < m_channels; ++ch)
                 out[ch] = zeros<Value>();
 
             #define DR_TEX_ACCUM(index, weight)                                \
                 {                                                              \
                     UInt32 index_ = index;                                     \
                     Value weight_ = weight;                                    \
-                    for (uint32_t ch = 0; ch < channels; ++ch)                 \
+                    DR_TEX_ALLOC_PACKET(packet, m_channels_storage);           \
+                    gather_packet_dynamic(m_channels_storage, m_value.array(), \
+                        index_, packet, active);                               \
+                    for (uint32_t ch = 0; ch < m_channels; ++ch)               \
                         out[ch] = fmadd(                                       \
-                            Value(gather<_Storage>(                            \
-                                m_value.array(), index_ + ch, active)),        \
+                            Value(packet[ch]),                                 \
                             weight_,                                           \
                             out[ch]);                                          \
                 }
@@ -453,14 +507,12 @@ public:
 
                 if constexpr (IsDiff) {
                     if (grad_enabled(m_value, pos)) {
-                        tensor(); // Will un-migrate the data if necessary
+                        sync_host_data(); // Will un-migrate the data if necessary
 
-                        const size_t channels = m_value.shape(Dimension);
-
-                        ArrayX out_nonaccel = empty<ArrayX>(channels);
+                        ArrayX out_nonaccel = empty<ArrayX>(m_channels);
                         eval_nonaccel(pos, out_nonaccel.data(), active);
 
-                        for (size_t ch = 0; ch < channels; ++ch)
+                        for (size_t ch = 0; ch < m_channels; ++ch)
                             out[ch] = replace_grad(out[ch], out_nonaccel[ch]);
                     }
                 }
@@ -485,14 +537,12 @@ public:
                          mask_t<Value> active = true) const {
         using PosF = Array<Value, Dimension>;
 
-        const size_t channels = m_value.shape(Dimension);
-
         if constexpr (HasCudaTexture && (sizeof(scalar_t<Value>) <= 4)) {
             if (m_use_accel) {
                 if constexpr (Dimension == 1) {
                     PosF pos(pos_);
 
-                    const PosF res_f = PosF(m_shape_opaque);
+                    const PosF res_f = PosF(m_resolution_opaque);
                     const PosF pos_f = floor(fmadd(pos, res_f, -.5f)) + .5f;
 
                     PosF fetch_pos;
@@ -510,24 +560,31 @@ public:
                     PosF32 pos(pos_);
 
                     uint32_t pos_idx[Dimension];
-                    uint32_t *out_idx =
-                        (uint32_t *) alloca(4 * channels * sizeof(uint32_t));
+                    uint32_t *out_idx = (uint32_t *) alloca(4 * 
+                        m_channels_storage * sizeof(uint32_t));
                     for (size_t i = 0; i < Dimension; ++i)
                         pos_idx[i] = pos[i].index();
 
                     jit_cuda_tex_bilerp_fetch(Dimension, m_handle, pos_idx,
                                               active.index(), out_idx);
 
-                    for (size_t ch = 0; ch < channels; ++ch) {
-                        out[2][ch] = Float32::steal(out_idx[ch*4 + 0]);
-                        out[3][ch] = Float32::steal(out_idx[ch*4 + 1]);
-                        out[1][ch] = Float32::steal(out_idx[ch*4 + 2]);
-                        out[0][ch] = Float32::steal(out_idx[ch*4 + 3]);
+                    for (size_t ch = 0; ch < m_channels_storage; ++ch) {
+                        Float32 v1 = Float32::steal(out_idx[ch*4 + 0]),
+                                v2 = Float32::steal(out_idx[ch*4 + 1]),
+                                v3 = Float32::steal(out_idx[ch*4 + 2]),
+                                v4 = Float32::steal(out_idx[ch*4 + 3]);
+
+                        if (ch < m_channels) {
+                            out[2][ch] = v1;
+                            out[3][ch] = v2;
+                            out[1][ch] = v3;
+                            out[0][ch] = v4;
+                        }
                     }
                 } else if constexpr (Dimension == 3) {
                     PosF pos(pos_);
 
-                    const PosF res_f = PosF(m_shape_opaque);
+                    const PosF res_f = PosF(m_resolution_opaque);
                     const PosF pos_f = floor(fmadd(pos, res_f, -.5f)) + .5f;
 
                     PosF fetch_pos;
@@ -550,7 +607,7 @@ public:
 
         DRJIT_MARK_USED(pos_); DRJIT_MARK_USED(active);
         for (size_t i = 0; i < ipow(2ul, Dimension); ++i)
-            for (size_t ch = 0; ch < channels; ++ch)
+            for (size_t ch = 0; ch < m_channels; ++ch)
                 out[i][ch] = zeros<Value>();
     }
 
@@ -578,7 +635,7 @@ public:
         if constexpr (!is_array_v<Mask>)
             active = true;
 
-        const PosF pos_f = fmadd(pos, PosF(m_shape_opaque), -.5f);
+        const PosF pos_f = fmadd(pos, PosF(m_resolution_opaque), -.5f);
         const PosI pos_i = floor2int<PosI>(pos_f);
 
         int32_t offset[2] = { 0, 1 };
@@ -587,10 +644,13 @@ public:
         pos_i_w = wrap(pos_i_w);
         InterpIdx idx = index(pos_i_w);
 
-        const uint32_t channels = (uint32_t) m_value.shape(Dimension);
-        for (size_t i = 0; i < InterpOffset::Size; ++i)
-            for (uint32_t ch = 0; ch < channels; ++ch)
-                out[i][ch] = Value(gather<_Storage>(m_value.array(), idx[i] + ch, active));
+        for (size_t i = 0; i < InterpOffset::Size; ++i) {
+            DR_TEX_ALLOC_PACKET(packet, m_channels_storage);
+            gather_packet_dynamic(
+                m_channels_storage, m_value.array(), idx[i], packet, active);
+            for (uint32_t ch = 0; ch < m_channels; ++ch)
+                out[i][ch] = Value(packet[ch]);
+        }
     }
 
     /**
@@ -615,21 +675,20 @@ public:
 
                 if constexpr (IsDiff) {
                     if (grad_enabled(m_value, pos)) {
-                        tensor(); // Will un-migrate the data if necessary
+                        sync_host_data(); // Will un-migrate the data if necessary
 
-                        const size_t channels = m_value.shape(Dimension);
                         constexpr size_t out_size = 1 << Dimension;
 
                         Array<Value *, out_size> out_nonaccel;
                         ArrayX out_nonaccel_values =
-                            empty<ArrayX>(out_size * channels);
+                            empty<ArrayX>(out_size * m_channels);
                         for (size_t i = 0; i < out_size; ++i)
                             out_nonaccel[i] =
-                                out_nonaccel_values.data() + i * channels;
+                                out_nonaccel_values.data() + i * m_channels;
                         eval_fetch_nonaccel(pos, out_nonaccel, active);
 
                         for (size_t i = 0; i < out_size; ++i)
-                            for (size_t ch = 0; ch < channels; ++ch)
+                            for (size_t ch = 0; ch < m_channels; ++ch)
                                 out[i][ch] =
                                     replace_grad(out[i][ch], out_nonaccel[i][ch]);
                     }
@@ -664,7 +723,7 @@ public:
             active = true;
 
         PosF pos_(pos);
-        PosF pos_f = fmadd(pos_, PosF(m_shape_opaque), -.5f);
+        PosF pos_f = fmadd(pos_, PosF(m_resolution_opaque), -.5f);
         PosI pos_i = floor2int<PosI>(pos_f);
 
         // `offset[k]` controls the k-th offset for any dimension.
@@ -689,18 +748,19 @@ public:
                            alpha3);
         };
 
-        const uint32_t channels = (uint32_t) m_value.shape(Dimension);
-        for (uint32_t ch = 0; ch < channels; ++ch)
+        for (uint32_t ch = 0; ch < m_channels; ++ch)
             out[ch] = zeros<Value>();
 
         #define DR_TEX_CUBIC_ACCUM(index, weight)                              \
             {                                                                  \
                 UInt32 index_ = index;                                         \
                 Value weight_ = weight;                                        \
-                for (uint32_t ch = 0; ch < channels; ++ch)                     \
+                DR_TEX_ALLOC_PACKET(packet, m_channels_storage);               \
+                gather_packet_dynamic(m_channels_storage, m_value.array(),     \
+                    index_, packet, active);                                   \
+                for (uint32_t ch = 0; ch < m_channels; ++ch)                   \
                     out[ch] = fmadd(                                           \
-                        Value(gather<_Storage>(                                \
-                            m_value.array(), index_ + ch, active)),            \
+                        Value(packet[ch]),                                     \
                         weight_,                                               \
                         out[ch]);                                              \
             }
@@ -768,7 +828,7 @@ public:
                         "migrated to CUDA texture memory");
         }
 
-        PosF res_f = PosF(m_shape_opaque);
+        PosF res_f = PosF(m_resolution_opaque);
         PosF pos_f = fmadd(pos, res_f, -.5f);
         PosI pos_i = floor2int<PosI>(pos_f);
         PosF pos_a = pos_f - PosF(pos_i);
@@ -798,11 +858,9 @@ public:
                 Value(integ + 1.5f + w3 / w23) * inv_shape[dim]); // (integ + 0.5) +- 1 + weight
         };
 
-        const size_t channels = m_value.shape(Dimension);
-
         auto eval_helper = [&](const PosF &pos,
                                const Mask &active) -> ArrayX {
-            ArrayX out = empty<ArrayX>(channels);
+            ArrayX out = empty<ArrayX>(m_channels);
             if constexpr (HasCudaTexture && (sizeof(scalar_t<Value>) <= 4)) {
                 if (m_use_accel && !force_nonaccel) {
                     eval_cuda(pos, out.data(), active);
@@ -814,7 +872,6 @@ public:
             return out;
         };
 
-        ArrayX result = empty<ArrayX>(channels);
         using F = Value;
 
         if constexpr (Dimension == 1) {
@@ -822,7 +879,7 @@ public:
             ArrayX f0 = eval_helper(PosF(F(cx[1])), active),
                    f1 = eval_helper(PosF(F(cx[2])), active);
 
-            for (size_t ch = 0; ch < channels; ++ch)
+            for (size_t ch = 0; ch < m_channels; ++ch)
                 out[ch] = lerp(f1[ch], f0[ch], cx[0]);
         } else if constexpr (Dimension == 2) {
             Array3 cx = compute_weight_coord(0),
@@ -833,7 +890,7 @@ public:
                    f11 = eval_helper(PosF(F(cx[2]), F(cy[2])), active);
 
             Value f0, f1;
-            for (size_t ch = 0; ch < channels; ++ch) {
+            for (size_t ch = 0; ch < m_channels; ++ch) {
                 f0 = lerp(f01[ch], f00[ch], cy[0]);
                 f1 = lerp(f11[ch], f10[ch], cy[0]);
 
@@ -853,7 +910,7 @@ public:
                    f111 = eval_helper(PosF(F(cx[2]), F(cy[2]), F(cz[2])), active);
 
             Value f00, f01, f10, f11, f0, f1;
-            for (size_t ch = 0; ch < channels; ++ch) {
+            for (size_t ch = 0; ch < m_channels; ++ch) {
                 f00 = lerp(f001[ch], f000[ch], cz[0]);
                 f01 = lerp(f011[ch], f010[ch], cz[0]);
                 f10 = lerp(f101[ch], f100[ch], cz[0]);
@@ -870,10 +927,10 @@ public:
                replace the AD graph. The result is unused (and never computed)
                and only the AD graph is replaced. */
             if (grad_enabled(m_value, pos)) {
-                tensor(); // Will un-migrate the data if necessary
-                ArrayX result_diff = empty<ArrayX>(channels);
+                sync_host_data(); // Will un-migrate the data if necessary
+                ArrayX result_diff = empty<ArrayX>(m_channels);
                 eval_cubic_helper(pos, result_diff.data(), active); // AD graph only
-                for (size_t ch = 0; ch < channels; ++ch)
+                for (size_t ch = 0; ch < m_channels; ++ch)
                     out[ch] = replace_grad(out[ch], result_diff[ch]);
             }
         }
@@ -905,7 +962,7 @@ public:
         if constexpr (!is_array_v<Mask>)
             active = true;
 
-        PosF res_f = PosF(m_shape_opaque);
+        PosF res_f = PosF(m_resolution_opaque);
         PosF pos_f = fmadd(pos, res_f, -.5f);
         PosI pos_i = floor2int<PosI>(pos_f);
 
@@ -938,33 +995,33 @@ public:
             }
         };
 
-        const uint32_t channels = (uint32_t) m_value.shape(Dimension);
-
-        for (uint32_t ch = 0; ch < channels; ++ch) {
+        for (uint32_t ch = 0; ch < m_channels; ++ch) {
             out_value[ch] = zeros<Value>();
             out_gradient[ch] = zeros<PosF>();
         }
-        ArrayX values = empty<ArrayX>(channels);
+        ArrayX values = empty<ArrayX>(m_channels);
 
 
         #define DR_TEX_CUBIC_GATHER(index)                                     \
             {                                                                  \
                 UInt32 index_ = index;                                         \
-                for (uint32_t ch = 0; ch < channels; ++ch)                     \
-                    values[ch] = Value(gather<_Storage>(                       \
-                                    m_value.array(), index_ + ch, active));    \
+                DR_TEX_ALLOC_PACKET(packet, m_channels_storage);               \
+                gather_packet_dynamic(m_channels_storage, m_value.array(),     \
+                    index_, packet, active);                                   \
+                for (uint32_t ch = 0; ch < m_channels; ++ch)                   \
+                    values[ch] = Value(packet[ch]);                            \
             }
         #define DR_TEX_CUBIC_ACCUM_VALUE(weight)                               \
             {                                                                  \
                 Value weight_ = weight;                                        \
-                for (uint32_t ch = 0; ch < channels; ++ch)                     \
+                for (uint32_t ch = 0; ch < m_channels; ++ch)                   \
                     out_value[ch] = fmadd(values[ch], weight_, out_value[ch]); \
             }
         #define DR_TEX_CUBIC_ACCUM_GRAD(dim, weight)                           \
             {                                                                  \
                 uint32_t dim_ = dim;                                           \
                 Value weight_ = weight;                                        \
-                for (uint32_t ch = 0; ch < channels; ++ch)                     \
+                for (uint32_t ch = 0; ch < m_channels; ++ch)                   \
                     out_gradient[ch][dim_] = fmadd(                            \
                         values[ch], weight_, out_gradient[ch][dim_]);          \
             }
@@ -1012,7 +1069,7 @@ public:
         #undef DR_TEX_CUBIC_ACCUM_GRAD
 
         // transform volume from unit size to its resolution
-        for (uint32_t ch = 0; ch < channels; ++ch)
+        for (uint32_t ch = 0; ch < m_channels; ++ch)
             for (uint32_t dim = 0; dim < Dimension; ++dim)
                 out_gradient[ch][dim] *= Value(res_f[dim]);
     }
@@ -1045,7 +1102,7 @@ public:
         if constexpr (!is_array_v<Mask>)
             active = true;
 
-        PosF res_f = PosF(m_shape_opaque);
+        PosF res_f = PosF(m_resolution_opaque);
         PosF pos_f = fmadd(pos, res_f, -.5f);
         PosI pos_i = floor2int<PosI>(pos_f);
 
@@ -1090,34 +1147,35 @@ public:
             );
         };
 
-        const uint32_t channels = (uint32_t) m_value.shape(Dimension);
-        for (uint32_t ch = 0; ch < channels; ++ch) {
+        for (uint32_t ch = 0; ch < m_channels; ++ch) {
             out_value[ch] = zeros<Value>();
             out_gradient[ch] = zeros<Value>();
             for (uint32_t dim1 = 0; dim1 < Dimension; ++dim1)
                 out_hessian[ch][dim1] = zeros<Value>();
         }
-        ArrayX values = empty<ArrayX>(channels);
+        ArrayX values = empty<ArrayX>(m_channels);
 
         // Make sure channel related operations are executed together
         #define DR_TEX_CUBIC_GATHER(index)                                     \
             {                                                                  \
                 UInt32 index_ = index;                                         \
-                for (uint32_t ch = 0; ch < channels; ++ch)                     \
-                    values[ch] = Value(gather<_Storage>(                       \
-                                    m_value.array(), index_ + ch, active));    \
+                DR_TEX_ALLOC_PACKET(packet, m_channels_storage);               \
+                gather_packet_dynamic(m_channels_storage, m_value.array(),     \
+                    index_, packet, active);                                   \
+                for (uint32_t ch = 0; ch < m_channels; ++ch)                   \
+                    values[ch] = Value(packet[ch]);                            \
             }
         #define DR_TEX_CUBIC_ACCUM_VALUE(weight)                               \
             {                                                                  \
                 Value weight_ = weight;                                        \
-                for (uint32_t ch = 0; ch < channels; ++ch)                     \
+                for (uint32_t ch = 0; ch < m_channels; ++ch)                   \
                     out_value[ch] = fmadd(values[ch], weight_, out_value[ch]); \
             }
         #define DR_TEX_CUBIC_ACCUM_GRAD(dim, weight_grad)                      \
             {                                                                  \
                 uint32_t dim_ = dim;                                           \
                 Value weight_grad_ = weight_grad;                              \
-                for (uint32_t ch = 0; ch < channels; ++ch)                     \
+                for (uint32_t ch = 0; ch < m_channels; ++ch)                   \
                     out_gradient[ch][dim_] = fmadd(                            \
                         values[ch], weight_grad_, out_gradient[ch][dim_]);     \
             }
@@ -1126,7 +1184,7 @@ public:
                 uint32_t dim1_ = dim1,                                         \
                          dim2_ = dim2;                                         \
                 Value weight_hessian_ = weight_hessian;                        \
-                for (uint32_t ch = 0; ch < channels; ++ch)                     \
+                for (uint32_t ch = 0; ch < m_channels; ++ch)                   \
                     out_hessian[ch][dim1_][dim2_] = fmadd(                     \
                         values[ch],                                            \
                         weight_hessian_,                                       \
@@ -1136,7 +1194,7 @@ public:
             {                                                                  \
                 uint32_t dim1_ = dim1,                                         \
                          dim2_ = dim2;                                         \
-                for (uint32_t ch = 0; ch < channels; ++ch)                     \
+                for (uint32_t ch = 0; ch < m_channels; ++ch)                   \
                     out_hessian[ch][dim2_][dim1_] =                            \
                         out_hessian[ch][dim1_][dim2_];                         \
             }
@@ -1207,7 +1265,7 @@ public:
         #undef DR_TEX_CUBIC_HESSIAN_SYMM
 
         // transform volume from unit size to its resolution
-        for (uint32_t ch = 0; ch < channels; ++ch)
+        for (uint32_t ch = 0; ch < m_channels; ++ch)
             for (uint32_t dim1 = 0; dim1 < Dimension; ++dim1) {
                 out_gradient[ch][dim1] *= Value(res_f[dim1]);
                 for (uint32_t dim2 = 0; dim2 < Dimension; ++dim2)
@@ -1227,9 +1285,9 @@ public:
             std::is_signed_v<Scalar>
         );
 
-        Array<Int32, Dimension> shape = m_shape_opaque;
+        Array<Int32, Dimension> res = m_resolution_opaque;
         if (m_wrap_mode == WrapMode::Clamp) {
-            return clip(pos, 0, shape - 1);
+            return clip(pos, 0, res - 1);
         } else {
             T value_shift_neg = select(pos < 0, pos + 1, pos);
 
@@ -1237,14 +1295,14 @@ public:
             for (size_t i = 0; i < Dimension; ++i)
                 div[i] = m_inv_resolution[i](value_shift_neg[i]);
 
-            T mod = pos - div * shape;
-            mod[mod < 0] += T(shape);
+            T mod = pos - div * res;
+            mod[mod < 0] += T(res);
 
             if (m_wrap_mode == WrapMode::Mirror)
                 // Starting at 0, flip the texture every other repetition
                 // (flip when: even number of repetitions in negative direction,
                 // or odd number of repetitions in positive direction)
-                mod = select(((div & 1) == 0) ^ (pos < 0), mod, shape - 1 - mod);
+                mod = select(((div & 1) == 0) ^ (pos < 0), mod, res - 1 - mod);
 
             return mod;
         }
@@ -1257,20 +1315,34 @@ protected:
         if (channels == 0)
             jit_raise("Texture::Texture(): must have at least 1 channel!");
 
-        m_size = channels;
+        m_channels = channels;
+
+        // Determine padding used for channels depending on backend
+        if constexpr (is_jit_v<_Storage>) {
+            m_channels_storage = 1;
+            while (m_channels_storage < m_channels)
+                m_channels_storage <<= 1;
+        } else {
+            m_channels_storage = channels;
+        }
+
+        m_size = m_channels_storage;
+
         size_t tensor_shape[Dimension + 1]{};
 
         for (size_t i = 0; i < Dimension; ++i) {
             tensor_shape[i] = shape[i];
-            m_shape_opaque[Dimension - 1 - i] = opaque<UInt32>((uint32_t) shape[i]);
+            m_shape[i] = shape[i];
+            m_resolution_opaque[Dimension - 1 - i] = opaque<UInt32>((uint32_t) shape[i]);
             m_inv_resolution[Dimension - 1 - i] = divisor<int32_t>((int32_t) shape[i]);
             m_size *= shape[i];
         }
-        tensor_shape[Dimension] = channels;
+        tensor_shape[Dimension] = m_channels_storage;
 
         if (init_tensor)
             m_value = TensorXf(zeros<Storage>(m_size), Dimension + 1, tensor_shape);
 
+        m_shape[Dimension] = channels;
         m_use_accel = use_accel;
         m_filter_mode = filter_mode;
         m_wrap_mode = wrap_mode;
@@ -1280,13 +1352,44 @@ protected:
                 size_t tex_shape[Dimension];
                 reverse_tensor_shape(tex_shape, false);
                 m_handle = jit_cuda_tex_create(
-                    Dimension, tex_shape, channels, (int) CudaFormat,
+                    Dimension, tex_shape, m_channels_storage, (int) CudaFormat,
                     (int) filter_mode, (int) wrap_mode);
             }
         }
     }
 
+    #undef DR_TEX_ALLOC_PACKET
+
 private:
+    /// Updates the host-side padded tensor
+    void sync_host_data() const {
+        if constexpr (HasCudaTexture) {
+            if (m_use_accel && m_migrated) {
+                Storage primal = empty<Storage>(m_size);
+
+                /* The CUDA texture here is already padded with respect to the 
+                 * m_channels_storage size so we directly copy into host
+                 * memory. Note, that for correct gradient tracking during
+                 * texture evaluation, we need the tensor to be on the host,
+                 * and moreover the padded storage allows us to leverage 
+                 * PacketOps when performing gathers/scatters.
+                 */
+                size_t tex_shape[Dimension + 1];
+                reverse_tensor_shape(tex_shape, true);
+                jit_cuda_tex_memcpy_t2d(Dimension, tex_shape, m_handle,
+                                        primal.data());
+
+                if constexpr (IsDiff)
+                    m_value.array() = replace_grad(primal, m_value.array());
+                else
+                    m_value.array() = primal;
+
+                m_migrated = false;
+                m_tensor_dirty = true;
+            }
+        }
+    }
+
     /// Helper function to reverse the tensor (\ref Texture.m_value) shape
     void reverse_tensor_shape(size_t *output, bool include_channels) const {
         for (size_t i = 0; i < Dimension; ++i)
@@ -1361,31 +1464,41 @@ private:
             index = Index(pos.x());
         } else if constexpr (Dimension == 2) {
             index = Index(
-                fmadd(Index(pos.y()), m_shape_opaque.x(), Index(pos.x())));
+                fmadd(Index(pos.y()), m_resolution_opaque.x(), Index(pos.x())));
         } else if constexpr (Dimension == 3) {
             index = Index(fmadd(
-                fmadd(Index(pos.z()), m_shape_opaque.y(), Index(pos.y())),
-                m_shape_opaque.x(), Index(pos.x())));
+                fmadd(Index(pos.z()), m_resolution_opaque.y(), Index(pos.y())),
+                m_resolution_opaque.x(), Index(pos.x())));
         }
 
-        uint32_t channels = (uint32_t) m_value.shape(Dimension);
-
-        return index * channels;
+        return index;
     }
 
 private:
     void *m_handle = nullptr;
-    size_t m_size = 0;
-    mutable TensorXf m_value;
+    size_t m_size = 0;                      /* Total size of array */
+    size_t m_channels = 0;                  /* Number of channels */
+    size_t m_channels_storage = 0;          /* Rounded-up number of channels
+                                               depending on backened */
+    size_t m_shape[Dimension + 1] = {};     /* Unpadded shape of texture */
+    mutable TensorXf m_value;               /* Host-side store of tensor
+                                               padded for packet size */
+    mutable TensorXf m_unpadded_value;      /* Lazily computed if texture data
+                                               is updated after initialization */
 
     // Stored in this order: width, height, depth
-    Array<UInt32, Dimension> m_shape_opaque;
+    Array<UInt32, Dimension> m_resolution_opaque;
     divisor<int32_t> m_inv_resolution[Dimension] { };
 
     FilterMode m_filter_mode;
     WrapMode m_wrap_mode;
     bool m_use_accel = false;
-    mutable bool m_migrated = false;
+    mutable bool m_migrated = false;        /* CUDA backend flag to indicate
+                                               whether texture data is 
+                                               exclusively on the device */
+    mutable bool m_tensor_dirty = false;    /* Flag to indicate whether
+                                               public-facing unpadded tensor
+                                               needs to be updated */
 };
 
 NAMESPACE_END(drjit)
