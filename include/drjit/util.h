@@ -318,4 +318,39 @@ private:
     Size size;
 };
 
+/// Special handling of packet gathers when packet size is only known at runtime
+template <typename Value, typename Source, typename Index, typename Mask>
+void gather_packet_dynamic(size_t packet_size, Source &&source, const Index &index,
+    Value* out, const Mask &mask_ = true, ReduceMode mode = ReduceMode::Auto) {
+
+    // Broadcast mask to match shape of Index
+    mask_t<plain_t<Index>> mask = mask_;
+
+    auto default_gather = [&]{
+        for (size_t i = 0; i < packet_size; ++i)
+            out[i] = gather<Value>(source,
+                fmadd(index, (uint32_t) packet_size, (uint32_t) i), mask, mode);
+    };
+
+    if constexpr (is_jit_v<Value>) {
+        if ((packet_size & (packet_size - 1)) == 0 && packet_size > 1) {
+            uint64_t *res_indices = (uint64_t *) alloca(
+                sizeof(uint64_t) * packet_size);
+            ad_var_gather_packet(packet_size,
+                source.index_combined(),
+                index.index(),
+                mask.index(), 
+                res_indices,
+                mode);
+
+            for (size_t i = 0; i < packet_size; ++i)
+                out[i] = Value::steal(res_indices[i]);
+        } else {
+            default_gather();
+        }
+    } else {
+        default_gather();
+    }
+}
+
 NAMESPACE_END(drjit)

@@ -686,7 +686,7 @@ def test22_fetch_grad(t, texture_type):
     assert dr.allclose(4, out[3][0])
 
     for i in range(0, 4):
-        dr.backward(out[i][0])
+        dr.backward(out[i][0], flags=dr.ADFlag.ClearVertices)
         grad = dr.grad(tex_data)
         expected = t(
                 1 if i == 0 else 0,
