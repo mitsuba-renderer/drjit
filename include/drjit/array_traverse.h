@@ -192,8 +192,6 @@ template <typename T> auto labels(const T &v) {
     return traversable_t<T>::labels(v);
 }
 
-using TraverseCallbackRO = void (*)(void *, uint64_t, const char *, const char *);
-
 template <typename Value>
 void traverse_1_fn_ro(const Value &value, void *payload,
                       void (*fn)(void *, uint64_t, const char *,
