@@ -573,12 +573,11 @@ public:
         using Packet = DynamicArray<Value>;
         Packet result = empty<Packet>(m_packet_size);
 
-        uint32_t *res_indices = (uint32_t *) alloca(sizeof(uint32_t) * m_packet_size);
-        jit_var_gather_packet(m_packet_size, 
+        uint64_t *res_indices = (uint64_t *) alloca(sizeof(uint64_t) * m_packet_size);
+        ad_var_gather_packet(m_packet_size, 
             value.index_combined(), 
             index.index(), 
-            mask.index(), res_indices);
-
+            mask.index(), res_indices, ReduceMode::Expand);
 
         for (size_t i = 0; i < m_packet_size; ++i)
             result[i] = Value::steal(res_indices[i]);
