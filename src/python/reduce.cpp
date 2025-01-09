@@ -502,6 +502,13 @@ nb::object none(nb::handle h, nb::handle axis) {
 
 nb::object mean(nb::handle value, nb::handle axis, nb::handle mode) {
     nb::object out = sum(value, axis, mode);
+
+    if (!out.ptr()) {
+        nb::chain_error(PyExc_RuntimeError,
+            "dr.mean(): encountered an exception (see above).");
+        return out;
+    }
+
     // mean = sum / (num_input/num_output)
     return (out * prod(shape(out), nb::none())) / prod(shape(value), nb::none()); 
 }
