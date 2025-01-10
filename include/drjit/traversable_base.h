@@ -27,7 +27,6 @@ NAMESPACE_END(detail)
 struct DRJIT_EXPORT TraversableBase : public nanobind::intrusive_base {
     virtual void traverse_1_cb_ro(void *, detail::traverse_callback_ro) const       = 0;
     virtual void traverse_1_cb_rw(void *, detail::traverse_callback_rw) = 0;
-    virtual const char *get_variant() const { return nullptr; };
 };
 
 /// Macro for generating call to traverse_1_fn_ro for a class member

@@ -137,19 +137,23 @@ static void log_layouts(const std::vector<Layout> &layouts, std::ostream &os,
 }
 
 void FlatVariables::add_domain(const char *variant, const char *domain) {
-    if (variant && strcmp(variant, "") != 0) {
-        if (this->variant.empty())
+    // Since it is not possible to pass nullptr strings to nanobind functions we
+    // assume, that a valid domain indicates a valid variant. If the variant is
+    // emtpy at the end of traversal, we know that no Class variable was
+    // traversed, and registry traversal is not necessary.
+    if (domain && variant && strcmp(domain, "") != 0) {
+        jit_log(LogLevel::Debug, "variant=%s, domain=%s", variant, domain);
+
+        if (domains.empty()){
             this->variant = variant;
+        }
         else if (this->variant != variant)
             jit_raise("traverse(): Variant missmatch! All arguments to a "
                       "frozen function have to have the same variant. "
                       "Variant %s of a previos argument does not match "
                       "variant %s of this argument.",
                       this->variant.c_str(), variant);
-    }
 
-    if (domain && strcmp(domain, "") != 0) {
-        jit_log(LogLevel::Warn, "variant=%s, domain=%s", variant, domain);
         bool contains = false;
         for (std::string &d : domains) {
             if (d == domain) {
@@ -679,18 +683,6 @@ void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
         } else if (nb::object cb = get_traverse_cb_ro(tp); cb.is_valid()) {
             ProfilerPhase profiler("traverse cb");
 
-            // nb::object get_variant = get_variant_fn(tp);
-            // auto h_variant = nb::borrow<nb::str>(get_variant(h));
-            // if (this->variant.empty())
-            //     this->variant = h_variant.c_str();
-            // else if (this->variant != h_variant.c_str())
-            //     jit_raise("traverse(): Variant missmatch! All arguments to a
-            //     "
-            //               "frozen function have to have the same variant. "
-            //               "Variant %s of a previos argument does not match "
-            //               "variant %s of this argument.",
-            //               this->variant.c_str(), h_variant.c_str());
-
             Layout layout;
             layout.type         = nb::borrow<nb::type_object>(tp);
             size_t layout_index = this->layout.size();
@@ -970,8 +962,8 @@ void FlatVariables::traverse_with_registry(nb::handle h, TraverseContext &ctx) {
     // Traverse the handle
     traverse(h, ctx);
 
-    // Traverse the registry
-    {
+    // Traverse the registry (if a class variable was traversed)
+    if (!domains.empty()) {
         ProfilerPhase profiler("traverse_registry");
         Layout layout;
         layout.type         = nb::borrow<nb::type_object>(nb::none());
@@ -985,7 +977,7 @@ void FlatVariables::traverse_with_registry(nb::handle h, TraverseContext &ctx) {
         std::vector<void *> registry_pointers;
         for (std::string &domain : domains) {
             uint32_t registry_bound =
-                jit_registry_id_bound(variant.c_str(), nullptr);
+                jit_registry_id_bound(variant.c_str(), domain.c_str());
             uint32_t offset = registry_pointers.size();
             registry_pointers.resize(registry_pointers.size() + registry_bound);
             jit_registry_get_pointers(variant.c_str(), domain.c_str(),
@@ -1027,43 +1019,45 @@ void FlatVariables::assign_with_registry(nb::handle dst) {
     // Assign the handle
     assign(dst);
 
-    // Assign registry
-    Layout &layout      = this->layout[layout_index++];
-    uint32_t num_fields = 0;
+    // Assign registry (if a class variable was traversed)
+    if (!domains.empty()) {
+        Layout &layout      = this->layout[layout_index++];
+        uint32_t num_fields = 0;
 
-    jit_log(LogLevel::Debug, "registry{");
+        jit_log(LogLevel::Debug, "registry{");
 
-    std::vector<void *> registry_pointers;
-    for (std::string &domain : domains) {
-        uint32_t registry_bound =
-            jit_registry_id_bound(variant.c_str(), nullptr);
-        uint32_t offset = registry_pointers.size();
-        registry_pointers.resize(registry_pointers.size() + registry_bound);
-        jit_registry_get_pointers(variant.c_str(), domain.c_str(),
-                                  &registry_pointers[offset]);
+        std::vector<void *> registry_pointers;
+        for (std::string &domain : domains) {
+            uint32_t registry_bound =
+                jit_registry_id_bound(variant.c_str(), domain.c_str());
+            uint32_t offset = registry_pointers.size();
+            registry_pointers.resize(registry_pointers.size() + registry_bound);
+            jit_registry_get_pointers(variant.c_str(), domain.c_str(),
+                                      &registry_pointers[offset]);
+        }
+
+        jit_log(LogLevel::Debug, "registry_bound=%u", registry_pointers.size());
+        jit_log(LogLevel::Debug, "layout_index=%u", this->layout_index);
+        for (void *ptr : registry_pointers) {
+            jit_log(LogLevel::Debug, "ptr=%p", ptr);
+            if (!ptr)
+                continue;
+
+            // WARN: very unsafe cast!
+            // We assume, that any object added to the registry inherits from
+            // TraversableBase. This is ensured by the signature of the
+            // ``drjit::registry_put`` function.
+            auto traversable = (drjit::TraversableBase *) ptr;
+            auto self        = traversable->self_py();
+
+            if (self)
+                assign(self);
+
+            assign_cb(traversable);
+            num_fields++;
+        }
+        jit_log(LogLevel::Debug, "}");
     }
-
-    jit_log(LogLevel::Debug, "registry_bound=%u", registry_pointers.size());
-    jit_log(LogLevel::Debug, "layout_index=%u", this->layout_index);
-    for (void *ptr : registry_pointers) {
-        jit_log(LogLevel::Debug, "ptr=%p", ptr);
-        if (!ptr)
-            continue;
-
-        // WARN: very unsafe cast!
-        // We assume, that any object added to the registry inherits from
-        // TraversableBase. This is ensured by the signature of the
-        // ``drjit::registry_put`` function.
-        auto traversable = (drjit::TraversableBase *) ptr;
-        auto self        = traversable->self_py();
-
-        if (self)
-            assign(self);
-
-        assign_cb(traversable);
-        num_fields++;
-    }
-    jit_log(LogLevel::Debug, "}");
 }
 
 std::ostream &operator<<(std::ostream &os, const FlatVariables &r) {
@@ -1125,11 +1119,78 @@ void traverse_traversable(drjit::TraversableBase *traversable,
 static void traverse_with_registry(const char *op, TraverseCallback &tc,
                                    nb::handle h, bool rw = false) {
 
-    std::vector<void *> registry_pointers;
-    {
-        uint32_t registry_bound = jit_registry_id_bound(nullptr, nullptr);
-        registry_pointers.resize(registry_bound);
-        jit_registry_get_pointers(nullptr, nullptr, registry_pointers.data());
+    // Determine domains, that have to be traversed, by traversing in read only mode
+
+    struct DomainTraverseCallback : TraverseCallback {
+
+        std::string variant;
+        std::vector<std::string> domains;
+
+        void add_domain(const char *variant, const char *domain) {
+            // Since it is not possible to pass nullptr strings to nanobind
+            // functions we
+            // assume, that a valid domain indicates a valid variant. If the
+            // variant is emtpy at the end of traversal, we know that no Class
+            // variable was traversed, and registry traversal is not necessary.
+            if (domain && variant && strcmp(domain, "") != 0) {
+                jit_log(LogLevel::Debug, "variant=%s, domain=%s", variant,
+                        domain);
+
+                if (domains.empty()) {
+                    this->variant = variant;
+                } else if (this->variant != variant)
+                    jit_raise(
+                        "traverse(): Variant missmatch! All arguments to a "
+                        "frozen function have to have the same variant. "
+                        "Variant %s of a previos argument does not match "
+                        "variant %s of this argument.",
+                        this->variant.c_str(), variant);
+
+                bool contains = false;
+                for (std::string &d : domains) {
+                    if (d == domain) {
+                        contains = true;
+                        break;
+                    }
+                }
+                if (!contains)
+                    domains.push_back(domain);
+    }
+        }
+
+        void operator()(nb::handle h) override {
+            const ArraySupplement &s = supp(h.type());
+            if (s.is_class && s.index) {
+                auto variant = nb::borrow<nb::str>(nb::getattr(h, "Variant"));
+                auto domain  = nb::borrow<nb::str>(nb::getattr(h, "Domain"));
+                if (s.index)
+                    operator()(s.index(inst_ptr(h)), variant.c_str(),
+                               domain.c_str());
+
+            } else if (s.index)
+                operator()(s.index(inst_ptr(h)), nullptr, nullptr);
+        }
+        uint64_t operator()(uint64_t, const char *variant,
+                            const char *domain) override {
+            add_domain(variant, domain);
+            return 0;
+        }
+    };
+    DomainTraverseCallback domain_callback;
+
+    traverse("domain traverse", domain_callback, h);
+
+    // Traverse the registry
+    if (!domain_callback.domains.empty()) {
+        std::vector<void *> registry_pointers;
+        for (std::string &domain : domain_callback.domains) {
+            uint32_t registry_bound =
+                jit_registry_id_bound(domain_callback.variant.c_str(), domain.c_str());
+            uint32_t offset = registry_pointers.size();
+            registry_pointers.resize(registry_pointers.size() + registry_bound);
+            jit_registry_get_pointers(domain_callback.variant.c_str(), domain.c_str(),
+                                      &registry_pointers[offset]);
+        }
 
         for (void *ptr : registry_pointers) {
             if (!ptr)
@@ -1147,10 +1208,9 @@ static void traverse_with_registry(const char *op, TraverseCallback &tc,
 
             traverse_traversable(traversable, tc, rw);
         }
-        registry_pointers.clear();
     }
 
-    traverse(op, tc, h);
+    traverse(op, tc, h, rw);
 }
 
 /**
@@ -1247,7 +1307,6 @@ static void deep_make_opaque(nb::handle h, bool eval = true,
     ScheduleForceCallback op;
     if (registry)
         traverse_with_registry("schedule_force", op, h, true);
-    // transform_in_place_with_registry(h, op);
     else
         traverse("schedule_force", op, h, true);
 

@@ -1001,7 +1001,6 @@ nb::handle DR_STR(_traverse_write);
 nb::handle DR_STR(_traverse_read);
 nb::handle DR_STR(_traverse_1_cb_rw);
 nb::handle DR_STR(_traverse_1_cb_ro);
-nb::handle DR_STR(_get_variant);
 nb::handle DR_STR(typing);
 nb::handle DR_STR(get_type_hints);
 
@@ -1018,7 +1017,6 @@ void export_base(nb::module_ &m) {
     DR_STR(_traverse_read) = PyUnicode_InternFromString("_traverse_read");
     DR_STR(_traverse_1_cb_rw) = PyUnicode_InternFromString("_traverse_1_cb_rw");
     DR_STR(_traverse_1_cb_ro) = PyUnicode_InternFromString("_traverse_1_cb_ro");
-    DR_STR(_get_variant) = PyUnicode_InternFromString("_get_variant");
     DR_STR(typing) = PyUnicode_InternFromString("typing");
     DR_STR(get_type_hints) = PyUnicode_InternFromString("get_type_hints");
 

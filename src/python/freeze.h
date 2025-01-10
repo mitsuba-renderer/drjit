@@ -65,7 +65,7 @@ struct Layout {
     /// cache it here.
     /// TODO: possibly do the same for literals?
     nb::object py_object;
-    
+
     /// Nanobind type of the container/variable
     nb::type_object type;
 
