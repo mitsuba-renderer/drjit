@@ -1879,9 +1879,10 @@ def binary_search(start, end, pred):
     return start
 
 def freeze(f):
+    # TODO: maybe add doc here
     import functools
 
-    class FF:
+    class FrozenFunction:
         def __init__(self, f) -> None:
             self.ff = detail.FrozenFunction(f)
 
@@ -1900,9 +1901,32 @@ def freeze(f):
             return self.ff.clear()
 
         def __get__(self, obj, type=None):
-            return functools.partial(self, obj)
+            if obj is None:
+                return self
+            else:
+                return FrozenMethod(self.ff, obj)
 
-    return functools.wraps(f)(FF(f))
+    class FrozenMethod(FrozenFunction):
+        """
+        A FrozenMethod currying the object into the __call__ method.
+
+        If the ``freeze`` decorator is applied to a method of some class, it has
+        to call the internal frozen function with the ``self`` argument. To this
+        end we implement the ``__get__`` method of the frozen function, to
+        return a ``FrozenMethod``, which holds a reference to the object.
+        The ``__call__`` method of the ``FrozenMethod`` then supplies the object
+        in addition to the arguments to the internal function.
+        """
+        def __init__(self, ff, obj) -> None:
+            super().__init__(ff)
+            self.obj = obj
+
+        def __call__(self, *args, **kwargs):
+            return self.ff(self.obj, *args, **kwargs)
+
+
+
+    return functools.wraps(f)(FrozenFunction(f))
 
 def assert_true(
     cond,

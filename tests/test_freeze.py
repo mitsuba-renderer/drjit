@@ -2424,6 +2424,33 @@ def test62_clear(t):
     assert func.n_recordings == 1
 
 
+@pytest.test_arrays("uint32, jit, shape=(*)")
+def test63_method_decorator(t):
+    mod = sys.modules[t.__module__]
+
+    class Custom:
+        DRJIT_STRUCT = {"state": t}
+
+        def __init__(self) -> None:
+            self.state = t([1, 2, 3])
+
+        @dr.freeze
+        def frozen(self, x):
+            return x + self.state
+
+        def func(self, x):
+            return x + self.state
+
+    c = Custom()
+    for i in range(3):
+        x = dr.arange(t, 3) + i
+        dr.make_opaque(x)
+        res = c.frozen(x)
+        ref = c.func(x)
+
+        assert dr.all(res == ref)
+
+
 # @pytest.test_arrays("float32, jit, diff, shape=(*)")
 # def test42_raise(t):
 #     # FIX: leaks variables
