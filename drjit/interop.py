@@ -373,6 +373,12 @@ torch_wrapper = None
 # See https://github.com/pytorch/pytorch/issues/117491
 torch_desc_o = None
 
+def new_drjit_scope():
+    if dr.has_backend(dr.JitBackend.LLVM):
+        dr.detail.new_scope(dr.JitBackend.LLVM)
+    if dr.has_backend(dr.JitBackend.CUDA):
+        dr.detail.new_scope(dr.JitBackend.CUDA)
+
 def create_torch_wrapper():
     from torch import set_grad_enabled as torch_set_grad_enabled
     from torch.autograd import Function, function
@@ -380,6 +386,8 @@ def create_torch_wrapper():
     class TorchWrapper(Function):
         @staticmethod
         def forward(ctx, func, desc, *inputs):
+            new_drjit_scope()
+
             # Convert and unflatten the input PyTrees
             inputs = to_drjit(inputs, 'torch', enable_grad=True)
             args, kwargs = unflatten(desc, *inputs)
@@ -409,11 +417,15 @@ def create_torch_wrapper():
             # Convert the output and return
             output_conv = from_drjit(output, 'torch')[0]
 
+            new_drjit_scope()
+
             return tuple(output_conv)
 
         @staticmethod
         @function.once_differentiable
         def backward(ctx, *grad_outputs):
+            new_drjit_scope()
+
             grad_outputs = to_drjit(grad_outputs, 'torch')
             dr.set_grad(ctx.output, grad_outputs)
 
@@ -426,11 +438,16 @@ def create_torch_wrapper():
 
             # Convert
             grad_inputs = from_drjit(grad_inputs, 'torch')[0]
+
+            new_drjit_scope()
+
             return None, None, *grad_inputs
 
         @staticmethod
         @function.once_differentiable
         def jvp(ctx, func, desc, *grad_inputs):
+            new_drjit_scope()
+
             grad_inputs = to_drjit(grad_inputs, 'torch')
             dr.set_grad(ctx.inputs, grad_inputs)
 
@@ -443,6 +460,9 @@ def create_torch_wrapper():
 
             # Convert
             grad_output = from_drjit(grad_output, 'torch')[0]
+
+            new_drjit_scope()
+
             return grad_output
 
 
@@ -480,7 +500,7 @@ def wrap(source: typing.Union[str, types.ModuleType],
 
     The following table lists the currently supported conversions:
 
-    .. |nbsp| unicode:: 0xA0 
+    .. |nbsp| unicode:: 0xA0
        :trim:
 
     .. list-table::
