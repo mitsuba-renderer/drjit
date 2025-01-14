@@ -86,7 +86,7 @@ def test04_traverse_opaque(t):
 
 @pytest.test_arrays("float32,-diff,shape=(*),jit")
 def test05_traverse_py(t):
-    # Tests the implementation of `%raverse_py_cb_ro`,
+    # Tests the implementation of `traverse_py_cb_ro`,
     # used for traversal of PyTrees inside of C++ objects
     Float = t
 
@@ -111,7 +111,7 @@ def test05_traverse_py(t):
 @pytest.test_arrays("float32,-diff,shape=(*),jit")
 def test06_trampoline_traversal(t):
     """
-    Tests that classes inhereting from trampoline classes are traversed
+    Tests that classes inheriting from trampoline classes are traversed
     automatically.
     """
     pkg = get_pkg(t)
