@@ -100,7 +100,7 @@ def test05_traverse_py(t):
 
     result = []
 
-    def callback(index):
+    def callback(index, domain, variant):
         result.append(index)
 
     dr.detail.traverse_py_cb_ro(c, callback)
