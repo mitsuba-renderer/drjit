@@ -551,6 +551,7 @@ def test20_literal(t):
     function to be re-traced if they change. This is enabled by making the input
     opaque.
     """
+
     @dr.freeze
     def func(x, y):
         z = x + y
@@ -677,6 +678,11 @@ def test23_vcall(t, symbolic):
 @pytest.mark.parametrize("opaque", [True, False])
 @pytest.test_arrays("float32, -is_diff, jit, shape=(*)")
 def test24_vcall_optimize(t, symbolic, optimize, opaque):
+    """
+    Test a basic vcall being called inside a frozen function, with the
+    "OptimizeCalls" flag either being set or not set. As well as opaque and
+    non-opaque inputs.
+    """
     pkg = get_pkg(t)
 
     A, B, Base, BasePtr = pkg.A, pkg.B, pkg.Base, pkg.BasePtr
@@ -723,11 +729,6 @@ def test24_vcall_optimize(t, symbolic, optimize, opaque):
             xo = frozen(c, x)
 
     assert frozen.n_recordings == 1
-    # if opaque:
-    #     assert frozen.n_recordings == 1
-    # else:
-    #     assert frozen.n_recordings == 2
-
     assert dr.all(xo == func(c, x))
 
 
@@ -736,6 +737,10 @@ def test24_vcall_optimize(t, symbolic, optimize, opaque):
 @pytest.mark.parametrize("opaque", [True, False])
 @pytest.test_arrays("float32, -is_diff, jit, shape=(*)")
 def test25_multiple_vcalls(t, symbolic, optimize, opaque):
+    """
+    Test calling multiple vcalls in a frozen function, where the result of the
+    first is used as the input to the second.
+    """
     pkg = get_pkg(t)
 
     A, B, Base, BasePtr = pkg.A, pkg.B, pkg.Base, pkg.BasePtr
@@ -784,16 +789,15 @@ def test25_multiple_vcalls(t, symbolic, optimize, opaque):
             xo = frozen(c, x)
 
     assert frozen.n_recordings == 1
-    # if opaque:
-    #     assert frozen.n_recordings == 1
-    # else:
-    #     assert frozen.n_recordings == 2
 
     assert dr.all(xo == func(c, x))
 
 
 @pytest.test_arrays("float32, jit, shape=(*)")
 def test26_freeze(t):
+    """
+    Test freezing a simple frozen function.
+    """
     UInt32 = dr.uint32_array_t(t)
     Float = dr.float32_array_t(t)
 
@@ -818,6 +822,10 @@ def test26_freeze(t):
 @pytest.mark.parametrize("freeze_first", (True, False))
 @pytest.test_arrays("float32, jit, shape=(*)")
 def test27_calling_frozen_from_frozen(t, freeze_first):
+    """
+    Test calling a frozen function from within another frozen function.
+    The inner frozen function should behave as a normal function.
+    """
     mod = sys.modules[t.__module__]
     Float = mod.Float32
     Array3f = mod.Array3f
@@ -885,6 +893,9 @@ def test28_no_inputs(t):
 
 @pytest.test_arrays("float32, jit, shape=(*)")
 def test29_with_gathers(t):
+    """
+    Test gathering from an array at every second index in a frozen function.
+    """
     import numpy as np
 
     n = 20

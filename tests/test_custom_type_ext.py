@@ -110,8 +110,10 @@ def test05_traverse_py(t):
 
 @pytest.test_arrays("float32,-diff,shape=(*),jit")
 def test06_trampoline_traversal(t):
-    # Tests that classes inhereting from trampoline classes are traversed
-    # automatically
+    """
+    Tests that classes inhereting from trampoline classes are traversed
+    automatically.
+    """
     pkg = get_pkg(t)
     Float = t
 
