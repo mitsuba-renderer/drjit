@@ -5,6 +5,14 @@
 Changelog
 #########
 
+Version TBD (not yet released)
+------------------------------
+
+- Warning about NVIDIA drivers v565+ `b5fd886 <https://github.com/mitsuba-renderer/drjit-core/commit/b5fd886dcced5b7e5b229e94e2b9e702ae6aba46>`__
+- Support for boolean Python arguments in :py:func:`drjit.select` `d0c8811 <https://github.com/mitsuba-renderer/drjit/commit/d0c881187c9ec0def50ef3f6cde32dacd86a96b4>`__
+- Backend refactoring: vectorized calls are now also isolated per variant `17bc707 <https://github.com/mitsuba-renderer/drjit/commit/17bc7078918662b06c6e80c3b5f3ac1d5f9f118f>`__
+- Fixes to `dr::safe_cbrt` `2f8a3ab <https://github.com/mitsuba-renderer/drjit/commit/2f8a3ab1acbf8e187a0ef4e248d0f65c00e27e3f>`__
+
 DrJit 1.0.1 (November 23, 2024)
 -------------------------------
 
