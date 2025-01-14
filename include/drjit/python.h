@@ -55,8 +55,8 @@
 #include <drjit-core/python.h>
 #include <nanobind/stl/array.h>
 #include <nanobind/intrusive/counter.h>
-#include "nanobind/nanobind.h"
-#include "drjit/traversable_base.h"
+#include <nanobind/nanobind.h>
+#include <drjit/traversable_base.h>
 
 NAMESPACE_BEGIN(drjit)
 struct ArrayBinding;

@@ -1,32 +1,97 @@
 #pragma once
 
-#include "array_traverse.h"
-#include "drjit-core/macros.h"
-#include "nanobind/intrusive/counter.h"
-#include "nanobind/intrusive/ref.h"
+#include <drjit/fwd.h>
+#include <drjit/array_traverse.h>
+#include <drjit-core/macros.h>
+#include <nanobind/intrusive/counter.h>
+#include <nanobind/intrusive/ref.h>
 #include <drjit-core/jit.h>
 #include <drjit/map.h>
 
 NAMESPACE_BEGIN(drjit)
 
-#if !defined(DRJIT_EXPORT)
-#if defined(_MSC_VER)
-#define DRJIT_EXPORT __declspec(dllexport)
-#else
-#define DRJIT_EXPORT __attribute__((visibility("default")))
-#endif
-#endif
-
 NAMESPACE_BEGIN(detail)
-using traverse_callback_ro = void (*)(void *, uint64_t, const char *,
-                                      const char *);
-using traverse_callback_rw = uint64_t (*)(void *, uint64_t);
+/**
+ * The callback used to traverse all jit arrays of a C++ object such as a
+ * Mitsuba scene.
+ *
+ * \param payload:
+ *     To wrap closures, a payload can be provided to the ``traverse_1_cb_ro``
+ *     function, that is passed to the callback.
+ *
+ * \param index:
+ *     A non-owning index of the traversed jit array.
+ *
+ * \param variant:
+ *     If a ``JitArray`` has the attribute ``IsClass`` it is referring to a drjit
+ *     class. When such a variable is traversed, the ``variant`` and ``domain``
+ *     string of its ``CallSupport`` is provided to the callback using this
+ *     argument. Otherwise the string is equal to "".
+ *
+ * \param domain:
+ *     The domain of the ``CallSupport`` when traversing a class variable.
+ */
+using traverse_callback_ro = void (*)(void *payload, uint64_t index,
+                                      const char *variant, const char *domain);
+/**
+ * The callback used to traverse and modify all jit arrays of a C++ object such
+ * as a Mitsuba scene.
+ *
+ * \param payload:
+ *     To wrap closures, a payload can be provided to the ``traverse_1_cb_ro``
+ *     function, that is passed to the callback.
+ *
+ * \param index:
+ *     A non-owning index of the traversed jit array.
+ *
+ * \return
+ *     The new index of the traversed variable. This index is borrowed, and
+ *     should therefore be non-owning.
+ */
+using traverse_callback_rw = uint64_t (*)(void *payload, uint64_t index);
 NAMESPACE_END(detail)
 
-/// Interface for traversing C++ objects.
+/**
+ * Interface for traversing C++ objects.
+ *
+ * This interface should be inherited by any class that can be added to the
+ * registry. We try to ensure this by wrapping the function ``jit_registry_put``
+ * in the function ``drjit::registry_put`` that takes a ``TraversableBase`` for
+ * the pointer argument.
+ */
 struct DRJIT_EXPORT TraversableBase : public nanobind::intrusive_base {
-    virtual void traverse_1_cb_ro(void *, detail::traverse_callback_ro) const       = 0;
-    virtual void traverse_1_cb_rw(void *, detail::traverse_callback_rw) = 0;
+    /**
+     * Traverse all jit arrays in this c++ object. For every jit variable, the
+     * callback should be called, with the provided payload pointer.
+     *
+     * \param payload:
+     *    A pointer to a payload struct. The callback ``cb`` is called with this
+     *    pointer.
+     * \param cb:
+     *    A function pointer, that is called with the ``payload`` pointer, the
+     *    index of the jit variable, and optionally the domain and variant of a
+     *    ``Class`` variable.
+     */
+    virtual void traverse_1_cb_ro(void *payload,
+                                  detail::traverse_callback_ro cb) const = 0;
+    /**
+     * Traverse all jit arrays in this c++ object, and assign the output of the
+     * callback to them. For every jit variable, the callback should be called,
+     * with the provided payload pointer.
+     *
+     * \param payload:
+     *    A pointer to a payload struct. The callback ``cb`` is called with this
+     *    pointer.
+     * \param cb:
+     *    A function pointer, that is called with the ``payload`` pointer, the
+     *    index of the jit variable, and optionally the domain and variant of a
+     *    ``Class`` variable. The resulting index of calling this function
+     *    pointer will be assigned to the traversed variable. The return value
+     *    of the is borrowed from when overwriting assigning the traversed
+     *    variable.
+     */
+    virtual void traverse_1_cb_rw(void *payload,
+                                  detail::traverse_callback_rw cb) = 0;
 };
 
 /// Macro for generating call to traverse_1_fn_ro for a class member
