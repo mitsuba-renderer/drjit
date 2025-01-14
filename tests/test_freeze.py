@@ -21,6 +21,10 @@ def get_single_entry(x):
 
 @pytest.test_arrays("uint32, jit, shape=(*)")
 def test01_basic(t):
+    """
+    Tests a very basic frozen function, adding two integers x, y.
+    """
+
     @dr.freeze
     def func(x, y):
         return x + y
@@ -40,6 +44,11 @@ def test01_basic(t):
 
 @pytest.test_arrays("uint32, jit, shape=(*)")
 def test02_flush_kernel_cache(t):
+    """
+    Tests that flushing the kernel between recording and replaying a frozen
+    function causes the function to be re-traced.
+    """
+
     @dr.freeze
     def func(x, y):
         return x + y
@@ -61,6 +70,10 @@ def test02_flush_kernel_cache(t):
 
 @pytest.test_arrays("uint32, jit, shape=(*)")
 def test03_output_tuple(t):
+    """
+    Tests that returning tuples from frozen functions is possible.
+    """
+
     @dr.freeze
     def func(x, y):
         return (x + y, x * y)
@@ -82,6 +95,10 @@ def test03_output_tuple(t):
 
 @pytest.test_arrays("uint32, jit, shape=(*)")
 def test04_output_list(t):
+    """
+    Tests that returning lists from forzen functions is possible.
+    """
+
     @dr.freeze
     def func(x, y):
         return [x + y, x * y]
@@ -103,6 +120,10 @@ def test04_output_list(t):
 
 @pytest.test_arrays("uint32, jit, shape=(*)")
 def test05_output_dict(t):
+    """
+    Tests that returning dictionaries from forzen functions is possible.
+    """
+
     @dr.freeze
     def func(x, y):
         return {"add": x + y, "mul": x * y}
@@ -128,6 +149,10 @@ def test05_output_dict(t):
 
 @pytest.test_arrays("uint32, jit, shape=(*)")
 def test06_nested_tuple(t):
+    """
+    Tests that returning nested tuples from forzen functions is possible.
+    """
+
     @dr.freeze
     def func(x):
         return (x + 1, x + 2, (x + 3, x + 4))
@@ -145,6 +170,11 @@ def test06_nested_tuple(t):
 
 @pytest.test_arrays("uint32, jit, shape=(*)")
 def test07_drjit_struct(t):
+    """
+    Tests that returning custom classes, annotated with ``DRJIT_STRUCT`` from
+    forzen functions is possible.
+    """
+
     class Point:
         x: t
         y: t
@@ -176,6 +206,10 @@ def test07_drjit_struct(t):
 
 @pytest.test_arrays("uint32, jit, shape=(*)")
 def test08_dataclass(t):
+    """
+    Tests that returning custom dataclasses from forzen functions is possible.
+    """
+
     @dataclass
     class Point:
         x: t
@@ -205,6 +239,10 @@ def test08_dataclass(t):
 
 @pytest.test_arrays("float32, jit, shape=(*)")
 def test09_traverse_cb(t):
+    """
+    Tests that passing opaque C++ objects to frozen functions is possible.
+    It should not be possible to return these from frozen functions.
+    """
     pkg = get_pkg(t)
     Sampler = pkg.Sampler
 
@@ -238,6 +276,11 @@ def test09_traverse_cb(t):
 
 @pytest.test_arrays("uint32, jit, shape=(*)")
 def test10_scatter(t):
+    """
+    Tests that it is possible to scatter to the input of a frozen function,
+    while leaving variables depending on the input the same (scattering problem).
+    """
+
     @dr.freeze
     def func(x):
         dr.scatter(x, 0, dr.arange(t, 3))
@@ -260,6 +303,12 @@ def test10_scatter(t):
 
 @pytest.test_arrays("float32, jit, is_diff, shape=(*)")
 def test11_optimization(t):
+    """
+    Implements a simple gradient descent optimization of a variable in a
+    frozen function. This verifies that gradient descent kernels are evaluated
+    correctly.
+    """
+
     @dr.freeze
     def func(state, ref):
         for k, x in state.items():
@@ -287,6 +336,11 @@ def test11_optimization(t):
 
 @pytest.test_arrays("uint32, jit, shape=(*)")
 def test12_resized(t):
+    """
+    Tests that it is possible to call a frozen function with inputs of different
+    size compared to the recording without having to re-trace the function.
+    """
+
     @dr.freeze
     def func(x, y):
         return x + y
@@ -304,10 +358,17 @@ def test12_resized(t):
 
     o0 = func(i0, i1)
     assert dr.all(r0 == o0)
+    assert func.n_recordings == 1
 
 
 @pytest.test_arrays("uint32, jit, shape=(*)")
 def test13_changed_input_dict(t):
+    """
+    Test that it is possible to pass a dictionary to a frozen function, that is
+    inserting the result at a new key in said dictionary. This ensures that the
+    input is evaluated correctly, and the dictionary is back-assigned to the input.
+    """
+
     @dr.freeze
     def func(d: dict):
         d["y"] = d["x"] + 1
@@ -327,6 +388,11 @@ def test13_changed_input_dict(t):
 
 @pytest.test_arrays("uint32, jit, shape=(*)")
 def test14_changed_input_dataclass(t):
+    """
+    Tests that it is possible to asing to the input of a dataclass inside a
+    frozen function. This also relies on correct back-assignment of the input.
+    """
+
     @dataclass
     class Point:
         x: t
@@ -348,6 +414,11 @@ def test14_changed_input_dataclass(t):
 
 @pytest.test_arrays("uint32, jit, shape=(*)")
 def test15_kwargs(t):
+    """
+    Tests that it is possible to pass keyword arguments to a frozen function
+    that modifies them.
+    """
+
     @dr.freeze
     def func(x=t(0, 1, 2)):
         return x + 1
@@ -361,6 +432,12 @@ def test15_kwargs(t):
 
 @pytest.test_arrays("uint32, jit, shape=(*)")
 def test16_opaque(t):
+    """
+    Tests that changing from an opaque (1-sized array) to an array of size
+    larger than 1 causes the funcion to be re-traced. This is necessary, because
+    different kernels are compiled for the two cases.
+    """
+
     @dr.freeze
     def func(x, y):
         return x + y
@@ -382,6 +459,9 @@ def test16_opaque(t):
 
 @pytest.test_arrays("float32, jit, -is_diff, shape=(*)")
 def test17_performance(t):
+    """
+    Tests the performance of a frozen function versus a non-frozen function.
+    """
     import time
 
     n = 1024
@@ -415,6 +495,11 @@ def test17_performance(t):
 
 @pytest.test_arrays("uint32, jit, shape=(*)")
 def test18_aliasing(t):
+    """
+    Tests that changing the inputs from being the same variable to two different
+    variables causes the function to be re-traced.
+    """
+
     @dr.freeze
     def func(x, y):
         return x + y
@@ -438,19 +523,34 @@ def test18_aliasing(t):
 
 @pytest.test_arrays("uint32, jit, shape=(*)")
 def test19_non_jit_types(t):
-    @dr.freeze
+    """
+    Tests that it is possible to pass non-jit types such as integers to frozen
+    functions.
+    """
+
     def func(x, y):
         return x + y
 
-    x = t(1, 2, 3)
-    y = 1
+    frozen = dr.freeze(func)
 
-    # with pytest.raises(RuntimeError):
-    z = func(x, y)
+    for i in range(3):
+        x = t(1, 2, 3)
+        y = i
+
+        res = frozen(x, y)
+        ref = func(x, y)
+        assert dr.all(res == ref)
+
+    assert frozen.n_recordings == 3
 
 
 @pytest.test_arrays("uint32, jit, cuda, -is_diff, shape=(*)")
 def test20_literal(t):
+    """
+    Test that drjit literals, passed to frozen functions do not cause the
+    function to be re-traced if they change. This is enabled by making the input
+    opaque.
+    """
     @dr.freeze
     def func(x, y):
         z = x + y
@@ -482,6 +582,11 @@ def test20_literal(t):
 
 @pytest.test_arrays("uint32, jit, shape=(*)")
 def test21_pointers(t):
+    """
+    Test that it is possible to gather from a same-sized variable. This tests
+    the kernel size inference algorithm as well as having two kernels in a
+    frozen function.
+    """
     UInt32 = dr.uint32_array_t(t)
 
     @dr.freeze
@@ -532,6 +637,9 @@ def get_pkg(t):
 @pytest.mark.parametrize("symbolic", [True])
 @pytest.test_arrays("float32, jit, -is_diff, shape=(*)")
 def test23_vcall(t, symbolic):
+    """
+    Tests a basic symbolic vcall being called inside a frozen function.
+    """
     pkg = get_pkg(t)
 
     A, B, Base, BasePtr = pkg.A, pkg.B, pkg.Base, pkg.BasePtr
