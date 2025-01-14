@@ -5,7 +5,7 @@
 Changelog
 #########
 
-Version TBD (not yet released)
+DrJit 1.0.2 (January 14, 2025)
 ------------------------------
 
 - Warning about NVIDIA drivers v565+ `b5fd886 <https://github.com/mitsuba-renderer/drjit-core/commit/b5fd886dcced5b7e5b229e94e2b9e702ae6aba46>`__
