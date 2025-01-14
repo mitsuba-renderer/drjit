@@ -76,7 +76,6 @@ def test03_cpp_make_opaque(t):
 def test04_traverse_opaque(t):
     # Tests that it is possible to traverse an opaque C++ object
     pkg = get_pkg(t)
-    print(f"{dir(pkg)=}")
     Float = t
 
     v = dr.arange(Float, 10)
@@ -114,7 +113,6 @@ def test06_trampoline_traversal(t):
     # Tests that classes inhereting from trampoline classes are traversed
     # automatically
     pkg = get_pkg(t)
-    print(f"{dir(pkg)=}")
     Float = t
 
     v = dr.opaque(Float, 0, 3)
