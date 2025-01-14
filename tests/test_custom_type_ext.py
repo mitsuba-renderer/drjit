@@ -129,6 +129,4 @@ def test06_trampoline_traversal(t):
 
     b = B(v)
 
-    b.value()
-
     assert dr.detail.collect_indices(b) == [v.index]
