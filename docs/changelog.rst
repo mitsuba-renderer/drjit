@@ -5,7 +5,7 @@
 Changelog
 #########
 
-Version TBD (not yet released)
+DrJit 1.0.3 (January 16, 2025)
 ------------------------------
 
 - Fixes to :py:func:`drjit.wrap` `166be21 <https://github.com/mitsuba-renderer/drjit/pull/326/commits/166be21886e9fc66fe389cbc6f5becec1bfb3417>`__
