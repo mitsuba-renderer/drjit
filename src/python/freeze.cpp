@@ -981,7 +981,7 @@ void FlatVariables::traverse_with_registry(nb::handle h, TraverseContext &ctx) {
             uint32_t registry_bound =
                 jit_registry_id_bound(variant.c_str(), domain.c_str());
             uint32_t offset = registry_pointers.size();
-            registry_pointers.resize(registry_pointers.size() + registry_bound);
+            registry_pointers.resize(registry_pointers.size() + registry_bound, nullptr);
             jit_registry_get_pointers(variant.c_str(), domain.c_str(),
                                       &registry_pointers[offset]);
         }
@@ -1033,7 +1033,7 @@ void FlatVariables::assign_with_registry(nb::handle dst) {
             uint32_t registry_bound =
                 jit_registry_id_bound(variant.c_str(), domain.c_str());
             uint32_t offset = registry_pointers.size();
-            registry_pointers.resize(registry_pointers.size() + registry_bound);
+            registry_pointers.resize(registry_pointers.size() + registry_bound, nullptr);
             jit_registry_get_pointers(variant.c_str(), domain.c_str(),
                                       &registry_pointers[offset]);
         }
@@ -1189,7 +1189,7 @@ static void traverse_with_registry(const char *op, TraverseCallback &tc,
             uint32_t registry_bound =
                 jit_registry_id_bound(domain_callback.variant.c_str(), domain.c_str());
             uint32_t offset = registry_pointers.size();
-            registry_pointers.resize(registry_pointers.size() + registry_bound);
+            registry_pointers.resize(registry_pointers.size() + registry_bound, nullptr);
             jit_registry_get_pointers(domain_callback.variant.c_str(), domain.c_str(),
                                       &registry_pointers[offset]);
         }
