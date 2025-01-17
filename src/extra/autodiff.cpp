@@ -43,7 +43,7 @@
  */
 
 #include "common.h"
-#include "drjit/extra.h"
+#include <drjit/extra.h>
 #include <drjit-core/half.h>
 #include <drjit/jit.h>
 #include <drjit/math.h>
