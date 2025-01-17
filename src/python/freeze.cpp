@@ -19,10 +19,10 @@
 #include <bitset>
 #include <cxxabi.h>
 #include <ios>
-#include <optional>
 #include <ostream>
 #include <vector>
 
+#if !defined(NDEBUG)
 struct ProfilerPhase {
     std::string m_message;
     ProfilerPhase(const char *message) : m_message(message) {
@@ -46,6 +46,12 @@ struct ProfilerPhase {
         jit_log(LogLevel::Debug, "profiler end: %s", m_message.c_str());
     }
 };
+#else
+struct ProfilerPhase{
+    ProfilerPhase(const char */*message*/){}
+    ProfilerPhase(const drjit::TraversableBase */*traversable*/){}
+};
+#endif
 
 struct ADScopeContext {
     bool process_postponed;
@@ -218,7 +224,6 @@ uint32_t FlatVariables::add_size(uint32_t size) {
  */
 void FlatVariables::traverse_jit_index(uint32_t index, TraverseContext &ctx,
                                        nb::handle tp) {
-    // ProfilerPhase profiler("traverse_jit_index");
     VarInfo info           = jit_set_backend(index);
     JitBackend var_backend = info.backend;
     VarType vtype          = jit_var_type(index);
@@ -309,10 +314,7 @@ uint32_t FlatVariables::construct_jit_index(const Layout &layout) {
  */
 void FlatVariables::traverse_ad_index(uint64_t index, TraverseContext &ctx,
                                       nb::handle tp) {
-    // ProfilerPhase profiler("traverse_ad_index");
     int grad_enabled = ad_grad_enabled(index);
-    // jit_log(LogLevel::Debug, "traverse_ad_index(): a%u, r%u",
-    //         (uint32_t) (index >> 32), (uint32_t) index, grad_enabled);
     if (grad_enabled) {
         uint32_t ad_index = (uint32_t) (index >> 32);
 
