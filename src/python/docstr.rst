@@ -5972,11 +5972,14 @@
 
 .. topic:: JitFlag_KernelFreezing
 
-    Enable recording of functions annotated with :py:func:`freeze`.
+    Enable recording and replay of functions annotated with :py:func:`freeze`.
 
-    If KernelFreezing is enabled, all Dr.Jit operations executed in a function 
-    annotated with :py:func:`freeze` are recorded at it's first call and 
-    replayed on subsequent calls.
+    If KernelFreezing is enabled, all Dr.Jit operations executed in a function
+    annotated with :py:func:`freeze` are recorded at it's first call and
+    replayed without re-tracing on subsequent calls.
+
+    If this flag is disabled, replay of previously frozen functions is disabled
+    as well.
 
 .. topic:: JitFlag_Default
 
