@@ -1879,7 +1879,54 @@ def binary_search(start, end, pred):
     return start
 
 def freeze(f):
-    # TODO: maybe add doc here
+    '''
+    Decorator to freeze a function for replaying kernels without compilation.
+
+    This decorator wraps a function, and enables replaying it in order remove the
+    need for tracing python operations. The first time a frozen function is called,
+    it is executed regularly, while all operations performed are recorded. When the
+    frozen function is called again, with compatible arguments, the recorded
+    operations are replayed instead of launching the Python function. This saves on
+    the overhead that is inherent when tracing and compiling python operations into
+    kernels. The frozen function keeps a record of all previously recorded calls,
+    and associates them with the input layout. Since the kernels might be compiled
+    differently when changing certain attributes of variables, the frozen function
+    will be re-recorded if the inputs are no longer compatible with previous
+    recordings. We also track the layout of any container and the values of Python
+    types of the inputs to the frozen function. The following are the input
+    attributes which are tracked and might cause the function to be re-recorded if
+    changed.
+
+    - Python type of any variable or container
+    - Number of members in a container, such as the length of a list
+    - Key or field names, such as dictionary keys or dataclass field names
+    - The `Dr.Jit` type of any variable
+    - Whether a variable has size $1$
+    - Whether the memory, referenced by a variable is unaligned (only applies to
+      mapped NumPy arrays)
+    - Whether the variable has gradients enabled
+    - The sets of variables that have the same size
+    - The hash of any Python variable, that is not a Dr.Jit variable or a container
+
+    The width of a variable itself is not tracked, as we want to allow replaying of
+    kernels with different sizes. However, if multiple variables are scheduled and
+    evaluated at the same time, they can get compiled into the same kernel if their
+    size matches. Therefore, we track the size class of the variable, and re-record
+    the kernel if it changed. Because the size is not tracked it is leaked into the
+    frozen function context and we infer the size of kernels using a heuristic based
+    on the sizes of the input variables. This allows gathering from variables with
+    their width as an argument. However, using the size of a variable in more
+    complicated computations might lead to undefined behavior.
+
+    ```python
+    y = dr.gather(type(x), x, dr.width(x)//2)
+    ```
+
+    Similarly, calculating the mean of a variable relies on the number of entries,
+    which will be baked into the frozen function. To avoid this, we suggest
+    supplying the number of entries as a Dr.Jit literal in the arguments to the
+    function.
+    '''
     import functools
 
     class FrozenFunction:
