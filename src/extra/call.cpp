@@ -816,6 +816,9 @@ bool ad_call(JitBackend backend, const char *variant, const char *domain,
         if (domain)
             callable_count = jit_registry_id_bound(variant, domain);
 
+        if (callable_count == (size_t) -1)
+            jit_raise("ad_call(): 'callable_count' or 'domain' must be set!");
+
         size_t size = jit_var_size(index);
         if (mask) {
             size_t size_2 = jit_var_size(mask);
