@@ -1060,8 +1060,8 @@ template <typename T> void bind_all(ArrayBinding &b) {
 // Expose already existing object tree traversal callbacks (T::traverse_1_..) in Python.
 // This functionality is needed to traverse custom/opaque C++ classes and correctly
 // update their members when they are used in vectorized loops, function calls, etc.
-template <typename T, typename... Args>
-auto &bind_traverse(nanobind::class_<T, Args...> &cls) {
+template <typename T, typename... Args> auto &bind_traverse(nanobind::class_<T, Args...> &cls)
+{
     namespace nb = nanobind;
     struct Payload {
         nb::callable c;
