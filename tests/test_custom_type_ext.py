@@ -74,7 +74,9 @@ def test03_cpp_make_opaque(t):
 
 @pytest.test_arrays("float32,-diff,shape=(*),jit")
 def test04_traverse_opaque(t):
-    # Tests that it is possible to traverse an opaque C++ object
+    """
+    Tests that it is possible to traverse an opaque C++ object.
+    """
     pkg = get_pkg(t)
     Float = t
 
@@ -86,8 +88,10 @@ def test04_traverse_opaque(t):
 
 @pytest.test_arrays("float32,-diff,shape=(*),jit")
 def test05_traverse_py(t):
-    # Tests the implementation of `traverse_py_cb_ro`,
-    # used for traversal of PyTrees inside of C++ objects
+    """
+    Tests the implementation of ``traverse_py_cb_ro``, used for traversal of
+    PyTrees held by C++ objects.
+    """
     Float = t
 
     v = dr.arange(Float, 10)
