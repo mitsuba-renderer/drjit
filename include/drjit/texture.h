@@ -17,7 +17,7 @@
 #include <drjit/idiv.h>
 #include <drjit/jit.h>
 #include <drjit/tensor.h>
-#include "drjit/traversable_base.h"
+#include <drjit/traversable_base.h>
 
 #pragma once
 
