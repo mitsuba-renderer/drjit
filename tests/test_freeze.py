@@ -3,9 +3,9 @@ import pytest
 from dataclasses import dataclass
 import sys
 
-# dr.set_log_level(dr.LogLevel.Trace)
+dr.set_log_level(dr.LogLevel.Trace)
 # dr.set_flag(dr.JitFlag.KernelFreezing, True)
-# dr.set_flag(dr.JitFlag.ReuseIndices, False)
+dr.set_flag(dr.JitFlag.ReuseIndices, False)
 
 
 def get_single_entry(x):
@@ -2567,6 +2567,27 @@ def test63_method_decorator(t):
         res = c.frozen(x)
         ref = c.func(x)
 
+        assert dr.all(res == ref)
+
+@pytest.test_arrays("float32, jit, shape=(*)")
+def test64_tensor(t):
+    """
+    Tests that constructing tensors in frozen functions is possible, and does
+    not cause leaks.
+    """
+    mod = sys.modules[t.__module__]
+    Float32 = mod.Float32
+    TensorXf = mod.TensorXf
+
+    def func(x):
+        return TensorXf(x + 1)
+
+    frozen = dr.freeze(func)
+
+    for i in range(3):
+        x = dr.arange(Float32, 100)
+        ref = func(x)
+        res = frozen(x)
         assert dr.all(res == ref)
 
 

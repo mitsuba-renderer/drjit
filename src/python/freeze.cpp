@@ -762,11 +762,9 @@ nb::object FlatVariables::construct() {
         if (is_drjit_type(layout.type)) {
             const ArraySupplement &s = supp(layout.type);
             if (s.is_tensor) {
-                const Layout &array_layout = this->layout[layout_index++];
-                nb::object array =
-                    construct_ad_var(array_layout, layout.literal);
-
-                return layout.type(array, layout.py_object);
+                nb::object array = construct();
+                nb::object tensor = layout.type(array, layout.py_object);
+                return tensor;
             } else if (s.ndim != 1) {
                 auto result      = nb::inst_alloc_zero(layout.type);
                 dr::ArrayBase *p = inst_ptr(result);
