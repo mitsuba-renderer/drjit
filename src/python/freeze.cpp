@@ -145,7 +145,7 @@ static void log_layouts(const std::vector<Layout> &layouts, std::ostream &os,
 void FlatVariables::add_domain(const char *variant, const char *domain) {
     // Since it is not possible to pass nullptr strings to nanobind functions we
     // assume, that a valid domain indicates a valid variant. If the variant is
-    // emtpy at the end of traversal, we know that no Class variable was
+    // empty at the end of traversal, we know that no Class variable was
     // traversed, and registry traversal is not necessary.
     if (domain && variant && strcmp(domain, "") != 0) {
         jit_log(LogLevel::Debug, "variant=%s, domain=%s", variant, domain);
@@ -741,7 +741,7 @@ void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
 }
 
 /**
- * This is the counterpart to the traverse method, used to construct the
+ * This is the counterpart to the ``traverse`` method, used to construct the
  * output of a frozen function. Given a layout vector and flat_variables, it
  * re-constructs the PyTree.
  */
@@ -1118,6 +1118,9 @@ void traverse_traversable(drjit::TraversableBase *traversable,
     }
 }
 
+/**
+ * Traverses the PyTree and all registry domains referenced in it.
+ */
 static void traverse_with_registry(const char *op, TraverseCallback &tc,
                                    nb::handle h, bool rw = false) {
 
