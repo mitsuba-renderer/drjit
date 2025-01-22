@@ -3,9 +3,9 @@ import pytest
 from dataclasses import dataclass
 import sys
 
-dr.set_log_level(dr.LogLevel.Trace)
+# dr.set_log_level(dr.LogLevel.Trace)
 # dr.set_flag(dr.JitFlag.KernelFreezing, True)
-dr.set_flag(dr.JitFlag.ReuseIndices, False)
+# dr.set_flag(dr.JitFlag.ReuseIndices, False)
 
 
 def get_single_entry(x):
