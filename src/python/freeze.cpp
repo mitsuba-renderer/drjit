@@ -859,10 +859,7 @@ void FlatVariables::assign(nb::handle dst) {
 
             if (s.is_tensor) {
                 nb::handle array = s.tensor_array(dst.ptr());
-
-                Layout &array_layout = this->layout[layout_index++];
-
-                assign_ad_var(array_layout, array);
+                assign(nb::steal(array));
             } else if (s.ndim != 1) {
                 Py_ssize_t len = s.shape[0];
                 if (len == DRJIT_DYNAMIC)
