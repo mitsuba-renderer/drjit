@@ -70,6 +70,14 @@ struct Layout {
     nb::type_object type;
 
     bool operator==(const Layout &rhs) const;
+
+    Layout() = default;
+
+    Layout(const Layout &)            = delete;
+    Layout &operator=(const Layout &) = delete;
+
+    Layout(Layout &&)            = default;
+    Layout &operator=(Layout &&) = default;
 };
 
 
@@ -116,6 +124,12 @@ struct FlatVariables {
 
     FlatVariables() {}
     FlatVariables(bool borrow) : borrow(borrow) {}
+
+    FlatVariables(const FlatVariables &)            = delete;
+    FlatVariables &operator=(const FlatVariables &) = delete;
+
+    FlatVariables(FlatVariables &&)            = default;
+    FlatVariables &operator=(FlatVariables &&) = default;
 
     void clear() {
         this->layout_index = 0;
@@ -277,13 +291,27 @@ struct RecordingKey {
     RecordingKey(std::vector<Layout> layout, uint32_t flags)
         : layout(std::move(layout)), flags(flags) {}
 
+    RecordingKey(const RecordingKey &)          = delete;
+    RecordingKey &operator=(const RecordingKey) = delete;
+
+    RecordingKey(RecordingKey &&)            = default;
+    RecordingKey &operator=(RecordingKey &&) = default;
+
     bool operator==(const RecordingKey &rhs) const {
         return this->layout == rhs.layout && this->flags == rhs.flags;
     }
 };
 
 struct RecordingKeyHasher {
-    size_t operator()(const RecordingKey &key) const;
+    size_t operator()(const std::shared_ptr<RecordingKey> &key) const;
+};
+
+struct RecordingKeyEqual{
+    using is_transparent = void;
+    bool operator()(const std::shared_ptr<RecordingKey> &lhs,
+                    const std::shared_ptr<RecordingKey> &rhs) const {
+        return *lhs.get() == *rhs.get();
+    }
 };
 
 struct FunctionRecording {
@@ -325,9 +353,9 @@ struct FunctionRecording {
                       nb::list input, const FlatVariables &in_variables);
 };
 
-using RecordingMap =
-    tsl::robin_map<RecordingKey, std::unique_ptr<FunctionRecording>,
-                   RecordingKeyHasher>;
+using RecordingMap = tsl::robin_map<std::shared_ptr<RecordingKey>,
+                                    std::unique_ptr<FunctionRecording>,
+                                    RecordingKeyHasher, RecordingKeyEqual>;
 
 } // namespace detail
 
@@ -335,7 +363,7 @@ struct FrozenFunction {
     nb::callable func;
 
     detail::RecordingMap recordings;
-    detail::RecordingKey prev_key;
+    std::shared_ptr<detail::RecordingKey> prev_key;
     uint32_t recording_counter = 0;
 
     FrozenFunction(nb::callable func) : func(func) {}

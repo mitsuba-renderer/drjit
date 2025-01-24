@@ -239,7 +239,7 @@ void FlatVariables::traverse_jit_index(uint32_t index, TraverseContext &ctx,
         jit_raise("Pointer inputs not supported!");
     }
 
-    Layout layout;
+    Layout &layout = this->layout.emplace_back();
     if (tp)
         layout.type = nb::borrow<nb::type_object>(tp);
     layout.vs         = vs;
@@ -273,7 +273,6 @@ void FlatVariables::traverse_jit_index(uint32_t index, TraverseContext &ctx,
         jit_raise("collect(): found variable %u in unsupported state %u!",
                   index, (uint32_t) vs);
     }
-    this->layout.push_back(std::move(layout));
 }
 
 /**
@@ -311,7 +310,7 @@ void FlatVariables::traverse_ad_index(uint64_t index, TraverseContext &ctx,
     if (grad_enabled) {
         uint32_t ad_index = (uint32_t) (index >> 32);
 
-        Layout layout;
+        Layout &layout = this->layout.emplace_back();
         if (tp)
             layout.type = nb::borrow<nb::type_object>(tp);
         layout.num = 2;
@@ -325,8 +324,6 @@ void FlatVariables::traverse_ad_index(uint64_t index, TraverseContext &ctx,
         if (ctx.postponed && ctx.postponed->contains(ad_index)) {
             layout.flags |= (uint32_t) LayoutFlag::Postponed;
         }
-
-        this->layout.push_back(std::move(layout));
 
         traverse_jit_index((uint32_t) index, ctx, tp);
         uint32_t grad = ad_grad(index);
@@ -473,10 +470,9 @@ void FlatVariables::traverse_cb(const drjit::TraversableBase *traversable,
                                 TraverseContext &ctx, nb::object type) {
     ProfilerPhase profiler(traversable);
 
-    Layout layout;
-    layout.type         = nb::borrow<nb::type_object>(type);
     size_t layout_index = this->layout.size();
-    this->layout.push_back(std::move(layout));
+    Layout &layout = this->layout.emplace_back();
+    layout.type         = nb::borrow<nb::type_object>(type);
 
     uint32_t num_fileds = 0;
 
@@ -484,6 +480,7 @@ void FlatVariables::traverse_cb(const drjit::TraversableBase *traversable,
         FlatVariables *flat_vars;
         uint32_t num_fields;
         TraverseContext *ctx;
+        std::vector<uint64_t> indices;
     };
     Payload payload{ this, 0, &ctx };
     traversable->traverse_1_cb_ro(
@@ -493,10 +490,17 @@ void FlatVariables::traverse_cb(const drjit::TraversableBase *traversable,
                 return;
             Payload *payload = (Payload *) p;
             payload->num_fields++;
-            payload->flat_vars->traverse_ad_index(index, *payload->ctx);
+            payload->indices.push_back(index);
         });
 
-    this->layout[layout_index].num = payload.num_fields;
+    {
+        ProfilerPhase p("indices");
+        for (uint64_t index : payload.indices) {
+            this->traverse_ad_index(index, ctx);
+        }
+    }
+
+    layout.num = payload.num_fields;
 }
 
 /**
@@ -552,8 +556,9 @@ void FlatVariables::assign_cb(drjit::TraversableBase *traversable) {
             if (payload->field_counter >= payload->num_fields)
                 jit_raise("While traversing an object "
                           "for assigning inputs, the number of variables to "
-                          "assign did not match the number of variables "
-                          "traversed when recording!");
+                          "assign (%u) did not match the number of variables "
+                          "traversed when recording (%u)!",
+                          payload->field_counter, payload->num_fields);
             payload->field_counter++;
 
             return payload->flat_vars->assign_cb_internal(index, payload->tmp);
@@ -587,11 +592,10 @@ void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
             if (s.is_tensor) {
                 nb::handle array = s.tensor_array(h.ptr());
 
-                Layout layout;
+                Layout &layout = this->layout.emplace_back();
                 layout.type      = nb::borrow<nb::type_object>(tp);
                 layout.py_object = shape(h);
                 layout.literal   = width(array);
-                this->layout.push_back(layout);
 
                 traverse(nb::steal(array), ctx);
             } else if (s.ndim != 1) {
@@ -599,10 +603,9 @@ void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
                 if (len == DRJIT_DYNAMIC)
                     len = s.len(inst_ptr(h));
 
-                Layout layout;
+                Layout &layout = this->layout.emplace_back();
                 layout.type = nb::borrow<nb::type_object>(tp);
                 layout.num  = len;
-                this->layout.push_back(layout);
 
                 for (Py_ssize_t i = 0; i < len; ++i)
                     traverse(nb::steal(s.item(h.ptr(), i)), ctx);
@@ -612,10 +615,9 @@ void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
         } else if (tp.is(&PyTuple_Type)) {
             nb::tuple tuple = nb::borrow<nb::tuple>(h);
 
-            Layout layout;
+            Layout &layout = this->layout.emplace_back();
             layout.type = nb::borrow<nb::type_object>(tp);
             layout.num  = tuple.size();
-            this->layout.push_back(layout);
 
             for (nb::handle h2 : tuple) {
                 traverse(h2, ctx);
@@ -623,10 +625,9 @@ void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
         } else if (tp.is(&PyList_Type)) {
             nb::list list = nb::borrow<nb::list>(h);
 
-            Layout layout;
+            Layout &layout = this->layout.emplace_back();
             layout.type = nb::borrow<nb::type_object>(tp);
             layout.num  = list.size();
-            this->layout.push_back(layout);
 
             for (nb::handle h2 : list) {
                 traverse(h2, ctx);
@@ -634,54 +635,50 @@ void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
         } else if (tp.is(&PyDict_Type)) {
             nb::dict dict = nb::borrow<nb::dict>(h);
 
-            Layout layout;
+            Layout &layout = this->layout.emplace_back();
             layout.type = nb::borrow<nb::type_object>(tp);
             layout.num  = dict.size();
             layout.fields.reserve(layout.num);
             for (auto k : dict.keys()) {
                 layout.fields.push_back(nb::borrow(k));
             }
-            this->layout.push_back(layout);
 
             for (auto [k, v] : dict) {
                 traverse(v, ctx);
             }
         } else if (nb::dict ds = get_drjit_struct(tp); ds.is_valid()) {
 
-            Layout layout;
+            Layout &layout = this->layout.emplace_back();
             layout.type = nb::borrow<nb::type_object>(tp);
             layout.num  = ds.size();
             layout.fields.reserve(layout.num);
             for (auto k : ds.keys()) {
                 layout.fields.push_back(nb::borrow(k));
             }
-            this->layout.push_back(layout);
 
             for (auto [k, v] : ds) {
                 traverse(nb::getattr(h, k), ctx);
             }
         } else if (nb::object df = get_dataclass_fields(tp); df.is_valid()) {
 
-            Layout layout;
+            Layout &layout = this->layout.emplace_back();
             layout.type = nb::borrow<nb::type_object>(tp);
             for (auto field : df) {
                 nb::object k = field.attr(DR_STR(name));
                 layout.fields.push_back(nb::borrow(k));
             }
             layout.num = layout.fields.size();
-            this->layout.push_back(layout);
 
             for (nb::handle field : df) {
                 nb::object k = field.attr(DR_STR(name));
                 traverse(nb::getattr(h, k), ctx);
             }
-        } else if (nb::object cb = get_traverse_cb_ro(tp); cb.is_valid()) {
+        } else if (auto cb = get_traverse_cb_ro(tp); cb.is_valid()) {
             ProfilerPhase profiler("traverse cb");
 
-            Layout layout;
+            Layout &layout = this->layout.emplace_back();
             layout.type         = nb::borrow<nb::type_object>(tp);
             size_t layout_index = this->layout.size();
-            this->layout.push_back(layout);
 
             uint32_t num_fields = 0;
 
@@ -702,9 +699,8 @@ void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
             // Update layout number of fields
             this->layout[layout_index].num = num_fields;
         } else if (tp.is(&_PyNone_Type)) {
-            Layout layout;
+            Layout &layout = this->layout.emplace_back();
             layout.type = nb::borrow<nb::type_object>(tp);
-            this->layout.push_back(layout);
         } else {
             jit_log(LogLevel::Warn,
                     "traverse(): You passed a value to a frozen function, "
@@ -712,10 +708,9 @@ void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
                     "not recommended and the value will be cached.",
                     nb::type_name(tp).c_str());
 
-            Layout layout;
+            Layout &layout = this->layout.emplace_back();
             layout.type      = nb::borrow<nb::type_object>(tp);
             layout.py_object = nb::borrow<nb::object>(h);
-            this->layout.push_back(layout);
         }
     } catch (nb::python_error &e) {
         nb::raise_from(e, PyExc_RuntimeError,
@@ -912,9 +907,9 @@ void FlatVariables::assign(nb::handle dst) {
                        jit_raise(
                            "While traversing the object of type %s "
                            "for assigning inputs, the number of variables "
-                           "to assign did not match the number of "
-                           "variables traversed when recording!",
-                           nb::str(tp).c_str());
+                           "to assign (%u) did not match the number of "
+                           "variables traversed when recording(%u)!",
+                           nb::str(tp).c_str(), num_fields, layout.num);
                    return assign_cb_internal(index, tmp);
                }));
             if (num_fields != layout.num)
@@ -955,10 +950,9 @@ void FlatVariables::traverse_with_registry(nb::handle h, TraverseContext &ctx) {
     // Traverse the registry (if a class variable was traversed)
     if (!domains.empty()) {
         ProfilerPhase profiler("traverse_registry");
-        Layout layout;
+        Layout &layout = this->layout.emplace_back();
         layout.type         = nb::borrow<nb::type_object>(nb::none());
         size_t layout_index = this->layout.size();
-        this->layout.push_back(layout);
 
         uint32_t num_fields = 0;
 
@@ -1422,12 +1416,13 @@ inline void hash_combine(size_t &seed, size_t value) {
     seed = b * mult;
 }
 
-size_t RecordingKeyHasher::operator()(const RecordingKey &key) const {
+size_t
+RecordingKeyHasher::operator()(const std::shared_ptr<RecordingKey> &key) const {
     ProfilerPhase profiler("hash");
     // Hash the layout
     // NOTE: string hashing seems to be less efficient
-    size_t hash = key.layout.size();
-    for (const Layout &layout : key.layout) {
+    size_t hash = key->layout.size();
+    for (const Layout &layout : key->layout) {
         hash_combine(hash, layout.num);
         hash_combine(hash, layout.fields.size());
         hash_combine(hash, (size_t) layout.vt);
@@ -1445,7 +1440,7 @@ size_t RecordingKeyHasher::operator()(const RecordingKey &key) const {
         }
     }
 
-    hash_combine(hash, (size_t) key.flags);
+    hash_combine(hash, (size_t) key->flags);
 
     return hash;
 }
@@ -1674,12 +1669,18 @@ nb::object FrozenFunction::operator()(nb::args args, nb::kwargs kwargs) {
             in_variables.traverse_with_registry(input, ctx);
         }
 
+        // for (uint32_t i = 0; i < 10000; i++){
+        //     FlatVariables vars(true);
+        //     TraverseContext ctx;
+        //     vars.traverse_with_registry(input, ctx);
+        // }
+
         raise_if(in_variables.backend == JitBackend::None,
                  "freeze(): Cannot infer backend without providing input "
                  "variable to frozen function!");
 
         uint32_t flags = jit_flags();
-        auto key       = RecordingKey(std::move(in_variables.layout), flags);
+        auto key       = std::make_shared<RecordingKey>(RecordingKey(std::move(in_variables.layout), flags));
         auto it        = this->recordings.find(key);
 
         if (it == this->recordings.end()) {
@@ -1743,7 +1744,7 @@ nb::object FrozenFunction::operator()(nb::args args, nb::kwargs kwargs) {
 
 void FrozenFunction::clear() {
     recordings.clear();
-    prev_key          = RecordingKey();
+    prev_key          = std::make_shared<RecordingKey>(RecordingKey());
     recording_counter = 0;
 }
 
