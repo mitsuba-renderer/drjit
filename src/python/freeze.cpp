@@ -22,7 +22,6 @@
 #include <ostream>
 #include <vector>
 
-#if !defined(NDEBUG)
 struct ProfilerPhase {
     std::string m_message;
     ProfilerPhase(const char *message) : m_message(message) {
@@ -32,8 +31,8 @@ struct ProfilerPhase {
 
     ProfilerPhase(const drjit::TraversableBase *traversable) {
         int status;
+        char message[1024] = {0};
         const char *name = typeid(*traversable).name();
-        char *message    = (char *) std::malloc(1024);
         snprintf(message, 1024, "traverse_cb %s", name);
 
         jit_log(LogLevel::Debug, "profiler start: %s", message);
@@ -46,12 +45,6 @@ struct ProfilerPhase {
         jit_log(LogLevel::Debug, "profiler end: %s", m_message.c_str());
     }
 };
-#else
-struct ProfilerPhase{
-    ProfilerPhase(const char */*message*/){}
-    ProfilerPhase(const drjit::TraversableBase */*traversable*/){}
-};
-#endif
 
 struct ADScopeContext {
     bool process_postponed;
