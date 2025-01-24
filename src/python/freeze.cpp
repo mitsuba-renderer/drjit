@@ -678,7 +678,6 @@ void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
 
             Layout &layout = this->layout.emplace_back();
             layout.type         = nb::borrow<nb::type_object>(tp);
-            size_t layout_index = this->layout.size();
 
             uint32_t num_fields = 0;
 
@@ -697,7 +696,7 @@ void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
                }));
 
             // Update layout number of fields
-            this->layout[layout_index].num = num_fields;
+            layout.num = num_fields;
         } else if (tp.is(&_PyNone_Type)) {
             Layout &layout = this->layout.emplace_back();
             layout.type = nb::borrow<nb::type_object>(tp);
@@ -952,7 +951,6 @@ void FlatVariables::traverse_with_registry(nb::handle h, TraverseContext &ctx) {
         ProfilerPhase profiler("traverse_registry");
         Layout &layout = this->layout.emplace_back();
         layout.type         = nb::borrow<nb::type_object>(nb::none());
-        size_t layout_index = this->layout.size();
 
         uint32_t num_fields = 0;
 
@@ -990,7 +988,7 @@ void FlatVariables::traverse_with_registry(nb::handle h, TraverseContext &ctx) {
         }
         jit_log(LogLevel::Debug, "}");
 
-        this->layout[layout_index].num = num_fields;
+        layout.num = num_fields;
     }
 }
 
@@ -1669,11 +1667,11 @@ nb::object FrozenFunction::operator()(nb::args args, nb::kwargs kwargs) {
             in_variables.traverse_with_registry(input, ctx);
         }
 
-        // for (uint32_t i = 0; i < 10000; i++){
-        //     FlatVariables vars(true);
-        //     TraverseContext ctx;
-        //     vars.traverse_with_registry(input, ctx);
-        // }
+        for (uint32_t i = 0; i < 10000; i++){
+            FlatVariables vars(true);
+            TraverseContext ctx;
+            vars.traverse_with_registry(input, ctx);
+        }
 
         raise_if(in_variables.backend == JitBackend::None,
                  "freeze(): Cannot infer backend without providing input "
