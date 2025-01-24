@@ -470,9 +470,9 @@ void FlatVariables::traverse_cb(const drjit::TraversableBase *traversable,
                                 TraverseContext &ctx, nb::object type) {
     ProfilerPhase profiler(traversable);
 
-    size_t layout_index = this->layout.size();
-    Layout &layout = this->layout.emplace_back();
-    layout.type         = nb::borrow<nb::type_object>(type);
+    uint32_t layout_index = this->layout.size();
+    Layout &layout        = this->layout.emplace_back();
+    layout.type           = nb::borrow<nb::type_object>(type);
 
     uint32_t num_fileds = 0;
 
@@ -500,7 +500,7 @@ void FlatVariables::traverse_cb(const drjit::TraversableBase *traversable,
         }
     }
 
-    layout.num = payload.num_fields;
+    this->layout[layout_index].num = payload.num_fields;
 }
 
 /**
@@ -556,7 +556,7 @@ void FlatVariables::assign_cb(drjit::TraversableBase *traversable) {
             if (payload->field_counter >= payload->num_fields)
                 jit_raise("While traversing an object "
                           "for assigning inputs, the number of variables to "
-                          "assign (%u) did not match the number of variables "
+                          "assign (>%u) did not match the number of variables "
                           "traversed when recording (%u)!",
                           payload->field_counter, payload->num_fields);
             payload->field_counter++;
@@ -676,6 +676,7 @@ void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
         } else if (auto cb = get_traverse_cb_ro(tp); cb.is_valid()) {
             ProfilerPhase profiler("traverse cb");
 
+            uint32_t layout_index = this->layout.size();
             Layout &layout = this->layout.emplace_back();
             layout.type         = nb::borrow<nb::type_object>(tp);
 
@@ -696,7 +697,7 @@ void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
                }));
 
             // Update layout number of fields
-            layout.num = num_fields;
+            this->layout[layout_index].num = num_fields;
         } else if (tp.is(&_PyNone_Type)) {
             Layout &layout = this->layout.emplace_back();
             layout.type = nb::borrow<nb::type_object>(tp);
@@ -949,8 +950,9 @@ void FlatVariables::traverse_with_registry(nb::handle h, TraverseContext &ctx) {
     // Traverse the registry (if a class variable was traversed)
     if (!domains.empty()) {
         ProfilerPhase profiler("traverse_registry");
-        Layout &layout = this->layout.emplace_back();
-        layout.type         = nb::borrow<nb::type_object>(nb::none());
+        uint32_t layout_index = this->layout.size();
+        Layout &layout        = this->layout.emplace_back();
+        layout.type           = nb::borrow<nb::type_object>(nb::none());
 
         uint32_t num_fields = 0;
 
@@ -988,7 +990,7 @@ void FlatVariables::traverse_with_registry(nb::handle h, TraverseContext &ctx) {
         }
         jit_log(LogLevel::Debug, "}");
 
-        layout.num = num_fields;
+        this->layout[layout_index].num = num_fields;
     }
 }
 
@@ -1667,11 +1669,11 @@ nb::object FrozenFunction::operator()(nb::args args, nb::kwargs kwargs) {
             in_variables.traverse_with_registry(input, ctx);
         }
 
-        for (uint32_t i = 0; i < 10000; i++){
-            FlatVariables vars(true);
-            TraverseContext ctx;
-            vars.traverse_with_registry(input, ctx);
-        }
+        // for (uint32_t i = 0; i < 10000; i++){
+        //     FlatVariables vars(true);
+        //     TraverseContext ctx;
+        //     vars.traverse_with_registry(input, ctx);
+        // }
 
         raise_if(in_variables.backend == JitBackend::None,
                  "freeze(): Cannot infer backend without providing input "
