@@ -11,6 +11,7 @@
 #pragma once
 
 #include <drjit/python.h>
+#include <functional>
 #include <nanobind/stl/pair.h>
 #include "docstr.h"
 
@@ -90,8 +91,43 @@ inline nb::object get_dataclass_fields(nb::handle tp) {
 }
 
 /// Extract a read-only callback to traverse custom data structures
-inline nb::object get_traverse_cb_ro(nb::handle tp) {
-    return nb::getattr(tp, DR_STR(_traverse_1_cb_ro), nb::handle());
+// inline nb::object get_traverse_cb_ro(nb::handle tp) {
+//     return nb::getattr(tp, DR_STR(_traverse_1_cb_ro), nb::handle());
+// }
+inline auto get_traverse_cb_ro(nb::handle tp) {
+
+    auto traverse_1_cb_ro = nb::getattr(tp, DR_STR(_traverse_1_cb_ro), nb::handle());
+
+
+    struct Traverse{
+        nb::object traverse_1_cb_ro;
+
+        struct Payload {
+            std::function<void(uint64_t, const char *, const char *)> cb;
+        };
+
+        static void fn(void *p, uint64_t index, const char *variant, const char *domain){
+                ((Payload *) p)->cb(index, variant, domain);
+        }
+
+        void operator()(
+            nb::handle h,
+            std::function<void(uint64_t, const char *, const char *)> cb) {
+
+            Payload payload{ cb };
+
+            traverse_1_cb_ro(h, nb::capsule((void*)&payload), nb::capsule((void*)&Traverse::fn));
+
+        }
+
+        bool is_valid(){
+            return traverse_1_cb_ro.is_valid();
+        };
+    };
+
+    return Traverse{
+        traverse_1_cb_ro,
+    };
 }
 
 /// Extract a read-write callback to traverse custom data structures

@@ -681,20 +681,28 @@ void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
             layout.type         = nb::borrow<nb::type_object>(tp);
 
             uint32_t num_fields = 0;
+            std::vector<uint64_t> indices;
+            indices.reserve(4096);
 
             // Traverse the opaque C++ object
-            cb(h, nb::cpp_function([&](uint64_t index, const char *variant,
-                                       const char *domain) {
-                   if (!index)
-                       return;
-                   add_domain(variant, domain);
-                   jit_log(LogLevel::Debug,
-                           "traverse(): traverse_cb[%u] = a%u r%u", num_fields,
-                           (uint32_t) (index >> 32), (uint32_t) index);
-                   num_fields++;
-                   this->traverse_ad_index(index, ctx, nb::none());
-                   return;
-               }));
+            cb(h, [&](uint64_t index, const char *variant, const char *domain) {
+                if (!index)
+                    return;
+               add_domain(variant, domain);
+               jit_log(LogLevel::Debug, "traverse(): traverse_cb[%u] = a%u r%u",
+                       num_fields, (uint32_t) (index >> 32), (uint32_t) index);
+               num_fields++;
+               indices.push_back(index);
+               return;
+            });
+
+            {
+                ProfilerPhase p("indices");
+
+                for (uint64_t index : indices) {
+                    this->traverse_ad_index(index, ctx, nb::none());
+                }
+            }
 
             // Update layout number of fields
             this->layout[layout_index].num = num_fields;

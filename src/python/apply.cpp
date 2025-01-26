@@ -637,7 +637,7 @@ void traverse(const char *op, TraverseCallback &tc, nb::handle h,
                     nb::object k = field.attr(DR_STR(name));
                     traverse(op, tc, nb::getattr(h, k), rw);
                 }
-            } else if (nb::object cb = get_traverse_cb_ro(tp); cb.is_valid() && !rw) {
+            } else if (auto cb = get_traverse_cb_ro(tp); cb.is_valid() && !rw) {
                 cb(h, nb::cpp_function([&](uint64_t index, const char *variant,
                                            const char *domain) {
                        tc(index, variant, domain);
