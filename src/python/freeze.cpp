@@ -217,6 +217,8 @@ uint32_t FlatVariables::add_size(uint32_t size) {
  */
 void FlatVariables::traverse_jit_index(uint32_t index, TraverseContext &ctx,
                                        nb::handle tp) {
+    Layout &layout = this->layout.emplace_back();
+
     VarInfo info           = jit_set_backend(index);
     JitBackend var_backend = info.backend;
     VarType vt             = info.type;
@@ -239,7 +241,6 @@ void FlatVariables::traverse_jit_index(uint32_t index, TraverseContext &ctx,
         jit_raise("Pointer inputs not supported!");
     }
 
-    Layout &layout = this->layout.emplace_back();
     if (tp)
         layout.type = nb::borrow<nb::type_object>(tp);
     layout.vs         = vs;
@@ -255,13 +256,6 @@ void FlatVariables::traverse_jit_index(uint32_t index, TraverseContext &ctx,
         layout.index = var_size;
     } else if (vs == VarState::Evaluated) {
         // Special case, handling evaluated/opaque variables.
-
-        // void *data   = nullptr;
-        // uint32_t tmp = jit_var_data(index, &data);
-        // if (tmp != index)
-        //     jit_fail("traverse(): The evaluated variable index changed during "
-        //              "evaluation!");
-        // jit_var_dec_ref(tmp);
 
         layout.index = this->add_variable_index(index);
 
@@ -279,21 +273,30 @@ void FlatVariables::traverse_jit_index(uint32_t index, TraverseContext &ctx,
  * Construct a variable, given it's layout.
  * This is the counterpart to `traverse_jit_index`.
  */
-uint32_t FlatVariables::construct_jit_index(const Layout &layout) {
-    if (layout.vs == VarState::Literal) {
-        uint32_t index = jit_var_literal(this->backend, layout.vt,
-                                         &layout.literal, layout.index);
+uint32_t FlatVariables::construct_jit_index(uint32_t prev_index) {
+    Layout &layout = this->layout[layout_index++];
 
-        return index;
+    uint32_t index;
+    if (layout.vs == VarState::Literal) {
+        index = jit_var_literal(this->backend, layout.vt, &layout.literal,
+                                layout.index);
+
     } else {
-        uint32_t index = this->variables[layout.index];
+        index = this->variables[layout.index];
         jit_log(LogLevel::Debug, "    uses output[%u] = r%u", layout.index,
                 index);
 
         jit_var_inc_ref(index);
-
-        return index;
     }
+
+    if (prev_index) {
+        if (layout.vt != (VarType) jit_var_type(prev_index))
+            jit_fail("VarType missmatch %u != %u while assigning (r%u) "
+                     "-> (r%u)!",
+                     (uint32_t) layout.vt, (uint32_t) jit_var_type(prev_index),
+                     (uint32_t) prev_index, (uint32_t) index);
+    }
+    return index;
 }
 
 /**
@@ -306,11 +309,12 @@ uint32_t FlatVariables::construct_jit_index(const Layout &layout) {
  */
 void FlatVariables::traverse_ad_index(uint64_t index, TraverseContext &ctx,
                                       nb::handle tp) {
+    Layout &layout = this->layout.emplace_back();
+
     int grad_enabled = ad_grad_enabled(index);
     if (grad_enabled) {
         uint32_t ad_index = (uint32_t) (index >> 32);
 
-        Layout &layout = this->layout.emplace_back();
         if (tp)
             layout.type = nb::borrow<nb::type_object>(tp);
         layout.num = 2;
@@ -345,18 +349,16 @@ void FlatVariables::traverse_ad_index(uint64_t index, TraverseContext &ctx,
  *
  * It returns an owning reference.
  */
-uint64_t FlatVariables::construct_ad_index(const Layout &layout,
-                                           uint32_t shrink,
+uint64_t FlatVariables::construct_ad_index(uint32_t shrink,
                                            uint64_t prev_index) {
+    Layout &layout = this->layout[this->layout_index++];
+
     uint64_t index;
     if ((layout.flags & (uint32_t) LayoutFlag::GradEnabled) != 0) {
         bool postponed = (layout.flags & (uint32_t) LayoutFlag::Postponed);
 
-        Layout &val_layout = this->layout[layout_index++];
-        uint32_t val       = construct_jit_index(val_layout);
-
-        Layout &grad_layout = this->layout[layout_index++];
-        uint32_t grad       = construct_jit_index(grad_layout);
+        uint32_t val = construct_jit_index();
+        uint32_t grad = construct_jit_index();
 
         // Resize the gradient if it is a literal
         if ((VarState) jit_var_state(grad) == VarState::Literal) {
@@ -389,12 +391,23 @@ uint64_t FlatVariables::construct_ad_index(const Layout &layout,
         if (ad_index && postponed) {
             ad_enqueue(drjit::ADMode::Backward, index);
         }
+
+        if (prev_index) {
+            if (layout.vt != (VarType) jit_var_type(prev_index))
+                jit_fail(
+                    "VarType missmatch %u != %u while assigning (a%u, r%u) "
+                    "-> (a%u, r%u)!",
+                    (uint32_t) layout.vt, (uint32_t) jit_var_type(prev_index),
+                    (uint32_t) (prev_index >> 32), (uint32_t) prev_index,
+                    (uint32_t) (index >> 32), (uint32_t) index);
+        }
     } else {
-        index = construct_jit_index(layout);
+        index = construct_jit_index(prev_index);
     }
 
     if (shrink > 0)
         index = ad_var_shrink(index, shrink);
+
     return index;
 }
 
@@ -424,7 +437,7 @@ void FlatVariables::traverse_ad_var(nb::handle h, TraverseContext &ctx) {
  */
 nb::object FlatVariables::construct_ad_var(const Layout &layout,
                                            uint32_t shrink) {
-    uint64_t index = construct_ad_index(layout, shrink);
+    uint64_t index = construct_ad_index(shrink);
 
     auto result              = nb::inst_alloc_zero(layout.type);
     const ArraySupplement &s = supp(result.type());
@@ -450,9 +463,9 @@ void FlatVariables::assign_ad_var(Layout &layout, nb::handle dst) {
     uint64_t index;
     if (s.index) {
         // ``construct_ad_index`` is used for assignment
-        index = construct_ad_index(layout, 0, s.index(inst_ptr(dst)));
+        index = construct_ad_index(0, s.index(inst_ptr(dst)));
     } else
-        index = construct_ad_index(layout);
+        index = construct_ad_index();
 
     s.reset_index(index, inst_ptr(dst));
     jit_log(LogLevel::Debug, "index=%zu, grad_enabled=%u, ad_grad_enabled=%u",
@@ -485,10 +498,11 @@ void FlatVariables::traverse_cb(const drjit::TraversableBase *traversable,
     Payload payload{ this, 0, &ctx };
     traversable->traverse_1_cb_ro(
         (void *) &payload,
-        [](void *p, uint64_t index, const char *, const char *) {
+        [](void *p, uint64_t index, const char *variant, const char *domain) {
             if (!index)
                 return;
             Payload *payload = (Payload *) p;
+            payload->flat_vars->add_domain(variant, domain);
             payload->num_fields++;
             payload->indices.push_back(index);
         });
@@ -516,16 +530,8 @@ uint64_t FlatVariables::assign_cb_internal(uint64_t index,
                                            index64_vector &tmp) {
     if (!index)
         return index;
-    Layout &layout = this->layout[layout_index++];
 
-    uint64_t new_index = this->construct_ad_index(layout, 0, index);
-
-    if (layout.vt != (VarType) jit_var_type(index))
-        jit_raise("VarType missmatch %u != %u while assigning (a%u, r%u) "
-                  "-> (a%u, r%u)!",
-                  (uint32_t) layout.vt, (uint32_t) jit_var_type(index),
-                  (uint32_t) (index >> 32), (uint32_t) index,
-                  (uint32_t) (new_index >> 32), (uint32_t) new_index);
+    uint64_t new_index = this->construct_ad_index(0, index);
 
     tmp.push_back_steal(new_index);
     return new_index;
@@ -544,7 +550,6 @@ void FlatVariables::assign_cb(drjit::TraversableBase *traversable) {
         uint32_t num_fields;
         uint32_t field_counter;
     };
-    jit_log(LogLevel::Debug, "    layout.num=%u", layout.num);
     Payload payload{ this, index64_vector(), (uint32_t) layout.num, 0 };
     traversable->traverse_1_cb_rw(
         (void *) &payload, [](void *p, uint64_t index) {
@@ -587,13 +592,14 @@ void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
     jit_log(LogLevel::Debug, "FlatVariables::traverse(): %s {", tp_name);
 
     try {
+        uint32_t layout_index = this->layout.size();
+        Layout &layout = this->layout.emplace_back();
+        layout.type = nb::borrow<nb::type_object>(tp);
         if (is_drjit_type(tp)) {
             const ArraySupplement &s = supp(tp);
             if (s.is_tensor) {
                 nb::handle array = s.tensor_array(h.ptr());
 
-                Layout &layout = this->layout.emplace_back();
-                layout.type      = nb::borrow<nb::type_object>(tp);
                 layout.py_object = shape(h);
                 layout.literal   = width(array);
 
@@ -603,8 +609,6 @@ void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
                 if (len == DRJIT_DYNAMIC)
                     len = s.len(inst_ptr(h));
 
-                Layout &layout = this->layout.emplace_back();
-                layout.type = nb::borrow<nb::type_object>(tp);
                 layout.num  = len;
 
                 for (Py_ssize_t i = 0; i < len; ++i)
@@ -615,8 +619,6 @@ void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
         } else if (tp.is(&PyTuple_Type)) {
             nb::tuple tuple = nb::borrow<nb::tuple>(h);
 
-            Layout &layout = this->layout.emplace_back();
-            layout.type = nb::borrow<nb::type_object>(tp);
             layout.num  = tuple.size();
 
             for (nb::handle h2 : tuple) {
@@ -625,8 +627,6 @@ void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
         } else if (tp.is(&PyList_Type)) {
             nb::list list = nb::borrow<nb::list>(h);
 
-            Layout &layout = this->layout.emplace_back();
-            layout.type = nb::borrow<nb::type_object>(tp);
             layout.num  = list.size();
 
             for (nb::handle h2 : list) {
@@ -635,8 +635,6 @@ void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
         } else if (tp.is(&PyDict_Type)) {
             nb::dict dict = nb::borrow<nb::dict>(h);
 
-            Layout &layout = this->layout.emplace_back();
-            layout.type = nb::borrow<nb::type_object>(tp);
             layout.num  = dict.size();
             layout.fields.reserve(layout.num);
             for (auto k : dict.keys()) {
@@ -648,8 +646,6 @@ void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
             }
         } else if (nb::dict ds = get_drjit_struct(tp); ds.is_valid()) {
 
-            Layout &layout = this->layout.emplace_back();
-            layout.type = nb::borrow<nb::type_object>(tp);
             layout.num  = ds.size();
             layout.fields.reserve(layout.num);
             for (auto k : ds.keys()) {
@@ -661,8 +657,6 @@ void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
             }
         } else if (nb::object df = get_dataclass_fields(tp); df.is_valid()) {
 
-            Layout &layout = this->layout.emplace_back();
-            layout.type = nb::borrow<nb::type_object>(tp);
             for (auto field : df) {
                 nb::object k = field.attr(DR_STR(name));
                 layout.fields.push_back(nb::borrow(k));
@@ -673,28 +667,29 @@ void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
                 nb::object k = field.attr(DR_STR(name));
                 traverse(nb::getattr(h, k), ctx);
             }
+        } else if (auto traversable = get_traversable_base(h); traversable) {
+            traverse_cb(traversable, ctx, nb::borrow<nb::type_object>(tp));
         } else if (auto cb = get_traverse_cb_ro(tp); cb.is_valid()) {
             ProfilerPhase profiler("traverse cb");
-
-            uint32_t layout_index = this->layout.size();
-            Layout &layout = this->layout.emplace_back();
-            layout.type         = nb::borrow<nb::type_object>(tp);
 
             uint32_t num_fields = 0;
             std::vector<uint64_t> indices;
             indices.reserve(4096);
 
             // Traverse the opaque C++ object
-            cb(h, [&](uint64_t index, const char *variant, const char *domain) {
-                if (!index)
-                    return;
-               add_domain(variant, domain);
-               jit_log(LogLevel::Debug, "traverse(): traverse_cb[%u] = a%u r%u",
-                       num_fields, (uint32_t) (index >> 32), (uint32_t) index);
-               num_fields++;
-               indices.push_back(index);
-               return;
-            });
+            cb(h, nb::cpp_function([&](uint64_t index, const char *variant,
+                                       const char *domain) {
+                   if (!index)
+                       return;
+                   add_domain(variant, domain);
+                   // jit_log(LogLevel::Debug, "traverse(): traverse_cb[%u] =
+                   // a%u r%u",
+                   //         num_fields, (uint32_t) (index >> 32), (uint32_t)
+                   //         index);
+                   num_fields++;
+                   indices.push_back(index);
+                   return;
+               }));
 
             {
                 ProfilerPhase p("indices");
@@ -707,8 +702,6 @@ void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
             // Update layout number of fields
             this->layout[layout_index].num = num_fields;
         } else if (tp.is(&_PyNone_Type)) {
-            Layout &layout = this->layout.emplace_back();
-            layout.type = nb::borrow<nb::type_object>(tp);
         } else {
             jit_log(LogLevel::Warn,
                     "traverse(): You passed a value to a frozen function, "
@@ -716,8 +709,6 @@ void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
                     "not recommended and the value will be cached.",
                     nb::type_name(tp).c_str());
 
-            Layout &layout = this->layout.emplace_back();
-            layout.type      = nb::borrow<nb::type_object>(tp);
             layout.py_object = nb::borrow<nb::object>(h);
         }
     } catch (nb::python_error &e) {
@@ -828,6 +819,8 @@ nb::object FlatVariables::construct() {
                         nb::type_name(layout.type).ptr(), e.what());
         nb::raise_python_error();
     }
+
+    jit_log(LogLevel::Debug, "}");
 }
 
 /**
@@ -838,15 +831,13 @@ void FlatVariables::assign(nb::handle dst) {
     nb::handle tp  = dst.type();
     Layout &layout = this->layout[layout_index++];
 
-    auto tp_name        = nb::type_name(tp).c_str();
-    auto layout_tp_name = nb::type_name(layout.type).c_str();
-    jit_log(LogLevel::Debug, "FlatVariables::assign(): %s with %s {", tp_name,
-            layout_tp_name);
+    jit_log(LogLevel::Debug, "FlatVariables::assign(): %s with %s {",
+            nb::type_name(tp).c_str(), nb::type_name(layout.type).c_str());
 
     if (!layout.type.equal(tp))
-        nb::raise(
-            "Type missmatch! Type of the object when recording %s does not "
-            "match type of object that is assigned %s.",
+        jit_fail(
+            "Type missmatch! Type of the object when recording (%s) does not "
+            "match type of object that is assigned (%s).",
             nb::type_name(tp).c_str(), nb::type_name(layout.type).c_str());
 
     try {
@@ -900,6 +891,8 @@ void FlatVariables::assign(nb::handle dst) {
                 else
                     nb::setattr(dst, k, construct());
             }
+        } else if (auto traversable = get_traversable_base(dst); traversable) {
+            assign_cb(traversable);
         } else if (nb::object cb = get_traverse_cb_rw(tp); cb.is_valid()) {
             index64_vector tmp;
             uint32_t num_fields = 0;
@@ -915,7 +908,7 @@ void FlatVariables::assign(nb::handle dst) {
                        jit_raise(
                            "While traversing the object of type %s "
                            "for assigning inputs, the number of variables "
-                           "to assign (%u) did not match the number of "
+                           "to assign (>%u) did not match the number of "
                            "variables traversed when recording(%u)!",
                            nb::str(tp).c_str(), num_fields, layout.num);
                    return assign_cb_internal(index, tmp);

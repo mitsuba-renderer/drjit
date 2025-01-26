@@ -216,7 +216,7 @@ struct FlatVariables {
      * Construct a variable, given it's layout.
      * This is the counterpart to `traverse_jit_index`.
      */
-    uint32_t construct_jit_index(const Layout &layout);
+    uint32_t construct_jit_index(uint32_t prev_index = 0);
 
     /**
      * Construct/assign the variable index given a layout.
@@ -229,7 +229,7 @@ struct FlatVariables {
      *
      * It returns an owning reference.
      */
-    uint64_t construct_ad_index(const Layout &layout, uint32_t shrink = 0,
+    uint64_t construct_ad_index(uint32_t shrink = 0,
                                 uint64_t prev_index = 0);
 
     /**

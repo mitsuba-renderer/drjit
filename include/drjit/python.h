@@ -1067,10 +1067,15 @@ template <typename T, typename... Args> auto &bind_traverse(nanobind::class_<T, 
         nb::callable c;
     };
 
-    cls.def("_traverse_1_cb_ro", [](const T *self, nb::capsule payload,
-                                    nb::capsule fn) {
-        self->traverse_1_cb_ro(payload.data(),
-                               (drjit::detail::traverse_callback_ro) fn.data());
+    static_assert(std::is_base_of_v<TraversableBase, T>);
+
+    cls.def("_traverse_1_cb_ro", [](T *self, nb::callable c) {
+        Payload payload{ std::move(c) };
+        self->traverse_1_cb_ro((void *) &payload,
+                               [](void *p, uint64_t index, const char *variant,
+                                  const char *domain) {
+                                   ((Payload *) p)->c(index, variant, domain);
+                               });
     });
 
     cls.def("_traverse_1_cb_rw", [](T *self, nb::callable c) {
