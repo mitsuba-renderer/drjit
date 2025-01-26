@@ -309,10 +309,14 @@ uint32_t FlatVariables::construct_jit_index(uint32_t prev_index) {
  */
 void FlatVariables::traverse_ad_index(uint64_t index, TraverseContext &ctx,
                                       nb::handle tp) {
-    Layout &layout = this->layout.emplace_back();
-
+    // NOTE: instead of emplacing a Layout representing the ad variable always,
+    // we only do so if the gradients have been enabled. We use this format,
+    // since most variables will not be ad enabled. The layout therefore has to
+    // be peeked in ``construct_ad_index`` before descending if an ad or jit
+    // index should be constructed/assigned.
     int grad_enabled = ad_grad_enabled(index);
     if (grad_enabled) {
+        Layout &layout = this->layout.emplace_back();
         uint32_t ad_index = (uint32_t) (index >> 32);
 
         if (tp)
@@ -351,10 +355,11 @@ void FlatVariables::traverse_ad_index(uint64_t index, TraverseContext &ctx,
  */
 uint64_t FlatVariables::construct_ad_index(uint32_t shrink,
                                            uint64_t prev_index) {
-    Layout &layout = this->layout[this->layout_index++];
+    Layout &layout = this->layout[this->layout_index];
 
     uint64_t index;
     if ((layout.flags & (uint32_t) LayoutFlag::GradEnabled) != 0) {
+        Layout &layout = this->layout[this->layout_index++];
         bool postponed = (layout.flags & (uint32_t) LayoutFlag::Postponed);
 
         uint32_t val = construct_jit_index();
@@ -1670,11 +1675,12 @@ nb::object FrozenFunction::operator()(nb::args args, nb::kwargs kwargs) {
             in_variables.traverse_with_registry(input, ctx);
         }
 
-        // for (uint32_t i = 0; i < 10000; i++){
-        //     FlatVariables vars(true);
-        //     TraverseContext ctx;
-        //     vars.traverse_with_registry(input, ctx);
-        // }
+        for (uint32_t i = 0; i < 10000; i++){
+            FlatVariables vars(true);
+            TraverseContext ctx;
+            vars.traverse_with_registry(input, ctx);
+            jit_log(LogLevel::Warn, "vars.layout.size()=%u", vars.layout.size());
+        }
 
         raise_if(in_variables.backend == JitBackend::None,
                  "freeze(): Cannot infer backend without providing input "
