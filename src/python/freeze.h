@@ -119,11 +119,8 @@ struct FlatVariables {
     std::string variant;
     std::vector<std::string> domains;
 
-    // Whether variables should be borrowed, instead of stealing them
-    bool borrow = true;
-
-    FlatVariables() {}
-    FlatVariables(bool borrow) : borrow(borrow) {}
+    FlatVariables() {
+    }
 
     FlatVariables(const FlatVariables &)            = delete;
     FlatVariables &operator=(const FlatVariables &) = delete;
@@ -138,10 +135,13 @@ struct FlatVariables {
         this->layout.clear();
         this->backend = JitBackend::None;
     }
+    void borrow(){
+        for (uint32_t &index : this->variables)
+            jit_var_inc_ref(index);
+    }
     void release() {
-        for (uint32_t &index : this->variables) {
+        for (uint32_t &index : this->variables)
             jit_var_dec_ref(index);
-        }
     }
 
     void add_domain(const char *variant, const char *domain);

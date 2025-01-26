@@ -177,8 +177,6 @@ uint32_t FlatVariables::add_variable_index(uint32_t variable_index) {
     bool inserted = result.second;
 
     if (inserted) {
-        if (borrow)
-            jit_var_inc_ref(variable_index);
         this->variables.push_back(variable_index);
         return next_slot;
     } else {
@@ -1651,7 +1649,7 @@ nb::object FrozenFunction::operator()(nb::args args, nb::kwargs kwargs) {
         input.append(args);
         input.append(kwargs);
 
-        FlatVariables in_variables(true);
+        FlatVariables in_variables;
         // Evaluate and traverse input variables (args and kwargs)
         {
             // Enter Resume scope, so we can track gradients
@@ -1673,14 +1671,20 @@ nb::object FrozenFunction::operator()(nb::args args, nb::kwargs kwargs) {
             jit_log(LogLevel::Debug, "freeze(): Traversing input.");
             TraverseContext ctx;
             in_variables.traverse_with_registry(input, ctx);
+            // In order to prevent issues with scattering, we borrow all input
+            // variables, incrementing their refcount.
+            in_variables.borrow();
         }
 
-        for (uint32_t i = 0; i < 10000; i++){
-            FlatVariables vars(true);
-            TraverseContext ctx;
-            vars.traverse_with_registry(input, ctx);
-            jit_log(LogLevel::Warn, "vars.layout.size()=%u", vars.layout.size());
-        }
+        // for (uint32_t i = 0; i < 10000; i++){
+        //     FlatVariables vars;
+        //     TraverseContext ctx;
+        //     vars.traverse_with_registry(input, ctx);
+        //     vars.borrow();
+        //     vars.release();
+        //     // jit_log(LogLevel::Warn, "vars.layout.size()=%u",
+        //     vars.layout.size());
+        // }
 
         raise_if(in_variables.backend == JitBackend::None,
                  "freeze(): Cannot infer backend without providing input "
@@ -1733,14 +1737,13 @@ nb::object FrozenFunction::operator()(nb::args args, nb::kwargs kwargs) {
             this->recordings.insert({ std::move(key), std::move(recording) });
 
         } else {
-            // Drop references to variables
-
             FunctionRecording *recording = it.value().get();
 
             {
                 result = recording->replay(func, this, input, in_variables);
             }
 
+            // Drop references to variables
             in_variables.release();
         }
     }
