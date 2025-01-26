@@ -219,10 +219,10 @@ void FlatVariables::traverse_jit_index(uint32_t index, TraverseContext &ctx,
                                        nb::handle tp) {
     VarInfo info           = jit_set_backend(index);
     JitBackend var_backend = info.backend;
-    VarType vtype          = jit_var_type(index);
-    uint32_t var_size      = jit_var_size(index);
-    VarState vs            = jit_var_state(index);
-    bool unaligned         = jit_var_is_unaligned(index);
+    VarType vt             = info.type;
+    uint32_t var_size      = info.size;
+    VarState vs = info.state;
+    bool unaligned = info.unaligned;
 
     if (backend == var_backend || this->backend == JitBackend::None) {
         backend = var_backend;
@@ -233,7 +233,7 @@ void FlatVariables::traverse_jit_index(uint32_t index, TraverseContext &ctx,
                   backend == JitBackend::CUDA ? "CUDA" : "LLVM");
     }
 
-    if (vtype == VarType::Pointer) {
+    if (vt == VarType::Pointer) {
         // We do not support pointers as inputs. It might be possible with
         // some extra handling, but they are never used directly.
         jit_raise("Pointer inputs not supported!");
@@ -243,25 +243,25 @@ void FlatVariables::traverse_jit_index(uint32_t index, TraverseContext &ctx,
     if (tp)
         layout.type = nb::borrow<nb::type_object>(tp);
     layout.vs         = vs;
-    layout.vt         = vtype;
+    layout.vt         = vt;
     layout.size_index = this->add_size(var_size);
 
     if (vs == VarState::Literal) {
         // Special case, where the variable is a literal. This should not
         // occur, as all literals are made opaque in beforehand, however it
         // is nice to have a fallback.
-        jit_var_read(index, 0, &layout.literal);
+        layout.literal = info.literal;
         // Store size in index variable, as this is not used for literals
         layout.index = var_size;
     } else if (vs == VarState::Evaluated) {
         // Special case, handling evaluated/opaque variables.
 
-        void *data   = nullptr;
-        uint32_t tmp = jit_var_data(index, &data);
-        if (tmp != index)
-            jit_fail("traverse(): The evaluated variable index changed during "
-                     "evaluation!");
-        jit_var_dec_ref(tmp);
+        // void *data   = nullptr;
+        // uint32_t tmp = jit_var_data(index, &data);
+        // if (tmp != index)
+        //     jit_fail("traverse(): The evaluated variable index changed during "
+        //              "evaluation!");
+        // jit_var_dec_ref(tmp);
 
         layout.index = this->add_variable_index(index);
 
