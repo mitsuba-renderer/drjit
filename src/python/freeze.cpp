@@ -492,23 +492,16 @@ void FlatVariables::traverse_cb(const drjit::TraversableBase *traversable,
 
     uint32_t num_fileds = 0;
 
-    std::vector<uint64_t> indices;
-
     traversable->traverse_1_cb_ro(
-        [&indices, this](uint64_t index, const char *variant, const char *domain) {
+        [this, &ctx, &num_fileds](uint64_t index, const char *variant, const char *domain) {
             if (!index)
                 return;
             add_domain(variant, domain);
-            indices.push_back(index);
-        });
-    {
-        ProfilerPhase p("indices");
-        for (uint64_t index : indices) {
             this->traverse_ad_index(index, ctx);
-        }
-    }
+            num_fileds++;
+        });
 
-    this->layout[layout_index].num = indices.size();
+    this->layout[layout_index].num = num_fileds;
 }
 
 /**
@@ -656,7 +649,7 @@ void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
         } else if (auto traversable = get_traversable_base(h); traversable) {
             traverse_cb(traversable, ctx, nb::borrow<nb::type_object>(tp));
         } else if (auto cb = get_traverse_cb_ro(tp); cb.is_valid()) {
-            ProfilerPhase profiler("traverse cb");
+            // ProfilerPhase profiler("traverse cb");
 
             uint32_t num_fields = 0;
             std::vector<uint64_t> indices;
@@ -668,17 +661,13 @@ void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
                    if (!index)
                        return;
                    add_domain(variant, domain);
-                   // jit_log(LogLevel::Debug, "traverse(): traverse_cb[%u] =
-                   // a%u r%u",
-                   //         num_fields, (uint32_t) (index >> 32), (uint32_t)
-                   //         index);
                    num_fields++;
                    indices.push_back(index);
                    return;
                }));
 
             {
-                ProfilerPhase p("indices");
+                // ProfilerPhase p("indices");
 
                 for (uint64_t index : indices) {
                     this->traverse_ad_index(index, ctx, nb::none());
@@ -1225,8 +1214,7 @@ static void deep_make_opaque(nb::handle h, bool eval = true,
             if (!index)
                 return index;
             uint64_t new_index;
-            jit_log(LogLevel::Debug, "    schedule a%u, r%u",
-                    (uint32_t) (index >> 32), (uint32_t) index);
+            //         (uint32_t) (index >> 32), (uint32_t) index);
             if (ad_grad_enabled(index)) {
 
                 uint32_t grad = ad_grad(index);
@@ -1238,8 +1226,6 @@ static void deep_make_opaque(nb::handle h, bool eval = true,
                             "   scheduled ad-variable a%u, r%u -> a%u, r%u",
                             (uint32_t) (index >> 32), (uint32_t) index,
                             (uint32_t) (new_index >> 32), (uint32_t) new_index);
-                    jit_log(LogLevel::Debug, "    state=%u",
-                            jit_var_state(new_index));
                     result = true;
                 }
 
@@ -1250,8 +1236,6 @@ static void deep_make_opaque(nb::handle h, bool eval = true,
                     jit_log(LogLevel::Debug,
                             "    scheduled gradient r%u -> r%u", grad,
                             new_grad);
-                    jit_log(LogLevel::Debug, "    state=%u",
-                            jit_var_state(new_grad));
                     result = true;
                 }
 
@@ -1269,9 +1253,6 @@ static void deep_make_opaque(nb::handle h, bool eval = true,
                     result = true;
                 }
             }
-
-            jit_log(LogLevel::Debug, "    return a%u, r%u",
-                    (uint32_t) (new_index >> 32), (uint32_t) new_index);
 
             release_list.push_back_steal(new_index);
             return new_index;
