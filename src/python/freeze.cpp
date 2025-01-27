@@ -492,32 +492,23 @@ void FlatVariables::traverse_cb(const drjit::TraversableBase *traversable,
 
     uint32_t num_fileds = 0;
 
-    struct Payload {
-        FlatVariables *flat_vars;
-        uint32_t num_fields;
-        TraverseContext *ctx;
-        std::vector<uint64_t> indices;
-    };
-    Payload payload{ this, 0, &ctx };
+    std::vector<uint64_t> indices;
+
     traversable->traverse_1_cb_ro(
-        (void *) &payload,
-        [](void *p, uint64_t index, const char *variant, const char *domain) {
+        [&indices, this](uint64_t index, const char *variant, const char *domain) {
             if (!index)
                 return;
-            Payload *payload = (Payload *) p;
-            payload->flat_vars->add_domain(variant, domain);
-            payload->num_fields++;
-            payload->indices.push_back(index);
+            add_domain(variant, domain);
+            indices.push_back(index);
         });
-
     {
         ProfilerPhase p("indices");
-        for (uint64_t index : payload.indices) {
+        for (uint64_t index : indices) {
             this->traverse_ad_index(index, ctx);
         }
     }
 
-    this->layout[layout_index].num = payload.num_fields;
+    this->layout[layout_index].num = indices.size();
 }
 
 /**
@@ -547,31 +538,23 @@ uint64_t FlatVariables::assign_cb_internal(uint64_t index,
 void FlatVariables::assign_cb(drjit::TraversableBase *traversable) {
     Layout &layout = this->layout[layout_index++];
 
-    struct Payload {
-        FlatVariables *flat_vars;
-        index64_vector tmp;
-        uint32_t num_fields;
-        uint32_t field_counter;
-    };
-    Payload payload{ this, index64_vector(), (uint32_t) layout.num, 0 };
+    index64_vector tmp;
+    uint32_t field_counter = 0;
     traversable->traverse_1_cb_rw(
-        (void *) &payload, [](void *p, uint64_t index) {
+        [&field_counter, &tmp, &layout, this](uint64_t index) {
             if (!index)
                 return index;
-            Payload *payload = (Payload *) p;
-            jit_log(LogLevel::Debug, "    field_counter=%u",
-                    payload->field_counter);
-            if (payload->field_counter >= payload->num_fields)
+            if (field_counter >= layout.num)
                 jit_raise("While traversing an object "
                           "for assigning inputs, the number of variables to "
                           "assign (>%u) did not match the number of variables "
                           "traversed when recording (%u)!",
-                          payload->field_counter, payload->num_fields);
-            payload->field_counter++;
-
-            return payload->flat_vars->assign_cb_internal(index, payload->tmp);
+                          field_counter, layout.num);
+            field_counter++;
+            return assign_cb_internal(index, tmp);
         });
-    if (payload.field_counter != layout.num)
+
+    if (field_counter != layout.num)
         jit_raise("While traversing and object for assigning inputs, the "
                   "number of variables to assign did not match the number "
                   "of variables traversed when recording!");

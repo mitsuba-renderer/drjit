@@ -3,6 +3,7 @@
 #include <drjit/fwd.h>
 #include <drjit/array_traverse.h>
 #include <drjit-core/macros.h>
+#include <functional>
 #include <nanobind/intrusive/counter.h>
 #include <nanobind/intrusive/ref.h>
 #include <drjit-core/jit.h>
@@ -82,6 +83,25 @@ struct DRJIT_EXPORT TraversableBase : public nanobind::intrusive_base {
      */
     virtual void traverse_1_cb_ro(void *payload,
                                   detail::traverse_callback_ro cb) const = 0;
+
+    // Helper function, wrapping the ``traverse_1_cb_ro`` function, and allowing
+    // traversal with a ``std::function``.
+    void
+    traverse_1_cb_ro(std::function<void(uint64_t index, const char *variant,
+                                        const char *domain)>
+                         cb) const {
+        struct Payload{
+            std::function<void(uint64_t index, const char *variant, const char *domain)> cb;
+        };
+        Payload payload{cb};
+        traverse_1_cb_ro((void *) &payload,
+                         [](void *p, uint64_t index, const char *variant,
+                            const char *domain) {
+                             Payload *payload = (Payload *) p;
+                             payload->cb(index, variant, domain);
+                         });
+    }
+
     /**
      * \brief Traverse all jit arrays in this c++ object, and assign the output of the
      *     callback to them. For every jit variable, the callback should be called,
@@ -100,6 +120,20 @@ struct DRJIT_EXPORT TraversableBase : public nanobind::intrusive_base {
      */
     virtual void traverse_1_cb_rw(void *payload,
                                   detail::traverse_callback_rw cb) = 0;
+
+    // Helper function, wrapping the ``traverse_1_cb_rw`` function, and allowing
+    // traversal with a ``std::function``.
+    void traverse_1_cb_rw(std::function<uint64_t(uint64_t index)> cb) {
+        struct Payload {
+            std::function<uint64_t(uint64_t index)> cb;
+        };
+        Payload payload{ cb };
+        traverse_1_cb_rw((void *) &payload,
+                         [](void *p, uint64_t index) -> uint64_t {
+                             Payload *payload = (Payload *) p;
+                             return payload->cb(index);
+                         });
+    }
 };
 
 /**

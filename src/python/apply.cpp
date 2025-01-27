@@ -637,6 +637,19 @@ void traverse(const char *op, TraverseCallback &tc, nb::handle h,
                     nb::object k = field.attr(DR_STR(name));
                     traverse(op, tc, nb::getattr(h, k), rw);
                 }
+            } else if (auto traversable = get_traversable_base(h);
+                       traversable) {
+                if (rw) {
+                    traversable->traverse_1_cb_rw([&tc](uint64_t index) {
+                        return tc(index, nullptr, nullptr);
+                    });
+                } else {
+                    traversable->traverse_1_cb_ro([&tc](uint64_t index,
+                                                        const char *variant,
+                                                        const char *domain) {
+                        tc(index, variant, domain);
+                    });
+                }
             } else if (auto cb = get_traverse_cb_ro(tp); cb.is_valid() && !rw) {
                 cb(h, nb::cpp_function([&](uint64_t index, const char *variant,
                                            const char *domain) {

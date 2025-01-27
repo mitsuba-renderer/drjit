@@ -120,6 +120,9 @@ struct FlatVariables {
     std::vector<std::string> domains;
 
     FlatVariables() {
+        layout.reserve(16384);
+        index_to_slot.reserve(16384);
+        size_to_slot.reserve(16384);
     }
 
     FlatVariables(const FlatVariables &)            = delete;
@@ -318,7 +321,7 @@ struct FunctionRecording {
     Recording *recording = nullptr;
     FlatVariables out_variables;
 
-    FunctionRecording() : out_variables(false) {}
+    FunctionRecording() : out_variables() {}
     FunctionRecording(const FunctionRecording &)            = delete;
     FunctionRecording &operator=(const FunctionRecording &) = delete;
     FunctionRecording(FunctionRecording &&)                 = default;
@@ -336,7 +339,7 @@ struct FunctionRecording {
             jit_freeze_destroy(this->recording);
         }
         this->recording     = nullptr;
-        this->out_variables = FlatVariables(false);
+        this->out_variables = FlatVariables();
     }
 
     /*
