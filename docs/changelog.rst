@@ -5,6 +5,11 @@
 Changelog
 #########
 
+DrJit 1.0.4 (January 28, 2025)
+------------------------------
+
+- Workaround for OptiX linking issue in driver version R570+ `0c9c54e <https://github.com/mitsuba-renderer/drjit-core/commit/0c9c54ec5c2963dd576c5a16d10fb2d63d67166f>`__
+
 DrJit 1.0.3 (January 16, 2025)
 ------------------------------
 
