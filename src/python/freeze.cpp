@@ -26,7 +26,9 @@ struct ProfilerPhase {
     std::string m_message;
     ProfilerPhase(const char *message) : m_message(message) {
         jit_log(LogLevel::Debug, "profiler start: %s", message);
+#if defined(DRJIT_ENABLE_NVTX)
         jit_profile_range_push(message);
+#endif
     }
 
     ProfilerPhase(const drjit::TraversableBase *traversable) {
@@ -41,7 +43,9 @@ struct ProfilerPhase {
     }
 
     ~ProfilerPhase() {
+#if defined(DRJIT_ENABLE_NVTX)
         jit_profile_range_pop();
+#endif
         jit_log(LogLevel::Debug, "profiler end: %s", m_message.c_str());
     }
 };
@@ -649,7 +653,7 @@ void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
         } else if (auto traversable = get_traversable_base(h); traversable) {
             traverse_cb(traversable, ctx, nb::borrow<nb::type_object>(tp));
         } else if (auto cb = get_traverse_cb_ro(tp); cb.is_valid()) {
-            // ProfilerPhase profiler("traverse cb");
+            ProfilerPhase profiler("traverse cb");
 
             uint32_t num_fields = 0;
             std::vector<uint64_t> indices;
@@ -1646,8 +1650,8 @@ nb::object FrozenFunction::operator()(nb::args args, nb::kwargs kwargs) {
         //     vars.traverse_with_registry(input, ctx);
         //     vars.borrow();
         //     vars.release();
-        //     // jit_log(LogLevel::Warn, "vars.layout.size()=%u",
-        //     vars.layout.size());
+        //     jit_log(LogLevel::Warn, "vars.layout.size()=%u",
+        //             vars.layout.size());
         // }
 
         raise_if(in_variables.backend == JitBackend::None,
