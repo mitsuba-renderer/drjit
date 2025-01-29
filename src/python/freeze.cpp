@@ -219,6 +219,7 @@ uint32_t FlatVariables::add_size(uint32_t size) {
  */
 void FlatVariables::traverse_jit_index(uint32_t index, TraverseContext &ctx,
                                        nb::handle tp) {
+    (void) ctx;
     Layout &layout = this->layout.emplace_back();
 
     VarInfo info           = jit_set_backend(index);
@@ -829,13 +830,20 @@ void FlatVariables::assign(nb::handle dst) {
             }
         } else if (tp.is(&PyTuple_Type)) {
             nb::tuple tuple = nb::borrow<nb::tuple>(dst);
-            raise_if(tuple.size() != layout.num, "");
+            raise_if(
+                tuple.size() != layout.num,
+                "The number of objects in this tuple changed from %u to %u "
+                "while recording the function.",
+                layout.num, (uint32_t) tuple.size());
 
             for (nb::handle h2 : tuple)
                 assign(h2);
         } else if (tp.is(&PyList_Type)) {
             nb::list list = nb::borrow<nb::list>(dst);
-            raise_if(list.size() != layout.num, "");
+            raise_if(list.size() != layout.num,
+                     "The number of objects in this list changed from %u to %u "
+                     "while recording the function.",
+                     layout.num, (uint32_t) list.size());
 
             for (nb::handle h2 : list)
                 assign(h2);
@@ -1194,8 +1202,8 @@ static void deep_make_opaque(nb::handle h, bool eval = true,
                 s.reset_index(operator()(s.index(inst_ptr(h))), inst_ptr(h));
         }
 
-        uint64_t operator()(uint64_t index, const char *variant = nullptr,
-                            const char *domain = nullptr) override {
+        uint64_t operator()(uint64_t index, const char * /*variant*/ = nullptr,
+                            const char * /*domain*/ = nullptr) override {
             if (!index)
                 return index;
             uint64_t new_index;
@@ -1288,8 +1296,8 @@ static void deep_eval(nb::handle h, bool eval = true) {
                               inst_ptr(h));
         }
 
-        uint64_t operator()(uint64_t index, const char *variant,
-                            const char *domain) override {
+        uint64_t operator()(uint64_t index, const char * /*variant*/,
+                            const char * /*domain*/) override {
             if (ad_grad_enabled(index)) {
                 int rv = 0;
 
@@ -1505,8 +1513,7 @@ nb::object FunctionRecording::record(nb::callable func,
         jit_log(LogLevel::Debug, "Construct:");
         output = nb::borrow<nb::object>(out_variables.construct());
         // NOTE: temporarily disable this to not enqueue twice
-        // jit_log(LogLevel::Debug, "Assign:");
-        // out_variables.assign(input);
+        out_variables.assign(input);
         out_variables.layout_index = 0;
     }
 
@@ -1709,23 +1716,10 @@ void FrozenFunction::clear() {
 
 FrozenFunction freeze(nb::callable func) { return FrozenFunction(func); }
 
-void export_freeze(nb::module_ &m) {
-    // m.def("freeze", &freeze, doc_freeze);
+void export_freeze(nb::module_ & /*m*/) {
     nb::module_ d = nb::module_::import_("drjit.detail");
     nb::class_<FrozenFunction>(d, "FrozenFunction")
         .def(nb::init<nb::callable>())
-        // .def("__get__",
-        //      [](nb::object self, nb::object instance, nb::object) {
-        //          if (instance.is_none()) {
-        //              return self;
-        //          } else {
-        //              return nb::cpp_function(
-        //                  [self, instance](nb::args args, nb::kwargs kwargs) {
-        //                      return self(instance, *args, **kwargs);
-        //                  },
-        //                  nb::rv_policy::move);
-        //          }
-        //      })
         .def_prop_ro(
             "n_cached_recordings",
             [](FrozenFunction &self) { return self.saved_recordings(); })
