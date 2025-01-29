@@ -20,6 +20,7 @@
 #include <cxxabi.h>
 #include <ios>
 #include <ostream>
+#include <sstream>
 #include <vector>
 
 struct ProfilerPhase {
@@ -1657,10 +1658,10 @@ nb::object FrozenFunction::operator()(nb::args args, nb::kwargs kwargs) {
                         "Function input missmatch! Function will be retraced.");
 
                 std::ostringstream repr;
-                repr << key;
+                repr << *key;
 
                 std::ostringstream repr_prev;
-                repr_prev << prev_key;
+                repr_prev << *prev_key;
 
                 jit_log(LogLevel::Debug, "new key: %s", repr.str().c_str());
                 jit_log(LogLevel::Debug, "old key: %s",
