@@ -640,8 +640,10 @@ void traverse(const char *op, TraverseCallback &tc, nb::handle h,
             } else if (auto traversable = get_traversable_base(h);
                        traversable) {
                 if (rw) {
-                    traversable->traverse_1_cb_rw([&tc](uint64_t index) {
-                        return tc(index, nullptr, nullptr);
+                    traversable->traverse_1_cb_rw([&tc](uint64_t index,
+                                                        const char *variant,
+                                                        const char *domain) {
+                        return tc(index, variant, domain);
                     });
                 } else {
                     traversable->traverse_1_cb_ro([&tc](uint64_t index,
@@ -657,8 +659,9 @@ void traverse(const char *op, TraverseCallback &tc, nb::handle h,
                    }));
             } else if (nb::object cb = get_traverse_cb_rw(tp);
                        cb.is_valid() && rw) {
-                cb(h, nb::cpp_function([&](uint64_t index) {
-                       return tc(index, nullptr, nullptr);
+                cb(h, nb::cpp_function([&](uint64_t index, const char *variant,
+                                           const char *domain) {
+                       return tc(index, variant, domain);
                    }));
             } else {
                 tc.traverse_unknown(h);
@@ -917,7 +920,9 @@ nb::object transform(const char *op, TransformCallback &tc, nb::handle h) {
                 }
                 result = tp(**tmp);
             } else if (nb::object cb = get_traverse_cb_rw(tp); cb.is_valid()) {
-                cb(h, nb::cpp_function([&](uint64_t index) { return tc(index); }));
+                cb(h,
+                   nb::cpp_function([&](uint64_t index, const char *,
+                                        const char *) { return tc(index); }));
                 result = nb::borrow(h);
             } else if (!result.is_valid()) {
                result = tc.transform_unknown(h);

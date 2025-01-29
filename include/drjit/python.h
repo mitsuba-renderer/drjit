@@ -1080,8 +1080,11 @@ template <typename T, typename... Args> auto &bind_traverse(nanobind::class_<T, 
 
     cls.def("_traverse_1_cb_rw", [](T *self, nb::callable c) {
         Payload payload{ std::move(c) };
-        self->traverse_1_cb_rw((void *) &payload, [](void *p, uint64_t index) {
-            return nb::cast<uint64_t>(((Payload *) p)->c(index));
+        self->traverse_1_cb_rw((void *) &payload, [](void *p, uint64_t index,
+                                                     const char *variant,
+                                                     const char *domain) {
+            return nb::cast<uint64_t>(
+                ((Payload *) p)->c(index, variant, domain));
         });
     });
 
@@ -1108,7 +1111,8 @@ inline void traverse_py_cb_ro(const TraversableBase *base, void *payload,
 }
 
 inline void traverse_py_cb_rw(TraversableBase *base, void *payload,
-                              uint64_t (*fn)(void *, uint64_t)) {
+                              uint64_t (*fn)(void *, uint64_t, const char *,
+                                             const char *)) {
 
     namespace nb    = nanobind;
     nb::handle self = base->self_py();
@@ -1119,8 +1123,10 @@ inline void traverse_py_cb_rw(TraversableBase *base, void *payload,
     nb::callable traverse_py_cb_rw =
         nb::borrow<nb::callable>(nb::getattr(detail, "traverse_py_cb_rw"));
 
-    traverse_py_cb_rw(self, nb::cpp_function([&](uint64_t index) {
-                          return fn(payload, index);
+    traverse_py_cb_rw(self,
+                      nb::cpp_function([&](uint64_t index, const char *variant,
+                                           const char *domain) {
+                          return fn(payload, index, variant, domain);
                       }));
 }
 

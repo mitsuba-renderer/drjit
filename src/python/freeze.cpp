@@ -488,7 +488,7 @@ void FlatVariables::assign_ad_var(Layout &layout, nb::handle dst) {
  */
 void FlatVariables::traverse_cb(const drjit::TraversableBase *traversable,
                                 TraverseContext &ctx, nb::object type) {
-    ProfilerPhase profiler(traversable);
+    // ProfilerPhase profiler(traversable);
 
     uint32_t layout_index = this->layout.size();
     Layout &layout        = this->layout.emplace_back();
@@ -538,7 +538,8 @@ void FlatVariables::assign_cb(drjit::TraversableBase *traversable) {
     index64_vector tmp;
     uint32_t field_counter = 0;
     traversable->traverse_1_cb_rw(
-        [&field_counter, &tmp, &layout, this](uint64_t index) {
+        [&field_counter, &tmp, &layout, this](uint64_t index, const char *,
+                                              const char *) {
             if (!index)
                 return index;
             if (field_counter >= layout.num)
@@ -866,7 +867,8 @@ void FlatVariables::assign(nb::handle dst) {
             index64_vector tmp;
             uint32_t num_fields = 0;
 
-            cb(dst, nb::cpp_function([&](uint64_t index) {
+            cb(dst, nb::cpp_function([&](uint64_t index, const char *,
+                                         const char *) {
                    if (!index)
                        return index;
                    jit_log(LogLevel::Debug,
@@ -1048,25 +1050,15 @@ std::ostream &operator<<(std::ostream &os, const FlatVariables &r) {
 
 void traverse_traversable(drjit::TraversableBase *traversable,
                           TraverseCallback &cb, bool rw = false) {
-    struct Payload {
-        TraverseCallback &cb;
-    };
-    Payload payload{ cb };
     if (rw) {
         traversable->traverse_1_cb_rw(
-            (void *) &payload, [](void *p, uint64_t index) {
-                Payload *payload = (Payload *) p;
-
-                uint64_t new_index = payload->cb(index);
+            [&cb](uint64_t index, const char *, const char *) -> uint64_t {
+                uint64_t new_index = cb(index);
                 return new_index;
             });
     } else {
         traversable->traverse_1_cb_ro(
-            (void *) &payload,
-            [](void *p, uint64_t index, const char *, const char *) {
-                Payload *payload = (Payload *) p;
-                payload->cb(index);
-            });
+            [&cb](uint64_t index, const char *, const char *) { cb(index); });
     }
 }
 
@@ -1082,6 +1074,7 @@ static void traverse_with_registry(const char *op, TraverseCallback &tc,
 
         std::string variant;
         std::vector<std::string> domains;
+        TraverseCallback *internal;
 
         void add_domain(const char *variant, const char *domain) {
             // Since it is not possible to pass nullptr strings to nanobind
@@ -1120,22 +1113,21 @@ static void traverse_with_registry(const char *op, TraverseCallback &tc,
             if (s.is_class && s.index) {
                 auto variant = nb::borrow<nb::str>(nb::getattr(h, "Variant"));
                 auto domain  = nb::borrow<nb::str>(nb::getattr(h, "Domain"));
-                if (s.index)
-                    operator()(s.index(inst_ptr(h)), variant.c_str(),
-                               domain.c_str());
+                add_domain(variant.c_str(), domain.c_str());
 
-            } else if (s.index)
-                operator()(s.index(inst_ptr(h)), nullptr, nullptr);
+            }
+            internal->operator()(h);
         }
-        uint64_t operator()(uint64_t, const char *variant,
+        uint64_t operator()(uint64_t index, const char *variant,
                             const char *domain) override {
             add_domain(variant, domain);
-            return 0;
+            return internal->operator()(index, variant, domain);
         }
     };
     DomainTraverseCallback domain_callback;
+    domain_callback.internal = &tc;
 
-    traverse("domain traverse", domain_callback, h);
+    traverse("traverse with registry", domain_callback, h);
 
     // Traverse the registry
     if (!domain_callback.domains.empty()) {
@@ -1167,7 +1159,6 @@ static void traverse_with_registry(const char *op, TraverseCallback &tc,
         }
     }
 
-    traverse(op, tc, h, rw);
 }
 
 /**

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <drjit/fwd.h>
+#include "fwd.h"
 #include <drjit/array_traverse.h>
 #include <drjit-core/macros.h>
 #include <functional>
@@ -45,11 +45,22 @@ using traverse_callback_ro = void (*)(void *payload, uint64_t index,
  * \param index:
  *     A non-owning index of the traversed jit array.
  *
+ * \param variant:
+ *     If a ``JitArray`` has the attribute ``IsClass`` it is referring to a
+ *     drjit class. When such a variable is traversed, the ``variant`` and
+ *     ``domain`` string of its ``CallSupport`` is provided to the callback
+ *     using this argument. Otherwise the string is equal to "".
+ *
+ * \param domain:
+ *     The domain of the ``CallSupport`` when traversing a class variable.
+ *
  * \return
  *     The new index of the traversed variable. This index is borrowed, and
  *     should therefore be non-owning.
  */
-using traverse_callback_rw = uint64_t (*)(void *payload, uint64_t index);
+using traverse_callback_rw = uint64_t (*)(void *payload, uint64_t index,
+                                          const char *variant,
+                                          const char *domain);
 
 inline void log_member_open(bool rw, const char *member) {
     jit_log(LogLevel::Debug, "%s%s{", rw ? "rw " : "ro ", member);
@@ -123,15 +134,21 @@ struct DRJIT_EXPORT TraversableBase : public nanobind::intrusive_base {
 
     // Helper function, wrapping the ``traverse_1_cb_rw`` function, and allowing
     // traversal with a ``std::function``.
-    void traverse_1_cb_rw(std::function<uint64_t(uint64_t index)> cb) {
+    void
+    traverse_1_cb_rw(std::function<uint64_t(uint64_t index, const char *variant,
+                                            const char *domain)>
+                         cb) {
         struct Payload {
-            std::function<uint64_t(uint64_t index)> cb;
+            std::function<uint64_t(uint64_t index, const char *variant,
+                                   const char *domain)>
+                cb;
         };
         Payload payload{ cb };
         traverse_1_cb_rw((void *) &payload,
-                         [](void *p, uint64_t index) -> uint64_t {
+                         [](void *p, uint64_t index, const char *variant,
+                            const char *domain) -> uint64_t {
                              Payload *payload = (Payload *) p;
-                             return payload->cb(index);
+                             return payload->cb(index, variant, domain);
                          });
     }
 };

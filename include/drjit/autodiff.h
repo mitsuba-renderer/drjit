@@ -984,7 +984,8 @@ struct update_indices_payload {
     size_t &pos;
 };
 
-inline uint64_t update_indices_fn(void *p, uint64_t) {
+inline uint64_t update_indices_fn(void *p, uint64_t, const char *,
+                                  const char *) {
     update_indices_payload &payload = *(update_indices_payload *) p;
     return payload.indices[payload.pos++];
 }
