@@ -106,7 +106,7 @@ static void log_layouts(const std::vector<Layout> &layouts, std::ostream &os,
                         uint32_t &index, std::string &padding) {
     const Layout &layout = layouts[index++];
 
-    auto tp_name = nb::type_name(layout.type).c_str();
+    auto tp_name = layout.type ? nb::type_name(layout.type).c_str() : "None";
     os << padding << "type = " << tp_name << std::endl;
     os << padding << "num: " << layout.num << std::endl;
     os << padding << "vt: " << (uint32_t) layout.vt << std::endl;
