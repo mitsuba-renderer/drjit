@@ -53,6 +53,11 @@ def test04_roundtrip_vector_torch(t):
 @pytest.test_arrays('tensor, -bool, -float16')
 def test05_roundtrip_dynamic_tf(t):
     pytest.importorskip("tensorflow.config")
+
+    import sys
+    if sys.platform == 'win32' and dr.backend_v(t) == dr.JitBackend.CUDA:
+        pytest.skip('Skipping TensorFlow GPU test on Windows')
+
     a = t([[[1, 2, 3], [4, 5, 6]], [[7, 8, 9], [10, 11, 12]]])
     roundtrip = t(a.tf())
 
@@ -67,6 +72,11 @@ def test05_roundtrip_dynamic_tf(t):
 @pytest.test_arrays('vector, shape=(3, *), -bool, -float16')
 def test06_roundtrip_vector_tf(t):
     pytest.importorskip("tensorflow.config")
+
+    import sys
+    if sys.platform == 'win32' and dr.backend_v(t) == dr.JitBackend.CUDA:
+        pytest.skip('Skipping TensorFlow GPU test on Windows')
+
     a = t([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
     roundtrip = t(a.tf())
 
