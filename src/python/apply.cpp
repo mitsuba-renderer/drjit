@@ -353,20 +353,24 @@ PyObject *apply(ArrayOp op, Slot slot, std::index_sequence<Is...> is,
     return nullptr;
 }
 
-// Broadcast a tensor to a desired shape
+// Broadcast a tensor to a desired shape. The size of 'shape_src' and 'shape_dst' must match.
 void tensor_broadcast(nb::object &tensor, nb::object &array,
                       const vector<size_t> &shape_src,
                       const vector<size_t> &shape_dst) {
-    size_t ndim = shape_src.size();
+    size_t ndim = shape_src.size(), src_size = 1, dst_size = 1;
     if (ndim == 0 || memcmp(shape_src.data(), shape_dst.data(), sizeof(size_t) * ndim) == 0)
         return;
 
-    // At this point, we know that shape_src.size() == shape_dst.size()
-    // See apply_tensor for details.
-
-    size_t size = 1;
     for (size_t i = 0; i < ndim; ++i)
-        size *= shape_dst[i];
+        src_size *= shape_src[i];
+    for (size_t i = 0; i < ndim; ++i)
+        dst_size *= shape_dst[i];
+
+    if (src_size == 1) {
+        if (dst_size != 1)
+            array = array + full("zeros", array.type(), nb::int_(0), dst_size);
+        return;
+    }
 
     nb::handle tp = tensor.type();
     const ArraySupplement &s = supp(tp);
@@ -374,18 +378,18 @@ void tensor_broadcast(nb::object &tensor, nb::object &array,
     nb::type_object_t<ArrayBase> index_type =
         nb::borrow<nb::type_object_t<ArrayBase>>(s.tensor_index);
 
-    nb::object index  = arange(index_type, 0, (Py_ssize_t) size, 1),
-               size_o = index_type(size);
+    nb::object index  = arange(index_type, 0, (Py_ssize_t) dst_size, 1),
+               size_o = index_type(dst_size);
 
     for (size_t i = 0; i < ndim; ++i) {
-        size_t size_next = size / shape_dst[i];
+        size_t size_next = dst_size / shape_dst[i];
 
         nb::object size_next_o = index_type(size_next);
 
         if (shape_src[i] == 1 && shape_dst[i] != 1)
             index = (index % size_next_o) + index.floor_div(size_o) * size_next_o;
 
-        size = size_next;
+        dst_size = size_next;
         size_o = std::move(size_next_o);
     }
 

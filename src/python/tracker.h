@@ -127,6 +127,9 @@ public:
     /// Check that the PyTree is compatible with size ``size``.
     void verify_size(size_t size);
 
+    /// Set a desired target shape for tensors
+    void set_shape(const dr::vector<size_t> &shape);
+
 private:
     VariableTracker(const VariableTracker &) = delete;
     VariableTracker(VariableTracker &&) = delete;

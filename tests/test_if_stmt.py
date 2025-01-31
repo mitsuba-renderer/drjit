@@ -613,3 +613,29 @@ def test18_if_stmt_preserve_unused_ad(t, mode):
         assert not dr.grad_enabled(x)
         assert dr.grad_enabled(y)
         assert y.index_ad == y_id
+
+
+@pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
+@pytest.mark.parametrize("variant", [0, 1])
+@pytest.test_arrays('uint32,is_jit,is_tensor')
+@dr.syntax
+def test19_tensor_cond(t, mode, variant):
+    # Let's use tensors as condition and variables
+    i = dr.arange(t, 7)
+    z = t(0)
+
+    if dr.hint(i < 5, mode=mode):
+        i += 1
+        if variant == 0:
+            z = i + 4
+        else:
+            z += 1
+    print(i)
+    print(z)
+
+    assert dr.all(i == t([1, 2, 3, 4, 5, 5, 6]))
+
+    if variant == 0:
+        assert dr.all(z == t([5, 6, 7, 8, 9, 0, 0]))
+    else:
+        assert dr.all(z == t([1, 1, 1, 1, 1, 0, 0]))

@@ -15,8 +15,8 @@
 
 #include "tracker.h"
 #include "base.h"
-#include "shape.h"
 #include "local.h"
+#include "shape.h"
 #include <string_view>
 #include <drjit/autodiff.h>
 #include <tsl/robin_map.h>
@@ -38,6 +38,9 @@ struct Variable {
 
     /// The Python object encountered during the last PyTree traversal
     nb::object value;
+
+    /// The initial and last observed shape (in case this variable refers to a tensor)
+    dr::vector<size_t> shape_orig, shape;
 
     /// For Dr.Jit arrays: the array ID encountered during the first PyTree traversal
     uint64_t index_orig;
@@ -123,6 +126,9 @@ struct VariableTracker::Impl {
 
     /// Perform extra checks to ensure that the size of variables remains compatible?
     bool check_size;
+
+    /// Desired target shape for tensors
+    vector<size_t> target_shape;
 
     /// Implementation detail of ``read()`` and ``write()``
     void traverse(Context &ctx, nb::handle state,
@@ -332,8 +338,25 @@ bool VariableTracker::Impl::traverse(Context &ctx, nb::handle h) {
             return false;
 
         if (s.is_tensor) {
+            dr::vector<size_t> &shape = s.tensor_shape(inst_ptr(h));
+            size_t size = 1;
+            for (size_t sv: shape)
+                size *= sv;
+
+            if (v->size == 0) {
+                v->shape_orig = shape;
+                v->size = size;
+            }
+            v->shape = shape;
+
             ScopedAppendLabel guard(ctx, ".array");
-            changed = traverse(ctx, nb::steal(s.tensor_array(h.ptr())));
+            nb::object array = nb::steal(s.tensor_array(h.ptr()));
+            changed = traverse(ctx, array);
+
+            if (ctx.write && nb::len(array) > 1 && size == 1 && !target_shape.empty()) {
+                v->shape = target_shape;
+                shape = target_shape;
+            }
         } else if (s.ndim > 1) {
             size_t size = s.shape[0];
             if (size == DRJIT_DYNAMIC)
@@ -633,6 +656,10 @@ nb::object VariableTracker::restore(const dr::vector<dr::string> &labels,
     }
 }
 
+void VariableTracker::set_shape(const vector<size_t> &shape) {
+    m_impl->target_shape = shape;
+}
+
 nb::object VariableTracker::rebuild(const dr::vector<dr::string> &labels,
                                     const char *default_label) {
 
@@ -668,9 +695,8 @@ nb::object VariableTracker::Impl::restore(dr::string &label) {
 
         if (s.is_tensor) {
             ScopedAppendLabel guard(label, ".array");
-            nb::inst_replace_copy(
-                nb::steal(s.tensor_array(value.ptr())),
-                restore(label));
+            (void) restore(label);
+            s.tensor_shape(inst_ptr(value)) = v->shape_orig;
         } else if (s.ndim > 1) {
             size_t size = size_valid(v, label, value, nb::len(value));
             for (size_t i = 0; i < size; ++i) {
@@ -745,9 +771,11 @@ std::pair<nb::object, bool> VariableTracker::Impl::rebuild(dr::string &label) {
                         "VariableTracker::rebuild(): internal error involving "
                         "a tensor, this case should never arise");
                 } else {
-                    value = tp(o, ::shape(value));
+                    value = tp(o, cast_shape(v->shape));
                     new_object = true;
                 }
+            } else {
+                s.tensor_shape(inst_ptr(value)) = v->shape;
             }
         } else if (s.ndim > 1) {
             size_t size = size_valid(v, label, value, nb::len(value));

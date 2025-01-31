@@ -79,15 +79,23 @@ nb::object if_stmt(nb::tuple args, nb::handle cond, nb::callable true_fn,
         else
             is_scalar = cond.type().is(&PyBool_Type);
 
+        vector<size_t> shape;
         if (!is_scalar) {
             nb::handle tp = cond.type();
 
             if (is_drjit_type(tp)) {
                 const ArraySupplement &s = supp(tp);
-                if ((VarType) s.type == VarType::Bool && s.ndim == 1 &&
+                if ((VarType) s.type == VarType::Bool && (s.ndim == 1 || s.is_tensor) &&
                     (JitBackend) s.backend != JitBackend::None) {
                     backend = (JitBackend) s.backend;
-                    cond_index = (uint32_t) s.index(inst_ptr(cond));
+                    if (s.is_tensor) {
+                        shape = s.tensor_shape(inst_ptr(cond));
+                        nb::object temp = nb::steal(s.tensor_array(cond.ptr()));
+                        cond_index = (uint32_t) supp(temp.type()).index(inst_ptr(cond));
+                    } else {
+                        cond_index = (uint32_t) s.index(inst_ptr(cond));
+                    }
+
                     if (!cond_index)
                         nb::raise("'cond' cannot be empty.");
                 }
@@ -98,8 +106,10 @@ nb::object if_stmt(nb::tuple args, nb::handle cond, nb::callable true_fn,
             }
 
             if (!cond_index || is_scalar)
-                nb::raise("'cond' must either be a Jit-compiled 1D Boolean "
-                          "array or a scalar Python 'bool'");
+                nb::raise("the type of 'cond' ('%s') is not supported. You "
+                          "must provide a Jit-compiled 1D Boolean "
+                          "array, a scalar Python 'bool', or a Boolean tensor.",
+                          nb::inst_name(cond).c_str());
         }
 
         if (is_scalar) {
@@ -134,6 +144,7 @@ nb::object if_stmt(nb::tuple args, nb::handle cond, nb::callable true_fn,
         stash_ref(is->args, is->sr);
 
         dr::detail::index64_vector args_i, rv_i;
+        is->tracker.set_shape(shape);
         is->tracker.read(is->args, args_i, is->arg_labels, "args");
 
         bool all_done =
