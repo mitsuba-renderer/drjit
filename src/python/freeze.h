@@ -119,10 +119,33 @@ struct FlatVariables {
     std::string variant;
     std::vector<std::string> domains;
 
+    /**
+     * Describes how many elements in the ``layout``, ``index_to_slot`` and
+     * ``size_to_slot`` containers should be reserved.
+     */
+    struct Heuristic {
+        size_t layout        = 0;
+        size_t index_to_slot = 0;
+        size_t size_to_slot  = 0;
+
+        Heuristic max(Heuristic rhs){
+            return Heuristic{
+                std::max(layout, rhs.layout),
+                std::max(index_to_slot, rhs.index_to_slot),
+                std::max(size_to_slot, rhs.size_to_slot),
+            };
+        }
+    };
+
     FlatVariables() {
         // layout.reserve(16384);
         // index_to_slot.reserve(16384);
         // size_to_slot.reserve(16384);
+    }
+    FlatVariables(Heuristic heuristic) {
+        layout.reserve(heuristic.layout);
+        index_to_slot.reserve(heuristic.index_to_slot);
+        size_to_slot.reserve(heuristic.size_to_slot);
     }
 
     FlatVariables(const FlatVariables &)            = delete;
@@ -146,6 +169,14 @@ struct FlatVariables {
         for (uint32_t &index : this->variables)
             jit_var_dec_ref(index);
     }
+
+    Heuristic heuristic() {
+        return Heuristic{
+            layout.size(),
+            index_to_slot.size(),
+            size_to_slot.size(),
+        };
+    };
 
     void add_domain(const char *variant, const char *domain);
 
@@ -368,6 +399,8 @@ struct FrozenFunction {
     detail::RecordingMap recordings;
     std::shared_ptr<detail::RecordingKey> prev_key;
     uint32_t recording_counter = 0;
+
+    detail::FlatVariables::Heuristic in_heuristics;
 
     FrozenFunction(nb::callable func) : func(func) {}
     ~FrozenFunction() {}

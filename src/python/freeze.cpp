@@ -1632,7 +1632,7 @@ nb::object FrozenFunction::operator()(nb::args args, nb::kwargs kwargs) {
         input.append(args);
         input.append(kwargs);
 
-        FlatVariables in_variables;
+        FlatVariables in_variables(in_heuristics);
         // Evaluate and traverse input variables (args and kwargs)
         {
             // Enter Resume scope, so we can track gradients
@@ -1658,6 +1658,8 @@ nb::object FrozenFunction::operator()(nb::args args, nb::kwargs kwargs) {
             // variables, incrementing their refcount.
             in_variables.borrow();
         }
+
+        in_heuristics = in_heuristics.max(in_variables.heuristic());
 
         // for (uint32_t i = 0; i < 10000; i++){
         //     FlatVariables vars;
