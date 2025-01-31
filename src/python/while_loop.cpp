@@ -13,6 +13,7 @@
 #include "base.h"
 #include "detail.h"
 #include "tracker.h"
+#include "shape.h"
 #include <nanobind/stl/optional.h>
 
 /**
@@ -58,13 +59,13 @@ static const ArraySupplement &check_cond(nb::handle h) {
     nb::handle tp = h.type();
     if (is_drjit_type(tp)) {
         const ArraySupplement &s = supp(tp);
-        if ((VarType) s.type == VarType::Bool && s.ndim == 1)
+        if ((VarType) s.type == VarType::Bool && (s.ndim == 1 || s.is_tensor))
             return s;
     }
 
     nb::raise("the type of the loop condition ('%s') is not supported. The "
               "'cond' function must either return a Jit-compiled 1D Boolean "
-              "array or a Python 'bool'", nb::type_name(tp).c_str());
+              "array, a Python 'bool', or a Boolean tensor.", nb::type_name(tp).c_str());
 }
 
 /// Callback functions that will be invoked by ad_loop()
@@ -72,7 +73,16 @@ static uint32_t while_loop_cond_cb(void *p) {
     nb::gil_scoped_acquire guard;
     LoopState *ls = (LoopState *) p;
     ls->active = tuple_call(ls->cond, ls->state);
-    uint32_t active_index = (uint32_t) check_cond(ls->active).index(inst_ptr(ls->active));
+    nb::object temp = ls->active;
+
+    const ArraySupplement *s = &check_cond(ls->active);
+    if (s->is_tensor) {
+        ls->tracker.set_shape(s->tensor_shape(inst_ptr(temp)));
+        temp = nb::steal(s->tensor_array(temp.ptr()));
+        s = &check_cond(temp);
+    }
+
+    uint32_t active_index = (uint32_t) s->index(inst_ptr(temp));
     ls->active_size = jit_var_size(active_index);
     return active_index;
 }

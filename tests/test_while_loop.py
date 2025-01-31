@@ -692,3 +692,29 @@ def test29_preserve_differentiability_suspend(t, mode):
     assert not dr.grad_enabled(x)
     assert dr.grad_enabled(y)
     assert y.index_ad == y_id
+
+
+@pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
+@pytest.mark.parametrize("optimize", [True, False])
+@pytest.mark.parametrize("variant", [0, 1])
+@pytest.test_arrays('uint32,is_jit,is_tensor')
+@dr.syntax
+def test30_tensor_loop(t, mode, optimize, variant):
+    # Let's use tensors as loop condition and variables
+    with dr.scoped_set_flag(dr.JitFlag.OptimizeLoops, optimize):
+        i = dr.arange(t, 7)
+        z = t(0)
+
+        while dr.hint(i < 5, mode=mode):
+            i += 1
+            if variant == 0:
+                z = i + 4
+            else:
+                z += 1
+
+        assert dr.all(i == t([5, 5, 5, 5, 5, 5, 6]))
+
+    if variant == 0:
+        assert dr.all(z == t([9, 9, 9, 9, 9, 0, 0]))
+    else:
+        assert dr.all(z == t([5, 4, 3, 2, 1, 0, 0]))
