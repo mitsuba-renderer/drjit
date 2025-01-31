@@ -978,8 +978,9 @@ void FlatVariables::traverse_with_registry(nb::handle h, TraverseContext &ctx) {
 
             if (self)
                 traverse(self, ctx);
+            else
+                traverse_cb(traversable, ctx);
 
-            traverse_cb(traversable, ctx);
             num_fields++;
         }
         jit_log(LogLevel::Debug, "}");
@@ -1030,8 +1031,9 @@ void FlatVariables::assign_with_registry(nb::handle dst) {
 
             if (self)
                 assign(self);
+            else
+                assign_cb(traversable);
 
-            assign_cb(traversable);
             num_fields++;
         }
         jit_log(LogLevel::Debug, "}");
@@ -1187,8 +1189,8 @@ static void traverse_with_registry(const char *op, TraverseCallback &tc,
 
             if (self)
                 traverse(op, tc, self, rw);
-
-            traverse_traversable(traversable, tc, rw);
+            else
+                traverse_traversable(traversable, tc, rw);
         }
     }
 
