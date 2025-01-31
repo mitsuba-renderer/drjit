@@ -490,24 +490,31 @@ void FlatVariables::assign_ad_var(Layout &layout, nb::handle dst) {
  */
 void FlatVariables::traverse_cb(const drjit::TraversableBase *traversable,
                                 TraverseContext &ctx, nb::object type) {
-    // ProfilerPhase profiler(traversable);
+    ProfilerPhase profiler(traversable);
 
     uint32_t layout_index = this->layout.size();
     Layout &layout        = this->layout.emplace_back();
     layout.type           = nb::borrow<nb::type_object>(type);
 
-    uint32_t num_fileds = 0;
+    struct Payload{
+        TraverseContext &ctx;
+        FlatVariables *flat_variables = nullptr;
+        uint32_t num_fields = 0;
+    };
 
-    traversable->traverse_1_cb_ro(
-        [this, &ctx, &num_fileds](uint64_t index, const char *variant, const char *domain) {
+    Payload p{ctx, this, 0};
+
+    traversable->traverse_1_cb_ro((void*) & p,
+        [](void *p, uint64_t index, const char *variant, const char *domain) {
             if (!index)
                 return;
-            add_domain(variant, domain);
-            this->traverse_ad_index(index, ctx);
-            num_fileds++;
+            Payload *payload = (Payload *)p;
+            payload->flat_variables->add_domain(variant, domain);
+            payload->flat_variables->traverse_ad_index(index, payload->ctx);
+            payload->num_fields++;
         });
 
-    this->layout[layout_index].num = num_fileds;
+    this->layout[layout_index].num = p.num_fields;
 }
 
 /**
@@ -537,24 +544,30 @@ uint64_t FlatVariables::assign_cb_internal(uint64_t index,
 void FlatVariables::assign_cb(drjit::TraversableBase *traversable) {
     Layout &layout = this->layout[layout_index++];
 
-    index64_vector tmp;
-    uint32_t field_counter = 0;
+
+    struct Payload{
+        FlatVariables *flat_variables =  nullptr;
+        Layout &layout;
+        index64_vector tmp;
+        uint32_t field_counter = 0;
+    };
+    Payload p{ this, layout, index64_vector(), 0 };
     traversable->traverse_1_cb_rw(
-        [&field_counter, &tmp, &layout, this](uint64_t index, const char *,
-                                              const char *) {
+        (void *) &p, [](void *p, uint64_t index, const char *, const char *) {
             if (!index)
                 return index;
-            if (field_counter >= layout.num)
+            Payload *payload = (Payload *) p;
+            if (payload->field_counter >= payload->layout.num)
                 jit_raise("While traversing an object "
                           "for assigning inputs, the number of variables to "
                           "assign (>%u) did not match the number of variables "
                           "traversed when recording (%u)!",
-                          field_counter, layout.num);
-            field_counter++;
-            return assign_cb_internal(index, tmp);
+                          payload->field_counter, payload->layout.num);
+            payload->field_counter++;
+            return payload->flat_variables->assign_cb_internal(index, payload->tmp);
         });
 
-    if (field_counter != layout.num)
+    if (p.field_counter != layout.num)
         jit_raise("While traversing and object for assigning inputs, the "
                   "number of variables to assign did not match the number "
                   "of variables traversed when recording!");
@@ -1059,15 +1072,26 @@ std::ostream &operator<<(std::ostream &os, const FlatVariables &r) {
 
 void traverse_traversable(drjit::TraversableBase *traversable,
                           TraverseCallback &cb, bool rw = false) {
+    struct Payload{
+        TraverseCallback &cb;
+    };
+    Payload p{ cb };
     if (rw) {
         traversable->traverse_1_cb_rw(
-            [&cb](uint64_t index, const char *, const char *) -> uint64_t {
-                uint64_t new_index = cb(index);
+            (void *) &p,
+            [](void *p, uint64_t index, const char *variant,
+               const char *domain) -> uint64_t {
+                Payload *payload   = (Payload *) p;
+                uint64_t new_index = payload->cb(index, variant, domain);
                 return new_index;
             });
     } else {
-        traversable->traverse_1_cb_ro(
-            [&cb](uint64_t index, const char *, const char *) { cb(index); });
+        traversable->traverse_1_cb_ro((void *) &p, [](void *p, uint64_t index,
+                                                      const char *variant,
+                                                      const char *domain) {
+            Payload *payload = (Payload *) p;
+            payload->cb(index);
+        });
     }
 }
 

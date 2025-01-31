@@ -639,18 +639,28 @@ void traverse(const char *op, TraverseCallback &tc, nb::handle h,
                 }
             } else if (auto traversable = get_traversable_base(h);
                        traversable) {
+                struct Payload {
+                    TraverseCallback &tc;
+                };
+                Payload p{ tc };
                 if (rw) {
-                    traversable->traverse_1_cb_rw([&tc](uint64_t index,
-                                                        const char *variant,
-                                                        const char *domain) {
-                        return tc(index, variant, domain);
-                    });
+                    traversable->traverse_1_cb_rw(
+                        (void *) &p,
+                        [](void *p, uint64_t index, const char *variant,
+                           const char *domain) -> uint64_t {
+                            Payload *payload = (Payload *) p;
+                            uint64_t new_index =
+                                payload->tc(index, variant, domain);
+                            return new_index;
+                        });
                 } else {
-                    traversable->traverse_1_cb_ro([&tc](uint64_t index,
-                                                        const char *variant,
-                                                        const char *domain) {
-                        tc(index, variant, domain);
-                    });
+                    traversable->traverse_1_cb_ro(
+                        (void *) &p,
+                        [](void *p, uint64_t index, const char *variant,
+                           const char *domain) {
+                            Payload *payload = (Payload *) p;
+                            payload->tc(index, variant, domain);
+                        });
                 }
             } else if (auto cb = get_traverse_cb_ro(tp); cb.is_valid() && !rw) {
                 cb(h, nb::cpp_function([&](uint64_t index, const char *variant,

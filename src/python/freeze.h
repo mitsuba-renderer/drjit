@@ -120,9 +120,9 @@ struct FlatVariables {
     std::vector<std::string> domains;
 
     FlatVariables() {
-        layout.reserve(16384);
-        index_to_slot.reserve(16384);
-        size_to_slot.reserve(16384);
+        // layout.reserve(16384);
+        // index_to_slot.reserve(16384);
+        // size_to_slot.reserve(16384);
     }
 
     FlatVariables(const FlatVariables &)            = delete;
