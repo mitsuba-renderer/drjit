@@ -250,41 +250,41 @@ if (NOT (DRJIT_SANITIZE_ASAN OR DRJIT_SANITIZE_UBSAN))
       ${STUB_ARGS}
     )
   endif()
-endif()
 
-add_custom_command(
-  OUTPUT ${DRJIT_PYTHON_DST_DIR}/auto/__init__.pyi
-  DEPENDS drjit-stub-llvm
-  COMMAND cmake -P ${CMAKE_CURRENT_SOURCE_DIR}/../../resources/auto-stub.cmake
-    ${DRJIT_PYTHON_DST_DIR}/llvm/__init__.pyi
+  add_custom_command(
+    OUTPUT ${DRJIT_PYTHON_DST_DIR}/auto/__init__.pyi
+    DEPENDS drjit-stub-llvm
+    COMMAND cmake -P ${CMAKE_CURRENT_SOURCE_DIR}/../../resources/auto-stub.cmake
+      ${DRJIT_PYTHON_DST_DIR}/llvm/__init__.pyi
+      ${DRJIT_PYTHON_DST_DIR}/auto/__init__.pyi
+  )
+
+  add_custom_command(
+    OUTPUT ${DRJIT_PYTHON_DST_DIR}/auto/ad.pyi
+    DEPENDS drjit-stub-llvm-ad
+    COMMAND cmake -P ${CMAKE_CURRENT_SOURCE_DIR}/../../resources/auto-stub.cmake
+      ${DRJIT_PYTHON_DST_DIR}/llvm/ad.pyi
+      ${DRJIT_PYTHON_DST_DIR}/auto/ad.pyi
+  )
+
+  add_custom_command(
+    OUTPUT
+      ${DRJIT_PYTHON_DST_DIR}/auto/py.typed
+      ${DRJIT_PYTHON_DST_DIR}/auto/__init__.py
+      ${DRJIT_PYTHON_DST_DIR}/auto/ad.py
+
+    COMMAND cmake -E touch
+      ${DRJIT_PYTHON_DST_DIR}/auto/py.typed
+      ${DRJIT_PYTHON_DST_DIR}/auto/__init__.py
+      ${DRJIT_PYTHON_DST_DIR}/auto/ad.py
+  )
+
+  add_custom_target(
+    drjit-auto-stub ALL DEPENDS
     ${DRJIT_PYTHON_DST_DIR}/auto/__init__.pyi
-)
-
-add_custom_command(
-  OUTPUT ${DRJIT_PYTHON_DST_DIR}/auto/ad.pyi
-  DEPENDS drjit-stub-llvm-ad
-  COMMAND cmake -P ${CMAKE_CURRENT_SOURCE_DIR}/../../resources/auto-stub.cmake
-    ${DRJIT_PYTHON_DST_DIR}/llvm/ad.pyi
+    ${DRJIT_PYTHON_DST_DIR}/auto/__init__.py
     ${DRJIT_PYTHON_DST_DIR}/auto/ad.pyi
-)
-
-add_custom_command(
-  OUTPUT
-    ${DRJIT_PYTHON_DST_DIR}/auto/py.typed
-    ${DRJIT_PYTHON_DST_DIR}/auto/__init__.py
     ${DRJIT_PYTHON_DST_DIR}/auto/ad.py
-
-  COMMAND cmake -E touch
     ${DRJIT_PYTHON_DST_DIR}/auto/py.typed
-    ${DRJIT_PYTHON_DST_DIR}/auto/__init__.py
-    ${DRJIT_PYTHON_DST_DIR}/auto/ad.py
-)
-
-add_custom_target(
-  drjit-auto-stub ALL DEPENDS
-  ${DRJIT_PYTHON_DST_DIR}/auto/__init__.pyi
-  ${DRJIT_PYTHON_DST_DIR}/auto/__init__.py
-  ${DRJIT_PYTHON_DST_DIR}/auto/ad.pyi
-  ${DRJIT_PYTHON_DST_DIR}/auto/ad.py
-  ${DRJIT_PYTHON_DST_DIR}/auto/py.typed
-)
+  )
+endif()
