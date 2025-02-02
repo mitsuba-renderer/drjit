@@ -8,20 +8,21 @@ Changelog
 DrJit 1.0.4 (January 28, 2025)
 ------------------------------
 
-- Workaround for OptiX linking issue in driver version R570+ `0c9c54e <https://github.com/mitsuba-renderer/drjit-core/commit/0c9c54ec5c2963dd576c5a16d10fb2d63d67166f>`__
+- Workaround for OptiX linking issue in driver version R570+. (commit `0c9c54e <https://github.com/mitsuba-renderer/drjit-core/commit/0c9c54ec5c2963dd576c5a16d10fb2d63d67166f>`__).
+- Tensors can now be used as condition and state variables of ``dr.if_stmt/while_loop``. (commit `4691fe <https://github.com/mitsuba-renderer/drjit-core/commit/4691fe4421bfd7002cd9c5d998617db0f40cce35>`__).
 
 DrJit 1.0.3 (January 16, 2025)
 ------------------------------
 
-- Fixes to :py:func:`drjit.wrap` `166be21 <https://github.com/mitsuba-renderer/drjit/pull/326/commits/166be21886e9fc66fe389cbc6f5becec1bfb3417>`__
+- Fixes to :py:func:`drjit.wrap`. (commit `166be21 <https://github.com/mitsuba-renderer/drjit/pull/326/commits/166be21886e9fc66fe389cbc6f5becec1bfb3417>`__).
 
 DrJit 1.0.2 (January 14, 2025)
 ------------------------------
 
-- Warning about NVIDIA drivers v565+ `b5fd886 <https://github.com/mitsuba-renderer/drjit-core/commit/b5fd886dcced5b7e5b229e94e2b9e702ae6aba46>`__
-- Support for boolean Python arguments in :py:func:`drjit.select` `d0c8811 <https://github.com/mitsuba-renderer/drjit/commit/d0c881187c9ec0def50ef3f6cde32dacd86a96b4>`__
-- Backend refactoring: vectorized calls are now also isolated per variant `17bc707 <https://github.com/mitsuba-renderer/drjit/commit/17bc7078918662b06c6e80c3b5f3ac1d5f9f118f>`__
-- Fixes to `dr::safe_cbrt` `2f8a3ab <https://github.com/mitsuba-renderer/drjit/commit/2f8a3ab1acbf8e187a0ef4e248d0f65c00e27e3f>`__
+- Warning about NVIDIA drivers v565+. (commit `b5fd886 <https://github.com/mitsuba-renderer/drjit-core/commit/b5fd886dcced5b7e5b229e94e2b9e702ae6aba46>`__).
+- Support for boolean Python arguments in :py:func:`drjit.select`. (commit `d0c8811 <https://github.com/mitsuba-renderer/drjit/commit/d0c881187c9ec0def50ef3f6cde32dacd86a96b4>`__).
+- Backend refactoring: vectorized calls are now also isolated per variant. (commit `17bc707 <https://github.com/mitsuba-renderer/drjit/commit/17bc7078918662b06c6e80c3b5f3ac1d5f9f118f>`__).
+- Fixes to `dr::safe_cbrt`. (commit `2f8a3ab <https://github.com/mitsuba-renderer/drjit/commit/2f8a3ab1acbf8e187a0ef4e248d0f65c00e27e3f>`__).
 
 DrJit 1.0.1 (November 23, 2024)
 -------------------------------
