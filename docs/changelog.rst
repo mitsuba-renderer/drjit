@@ -5,11 +5,16 @@
 Changelog
 #########
 
-DrJit 1.0.4 (January 28, 2025)
+DrJit 1.0.5 (February 3, 2025)
 ------------------------------
 
 - Workaround for OptiX linking issue in driver version R570+. (commit `0c9c54e <https://github.com/mitsuba-renderer/drjit-core/commit/0c9c54ec5c2963dd576c5a16d10fb2d63d67166f>`__).
 - Tensors can now be used as condition and state variables of ``dr.if_stmt/while_loop``. (commit `4691fe <https://github.com/mitsuba-renderer/drjit-core/commit/4691fe4421bfd7002cd9c5d998617db0f40cce35>`__).
+
+DrJit 1.0.4 (January 28, 2025)
+------------------------------
+
+- Release was retracted
 
 DrJit 1.0.3 (January 16, 2025)
 ------------------------------
