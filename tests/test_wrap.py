@@ -26,6 +26,7 @@ try:
         if torch.__version__ < torch.torch_version.TorchVersion('2.1.3'):
             supports_bool = False
     configs_torch.append(('torch', supports_bool, False))
+    del supports_bool
 except ImportError:
     pass
 
@@ -40,6 +41,7 @@ try:
     configs_jax.append(('jax', supports_bool, False))
     configs_jax.append(('jax', supports_bool, True))
     jit = jax.jit
+    del supports_bool
 except ImportError:
     pass
 
@@ -48,11 +50,14 @@ try:
     supports_bool = True
     configs_tf.append(('tf', supports_bool, 'eager'))
 
-    # Test configurations which are only used 
+    # Test configurations which are only used
     # for the 'drjit'->'tf' direction, where
     # the TF function is executed in Graph or XLA mode
     configs_tf_jit.append(('tf', supports_bool, 'graph'))
     configs_tf_jit.append(('tf', supports_bool, 'xla'))
+
+    TF_HAS_GPU = bool(tf.config.list_physical_devices("GPU"))
+    del supports_bool
 
 except ImportError:
     pass
@@ -97,18 +102,27 @@ def tf_dtype(t):
     else:
         raise Exception("Unsupported variable type")
 
-def skip_tf_int32_graph_mode(config, t):
-    """Helper function to mark a specific test case for TF which is expected to fail"""
-    if config[0] == "tf" and config[2] == "graph" \
-        and dr.backend_v(t) == dr.JitBackend.CUDA:
+
+def skip_if_unsupported(config, t, needs_int32: bool = False):
+    """Helper function to skip tests in configurations which are known
+    to be unsupported."""
+
+    # Skip TF test if DrJit supports CUDA on this platform,
+    # but TF does not (e.g. native Windows).
+    if config[0] == "tf" and dr.backend_v(t) == dr.JitBackend.CUDA:
+        if not TF_HAS_GPU:
+            pytest.skip("TensorFlow didn't detect a CUDA device, skipping.")
+        if needs_int32 and config[2] == "graph":
             pytest.xfail("Expected to fail due to TF dlpack issue for int32,"
-                        " see https://github.com/tensorflow/tensorflow/issues/78091")
+                         " see https://github.com/tensorflow/tensorflow/issues/78091")
+
 
 @pytest.mark.parametrize('is_diff', [True, False])
 @pytest.mark.parametrize('config', configs + configs_tf_jit)
 @pytest.test_arrays('is_diff,float,shape=(*)')
 @pytest.skip_on(RuntimeError, "backend does not support the requested type of atomic reduction")
 def test01_simple_bwd(t, config, is_diff):
+    skip_if_unsupported(config, t)
     @wrap(config)
     def test_fn(x):
         return x * 2
@@ -132,6 +146,7 @@ def test01_simple_bwd(t, config, is_diff):
 @pytest.test_arrays('is_diff,float,shape=(*)')
 @pytest.skip_on(RuntimeError, "backend does not support the requested type of atomic reduction")
 def test02_flipped_simple_bwd(t, config, is_diff, scalar_deriv):
+    skip_if_unsupported(config, t)
     @wrap_flipped(config)
     def test_fn(x):
         assert dr.is_array_v(x)
@@ -179,6 +194,7 @@ def test02_flipped_simple_bwd(t, config, is_diff, scalar_deriv):
 @pytest.mark.parametrize('config', configs + configs_tf_jit)
 @pytest.test_arrays('is_diff,float,shape=(*)')
 def test03_simple_fwd(t, config):
+    skip_if_unsupported(config, t)
     @wrap(config)
     def test_fn(x):
         return x * 2
@@ -195,6 +211,7 @@ def test03_simple_fwd(t, config):
 @pytest.mark.parametrize('config', configs_torch + configs_tf)
 @pytest.test_arrays('is_diff,float,shape=(*)')
 def test04_flipped_simple_fwd(t, config):
+    skip_if_unsupported(config, t)
     if config[0] == "tf":
         pytest.skip("Skipped due to limited support of `tf.custom_gradient()`"
                     " for forward-mode AD.")
@@ -226,6 +243,7 @@ def test04_flipped_simple_fwd(t, config):
 @pytest.mark.parametrize('config', configs + configs_tf_jit)
 @pytest.test_arrays('is_diff,float,shape=(*)')
 def test05_simple_multiarg_bwd(t, config):
+    skip_if_unsupported(config, t)
     @wrap(config)
     def test_fn(x, y):
         return x + y, y, x
@@ -251,6 +269,7 @@ def test05_simple_multiarg_bwd(t, config):
 @pytest.test_arrays('is_diff,float,shape=(*)')
 @pytest.skip_on(RuntimeError, "backend does not support the requested type of atomic reduction")
 def test06_flipped_simple_multiarg_bwd(t, config):
+    skip_if_unsupported(config, t)
     @wrap_flipped(config)
     def test_fn(x, y):
         return x + y, y, x
@@ -302,6 +321,7 @@ def test06_flipped_simple_multiarg_bwd(t, config):
 @pytest.mark.parametrize('config', configs + configs_tf_jit)
 @pytest.test_arrays('is_diff,float,shape=(*)')
 def test07_simple_multiarg_fwd(t, config):
+    skip_if_unsupported(config, t)
     @wrap(config)
     def test_fn(x, y):
         return x + y, y, x
@@ -326,6 +346,7 @@ def test07_simple_multiarg_fwd(t, config):
 @pytest.test_arrays('is_diff,float,shape=(*)')
 @pytest.skip_on(RuntimeError, "not implemented for 'Half'")
 def test08_filled_simple_multiarg_fwd(t, config):
+    skip_if_unsupported(config, t)
     if config[0] == "tf":
         pytest.skip("Skipped due to limited support of `tf.custom_gradient()`"
                     " for forward-mode AD.")
@@ -355,7 +376,7 @@ def test08_filled_simple_multiarg_fwd(t, config):
 @pytest.mark.parametrize('config', configs + configs_tf_jit)
 @pytest.test_arrays('is_diff,float32,shape=(*)')
 def test09_nondiff_bwd(t, config):
-    skip_tf_int32_graph_mode(config, t)
+    skip_if_unsupported(config, t, needs_int32=True)
     @wrap(config)
     def test_fn(x, y, z):
         return x, y, z
@@ -380,6 +401,7 @@ def test09_nondiff_bwd(t, config):
 @pytest.mark.parametrize('config', configs_torch + configs_tf)
 @pytest.test_arrays('is_diff,float32,shape=(*)')
 def test10_flipped_nondiff_bwd(t, config):
+    skip_if_unsupported(config, t)
     if config[0] == 'torch':
         with dr.detail.scoped_rtld_deepbind():
             @wrap_flipped(config)
@@ -424,7 +446,7 @@ def test10_flipped_nondiff_bwd(t, config):
 @pytest.mark.parametrize('config', configs + configs_tf_jit)
 @pytest.test_arrays('is_diff,float32,shape=(*)')
 def test11_nondiff_fwd(t, config):
-    skip_tf_int32_graph_mode(config, t)
+    skip_if_unsupported(config, t, needs_int32=True)
     @wrap(config)
     def test_fn(x, y, z):
         return x, y, z
@@ -449,6 +471,7 @@ def test11_nondiff_fwd(t, config):
 @pytest.test_arrays('is_diff,float,shape=(*)')
 @pytest.skip_on(RuntimeError, "not implemented for 'Half'")
 def test12_flipped_nondiff_fwd(t, config):
+    skip_if_unsupported(config, t)
     if config[0] == "tf":
         pytest.skip("Skipped due to limited support of `tf.custom_gradient()`"
                     " for forward-mode AD.")
@@ -482,7 +505,7 @@ def test12_flipped_nondiff_fwd(t, config):
 @pytest.mark.parametrize('config', configs + configs_tf_jit)
 @pytest.test_arrays('is_diff,float,shape=(*)')
 def test13_scalar_bwd(t, config):
-    skip_tf_int32_graph_mode(config, t)
+    skip_if_unsupported(config, t, needs_int32=True)
     @wrap(config)
     def test_fn(x, y, z):
         return x*2, y, z
@@ -502,6 +525,7 @@ def test13_scalar_bwd(t, config):
 @pytest.test_arrays('is_diff,float,shape=(*)')
 @pytest.skip_on(RuntimeError, "not implemented for 'Half'")
 def test14_flipped_scalar_bwd(t, config):
+    skip_if_unsupported(config, t)
     @wrap_flipped(config)
     def test_fn(x, y, z):
         return x*2, y+1, z+1
@@ -534,7 +558,7 @@ def test14_flipped_scalar_bwd(t, config):
 @pytest.mark.parametrize('config', configs + configs_tf_jit)
 @pytest.test_arrays('is_diff,float,shape=(*)')
 def test15_scalar_fwd(t, config):
-    skip_tf_int32_graph_mode(config, t)
+    skip_if_unsupported(config, t, needs_int32=True)
     @wrap(config)
     def test_fn(x, y, z):
         return x, y, z
@@ -553,6 +577,7 @@ def test15_scalar_fwd(t, config):
 @pytest.mark.parametrize('config', configs_torch + configs_tf)
 @pytest.test_arrays('is_diff,float,shape=(*)')
 def test14_flipped_scalar_fwd(t, config):
+    skip_if_unsupported(config, t)
     if config[0] == 'torch':
         pytest.skip('Skipped until issue https://github.com/pytorch/pytorch/issues/117491 is fixed.')
     if config[0] == "tf":
@@ -577,6 +602,7 @@ def test14_flipped_scalar_fwd(t, config):
 @pytest.mark.parametrize('config', configs_torch + configs_tf + configs_tf_jit)
 @pytest.test_arrays('is_diff,float,shape=(*)')
 def test15_custom_class_bwd(t, config):
+    skip_if_unsupported(config, t)
     if config[0] == "tf" and config[2] in ['graph', 'xla']:
         pytest.skip("Skipped since TF Graph/XLA mode does not support class inputs.")
 
@@ -603,9 +629,12 @@ def test15_custom_class_bwd(t, config):
 @pytest.test_arrays('is_diff,float,shape=(*)')
 @pytest.skip_on(RuntimeError, "not implemented for 'Half'")
 def test16_flipped_custom_class_bwd(t, config):
-    pytest.skip("Skipped since tf.custom_gradient only supports " + \
-                "Tensor inputs (see " + \
-                "https://www.tensorflow.org/api_docs/python/tf/custom_gradient).")
+    skip_if_unsupported(config, t)
+    if config[0] == "tf":
+        pytest.skip("Skipped since tf.custom_gradient only supports "
+                    "Tensor inputs (see "
+                    "https://www.tensorflow.org/api_docs/python/tf/custom_gradient).")
+
     class MyClass:
         pass
 
@@ -628,7 +657,8 @@ def test16_flipped_custom_class_bwd(t, config):
 @pytest.mark.parametrize('config', configs_torch + configs_tf + configs_tf_jit)
 @pytest.test_arrays('is_diff,float,shape=(*)')
 def test17_custom_class_fwd(t, config):
-    if config[0] == "tf" and config[2] in ['graph', 'xla']:
+    skip_if_unsupported(config, t)
+    if config[0] == "tf" and config[2] in ('graph', 'xla'):
         pytest.skip("Skipped since TF Graph/XLA mode does not support class inputs.")
 
     class MyClass:
@@ -653,6 +683,7 @@ def test17_custom_class_fwd(t, config):
 @pytest.mark.parametrize('config', configs_torch + configs_tf)
 @pytest.test_arrays('is_diff,float,shape=(*)')
 def test18_flipped_custom_class_fwd(t, config):
+    skip_if_unsupported(config, t)
     if config[0] == 'torch':
         pytest.skip('Skipped until issue https://github.com/pytorch/pytorch/issues/117491 is fixed.')
     if config[0] == "tf":
@@ -684,6 +715,7 @@ def test18_flipped_custom_class_fwd(t, config):
 @pytest.mark.parametrize('config', configs + configs_tf_jit)
 @pytest.test_arrays('is_diff,float,shape=(*)')
 def test19_args_kwargs_bwd(t, config):
+    skip_if_unsupported(config, t)
     @wrap(config)
     def test_fn(*args, **kwargs):
         return args[0] * kwargs["y"]
@@ -703,6 +735,7 @@ def test19_args_kwargs_bwd(t, config):
 @pytest.test_arrays('is_diff,float,shape=(*)')
 @pytest.skip_on(RuntimeError, "backend does not support the requested type of atomic reduction")
 def test20_flipped_args_kwargs_bwd(t, config):
+    skip_if_unsupported(config, t)
     @wrap_flipped(config)
     def test_fn(*args, **kwargs):
         return args[0] * kwargs["y"]
@@ -737,6 +770,7 @@ def test20_flipped_args_kwargs_bwd(t, config):
 @pytest.mark.parametrize('config', configs + configs_tf_jit)
 @pytest.test_arrays('is_diff,float,shape=(*)')
 def test21_args_kwargs_fwd(t, config):
+    skip_if_unsupported(config, t)
     @wrap(config)
     def test_fn(*args, **kwargs):
         return args[0] * kwargs["y"]
@@ -756,6 +790,7 @@ def test21_args_kwargs_fwd(t, config):
 @pytest.test_arrays('is_diff,float,shape=(*)')
 @pytest.skip_on(RuntimeError, "not implemented for 'Half'")
 def test22_flipped_args_kwargs_fwd(t, config):
+    skip_if_unsupported(config, t)
     if config[0] == "tf":
         pytest.skip("Skipped due to limited support of `tf.custom_gradient()`"
                     " for forward-mode AD.")
@@ -783,6 +818,7 @@ def test22_flipped_args_kwargs_fwd(t, config):
 @pytest.mark.parametrize('config', configs + configs_tf_jit)
 @pytest.test_arrays('is_diff,float,shape=(3, *)')
 def test23_nested_arrays_bwd(t, config):
+    skip_if_unsupported(config, t)
     @wrap(config)
     def test_fn(x, y):
         if config[0] == 'tf':
@@ -803,6 +839,7 @@ def test23_nested_arrays_bwd(t, config):
 @pytest.mark.parametrize('config', configs + configs_tf_jit)
 @pytest.test_arrays('is_diff,float,shape=(3, *)')
 def test24_nested_arrays_fwd(t, config):
+    skip_if_unsupported(config, t)
     @wrap(config)
     def test_fn(x, y):
         if config[0] == 'tf':
@@ -824,6 +861,7 @@ def test24_nested_arrays_fwd(t, config):
 @pytest.mark.parametrize('config', configs + configs_tf_jit)
 @pytest.test_arrays('is_diff,float,shape=(*)')
 def test25_pytree_bwd(t, config):
+    skip_if_unsupported(config, t)
     @wrap(config)
     def test_fn(x):
         return {
@@ -847,6 +885,7 @@ def test25_pytree_bwd(t, config):
 @pytest.mark.parametrize('config', configs + configs_tf_jit)
 @pytest.test_arrays('is_diff,float,shape=(*)')
 def test25_pytree_fwd(t, config):
+    skip_if_unsupported(config, t)
     @wrap(config)
     def test_fn(x):
         return {
@@ -870,6 +909,7 @@ def test25_pytree_fwd(t, config):
 @pytest.mark.parametrize('config', configs_torch + configs_tf)
 @pytest.test_arrays('is_diff,float,shape=(*)')
 def test26_flipped_pytree_bwd(t, config):
+    skip_if_unsupported(config, t)
     @wrap_flipped(config)
     def test_fn(x):
         return {
@@ -911,6 +951,7 @@ def test26_flipped_pytree_bwd(t, config):
 @pytest.mark.parametrize('config', configs_torch + configs_tf)
 @pytest.test_arrays('is_diff,float,shape=(*)')
 def test26_flipped_pytree_fwd(t, config):
+    skip_if_unsupported(config, t)
     if config[0] == "tf":
         pytest.skip("Skipped due to limited support of `tf.custom_gradient()`"
                     " for forward-mode AD.")
@@ -945,6 +986,7 @@ def test26_flipped_pytree_fwd(t, config):
 @pytest.mark.parametrize('config', configs + configs_tf_jit)
 @pytest.test_arrays('is_diff,float32,shape=(*)')
 def test27_exception(t, config):
+    skip_if_unsupported(config, t)
     @wrap(config)
     def test_fn(x):
         raise RuntimeError('foo')
@@ -956,6 +998,7 @@ def test27_exception(t, config):
 @pytest.mark.parametrize('config', configs_torch + configs_tf)
 @pytest.test_arrays('is_diff,float32,shape=(*)')
 def test28_flipped_exception(t, config):
+    skip_if_unsupported(config, t)
     @wrap_flipped(config)
     def test_fn(x):
         raise RuntimeError('foo')
@@ -970,6 +1013,7 @@ def test28_flipped_exception(t, config):
 @pytest.test_arrays('is_diff,float,shape=(*)')
 @pytest.skip_on(RuntimeError, "backend does not support the requested type of atomic reduction")
 def test29_flipped_non_tensor_output_bwd(t, config):
+    skip_if_unsupported(config, t)
     @wrap_flipped(config)
     def test_fn(x):
         a = dr.gather(t, x.array, 0)
