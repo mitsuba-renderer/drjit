@@ -441,13 +441,14 @@ bool VariableTracker::Impl::traverse(Context &ctx, nb::handle h) {
                 VarInfo vi_new = jit_set_backend((uint32_t) idx_new);
 
                 if (vi_new.size != vi.size && vi_new.size != 1 &&
-                    vi.size != 1 && check_size)
+                    vi.size != 1 && check_size) {
                     nb::raise("the symbolic operation tried to change the "
                               "size of state variable '%s' of type "
                               "'%s' from %zu to %zu. Aborting because "
                               "these sizes aren't compatible",
                               ctx.label.c_str(), nb::inst_name(h).c_str(),
                               vi.size, vi_new.size);
+                }
 
                 if (vi.type != vi_new.type)
                     nb::raise("internal error: the JIT variable type of "
@@ -585,8 +586,8 @@ uint64_t VariableTracker::Context::_traverse_write(uint64_t idx) {
                   "'%s': uninitialized variable",
                   label.c_str());
 
-    VarInfo vi = jit_set_backend((uint32_t)idx),
-            vi_new = jit_set_backend((uint32_t)idx_new);
+    VarInfo vi = jit_set_backend((uint32_t) idx),
+            vi_new = jit_set_backend((uint32_t) idx_new);
 
     if (vi.size != vi_new.size && vi.size != 1 && vi_new.size != 1 &&
         check_size)

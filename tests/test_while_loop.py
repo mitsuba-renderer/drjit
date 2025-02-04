@@ -220,7 +220,7 @@ def test12_loop_optimizations(t, optimize):
             assert b_const == 0
             assert it_count == 1
             assert a.state == dr.VarState.Unevaluated
-            assert b.state == dr.VarState.Unevaluated
+            assert b.state == dr.VarState.Literal
         else:
             assert a_const == 1
             assert b_const == 1
