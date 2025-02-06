@@ -581,12 +581,29 @@ public:
         for (size_t i = 0; i < args.size(); ++i)
             m_args.push_back_borrow((uint32_t) args[i]);
 
+        m_mask_stack = jit_var_mask_peek(backend);
+        if (!m_mask_stack) {
+            // Find wavefront size, sizes are guaranteed to be compatible here
+            size_t size = jit_var_size(index);
+
+            size_t mask_size = jit_var_size(index);
+            size = mask_size > size ? mask_size : size;
+
+            for (uint64_t arg_i : args) {
+                size_t arg_size = jit_var_size((uint32_t)arg_i);
+                size = arg_size > size ? arg_size : size;
+            }
+
+            m_mask_stack = jit_var_mask_default(backend, size);
+        }
+
         m_name_op = "Call: " + m_name;
     }
 
     ~CallOp() {
         jit_var_dec_ref(m_index);
         jit_var_dec_ref(m_mask);
+        jit_var_dec_ref(m_mask_stack);
         if (m_cleanup)
             m_cleanup(m_payload);
     }
@@ -597,6 +614,7 @@ public:
 
     /// Implements f(arg..., grad(arg)...) -> grad(rv)...
     void forward() override {
+        scoped_push_mask mask_guard(m_backend, m_mask_stack);
         std::string name = m_name + " [ad, fwd]";
 
         index64_vector args, rv;
@@ -630,6 +648,8 @@ public:
     /// Implements f(arg..., grad(rv)...) -> grad(arg) ...
     void backward() override {
         scoped_isolation_guard isolation_guard;
+        scoped_push_mask mask_guard(m_backend, m_mask_stack);
+
         std::string name = m_name + " [ad, bwd]";
 
         index64_vector args, rv;
@@ -766,7 +786,7 @@ private:
     std::string m_name, m_name_op;
     const char *m_variant;
     const char *m_domain;
-    uint32_t m_index, m_mask;
+    uint32_t m_index, m_mask, m_mask_stack;
     size_t m_callable_count;
     index32_vector m_args;
     index64_vector m_args2;
