@@ -679,3 +679,42 @@ def test17_bwd_in_switch(t, symbolic):
         result = dr.switch(index, funcs, a, b)
         assert dr.allclose(result, [3, 6, 3, 4])
         assert dr.allclose(buf1.grad, [2, 2, 0, 0])
+
+
+# Loop mask should implicitly be applied to calls (with AD too)
+@pytest.mark.parametrize("symbolic_config", [(True, True), (False, True), (False, False)])
+@pytest.test_arrays('float32,diff,shape=(*)')
+@dr.syntax()
+def test18_apply_loop_mask(t, capsys, symbolic_config):
+    dr.set_flag(dr.JitFlag.Debug, True)
+    Float = t
+    UInt32 = dr.uint32_array_t(t)
+    with dr.scoped_set_flag(dr.JitFlag.SymbolicLoops, symbolic_config[0]):
+        with dr.scoped_set_flag(dr.JitFlag.SymbolicCalls, symbolic_config[1]):
+            def f(value):
+                return value * 2
+            def g(value):
+                return Float(0)
+
+            switch_idx = UInt32([0, 1, 123]) # idx=2 is invalid
+
+            val = Float(2)
+            dr.enable_grad(val)
+            dr.set_grad(val, 1)
+
+            # Every idx does one iteration of the loop, except idx=2
+            count = UInt32(0, 0, 1)
+            out = Float(1)
+            while count < 1:
+                out = dr.switch(switch_idx, [f, g], val)
+                count = count + 1
+
+            dr.forward_to(out)
+
+            # idx=2 output values should be ignored
+            assert dr.allclose(out[0], 4)
+            assert dr.allclose(out[1], 0)
+            assert dr.allclose(out.grad[0], 2)
+            assert dr.allclose(out.grad[1], 0)
+            transcript = capsys.readouterr().err
+            assert "Attempted to invoke callable with index 123, but this value must be strictly smaller than 2" not in transcript
