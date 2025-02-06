@@ -1,6 +1,9 @@
-import pytest
+import platform
 import warnings
+
 import drjit as dr
+import pytest
+
 
 configs_jax = []
 configs_torch = []
@@ -45,24 +48,29 @@ try:
 except ImportError:
     pass
 
-try:
-    import tensorflow as tf
-    supports_bool = True
-    configs_tf.append(('tf', supports_bool, 'eager'))
 
-    # Test configurations which are only used
-    # for the 'drjit'->'tf' direction, where
-    # the TF function is executed in Graph or XLA mode
-    configs_tf_jit.append(('tf', supports_bool, 'graph'))
-    configs_tf_jit.append(('tf', supports_bool, 'xla'))
+# TensorFlow is not setup correctly on the macOS CI yet.
+# TODO: re-enable TF tests on macOS
+if platform.system() != "Darwin":
+    try:
+        import tensorflow as tf
+        supports_bool = True
+        configs_tf.append(('tf', supports_bool, 'eager'))
 
-    TF_HAS_GPU = bool(tf.config.list_physical_devices("GPU"))
-    del supports_bool
+        # Test configurations which are only used
+        # for the 'drjit'->'tf' direction, where
+        # the TF function is executed in Graph or XLA mode
+        configs_tf_jit.append(('tf', supports_bool, 'graph'))
+        configs_tf_jit.append(('tf', supports_bool, 'xla'))
 
-except ImportError:
-    pass
+        TF_HAS_GPU = bool(tf.config.list_physical_devices("GPU"))
+        del supports_bool
+
+    except ImportError:
+        pass
 
 configs = configs_torch + configs_jax + configs_tf
+
 
 def wrap(config):
     def wrapper(func):
@@ -109,12 +117,13 @@ def skip_if_unsupported(config, t, needs_int32: bool = False):
 
     # Skip TF test if DrJit supports CUDA on this platform,
     # but TF does not (e.g. native Windows).
-    if config[0] == "tf" and dr.backend_v(t) == dr.JitBackend.CUDA:
-        if not TF_HAS_GPU:
-            pytest.skip("TensorFlow didn't detect a CUDA device, skipping.")
-        if needs_int32 and config[2] == "graph":
-            pytest.xfail("Expected to fail due to TF dlpack issue for int32,"
-                         " see https://github.com/tensorflow/tensorflow/issues/78091")
+    if config[0] == "tf":
+        if dr.backend_v(t) == dr.JitBackend.CUDA:
+            if not TF_HAS_GPU:
+                pytest.skip("TensorFlow didn't detect a CUDA device, skipping.")
+            if needs_int32 and config[2] == "graph":
+                pytest.xfail("Expected to fail due to TF dlpack issue for int32,"
+                            " see https://github.com/tensorflow/tensorflow/issues/78091")
 
 
 @pytest.fixture(scope="module", autouse=True)
