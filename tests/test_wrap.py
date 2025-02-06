@@ -117,6 +117,17 @@ def skip_if_unsupported(config, t, needs_int32: bool = False):
                          " see https://github.com/tensorflow/tensorflow/issues/78091")
 
 
+@pytest.fixture(scope="module", autouse=True)
+def wrap_teardown():
+    # Run tests in this module
+    yield
+
+    # Teardown: invoke garbage collector explicitly to avoid
+    # issues related to destruction order during shutdown.
+    import gc
+    gc.collect()
+
+
 @pytest.mark.parametrize('is_diff', [True, False])
 @pytest.mark.parametrize('config', configs + configs_tf_jit)
 @pytest.test_arrays('is_diff,float,shape=(*)')
