@@ -1501,8 +1501,7 @@ private:
                                                public-facing unpadded tensor
                                                needs to be updated */
 
-    DR_TRAVERSE_CB(drjit::TraversableBase, m_value, m_shape_opaque,
-                   m_inv_resolution);
+    DR_TRAVERSE_CB(drjit::TraversableBase, m_value, m_inv_resolution);
 };
 
 NAMESPACE_END(drjit)
