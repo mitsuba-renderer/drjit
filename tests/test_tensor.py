@@ -327,6 +327,13 @@ def test09_broadcast(t):
     x = dr.full(t, 2, shape=(4,5)) * dr.full(t, 3, shape=(3,4,5))
     assert dr.all(x == dr.full(t, 6, shape=(3,4,5)), axis=None)
 
+    # Implicit broadcast with select
+    x = dr.full(t, 2, shape=(1,1))
+    y = dr.full(t, 2, shape=(2,1))
+    z = dr.select(x==2, 2, y)
+    assert dr.all(z == y)
+    assert z.shape == (2,1)
+
     with pytest.raises(RuntimeError, match=r'operands have incompatible shapes: \(2,\) and \(3,\).'):
         dr.zeros(t, 2) + dr.zeros(t, 3)
 
