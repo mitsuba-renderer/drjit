@@ -862,10 +862,16 @@ def test24_nested_arrays_fwd(t, config):
     skip_if_unsupported(config, t)
     @wrap(config)
     def test_fn(x, y):
+        # Note: this test was initially written using `x * y`, but this caused
+        # reference leaks from TensorFlow in a very weird corner case where
+        # all of the following applied:
+        # - LLVM backend
+        # - Both XLA and eager-mode variants enabled
+        # - Forward-mode gradients (backward-mode didn't leak)
         if config[0] == 'tf':
-            return tf.reduce_sum(x*y)
+            return tf.reduce_sum(x + y)
         else:
-            return (x*y).sum()
+            return (x + y).sum()
 
     x = t([1, 2], [3, 4], [5, 6])
     y = t(10, 20, 30)
@@ -876,7 +882,7 @@ def test24_nested_arrays_fwd(t, config):
 
     g = dr.forward_to(r)
     assert dr.is_tensor_v(g)
-    assert g.array[0] == 10000
+    assert g.array[0] == 1410.0
 
 @pytest.mark.parametrize('config', configs + configs_tf_jit)
 @pytest.test_arrays('is_diff,float,shape=(*)')
