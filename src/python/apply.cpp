@@ -366,14 +366,18 @@ void tensor_broadcast(nb::object &tensor, nb::object &array,
     for (size_t i = 0; i < ndim; ++i)
         dst_size *= shape_dst[i];
 
-    if (src_size == 1) {
-        if (dst_size != 1)
-            array = array + full("zeros", array.type(), nb::int_(0), dst_size);
-        return;
-    }
-
     nb::handle tp = tensor.type();
     const ArraySupplement &s = supp(tp);
+
+    if (src_size == 1) {
+        if (dst_size != 1) {
+            if (s.type == (uint16_t) VarType::Bool)
+                array = array | full("zeros", array.type(), nb::bool_(0), dst_size);
+            else
+                array = array + full("zeros", array.type(), nb::int_(0), dst_size);
+        }
+        return;
+    }
 
     nb::type_object_t<ArrayBase> index_type =
         nb::borrow<nb::type_object_t<ArrayBase>>(s.tensor_index);
