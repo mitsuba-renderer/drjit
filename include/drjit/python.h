@@ -1098,10 +1098,10 @@ inline void traverse_py_cb_ro(const TraversableBase *base, void *payload,
         return;
 
     auto detail = nb::module_::import_("drjit.detail");
-    nb::callable traverse_py_cb_ro =
+    nb::callable traverse_py_cb_ro_fn =
         nb::borrow<nb::callable>(nb::getattr(detail, "traverse_py_cb_ro"));
 
-    traverse_py_cb_ro(self,
+    traverse_py_cb_ro_fn(self,
                       nb::cpp_function([&](uint64_t index, const char *variant,
                                            const char *domain) {
                           fn(payload, index, variant, domain);
@@ -1118,10 +1118,10 @@ inline void traverse_py_cb_rw(TraversableBase *base, void *payload,
         return;
 
     auto detail = nb::module_::import_("drjit.detail");
-    nb::callable traverse_py_cb_rw =
+    nb::callable traverse_py_cb_rw_fn =
         nb::borrow<nb::callable>(nb::getattr(detail, "traverse_py_cb_rw"));
 
-    traverse_py_cb_rw(self,
+    traverse_py_cb_rw_fn(self,
                       nb::cpp_function([&](uint64_t index, const char *variant,
                                            const char *domain) {
                           return fn(payload, index, variant, domain);
