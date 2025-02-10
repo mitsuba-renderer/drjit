@@ -114,8 +114,8 @@ void collect_indices(nb::handle h, dr::vector<uint64_t> &indices, bool inc_ref) 
                 operator()(index_fn(inst_ptr(h)), nullptr, nullptr);
         }
 
-        uint64_t operator()(uint64_t index, const char *variant,
-                            const char *domain) override {
+        uint64_t operator()(uint64_t index, const char *,
+                            const char *) override {
             if (inc_ref)
                 ad_var_inc_ref(index);
             result.push_back(index);
@@ -325,7 +325,7 @@ void traverse_py_cb_rw_impl(nb::handle self, nb::callable c) {
                 s.reset_index(operator()(s.index(inst_ptr(h)), nullptr, nullptr), inst_ptr(h));
         }
         uint64_t operator()(uint64_t index, const char *variant, const char *domain) override {
-            return nb::cast<uint64_t>(m_callback(index));
+            return nb::cast<uint64_t>(m_callback(index, variant, domain));
         }
         nb::callable m_callback;
 
