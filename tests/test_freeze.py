@@ -545,7 +545,7 @@ def test19_non_jit_types(t):
     assert frozen.n_recordings == 3
 
 
-@pytest.test_arrays("uint32, jit, cuda, -is_diff, shape=(*)")
+@pytest.test_arrays("uint32, jit, shape=(*)")
 def test20_literal(t):
     """
     Test that drjit literals, passed to frozen functions do not cause the
