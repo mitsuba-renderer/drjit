@@ -940,7 +940,7 @@ def test29_with_gathers(t):
     assert dr.allclose(result4, result1)
 
 
-@pytest.test_arrays("float32, cuda, jit, shape=(*)")
+@pytest.test_arrays("float32, jit, shape=(*)")
 def test30_scatter_with_op(t):
     """
     Tests scattering into the input of a frozen function.
