@@ -11,6 +11,7 @@
 #pragma once
 
 #include "common.h"
+#include <string>
 #include <drjit/autodiff.h>
 
 #include <tsl/robin_map.h>
