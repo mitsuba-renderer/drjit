@@ -54,9 +54,7 @@ class CustomBase : public Object{
 public:
     CustomBase() : Object() {}
 
-    virtual Value &value() {
-        jit_raise("test");
-    };
+    virtual Value &value() = 0;
 
     DR_TRAVERSE_CB(Object);
 };
