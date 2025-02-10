@@ -86,6 +86,7 @@ struct DRJIT_EXPORT TraversableBase : public nanobind::intrusive_base {
      * \param payload:
      *    A pointer to a payload struct. The callback ``cb`` is called with this
      *    pointer.
+     
      * \param cb:
      *    A function pointer, that is called with the ``payload`` pointer, the
      *    index of the jit variable, and optionally the domain and variant of a
@@ -102,6 +103,7 @@ struct DRJIT_EXPORT TraversableBase : public nanobind::intrusive_base {
      * \param payload:
      *    A pointer to a payload struct. The callback ``cb`` is called with this
      *    pointer.
+     
      * \param cb:
      *    A function pointer, that is called with the ``payload`` pointer, the
      *    index of the jit variable, and optionally the domain and variant of a
