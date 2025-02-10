@@ -3,7 +3,6 @@
 #include "fwd.h"
 #include <drjit/array_traverse.h>
 #include <drjit-core/macros.h>
-#include <functional>
 #include <nanobind/intrusive/counter.h>
 #include <nanobind/intrusive/ref.h>
 #include <drjit-core/jit.h>
