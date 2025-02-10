@@ -745,7 +745,6 @@ void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
 
             // Update layout number of fields
             this->layout[layout_index].num = num_fields;
-        } else if (tp.is(&_PyNone_Type)) {
         } else {
             jit_log(LogLevel::Info,
                     "traverse(): You passed a value to a frozen function, "
