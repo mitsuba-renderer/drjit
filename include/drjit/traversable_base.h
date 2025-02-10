@@ -200,13 +200,13 @@ public:                                                                        \
                           drjit::detail::traverse_callback_ro fn)              \
         const override {                                                       \
         if constexpr (!std ::is_same_v<Base, drjit ::TraversableBase>)         \
-            Base ::traverse_1_cb_ro(payload, fn);                              \
+            Base::traverse_1_cb_ro(payload, fn);                               \
         drjit::traverse_py_cb_ro(this, payload, fn);                           \
     }                                                                          \
     void traverse_1_cb_rw(void *payload,                                       \
                           drjit::detail::traverse_callback_rw fn) override {   \
         if constexpr (!std ::is_same_v<Base, drjit ::TraversableBase>)         \
-            Base ::traverse_1_cb_rw(payload, fn);                              \
+            Base::traverse_1_cb_rw(payload, fn);                               \
         drjit::traverse_py_cb_rw(this, payload, fn);                           \
     }
 
