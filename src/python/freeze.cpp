@@ -823,13 +823,13 @@ nb::object FlatVariables::construct() {
             for (uint32_t i = 0; i < layout.num; ++i) {
                 list.append(construct());
             }
-            return list;
+            return std::move(list);
         } else if (layout.type.is(&PyDict_Type)) {
             nb::dict dict;
             for (auto k : layout.fields) {
                 dict[k] = construct();
             }
-            return dict;
+            return std::move(dict);
         } else if (nb::dict ds = get_drjit_struct(layout.type); ds.is_valid()) {
             nb::object tmp = layout.type();
             // TODO: validation against `ds`
