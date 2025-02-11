@@ -1,3 +1,4 @@
+from typing import Callable, TypeVar
 from . import detail
 
 with detail.scoped_rtld_deepbind():
@@ -1877,6 +1878,142 @@ def binary_search(start, end, pred):
         end = select(cond, end, middle)
 
     return start
+
+# Represents the type of the state that is returned by ``state``
+S = TypeVar("S")
+# Represents the frozen function passed to the decorator without arguments
+F = TypeVar("F")
+# Represents the frozen function passed to the decorator with arguments
+F2 = TypeVar("F2")
+
+@overload
+def freeze(f: None = None, *, state: Callable[..., S]) -> Callable[[F], F]:
+    """
+    Decorator to freeze a function for replaying kernels without compilation.
+
+    This decorator wraps a function, and enables replaying it in order remove the
+    need for tracing python operations. The first time a frozen function is called,
+    it is executed regularly, while all operations performed are recorded. When the
+    frozen function is called again, with compatible arguments, the recorded
+    operations are replayed instead of launching the Python function. This saves on
+    the overhead that is inherent when tracing and compiling python operations into
+    kernels. The frozen function keeps a record of all previously recorded calls,
+    and associates them with the input layout. Since the kernels might be compiled
+    differently when changing certain attributes of variables, the frozen function
+    will be re-recorded if the inputs are no longer compatible with previous
+    recordings. We also track the layout of any container and the values of Python
+    types of the inputs to the frozen function. The following are the input
+    attributes which are tracked and might cause the function to be re-recorded if
+    changed.
+
+    - Python type of any variable or container
+    - Number of members in a container, such as the length of a list
+    - Key or field names, such as dictionary keys or dataclass field names
+    - The `Dr.Jit` type of any variable
+    - Whether a variable has size $1$
+    - Whether the memory, referenced by a variable is unaligned (only applies to
+      mapped NumPy arrays)
+    - Whether the variable has gradients enabled
+    - The sets of variables that have the same size
+    - The hash of any Python variable, that is not a Dr.Jit variable or a container
+
+    The width of a variable itself is not tracked, as we want to allow replaying of
+    kernels with different sizes. However, if multiple variables are scheduled and
+    evaluated at the same time, they can get compiled into the same kernel if their
+    size matches. Therefore, we track the size class of the variable, and re-record
+    the kernel if it changed. Because the size is not tracked it is leaked into the
+    frozen function context and we infer the size of kernels using a heuristic based
+    on the sizes of the input variables. This allows gathering from variables with
+    their width as an argument. However, using the size of a variable in more
+    complicated computations might lead to undefined behavior.
+
+    ```python
+    y = dr.gather(type(x), x, dr.width(x)//2)
+    ```
+
+    Similarly, calculating the mean of a variable relies on the number of entries,
+    which will be baked into the frozen function. To avoid this, we suggest
+    supplying the number of entries as a Dr.Jit literal in the arguments to the
+    function.
+    """
+
+
+@overload
+def freeze(f: F, *, state: None = None) -> F: ...
+
+
+def freeze(
+    f: Optional[F] = None, *, state: Optional[Callable] = None
+) -> Union[F, Callable[[F2], F2]]:
+
+    def decorator(f):
+        """
+        Internal decorator, returned in ``dr.freeze`` was used with arguments.
+        """
+        import functools
+        import inspect
+
+        def inner(closure, *args, **kwargs):
+            """
+            This inner function is the one that gets actually frozen. It receives
+            any additional state such as closures or state specified with the
+            ``state`` lambda, and allows for traversal of it.
+            """
+            return f(*args, **kwargs)
+
+        class FrozenFunction:
+            def __init__(self, f) -> None:
+                closure = inspect.getclosurevars(f)
+                self.closure = (closure.nonlocals, closure.globals)
+                self.frozen = detail.FrozenFunction(inner)
+
+            def __call__(self, *args, **kwargs):
+                _state = state(*args, **kwargs) if state is not None else None
+                return self.frozen([self.closure, _state], *args, **kwargs)
+
+            @property
+            def n_recordings(self):
+                return self.frozen.n_recordings
+
+            @property
+            def n_cached_recordings(self):
+                return self.frozen.n_cached_recordings
+
+            def clear(self):
+                return self.frozen.clear()
+
+            def __get__(self, obj, type=None):
+                if obj is None:
+                    return self
+                else:
+                    return FrozenMethod(self.frozen, self.closure, obj)
+
+        class FrozenMethod(FrozenFunction):
+            """
+            A FrozenMethod currying the object into the __call__ method.
+
+            If the ``freeze`` decorator is applied to a method of some class, it has
+            to call the internal frozen function with the ``self`` argument. To this
+            end we implement the ``__get__`` method of the frozen function, to
+            return a ``FrozenMethod``, which holds a reference to the object.
+            The ``__call__`` method of the ``FrozenMethod`` then supplies the object
+            in addition to the arguments to the internal function.
+            """
+            def __init__(self, frozen, closure, obj) -> None:
+                self.obj = obj
+                self.frozen = frozen
+                self.closure = closure
+
+            def __call__(self, *args, **kwargs):
+                _state = state(self.obj, *args, **kwargs) if state is not None else None
+                return self.frozen([self.closure, _state], self.obj, *args, **kwargs)
+
+        return functools.wraps(f)(FrozenFunction(f))
+
+    if f is not None:
+        return decorator(f)
+    else:
+        return decorator
 
 
 def assert_true(
