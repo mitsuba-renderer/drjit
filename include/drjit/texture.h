@@ -58,7 +58,7 @@ public:
     using UInt32 = uint32_array_t<_Storage>;
     using Storage = std::conditional_t<IsDynamic, _Storage, DynamicArray<_Storage>>;
     using Packet = std::conditional_t<is_jit_v<_Storage>,
-        dr::DynamicArray<_Storage>, _Storage*>;
+        DynamicArray<_Storage>, _Storage*>;
     using TensorXf = Tensor<Storage>;
 
     #define DR_TEX_ALLOC_PACKET(name, size)                     \
@@ -217,12 +217,12 @@ public:
 
             if (m_channels_storage != m_channels) {
                 using Mask = mask_t<_Storage>;
-                UInt32 idx = dr::arange<UInt32>(m_size);
+                UInt32 idx = arange<UInt32>(m_size);
                 UInt32 pixels_idx = idx / m_channels_storage;
                 UInt32 channel_idx = idx % m_channels_storage;
                 Mask active = channel_idx < m_channels;
-                idx = dr::fmadd(pixels_idx, m_channels, channel_idx);
-                padded_value = dr::gather<Storage>(value, idx, active);
+                idx = fmadd(pixels_idx, m_channels, channel_idx);
+                padded_value = gather<Storage>(value, idx, active);
             }
 
             if (padded_value.size() != m_size)
@@ -335,13 +335,13 @@ public:
                 m_unpadded_value = m_value;
 
                 if (m_channels != m_channels_storage) {
-                    UInt32 idx = dr::arange<UInt32>((m_size * m_channels)
+                    UInt32 idx = arange<UInt32>((m_size * m_channels)
                         / m_channels_storage);
                     UInt32 pixels_idx = idx / m_channels;
                     UInt32 channel_idx = idx % m_channels;
-                    idx = dr::fmadd(pixels_idx, m_channels_storage, channel_idx);
+                    idx = fmadd(pixels_idx, m_channels_storage, channel_idx);
                     m_unpadded_value = TensorXf(
-                        dr::gather<Storage>(m_value.array(), idx),
+                        gather<Storage>(m_value.array(), idx),
                         Dimension + 1, m_shape);
                 }
                 m_tensor_dirty = false;
