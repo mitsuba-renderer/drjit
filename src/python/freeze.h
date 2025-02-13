@@ -23,6 +23,7 @@ struct FrozenFunction;
 namespace detail {
 
 using index64_vector = drjit::detail::index64_vector;
+using index32_vector = drjit::detail::index32_vector;
 
 enum class LayoutFlag : uint32_t {
     /// Whether this variable has size 1
@@ -37,6 +38,7 @@ enum class LayoutFlag : uint32_t {
     /// where postponed by the ``isolate_grad`` function?
     Postponed = (1 << 4),
     JitIndex = (1 << 5),
+    MakeOpaque = (1 << 6),
 };
 
 /// Stores information about python objects, such as their type, their number of
@@ -118,7 +120,7 @@ struct VarLayout{
 struct TraverseContext {
     /// Set of postponed ad nodes, used to mark inputs to functions.
     const tsl::robin_set<uint32_t, UInt32Hasher> *postponed = nullptr;
-    bool schedule_force                                     = false;
+    index32_vector free_list;
 };
 
 /**
@@ -238,6 +240,11 @@ struct FlatVariables {
         for (uint32_t &index : this->variables)
             jit_var_dec_ref(index);
     }
+
+    bool compare_opaque(FlatVariables &prev, std::vector<bool> &opaque_mask);
+
+    void schedule_jit_variables(bool schedule_force,
+                                std::vector<bool> *opaque_mask);
 
     /**
      * \brief Records information about jit variables, that have been traversed.
@@ -498,18 +505,21 @@ struct FrozenFunction {
 
     detail::RecordingMap recordings;
     std::shared_ptr<detail::FlatVariables> prev_key;
+    std::vector<bool> opaque_mask;
 
     uint32_t recording_counter = 0;
     uint32_t call_counter = 0;
     int max_cache_size = -1;
     uint32_t warn_recording_count = 10;
+    bool auto_opaque = false;
 
     detail::FlatVariables::Heuristic in_heuristics;
 
     FrozenFunction(nb::callable func, int max_cache_size = -1,
-                   uint32_t warn_recording_count = 10)
+                   uint32_t warn_recording_count = 10, bool auto_opaque = false)
         : func(func), max_cache_size(max_cache_size),
-          warn_recording_count(warn_recording_count) {}
+          warn_recording_count(warn_recording_count), auto_opaque(auto_opaque) {
+    }
     ~FrozenFunction() {}
 
     FrozenFunction(const FrozenFunction &)            = delete;

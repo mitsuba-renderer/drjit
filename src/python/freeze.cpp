@@ -230,6 +230,133 @@ uint32_t FlatVariables::add_jit_index(uint32_t index) {
     }
 }
 
+bool compatible_auto_opaque(FlatVariables &cur, FlatVariables &prev){
+    if (cur.layout.size() != prev.layout.size()) {
+        return false;
+    }
+    for (uint32_t i = 0; i < cur.layout.size(); i++) {
+        Layout &cur_layout  = cur.layout[i];
+        Layout &prev_layout = prev.layout[i];
+
+        if (((bool) cur_layout.type != (bool) prev_layout.type) ||
+            !(cur_layout.type.equal(prev_layout.type))){
+            // jit_log(LogLevel::Warn, "type");
+            return false;
+        }
+
+        if (cur_layout.num != prev_layout.num){
+            // jit_log(LogLevel::Warn, "num");
+            return false;
+        }
+
+        if (cur_layout.fields.size() != prev_layout.fields.size()){
+            // jit_log(LogLevel::Warn, "fields.size()");
+            return false;
+        }
+
+        for (uint32_t i = 0; i < cur_layout.fields.size(); ++i) {
+            if (!(cur_layout.fields[i].equal(prev_layout.fields[i]))){
+                // jit_log(LogLevel::Warn, "fields[%u]", i);
+                return false;
+            }
+        }
+
+        // if (cur_layout.index != prev_layout.index)
+        //     return false;
+
+        // if (cur_layout.flags != prev_layout.flags)
+        //     return false;
+
+        if (cur_layout.vt != prev_layout.vt){
+            // jit_log(LogLevel::Warn, "vt");
+            return false;
+        }
+
+        if (((bool) cur_layout.py_object != (bool) prev_layout.py_object) ||
+            !cur_layout.py_object.equal(prev_layout.py_object)){
+            // jit_log(LogLevel::Warn, "py_object");
+            return false;
+        }
+    }
+    return true;
+}
+
+bool FlatVariables::compare_opaque(FlatVariables &prev,
+                                   std::vector<bool> &opaque_mask) {
+
+    // If we notice that only a literal has changed, we can set the
+    // corresponding bit in the mask, indicating that this literal should be
+    // made opaque next time.
+    uint32_t opaque_cunter = 0;
+    for (uint32_t i = 0; i < this->layout.size(); i++) {
+        Layout &layout      = this->layout[i];
+        Layout &prev_layout = prev.layout[i];
+
+        if (layout.flags & (uint32_t) LayoutFlag::Literal &&
+            prev_layout.flags & (uint32_t) LayoutFlag::Literal &&
+            (layout.literal != prev_layout.literal)) {
+            opaque_mask[i] = true;
+        }
+        if (opaque_mask[i])
+            opaque_cunter++;
+    }
+
+    jit_log(LogLevel::Debug,
+            "compare_opaque(): %u variables will be made opaque",
+            opaque_cunter);
+
+    return true;
+}
+
+void FlatVariables::schedule_jit_variables(bool schedule_force,
+                                           std::vector<bool> *opaque_mask) {
+    for (uint32_t i = layout_index; i < layout.size(); i++) {
+        Layout &layout = this->layout[i];
+
+        if (!(layout.flags & (uint32_t) LayoutFlag::JitIndex))
+            continue;
+
+        uint32_t index = layout.index;
+
+        int rv = 0;
+        if (schedule_force || (opaque_mask && opaque_mask->at(i-layout_index))) {
+            // Returns owning reference
+            index = jit_var_schedule_force(index, &rv);
+        } else {
+            // Schedule and create owning reference
+            rv = jit_var_schedule(index);
+            jit_var_inc_ref(index);
+        }
+
+        VarInfo info = jit_set_backend(index);
+        if (backend == info.backend || this->backend == JitBackend::None) {
+            backend = info.backend;
+        } else {
+            jit_raise("freeze(): backend missmatch error (backend of this "
+                      "variable %s does not match backend of others %s)!",
+                      info.backend == JitBackend::CUDA ? "CUDA" : "LLVM",
+                      backend == JitBackend::CUDA ? "CUDA" : "LLVM");
+        }
+
+        if (info.state == VarState::Literal) {
+            // Special case, where the variable is a literal. This should not
+            // occur, as all literals are made opaque in beforehand, however it
+            // is nice to have a fallback.
+            layout.literal = info.literal;
+            // Store size in index variable, as this is not used for literals
+            layout.index = info.size;
+            layout.vt    = info.type;
+
+            layout.flags |= (uint32_t) LayoutFlag::Literal;
+        } else {
+            layout.index = this->add_jit_index(index);
+            layout.vt    = info.type;
+        }
+        jit_var_dec_ref(index);
+    }
+    layout_index = layout.size();
+}
+
 /**
  * \brief Records information about jit variables, that have been traversed.
  *
@@ -247,16 +374,6 @@ void FlatVariables::record_jit_variables() {
         VarLayout &layout = var_layout[i];
 
         VarInfo info = jit_set_backend(index);
-
-        if (backend == info.backend || this->backend == JitBackend::None) {
-            backend = info.backend;
-        } else {
-            jit_raise("freeze(): backend missmatch error (backend of this "
-                      "variable %s does not match backend of others %s)!",
-                      info.backend == JitBackend::CUDA ? "CUDA" : "LLVM",
-                      backend == JitBackend::CUDA ? "CUDA" : "LLVM");
-        }
-
         if (info.type == VarType::Pointer) {
             // We do not support pointers as inputs. It might be possible with
             // some extra handling, but they are never used directly.
@@ -325,32 +442,8 @@ void FlatVariables::traverse_jit_index(uint32_t index, TraverseContext &ctx,
         layout.type = nb::borrow<nb::type_object>(tp);
 
     layout.flags |= (uint32_t) LayoutFlag::JitIndex;
-
-    int rv = 0;
-    if (ctx.schedule_force) {
-        // Returns owning reference
-        index = jit_var_schedule_force(index, &rv);
-    } else {
-        // Schedule and create owning reference
-        rv = jit_var_schedule(index);
-        jit_var_inc_ref(index);
-    }
-
-    VarInfo info = jit_set_backend(index);
-    if (info.state == VarState::Literal) {
-        // Special case, where the variable is a literal. This should not
-        // occur, as all literals are made opaque in beforehand, however it
-        // is nice to have a fallback.
-        layout.literal = info.literal;
-        // Store size in index variable, as this is not used for literals
-        layout.index = info.size;
-        layout.vt    = info.type;
-
-        layout.flags |= (uint32_t) LayoutFlag::Literal;
-    } else {
-        layout.index = this->add_jit_index(index);
-    }
-    jit_var_dec_ref(index);
+    layout.index = index;
+    layout.vt = jit_var_type(index);
 }
 
 /**
@@ -427,7 +520,7 @@ void FlatVariables::traverse_ad_index(uint64_t index, TraverseContext &ctx,
         traverse_jit_index((uint32_t) index, ctx, tp);
         uint32_t grad = ad_grad(index);
         traverse_jit_index(grad, ctx, tp);
-        jit_var_dec_ref(grad);
+        ctx.free_list.push_back_steal(grad);
     } else {
         traverse_jit_index(index, ctx, tp);
     }
@@ -1373,12 +1466,21 @@ nb::object FunctionRecording::record(nb::callable func,
         // Enter Resume scope, so we can track gradients
         ADScopeContext ad_scope(drjit::ADScope::Resume, 0, nullptr, -1, false);
 
+        jit_log(LogLevel::Info, "traverse output");
+
         TraverseContext ctx;
         ctx.postponed = &postponed;
-        ctx.schedule_force = false;
+
         out_variables.traverse(output, ctx);
-        ctx.schedule_force = true;
+        out_variables.schedule_jit_variables(false, nullptr);
+
+        // if (!frozen_func->prev_key)
+        //     frozen_func->in_opaque_mask.resize(out_variables.layout.size(), false);
+
         out_variables.traverse_with_registry(input, ctx);
+        out_variables.schedule_jit_variables(false, nullptr);
+
+        out_variables.layout_index = 0;
 
         { // Evaluate the variables, scheduled when traversing
             nb::gil_scoped_release guard;
@@ -1538,12 +1640,34 @@ nb::object FrozenFunction::operator()(nb::args args, nb::kwargs kwargs) {
             ADScopeContext ad_scope(drjit::ADScope::Resume, 0, nullptr, 0,
                                     true);
 
+
             // Traverse input variables
             ProfilerPhase profiler("traverse input");
             jit_log(LogLevel::Info, "freeze(): Traversing input");
+
             TraverseContext ctx;
-            ctx.schedule_force = true;
             in_variables->traverse_with_registry(input, ctx);
+
+            // If this is the first time the frozen function has been called or
+            // the layout is not compatible with the previous one, we clear the
+            // opaque_mask.
+            bool auto_opaque = false;
+            if (prev_key) {
+                auto_opaque = compatible_auto_opaque(*in_variables, *prev_key);
+                if (!auto_opaque) {
+                    // The mask is reset if they are not compatible
+                    opaque_mask.resize(in_variables->layout.size());
+                    for (uint32_t i = 0; i < opaque_mask.size(); i++)
+                        opaque_mask[i] = false;
+                    jit_log(LogLevel::Debug, "auto-opaque incompatible");
+                }
+            } else
+                opaque_mask.resize(in_variables->layout.size(), false);
+
+            in_variables->schedule_jit_variables(!this->auto_opaque,
+                                                 &opaque_mask);
+
+            in_variables->layout_index = 0;
 
             { // Evaluate the variables, scheduled when traversing
                 nb::gil_scoped_release guard;
@@ -1551,6 +1675,8 @@ nb::object FrozenFunction::operator()(nb::args args, nb::kwargs kwargs) {
             }
 
             in_variables->record_jit_variables();
+            if (prev_key && auto_opaque)
+                in_variables->compare_opaque(*prev_key, opaque_mask);
         }
 
         in_heuristics = in_heuristics.max(in_variables->heuristic());
@@ -1696,7 +1822,7 @@ void export_freeze(nb::module_ & /*m*/) {
     auto traversable_base =
         nb::class_<drjit::TraversableBase>(d, "TraversableBase");
     nb::class_<FrozenFunction>(d, "FrozenFunction", nb::type_slots(slots))
-        .def(nb::init<nb::callable, int, uint32_t>())
+        .def(nb::init<nb::callable, int, uint32_t, bool>())
         .def_prop_ro(
             "n_cached_recordings",
             [](FrozenFunction &self) { return self.n_cached_recordings(); })
