@@ -66,9 +66,10 @@ struct Variable {
 
     /// Move constructor
     Variable(Variable &&v) noexcept
-        : value_orig(std::move(v.value_orig)),
-          value(std::move(v.value)), index_orig(v.index_orig),
-          index(v.index), size(v.size), mutated(v.mutated) {
+        : value_orig(std::move(v.value_orig)), value(std::move(v.value)),
+          shape_orig(std::move(v.shape_orig)), shape(std::move(v.shape)),
+          index_orig(v.index_orig), index(v.index), size(v.size),
+          mutated(v.mutated) {
         v.index_orig = 0;
         v.index = 0;
         v.size = 0;
@@ -79,6 +80,8 @@ struct Variable {
     Variable &operator=(Variable &&v) noexcept {
         value_orig = std::move(v.value_orig);
         value = std::move(v.value);
+        shape = std::move(v.shape);
+        shape_orig = std::move(v.shape_orig);
         uint64_t old0 = index_orig, old1 = index;
         index_orig = v.index_orig;
         index = v.index;

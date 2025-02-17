@@ -712,9 +712,27 @@ def test30_tensor_loop(t, mode, optimize, variant):
             else:
                 z += 1
 
+        assert i.shape == (7,)
+        assert z.shape == (7,)
         assert dr.all(i == t([5, 5, 5, 5, 5, 5, 6]))
 
     if variant == 0:
         assert dr.all(z == t([9, 9, 9, 9, 9, 0, 0]))
     else:
         assert dr.all(z == t([5, 4, 3, 2, 1, 0, 0]))
+
+
+@pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
+@pytest.test_arrays('uint32,is_jit,is_tensor')
+@dr.syntax
+def test31_tensor_loop_preserve_shape(t, mode):
+    Int = dr.uint32_array_t(dr.array_t(t))
+
+    a = dr.zeros(t, (10, 11))
+
+    i = Int(0)
+    while i < 2:
+        i += 1
+        assert a.shape == (10, 11)
+
+    assert a.shape == (10, 11)
