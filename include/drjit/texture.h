@@ -69,7 +69,8 @@ public:
             _packet = empty<Packet>(m_channels_storage);        \
             name = _packet.data();                              \
         } else {                                                \
-            name = (_Storage*)alloca(sizeof(_Storage) * size);  \
+            name = (_Storage*) alloca(sizeof(_Storage) * size); \
+            (void) _packet;                                     \
         }
 
     /// Default constructor: create an invalid texture object
