@@ -149,32 +149,30 @@ def test01_traits(t):
 
     is_diff = "ad" in tm
     assert is_diff == dr.is_diff_v(t)
-    
+
     if is_jit:
         assert dr.is_diff_v(dr.diff_array_t(t))
         assert not dr.is_diff_v(dr.detached_t(t))
     else:
         assert not dr.is_diff_v(dr.diff_array_t(t))
         assert not dr.is_diff_v(dr.detached_t(t))
-    
-    #  assert dr.uint32_array_t(float) is int
-    #  assert dr.bool_array_t(float) is bool
-    #  assert dr.float32_array_t(int) is float
-    #
-    #  assert dr.bool_array_t(dr.scalar.Array3f) is dr.scalar.Array3b
-    #  assert dr.int32_array_t(dr.scalar.Array3f) is dr.scalar.Array3i
-    #  assert dr.uint32_array_t(dr.scalar.Array3f64) is dr.scalar.Array3u
-    #  assert dr.int64_array_t(dr.scalar.Array3f) is dr.scalar.Array3i64
-    #  assert dr.uint64_array_t(dr.scalar.Array3f) is dr.scalar.Array3u64
-    #  assert dr.uint_array_t(dr.scalar.Array3f) is dr.scalar.Array3u
-    #  assert dr.int_array_t(dr.scalar.Array3f) is dr.scalar.Array3i
-    #  assert dr.uint_array_t(dr.scalar.Array3f64) is dr.scalar.Array3u64
-    #  assert dr.int_array_t(dr.scalar.Array3f64) is dr.scalar.Array3i64
-    #  assert dr.float_array_t(dr.scalar.Array3u) is dr.scalar.Array3f
-    #  assert dr.float32_array_t(dr.scalar.Array3u) is dr.scalar.Array3f
-    #  assert dr.float_array_t(dr.scalar.Array3u64) is dr.scalar.Array3f64
-    #  assert dr.float32_array_t(dr.scalar.Array3u64) is dr.scalar.Array3f
-    #  assert dr.float_array_t(dr.scalar.TensorXu64) is dr.scalar.TensorXf64
+
+    assert dr.uint32_array_t(float) is int
+    assert dr.float32_array_t(int) is float
+
+    assert dr.int32_array_t(dr.scalar.Array3f) is dr.scalar.Array3i
+    assert dr.uint32_array_t(dr.scalar.Array3f64) is dr.scalar.Array3u
+    assert dr.int64_array_t(dr.scalar.Array3f) is dr.scalar.Array3i64
+    assert dr.uint64_array_t(dr.scalar.Array3f) is dr.scalar.Array3u64
+    assert dr.uint_array_t(dr.scalar.Array3f) is dr.scalar.Array3u
+    assert dr.int_array_t(dr.scalar.Array3f) is dr.scalar.Array3i
+    assert dr.uint_array_t(dr.scalar.Array3f64) is dr.scalar.Array3u64
+    assert dr.int_array_t(dr.scalar.Array3f64) is dr.scalar.Array3i64
+    assert dr.float_array_t(dr.scalar.Array3u) is dr.scalar.Array3f
+    assert dr.float32_array_t(dr.scalar.Array3u) is dr.scalar.Array3f
+    assert dr.float_array_t(dr.scalar.Array3u64) is dr.scalar.Array3f64
+    assert dr.float32_array_t(dr.scalar.Array3u64) is dr.scalar.Array3f
+    assert dr.float_array_t(dr.scalar.TensorXu64) is dr.scalar.TensorXf64
 
 
 @pytest.test_arrays("float, shape=(*)")
