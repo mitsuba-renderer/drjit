@@ -51,18 +51,17 @@ static void make_opaque(nb::handle h) {
             if (!s.index)
                 return;
 
+            ArrayBase *ptr = inst_ptr(h);
+
             int rv = 0;
-            uint64_t index = s.index(inst_ptr(h)),
+            uint64_t index = s.index(ptr),
                      index_new = ad_var_schedule_force(index, &rv);
+
             if (rv)
                 result = true;
 
-            if (index != index_new) {
-                nb::object tmp = nb::inst_alloc(tp);
-                s.init_index(index_new, inst_ptr(tmp));
-                nb::inst_mark_ready(tmp);
-                nb::inst_replace_move(h, tmp);
-            }
+            if (index != index_new)
+                s.reset_index(index_new, ptr);
 
             ad_var_dec_ref(index_new);
         }
