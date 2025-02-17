@@ -202,6 +202,31 @@ example, instead of ``dtype=Float``, we could have called
 dataclass). Indexing into the :py:class:`drjit.Local` instance then fetches or
 stores one instance of the PyTree.
 
+.. warning::
+
+   A limitation of the current implementation of this feature is that
+   :py:func:`Local.__getitem__` returns a copy of the underlying entry. The
+   following code therefore does not accomplish the expected mutation:
+
+   .. code-block:: python
+
+      buf = dr.alloc_local(MyClass, 10)
+      # ...
+      buf[i].entry += 1 # This won't modify 'buf'!
+
+   To modify nested fields, you must first retrieve the entire record and then
+   reassign it.
+
+   .. code-block:: python
+
+      value = buf[i]
+      value.entry += 1
+      buf[i] = value
+
+   An exception to this rule are in-place mutations (e.g. ``buf[i] += 1``) of
+   local memory buffers with arithmetic types, because Python will automatically
+   turn such expressions into the above pattern.
+
 .. note::
 
    Local memory reads/writes are *not* tracked by Dr.Jit's automatic
