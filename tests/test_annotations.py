@@ -1,5 +1,5 @@
-# Test selection of Dr.Jit functionality using postponed evaluation of 
-# annotations. The following import has to be included first which is why we 
+# Test selection of Dr.Jit functionality using postponed evaluation of
+# annotations. The following import has to be included first which is why we
 # have a dedicated test file
 from __future__ import annotations
 
@@ -15,11 +15,11 @@ def test01_gather_pytree(t):
     i = dr.uint32_array_t(t)([1, 0])
 
     if dr.backend_v(t) == dr.JitBackend.CUDA:
-        @dataclass 
+        @dataclass
         class MyDataclass:
             a : dr.cuda.ad.Float
     else:
-        @dataclass 
+        @dataclass
         class MyDataclass:
             a : dr.llvm.ad.Float
 
@@ -36,11 +36,11 @@ def test02_scatter_pytree(t):
     y = dr.zeros(t, 4)
 
     if dr.backend_v(t) == dr.JitBackend.CUDA:
-        @dataclass 
+        @dataclass
         class MyDataclass:
             a : dr.cuda.ad.Float
     else:
-        @dataclass 
+        @dataclass
         class MyDataclass:
             a : dr.llvm.ad.Float
 
