@@ -81,12 +81,15 @@ def test01_traits(t):
         assert mn == 'Array33b'
         assert dr.array_t(t).__name__ == "Array33f"
         assert dr.array_t(m).__name__ == "Array33b"
+        if is_jit:
+            assert dr.leaf_t(t) is dr.value_t(dr.value_t(t))
 
     if tn == 'Float':
         assert mn == 'Bool'
         assert dr.array_t(t).__name__ == "Float"
         assert dr.array_t(m).__name__ == "Bool"
         assert dr.matrix_t(t) is None
+        assert dr.leaf_t(t) is t
 
     if tn == 'Array3f':
         assert dr.matrix_t(t).__name__ == "Matrix3f"
@@ -157,6 +160,8 @@ def test01_traits(t):
         assert not dr.is_diff_v(dr.diff_array_t(t))
         assert not dr.is_diff_v(dr.detached_t(t))
 
+    assert dr.leaf_t(float) is float
+
     assert dr.uint32_array_t(float) is int
     assert dr.float32_array_t(int) is float
 
@@ -173,7 +178,7 @@ def test01_traits(t):
     assert dr.float_array_t(dr.scalar.Array3u64) is dr.scalar.Array3f64
     assert dr.float32_array_t(dr.scalar.Array3u64) is dr.scalar.Array3f
     assert dr.float_array_t(dr.scalar.TensorXu64) is dr.scalar.TensorXf64
-
+    assert dr.leaf_t(dr.scalar.Matrix3f) is dr.scalar.Array3f
 
 @pytest.test_arrays("float, shape=(*)")
 def test02_expr_t(t):

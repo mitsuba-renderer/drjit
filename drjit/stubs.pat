@@ -185,6 +185,15 @@ drjit.value_t$:
     @overload
     def value_t(arg: object, /) -> type: ...
 
+drjit.leaf_t$:
+    @overload
+    def leaf_t(arg: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], /) -> type[RedT]:
+        \doc
+    @overload
+    def leaf_t(arg: type[ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT]], /) -> type[RedT]: ...
+    @overload
+    def leaf_t(arg: object, /) -> type: ...
+
 drjit.array_t$:
     @overload
     def array_t(arg: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], /) -> type[PlainT]:

@@ -228,6 +228,7 @@
         assert dr.scalar_t(dr.scalar.Array3f) is bool
         assert dr.scalar_t(dr.cuda.Array3f) is float
         assert dr.scalar_t(dr.cuda.Matrix4f) is float
+        assert dr.scalar_t(dr.cuda.TensorXf) is float
         assert dr.scalar_t(str) is str
         assert dr.scalar_t("test") is str
 
@@ -249,6 +250,31 @@
     Returns:
         bool: ``True`` if ``arg`` represents a Dr.Jit mask array or Python ``bool``
         instance or type.
+
+.. topic:: leaf_t
+
+    Return the *leaf Dr.Jit type* associated with the provided Dr.Jit array or type
+    (i.e., the lowest-level element that is still a Dr.Jit type).
+
+    When the input is not a Dr.Jit array or type, the function returns its input
+    unchanged. The following assertions illustrate the behavior of
+    :py:func:`leaf_t`.
+
+    .. code-block:: python
+
+        assert dr.leaf_t(dr.leaf.Array3f) is dr.leaf.Array3f
+        assert dr.leaf_t(dr.cuda.Array3i) is dr.cuda.Int
+        assert dr.leaf_t(dr.cuda.Matrix4f) is dr.cuda.Float
+        assert dr.leaf_t(dr.cuda.TensorXf) is dr.cuda.Float
+        assert dr.leaf_t(str) is str
+        assert dr.leaf_t("test") is str
+
+    Args:
+        arg (object): An arbitrary Python object
+
+    Returns:
+        int: Returns the leaf Dr.Jit type of the provided Dr.Jit array, or the
+        type of the input.
 
 .. topic:: is_integral_v
 

@@ -20,6 +20,19 @@ nb::handle scalar_t(nb::handle h) {
     return tp;
 }
 
+nb::handle leaf_t(nb::handle h) {
+    nb::handle tp = h.is_type() ? h : h.type();
+    if (is_drjit_type(tp)) {
+        do {
+            nb::handle tp2 = supp(tp).value;
+            if (!is_drjit_type(tp2))
+                break;
+            tp = tp2;
+        } while (true);
+    }
+    return tp;
+}
+
 static size_t itemsize_v(nb::handle h) {
     nb::handle tp = h.is_type() ? h : h.type();
     if (is_drjit_type(tp))
@@ -159,6 +172,7 @@ void export_traits(nb::module_ &m) {
           }, doc_array_t);
 
     m.def("scalar_t", scalar_t, doc_scalar_t);
+    m.def("leaf_t", leaf_t, doc_leaf_t);
 
     m.def("is_array_v",
           [](nb::handle h) -> bool {

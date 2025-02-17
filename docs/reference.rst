@@ -231,6 +231,7 @@ _______________________
 .. autofunction:: array_t
 .. autofunction:: tensor_t
 .. autofunction:: matrix_t
+.. autofunction:: leaf_t
 
 Bit-level operations
 --------------------
