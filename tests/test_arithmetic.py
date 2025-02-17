@@ -431,3 +431,17 @@ def test22_and_mask(t):
 
     arr &= m
     assert dr.all(arr == t(1, 2, 0, 0))
+
+@pytest.test_arrays('float32, shape=(*), is_diff')
+def test23_rsqrt(t):
+    x = t(0.001, 0.1, 1, 2, 3, 4, 100)
+    y = 1 / dr.sqrt(x)
+    z = dr.rsqrt(x)
+    assert dr.all((y-z) / y < 1e-7)
+
+    x = t(0, float('inf'))
+    y = 1 / dr.sqrt(x)
+    z = dr.rsqrt(x)
+
+    assert dr.isinf(y[0]) == dr.isinf(z[0])
+    assert y[1] == z[1]
