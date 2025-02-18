@@ -1267,11 +1267,14 @@
     scalar, array, or tensor. When called with a complex or quaternion-valued
     array, it uses a suitable generalization of the operation.
 
-    When ``arg`` is a CUDA single precision array, the operation is implemented
-    slightly approximately---see the documentation of the instruction
-    ``rsqrt.approx.ftz.f32`` in the
-    `NVIDIA PTX manual <https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#floating-point-instructions-rcp>`__ for details.
-    For full IEEE-754 compatibility, unset :py:attr:`drjit.JitFlag.FastMath`.
+    When ``arg`` is a single precision array, the operation is
+    implemented slightly approximately---see the documentation of
+    the instruction ``rsqrt.approx.ftz.f32`` in the `NVIDIA PTX
+    manual
+    <https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#floating-point-instructions-rcp>`__
+    for details on how this works on the CUDA backend. For full
+    IEEE-754 compatibility, unset
+    :py:attr:`drjit.JitFlag.FastMath`.
 
     Args:
         arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
