@@ -21,8 +21,8 @@ configure_file(
 )
 
 set(PY_FILES
-  config.py __init__.py ast.py detail.py interop.py dda.py _sh_eval.py _reduce.py
-  scalar/__init__.py llvm/__init__.py llvm/ad.py
+  config.py __init__.py ast.py detail.py interop.py dda.py opt.py
+  _sh_eval.py _reduce.py scalar/__init__.py llvm/__init__.py llvm/ad.py
   cuda/__init__.py cuda/ad.py)
 
 set(PY_FILES_OUT "")

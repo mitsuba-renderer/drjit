@@ -207,6 +207,7 @@ if (DRJIT_MASTER_PROJECT)
       ${CMAKE_CURRENT_BINARY_DIR}/drjit/ast.py
       ${CMAKE_CURRENT_BINARY_DIR}/drjit/detail.pyi
       ${CMAKE_CURRENT_BINARY_DIR}/drjit/detail.py
+      ${CMAKE_CURRENT_BINARY_DIR}/drjit/opt.py
       ${CMAKE_CURRENT_BINARY_DIR}/drjit/py.typed
       DESTINATION drjit
     )
