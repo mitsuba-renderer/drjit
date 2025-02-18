@@ -344,7 +344,7 @@ void gather_packet_dynamic(size_t packet_size, Source &&source, const Index &ind
                 mode);
 
             for (size_t i = 0; i < packet_size; ++i)
-                out[i] = Value::steal(res_indices[i]);
+                out[i] = Value::steal((typename Value::Index) res_indices[i]);
         } else {
             default_gather();
         }
