@@ -216,7 +216,9 @@ def test06_literal(t, drjit_verbose, capsys):
 def test07_zeros(t, drjit_verbose, capsys):
     is_jit = "jit" in t.__meta__
     v = dr.zeros(t)
+    v2 = dr.zeros_like(v)
     assert len(v) == 1 and v[0] == 0
+    assert len(v2) == 1 and v[0] == 0
     assert not is_jit or " = 0" in capsys.readouterr().out
 
     v = dr.zeros(t, 100)
@@ -230,12 +232,18 @@ def test07_zeros(t, drjit_verbose, capsys):
     with pytest.raises(RuntimeError, match='the provided "shape" and "dtype" parameters are incompatible.'):
         v = dr.zeros(t, (100, 200))
 
+    assert type(dr.zeros_like(0)) is int
+    assert type(dr.zeros_like(0.0)) is float
+    assert dr.zeros_like(0) == 0
+
 # Test dr.zeros (2)
 @pytest.test_arrays('float32, shape=(3, *)')
 def test08_zeros_3d(t, drjit_verbose, capsys):
     is_jit = "jit" in t.__meta__
     v = dr.zeros(t)
     assert len(v) == 3 and len(v[1]) == 1 and v[0][0] == 0
+    v2 = dr.zeros_like(v)
+    assert len(v2) == 3 and len(v2[1]) == 1 and v2[0][0] == 0
 
     v = dr.zeros(t, 100)
     assert len(v) == 3 and len(v[1]) == 100 and v[0][0] == 0
