@@ -39,6 +39,9 @@ Array creation
 .. autofunction:: opaque
 .. autofunction:: arange
 .. autofunction:: linspace
+.. autofunction:: zeros_like
+.. autofunction:: empty_like
+.. autofunction:: ones_like
 
 Control flow
 ------------

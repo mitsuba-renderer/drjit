@@ -1008,6 +1008,24 @@ def transform_compose(s, q, t, /):
 
     return m44
 
+def zeros_like(arg: T, /) -> T:
+    """
+    Return an array of zeros with the same shape and type as a given array.
+    """
+    return zeros(type(arg), shape(arg))
+
+def ones_like(arg: T, /) -> T:
+    """
+    Return an array of ones with the same shape and type as a given array.
+    """
+    return ones(type(arg), shape(arg))
+
+def empty_like(arg: T, /) -> T:
+    """
+    Return an empty array with the same shape and type as a given array.
+    """
+    return empty(type(arg), shape(arg))
+
 # -------------------------------------------------------------------
 #                      Mathematical constants
 # -------------------------------------------------------------------

@@ -187,7 +187,7 @@ def dda(
     # Only run the DDA algorithm if the interval is nonempty
     active = active & (t_max > t_min) & dr.isfinite(t_max) # type: ignore
 
-    # Deactivate rays that have zero direction along any axis 
+    # Deactivate rays that have zero direction along any axis
     # and whose origin along that axis is outside the grid bounds
     active = active & dr.all(~inf_t | ((0 <= ray_o) & (ray_o <= grid_res_f)))
 

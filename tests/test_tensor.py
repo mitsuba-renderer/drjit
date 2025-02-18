@@ -155,9 +155,12 @@ def test02_construct(t):
 @pytest.test_arrays('is_tensor, -bool')
 def test03_construct_2(t):
     assert dr.all(dr.arange(t, 3) == [0, 1, 2])
-    assert dr.all(dr.zeros(t, 3) == [0, 0, 0])
+    z = dr.zeros(t, 3)
+    assert dr.all(z == [0, 0, 0])
+    assert dr.all(dr.zeros_like(z) == [0, 0, 0])
     assert dr.all(dr.full(t, 1, 3) == [1, 1, 1])
     assert dr.all(dr.empty(t, 3).shape == (3,))
+    assert dr.all(dr.empty_like(z).shape == (3,))
 
     if dr.is_float_v(t):
         assert dr.all(dr.linspace(t, 0, 1, 3) == [0, 0.5, 1])
