@@ -323,6 +323,8 @@ struct DRJIT_TRIVIAL_ABI JitArray
 
     bool all_() const { return jit_var_all(m_index); }
     bool any_() const { return jit_var_any(m_index); }
+    auto all_async_() const { return MaskType::steal(jit_var_all_async(Backend, m_index)); }
+    auto any_async_() const { return MaskType::steal(jit_var_any_async(Backend, m_index)); }
 
     #define DRJIT_HORIZONTAL_OP(name, op)                                  \
         JitArray name##_() const {                                         \
