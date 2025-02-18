@@ -364,6 +364,8 @@ struct DRJIT_TRIVIAL_ABI DiffArray
 
     bool all_() const { return jit_var_all((uint32_t) m_index); }
     bool any_() const { return jit_var_any((uint32_t) m_index); }
+    auto all_async_() const { return MaskType::steal(jit_var_all_async(Backend, (uint32_t) m_index)); }
+    auto any_async_() const { return MaskType::steal(jit_var_any_async(Backend, (uint32_t) m_index)); }
 
     #define DRJIT_HORIZONTAL_OP(name, op)                                      \
         DiffArray name##_() const {                                            \

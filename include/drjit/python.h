@@ -713,8 +713,8 @@ void bind_tensor(ArrayBinding &b) {
 
 template <typename T> void bind_mask_reductions(ArrayBinding &b) {
     if constexpr (is_jit_v<T>) {
-        b[ArrayOp::All] = (void *) +[](const T *a, T *b) { new (b) T(a->all_()); };
-        b[ArrayOp::Any] = (void *) +[](const T *a, T *b) { new (b) T(a->any_()); };
+        b[ArrayOp::All] = (void *) +[](const T *a, T *b) { new (b) T(a->all_async_()); };
+        b[ArrayOp::Any] = (void *) +[](const T *a, T *b) { new (b) T(a->any_async_()); };
         b[ArrayOp::Count] = (void *) +[](const T *a, uint32_array_t<T> *b) {
             new (b) uint32_array_t<T>(a->count_());
         };
