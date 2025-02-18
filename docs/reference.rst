@@ -658,3 +658,46 @@ grid.
 .. autofunction:: dda
 .. autofunction:: integrate
 
+Optimizers
+----------
+
+.. py:module:: drjit.opt
+
+The :py:mod:`drjit.opt` module implements basic infrastructure for
+gradient-based optimization and adaptive mixed-precision training.
+
+.. autoclass:: Optimizer
+
+   .. automethod:: step
+   .. automethod:: reset
+   .. automethod:: update
+   .. automethod:: learning_rate
+   .. automethod:: set_learning_rate
+   .. automethod:: __setitem__
+   .. automethod:: __getitem__
+   .. automethod:: __delitem__
+   .. automethod:: __contains__
+   .. automethod:: __len__
+   .. automethod:: update
+   .. automethod:: keys
+   .. automethod:: values
+   .. automethod:: items
+
+.. autoclass:: SGD
+
+   .. automethod:: __init__
+
+.. autoclass:: Adam
+
+   .. automethod:: __init__
+
+.. autoclass:: RMSProp
+
+   .. automethod:: __init__
+
+.. autoclass:: GradScaler
+
+   .. automethod:: __init__
+   .. automethod:: step
+   .. automethod:: scale
+   .. automethod:: unscale
