@@ -90,6 +90,10 @@ struct TransformCallback {
 struct TransformPairCallback {
     virtual nb::handle transform_type(nb::handle tp) const;
     virtual void operator()(nb::handle h1, nb::handle h2, nb::handle h3) = 0;
+
+    // How should unknown (non-array) types be transformed? Should directly
+    // return the output object Identity by default.
+    virtual nb::object transform_unknown(nb::handle h1, nb::handle h2) const;
 };
 
 /// Invoke the given callback on leaf elements of the pytree 'h'

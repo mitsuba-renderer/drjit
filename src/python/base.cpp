@@ -884,7 +884,7 @@ nb::object select(nb::handle h0, nb::handle h1, nb::handle h2) {
 
     if (is_drjit_type(tp) || !tp.is(h2.type()) ||
         tp.is(&PyLong_Type) || tp.is(&PyFloat_Type) || tp.is(&PyBool_Type)) {
-        PyObject *o = apply<Select>(ArrayOp::Select, "select", 
+        PyObject *o = apply<Select>(ArrayOp::Select, "select",
             std::make_index_sequence<3>(), h0.ptr(), h1.ptr(), h2.ptr());
 
         if (!o)
@@ -898,8 +898,15 @@ nb::object select(nb::handle h0, nb::handle h1, nb::handle h2) {
     // consistent types so only perform as a last resort
     struct SelectCB : TransformPairCallback {
         SelectCB(nb::handle mask) : mask(mask) {}
+
+        nb::object transform_unknown(nb::handle h1, nb::handle h2) const override {
+            if (!h1.is(h2))
+                nb::raise("encountered incompatible objects with an unknown type (not a Dr.Jit array, not a PyTree).");
+            return nb::borrow(h1);
+        }
+
         void operator()(nb::handle h1, nb::handle h2, nb::handle h3) override {
-            PyObject *o = apply<Select>(ArrayOp::Select, "select", 
+            PyObject *o = apply<Select>(ArrayOp::Select, "select",
                 std::make_index_sequence<3>(), mask.ptr(), h1.ptr(), h2.ptr());
 
             if (!o)
@@ -1244,12 +1251,13 @@ void export_base(nb::module_ &m) {
 
     m.def("select",
           nb::overload_cast<nb::handle, nb::handle, nb::handle>(&select),
-          doc_select);
+          doc_select,
+          nb::arg(), nb::arg().none(), nb::arg().none());
 
     m.def("select",
           [](bool mask, nb::handle a, nb::handle b) {
               return nb::borrow(mask ? a : b);
-          });
+          }, nb::arg(), nb::arg().none(), nb::arg().none());
 
     m.def("power",
           [](Py_ssize_t arg0, Py_ssize_t arg1) { return std::pow(arg0, arg1); },
