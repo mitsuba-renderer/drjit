@@ -90,6 +90,22 @@ bool grad_enabled(nb::handle h) {
     return ge.result;
 }
 
+static bool has_grad(nb::handle h) {
+    struct HasGrad : TraverseCallback {
+        bool result = false;
+
+        void operator()(nb::handle h) override {
+            const ArraySupplement &s = supp(h.type());
+            if (s.is_diff && is_float(s))
+                result |= ad_has_grad(s.index(inst_ptr(h))) != 0;
+        }
+    };
+
+    HasGrad ge;
+    traverse("drjit.has_grad", ge, h);
+    return ge.result;
+}
+
 static bool grad_enabled_2(nb::args args) { return grad_enabled(args); }
 
 static nb::object detach(nb::handle h, bool preserve_type_ = true) {
@@ -295,28 +311,38 @@ static bool check_grad_enabled(const char *name, nb::handle h, uint32_t flags) {
     return rv;
 }
 
+template <bool ForceInitGrad>
 static void forward_from(nb::handle_t<dr::ArrayBase> h, uint32_t flags) {
-    if (check_grad_enabled("drjit.forward_from", h, flags)) {
+    if (check_grad_enabled(ForceInitGrad ? "drjit.forward"
+                                         : "drjit.forward_from",
+                           h, flags)) {
         // Full for quaternion and complex types won't fill all components
         // so make sure we use corresponding array type
         nb::handle tp = h.type();
         nb::handle at = is_drjit_type(tp) ? supp(tp).array : tp.ptr();
-        ::clear_grad(h);
-        ::accum_grad(h, full("ones", at, nb::int_(1), 1));
+        if (ForceInitGrad || !has_grad(h)) {
+            ::clear_grad(h);
+            ::accum_grad(h, full("ones", at, nb::int_(1), 1));
+        }
         enqueue_impl(dr::ADMode::Forward, h);
         nb::gil_scoped_release r;
         ad_traverse(dr::ADMode::Forward, flags);
     }
 }
 
+template <bool ForceInitGrad>
 static void backward_from(nb::handle_t<dr::ArrayBase> h, uint32_t flags) {
-    if (check_grad_enabled("drjit.backward_from", h, flags)) {
+    if (check_grad_enabled(ForceInitGrad ? "drjit.backward"
+                                         : "drjit.backward_from",
+                           h, flags)) {
         // Full for quaternion and complex types won't fill all components
         // so make sure we use corresponding array type
         nb::handle tp = h.type();
         nb::handle at = is_drjit_type(tp) ? supp(tp).array : tp.ptr();
-        ::clear_grad(h);
-        ::accum_grad(h, full("ones", at, nb::int_(1), 1));
+        if (ForceInitGrad || !has_grad(h)) {
+            ::clear_grad(h);
+            ::accum_grad(h, full("ones", at, nb::int_(1), 1));
+        }
         enqueue_impl(dr::ADMode::Backward, h);
         nb::gil_scoped_release r;
         ad_traverse(dr::ADMode::Backward, flags);
@@ -603,13 +629,13 @@ void export_autodiff(nb::module_ &m) {
           }, "mode"_a, "args"_a)
      .def("traverse", &ad_traverse, "mode"_a, "flags"_a = dr::ADFlag::Default, doc_traverse,
           nb::sig("def traverse(mode: drjit.ADMode, flags: drjit.ADFlag | int = drjit.ADFlag.Default) -> None"))
-     .def("forward_from", &::forward_from, "arg"_a, "flags"_a = dr::ADFlag::Default, doc_forward_from,
+     .def("forward_from", &::forward_from<0>, "arg"_a, "flags"_a = dr::ADFlag::Default, doc_forward_from,
           nb::sig("def forward_from(arg: drjit.AnyArray, flags: drjit.ADFlag | int = drjit.ADFlag.Default) -> None"))
-     .def("forward", &::forward_from, "arg"_a, "flags"_a = dr::ADFlag::Default, doc_forward,
+     .def("forward", &::forward_from<1>, "arg"_a, "flags"_a = dr::ADFlag::Default, doc_forward,
           nb::sig("def forward(arg: drjit.AnyArray, flags: drjit.ADFlag | int = drjit.ADFlag.Default) -> None"))
-     .def("backward_from", &::backward_from, "arg"_a, "flags"_a = dr::ADFlag::Default, doc_backward_from,
+     .def("backward_from", &::backward_from<0>, "arg"_a, "flags"_a = dr::ADFlag::Default, doc_backward_from,
           nb::sig("def backward_from(arg: drjit.AnyArray, flags: drjit.ADFlag | int = drjit.ADFlag.Default) -> None"))
-     .def("backward", &::backward_from, "arg"_a, "flags"_a = dr::ADFlag::Default, doc_backward,
+     .def("backward", &::backward_from<1>, "arg"_a, "flags"_a = dr::ADFlag::Default, doc_backward,
           nb::sig("def backward(arg: drjit.AnyArray, flags: drjit.ADFlag | int = drjit.ADFlag.Default) -> None"))
      .def("forward_to", &::forward_to, "arg"_a, "flags"_a = dr::ADFlag::Default, doc_forward_to,
           nb::sig("def forward_to(arg: ArrayT, flags: drjit.ADFlag | int = drjit.ADFlag.Default) -> ArrayT"))

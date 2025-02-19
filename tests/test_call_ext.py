@@ -295,9 +295,9 @@ def test07_backward_diff_implicit(t, symbolic, optimize, use_mask, opaque):
     dr.set_grad(xo, [1,2,3,4,5])
     dr.backward_from(xo)
 
-    assert dr.all(dr.grad(x) == t([0, 0, 0, 24, 32]))
-    assert dr.all(dr.grad(av) == t([4]))
-    assert dr.all(dr.grad(bv) == t([100]))
+    assert dr.all(dr.grad(x) == t([0, 0, 0, 96, 160]))
+    assert dr.all(dr.grad(av) == t([6]))
+    assert dr.all(dr.grad(bv) == t([464]))
 
 
 @pytest.mark.parametrize("use_mask", [True, False])

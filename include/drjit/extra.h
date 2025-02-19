@@ -119,6 +119,9 @@ extern DRJIT_EXTRA_EXPORT uint32_t ad_grad(uint64_t index, bool null_ok = false)
 /// Check if gradient tracking is enabled for the given variable
 extern DRJIT_EXTRA_EXPORT int ad_grad_enabled(uint64_t index);
 
+/// Check if a gradient has been assigned to a variable
+extern DRJIT_EXTRA_EXPORT int ad_has_grad(uint64_t index);
+
 /// Check if gradient tracking is disabled (can't create new AD variables)
 extern DRJIT_EXTRA_EXPORT int ad_grad_suspended();
 
