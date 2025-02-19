@@ -43,7 +43,8 @@ def test01_basic(t):
 
     assert (
         str(opt) == "Adam[\n"
-        "  state = ['y'],\n"
+        "  parameters = ['y'],\n"
+        "  total_count = 1,\n"
         "  lr = {'default': 0.0001},\n"
         "  beta = (0.9, 0.999),\n"
         "  epsilon = 1e-08\n"
@@ -276,24 +277,26 @@ def test07_adam_incompat_shape(t):
     opt["x"] = t(1, 2, 3)
     opt["x"].grad = t(-1, -1, -1)
     opt.step()
-    assert dr.allclose(opt.state['x'][-1], 1e-3)
-    assert dr.allclose(opt.state['x'][-2], -1e-1)
+    assert dr.allclose(opt.state['x'][-1][1], -1e-1)
+    assert dr.allclose(opt.state['x'][-1][2], 1e-3)
     opt["x"] = t(1, 2, 3)
-    assert dr.allclose(opt.state['x'][-1], 1e-3)
-    assert dr.allclose(opt.state['x'][-2], -1e-1)
+    assert dr.allclose(opt.state['x'][-1][1], -1e-1)
+    assert dr.allclose(opt.state['x'][-1][2], 1e-3)
     opt["x"] = t(1, 2, 3, 4)
-    assert dr.allclose(opt.state['x'][-1], 0)
-    assert dr.allclose(opt.state['x'][-2], 0)
+    assert dr.allclose(opt.state['x'][-1][1], 0)
+    assert dr.allclose(opt.state['x'][-1][2], 0)
 
 
-@pytest.test_arrays("is_diff,float,shape=(*),float32")
+@pytest.test_arrays("is_diff,float,shape=(),is_tensor,float32")
 def test08_amp(t):
     t16 = dr.float16_array_t(t)
-    opt = Adam(lr=1, params={'x': dr.ones(t, 10)})
-    scaler = GradScaler()
+    opt = Adam(lr=1, params={'x': dr.full(t, 1, (2,2))})
+    scaler = GradScaler(debug=True)
 
     for it in range(20):
         loss = t((t16(opt["x"]) - 2) ** 2)
-        dr.backward(scaler.scale(loss))
+        scaled_loss = scaler.scale(loss)
+        dr.backward_from(scaled_loss)
         scaler.step(opt)
+    assert dr.shape(opt["x"] == (2, 2))
     assert dr.allclose(opt["x"], 2.00245)
