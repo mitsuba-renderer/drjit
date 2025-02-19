@@ -97,7 +97,7 @@ def test02_init_broadcast(t):
 # Test array initialization from a list of arguments (explicit, list, tuple, iterable)
 @pytest.test_arrays('-tensor')
 def test03_init_list(t):
-    with pytest.raises(TypeError, match='Constructor does not take keyword arguments.'):
+    with pytest.raises(TypeError, match='Unknown keyword argument'):
         t(hello='world')
 
     value = False if dr.is_mask_v(t) else 0

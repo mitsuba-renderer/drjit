@@ -18,10 +18,7 @@
 #include "shape.h"
 #include "dlpack.h"
 #include "init.h"
-
-#include <mutex>
-#include <thread>
-#include <condition_variable>
+#include <algorithm>
 
 /// Forward declaration
 static bool array_init_from_seq(PyObject *self, const ArraySupplement &s, PyObject *seq);
@@ -37,9 +34,15 @@ int tp_init_array(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
     const ArraySupplement &s = supp(self_tp);
     Py_ssize_t argc = NB_TUPLE_GET_SIZE(args);
     ArraySupplement::SetItem set_item = s.set_item;
+    bool do_flip_axes = false;
 
     try {
-        raise_if(kwds, "Constructor does not take keyword arguments.");
+        if (kwds) {
+            PyObject *flip_axes = PyDict_GetItemString(kwds, "flip_axes");
+            if (!flip_axes || PyDict_Size(kwds) == 0)
+                raise_if(kwds, "Unknown keyword argument.");
+            do_flip_axes = flip_axes == Py_True;
+        }
 
         if (argc == 0) {
             // Default initialization, e.g., ``Array3f()``
@@ -144,9 +147,12 @@ int tp_init_array(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
                     else
                         flattened = import_ndarray(s, arg);
 
+                    if (s.is_complex)
+                        do_flip_axes = true;
+
                     nb::object unraveled = unravel(
                         nb::borrow<nb::type_object_t<dr::ArrayBase>>(self_tp),
-                        flattened, s.is_complex ? 'F' : 'C');
+                        flattened, do_flip_axes ? 'F' : 'C');
 
                     nb::inst_move(self, unraveled);
                     return 0;
@@ -643,14 +649,22 @@ int tp_init_tensor(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
     PyTypeObject *self_tp = Py_TYPE(self);
 
     try {
-        PyObject *array = nullptr, *shape = nullptr;
-        const char *kwlist[3] = { "array", "shape", nullptr };
-        raise_if(!PyArg_ParseTupleAndKeywords(args, kwds, "|OO!",
-                                              (char **) kwlist, &array,
-                                              &PyTuple_Type, &shape),
+        PyObject *array = nullptr, *shape = nullptr, *flip_axes = nullptr;
+        const char *kwlist[4] = { "array", "shape", "flip_axes", nullptr };
+        raise_if(!PyArg_ParseTupleAndKeywords(
+                     args, kwds, "|OO!O!", (char **) kwlist, &array,
+                     &PyTuple_Type, &shape, &PyBool_Type, &flip_axes),
                  "Invalid tensor constructor arguments.");
 
         const ArraySupplement &s = supp(self_tp);
+        bool do_flip_axes = flip_axes == Py_True;
+
+        PyTypeObject *array_tp = array ? Py_TYPE(array) : nullptr;
+        raise_if(do_flip_axes && (shape || !array_tp || !is_drjit_type(array_tp) ||
+                                  array_tp == self_tp),
+                 "flip_axes=True requires that 'shape' is not specified, and "
+                 "that the input is a nested Dr.Jit array type (e.g. "
+                 "drjit.cuda.Array3f).");
 
         if (!shape && !array) {
             nb::detail::nb_inst_zero(self);
@@ -659,8 +673,6 @@ int tp_init_tensor(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
         }
 
         raise_if(!array, "Input array must be specified.");
-
-        PyTypeObject *array_tp = Py_TYPE(array);
 
         // Same type -> copy constructor
         if (array_tp == self_tp) {
@@ -681,7 +693,10 @@ int tp_init_tensor(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
             } else {
                 // Infer the shape of an arbitrary data structure & flatten it
                 VarType vt = (VarType) s.type;
-                flat = ravel(array, 'C', &shape_vec, nullptr, &vt);
+                char order = do_flip_axes ? 'F' : 'C';
+                flat = ravel(array, order, &shape_vec, nullptr, &vt);
+                if (do_flip_axes)
+                    std::reverse(shape_vec.begin(), shape_vec.end());
             }
             args_2 = nb::make_tuple(flat);
         } else {
