@@ -3603,7 +3603,7 @@
         dr.enable_grad(a)
         b = f(a) # some computation involving 'a'
 
-        # The below three operations can also be written more compactly as dr.forward_from(a)
+        # The below three operations can also be written more compactly as dr.forward(a)
         dr.set_gradient(a, 1.0)
         dr.enqueue(dr.ADMode.Forward, a)
         dr.traverse(dr.ADMode.Forward)
@@ -3632,10 +3632,10 @@
     The same naturally also works in the reverse direction. Dr.Jit provides a
     higher level API that encapsulate such logic in a few different flavors:
 
-    - :py:func:`drjit.forward_from` (alias: :py:func:`drjit.forward`) and
-      :py:func:`drjit.forward_to`.
-    - :py:func:`drjit.backward_from` (alias: :py:func:`drjit.backward`) and
-      :py:func:`drjit.backward_to`.
+    - :py:func:`drjit.forward_from`, :py:func:`drjit.forward_to`, and
+      :py:func:`drjit.forward`.
+    - :py:func:`drjit.backward_from`, :py:func:`drjit.backward_to`, and
+      :py:func:`drjit.backward`.
 
     Args:
         mode (drjit.ADMode): Specifies the set edges which Dr.Jit should follow to
@@ -3690,16 +3690,20 @@
 
     Forward-propagate gradients from the provided Dr.Jit array or tensor.
 
-    This function sets the gradient of the provided Dr.Jit array or tensor ``arg``
-    to ``1.0`` and then forward-propagates derivatives through forward-connected
-    components of the computation graph (i.e., reaching all variables that directly
-    or indirectly depend on ``arg``).
+    This function checks if a derivative has already been assigned to
+    the provided Dr.Jit array or tensor ``arg``. If not, it assigns
+    the value ``1``.
+
+    Following this, it forward-propagates derivatives through forward-connected
+    components of the computation graph (i.e., reaching all variables that
+    directly or indirectly depend on ``arg``).
 
     The operation is equivalent to
 
     .. code-block:: python
 
-       dr.set_grad(arg, 1.0)
+       if arg.grad has not been set yet:
+           dr.set_grad(arg, 1)
        dr.enqueue(dr.ADMode.Forward, h)
        dr.traverse(dr.ADMode.Forward, flags=flags)
 
@@ -3777,31 +3781,47 @@
 
 .. topic:: forward
 
-    Forward-propagate gradients from the provided Dr.Jit array or tensor
+    Forard-propagate gradients from the provided Dr.Jit array or tensor.
 
-    This function is an alias of :py:func:`drjit.forward_from()`. Please refer to
-    the documentation of this function.
+    This operation is equivalent to
+
+    .. code-block:: python
+
+       dr.set_grad(arg, 1)
+       dr.forward_from(arg)
+
+    In other words, it assigns an initial gradient of ``1`` to ``arg`` and
+    then forward-propagates it through the rest of the computation.
+
+    Please refer to the function :py:func:`drjit.forward_from()` for further
+    detail.
 
     Args:
         args (object): A Dr.Jit array, tensor, or :ref:`PyTree <pytrees>`.
 
-        flags (drjit.ADFlag | int): Controls what parts of the AD graph are cleared
-            during traversal. The default value is :py:attr:`drjit.ADFlag.Default`.
+        flags (drjit.ADFlag | int): Controls what parts of the AD graph to clear
+            during traversal, and whether or not to fail when the input is not
+            differentiable. The default value is :py:attr:`drjit.ADFlag.Default`.
+
 
 .. topic:: backward_from
 
     Backpropagate gradients from the provided Dr.Jit array or tensor.
 
-    This function sets the gradient of the provided Dr.Jit array or tensor ``arg``
-    to ``1.0`` and then backpropagates derivatives through backward-connected
-    components of the computation graph (i.e., reaching differentiable variables
-    that potentially influence the value of ``arg``).
+    This function checks if a derivative has already been assigned to
+    the provided Dr.Jit array or tensor ``arg``. If not, it assigns
+    the value ``1``.
 
-    The operation is equivalent to
+    Following this, it backpropagates derivatives through backward-connected
+    components of the computation graph (i.e., reaching differentiable
+    variables that potentially influence the value of ``arg``).
+
+    The operation is conceptually equivalent to
 
     .. code-block:: python
 
-       dr.set_grad(arg, 1.0)
+       if arg.grad has not been set yet:
+           dr.set_grad(arg, 1)
        dr.enqueue(dr.ADMode.Backward, h)
        dr.traverse(dr.ADMode.Backward, flags=flags)
 
@@ -3881,8 +3901,18 @@
 
     Backpropgate gradients from the provided Dr.Jit array or tensor.
 
-    This function is an alias of :py:func:`drjit.backward_from()`. Please refer to
-    the documentation of this function.
+    This operation is equivalent to
+
+    .. code-block:: python
+
+       dr.set_grad(arg, 1)
+       dr.backward_from(arg)
+
+    In other words, it assigns an initial gradient of ``1`` to ``arg`` and
+    then backpropagates it through the rest of the computation.
+
+    Please refer to the function :py:func:`drjit.backward_from()` for further
+    detail.
 
     Args:
         args (object): A Dr.Jit array, tensor, or :ref:`PyTree <pytrees>`.

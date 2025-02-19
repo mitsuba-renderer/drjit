@@ -1795,6 +1795,23 @@ int ad_grad_enabled(Index index) {
     return ad_index != 0;
 }
 
+/// Check if a gradient has been assigned to a variable
+int ad_has_grad(Index index) {
+    ADIndex ad_index = ::ad_index(index);
+    if (!ad_index)
+        return 0;
+
+    const std::vector<Scope> &scopes = local_state.scopes;
+    if (!scopes.empty())
+        scopes.back().maybe_disable(ad_index);
+    if (!ad_index)
+        return 0;
+
+    std::lock_guard<Lock> guard(state.lock);
+    const Variable *v = state[ad_index];
+    return v->grad.valid();
+}
+
 int ad_grad_suspended() {
     const std::vector<Scope> &scopes = local_state.scopes;
     if (scopes.empty())

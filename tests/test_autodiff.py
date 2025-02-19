@@ -2104,3 +2104,21 @@ def test135_backward_from_complex(t):
     b = 2 * a
     dr.backward_from(b)
     assert dr.allclose(dr.grad(a), t(0, 2))
+
+@pytest.test_arrays('is_diff,float,shape=(*)')
+def test136_backward_from_existing_gradient(t):
+    a = t(1.0)
+    dr.enable_grad(a)
+    b = 2 * a
+    b.grad = 1000
+    dr.backward_from(b)
+    assert dr.allclose(a.grad, 2000)
+
+@pytest.test_arrays('is_diff,float,shape=(*)')
+def test137_forward_from_existing_gradient(t):
+    a = t(1.0)
+    dr.enable_grad(a)
+    b = 2 * a
+    a.grad = 1000
+    dr.forward_from(a)
+    assert dr.allclose(b.grad, 2000)

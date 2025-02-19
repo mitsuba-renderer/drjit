@@ -404,10 +404,9 @@ example graph below.
 
 See :py:func:`dr.forward_to() <forward_to>`, :py:func:`dr.backward_to()
 <backward_to>`, :py:func:`dr.forward_from() <forward_from>`,
-:py:func:`dr.backward_from() <backward_from>` for details. Note that the
-``_from`` variants set the gradient of the input variable. There is an even
+:py:func:`dr.backward_from() <backward_from>` for details. There is an even
 lower-level interface (:py:func:`dr.enqueue() <enqueue>` and
-:py:func:`dr.traverse() <traverse>`) that can be used to avoid this.
+:py:func:`dr.traverse() <traverse>`) that can be useful in advanced use cases.
 
 PyTrees
 -------
