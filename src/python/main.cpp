@@ -101,6 +101,7 @@ NB_MODULE(_drjit_ext, m_) {
         .value("PrintIR", JitFlag::PrintIR, doc_JitFlag_PrintIR)
         .value("KernelHistory", JitFlag::KernelHistory, doc_JitFlag_KernelHistory)
         .value("LaunchBlocking", JitFlag::LaunchBlocking, doc_JitFlag_LaunchBlocking)
+        .value("ForbidSynchronization", JitFlag::ForbidSynchronization, doc_JitFlag_ForbidSynchronization)
         .value("ScatterReduceLocal", JitFlag::ScatterReduceLocal, doc_JitFlag_ScatterReduceLocal)
         .value("SymbolicConditionals", JitFlag::SymbolicConditionals, doc_JitFlag_SymbolicConditionals)
         .value("SymbolicScope", JitFlag::SymbolicScope, doc_JitFlag_SymbolicScope)

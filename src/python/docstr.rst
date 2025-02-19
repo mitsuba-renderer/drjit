@@ -5925,6 +5925,17 @@
 
     This flag has a severe performance impact and is *disabled* by default.
 
+.. topic:: JitFlag_ForbidSynchronization
+
+    Treat any kind of synchronization as an error and raise an exception when
+    it is encountered.
+
+    Operations like :py:func:`drjit.sync_thread()` are costly because they
+    prevent the system from overlapping CPU/GPU work. Enable this flag to find
+    places in a larger codebase that are responsible for this.
+
+    This flag is *disabled* by default.
+
 .. topic:: JitFlag_ScatterReduceLocal
 
     Reduce locally before performing atomic scatter-reductions.
