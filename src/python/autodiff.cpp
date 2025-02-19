@@ -436,7 +436,8 @@ public:
                     uint32_t jit_index = (uint32_t) index;
                     uint32_t ad_index = (uint32_t) (index >> 32);
                     op.add_index((JitBackend) s.backend, ad_index, input);
-                    uint32_t new_idx = jit_var_copy(jit_index);
+                    VarInfo info = jit_set_backend(jit_index);
+                    uint32_t new_idx = jit_var_undefined(info.backend, info.type, info.size);
                     s.init_index(((uint64_t) ad_index) << 32 | new_idx, inst_ptr(h2));
                     jit_var_dec_ref(new_idx);
                 }
