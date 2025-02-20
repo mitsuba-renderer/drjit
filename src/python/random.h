@@ -67,19 +67,19 @@ void bind_pcg32(nb::module_ &m) {
              doc_PCG32_next_float64)
         .def("next_float64",
              nb::overload_cast<const Mask &>(&PCG32::next_float64))
-        .def("next_float_n",
+        .def("next_float_normal",
              [](nb::handle self, nb::type_object dtype, nb::handle mask) {
                  const char *key = nullptr;
                  if constexpr (dr::is_jit_v<Guide>) {
                      if (is_drjit_type(dtype)) {
                          const ArraySupplement &s = supp(dtype);
                          if ((VarType) s.type == VarType::Float32)
-                             key = "next_float32_n";
+                             key = "next_float32_normal";
                          else if ((VarType) s.type == VarType::Float64)
-                             key = "next_float64_n";
+                             key = "next_float64_normal";
                      }
                  } else if (dtype.is(&PyFloat_Type)) {
-                     key = "next_float64_n";
+                     key = "next_float64_normal";
                  }
 
                  if (!key)
@@ -87,17 +87,17 @@ void bind_pcg32(nb::module_ &m) {
 
                  auto &&fn = self.attr(key);
                  return !mask.is(Py_True) ? fn(mask) : fn();
-             }, "dtype"_a, "mask"_a = true, doc_PCG32_next_float_n)
-        .def("next_float32_n",
-             nb::overload_cast<>(&PCG32::next_float32_n),
-             doc_PCG32_next_float32_n)
-        .def("next_float32_n",
+             }, "dtype"_a, "mask"_a = true, doc_PCG32_next_float_normal)
+        .def("next_float32_normal",
+             nb::overload_cast<>(&PCG32::next_float32_normal),
+             doc_PCG32_next_float32_normal)
+        .def("next_float32_normal",
              nb::overload_cast<const Mask &>(&PCG32::next_float32))
-        .def("next_float64_n",
-             nb::overload_cast<>(&PCG32::next_float64_n),
-             doc_PCG32_next_float64_n)
-        .def("next_float64_n",
-             nb::overload_cast<const Mask &>(&PCG32::next_float64_n))
+        .def("next_float64_normal",
+             nb::overload_cast<>(&PCG32::next_float64_normal),
+             doc_PCG32_next_float64_normal)
+        .def("next_float64_normal",
+             nb::overload_cast<const Mask &>(&PCG32::next_float64_normal))
         .def("__add__", [](const PCG32 &a, const Int64 &x) -> PCG32 { return a + x; }, nb::is_operator(), doc_PCG32_add)
         .def("__iadd__", [](PCG32 *a, const Int64 &x) -> PCG32* { *a += x; return a; }, nb::is_operator(), doc_PCG32_iadd)
         .def("__sub__", [](const PCG32 &a, const Int64 &x) -> PCG32 { return a - x; }, nb::is_operator(), doc_PCG32_sub)

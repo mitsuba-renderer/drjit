@@ -6174,7 +6174,7 @@
     Two overloads of this function exist: the masked variant does not advance
     the PRNG state of entries ``i`` where ``mask[i] == False``.
 
-.. topic:: PCG32_next_float_n
+.. topic:: PCG32_next_float_normal
 
     Generate a (standard) normally distributed single precision floating point number.
 
@@ -6184,14 +6184,14 @@
 
     A mask can be optionally provided. Masked entries do not advance the PRNG state.
 
-.. topic:: PCG32_next_float32_n
+.. topic:: PCG32_next_float32_normal
 
     Generate a (standard) normally distributed single precision floating point number.
 
     Two overloads of this function exist: the masked variant does not advance
     the PRNG state of entries ``i`` where ``mask[i] == False``.
 
-.. topic:: PCG32_next_float64_n
+.. topic:: PCG32_next_float64_normal
 
     Generate a (standard) normally distributed single precision floating point number.
 

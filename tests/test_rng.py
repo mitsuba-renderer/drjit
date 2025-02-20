@@ -10,14 +10,14 @@ def test01_basic(t):
     assert f32 == 0.10837864875793457
     assert f64 == 0.10837870510295033
 
-    f32_n = m.PCG32().next_float32_n()
-    f64_n = m.PCG32().next_float64_n()
+    f32_n = m.PCG32().next_float32_normal()
+    f64_n = m.PCG32().next_float64_normal()
     assert f32_n == -1.2351967096328735
     assert f64_n == -1.235196513088357
 
     if dr.is_jit_v(t):
         f = m.PCG32().next_float(t)
-        f_n = m.PCG32().next_float_n(t)
+        f_n = m.PCG32().next_float_normal(t)
 
         if dr.type_v(t) == dr.VarType.Float32:
             assert f == f32
@@ -27,6 +27,6 @@ def test01_basic(t):
             assert f_n == f64_n
     else:
         f = m.PCG32().next_float(float)
-        f_n = m.PCG32().next_float_n(float)
+        f_n = m.PCG32().next_float_normal(float)
         assert f == f64
         assert f_n == f64_n
