@@ -6147,6 +6147,17 @@
     Two overloads of this function exist: the masked variant does not advance
     the PRNG state of entries ``i`` where ``mask[i] == False``.
 
+.. topic:: PCG32_next_float
+
+    Generate a uniformly distributed single precision floating point number on the
+    interval :math:`[0, 1)`.
+
+    The function analyzes the provided target ``dtype`` and either invokes
+    :py:func:`next_float32` or :py:func:`next_float64` depending on the
+    requested precision.
+
+    A mask can be optionally provided. Masked entries do not advance the PRNG state.
+
 .. topic:: PCG32_next_float32
 
     Generate a uniformly distributed single precision floating point number on the
@@ -6159,6 +6170,30 @@
 
     Generate a uniformly distributed double precision floating point number on the
     interval :math:`[0, 1)`.
+
+    Two overloads of this function exist: the masked variant does not advance
+    the PRNG state of entries ``i`` where ``mask[i] == False``.
+
+.. topic:: PCG32_next_float_normal
+
+    Generate a (standard) normally distributed single precision floating point number.
+
+    The function analyzes the provided target ``dtype`` and either invokes
+    :py:func:`next_float32_n` or :py:func:`next_float64_n` depending on the
+    requested precision.
+
+    A mask can be optionally provided. Masked entries do not advance the PRNG state.
+
+.. topic:: PCG32_next_float32_normal
+
+    Generate a (standard) normally distributed single precision floating point number.
+
+    Two overloads of this function exist: the masked variant does not advance
+    the PRNG state of entries ``i`` where ``mask[i] == False``.
+
+.. topic:: PCG32_next_float64_normal
+
+    Generate a (standard) normally distributed single precision floating point number.
 
     Two overloads of this function exist: the masked variant does not advance
     the PRNG state of entries ``i`` where ``mask[i] == False``.

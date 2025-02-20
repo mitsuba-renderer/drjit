@@ -570,8 +570,12 @@ Random number generators
    .. automethod:: seed
    .. automethod:: next_uint32
    .. automethod:: next_uint64
+   .. automethod:: next_float
    .. automethod:: next_float32
    .. automethod:: next_float64
+   .. automethod:: next_float_n
+   .. automethod:: next_float32_n
+   .. automethod:: next_float64_n
    .. automethod:: next_uint32_bounded
    .. automethod:: next_uint64_bounded
    .. automethod:: __add__
@@ -1137,8 +1141,12 @@ Random number generators
    .. automethod:: seed
    .. automethod:: next_uint32
    .. automethod:: next_uint64
+   .. automethod:: next_float
    .. automethod:: next_float32
    .. automethod:: next_float64
+   .. automethod:: next_float_n
+   .. automethod:: next_float32_n
+   .. automethod:: next_float64_n
    .. automethod:: next_uint32_bounded
    .. automethod:: next_uint64_bounded
    .. automethod:: __add__
@@ -1698,8 +1706,12 @@ Random number generators
    .. automethod:: seed
    .. automethod:: next_uint32
    .. automethod:: next_uint64
+   .. automethod:: next_float
    .. automethod:: next_float32
    .. automethod:: next_float64
+   .. automethod:: next_float_n
+   .. automethod:: next_float32_n
+   .. automethod:: next_float64_n
    .. automethod:: next_uint32_bounded
    .. automethod:: next_uint64_bounded
    .. automethod:: __add__
@@ -2098,8 +2110,12 @@ Random number generators
    .. automethod:: seed
    .. automethod:: next_uint32
    .. automethod:: next_uint64
+   .. automethod:: next_float
    .. automethod:: next_float32
    .. automethod:: next_float64
+   .. automethod:: next_float_n
+   .. automethod:: next_float32_n
+   .. automethod:: next_float64_n
    .. automethod:: next_uint32_bounded
    .. automethod:: next_uint64_bounded
    .. automethod:: __add__
@@ -2498,8 +2514,12 @@ Random number generators
    .. automethod:: seed
    .. automethod:: next_uint32
    .. automethod:: next_uint64
+   .. automethod:: next_float
    .. automethod:: next_float32
    .. automethod:: next_float64
+   .. automethod:: next_float_n
+   .. automethod:: next_float32_n
+   .. automethod:: next_float64_n
    .. automethod:: next_uint32_bounded
    .. automethod:: next_uint64_bounded
    .. automethod:: __add__
@@ -3075,8 +3095,12 @@ Random number generators
    .. automethod:: seed
    .. automethod:: next_uint32
    .. automethod:: next_uint64
+   .. automethod:: next_float
    .. automethod:: next_float32
    .. automethod:: next_float64
+   .. automethod:: next_float_n
+   .. automethod:: next_float32_n
+   .. automethod:: next_float64_n
    .. automethod:: next_uint32_bounded
    .. automethod:: next_uint64_bounded
    .. automethod:: __add__
