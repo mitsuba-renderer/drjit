@@ -173,6 +173,22 @@ struct FlatVariables {
     /// to exceed 100.
     std::vector<std::string> domains;
 
+    uint32_t recursion_level = 0;
+
+    struct recursion_guard {
+        FlatVariables *flat_variables;
+        recursion_guard(FlatVariables *flat_variables)
+            : flat_variables(flat_variables) {
+            if (++flat_variables->recursion_level >= 50) {
+                PyErr_SetString(PyExc_RecursionError,
+                                "runaway recursion detected");
+                nb::raise_python_error();
+            }
+        }
+        ~recursion_guard() { flat_variables->recursion_level--; }
+};
+
+
     /**
      * Describes how many elements have to be pre-allocated for the ``layout``,
      * ``index_to_slot`` and ``size_to_slot`` containers.

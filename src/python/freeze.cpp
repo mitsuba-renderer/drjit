@@ -642,6 +642,8 @@ void FlatVariables::assign_cb(drjit::TraversableBase *traversable) {
  * as an identifier to the recording of the frozen function.
  */
 void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
+    recursion_guard guard(this);
+
     ProfilerPhase profiler("traverse");
     nb::handle tp = h.type();
 
@@ -775,6 +777,8 @@ void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
  * re-constructs the PyTree.
  */
 nb::object FlatVariables::construct() {
+    recursion_guard guard(this);
+
     if (this->layout.size() == 0) {
         return nb::none();
     }
@@ -870,6 +874,8 @@ nb::object FlatVariables::construct() {
  * This is used when input variables have changed.
  */
 void FlatVariables::assign(nb::handle dst) {
+    recursion_guard guard(this);
+
     nb::handle tp  = dst.type();
     Layout &layout = this->layout[layout_index++];
 

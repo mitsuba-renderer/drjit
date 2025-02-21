@@ -283,7 +283,22 @@ bool leak_warnings() {
     return nb::leak_warnings() || jit_leak_warnings() || ad_leak_warnings();
 }
 
+static int recursion_level = 0;
+
+// PyTrees could theoretically include cycles. Catch infinite recursion below
+struct recursion_guard {
+    recursion_guard() {
+        if (++recursion_level >= 50) {
+            PyErr_SetString(PyExc_RecursionError, "runaway recursion detected");
+            nb::raise_python_error();
+        }
+    }
+    ~recursion_guard() { recursion_level--; }
+};
+
 void traverse_py_cb_ro_impl(nb::handle self, nb::callable c) {
+    recursion_guard guard;
+
     struct PyTraverseCallback : TraverseCallback {
         void operator()(nb::handle h) override {
             const ArraySupplement &s = supp(h.type());
@@ -313,11 +328,14 @@ void traverse_py_cb_ro_impl(nb::handle self, nb::callable c) {
     auto dict = nb::borrow<nb::dict>(nb::getattr(self, "__dict__"));
 
     for (auto value : dict.values()) {
+        jit_log(LogLevel::Warn, "%s", nb::str(dict).c_str());
         traverse("traverse_py_cb_ro", traverse_cb, value);
     }
 }
 
 void traverse_py_cb_rw_impl(nb::handle self, nb::callable c) {
+    recursion_guard guard;
+
     struct PyTraverseCallback : TraverseCallback {
         void operator()(nb::handle h) override {
             const ArraySupplement &s = supp(h.type());
