@@ -81,12 +81,44 @@ struct TransformCallback {
     /// Initialize 'h2' (already allocated) based on 'h1'
     virtual void operator()(nb::handle h1, nb::handle h2) = 0;
 
-    // Type-erased form which is needed in some cases to traverse into opaque
-    // C++ code. This one just gets called with Jit/AD variable indices, an
-    // associated Python/ instance/type is not available.
-    // This can optionally return a non-owning jit_index, that will be assigned
-    // to the underlying variable if \c traverse is called with the \c rw
-    // argument set to \c true.
+    /** Type-erased form which is needed in some cases to traverse into opaque
+     * C++ code. This one just gets called with Jit/AD variable indices, an
+     * associated Python/ instance/type is not available.
+     * This can optionally return a non-owning jit_index, that will be assigned
+     * to the underlying variable if \c traverse is called with the \c rw
+     * argument set to \c true.
+     * For example, to traverse and write indices from a vector to a pytorch
+     * array, one can call \c traverse with
+     *
+     * \code
+     * struct AssignTraverseCallback : TraverseCallback {
+     *     void operator()(nb::handle h) override {
+     *         const ArraySupplement &s = supp(h.type());
+     *         if (s.index)
+     *             s.reset_index(operator()(s.index(inst_ptr(h)), nullptr,
+     *                                      nullptr), inst_ptr(h));
+     *     }
+     *     uint64_t operator()(uint64_t index, const char *variant,
+     *                         const char domain) override {
+     *         return indices[counter++];
+     *     }
+     *     uint32_t counter = 0;
+     *     std::vector<uint64_t> indices;
+     *
+     *     AssignTraverseCallback() : {}
+     *     ~AssignTraverseCallback() {
+     *         for (uint64_t index : indices) {
+     *             ad_var_dec_ref(index);
+     *         }
+     *     }
+     * };
+     *
+     * AssignTraverseCallback traverse_cb();
+     *
+     * traverse("assign", traverse_cb, value);
+     *
+     * \endcode
+     */
     virtual uint64_t operator()(uint64_t index);
 };
 
