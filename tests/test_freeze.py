@@ -2768,6 +2768,23 @@ def test71_texture(t, force_optix):
 
     assert frozen.n_recordings < n
 
+@pytest.test_arrays("float32, jit, shape=(*)")
+def test72_opaque_width(t):
+
+    def func(x: t):
+        return dr.mean(x)
+
+    frozen = dr.freeze(func)
+
+    n = 3
+    for i in range(n):
+        x = dr.arange(t, 3 + i)
+
+        res = frozen(x)
+        ref = func(x)
+
+        assert dr.allclose(ref, res)
+
 
 # @pytest.test_arrays("float32, jit, diff, shape=(*)")
 # def test42_raise(t):
