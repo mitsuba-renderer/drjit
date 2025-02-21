@@ -133,7 +133,9 @@ struct TransformPairCallback {
 };
 
 /**
- * \brief Invoke the given callback on leaf elements of the pytree 'h'
+ * \brief Invoke the given callback on leaf elements of the pytree 'h',
+ *     including JIT indices in c++ objects, inheriting from
+ *     \c drjit::TraversableBase.
  *
  * \param op:
  *     Name of the operation that is performed, this will be used in the
