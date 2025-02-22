@@ -1438,16 +1438,6 @@ nb::object FrozenFunction::operator()(nb::args args, nb::kwargs kwargs) {
 
         in_heuristics = in_heuristics.max(in_variables->heuristic());
 
-        // for (uint32_t i = 0; i < 10000; i++){
-        //     FlatVariables vars;
-        //     TraverseContext ctx;
-        //     vars.traverse_with_registry(input, ctx);
-        //     vars.borrow();
-        //     vars.release();
-        //     jit_log(LogLevel::Warn, "vars.layout.size()=%u",
-        //             vars.layout.size());
-        // }
-
         raise_if(in_variables->backend == JitBackend::None,
                  "freeze(): Cannot infer backend without providing input "
                  "variable to frozen function!");
