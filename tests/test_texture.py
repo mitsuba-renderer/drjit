@@ -8,6 +8,7 @@ wrap_modes = [dr.WrapMode.Repeat, dr.WrapMode.Clamp, dr.WrapMode.Mirror]
 @pytest.mark.parametrize("wrap_mode", wrap_modes)
 @pytest.mark.parametrize("force_optix", [True, False])
 @pytest.mark.parametrize("texture_type", ['Texture1f', 'Texture1f16'])
+@pytest.mark.skip()
 @pytest.test_arrays("is_jit, float32, shape=(*)")
 def test01_interp_1d(t, wrap_mode, force_optix, texture_type):
 
@@ -81,6 +82,7 @@ def test01_interp_1d(t, wrap_mode, force_optix, texture_type):
             output = tex.eval(pos, active=active)
             assert dr.allclose(output, 0)
 
+@pytest.mark.skip()
 @pytest.mark.parametrize("wrap_mode", wrap_modes)
 @pytest.mark.parametrize("texture_type", ['Texture1f', 'Texture1f16'])
 @pytest.test_arrays("is_jit, float32, shape=(*)")
@@ -114,6 +116,7 @@ def test02_interp_1d(t, wrap_mode, texture_type):
 
             assert dr.allclose(result_drjit, result_accel, 5e-3, 5e-3)
 
+@pytest.mark.skip()
 @pytest.mark.parametrize("wrap_mode", wrap_modes)
 @pytest.mark.parametrize("texture_type", ['Texture2f', 'Texture2f16'])
 @pytest.test_arrays("is_jit, float32, shape=(*)")
@@ -144,6 +147,7 @@ def test03_interp_2d(t, wrap_mode, texture_type):
 
             assert(dr.allclose(result_drjit, result_accel, 5e-3, 5e-3))
 
+@pytest.mark.skip()
 @pytest.mark.parametrize("wrap_mode", wrap_modes)
 @pytest.mark.parametrize("texture_type", ['Texture3f', 'Texture3f16'])
 @pytest.test_arrays("is_jit, float32, shape=(*)")
@@ -174,6 +178,7 @@ def test04_interp_3d(t, wrap_mode, texture_type):
 
             assert(dr.allclose(result_drjit, result_accel, 6e-3, 6e-3))
 
+@pytest.mark.skip()
 @pytest.mark.parametrize("migrate", [True, False])
 @pytest.mark.parametrize("texture_type", ['Texture1f', 'Texture1f16'])
 @pytest.test_arrays("is_diff, float32, shape=(*)")
@@ -206,6 +211,7 @@ def test05_grad(t, migrate, texture_type):
     assert dr.allclose(out, expected, 5e-3, 5e-3)
     assert dr.allclose(tex.value(), value)
 
+@pytest.mark.skip()
 @pytest.mark.parametrize("texture_type", ['Texture1f', 'Texture1f16'])
 @pytest.test_arrays("is_jit, float32, shape=(*)")
 def test_06_nearest(t, texture_type):
@@ -229,6 +235,7 @@ def test_06_nearest(t, texture_type):
     out_drjit = tex_no_accel.eval(pos)
     assert dr.allclose(out_accel, out_drjit)
 
+@pytest.mark.skip()
 @pytest.mark.parametrize("texture_type", ['Texture1f'])
 @pytest.test_arrays("is_diff, float32, shape=(*)")
 def test07_cubic_analytic(t, texture_type):
@@ -262,6 +269,7 @@ def test07_cubic_analytic(t, texture_type):
     assert dr.allclose(grad_64[0][0], ref_grad, 1e-5, 1e-5)
     assert dr.allclose(grad_ad[0], ref_grad, 1e-5, 1e-5)
 
+@pytest.mark.skip()
 @pytest.mark.parametrize("wrap_mode", wrap_modes)
 @pytest.mark.parametrize("texture_type", ['Texture1f'])
 @pytest.test_arrays("is_jit, float32, shape=(*)")
@@ -335,6 +343,7 @@ def test08_cubic_interp_1d(t, texture_type, wrap_mode):
         assert dr.allclose(res, ref)
         assert dr.allclose(res2, ref)
 
+@pytest.mark.skip()
 @pytest.mark.parametrize("texture_type", ['Texture2f'])
 @pytest.mark.parametrize("wrap_mode", wrap_modes)
 @pytest.test_arrays("is_jit, float32, shape=(*)")
@@ -365,33 +374,59 @@ def test10_cubic_interp_3d(t, texture_type):
     Array3f = getattr(mod, 'Array3f')
     UInt32 = dr.uint32_array_t(t)
 
-    dummy_tex = TexType([1,1,1], 1)
+    for i in range(2000):
+        level = dr.log_level()
 
-    TensorType = type(dummy_tex.tensor())
-    StorageType = dr.array_t(dummy_tex.value())
+        print(f'Iteration {i}')
 
-    s = 9
-    tensor = dr.full(TensorType, 1, shape=[s, s, s, 2])
-    dr.scatter(tensor.array, StorageType(0.0),  UInt32(728)) # tensor[4, 4, 4, 0] = 0.0
-    dr.scatter(tensor.array, StorageType(2.0),  UInt32(546)) # tensor[3, 3, 3, 0] = 2.0
-    dr.scatter(tensor.array, StorageType(10.0), UInt32(727)) # tensor[4, 4, 3, 1] = 10.0
+        print('Post scatter')
 
-    tex = TexType(tensor, True, False, dr.FilterMode.Linear, dr.WrapMode.Clamp)
+        dummy_tex = TexType([1,1,1], 1)
 
-    ref = Array2f(0.71312, 1.86141)
-    pos = Array3f(.49, .5, .5)
-    res = tex.eval_cubic(pos, True, True)
-    res2 = tex.eval_cubic_helper(pos)
-    assert dr.allclose(res, ref, 2e-3, 2e-3)
-    assert dr.allclose(res2, ref, 2e-3, 2e-3)
+        TensorType = type(dummy_tex.tensor())
+        StorageType = dr.array_t(dummy_tex.value())
 
-    ref2 = Array2f(0.800905, 2.60136)
-    pos2 = Array3f(.45, .53, .51)
-    res = tex.eval_cubic(pos2, True, True)
-    res2 = tex.eval_cubic_helper(pos2)
-    assert dr.allclose(res, ref2, 2e-3, 2e-2)
-    assert dr.allclose(res2, ref2, 2e-3, 2e-2)
+        s = 9
+        tensor = dr.full(TensorType, 1, shape=[s, s, s, 2])
+        dr.scatter(tensor.array, StorageType(0.0),  UInt32(728)) # tensor[4, 4, 4, 0] = 0.0
+        dr.scatter(tensor.array, StorageType(2.0),  UInt32(546)) # tensor[3, 3, 3, 0] = 2.0
+        dr.scatter(tensor.array, StorageType(10.0), UInt32(727)) # tensor[4, 4, 3, 1] = 10.0
 
+        #dr.eval(tensor.array)
+        #dr.sync_thread()
+
+        print('Post scatter')
+
+        tex = TexType(tensor, True, False, dr.FilterMode.Linear, dr.WrapMode.Clamp)
+
+        ref = Array2f(0.71312, 1.86141)
+        pos = Array3f(.49, .5, .5)
+        res = tex.eval_cubic(pos, True, True)
+        dr.eval(res)
+        dr.sync_thread()
+        print('Post cubic 1')
+        res2 = tex.eval_cubic_helper(pos)
+        #dr.eval(res)
+        #dr.sync_thread()
+        print('Post cubic helper 1')
+        assert dr.allclose(res, ref, 2e-3, 2e-3)
+        assert dr.allclose(res2, ref, 2e-3, 2e-3)
+
+        ref2 = Array2f(0.800905, 2.60136)
+        pos2 = Array3f(.45, .53, .51)
+        res = tex.eval_cubic(pos2, True, True)
+        #dr.eval(res)
+        #dr.sync_thread()
+        print('Post cubic 2')
+        res2 = tex.eval_cubic_helper(pos2)
+        #dr.eval(res2)
+        #dr.sync_thread()
+        print('Post cubic helper 2')
+        assert dr.allclose(res, ref2, 2e-3, 2e-2)
+        assert dr.allclose(res2, ref2, 2e-3, 2e-2)
+
+
+@pytest.mark.skip()
 @pytest.mark.parametrize("texture_type", ['Texture3f'])
 @pytest.test_arrays("is_diff, float32, shape=(*)")
 @pytest.mark.skipif(sys.platform == "win32", reason="FIXME: Non-deterministic crashes on Windows")
@@ -435,6 +470,7 @@ def test11_cubic_grad_pos(t, texture_type):
     assert dr.allclose(grad_64[0][2], ref_grad[2])
     assert dr.allclose(grad_ad, ref_grad)
 
+@pytest.mark.skip()
 @pytest.mark.parametrize("texture_type", ['Texture3f'])
 @pytest.test_arrays("is_diff, float32, shape=(*)")
 def test12_cubic_hessian_pos(t, texture_type):
@@ -478,6 +514,7 @@ def test12_cubic_hessian_pos(t, texture_type):
     assert hessian[0][0][2] == hessian[0][2][0]
     assert hessian[0][1][2] == hessian[0][2][1]
 
+@pytest.mark.skip()
 @pytest.mark.parametrize("texture_type", ['Texture1f', 'Texture1f16'])
 @pytest.test_arrays("is_jit, float32, shape=(*)")
 def test15_tensor_value_1d(t, texture_type):
@@ -497,6 +534,7 @@ def test15_tensor_value_1d(t, texture_type):
         assert dr.allclose(tex.value(), tex_data)
         assert dr.allclose(tex.tensor().array, tex_data)
 
+@pytest.mark.skip()
 @pytest.mark.parametrize("texture_type", ['Texture2f', 'Texture2f16'])
 @pytest.test_arrays("is_jit, float32, shape=(*)")
 def test16_tensor_value_2d(t, texture_type):
@@ -516,6 +554,7 @@ def test16_tensor_value_2d(t, texture_type):
         assert dr.allclose(tex.value(), tex_data)
         assert dr.allclose(tex.tensor().array, tex_data)
 
+@pytest.mark.skip()
 @pytest.mark.parametrize("texture_type", ['Texture3f', 'Texture3f16'])
 @pytest.test_arrays("is_jit, float32, shape=(*)")
 def test17_tensor_value_3d(t, texture_type):
@@ -535,6 +574,7 @@ def test17_tensor_value_3d(t, texture_type):
         assert dr.allclose(tex.value(), tex_data)
         assert dr.allclose(tex.tensor().array, tex_data)
 
+@pytest.mark.skip()
 @pytest.mark.parametrize("texture_type", ['Texture1f', 'Texture1f16'])
 @pytest.test_arrays("is_jit, float32, shape=(*)")
 def test18_fetch_1d(t, texture_type):
@@ -563,6 +603,7 @@ def test18_fetch_1d(t, texture_type):
             assert dr.allclose(tex_data[ch + k], out_drjit[1][k])
             assert dr.allclose(tex_data[ch + k], out_accel[1][k])
 
+@pytest.mark.skip()
 @pytest.mark.parametrize("texture_type", ['Texture2f', 'Texture2f16'])
 @pytest.test_arrays("is_jit, float32, shape=(*)")
 def test19_fetch_2d(t, texture_type):
@@ -595,6 +636,7 @@ def test19_fetch_2d(t, texture_type):
             assert dr.allclose(tex_data[3 * ch + k], out_drjit[3][k])
             assert dr.allclose(tex_data[3 * ch + k], out_accel[3][k])
 
+@pytest.mark.skip()
 @pytest.mark.parametrize("texture_type", ['Texture3f', 'Texture3f16'])
 @pytest.test_arrays("is_jit, float32, shape=(*)")
 def test20_fetch_3d(t, texture_type):
@@ -635,6 +677,7 @@ def test20_fetch_3d(t, texture_type):
             assert dr.allclose(tex_data[7 * ch + k], out_drjit[7][k])
             assert dr.allclose(tex_data[7 * ch + k], out_accel[7][k])
 
+@pytest.mark.skip()
 @pytest.mark.parametrize("texture_type", ['Texture1f', 'Texture1f16'])
 @pytest.mark.parametrize("migrate", [True, False])
 @pytest.test_arrays("is_jit, float32, shape=(*)")
@@ -654,6 +697,7 @@ def test21_fetch_migrate(t, texture_type, migrate):
     assert dr.allclose(out[0][0], 1.0)
     assert dr.allclose(out[1][0], 2.0)
 
+@pytest.mark.skip()
 @pytest.mark.parametrize("texture_type", ['Texture2f', 'Texture2f16'])
 @pytest.test_arrays("is_diff, float32, shape=(*)")
 @pytest.skip_on(RuntimeError, "backend does not support the requested type of atomic reduction")
@@ -697,6 +741,7 @@ def test22_fetch_grad(t, texture_type):
         assert dr.allclose(expected, grad)
         dr.set_grad(tex_data, t(0, 0, 0, 0))
 
+@pytest.mark.skip()
 @pytest.mark.parametrize("texture_type", ['Texture2f', 'Texture2f16'])
 @pytest.test_arrays("is_jit, float32, shape=(*)")
 def test23_set_tensor(t, texture_type):

@@ -320,8 +320,8 @@ private:
 
 /// Special handling of packet gathers when packet size is only known at runtime
 template <typename Value, typename Source, typename Index, typename Mask>
-void gather_packet_dynamic(size_t packet_size, Source &&source, const Index &index,
-    Value* out, const Mask &mask_ = true, ReduceMode mode = ReduceMode::Auto) {
+void gather_packet_dynamic(size_t packet_size, Source &&source, 
+    const Index &index, Value* out, const Mask &mask_ = true, ReduceMode mode = ReduceMode::Auto) {
 
     // Broadcast mask to match shape of Index
     mask_t<plain_t<Index>> mask = mask_;
