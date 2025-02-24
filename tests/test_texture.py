@@ -374,56 +374,33 @@ def test10_cubic_interp_3d(t, texture_type):
     Array3f = getattr(mod, 'Array3f')
     UInt32 = dr.uint32_array_t(t)
 
-    for i in range(1):
-        level = dr.log_level()
+    dummy_tex = TexType([1,1,1], 1)
 
-        print(f'Iteration {i}')
+    TensorType = type(dummy_tex.tensor())
+    StorageType = dr.array_t(dummy_tex.value())
 
-        print('Post scatter')
+    s = 9
+    tensor = dr.full(TensorType, 1, shape=[s, s, s, 2])
+    dr.scatter(tensor.array, StorageType(0.0),  UInt32(728)) # tensor[4, 4, 4, 0] = 0.0
+    dr.scatter(tensor.array, StorageType(2.0),  UInt32(546)) # tensor[3, 3, 3, 0] = 2.0
+    dr.scatter(tensor.array, StorageType(10.0), UInt32(727)) # tensor[4, 4, 3, 1] = 10.0
 
-        dummy_tex = TexType([1,1,1], 1)
+    tex = TexType(tensor, True, False, dr.FilterMode.Linear, dr.WrapMode.Clamp)
 
-        TensorType = type(dummy_tex.tensor())
-        StorageType = dr.array_t(dummy_tex.value())
+    ref = Array2f(0.71312, 1.86141)
+    pos = Array3f(.49, .5, .5)
+    res = tex.eval_cubic(pos, True, True)
+    res2 = tex.eval_cubic_helper(pos)
+    assert dr.allclose(res, ref, 2e-3, 2e-3)
+    assert dr.allclose(res2, ref, 2e-3, 2e-3)
 
-        s = 9
-        tensor = dr.full(TensorType, 1, shape=[s, s, s, 2])
-        dr.scatter(tensor.array, StorageType(0.0),  UInt32(728)) # tensor[4, 4, 4, 0] = 0.0
-        dr.scatter(tensor.array, StorageType(2.0),  UInt32(546)) # tensor[3, 3, 3, 0] = 2.0
-        dr.scatter(tensor.array, StorageType(10.0), UInt32(727)) # tensor[4, 4, 3, 1] = 10.0
+    ref2 = Array2f(0.800905, 2.60136)
+    pos2 = Array3f(.45, .53, .51)
+    res = tex.eval_cubic(pos2, True, True)
+    res2 = tex.eval_cubic_helper(pos2)
+    assert dr.allclose(res, ref2, 2e-3, 2e-2)
+    assert dr.allclose(res2, ref2, 2e-3, 2e-2)
 
-        #dr.eval(tensor.array)
-        #dr.sync_thread()
-
-        print('Post scatter')
-
-        tex = TexType(tensor, True, False, dr.FilterMode.Linear, dr.WrapMode.Clamp)
-
-        ref = Array2f(0.71312, 1.86141)
-        pos = Array3f(.49, .5, .5)
-        res = tex.eval_cubic(pos, True, True)
-        #dr.eval(res)
-        #dr.sync_thread()
-        print('Post cubic 1')
-        res2 = tex.eval_cubic_helper(pos)
-        #dr.eval(res)
-        #dr.sync_thread()
-        print('Post cubic helper 1')
-        assert dr.allclose(res, ref, 2e-3, 2e-3)
-        assert dr.allclose(res2, ref, 2e-3, 2e-3)
-
-        ref2 = Array2f(0.800905, 2.60136)
-        pos2 = Array3f(.45, .53, .51)
-        res = tex.eval_cubic(pos2, True, True)
-        #dr.eval(res)
-        #dr.sync_thread()
-        print('Post cubic 2')
-        res2 = tex.eval_cubic_helper(pos2)
-        #dr.eval(res2)
-        #dr.sync_thread()
-        print('Post cubic helper 2')
-        assert dr.allclose(res, ref2, 2e-3, 2e-2)
-        assert dr.allclose(res2, ref2, 2e-3, 2e-2)
 
 
 @pytest.mark.skip()
