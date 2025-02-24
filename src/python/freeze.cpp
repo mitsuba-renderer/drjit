@@ -1139,6 +1139,9 @@ std::ostream &operator<<(std::ostream &os, const FlatVariables &r) {
     return os;
 }
 
+/**
+ * Log the difference of the layout nodes at ``index`` for the two FlatVariables.
+ */
 bool log_diff(LogLevel level, const FlatVariables &curr,
               const FlatVariables &prev, uint32_t &index, std::string &path) {
 
@@ -1229,6 +1232,9 @@ bool log_diff(LogLevel level, const FlatVariables &curr,
     return true;
 }
 
+/**
+ * Log the difference of the two FlatVariables.
+ */
 bool log_diff(LogLevel level, const FlatVariables &curr,
               const FlatVariables &prev) {
     if (curr.flags != prev.flags) {
