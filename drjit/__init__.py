@@ -1696,19 +1696,29 @@ def _compute_strides(shape: Sequence[int]) -> Tuple[int, ...]:
     return tuple(strides)
 
 
-def concat(arr: Sequence[ArrayT], /, axis: int = 0) -> ArrayT:
+def concat(arr: Sequence[ArrayT], /, axis: Optional[int] = 0) -> ArrayT:
     """
     Concatenate a sequence of arrays or tensors along a given axis.
 
     The inputs must all be of the same type, and they must have the same shape
     except for the axis being concatenated. Negative ``axis`` values count
     backwards from the last dimension.
+
+    When ``axis=None``, the function ravels the input arrays or tensors prior
+    to concatenating them.
     """
+
+    if is_array_v(arr):
+        raise TypeError("Input should be Python sequence of arrays.")
 
     if len(arr) == 0:
         raise RuntimeError("At least one input array/tensor is required!")
     elif len(arr) == 1:
         return arr[0]
+
+    if axis is None:
+        arr = tuple(ravel(v) for v in arr)
+        axis = 0
 
     ref = arr[0]
     ref_tp = type(ref)
