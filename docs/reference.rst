@@ -103,6 +103,7 @@ Block reductions
 Rearranging array contents
 --------------------------
 
+.. autofunction:: concat
 .. autofunction:: reverse
 .. autofunction:: compress
 .. autofunction:: ravel

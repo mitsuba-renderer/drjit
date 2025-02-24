@@ -550,7 +550,7 @@ def test15_upsampling_texture(t):
 
 @pytest.test_arrays('is_tensor, float32')
 def test16_implicit_conversion(t):
-    import numpy as np
+    np = pytest.importorskip("numpy")
 
     mod = sys.modules[t.__module__]
     tex_t = getattr(mod, 'Texture2f')
@@ -572,3 +572,37 @@ def test18_tensor_index_signed_vec(t):
     x = t([1, 2, 3], shape=(1, 3))
     A = dr.int32_array_t(dr.array_t(x))
     assert dr.all(x[:, A([-1, 0])] == t([3, 1]))
+
+
+@pytest.test_arrays('is_tensor, jit, uint32')
+def test20_concat(t):
+    np = pytest.importorskip("numpy")
+
+    configs = [
+        (0, (3,), (4,)),
+        (0, (3, 10), (2, 10)),
+        (1, (10, 7), (10, 11)),
+        (1, (10, 7), (10, 11), (10, 3)),
+        (-1, (10, 7), (10, 11), (10, 3)),
+        (0, (3, 6, 7), (5, 6, 7), (8, 6, 7)),
+        (1, (5, 3, 7), (5, 6, 7), (5, 8, 7)),
+        (2, (5, 6, 3), (5, 6, 7), (5, 6, 8)),
+        (None, (5, 6, 3), (5, 6, 7), (5, 6, 8)),
+    ]
+
+    for axis, *shapes in configs:
+        in_drjit = []
+        in_numpy = []
+        print(f"{axis=}, {shapes=}")
+        for i, shape in enumerate(shapes):
+            size = dr.prod(shape)
+            seq = dr.arange(dr.array_t(t), size) + i*100
+            in_drjit.append(t(seq, shape))
+            seq = np.arange(size) + i*100
+            in_numpy.append(seq.reshape(shape))
+
+        out_numpy = np.concatenate(in_numpy, axis=axis)
+        out_drjit = dr.concat(in_drjit, axis=axis)
+
+        assert out_numpy.shape == out_drjit.shape
+        assert np.allclose(out_numpy, out_drjit.numpy())

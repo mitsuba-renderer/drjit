@@ -460,3 +460,7 @@ def test13_test_prefix_reduction(t, reverse, exclusive):
     test_red((9, 5, 7), 1)
     test_red((9, 5, 7), 2)
     test_red((9, 5, 7), -1)
+
+@pytest.test_arrays('jit, uint32, shape=(*)')
+def test20_concat_array(t):
+    assert dr.all(dr.concat((t(1,2,3), t(4,5,6))) == t(1,2,3,4,5,6))
