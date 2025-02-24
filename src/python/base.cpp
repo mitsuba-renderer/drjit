@@ -901,7 +901,7 @@ nb::object select(nb::handle h0, nb::handle h1, nb::handle h2) {
 
         nb::object transform_unknown(nb::handle h1, nb::handle h2) const override {
             if (!h1.is(h2))
-                nb::raise("encountered incompatible objects with an unknown type (not a Dr.Jit array, not a PyTree).");
+                nb::raise("select() encountered incompatible objects with an unknown type (not a Dr.Jit array, not a PyTree).");
             return nb::borrow(h1);
         }
 
