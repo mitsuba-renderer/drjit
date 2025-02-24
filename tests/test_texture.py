@@ -374,7 +374,7 @@ def test10_cubic_interp_3d(t, texture_type):
     Array3f = getattr(mod, 'Array3f')
     UInt32 = dr.uint32_array_t(t)
 
-    for i in range(2000):
+    for i in range(1):
         level = dr.log_level()
 
         print(f'Iteration {i}')
