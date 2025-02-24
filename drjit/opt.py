@@ -350,7 +350,7 @@ class Optimizer(Generic[Extra], MutableMapping[str, dr.ArrayBase]):
            opt.update(key_1=value_1, key_2=value_2)
         """
         if params:
-            for k, v in params.items():
+            for k, v in self._filter(params).items():
                 self[k] = v
         if args:
             self.update(args)
@@ -477,6 +477,10 @@ class Optimizer(Generic[Extra], MutableMapping[str, dr.ArrayBase]):
     def _select(self, mask: dr.ArrayBase, extra: Extra, new_extra: Extra, /) -> Extra:
         return dr.select(mask, extra, new_extra)
 
+    # Optional: optimizers can override/patch this method to filter
+    # ineligible parameters
+    def _filter(self, params: Mapping[str, dr.ArrayBase], /) -> Mapping[str, dr.ArrayBase]:
+        return params
 
 class _LRCache(Dict[Tuple[Type[dr.ArrayBase], float], dr.ArrayBase]):
     """
