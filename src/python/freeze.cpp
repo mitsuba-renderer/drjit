@@ -663,6 +663,7 @@ void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
 
                 layout.py_object = shape(h);
                 layout.index   = width(array);
+                layout.num = 1;
 
                 traverse(nb::steal(array), ctx);
             } else if (s.ndim != 1) {
@@ -670,17 +671,18 @@ void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
                 if (len == DRJIT_DYNAMIC)
                     len = s.len(inst_ptr(h));
 
-                layout.num  = len;
+                layout.num = len;
 
                 for (Py_ssize_t i = 0; i < len; ++i)
                     traverse(nb::steal(s.item(h.ptr(), i)), ctx);
             } else {
+                layout.num = 1;
                 traverse_ad_var(h, ctx);
             }
         } else if (tp.is(&PyTuple_Type)) {
             nb::tuple tuple = nb::borrow<nb::tuple>(h);
 
-            layout.num  = tuple.size();
+            layout.num = tuple.size();
 
             for (nb::handle h2 : tuple) {
                 traverse(h2, ctx);
@@ -688,7 +690,7 @@ void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
         } else if (tp.is(&PyList_Type)) {
             nb::list list = nb::borrow<nb::list>(h);
 
-            layout.num  = list.size();
+            layout.num = list.size();
 
             for (nb::handle h2 : list) {
                 traverse(h2, ctx);
@@ -696,7 +698,7 @@ void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
         } else if (tp.is(&PyDict_Type)) {
             nb::dict dict = nb::borrow<nb::dict>(h);
 
-            layout.num  = dict.size();
+            layout.num = dict.size();
             layout.fields.reserve(layout.num);
             for (auto k : dict.keys()) {
                 layout.fields.push_back(nb::borrow(k));
@@ -707,7 +709,7 @@ void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
             }
         } else if (nb::dict ds = get_drjit_struct(tp); ds.is_valid()) {
 
-            layout.num  = ds.size();
+            layout.num = ds.size();
             layout.fields.reserve(layout.num);
             for (auto k : ds.keys()) {
                 layout.fields.push_back(nb::borrow(k));
@@ -1137,6 +1139,117 @@ std::ostream &operator<<(std::ostream &os, const FlatVariables &r) {
     return os;
 }
 
+bool log_diff(LogLevel level, const FlatVariables &curr,
+              const FlatVariables &prev, uint32_t &index, std::string &path) {
+
+    const Layout &curr_l = curr.layout[index];
+    const Layout &prev_l = prev.layout[index];
+    index++;
+
+    if (((bool) curr_l.type != (bool) prev_l.type) ||
+        !(curr_l.type.equal(prev_l.type))) {
+        jit_log(level, "%s: The type of this node changed from %s to %s",
+                path.c_str(), nb::str(prev_l.type).c_str(),
+                nb::str(curr_l.type).c_str());
+        return false;
+    }
+
+    if (curr_l.literal != prev_l.literal) {
+        jit_log(level,
+                "%s: The literal value of this variable changed from 0x%llx to "
+                "0x%llx",
+                path.c_str(), prev_l.literal, curr_l.literal);
+        return false;
+    }
+
+    if (((bool) curr_l.py_object != (bool) prev_l.py_object) ||
+        !curr_l.py_object.equal(prev_l.py_object)) {
+        jit_log(level, "%s: The object changed from %s to %s", path.c_str(),
+                nb::str(prev_l.py_object).c_str(),
+                nb::str(curr_l.py_object).c_str());
+        return false;
+    }
+
+    if (curr_l.num != prev_l.num){
+        jit_log(level,
+                "%s: The number of elements of this container changed from %u "
+                "to %u",
+                path.c_str(), prev_l.num, curr_l.num);
+        return false;
+    }
+
+    if (curr_l.fields.size() != prev_l.fields.size()){
+        jit_log(level,
+                "%s: The number of elements of this container changed from %u "
+                "to %u",
+                path.c_str(), prev_l.fields.size(), curr_l.fields.size());
+        return false;
+    }
+
+    for (uint32_t i = 0; i < curr_l.fields.size(); ++i) {
+        if (!(curr_l.fields[i].equal(prev_l.fields[i]))) {
+            jit_log(level, "%s: The %ith key changed from \"%s\" to \"%s\"",
+                    path.c_str(), i, nb::str(curr_l.fields[i]).c_str(),
+                    nb::str(prev_l.fields[i]).c_str());
+        }
+    }
+
+    if (curr_l.fields.size() > 0){
+        for (uint32_t i = 0; i < curr_l.fields.size(); i++){
+            auto &field = curr_l.fields[i];
+
+            uint32_t path_size = path.size();
+
+            if(curr_l.type.is(&PyDict_Type)){
+                path += "[\"";
+                path += nb::str(field).c_str();
+                path += "\"]";
+            }else{
+                path += ".";
+                path += nb::str(field).c_str();
+            }
+
+            log_diff(level, curr, prev, index, path);
+
+            path.resize(path_size);
+        }
+    }else{
+        for (uint32_t i = 0; i < curr_l.num; i++) {
+            uint32_t path_size = path.size();
+            path += "[";
+            path += std::to_string(i);
+            path += "]";
+
+            log_diff(level, curr, prev, index, path);
+
+            path.resize(path_size);
+        }
+    }
+
+    return true;
+}
+
+bool log_diff(LogLevel level, const FlatVariables &curr,
+              const FlatVariables &prev) {
+    if (curr.flags != prev.flags) {
+        jit_log(level, "The flags of the input changed from %lx to %lx",
+                prev.flags, curr.flags);
+        return false;
+    }
+    if(curr.layout.size() != prev.layout.size()){
+        jit_log(level,
+                "The number of elements in the input changed from %u to %u.",
+                prev.layout.size(), curr.layout.size());
+        return false;
+    }
+
+    uint32_t index = 0;
+    std::string path;
+    log_diff(level, curr, prev, index, path);
+
+    return true;
+}
+
 void traverse_traversable(drjit::TraversableBase *traversable,
                           TraverseCallback &cb, bool rw = false) {
     struct Payload{
@@ -1217,14 +1330,14 @@ nb::object FunctionRecording::record(nb::callable func,
     JitBackend backend = in_variables.backend;
 
     frozen_func->recording_counter++;
-    if (frozen_func->recording_counter > frozen_func->warn_recording_count)jit_log(
-        LogLevel::Warn,
-        "The frozen function has been recorded %u times, this indicates a "
-        "problem with how the frozen function is being called. For "
-        "example, calling it with changing python values such as a "
-        "index.",
-        frozen_func->recording_counter);
-
+    if (frozen_func->recording_counter > frozen_func->warn_recording_count)
+        jit_log(
+            LogLevel::Warn,
+            "The frozen function has been recorded %u times, this indicates a "
+            "problem with how the frozen function is being called. For "
+            "example, calling it with changing python values such as a "
+            "index.",
+            frozen_func->recording_counter);
 
     jit_log(LogLevel::Info,
             "Recording (n_inputs=%u):", in_variables.variables.size());
@@ -1468,19 +1581,12 @@ nb::object FrozenFunction::operator()(nb::args args, nb::kwargs kwargs) {
 
         if (it == this->recordings.end()) {
 #ifndef NDEBUG
-            if (this->recordings.size() >= 1) {
-                jit_log(LogLevel::Info,
-                        "Function input missmatch! Function will be retraced.");
-
-                std::ostringstream repr;
-                repr << *in_variables;
-
-                std::ostringstream repr_prev;
-                repr_prev << *prev_key;
-
-                jit_log(LogLevel::Debug, "new key: %s", repr.str().c_str());
-                jit_log(LogLevel::Debug, "old key: %s",
-                        repr_prev.str().c_str());
+            if (this->recordings.size() >= 1)
+                log_diff(LogLevel::Debug, *in_variables, *prev_key);
+#else
+            if (this->recordings.size() >= 1 &&
+                recording_counter + 1 > warn_recording_count) {
+                log_diff(LogLevel::Warn, *in_variables, *prev_key);
             }
 #endif
 
