@@ -510,6 +510,18 @@ nb::object mean(nb::handle value, nb::handle axis, nb::handle mode) {
         return out;
     }
 
+    if (jit_flag(JitFlag::FreezingScope) && width(out) == 1 &&
+        width(value) > 1) {
+        // To avoid incorrect values when replaying frozen functions, we have to
+        // avoid baking the size of the array into the kernel as a literal. We
+        // therefore use the functions ``jit_opaque_width`` to compute the
+        // number of elements.
+        auto num_input  = opaque_n_elements(value);
+        auto num_output = prod(shape(out), nb::none());
+
+        return (out * num_output) / num_input;
+    }
+
     // mean = sum / (num_input/num_output)
     return (out * prod(shape(out), nb::none())) / prod(shape(value), nb::none());
 }

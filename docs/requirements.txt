@@ -1,5 +1,6 @@
-furo
-sphinxcontrib-katex
-typing_extensions
 enum-tools[sphinx]
+furo
+sphinx
+sphinxcontrib-katex
 sphinxcontrib-svg2pdfconverter
+typing_extensions

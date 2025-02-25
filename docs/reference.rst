@@ -169,6 +169,11 @@ Just-in-time compilation
    .. automethod:: __enter__
    .. automethod:: __exit__
 
+Function freezing
+-----------------
+
+.. autofunction:: freeze
+
 Type traits
 -----------
 

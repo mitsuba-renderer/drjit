@@ -79,6 +79,8 @@ struct StaticArrayBase : ArrayBaseT<Value_, IsMask_, Derived_> {
 
     DRJIT_INLINE constexpr size_t size() const { return Derived::Size; }
 
+    DRJIT_INLINE constexpr size_t opaque_size_() const { return Derived::Size; }
+
     DRJIT_INLINE void init_(size_t) { }
 
     static Derived empty_(size_t size) {

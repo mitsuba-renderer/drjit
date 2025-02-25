@@ -34,6 +34,8 @@ template <typename Float> struct Base : drjit::TraversableBase {
     virtual Float g(Float, Mask) = 0;
     virtual Float h(Float) = 0;
     virtual Float nested(Float x, UInt32 s) = 0;
+    /// Nested vcall, using a member variable as a pointer.
+    virtual Float nested_self(Float x) = 0;
     virtual void dummy() = 0;
     virtual float scalar_getter() = 0;
     virtual Float opaque_getter() = 0;
@@ -45,9 +47,14 @@ template <typename Float> struct Base : drjit::TraversableBase {
     virtual void scatter_packet(UInt32, dr::Array<Float, 4>) = 0;
     virtual void scatter_add_packet(UInt32, dr::Array<Float, 4>) = 0;
 
+    static constexpr const char *variant_() {
+        return Float::Backend == JitBackend::CUDA ? "cuda" : "llvm";
+    }
+
     Base() {
-        if constexpr (dr::is_jit_v<Float>)
-            drjit::registry_put("", "Base", this);
+        if constexpr (dr::is_jit_v<Float>){
+            drjit::registry_put(Base::variant_(), "Base", this);
+        }
     }
 
     virtual ~Base() { jit_registry_remove(this); }
@@ -78,6 +85,10 @@ template <typename Float> struct A : Base<Float> {
     }
 
     virtual Float nested(Float x, UInt32 /*s*/) override {
+        return x + dr::gather<Float>(value, UInt32(0));
+    }
+
+    virtual Float nested_self(Float x) override {
         return x + dr::gather<Float>(value, UInt32(0));
     }
 
@@ -147,6 +158,12 @@ template <typename Float> struct B : Base<Float> {
         return self->nested(x, s);
     }
 
+    virtual Float nested_self(Float x) override {
+        using BaseArray = dr::replace_value_t<Float, Base<Float>*>;
+        BaseArray self = dr::reinterpret_array<BaseArray>(this->s);
+        return self->nested(x, this->s);
+    }
+
     virtual std::pair<Sampler<Float> *, Float> sample(Sampler<Float> *s) override {
         return { s, 0 };
     }
@@ -169,9 +186,14 @@ template <typename Float> struct B : Base<Float> {
 
     Float value;
     Float opaque = dr::opaque<Float>(2.f);
+    UInt32 s;
 
     DR_TRAVERSE_CB(Base<Float>, value, opaque)
 };
+
+template <typename Float> constexpr const char *get_variant() {
+    return Float::Backend == JitBackend::CUDA ? "cuda" : "llvm";
+}
 
 DRJIT_CALL_TEMPLATE_BEGIN(Base)
     DRJIT_CALL_METHOD(f)
@@ -180,6 +202,7 @@ DRJIT_CALL_TEMPLATE_BEGIN(Base)
     DRJIT_CALL_METHOD(g)
     DRJIT_CALL_METHOD(h)
     DRJIT_CALL_METHOD(nested)
+    DRJIT_CALL_METHOD(nested_self)
     DRJIT_CALL_METHOD(sample)
     DRJIT_CALL_METHOD(gather_packet)
     DRJIT_CALL_METHOD(scatter_packet)
@@ -189,6 +212,8 @@ DRJIT_CALL_TEMPLATE_BEGIN(Base)
     DRJIT_CALL_GETTER(complex_getter)
     DRJIT_CALL_GETTER(constant_getter)
     DRJIT_CALL_METHOD(get_self)
+public:
+    static constexpr const char *variant_() { return get_variant<Ts...>(); }
 DRJIT_CALL_END(Base)
 
 
@@ -222,6 +247,7 @@ void bind(nb::module_ &m) {
         .def("f_masked", &BaseT::f_masked)
         .def("g", &BaseT::g)
         .def("nested", &BaseT::nested)
+        .def("nested_self", &BaseT::nested_self)
         .def("sample", &BaseT::sample);
     bind_traverse(base_cls);
 
@@ -238,7 +264,8 @@ void bind(nb::module_ &m) {
     auto b_cls = nb::class_<BT, BaseT>(m, "B")
         .def(nb::init<>())
         .def_rw("opaque", &BT::opaque)
-        .def_rw("value", &BT::value);
+        .def_rw("value", &BT::value)
+        .def_rw("s", &BT::s);
     bind_traverse(b_cls);
 
     using BaseArray = dr::DiffArray<Backend, BaseT *>;
@@ -263,6 +290,9 @@ void bind(nb::module_ &m) {
         .def("nested",
              [](BaseArray &self, Float x, UInt32 s) { return self->nested(x, s); },
              "x"_a, "s"_a)
+        .def("nested_self",
+             [](BaseArray &self, Float x) { return self->nested_self(x); },
+             "x"_a)
         .def("dummy", [](BaseArray &self) { return self->dummy(); })
         .def("scalar_getter", [](BaseArray &self, Mask m) {
                 return self->scalar_getter(m);

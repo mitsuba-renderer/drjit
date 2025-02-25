@@ -1,15 +1,5 @@
 #include "freeze.h"
-#include "apply.h"
-#include "autodiff.h"
-#include "base.h"
-#include "common.h"
-#include "reduce.h"
-#include "listobject.h"
-#include "object.h"
-#include "pyerrors.h"
-#include "shape.h"
-#include "tupleobject.h"
-#include <bitset>
+
 #include <drjit-core/hash.h>
 #include <drjit-core/jit.h>
 #include <drjit/array_router.h>
@@ -17,11 +7,22 @@
 #include <drjit/extra.h>
 #include <drjit/fwd.h>
 #include <drjit/traversable_base.h>
-#include <ios>
 #include <nanobind/nanobind.h>
-#include <ostream>
-#include <sstream>
-#include <vector>
+#include <xxh3.h>
+
+#include "autodiff.h"
+#include "base.h"
+#include "common.h"
+#include "listobject.h"
+#include "object.h"
+#include "pyerrors.h"
+#include "reduce.h"
+#include "shape.h"
+#include "tupleobject.h"
+
+#include "../ext/nanobind/src/buffer.h"
+
+using Buffer = nanobind::detail::Buffer;
 
 /**
  * \brief Helper struct to profile and log frozen functions.
@@ -36,9 +37,8 @@ struct ProfilerPhase {
     }
 
     ProfilerPhase(const drjit::TraversableBase *traversable) {
-        int status;
-        char message[1024] = {0};
-        const char *name = typeid(*traversable).name();
+        char message[1024] = { 0 };
+        const char *name   = typeid(*traversable).name();
         snprintf(message, 1024, "traverse_cb %s", name);
 
         jit_log(LogLevel::Debug, "profiler start: %s", message);
@@ -69,16 +69,23 @@ struct scoped_set_flag {
     scoped_set_flag(JitFlag flag, bool enabled) : backup(jit_flags()) {
         uint32_t flags = backup;
         if (enabled)
-            flags |= (uint32_t)flag;
+            flags |= (uint32_t) flag;
         else
             flags &= ~(uint32_t) flag;
 
         jit_set_flags(flags);
     }
 
-    ~scoped_set_flag() {
-        jit_set_flags(backup);
-    }
+    ~scoped_set_flag() { jit_set_flags(backup); }
+};
+
+struct state_lock_guard {
+    state_lock_guard() { jit_state_lock(); }
+    ~state_lock_guard() { jit_state_unlock(); }
+};
+struct state_unlock_guard {
+    state_unlock_guard() { jit_state_unlock(); }
+    ~state_unlock_guard() { jit_state_lock(); }
 };
 
 using namespace detail;
@@ -152,10 +159,9 @@ void FlatVariables::add_domain(const char *variant, const char *domain) {
     if (domain && variant && strcmp(domain, "") != 0) {
         jit_log(LogLevel::Debug, "variant=%s, domain=%s", variant, domain);
 
-        if (domains.empty()){
+        if (domains.empty()) {
             this->variant = variant;
-        }
-        else if (this->variant != variant)
+        } else if (this->variant != variant)
             jit_raise("traverse(): Variant missmatch! All arguments to a "
                       "frozen function have to have the same variant. "
                       "Variant %s of a previos argument does not match "
@@ -184,7 +190,7 @@ uint32_t FlatVariables::add_jit_index(uint32_t index) {
     uint32_t next_slot = this->variables.size();
     auto result        = this->index_to_slot.try_emplace(index, next_slot);
     auto it            = result.first;
-    bool inserted = result.second;
+    bool inserted      = result.second;
 
     if (inserted) {
         this->variables.push_back(index);
@@ -198,6 +204,122 @@ uint32_t FlatVariables::add_jit_index(uint32_t index) {
 }
 
 /**
+ *
+ * The auto opaque feature, is able to track changes of literal values in the
+ * PyTree between calls to the function. If a literal value changes between two
+ * calls, it should be made opaque before the second call. To accomplish this, a
+ * boolean array (``opaque_mask``) is used, which indicates which variables
+ * should be made opaque before recording a function. Tracking the literals,
+ * which should be made opaque can only be done as long as the structure
+ * of the input PyTree does not change significantly. If such a change is
+ * detected, the opaque_mask is reset with ``false``, and the next call does not
+ * force evaluate literals.
+ * This function is responsible for detecting changes between two flattened
+ * PyTrees (``FlatVariables``), that force us to reset the ``opaque_mask``
+ * array.
+ */
+bool compatible_auto_opaque(FlatVariables &cur, FlatVariables &prev) {
+    // NOTE: We only test the size of the layout, as a full test is somewhat
+    // expensive, and the worst case is that we make too many variables opaque,
+    // which does not impact correctness. If this causes problems, more
+    // extensive tests might have to be reintroduced.
+    if (cur.layout.size() != prev.layout.size()) {
+        return false;
+    }
+    return true;
+}
+
+bool FlatVariables::fill_opaque_mask(FlatVariables &prev,
+                                     drjit::vector<bool> &opaque_mask) {
+    // If we notice that only a literal has changed, we can set the
+    // corresponding bit in the mask, indicating that this literal should be
+    // made opaque next time.
+    uint32_t opaque_counter = 0;
+    bool new_opaques        = false;
+    for (uint32_t i = 0; i < this->layout.size(); i++) {
+        Layout &layout      = this->layout[i];
+        Layout &prev_layout = prev.layout[i];
+
+        bool requires_opaque =
+            (layout.flags & (uint32_t) LayoutFlag::Literal) &&
+            (prev_layout.flags & (uint32_t) LayoutFlag::Literal) &&
+            (layout.literal != prev_layout.literal ||
+             layout.literal_size != prev_layout.literal_size);
+
+        opaque_mask[i] |= requires_opaque;
+        new_opaques |= requires_opaque;
+        opaque_counter += requires_opaque;
+    }
+
+    jit_log(LogLevel::Debug,
+            "compare_opaque(): %u variables will be made opaque",
+            opaque_counter);
+
+    return new_opaques;
+}
+
+void FlatVariables::schedule_jit_variables(
+    bool schedule_force, const drjit::vector<bool> *opaque_mask) {
+
+    ProfilerPhase profiler("schedule_jit_variables");
+    for (uint32_t i = layout_index; i < layout.size(); i++) {
+        Layout &layout = this->layout[i];
+
+        if (!(layout.flags & (uint32_t) LayoutFlag::JitIndex))
+            continue;
+
+        uint32_t index = layout.index;
+
+        int rv = 0;
+        // Undefined variables (i.e. ones created with ``dr.empty``) are handled
+        // similarly to literals, and can be allocated when replaying.
+        if (schedule_force ||
+            (opaque_mask && (*opaque_mask)[i - layout_index])) {
+            // Returns owning reference
+            index = jit_var_schedule_force(index, &rv);
+        } else {
+            // Schedule and create owning reference
+            rv = jit_var_schedule(index);
+            jit_var_inc_ref(index);
+        }
+
+        VarInfo info = jit_var_info(index);
+        if (backend == info.backend || this->backend == JitBackend::None) {
+            backend = info.backend;
+        } else {
+            jit_raise("freeze(): backend missmatch error (backend of this "
+                      "variable %s does not match backend of others %s)!",
+                      info.backend == JitBackend::CUDA ? "CUDA" : "LLVM",
+                      backend == JitBackend::CUDA ? "CUDA" : "LLVM");
+        }
+
+        if (info.state == VarState::Literal) {
+            // Special case, where the variable is a literal.
+            layout.literal = info.literal;
+            // Store size in index variable, as this is not used for literals.
+            layout.literal_size  = info.size;
+            layout.vt            = (uint32_t) info.type;
+            layout.literal_index = index;
+
+            layout.flags |= (uint32_t) LayoutFlag::Literal;
+        } else if (info.state == VarState::Undefined) {
+            // Special case, where the variable is a literal.
+            // Store size in index variable, as this is not used for literals.
+            layout.literal_size  = info.size;
+            layout.vt            = (uint32_t) info.type;
+            layout.literal_index = index;
+
+            layout.flags |= (uint32_t) LayoutFlag::Undefined;
+        } else {
+            layout.index = this->add_jit_index(index);
+            layout.vt    = (uint32_t) info.type;
+            jit_var_dec_ref(index);
+        }
+    }
+    layout_index = layout.size();
+}
+
+/**
  * \brief Records information about jit variables, that have been traversed.
  *
  * After traversing the PyTree, collecting non-literal indices in
@@ -208,30 +330,21 @@ uint32_t FlatVariables::add_jit_index(uint32_t index) {
  * over the collected indices and collects that information.
  */
 void FlatVariables::record_jit_variables() {
+    ProfilerPhase profiler("record_jit_variables");
     assert(variables.size() == var_layout.size());
-    for (uint32_t i = 0; i < var_layout.size(); i++){
-        uint32_t index = variables[i];
+    for (uint32_t i = 0; i < var_layout.size(); i++) {
+        uint32_t index    = variables[i];
         VarLayout &layout = var_layout[i];
 
-        VarInfo info = jit_set_backend(index);
-
-        if (backend == info.backend || this->backend == JitBackend::None) {
-            backend = info.backend;
-        } else {
-            jit_raise("freeze(): backend missmatch error (backend of this "
-                      "variable %s does not match backend of others %s)!",
-                      info.backend == JitBackend::CUDA ? "CUDA" : "LLVM",
-                      backend == JitBackend::CUDA ? "CUDA" : "LLVM");
-        }
-
+        VarInfo info = jit_var_info(index);
         if (info.type == VarType::Pointer) {
             // We do not support pointers as inputs. It might be possible with
             // some extra handling, but they are never used directly.
             jit_raise("Pointer inputs not supported!");
         }
 
-        layout.vs = info.state;
-        layout.vt = info.type;
+        layout.vs         = info.state;
+        layout.vt         = info.type;
         layout.size_index = this->add_size(info.size);
 
         if (info.state == VarState::Evaluated) {
@@ -239,7 +352,8 @@ void FlatVariables::record_jit_variables() {
 
             layout.flags |=
                 (info.size == 1 ? (uint32_t) LayoutFlag::SingletonArray : 0);
-            layout.flags |= (info.unaligned ? (uint32_t) LayoutFlag::Unaligned : 0);
+            layout.flags |=
+                (info.unaligned ? (uint32_t) LayoutFlag::Unaligned : 0);
 
         } else {
             jit_raise("collect(): found variable %u in unsupported state %u!",
@@ -291,31 +405,9 @@ void FlatVariables::traverse_jit_index(uint32_t index, TraverseContext &ctx,
     if (tp)
         layout.type = nb::borrow<nb::type_object>(tp);
 
-    int rv = 0;
-    if (ctx.schedule_force) {
-        // Returns owning reference
-        index = jit_var_schedule_force(index, &rv);
-    } else {
-        // Schedule and create owning reference
-        rv = jit_var_schedule(index);
-        jit_var_inc_ref(index);
-    }
-
-    VarInfo info = jit_set_backend(index);
-    if (info.state == VarState::Literal) {
-        // Special case, where the variable is a literal. This should not
-        // occur, as all literals are made opaque in beforehand, however it
-        // is nice to have a fallback.
-        layout.literal = info.literal;
-        // Store size in index variable, as this is not used for literals
-        layout.index = info.size;
-        layout.vt    = info.type;
-
-        layout.flags |= (uint32_t) LayoutFlag::Literal;
-    } else {
-        layout.index = this->add_jit_index(index);
-    }
-    jit_var_dec_ref(index);
+    layout.flags |= (uint32_t) LayoutFlag::JitIndex;
+    layout.index = index;
+    layout.vt    = (uint32_t) jit_var_type(index);
 }
 
 /**
@@ -331,13 +423,14 @@ uint32_t FlatVariables::construct_jit_index(uint32_t prev_index) {
 
     uint32_t index;
     VarType vt;
-    if (layout.flags & (uint32_t) LayoutFlag::Literal) {
-        index = jit_var_literal(this->backend, layout.vt, &layout.literal,
-                                layout.index);
-        vt    = layout.vt;
+    if ((layout.flags & (uint32_t) LayoutFlag::Literal) ||
+        (layout.flags & (uint32_t) LayoutFlag::Undefined)) {
+        index = layout.literal_index;
+        jit_var_inc_ref(index);
+        vt = (VarType) layout.vt;
     } else {
         VarLayout &var_layout = this->var_layout[layout.index];
-        index = this->variables[layout.index];
+        index                 = this->variables[layout.index];
         jit_log(LogLevel::Debug, "    uses output[%u] = r%u", layout.index,
                 index);
 
@@ -372,7 +465,7 @@ void FlatVariables::traverse_ad_index(uint64_t index, TraverseContext &ctx,
     // index should be constructed/assigned.
     int grad_enabled = ad_grad_enabled(index);
     if (grad_enabled) {
-        Layout &layout = this->layout.emplace_back();
+        Layout &layout    = this->layout.emplace_back();
         uint32_t ad_index = (uint32_t) (index >> 32);
 
         if (tp)
@@ -392,7 +485,7 @@ void FlatVariables::traverse_ad_index(uint64_t index, TraverseContext &ctx,
         traverse_jit_index((uint32_t) index, ctx, tp);
         uint32_t grad = ad_grad(index);
         traverse_jit_index(grad, ctx, tp);
-        jit_var_dec_ref(grad);
+        ctx.free_list.push_back_steal(grad);
     } else {
         traverse_jit_index(index, ctx, tp);
     }
@@ -418,7 +511,7 @@ uint64_t FlatVariables::construct_ad_index(uint32_t shrink,
         Layout &layout = this->layout[this->layout_index++];
         bool postponed = (layout.flags & (uint32_t) LayoutFlag::Postponed);
 
-        uint32_t val = construct_jit_index(prev_index);
+        uint32_t val  = construct_jit_index(prev_index);
         uint32_t grad = construct_jit_index(prev_index);
 
         // Resize the gradient if it is a literal
@@ -538,19 +631,20 @@ void FlatVariables::traverse_cb(const drjit::TraversableBase *traversable,
     Layout &layout        = this->layout.emplace_back();
     layout.type           = nb::borrow<nb::type_object>(type);
 
-    struct Payload{
+    struct Payload {
         TraverseContext &ctx;
         FlatVariables *flat_variables = nullptr;
-        uint32_t num_fields = 0;
+        uint32_t num_fields           = 0;
     };
 
-    Payload p{ctx, this, 0};
+    Payload p{ ctx, this, 0 };
 
-    traversable->traverse_1_cb_ro((void*) & p,
+    traversable->traverse_1_cb_ro(
+        (void *) &p,
         [](void *p, uint64_t index, const char *variant, const char *domain) {
             if (!index)
                 return;
-            Payload *payload = (Payload *)p;
+            Payload *payload = (Payload *) p;
             payload->flat_variables->add_domain(variant, domain);
             payload->flat_variables->traverse_ad_index(index, payload->ctx);
             payload->num_fields++;
@@ -586,34 +680,59 @@ uint64_t FlatVariables::assign_cb_internal(uint64_t index,
 void FlatVariables::assign_cb(drjit::TraversableBase *traversable) {
     Layout &layout = this->layout[layout_index++];
 
-
-    struct Payload{
-        FlatVariables *flat_variables =  nullptr;
+    struct Payload {
+        FlatVariables *flat_variables = nullptr;
         Layout &layout;
         index64_vector tmp;
         uint32_t field_counter = 0;
     };
     Payload p{ this, layout, index64_vector(), 0 };
     traversable->traverse_1_cb_rw(
-        (void *) &p, [](void *p, uint64_t index, const char *, const char *) {
-            if (!index)
-                return index;
-            Payload *payload = (Payload *) p;
-            if (payload->field_counter >= payload->layout.num)
-                jit_raise("While traversing an object "
-                          "for assigning inputs, the number of variables to "
-                          "assign (>%u) did not match the number of variables "
-                          "traversed when recording (%u)!",
-                          payload->field_counter, payload->layout.num);
-            payload->field_counter++;
-            return payload->flat_variables->assign_cb_internal(index, payload->tmp);
-        });
+        (void *) &p,
+        [](void *p, uint64_t index, const char *, const char *) {
+        if (!index)
+            return index;
+        Payload *payload = (Payload *) p;
+        if (payload->field_counter >= payload->layout.num)
+            jit_raise("While traversing an object "
+                      "for assigning inputs, the number of variables to "
+                      "assign (>%u) did not match the number of variables "
+                      "traversed when recording (%u)!",
+                      payload->field_counter, payload->layout.num);
+        payload->field_counter++;
+        return payload->flat_variables->assign_cb_internal(index, payload->tmp);
+    });
 
     if (p.field_counter != layout.num)
         jit_raise("While traversing and object for assigning inputs, the "
                   "number of variables to assign did not match the number "
                   "of variables traversed when recording!");
 }
+
+/**
+ * Helper struct to construct path strings to variables.
+ * Used to provide helpful logs and error messages.
+ */
+struct scoped_path {
+    Buffer &path;
+
+    uint32_t size;
+    scoped_path(TraverseContext &ctx, const char *suffix, bool dict = false)
+        : path(ctx.path), size(path.size()) {
+        if (dict) {
+            path.fmt("[\"%s\"]", suffix);
+        } else {
+            path.fmt(".%s", suffix);
+        }
+    }
+    scoped_path(TraverseContext &ctx, uint32_t suffix)
+        : path(ctx.path), size(path.size()) {
+        path.fmt("[%u]", suffix);
+    }
+    ~scoped_path() {
+        path.rewind(path.size() - size);
+    }
+};
 
 /**
  * Traverses a PyTree in DFS order, and records it's layout in the
@@ -636,9 +755,16 @@ void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
     auto tp_name = nb::type_name(tp).c_str();
     jit_log(LogLevel::Debug, "FlatVariables::traverse(): %s {", tp_name);
 
+    uint32_t layout_index = this->layout.size();
+    Layout &layout        = this->layout.emplace_back();
+
+    const void *key     = h.ptr();
+    auto [it, inserted] = ctx.visited.try_emplace(key, nb::borrow(h));
+    if (!inserted) {
+        layout.flags |= (uint32_t) LayoutFlag::RecursiveRef;
+        return;
+    }
     try {
-        uint32_t layout_index = this->layout.size();
-        Layout &layout = this->layout.emplace_back();
         layout.type = nb::borrow<nb::type_object>(tp);
         if (is_drjit_type(tp)) {
             const ArraySupplement &s = supp(tp);
@@ -668,50 +794,59 @@ void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
                 if (len == DRJIT_DYNAMIC)
                     len = s.len(inst_ptr(h));
 
-                layout.num  = len;
+                layout.num = len;
 
-                for (Py_ssize_t i = 0; i < len; ++i)
+                for (Py_ssize_t i = 0; i < len; ++i) {
+                    scoped_path ps(ctx, i);
                     traverse(nb::steal(s.item(h.ptr(), i)), ctx);
+                }
             } else {
+                layout.num = 1;
                 traverse_ad_var(h, ctx);
             }
         } else if (tp.is(&PyTuple_Type)) {
             nb::tuple tuple = nb::borrow<nb::tuple>(h);
 
-            layout.num  = tuple.size();
+            layout.num = tuple.size();
 
-            for (nb::handle h2 : tuple) {
+            for (uint32_t i = 0; i < tuple.size(); i++) {
+                scoped_path ps(ctx, i);
+                auto h2 = tuple[i];
                 traverse(h2, ctx);
             }
         } else if (tp.is(&PyList_Type)) {
             nb::list list = nb::borrow<nb::list>(h);
 
-            layout.num  = list.size();
+            layout.num = list.size();
 
-            for (nb::handle h2 : list) {
+            for (uint32_t i = 0; i < list.size(); i++) {
+                scoped_path ps(ctx, i);
+                auto h2 = list[i];
                 traverse(h2, ctx);
             }
         } else if (tp.is(&PyDict_Type)) {
             nb::dict dict = nb::borrow<nb::dict>(h);
 
-            layout.num  = dict.size();
+            layout.num = dict.size();
             layout.fields.reserve(layout.num);
             for (auto k : dict.keys()) {
                 layout.fields.push_back(nb::borrow(k));
             }
 
             for (auto [k, v] : dict) {
+                scoped_path ps(ctx, nb::str(k).c_str(), true);
                 traverse(v, ctx);
             }
         } else if (nb::dict ds = get_drjit_struct(tp); ds.is_valid()) {
 
-            layout.num  = ds.size();
+            layout.num = ds.size();
             layout.fields.reserve(layout.num);
             for (auto k : ds.keys()) {
                 layout.fields.push_back(nb::borrow(k));
             }
 
             for (auto [k, v] : ds) {
+                scoped_path ps(ctx, nb::str(k).c_str());
                 traverse(nb::getattr(h, k), ctx);
             }
         } else if (nb::object df = get_dataclass_fields(tp); df.is_valid()) {
@@ -724,6 +859,7 @@ void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
 
             for (nb::handle field : df) {
                 nb::object k = field.attr(DR_STR(name));
+                scoped_path ps(ctx, nb::str(k).c_str());
                 traverse(nb::getattr(h, k), ctx);
             }
         } else if (auto traversable = get_traversable_base(h); traversable) {
@@ -751,23 +887,31 @@ void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
                     "traverse(): You passed a value of type %s to a frozen "
                     "function, it could not be converted to a Dr.Jit type. "
                     "Changing this value in future calls to the frozen "
-                    "function will cause it to be re-traced.",
-                    nb::str(tp).c_str());
+                    "function will cause it to be re-traced. The value is "
+                    "located at %s.",
+                    nb::str(tp).c_str(), ctx.path.get());
 
             layout.py_object = nb::borrow<nb::object>(h);
         }
     } catch (nb::python_error &e) {
-        nb::raise_from(e, PyExc_RuntimeError,
-                       "FlatVariables::traverse(): error encountered while "
-                       "processing an argument of type '%U' (see above).",
-                       nb::type_name(tp).ptr());
+        auto ts = nb::str(tp);
+        nb::raise_from(
+            e, PyExc_RuntimeError,
+            "FlatVariables::traverse(): error encountered while "
+            "processing an argument of type '%s' at location %s (see above).",
+            ts.c_str(), ctx.path.get());
     } catch (const std::exception &e) {
-        nb::chain_error(PyExc_RuntimeError,
-                        "FlatVariables::traverse(): error encountered "
-                        "while processing an argument of type '%U': %s",
-                        nb::type_name(tp).ptr(), e.what());
+        auto ts = nb::str(tp);
+        nb::chain_error(
+            PyExc_RuntimeError,
+            "FlatVariables::traverse(): error encountered "
+            "while processing an argument of type '%s' at location %s: %s",
+            ts.c_str(), ctx.path.get(), e.what());
         nb::raise_python_error();
     }
+
+    if (!ctx.deduplicate_pytree)
+        ctx.visited.erase(key);
 
     jit_log(LogLevel::Debug, "}");
 }
@@ -800,9 +944,9 @@ nb::object FlatVariables::construct() {
 
                 // Reconstruct the full shape from the inner part, stored in the
                 // layout and the width of the underlying array.
-                auto inner_shape  = nb::borrow<nb::tuple>(layout.py_object);
-                auto first_dim    = prod(shape(array), nb::none())
-                                    .floor_div(prod(inner_shape, nb::none()));
+                auto inner_shape = nb::borrow<nb::tuple>(layout.py_object);
+                auto first_dim   = prod(shape(array), nb::none())
+                                     .floor_div(prod(inner_shape, nb::none()));
 
                 nb::list full_shape;
                 full_shape.append(first_dim);
@@ -887,21 +1031,25 @@ nb::object FlatVariables::construct() {
  * Assigns the flattened variables to an already existing PyTree.
  * This is used when input variables have changed.
  */
-void FlatVariables::assign(nb::handle dst) {
+void FlatVariables::assign(nb::handle dst, TraverseContext &ctx) {
     recursion_guard guard(this);
     scoped_set_flag traverse_scope(JitFlag::EnableObjectTraversal, true);
 
     nb::handle tp  = dst.type();
     Layout &layout = this->layout[layout_index++];
 
+    if (layout.flags & (uint32_t) LayoutFlag::RecursiveRef)
+        return;
+
     jit_log(LogLevel::Debug, "FlatVariables::assign(): %s with %s {",
             nb::type_name(tp).c_str(), nb::type_name(layout.type).c_str());
 
     if (!layout.type.equal(tp))
-        jit_fail(
-            "Type missmatch! Type of the object when recording (%s) does not "
-            "match type of object that is assigned (%s).",
-            nb::type_name(tp).c_str(), nb::type_name(layout.type).c_str());
+        jit_raise("Type missmatch! Type of the object at location %s when "
+                  "recording (%s) does not match type of object that is "
+                  "assigned (%s).",
+                  ctx.path.get(), nb::type_name(tp).c_str(),
+                  nb::type_name(layout.type).c_str());
 
     try {
         if (is_drjit_type(tp)) {
@@ -909,14 +1057,16 @@ void FlatVariables::assign(nb::handle dst) {
 
             if (s.is_tensor) {
                 nb::handle array = s.tensor_array(dst.ptr());
-                assign(nb::steal(array));
+                assign(nb::steal(array), ctx);
             } else if (s.ndim != 1) {
                 Py_ssize_t len = s.shape[0];
                 if (len == DRJIT_DYNAMIC)
                     len = s.len(inst_ptr(dst));
 
-                for (Py_ssize_t i = 0; i < len; ++i)
-                    assign(dst[i]);
+                for (Py_ssize_t i = 0; i < len; ++i) {
+                    scoped_path ps(ctx, i);
+                    assign(dst[i], ctx);
+                }
             } else {
                 assign_ad_var(layout, dst);
             }
@@ -928,36 +1078,46 @@ void FlatVariables::assign(nb::handle dst) {
                 "while recording the function.",
                 layout.num, (uint32_t) tuple.size());
 
-            for (nb::handle h2 : tuple)
-                assign(h2);
+            for (uint32_t i = 0; i < tuple.size(); i++) {
+                scoped_path ps(ctx, i);
+                auto h2 = tuple[i];
+                assign(h2, ctx);
+            }
         } else if (tp.is(&PyList_Type)) {
             nb::list list = nb::borrow<nb::list>(dst);
-            raise_if(list.size() != layout.num,
-                     "The number of objects in this list changed from %u to %u "
-                     "while recording the function.",
-                     layout.num, (uint32_t) list.size());
+            raise_if(
+                list.size() != layout.num,
+                "The number of objects in a list at %s changed from %u to %u "
+                "while recording the function.",
+                ctx.path.get(), layout.num, (uint32_t) list.size());
 
-            for (nb::handle h2 : list)
-                assign(h2);
+            for (uint32_t i = 0; i < list.size(); i++) {
+                scoped_path ps(ctx, i);
+                auto h2 = list[i];
+                assign(h2, ctx);
+            }
         } else if (tp.is(&PyDict_Type)) {
             nb::dict dict = nb::borrow<nb::dict>(dst);
             for (auto &k : layout.fields) {
+                scoped_path ps(ctx, nb::str(k).c_str(), true);
                 if (dict.contains(&k))
-                    assign(dict[k]);
+                    assign(dict[k], ctx);
                 else
                     dst[k] = construct();
             }
         } else if (nb::dict ds = get_drjit_struct(dst); ds.is_valid()) {
             for (auto &k : layout.fields) {
+                scoped_path ps(ctx, nb::str(k).c_str());
                 if (nb::hasattr(dst, k))
-                    assign(nb::getattr(dst, k));
+                    assign(nb::getattr(dst, k), ctx);
                 else
                     nb::setattr(dst, k, construct());
             }
         } else if (nb::object df = get_dataclass_fields(tp); df.is_valid()) {
             for (auto k : layout.fields) {
+                scoped_path ps(ctx, nb::str(k).c_str());
                 if (nb::hasattr(dst, k))
-                    assign(nb::getattr(dst, k));
+                    assign(nb::getattr(dst, k), ctx);
                 else
                     nb::setattr(dst, k, construct());
             }
@@ -977,33 +1137,35 @@ void FlatVariables::assign(nb::handle dst) {
                    num_fields++;
                    if (num_fields > layout.num)
                        jit_raise(
-                           "While traversing the object of type %s "
-                           "for assigning inputs, the number of variables "
+                           "While traversing the object of type %s at location "
+                           "%s for assigning inputs, the number of variables "
                            "to assign (>%u) did not match the number of "
                            "variables traversed when recording(%u)!",
-                           nb::str(tp).c_str(), num_fields, layout.num);
+                           ctx.path.get(), nb::str(tp).c_str(), num_fields,
+                           layout.num);
                    return assign_cb_internal(index, tmp);
                }));
             if (num_fields != layout.num)
-                jit_raise("While traversing the object of type %s "
-                          "for assigning inputs, the number of variables "
-                          "to assign did not match the number of variables "
-                          "traversed when recording!",
-                          nb::str(tp).c_str());
+                jit_raise(
+                    "While traversing the object of type %s at location %s "
+                    "for assigning inputs, the number of variables "
+                    "to assign did not match the number of variables "
+                    "traversed when recording!",
+                    ctx.path.get(), nb::str(tp).c_str());
         } else {
         }
     } catch (nb::python_error &e) {
         nb::raise_from(e, PyExc_RuntimeError,
                        "FlatVariables::assign(): error encountered while "
-                       "processing an argument "
+                       "processing an argument at %s "
                        "of type '%U' (see above).",
-                       nb::type_name(tp).ptr());
+                       ctx.path.get(), nb::type_name(tp).ptr());
     } catch (const std::exception &e) {
         nb::chain_error(PyExc_RuntimeError,
                         "FlatVariables::assign(): error encountered "
-                        "while processing an argument "
+                        "while processing an argument at %s "
                         "of type '%U': %s",
-                        nb::type_name(tp).ptr(), e.what());
+                        ctx.path.get(), nb::type_name(tp).ptr(), e.what());
         nb::raise_python_error();
     }
 
@@ -1031,12 +1193,13 @@ void FlatVariables::traverse_with_registry(nb::handle h, TraverseContext &ctx) {
 
         jit_log(LogLevel::Debug, "registry{");
 
-        std::vector<void *> registry_pointers;
+        drjit::vector<void *> registry_pointers;
         for (std::string &domain : domains) {
             uint32_t registry_bound =
                 jit_registry_id_bound(variant.c_str(), domain.c_str());
             uint32_t offset = registry_pointers.size();
-            registry_pointers.resize(registry_pointers.size() + registry_bound, nullptr);
+            registry_pointers.resize(registry_pointers.size() + registry_bound,
+                                     nullptr);
             jit_registry_get_pointers(variant.c_str(), domain.c_str(),
                                       &registry_pointers[offset]);
         }
@@ -1072,28 +1235,34 @@ void FlatVariables::traverse_with_registry(nb::handle h, TraverseContext &ctx) {
  * First assigns the registry and then the PyTree.
  * Corresponds to `traverse_with_registry`.
  */
-void FlatVariables::assign_with_registry(nb::handle dst) {
+void FlatVariables::assign_with_registry(nb::handle dst, TraverseContext &ctx) {
     scoped_set_flag traverse_scope(JitFlag::EnableObjectTraversal, true);
 
     // Assign the handle
-    assign(dst);
+    assign(dst, ctx);
 
     // Assign registry (if a class variable was traversed)
     if (!domains.empty()) {
-        Layout &layout      = this->layout[layout_index++];
-        uint32_t num_fields = 0;
+        Layout &layout = this->layout[layout_index++];
 
         jit_log(LogLevel::Debug, "registry{");
 
-        std::vector<void *> registry_pointers;
+        drjit::vector<void *> registry_pointers;
         for (std::string &domain : domains) {
             uint32_t registry_bound =
                 jit_registry_id_bound(variant.c_str(), domain.c_str());
             uint32_t offset = registry_pointers.size();
-            registry_pointers.resize(registry_pointers.size() + registry_bound, nullptr);
+            registry_pointers.resize(registry_pointers.size() + registry_bound,
+                                     nullptr);
             jit_registry_get_pointers(variant.c_str(), domain.c_str(),
                                       &registry_pointers[offset]);
         }
+
+        if (registry_pointers.size() != layout.num)
+            jit_raise("assign_with_registry(): The number of registry "
+                      "entries (%zu) did not match the number of registry "
+                      "entries recorded (%u)!",
+                      registry_pointers.size(), layout.num);
 
         jit_log(LogLevel::Debug, "registry_bound=%u", registry_pointers.size());
         jit_log(LogLevel::Debug, "layout_index=%u", this->layout_index);
@@ -1110,56 +1279,276 @@ void FlatVariables::assign_with_registry(nb::handle dst) {
             auto self        = traversable->self_py();
 
             if (self)
-                assign(self);
+                assign(self, ctx);
             else
                 assign_cb(traversable);
-
-            num_fields++;
         }
         jit_log(LogLevel::Debug, "}");
     }
 }
 
-inline void hash_combine(size_t &seed, size_t value) {
-    /// From CityHash (https://github.com/google/cityhash)
-    const size_t mult = 0x9ddfea08eb382d69ull;
-    size_t a          = (value ^ seed) * mult;
-    a ^= (a >> 47);
-    size_t b = (seed ^ a) * mult;
-    b ^= (b >> 47);
-    seed = b * mult;
+FlatVariables::~FlatVariables() {
+    state_lock_guard guard;
+    for (uint32_t i = 0; i < layout.size(); ++i) {
+        Layout &l = layout[i];
+        if (((l.flags & (uint32_t) LayoutFlag::Literal) ||
+             (l.flags & (uint32_t) LayoutFlag::Undefined)) &&
+            l.literal_index) {
+            jit_var_dec_ref(l.literal_index);
+        }
+    }
 }
 
-size_t
-FlatVariablesHasher::operator()(const std::shared_ptr<FlatVariables> &key) const {
-    ProfilerPhase profiler("hash");
-    // Hash the layout
-    // NOTE: string hashing seems to be less efficient
-    size_t hash = key->layout.size();
-    for (const Layout &layout : key->layout) {
-        hash_combine(hash, layout.num);
-        hash_combine(hash, layout.fields.size());
-        hash_combine(hash, (size_t) layout.flags);
-        hash_combine(hash, (size_t) layout.index);
-        hash_combine(hash, (size_t) layout.literal);
-        hash_combine(hash, (size_t) layout.vt);
-        if (layout.type)
-            hash_combine(hash, nb::hash(layout.type));
-        if (layout.py_object)
-            hash_combine(hash, nb::hash(layout.py_object));
-        for (auto &field : layout.fields) {
-            hash_combine(hash, nb::hash(field));
+void FlatVariables::borrow() {
+    state_lock_guard guard;
+    for (uint32_t &index : this->variables)
+        jit_var_inc_ref(index);
+}
+
+void FlatVariables::release() {
+    state_lock_guard guard;
+    for (uint32_t &index : this->variables)
+        jit_var_dec_ref(index);
+}
+
+bool log_diff_variable(LogLevel level, const FlatVariables &curr,
+                       const FlatVariables &prev, uint32_t slot,
+                       TraverseContext &ctx) {
+    const VarLayout &curr_l = curr.var_layout[slot];
+    const VarLayout &prev_l = prev.var_layout[slot];
+
+    if (curr_l.vt != prev_l.vt) {
+        jit_log(level, "%s: The variable type changed from %u to %u.",
+                ctx.path.get(), prev_l.vt, curr_l.vt);
+        return false;
+    }
+    if (curr_l.size_index != prev_l.size_index) {
+        jit_log(level,
+                "%s: The size equivalence class of the variable changed from "
+                "%u to %u.",
+                ctx.path.get(), prev_l.size_index, curr_l.size_index);
+        return false;
+    }
+
+    return true;
+}
+
+/**
+ * Log the difference of the layout nodes at ``index`` for the two
+ * FlatVariables.
+ */
+bool log_diff(LogLevel level, const FlatVariables &curr,
+              const FlatVariables &prev, uint32_t &index, TraverseContext &ctx) {
+
+    const Layout &curr_l = curr.layout[index];
+    const Layout &prev_l = prev.layout[index];
+    index++;
+
+    if (curr_l.flags != prev_l.flags) {
+        jit_log(level, "%s: The flags of this node changed from 0x%lx to 0x%lx",
+                ctx.path.get(), prev_l.flags, curr_l.flags);
+        return false;
+    }
+
+    if (curr_l.index != prev_l.index) {
+        jit_log(level,
+                "%s: The index into the array of deduplicated variables "
+                "changed from s%u to s%u. This can occur if two variables "
+                "referred to the same JIT index, but do no longer.",
+                ctx.path.get(), prev_l.index, curr_l.index);
+        return false;
+    }
+
+    if (curr_l.flags & (uint32_t) LayoutFlag::JitIndex &&
+        !(curr_l.flags & (uint32_t) LayoutFlag::Literal) &&
+        !(curr_l.flags & (uint32_t) LayoutFlag::Undefined)) {
+        uint32_t slot = curr_l.index;
+        if (!log_diff_variable(level, curr, prev, slot, ctx))
+            return false;
+    }
+
+    if (((bool) curr_l.type != (bool) prev_l.type) ||
+        !(curr_l.type.equal(prev_l.type))) {
+        jit_log(level, "%s: The type of this node changed from %s to %s",
+                ctx.path.get(), nb::str(prev_l.type).c_str(),
+                nb::str(curr_l.type).c_str());
+        return false;
+    }
+
+    if (curr_l.literal != prev_l.literal) {
+        jit_log(level,
+                "%s: The literal value of this variable changed from 0x%llx to "
+                "0x%llx",
+                ctx.path.get(), prev_l.literal, curr_l.literal);
+        return false;
+    }
+
+    if (((bool) curr_l.py_object != (bool) prev_l.py_object) ||
+        !curr_l.py_object.equal(prev_l.py_object)) {
+        jit_log(level, "%s: The object changed from %s to %s", ctx.path.get(),
+                nb::str(prev_l.py_object).c_str(),
+                nb::str(curr_l.py_object).c_str());
+        return false;
+    }
+
+    if (curr_l.num != prev_l.num) {
+        jit_log(level,
+                "%s: The number of elements of this container changed from %u "
+                "to %u",
+                ctx.path.get(), prev_l.num, curr_l.num);
+        return false;
+    }
+
+    if (curr_l.fields.size() != prev_l.fields.size()) {
+        jit_log(level,
+                "%s: The number of elements of this container changed from %u "
+                "to %u",
+                ctx.path.get(), prev_l.fields.size(), curr_l.fields.size());
+        return false;
+    }
+
+    for (uint32_t i = 0; i < curr_l.fields.size(); ++i) {
+        if (!(curr_l.fields[i].equal(prev_l.fields[i]))) {
+            jit_log(level, "%s: The %ith key changed from \"%s\" to \"%s\"",
+                    ctx.path.get(), i, nb::str(curr_l.fields[i]).c_str(),
+                    nb::str(prev_l.fields[i]).c_str());
         }
     }
 
-    for (const VarLayout &layout : key->var_layout) {
-        hash_combine(hash, (size_t) layout.vt);
-        hash_combine(hash, (size_t) layout.vs);
-        hash_combine(hash, (size_t) layout.flags);
-        hash_combine(hash, (size_t) layout.size_index);
+    if (curr_l.fields.size() > 0) {
+        for (uint32_t i = 0; i < curr_l.fields.size(); i++) {
+            auto &field = curr_l.fields[i];
+
+            scoped_path ps(ctx, nb::str(field).c_str(),
+                           curr_l.type.is(&PyDict_Type));
+
+            log_diff(level, curr, prev, index, ctx);
+        }
+    } else {
+        for (uint32_t i = 0; i < curr_l.num; i++) {
+            scoped_path ps(ctx, i);
+
+            log_diff(level, curr, prev, index, ctx);
+        }
     }
 
-    hash_combine(hash, (size_t) key->flags);
+    return true;
+}
+
+/**
+ * Log the difference of the two FlatVariables.
+ */
+bool log_diff(LogLevel level, const FlatVariables &curr,
+              const FlatVariables &prev) {
+    if (curr.flags != prev.flags) {
+        jit_log(level, "The flags of the input changed from %lx to %lx",
+                prev.flags, curr.flags);
+        return false;
+    }
+    if (curr.layout.size() != prev.layout.size()) {
+        jit_log(level,
+                "The number of elements in the input changed from %u to %u.",
+                prev.layout.size(), curr.layout.size());
+        return false;
+    }
+    if (curr.var_layout.size() != prev.var_layout.size()) {
+        jit_log(level,
+                "The number of opaque variables in the input changed from %u "
+                "to %u.",
+                prev.var_layout.size(), curr.var_layout.size());
+        return false;
+    }
+
+    uint32_t index = 0;
+    TraverseContext ctx;
+    log_diff(level, curr, prev, index, ctx);
+
+    return true;
+}
+
+size_t FlatVariablesHasher::operator()(
+    const std::shared_ptr<FlatVariables> &key) const {
+    ProfilerPhase profiler("hash");
+    // Hash the layout
+
+    // TODO: Maybe we can use xxh by first collecting in vector<uint64_t>?
+
+    drjit::vector<uint64_t> data;
+    data.reserve(1 + key->layout.size() * 4 + key->var_layout.size());
+
+    data.push_back((uint64_t) (key->layout.size() << 32) |
+                   (uint64_t) (key->var_layout.size() << 2));
+
+    for (const Layout &layout : key->layout) {
+        // If layout.fields is not 0 then layout.num == layout.fields.size()
+        // therefore we can omit layout.fields.size().
+        // This makes the assumption that we don't have more than 2^27-1
+        // elements in one layout or variables in the FlatVariables. If more
+        // elements are part of the layout, hash collisions might occur,
+        // impacting performance but not correctness.
+        if(layout.num >> 26)
+            jit_log(LogLevel::Warn,
+                    "The layout consists of more than 100M elements, which "
+                    "might lead to hash collisions when looking up previous "
+                    "recordings of frozen functions.");
+        if(layout.index >> 26)
+            jit_log(LogLevel::Warn,
+                    "The layout consists of more than 100M opaque variables, which "
+                    "might lead to hash collisions when looking up previous "
+                    "recordings of frozen functions.");
+        union {
+            struct{
+                uint64_t num: 26;
+                uint64_t index: 26;
+                uint64_t flags: 8;
+                uint64_t vt: 4;
+            };
+            uint64_t data;
+        } lkey;
+        static_assert(sizeof(lkey) == sizeof(uint64_t));
+        lkey.num   = layout.num;
+        lkey.index = layout.index;
+        lkey.flags = layout.flags;
+        lkey.vt    = layout.vt;
+
+        data.push_back(lkey.data);
+        if (layout.flags & (uint32_t) LayoutFlag::JitIndex)
+            data.push_back(layout.literal);
+
+        uint32_t type_hash = 0;
+        if (layout.type)
+            type_hash = nb::hash(layout.type);
+
+        uint32_t object_hash = 0;
+        if (layout.py_object) {
+            PyObject *ptr = layout.py_object.ptr();
+            Py_hash_t rv  = PyObject_Hash(ptr);
+
+            // Try to hash the object, and otherwise fallback to ``id()``
+            if (rv == -1 && PyErr_Occurred()) {
+                PyErr_Clear();
+                object_hash = (uintptr_t) ptr;
+            } else {
+                object_hash = rv;
+            }
+        }
+        if (type_hash && object_hash)
+            data.push_back(((uint64_t) type_hash << 32) |
+                           ((uint64_t) (uint32_t) object_hash));
+        for (auto &field : layout.fields)
+            data.push_back(nb::hash(field.ptr()));
+    }
+
+    for (const VarLayout &layout : key->var_layout) {
+        // layout.vt: 4
+        // layout.vs: 4
+        // layout.flags: 8
+        data.push_back(((uint64_t) layout.size_index << 32) |
+                       ((uint64_t) layout.flags << 8) |
+                       ((uint64_t) layout.vs << 4) | ((uint64_t) layout.vt));
+    }
+
+    uint64_t hash = XXH3_64bits(data.data(), data.size());
 
     return hash;
 }
@@ -1175,16 +1564,35 @@ nb::object FunctionRecording::record(nb::callable func,
     JitBackend backend = in_variables.backend;
 
     frozen_func->recording_counter++;
-    if (frozen_func->recording_counter > frozen_func->warn_recording_count)jit_log(
-        LogLevel::Warn,
-        "The frozen function has been recorded %u times, this indicates a "
-        "problem with how the frozen function is being called. For "
-        "example, calling it with changing python values such as a "
-        "index.",
-        frozen_func->recording_counter);
+    if (frozen_func->recording_counter > frozen_func->warn_recording_count &&
+        frozen_func->recordings.size() >= 1) {
+        if (frozen_func->recordings.size() < frozen_func->recording_counter){
+            jit_log(LogLevel::Warn,
+                    "The frozen function has been recorded %u times, this "
+                    "indicates a problem with how the frozen function is being "
+                    "called. The number of cached recordings %u is smaller "
+                    "than the number of times this function has been recorded "
+                    "%u, indicating that dry-running the recording failed at "
+                    "least %u times.",
+                    frozen_func->recording_counter,
+                    frozen_func->recordings.size(),
+                    frozen_func->recording_counter,
+                    frozen_func->recording_counter -
+                        frozen_func->recordings.size());
+        } else {
+            jit_log(
+                LogLevel::Warn,
+                "The frozen function has been recorded %u times, this "
+                "indicates a problem with how the frozen function is being "
+                "called. For example, calling it with changing python values "
+                "such as an index. For more information about which variables "
+                "changed set the log level to ``LogLevel::Debug``.",
+                frozen_func->recording_counter);
+        }
+        log_diff(LogLevel::Info, in_variables, *frozen_func->prev_key);
+    }
 
-
-    jit_log(LogLevel::Info,
+    jit_log(LogLevel::Debug,
             "Recording (n_inputs=%u):", in_variables.variables.size());
     jit_freeze_start(backend, in_variables.variables.data(),
                      in_variables.variables.size());
@@ -1193,6 +1601,7 @@ nb::object FunctionRecording::record(nb::callable func,
     nb::object output;
     {
         ProfilerPhase profiler("function");
+        state_unlock_guard guard;
         output = func(*input[0], **input[1]);
     }
 
@@ -1210,18 +1619,27 @@ nb::object FunctionRecording::record(nb::callable func,
             postponed.insert(index);
     }
 
-    jit_log(LogLevel::Info, "Traversing output");
     {
         ProfilerPhase profiler("traverse output");
         // Enter Resume scope, so we can track gradients
         ADScopeContext ad_scope(drjit::ADScope::Resume, 0, nullptr, -1, false);
 
-        TraverseContext ctx;
-        ctx.postponed = &postponed;
-        ctx.schedule_force = false;
-        out_variables.traverse(output, ctx);
-        ctx.schedule_force = true;
-        out_variables.traverse_with_registry(input, ctx);
+        {
+            TraverseContext ctx;
+            ctx.postponed          = &postponed;
+            ctx.deduplicate_pytree = false;
+            out_variables.traverse(output, ctx);
+            out_variables.schedule_jit_variables(false, nullptr);
+        }
+
+        {
+            TraverseContext ctx;
+            ctx.postponed = &postponed;
+            out_variables.traverse_with_registry(input, ctx);
+            out_variables.schedule_jit_variables(false, nullptr);
+        }
+
+        out_variables.layout_index = 0;
 
         { // Evaluate the variables, scheduled when traversing
             nb::gil_scoped_release guard;
@@ -1263,12 +1681,13 @@ nb::object FunctionRecording::record(nb::callable func,
         nb::raise_python_error();
     }
 
-    jit_log(LogLevel::Info, "Recording done (n_outputs=%u)",
+    jit_log(LogLevel::Debug, "Recording done (n_outputs=%u)",
             out_variables.variables.size());
 
     // For catching input assignment mismatches, we assign the input and
     // output
     {
+        state_lock_guard guard;
         // Enter Resume scope, so we can track gradients
         ADScopeContext ad_scope(drjit::ADScope::Resume, 0, nullptr, -1, false);
 
@@ -1276,7 +1695,10 @@ nb::object FunctionRecording::record(nb::callable func,
         jit_log(LogLevel::Debug, "Construct:");
         output = nb::borrow<nb::object>(out_variables.construct());
         // NOTE: temporarily disable this to not enqueue twice
-        out_variables.assign(input);
+        {
+            TraverseContext ctx;
+            out_variables.assign(input, ctx);
+        }
         out_variables.layout_index = 0;
     }
 
@@ -1330,6 +1752,7 @@ nb::object FunctionRecording::replay(nb::callable func,
     // Construct Output variables
     nb::object output;
     {
+        state_lock_guard guard;
         // Enter Resume scope, so we can track gradients
         ADScopeContext ad_scope(drjit::ADScope::Resume, 0, nullptr, -1, false);
         out_variables.layout_index = 0;
@@ -1339,7 +1762,8 @@ nb::object FunctionRecording::replay(nb::callable func,
         }
         {
             ProfilerPhase profiler("assign input");
-            out_variables.assign_with_registry(input);
+            TraverseContext ctx;
+            out_variables.assign_with_registry(input, ctx);
         }
     }
 
@@ -1352,6 +1776,8 @@ nb::object FunctionRecording::replay(nb::callable func,
 }
 
 nb::object FrozenFunction::operator()(nb::args args, nb::kwargs kwargs) {
+    ProfilerPhase profiler("frozen function");
+    state_lock_guard guard;
     nb::object result;
     {
         // Enter Isolate grad scope, so that gradients are not propagated
@@ -1364,6 +1790,7 @@ nb::object FrozenFunction::operator()(nb::args args, nb::kwargs kwargs) {
         if (!jit_flag(JitFlag::KernelFreezing) ||
             jit_flag(JitFlag::FreezingScope) || max_cache_size == 0) {
             ProfilerPhase profiler("function");
+            state_unlock_guard guard;
             return func(*args, **kwargs);
         }
 
@@ -1377,24 +1804,73 @@ nb::object FrozenFunction::operator()(nb::args args, nb::kwargs kwargs) {
             std::make_shared<FlatVariables>(FlatVariables(in_heuristics));
         in_variables->backend = this->default_backend;
         // Evaluate and traverse input variables (args and kwargs)
-        {
+        // Repeat this a max of 2 times if the number of variables that should
+        // be made opaque changed.
+        for (uint32_t i = 0; i < 2; i++) {
+            state_lock_guard guard;
             // Enter Resume scope, so we can track gradients
             ADScopeContext ad_scope(drjit::ADScope::Resume, 0, nullptr, 0,
                                     true);
 
             // Traverse input variables
             ProfilerPhase profiler("traverse input");
-            jit_log(LogLevel::Info, "freeze(): Traversing input");
+
             TraverseContext ctx;
-            ctx.schedule_force = true;
             in_variables->traverse_with_registry(input, ctx);
 
+            // If this is the first time the frozen function has been called or
+            // the layout is not compatible with the previous one, we clear the
+            // opaque_mask.
+            bool auto_opaque = false;
+            if (prev_key) {
+                auto_opaque = compatible_auto_opaque(*in_variables, *prev_key);
+                if (!auto_opaque) {
+                    // The mask is reset if they are not compatible
+                    opaque_mask.resize(in_variables->layout.size());
+                    for (uint32_t i = 0; i < opaque_mask.size(); i++)
+                        opaque_mask[i] = false;
+                    jit_log(LogLevel::Debug, "auto-opaque incompatible");
+                }
+            } else
+                opaque_mask.resize(in_variables->layout.size(), false);
+
+            in_variables->schedule_jit_variables(!this->auto_opaque,
+                                                 &opaque_mask);
+
+            in_variables->layout_index = 0;
+
             { // Evaluate the variables, scheduled when traversing
+                ProfilerPhase profiler("eval");
                 nb::gil_scoped_release guard;
                 jit_eval();
             }
 
             in_variables->record_jit_variables();
+            bool new_opaques = false;
+            if (prev_key && auto_opaque)
+                new_opaques =
+                    in_variables->fill_opaque_mask(*prev_key, opaque_mask);
+
+            if (new_opaques) {
+                // If new variables have been discovered that should be made
+                // opaque, we repeat traversal of the input to make them opaque.
+                // This reduces the number of variants that are saved by one.
+                jit_log(LogLevel::Info,
+                        "While traversing the frozen function input, new "
+                        "literal variables have been discovered which changed "
+                        "from one call to another. These will be made opaque, "
+                        "and the input will be traversed again. This will "
+                        "incur some overhead. To prevent this, make those "
+                        "variables opaque in beforehand. Below, a list of "
+                        "variables that changed will be shown.");
+                if (prev_key)
+                    log_diff(LogLevel::Info, *in_variables, *prev_key);
+                in_variables->release();
+                in_variables = std::make_shared<FlatVariables>(
+                    FlatVariables(in_heuristics));
+            } else {
+                break;
+            }
         }
 
         in_heuristics = in_heuristics.max(in_variables->heuristic());
@@ -1430,11 +1906,12 @@ nb::object FrozenFunction::operator()(nb::args args, nb::kwargs kwargs) {
                 // TODO: single traverse
                 ADScopeContext ad_scope(drjit::ADScope::Resume, 0, nullptr, 0,
                                         true);
-                in_variables->assign_with_registry(input);
+                TraverseContext ctx;
+                in_variables->assign_with_registry(input, ctx);
             }
 
             // FunctionRecording recording;
-            auto recording = std::make_unique<FunctionRecording>();
+            auto recording       = std::make_unique<FunctionRecording>();
             recording->last_used = call_counter - 1;
 
             try {
@@ -1541,7 +2018,7 @@ void export_freeze(nb::module_ & /*m*/) {
     auto traversable_base =
         nb::class_<drjit::TraversableBase>(d, "TraversableBase");
     nb::class_<FrozenFunction>(d, "FrozenFunction", nb::type_slots(slots))
-        .def(nb::init<nb::callable, int, uint32_t, JitBackend>())
+        .def(nb::init<nb::callable, int, uint32_t, JitBackend, bool>())
         .def_prop_ro(
             "n_cached_recordings",
             [](FrozenFunction &self) { return self.n_cached_recordings(); })

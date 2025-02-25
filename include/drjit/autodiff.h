@@ -709,6 +709,11 @@ struct DRJIT_TRIVIAL_ABI DiffArray
 
     size_t size() const { return jit_var_size((uint32_t) m_index); }
 
+    auto opaque_size_() const {
+        using UInt32 = JitArray<Backend, uint32_t>;
+        return UInt32::steal(jit_var_opaque_width(m_index));
+    }
+
     bool grad_enabled_() const {
         if constexpr (IsFloat)
             return (m_index >> 32) != 0;

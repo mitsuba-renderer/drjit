@@ -62,10 +62,19 @@ using traverse_callback_rw = uint64_t (*)(void *payload, uint64_t index,
                                           const char *domain);
 
 inline void log_member_open(bool rw, const char *member) {
+#ifndef NDEBUG
     jit_log(LogLevel::Debug, "%s%s{", rw ? "rw " : "ro ", member);
+#else
+    DRJIT_MARK_USED(rw);
+    DRJIT_MARK_USED(member);
+#endif
 }
 
-inline void log_member_close() { jit_log(LogLevel::Debug, "}"); }
+inline void log_member_close() {
+#ifndef NDEBUG
+    jit_log(LogLevel::Debug, "}");
+#endif
+}
 
 NAMESPACE_END(detail)
 

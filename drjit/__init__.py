@@ -2499,6 +2499,7 @@ F = TypeVar("F")
 # Represents the frozen function passed to the decorator with arguments
 F2 = TypeVar("F2")
 
+
 @overload
 def freeze(
     f: None = None,
@@ -2507,7 +2508,33 @@ def freeze(
     limit: Optional[int] = None,
     warn_after: int = 10,
     backend: Optional[JitBackend] = None,
+    auto_opaque: bool = True,
 ) -> Callable[[F], F]:
+    ...
+
+
+@overload
+def freeze(
+    f: F,
+    *,
+    state_fn: Optional[Callable] = None,
+    limit: Optional[int] = None,
+    warn_after: int = 10,
+    backend: Optional[JitBackend] = None,
+    auto_opaque: bool = True,
+) -> F:
+    ...
+
+
+def freeze(
+    f: Optional[F] = None,
+    *,
+    state_fn: Optional[Callable] = None,
+    limit: Optional[int] = None,
+    warn_after: int = 10,
+    backend: Optional[JitBackend] = None,
+    auto_opaque: bool = True,
+) -> Union[F, Callable[[F2], F2]]:
     """
     Decorator to "freeze" functions, which improves efficiency by removing
     repeated JIT tracing overheads.
@@ -2548,10 +2575,12 @@ def freeze(
     - Changes in the **type** of an argument or :ref:`PyTree <pytrees>` element.
     - Changes in the **length** of a container (``list``, ``tuple``, ``dict``).
     - Changes of **dictionary keys**  or **field names** of dataclasses.
-    - Changes in the AD status (:py:`dr.grad_enabled() <drjit.grad_enabled>`) of a variable.
-    - Changes of (non-PyTree) **Python objects**, as detected by mismatching ``hash()``.
+    - Changes in the AD status (:py:func:`dr.grad_enabled() <drjit.grad_enabled>`) of a variable.
+    - Changes of (non-PyTree) **Python objects**, as detected by mismatching ``hash()``
+      or ``id()`` if they are not hashable.
 
     The following more technical conditions also trigger re-tracing:
+
     - A Dr.Jit variable changes from/to a **scalar** configuration (size ``1``).
     - The sets of variables of the same size change. In the example above, this
       would be the case if ``len(x) == len(y)`` in one call, and ``len(x) != len(y)``
@@ -2575,6 +2604,12 @@ def freeze(
       reference the old size. One exception to this rule are constructions like
       `dr.arange(UInt32, dr.width(a))`, where the result only implicitly depends on
       the width value.
+
+    When calling a frozen function from within an outer frozen function, the content
+    of the inner function will be executed and recorded by the outer function.
+    No separate recording will be made for the inner function, and its ``n_recordings``
+    count will not change. Calling the inner function separately from outside a
+    frozen function will therefore require re-tracing for the provided inputs.
 
     **Advanced features**. The :py:func:`@dr.freeze <drjit.freeze>` decorator takes
     several optional parameters that are helpful in certain situations.
@@ -2623,28 +2658,14 @@ def freeze(
         backend (Optional[JitBackend]): If no inputs are given when calling the
           frozen function, the backend used has to be specified using this argument.
           It must match the backend used for computation within the function.
+
+        auto_opaque: (bool): If this flag is set true and only literal values
+          or their size changes between calls to the function, these variables
+          will be marked and made opaque. This reduces the memory usage, traversal
+          overhead, and can improved the performance of generated kernels.
+          If the flag is set to false, all input variables will be made opaque.
     """
 
-
-@overload
-def freeze(
-    f: F,
-    *,
-    state_fn: Optional[Callable] = None,
-    limit: Optional[int] = None,
-    warn_after: int = 10,
-    backend: Optional[JitBackend] = None,
-) -> F: ...
-
-
-def freeze(
-    f: Optional[F] = None,
-    *,
-    state_fn: Optional[Callable] = None,
-    limit: Optional[int] = None,
-    warn_after: int = 10,
-    backend: Optional[JitBackend] = None,
-) -> Union[F, Callable[[F2], F2]]:
     limit = limit if limit is not None else -1
     backend = backend if backend is not None else JitBackend.Invalid
 
@@ -2665,18 +2686,15 @@ def freeze(
 
         class FrozenFunction:
             def __init__(self, f) -> None:
-                closure = inspect.getclosurevars(f)
-                self.closure = (closure.nonlocals, closure.globals)
+                self.f = f
                 self.frozen = detail.FrozenFunction(
-                    inner,
-                    limit,
-                    warn_after,
-                    backend,
+                    inner, limit, warn_after, backend, auto_opaque
                 )
 
             def __call__(self, *args, **kwargs):
                 _state = state_fn(*args, **kwargs) if state_fn is not None else None
-                return self.frozen([self.closure, _state], *args, **kwargs)
+                closure = inspect.getclosurevars(f)
+                return self.frozen([closure.nonlocals, closure.globals, _state], *args, **kwargs)
 
             @property
             def n_recordings(self):
@@ -2712,7 +2730,7 @@ def freeze(
                 if obj is None:
                     return self
                 else:
-                    return FrozenMethod(self.frozen, self.closure, obj)
+                    return FrozenMethod(self.f, self.frozen, obj)
 
         class FrozenMethod(FrozenFunction):
             """
@@ -2725,14 +2743,15 @@ def freeze(
             The ``__call__`` method of the ``FrozenMethod`` then supplies the object
             in addition to the arguments to the internal function.
             """
-            def __init__(self, frozen, closure, obj) -> None:
+            def __init__(self, f, frozen, obj) -> None:
+                self.f = f
                 self.obj = obj
                 self.frozen = frozen
-                self.closure = closure
 
             def __call__(self, *args, **kwargs):
                 _state = state_fn(self.obj, *args, **kwargs) if state_fn is not None else None
-                return self.frozen([self.closure, _state], self.obj, *args, **kwargs)
+                closure = inspect.getclosurevars(self.f)
+                return self.frozen([closure.nonlocals, closure.globals, _state], self.obj, *args, **kwargs)
 
         return functools.wraps(f)(FrozenFunction(f))
 
