@@ -8,8 +8,12 @@
     BSD-style license that can be found in the LICENSE.txt file.
 */
 
+#include <drjit-core/hash.h>
+#include <tsl/robin_map.h>
+
 #include "detail.h"
 #include "apply.h"
+#include "common.h"
 #include "shape.h"
 #include "base.h"
 #include "meta.h"
@@ -291,10 +295,14 @@ static int recursion_level = 0;
 // PyTrees could theoretically include cycles. Catch infinite recursion below
 struct recursion_guard {
     recursion_guard() {
-        if (++recursion_level >= 50) {
+        if (recursion_level >= 50) {
             PyErr_SetString(PyExc_RecursionError, "runaway recursion detected");
             nb::raise_python_error();
         }
+        // NOTE: the recursion_level has to be incremented after potentially
+        // throwing an exception, as throwing an exception in the constructor
+        // prevents the destructor from being called.
+        recursion_level++;
     }
     ~recursion_guard() { recursion_level--; }
 };
@@ -340,11 +348,9 @@ void traverse_py_cb_ro_impl(nb::handle self, nb::callable c) {
 
     PyTraverseCallback traverse_cb(std::move(c));
 
-    auto dict = nb::borrow<nb::dict>(nb::getattr(self, "__dict__"));
-
-    for (auto value : dict.values()) {
+    auto dict    = nb::borrow<nb::dict>(nb::getattr(self, "__dict__"));
+    for (auto value : dict.values())
         traverse("traverse_py_cb_ro", traverse_cb, value);
-    }
 }
 
 /**
@@ -387,10 +393,8 @@ void traverse_py_cb_rw_impl(nb::handle self, nb::callable c) {
     PyTraverseCallback traverse_cb(std::move(c));
 
     auto dict = nb::borrow<nb::dict>(nb::getattr(self, "__dict__"));
-
-    for (auto value : dict.values()) {
+    for (auto value : dict.values())
         traverse("traverse_py_cb_rw", traverse_cb, value, true);
-    }
 }
 
 void export_detail(nb::module_ &) {
