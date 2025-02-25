@@ -36,6 +36,7 @@ enum class LayoutFlag : uint32_t {
     /// Did this variable have gradient edges attached when recording, that
     /// where postponed by the ``isolate_grad`` function?
     Postponed = (1 << 4),
+    JitIndex = (1 << 5),
 };
 
 /// Stores information about python objects, such as their type, their number of

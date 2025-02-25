@@ -307,6 +307,8 @@ void FlatVariables::traverse_jit_index(uint32_t index, TraverseContext &ctx,
     if (tp)
         layout.type = nb::borrow<nb::type_object>(tp);
 
+    layout.flags |= (uint32_t) LayoutFlag::JitIndex;
+
     int rv = 0;
     if (ctx.schedule_force) {
         // Returns owning reference
