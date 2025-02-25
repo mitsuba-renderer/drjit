@@ -23,6 +23,7 @@ struct FrozenFunction;
 namespace detail {
 
 using index64_vector = drjit::detail::index64_vector;
+using index32_vector = drjit::detail::index32_vector;
 
 enum class LayoutFlag : uint32_t {
     /// Whether this variable has size 1
@@ -36,6 +37,8 @@ enum class LayoutFlag : uint32_t {
     /// Did this variable have gradient edges attached when recording, that
     /// where postponed by the ``isolate_grad`` function?
     Postponed = (1 << 4),
+    /// Does this node represent a JIT Index?
+    JitIndex = (1 << 5),
 };
 
 /// Stores information about python objects, such as their type, their number of
@@ -117,7 +120,8 @@ struct VarLayout{
 struct TraverseContext {
     /// Set of postponed ad nodes, used to mark inputs to functions.
     const tsl::robin_set<uint32_t, UInt32Hasher> *postponed = nullptr;
-    bool schedule_force                                     = false;
+    index32_vector free_list;
+    std::string path;
 };
 
 /**
@@ -237,6 +241,36 @@ struct FlatVariables {
         for (uint32_t &index : this->variables)
             jit_var_dec_ref(index);
     }
+
+    /**
+     * Generates a mask of variables that should be made opaque in the next
+     * iteration. This should only be called if \c compatible_auto_opaque
+     * returns true for the corresponding \c FlatVariables pair.
+     *
+     * Returns true if new variables have been discovered that should be made
+     * opaque, otherwise returns false.
+     */
+    bool fill_opaque_mask(FlatVariables &prev, std::vector<bool> &opaque_mask);
+
+    /**
+     * Schedule variables that have been collected when traversing the PyTree.
+     *
+     * This function iterates over all ``Layout`` nodes that represent JIT
+     * indices and either calls ``jit_var_schedule`` or
+     * ``jit_var_schedule_force`` on them, depending on whether
+     * ``schedule_force`` is true or the boolean in the ``opaque_mask``
+     * corresponding to that variable is true.
+     *
+     * \param schedule_force
+     *     Overrides the use of \c opaque_mask and makes all variables opaque
+     *
+     * \param opaque_mask
+     *     A pointer to a compatible boolean array, indicating if some of the
+     *     variables should be made opaque. Can be \c nullptr, in which case it
+     *     will be ignored.
+     */
+    void schedule_jit_variables(bool schedule_force,
+                                std::vector<bool> *opaque_mask);
 
     /**
      * \brief Records information about jit variables, that have been traversed.
@@ -414,13 +448,13 @@ struct FlatVariables {
      * Assigns the flattened variables to an already existing PyTree.
      * This is used when input variables have changed.
      */
-    void assign(nb::handle dst);
+    void assign(nb::handle dst, TraverseContext &ctx);
 
     /**
      * First assigns the registry and then the PyTree.
      * Corresponds to `traverse_with_registry`.
      */
-    void assign_with_registry(nb::handle dst);
+    void assign_with_registry(nb::handle dst, TraverseContext &ctx);
 
     bool operator==(const FlatVariables &rhs) const {
         return this->layout == rhs.layout &&
@@ -497,21 +531,24 @@ struct FrozenFunction {
 
     detail::RecordingMap recordings;
     std::shared_ptr<detail::FlatVariables> prev_key;
+    std::vector<bool> opaque_mask;
 
     uint32_t recording_counter    = 0;
     uint32_t call_counter         = 0;
     int max_cache_size            = -1;
     uint32_t warn_recording_count = 10;
     JitBackend default_backend    = JitBackend::None;
+    bool auto_opaque = false;
 
     detail::FlatVariables::Heuristic in_heuristics;
 
     FrozenFunction(nb::callable func, int max_cache_size = -1,
                    uint32_t warn_recording_count = 10,
-                   JitBackend backend            = JitBackend::None)
+                   JitBackend backend            = JitBackend::None,
+                   bool auto_opaque              = false)
         : func(func), max_cache_size(max_cache_size),
-          warn_recording_count(warn_recording_count), default_backend(backend) {
-    }
+          warn_recording_count(warn_recording_count), default_backend(backend),
+          auto_opaque(auto_opaque) {}
     ~FrozenFunction() {}
 
     FrozenFunction(const FrozenFunction &)            = delete;
