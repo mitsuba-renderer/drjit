@@ -283,6 +283,9 @@ bool leak_warnings() {
     return nb::leak_warnings() || jit_leak_warnings() || ad_leak_warnings();
 }
 
+// Have to wrap this in an unnamed namespace to prevent collisions with the
+// other declaration of ``recursion_guard``.
+namespace {
 static int recursion_level = 0;
 
 // PyTrees could theoretically include cycles. Catch infinite recursion below
@@ -295,6 +298,7 @@ struct recursion_guard {
     }
     ~recursion_guard() { recursion_level--; }
 };
+} // namespace
 
 void traverse_py_cb_ro_impl(nb::handle self, nb::callable c) {
     recursion_guard guard;
