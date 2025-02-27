@@ -245,6 +245,9 @@ struct FlatVariables {
      * Generates a mask of variables that should be made opaque in the next
      * iteration. This should only be called if \c compatible_auto_opaque
      * returns true for the corresponding \c FlatVariables pair.
+     *
+     * Returns true if new variables have been discovered that should be made
+     * opaque, otherwise returns false.
      */
     bool fill_opaque_mask(FlatVariables &prev, std::vector<bool> &opaque_mask);
 

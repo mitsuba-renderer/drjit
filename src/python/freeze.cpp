@@ -275,6 +275,7 @@ bool FlatVariables::fill_opaque_mask(FlatVariables &prev,
     // corresponding bit in the mask, indicating that this literal should be
     // made opaque next time.
     uint32_t opaque_cunter = 0;
+    bool new_opaques = false;
     for (uint32_t i = 0; i < this->layout.size(); i++) {
         Layout &layout      = this->layout[i];
         Layout &prev_layout = prev.layout[i];
@@ -283,6 +284,7 @@ bool FlatVariables::fill_opaque_mask(FlatVariables &prev,
             prev_layout.flags & (uint32_t) LayoutFlag::Literal &&
             (layout.literal != prev_layout.literal)) {
             opaque_mask[i] = true;
+            new_opaques = true;
         }
         if (opaque_mask[i])
             opaque_cunter++;
@@ -292,7 +294,7 @@ bool FlatVariables::fill_opaque_mask(FlatVariables &prev,
             "compare_opaque(): %u variables will be made opaque",
             opaque_cunter);
 
-    return true;
+    return new_opaques;
 }
 
 void FlatVariables::schedule_jit_variables(bool schedule_force,
@@ -1482,9 +1484,6 @@ nb::object FunctionRecording::record(nb::callable func,
         out_variables.traverse(output, ctx);
         out_variables.schedule_jit_variables(false, nullptr);
 
-        // if (!frozen_func->prev_key)
-        //     frozen_func->in_opaque_mask.resize(out_variables.layout.size(), false);
-
         out_variables.traverse_with_registry(input, ctx);
         out_variables.schedule_jit_variables(false, nullptr);
 
@@ -1643,7 +1642,9 @@ nb::object FrozenFunction::operator()(nb::args args, nb::kwargs kwargs) {
         auto in_variables =
             std::make_shared<FlatVariables>(FlatVariables(in_heuristics));
         // Evaluate and traverse input variables (args and kwargs)
-        {
+        // Repeat this a max of 2 times if the number of variables that should
+        // be made opaque changed.
+        for (uint32_t i = 0; i < 2; i++) {
             // Enter Resume scope, so we can track gradients
             ADScopeContext ad_scope(drjit::ADScope::Resume, 0, nullptr, 0,
                                     true);
@@ -1683,8 +1684,21 @@ nb::object FrozenFunction::operator()(nb::args args, nb::kwargs kwargs) {
             }
 
             in_variables->record_jit_variables();
+            bool new_opaques = false;
             if (prev_key && auto_opaque)
-                in_variables->fill_opaque_mask(*prev_key, opaque_mask);
+                new_opaques =
+                    in_variables->fill_opaque_mask(*prev_key, opaque_mask);
+
+            if (new_opaques) {
+                // If new variables have been discovered that should be made
+                // opaque, we repeat traversal of the input to make them opaque.
+                // This reduces the number of variants that are saved by one.
+                in_variables->release();
+                in_variables = std::make_shared<FlatVariables>(
+                    FlatVariables(in_heuristics));
+            } else {
+                break;
+            }
         }
 
         in_heuristics = in_heuristics.max(in_variables->heuristic());
