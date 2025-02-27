@@ -1261,6 +1261,28 @@ std::ostream &operator<<(std::ostream &os, const FlatVariables &r) {
     return os;
 }
 
+bool log_diff_variable(LogLevel level, const FlatVariables &curr,
+                       const FlatVariables &prev, std::string &path,
+                       uint32_t slot) {
+    const VarLayout &curr_l = curr.var_layout[slot];
+    const VarLayout &prev_l = prev.var_layout[slot];
+
+    if(curr_l.vt != prev_l.vt){
+        jit_log(level, "%s: The variable type changed from %u to %u.",
+                path.c_str(), prev_l.vt, curr_l.vt);
+        return false;
+    }
+    if(curr_l.size_index != prev_l.size_index){
+        jit_log(level,
+                "%s: The size equivalence class of the variable changed from "
+                "%u to %u.",
+                path.c_str(), prev_l.size_index, curr_l.size_index);
+        return false;
+    }
+
+    return true;
+}
+
 /**
  * Log the difference of the layout nodes at ``index`` for the two FlatVariables.
  */
@@ -1270,6 +1292,28 @@ bool log_diff(LogLevel level, const FlatVariables &curr,
     const Layout &curr_l = curr.layout[index];
     const Layout &prev_l = prev.layout[index];
     index++;
+
+    if (curr_l.flags != prev_l.flags) {
+        jit_log(level, "%s: The flags of this node changed from 0x%lx to 0x%lx",
+                path.c_str(), prev_l.flags, curr_l.flags);
+        return false;
+    }
+
+    if (curr_l.index != prev_l.index) {
+        jit_log(level,
+                "%s: The index into the array of deduplicated variables "
+                "changed from s%u to s%u. This can occur if two variables "
+                "referred to the same JIT index, but do no longer.",
+                path.c_str(), prev_l.index, curr_l.index);
+        return false;
+    }
+
+    if (curr_l.flags & (uint32_t) LayoutFlag::JitIndex &&
+        !(curr_l.flags & (uint32_t) LayoutFlag::Literal)) {
+        uint32_t slot = curr_l.index;
+        if (!log_diff_variable(level, curr, prev, path, slot))
+            return false;
+    }
 
     if (((bool) curr_l.type != (bool) prev_l.type) ||
         !(curr_l.type.equal(prev_l.type))) {
@@ -1367,6 +1411,13 @@ bool log_diff(LogLevel level, const FlatVariables &curr,
     if(curr.layout.size() != prev.layout.size()){
         jit_log(level,
                 "The number of elements in the input changed from %u to %u.",
+                prev.layout.size(), curr.layout.size());
+        return false;
+    }
+    if(curr.var_layout.size() != prev.var_layout.size()){
+        jit_log(level,
+                "The number of opaque variables in the input changed from %u "
+                "to %u.",
                 prev.layout.size(), curr.layout.size());
         return false;
     }
@@ -1691,6 +1742,16 @@ nb::object FrozenFunction::operator()(nb::args args, nb::kwargs kwargs) {
                 // If new variables have been discovered that should be made
                 // opaque, we repeat traversal of the input to make them opaque.
                 // This reduces the number of variants that are saved by one.
+                jit_log(LogLevel::Warn,
+                        "While traversing the frozen function input, new "
+                        "literal variables have been discovered which changed "
+                        "from one call to another. These will be made opaque, "
+                        "and the input will be traversed again. This will "
+                        "incur some overhead. To prevent this, make those "
+                        "variables opaque in beforehand. Below, a list of "
+                        "variables that changed will be shown.");
+                if (prev_key)
+                    log_diff(LogLevel::Warn, *in_variables, *prev_key);
                 in_variables->release();
                 in_variables = std::make_shared<FlatVariables>(
                     FlatVariables(in_heuristics));
