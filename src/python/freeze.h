@@ -37,8 +37,8 @@ enum class LayoutFlag : uint32_t {
     /// Did this variable have gradient edges attached when recording, that
     /// where postponed by the ``isolate_grad`` function?
     Postponed = (1 << 4),
+    /// Does this node represent a JIT Index?
     JitIndex = (1 << 5),
-    MakeOpaque = (1 << 6),
 };
 
 /// Stores information about python objects, such as their type, their number of
@@ -241,8 +241,30 @@ struct FlatVariables {
             jit_var_dec_ref(index);
     }
 
+    /**
+     * Generates a mask of variables that should be made opaque in the next
+     * iteration. This should only be called if \c compatible_auto_opaque
+     * returns true for the corresponding \c FlatVariables pair.
+     */
     bool compare_opaque(FlatVariables &prev, std::vector<bool> &opaque_mask);
 
+    /**
+     * Schedule variables that have been collected when traversing the PyTree.
+     *
+     * This function iterates over all ``Layout`` nodes that represent JIT
+     * indices and either calls ``jit_var_schedule`` or
+     * ``jit_var_schedule_force`` on them, depending on whether
+     * ``schedule_force`` is true or the boolean in the ``opaque_mask``
+     * corresponding to that variable is true.
+     *
+     * \param schedule_force
+     *     Overrides the use of \c opaque_mask and makes all variables opaque
+     *
+     * \param opaque_mask
+     *     A pointer to a compatible boolean array, indicating if some of the
+     *     variables should be made opaque. Can be \c nullptr, in which case it
+     *     will be ignored.
+     */
     void schedule_jit_variables(bool schedule_force,
                                 std::vector<bool> *opaque_mask);
 
