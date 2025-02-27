@@ -246,7 +246,7 @@ struct FlatVariables {
      * iteration. This should only be called if \c compatible_auto_opaque
      * returns true for the corresponding \c FlatVariables pair.
      */
-    bool compare_opaque(FlatVariables &prev, std::vector<bool> &opaque_mask);
+    bool fill_opaque_mask(FlatVariables &prev, std::vector<bool> &opaque_mask);
 
     /**
      * Schedule variables that have been collected when traversing the PyTree.

@@ -286,7 +286,7 @@ bool compatible_auto_opaque(FlatVariables &cur, FlatVariables &prev){
     return true;
 }
 
-bool FlatVariables::compare_opaque(FlatVariables &prev,
+bool FlatVariables::fill_opaque_mask(FlatVariables &prev,
                                    std::vector<bool> &opaque_mask) {
     // If we notice that only a literal has changed, we can set the
     // corresponding bit in the mask, indicating that this literal should be
@@ -1682,7 +1682,7 @@ nb::object FrozenFunction::operator()(nb::args args, nb::kwargs kwargs) {
 
             in_variables->record_jit_variables();
             if (prev_key && auto_opaque)
-                in_variables->compare_opaque(*prev_key, opaque_mask);
+                in_variables->fill_opaque_mask(*prev_key, opaque_mask);
         }
 
         in_heuristics = in_heuristics.max(in_variables->heuristic());
