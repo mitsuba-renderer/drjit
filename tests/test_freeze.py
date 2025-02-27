@@ -2866,3 +2866,25 @@ def test73_opaque_width(t, auto_opaque):
         ref = func(x)
 
         assert dr.allclose(ref, res)
+
+    assert frozen.n_recordings < n
+
+
+@pytest.test_arrays("float32, jit, shape=(*)")
+def test74_auto_opaque_retraverse(t):
+
+    def func(x: t):
+        return x + 1
+
+    frozen = dr.freeze(func, auto_opaque=True)
+
+    n = 3
+    for i in range(n):
+        x = t(i)
+
+        res = frozen(x)
+        ref = func(x)
+
+        assert dr.allclose(ref, res)
+
+    assert frozen.n_recordings == 2
