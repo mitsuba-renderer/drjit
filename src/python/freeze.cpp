@@ -230,6 +230,11 @@ uint32_t FlatVariables::add_jit_index(uint32_t index) {
     }
 }
 
+/**
+ * Compares two \c FlatVariables to determine if it is possible to create an
+ * opaque_mask. This is the case, if the only change between the PyTrees
+ * consists of changes in literal values.
+ */
 bool compatible_auto_opaque(FlatVariables &cur, FlatVariables &prev){
     if (cur.layout.size() != prev.layout.size()) {
         return false;
@@ -283,7 +288,6 @@ bool compatible_auto_opaque(FlatVariables &cur, FlatVariables &prev){
 
 bool FlatVariables::compare_opaque(FlatVariables &prev,
                                    std::vector<bool> &opaque_mask) {
-
     // If we notice that only a literal has changed, we can set the
     // corresponding bit in the mask, indicating that this literal should be
     // made opaque next time.
