@@ -2214,7 +2214,7 @@ Index ad_var_new(JitIndex i0) {
     Index result = ad_var_new(nullptr, JitVar::borrow(i0));
 
     const char *label = jit_var_label(i0);
-    if (label) {
+    if (label && ad_index(result)) {
         VarInfo info = jit_set_backend(i0);
         const char *prefix = jit_prefix(info.backend);
 
