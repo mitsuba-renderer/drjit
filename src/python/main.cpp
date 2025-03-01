@@ -39,6 +39,7 @@
 #include "profile.h"
 #include "tracker.h"
 #include "local.h"
+#include "resample.h"
 
 static int active_backend = -1;
 
@@ -248,6 +249,7 @@ NB_MODULE(_drjit_ext, m_) {
     export_profile(m);
     export_tracker(detail);
     export_local(m);
+    export_resample(m);
 
     export_scalar(scalar);
 

@@ -54,6 +54,11 @@ static nb::object new_grad(nb::handle h) {
         void operator()(nb::handle h1, nb::handle h2) override {
             nb::handle tp = h1.type();
             const ArraySupplement &s = supp(tp);
+            if (!s.is_diff) {
+                nb::inst_copy(h2, h1);
+                return;
+            }
+
             uint32_t index = (uint32_t) s.index(inst_ptr(h1));
 
             if (s.is_diff && is_float(s)) {
@@ -462,8 +467,11 @@ public:
                     uint32_t jit_index = (uint32_t) index;
                     uint32_t ad_index = (uint32_t) (index >> 32);
                     op.add_index((JitBackend) s.backend, ad_index, input);
-                    VarInfo info = jit_set_backend(jit_index);
-                    uint32_t new_idx = jit_var_undefined(info.backend, info.type, info.size);
+                    uint32_t new_idx = 0;
+                    if (jit_index) {
+                        VarInfo info = jit_set_backend(jit_index);
+                        new_idx = jit_var_undefined(info.backend, info.type, info.size);
+                    }
                     s.init_index(((uint64_t) ad_index) << 32 | new_idx, inst_ptr(h2));
                     jit_var_dec_ref(new_idx);
                 }

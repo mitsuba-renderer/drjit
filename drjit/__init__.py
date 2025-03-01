@@ -19,12 +19,12 @@ with detail.scoped_rtld_deepbind():
 import sys
 if sys.version_info < (3, 11):
     try:
-        from typing_extensions import overload, Optional, Tuple, Sequence
+        from typing_extensions import overload, Optional, Tuple, Sequence, Union, Literal, Callable
     except ImportError:
         raise RuntimeError(
             "Dr.Jit requires the 'typing_extensions' package on Python <3.11")
 else:
-    from typing import overload, Optional, Tuple, Sequence
+    from typing import overload, Optional, Tuple, Sequence, Union, Literal, Callable
 del sys
 
 from .ast import syntax, hint
@@ -1578,7 +1578,7 @@ def sh_eval(d: ArrayBase, order: int) -> list:
     Evalute real spherical harmonics basis function up to a specified order.
 
     The input ``d`` must be a normalized 3D Cartesian coordinate vector. The
-    function returns a list containing all spherical haromnic basis functions
+    function returns a list containing all spherical harmonic basis functions
     evaluated with respect to ``d`` up to the desired order, for a total of
     ``(order+1)**2`` output values.
 
@@ -1814,6 +1814,162 @@ def concat(arr: Sequence[ArrayT], /, axis: Optional[int] = 0) -> ArrayT:
 
     return result
 
+class _ResampleOp(CustomOp):
+    """Implementation detail of the function drjit.resample()"""
+    def eval(self, resampler, source, stride):
+        self.resampler, self.stride = resampler, stride
+        return type(source)(resampler.resample_fwd(detach(source, False), stride))
+
+    def forward(self):
+        grad_source = detach(self.grad_in('source'), False)
+        self.set_grad_out(
+            self.resampler.resample_fwd(grad_source, self.stride)
+        )
+
+    def backward(self):
+        grad_out = detach(self.grad_out(), False)
+
+        self.set_grad_in(
+            'source',
+            self.resampler.resample_bwd(grad_out, self.stride)
+        )
+
+_resample_cache = {}
+
+def resample(
+    source: ArrayT,
+    shape: Sequence[int],
+    *,
+    filter: Union[Literal["box", "linear", "hamming", "cubic", "lanczos"], Callable[[float], float]] = "cubic",
+    filter_radius: Optional[float] = None
+) -> ArrayT:
+    """
+    Resample an input array/tensor to increase or decrease its resolution along
+    a set of axes.
+
+    This function up- and/or downsamples a given array or tensor along a
+    specified set of axes. Given an input array (``source``) and target shape
+    (``shape``), it returns a compatible array of the specified configuration.
+    This is implemented using a sequence of successive 1D resampling steps for
+    each mismatched axis.
+
+    Example usage:
+
+    .. code-block:: python
+
+       image: TensorXf = ...  # a RGB image
+       width, height, channels = image.shape
+
+       scaled_image = dr.resample(
+           image,
+           (width // 2, height // 2, channels)
+       )
+
+    Resampling uses a `reconstruction filter
+    <https://en.wikipedia.org/wiki/Reconstruction_filter>`__. The following
+    options are available, where :math:`n` refers to the number of dimensions
+    being resampled:
+
+    - ``"box"``: use nearest-neighbor interpolation/averaging. This is very
+      efficient but generally produces sub-par output that is either pixelated
+      (when upsampling) or aliased (when downsampling).
+
+    - ``"linear"``: use linear ramp / tent filter that uses :math:`2^n`
+      neighbors to reconstruct each output sample when upsampling. Tends to
+      produce relatively blurry results.
+
+    - ``"hamming"``: uses the same number of input samples as ``"linear"`` but
+      better preserves sharpness when downscaling. Do not use for upscaling.
+
+    - ``"cubic"``: use cubic filter kernel that uses :math:`4^n`
+      neighbors to reconstruct each output sample when upsampling. Produces
+      high-quality results. This is the default.
+
+    - ``"lanczos"``: use a windowed Lanczos filter that uses :math:`6^n`
+      neighbors to reconstruct each output sample when upsampling. This is the
+      best filter for smooth signals, but also the costliest. The Lanczos
+      filter is susceptible to ringing when the input array contains
+      discontinuities.
+
+    - Besides he above choices, is also possible to specify a custom filter.
+      To do so, use the ``filter`` argument to pass a Python callable with
+      signature ``Callable[[float], float]``. In this case, you must also
+      specify a filter radius via the ``filter_radius`` parameter.
+
+    The implementation was extensively tested against `Image.resize()
+    <https://pillow.readthedocs.io/en/stable/reference/Image.html#PIL.Image.Image.resize>`__
+    from the Pillow library and should be a drop-in replacement with added
+    support for JIT tracing / GPU evaluation, differentiability, and
+    compatibility with higher-dimensional tensors.
+
+    .. warning::
+
+       When using ``filter="hamming"``, ``"cubic"``, or ``"lanczos"``, the
+       range of the output array can exceed that of the input array. For
+       example, positive-valued data may contain negative values following
+       resampling. Clamp the output in case it is important that array values
+       remain within a fixed range (e.g., :math:`[0,1]`).
+
+    Args:
+        source (dr.ArrayBase): The Dr.Jit tensor or 1D array to be resampled.
+
+        shape (Sequence[int]): The desired output shape.
+
+        filter (str | Callable[[float], float])
+          The desired reconstruction filter, see the above text for an overview.
+          Alternatively, a custom reconstruction filter function can also be
+          specified.
+
+        filter_radius (float | None)
+          The radius of the pixel filter in the output sample space. Should
+          only be specified when using a custom reconstruction filter.
+
+    Returns:
+        drjit.ArrayBase: The resampled output array. Its type matches
+        ``source``, and its shape matches ``shape``.
+    """
+
+    source_shape = source.shape
+    strides = _compute_strides(shape)
+    ndim = len(source_shape)
+    tp = type(source)
+    value = source.array
+
+    if len(shape) != ndim:
+        raise RuntimeError(
+            "drjit.resample(): 'source' and 'shape' must have the same number of axes."
+        )
+
+    for i in reversed(range(ndim)):
+        source_res = source_shape[i]
+        target_res = shape[i]
+
+        if source_res == target_res:
+            continue
+
+        # Cache resampler in case it can be reused
+        key = (source_res, target_res, filter, filter_radius)
+
+        resampler = _resample_cache.get(key, None)
+        if resampler is None:
+            resampler = detail.Resampler(
+                source_res=source_res,
+                target_res=target_res,
+                filter=filter,
+                filter_radius=filter_radius,
+            )
+            _resample_cache[key] = resampler
+
+        value = custom(_ResampleOp,
+            resampler=resampler,
+            source=value,
+            stride=strides[i])
+
+    if is_tensor_v(tp):
+        return tp(value, shape)
+    else:
+        return value
+
 
 def upsample(t, shape=None, scale_factor=None):
     '''
@@ -1844,6 +2000,9 @@ def upsample(t, shape=None, scale_factor=None):
         object: the up-sampled tensor or texture object. The type of the output will be the same as the type of the source.
     '''
     from collections.abc import Sequence as _Sequence
+
+    _warnings.warn("drjit.upsample() is deprecated, please use drjit.resample() instead.",
+                   DeprecationWarning, stacklevel=2)
 
     if  not getattr(t, 'IsTexture', False) and not is_tensor_v(t):
         raise TypeError("upsample(): unsupported input type, expected Jit "
