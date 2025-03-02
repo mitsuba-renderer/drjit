@@ -611,7 +611,6 @@ def test20_concat(t):
     for axis, *shapes in configs:
         in_drjit = []
         in_numpy = []
-        print(f"{axis=}, {shapes=}")
         for i, shape in enumerate(shapes):
             size = dr.prod(shape)
             seq = dr.arange(dr.array_t(t), size) + i*100
