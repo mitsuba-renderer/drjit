@@ -5,11 +5,49 @@
 Changelog
 #########
 
+DrJit 1.1.0 (TBA)
+-----------------
+
+- New operation :py:func:`drjit.resample() <resample>` to increase/decrease the
+  resolution of Dr.Jit arrays/tensors along a set of axes. (PR `#358
+  <https://github.com/mitsuba-renderer/drjit/pull/358>`__).
+- New operation :py:func:`dr.concat() <concat>` to concatenate arrays/tensors.
+  (PR `#354 <https://github.com/mitsuba-renderer/drjit/pull/354>`__).
+- Use packet memory operations when accessing multi-channel textures (PR `#329
+  <https://github.com/mitsuba-renderer/drjit/pull/329>`__).
+- Compile the :py:func:`dr.rsqrt() <rsqrt>` operation to a faster instruction
+  sequence on the LLVM backend, e.g., ``VRSQRTPS`` plus one Newton-Raphson
+  iteration on Intel-compatible processors. (PR `#343
+  <https://github.com/mitsuba-renderer/drjit/pull/343>`__).
+- Added PCG32 methods :py:func:`PCG32.next_float_normal()
+  <drjit.llvm.PCG32.next_float_normal>`, :py:func:`PCG32.next_float32_normal()
+  <drjit.llvm.PCG32.next_float32_normal>`, and :py:func:`PCG32.next_float64_normal()
+  <drjit.llvm.PCG32.next_float64_normal>` to generate standard normal
+  variates. (PR `#353
+  <https://github.com/mitsuba-renderer/drjit/pull/353/files>`__).
+- Make :py:func:`dr.any() <any>`, :py:func:`dr.all() <all>`, and
+  :py:func:`dr.none() <none>` asynchronous with respect to the host. (PR `#344
+  <https://github.com/mitsuba-renderer/drjit/pull/344>`__).
+- Added :py:attr:`JitFlag.ForbidSynchronization` to turn synchronization into
+  an error. (PR `#350 <https://github.com/mitsuba-renderer/drjit/pull/350>`__).
+- Miscellaneous bugfixes and improvements. (PRs
+  `#347 <https://github.com/mitsuba-renderer/drjit/pull/347>`__,
+  `#349 <https://github.com/mitsuba-renderer/drjit/pull/349>`__ and
+  commits
+  `38fe4a <https://github.com/mitsuba-renderer/drjit/commit/38fe4a10b6d57bbe0d185c6b9e1b976603b41cab>`__,
+  `74c4d0 <https://github.com/mitsuba-renderer/drjit/commit/74c4d0313a420a22dd9e2fe0cb11205f051cb762>`__,
+  `1cc2db <https://github.com/mitsuba-renderer/drjit/commit/1cc2dbd799739edc5e4d3c5e84519cbe504b2aaa>`__,
+  `4035a8 <https://github.com/mitsuba-renderer/drjit/commit/4035a8c85d88a5bf8db92d4d19a0b90850186751>`__).
+
 DrJit 1.0.5 (February 3, 2025)
 ------------------------------
 
-- Workaround for OptiX linking issue in driver version R570+. (commit `0c9c54e <https://github.com/mitsuba-renderer/drjit-core/commit/0c9c54ec5c2963dd576c5a16d10fb2d63d67166f>`__).
-- Tensors can now be used as condition and state variables of ``dr.if_stmt/while_loop``. (commit `4691fe <https://github.com/mitsuba-renderer/drjit-core/commit/4691fe4421bfd7002cd9c5d998617db0f40cce35>`__).
+- Workaround for OptiX linking issue in driver version R570+. (commit `0c9c54e
+  <https://github.com/mitsuba-renderer/drjit-core/commit/0c9c54ec5c2963dd576c5a16d10fb2d63d67166f>`__).
+
+- Tensors can now be used as condition and state variables of
+  ``dr.if_stmt/while_loop``. (commit `4691fe
+  <https://github.com/mitsuba-renderer/drjit-core/commit/4691fe4421bfd7002cd9c5d998617db0f40cce35>`__).
 
 DrJit 1.0.4 (January 28, 2025)
 ------------------------------

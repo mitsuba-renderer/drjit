@@ -6235,7 +6235,7 @@
     Generate a (standard) normally distributed single precision floating point number.
 
     The function analyzes the provided target ``dtype`` and either invokes
-    :py:func:`next_float32_n` or :py:func:`next_float64_n` depending on the
+    :py:func:`next_float32_normal` or :py:func:`next_float64_normal` depending on the
     requested precision.
 
     A mask can be optionally provided. Masked entries do not advance the PRNG state.
