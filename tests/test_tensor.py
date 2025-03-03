@@ -573,6 +573,24 @@ def test18_tensor_index_signed_vec(t):
     A = dr.int32_array_t(dr.array_t(x))
     assert dr.all(x[:, A([-1, 0])] == t([3, 1]))
 
+@pytest.test_arrays('jit, float32, shape=(3, *)')
+def test19_roundtrip_flip(t):
+    mod = sys.modules[t.__module__]
+    TensorXf = getattr(mod, 'TensorXf')
+
+    x = t([1,2], [3,4], [5,6])
+    t1 = TensorXf(x)
+    t2 = TensorXf(x, flip_axes=True)
+    assert x.shape == (3, 2)
+    assert t1.shape == (3, 2)
+    assert t2.shape == (2, 3)
+    assert dr.all(t1.array == (1,2,3,4,5,6))
+    assert dr.all(t2.array == (1,3,5,2,4,6))
+
+    x1 = t(t1)
+    x2 = t(t2, flip_axes=True)
+    assert dr.all(x1 == x, axis=None)
+    assert dr.all(x2 == x, axis=None)
 
 @pytest.test_arrays('is_tensor, jit, uint32')
 def test20_concat(t):

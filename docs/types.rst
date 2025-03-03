@@ -517,6 +517,27 @@ each other (e.g. to display a complete 3D vector on each line in the above
 example). In contrast, the string conversion of tensors matches that of other
 array programming libraries and does not transpose the input.
 
+As the example above showed, conversion between nested arrays and tensors
+always preserves the shape---for example
+
+.. code-block:: python
+
+   x = dr.zeros(Array3f, shape=(3, N))
+   y = TensorXf(x)
+
+produces a tensor ``y`` of shape ``(3, N)``. However, sometimes an application might
+actually need a tensor of shape ``(N, 3)``. Pass ``flip_axes=True`` to the
+constructor to reverse the order of the ``shape`` elements and directly perform
+this conversion. The same also works in the reverse direction.
+
+.. code-block:: python
+
+   # Convert to (N, 3) tensor
+   y = TensorXf(x, flip_axes=True)
+
+   # Convert (N, 3) tensor back to nested array form
+   y = Array3f(y, flip_axes=True)
+
 Tensors support all normal mathematical operations along with automatic
 differentiation. They share the broadcasting behavior known from other array
 programming frameworks.
