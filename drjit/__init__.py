@@ -1,4 +1,3 @@
-from typing import Callable, TypeVar
 from . import detail
 
 with detail.scoped_rtld_deepbind():
@@ -20,12 +19,12 @@ with detail.scoped_rtld_deepbind():
 import sys
 if sys.version_info < (3, 11):
     try:
-        from typing_extensions import overload, Optional, Tuple, Sequence
+        from typing_extensions import overload, Optional, Tuple, Sequence, Literal, Union, Callable, TypeVar
     except ImportError:
         raise RuntimeError(
             "Dr.Jit requires the 'typing_extensions' package on Python <3.11")
 else:
-    from typing import overload, Optional, Tuple, Sequence
+    from typing import overload, Optional, Tuple, Sequence, Literal, Union, Callable, TypeVar
 del sys
 
 from .ast import syntax, hint
