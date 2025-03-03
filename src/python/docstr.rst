@@ -5925,6 +5925,17 @@
 
     This flag has a severe performance impact and is *disabled* by default.
 
+.. topic:: JitFlag_ForbidSynchronization
+
+    Treat any kind of synchronization as an error and raise an exception when
+    it is encountered.
+
+    Operations like :py:func:`drjit.sync_thread()` are costly because they
+    prevent the system from overlapping CPU/GPU work. Enable this flag to find
+    places in a larger codebase that are responsible for this.
+
+    This flag is *disabled* by default.
+
 .. topic:: JitFlag_ScatterReduceLocal
 
     Reduce locally before performing atomic scatter-reductions.
@@ -6136,6 +6147,17 @@
     Two overloads of this function exist: the masked variant does not advance
     the PRNG state of entries ``i`` where ``mask[i] == False``.
 
+.. topic:: PCG32_next_float
+
+    Generate a uniformly distributed single precision floating point number on the
+    interval :math:`[0, 1)`.
+
+    The function analyzes the provided target ``dtype`` and either invokes
+    :py:func:`next_float32` or :py:func:`next_float64` depending on the
+    requested precision.
+
+    A mask can be optionally provided. Masked entries do not advance the PRNG state.
+
 .. topic:: PCG32_next_float32
 
     Generate a uniformly distributed single precision floating point number on the
@@ -6148,6 +6170,30 @@
 
     Generate a uniformly distributed double precision floating point number on the
     interval :math:`[0, 1)`.
+
+    Two overloads of this function exist: the masked variant does not advance
+    the PRNG state of entries ``i`` where ``mask[i] == False``.
+
+.. topic:: PCG32_next_float_normal
+
+    Generate a (standard) normally distributed single precision floating point number.
+
+    The function analyzes the provided target ``dtype`` and either invokes
+    :py:func:`next_float32_n` or :py:func:`next_float64_n` depending on the
+    requested precision.
+
+    A mask can be optionally provided. Masked entries do not advance the PRNG state.
+
+.. topic:: PCG32_next_float32_normal
+
+    Generate a (standard) normally distributed single precision floating point number.
+
+    Two overloads of this function exist: the masked variant does not advance
+    the PRNG state of entries ``i`` where ``mask[i] == False``.
+
+.. topic:: PCG32_next_float64_normal
+
+    Generate a (standard) normally distributed single precision floating point number.
 
     Two overloads of this function exist: the masked variant does not advance
     the PRNG state of entries ``i`` where ``mask[i] == False``.

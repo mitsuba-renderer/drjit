@@ -751,7 +751,7 @@ void export_print(nb::module_ &m) {
           [](nb::object value, nb::kwargs kwargs) {
               print_impl("{}", nb::borrow<nb::args>(nb::make_tuple(value)), kwargs);
           },
-          "value"_a, "kwargs"_a,
+          "value"_a.none(), "kwargs"_a,
           nb::sig("def print(value: object, /, active: drjit.ArrayBase | "
                         "bool = True, end: str = '\\n', file: object = None, "
                         "limit: int = 20, mode='auto', **kwargs) -> None"));

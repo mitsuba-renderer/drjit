@@ -928,6 +928,10 @@ nb::handle TransformPairCallback::transform_type(nb::handle tp) const {
 
 uint64_t TransformCallback::operator()(uint64_t index) { return index; }
 
+nb::object TransformPairCallback::transform_unknown(nb::handle, nb::handle) const {
+    return nb::none();
+}
+
 /// Transform a pair of input pytrees 'h1' and 'h2' into an output pytree, potentially of a different type
 nb::object transform_pair(const char *op, TransformPairCallback &tc,
                           nb::handle h1, nb::handle h2) {
@@ -1047,7 +1051,7 @@ nb::object transform_pair(const char *op, TransformPairCallback &tc,
                 }
                 return tp1(**result);
             } else {
-                return nb::none();
+                return tc.transform_unknown(h1, h2);
             }
         }
     } catch (nb::python_error &e) {

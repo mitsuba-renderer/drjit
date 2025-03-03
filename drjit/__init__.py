@@ -19,12 +19,12 @@ with detail.scoped_rtld_deepbind():
 import sys
 if sys.version_info < (3, 11):
     try:
-        from typing_extensions import overload, Optional, Tuple, Literal, Union
+        from typing_extensions import overload, Optional, Tuple, Sequence
     except ImportError:
         raise RuntimeError(
             "Dr.Jit requires the 'typing_extensions' package on Python <3.11")
 else:
-    from typing import overload, Optional, Tuple, Literal, Union
+    from typing import overload, Optional, Tuple, Sequence
 del sys
 
 from .ast import syntax, hint
@@ -1684,6 +1684,117 @@ def meshgrid(*args, indexing='xy') -> tuple: # <- proper type signature in stubs
         result[0], result[1] = result[1], result[0]
 
     return tuple(result)
+
+
+def _compute_strides(shape: Sequence[int]) -> Tuple[int, ...]:
+    """Turn a shape tuple into a C-style strides tuple"""
+    val, ndim = 1, len(shape)
+    strides = [0] * ndim
+    for i in reversed(range(ndim)):
+        strides[i] = val
+        val *= shape[i]
+    return tuple(strides)
+
+
+def concat(arr: Sequence[ArrayT], /, axis: Optional[int] = 0) -> ArrayT:
+    """
+    Concatenate a sequence of arrays or tensors along a given axis.
+
+    The inputs must all be of the same type, and they must have the same shape
+    except for the axis being concatenated. Negative ``axis`` values count
+    backwards from the last dimension.
+
+    When ``axis=None``, the function ravels the input arrays or tensors prior
+    to concatenating them.
+    """
+
+    if is_array_v(arr):
+        raise TypeError("Input should be Python sequence of arrays.")
+
+    if len(arr) == 0:
+        raise RuntimeError("At least one input array/tensor is required!")
+    elif len(arr) == 1:
+        return arr[0]
+
+    if axis is None:
+        arr = tuple(ravel(v) for v in arr)
+        axis = 0
+
+    ref = arr[0]
+    ref_tp = type(ref)
+    if not is_jit_v(ref_tp):
+        raise TypeError(f"The input arrays must be JIT-compiled Dr.Jit types (encountered {ref_tp})!")
+
+    ref_shape = ref.shape
+    ref_ndim = len(ref_shape)
+
+    # Examine the 'axis' parameter
+    if axis < 0:
+        axis = len(ref_shape) + axis
+    if axis >= len(ref_shape):
+        raise RuntimeError(f"The value axis={axis} is out of bounds!")
+
+    # Compute output shape and check compatibility
+    axis_size = 0
+    for i, arg in enumerate(arr):
+        arg_tp = type(arg)
+        if arg_tp is not ref_tp:
+            raise TypeError(f"The input arrays must all have the same type (encountered {ref_tp} and {arg_tp})!")
+        if not is_jit_v(arg):
+            raise TypeError(f"The input arrays must be JIT-compiled Dr.Jit types (encountered {arg_tp})!")
+        arg_shape = arg.shape
+        arg_ndim = len(arg_shape)
+
+        if arg_ndim != ref_ndim:
+            raise TypeError(f"The input arrays must all have the same dimension (encountered {ref_ndim} vs {arg_ndim})!")
+
+        for j in range(ref_ndim):
+            aj, rj = arg_shape[j], ref_shape[j]
+            if j == axis:
+                axis_size += aj
+            elif aj != rj:
+                raise TypeError(f"Input array {i} has an incompatible size on axis {j} (encountered {rj} vs {aj})!")
+
+    out_shape = list(ref_shape)
+    out_shape[axis] = axis_size
+    out_strides = _compute_strides(out_shape)
+
+    result = empty(ref_tp, out_shape)
+    result_array = result.array
+    Index = uint32_array_t(type(result_array))
+
+    axis_size = 0
+    for i, arg in enumerate(arr):
+        arg_shape = arg.shape
+        arg_strides = _compute_strides(arg_shape)
+        arg_size = prod(arg_shape)
+        arg_array = arg.array
+        index_in = arange(Index, arg_size)
+        index_out = zeros(Index, arg_size)
+
+        for j in range(ref_ndim):
+            pos_in = index_in // arg_strides[j]
+            pos_out = pos_in
+
+            if j == axis:
+                pos_out = pos_out + axis_size
+                axis_size += arg_shape[j]
+
+            index_in -= pos_in * arg_strides[j]
+            index_out += pos_out * out_strides[j]
+
+            if j == axis:
+                index_out += index_in
+                break
+
+        scatter(
+            target=result_array,
+            index=index_out,
+            value=arg_array,
+            mode=ReduceMode.Permute
+        )
+
+    return result
 
 
 def upsample(t, shape=None, scale_factor=None):

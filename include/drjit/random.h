@@ -21,6 +21,7 @@
 
 #include <drjit/array.h>
 #include <drjit/idiv.h>
+#include <drjit/math.h>
 #include <drjit/while_loop.h>
 
 #define PCG32_DEFAULT_STATE  0x853c49e6748fea9bULL
@@ -178,6 +179,19 @@ template <typename T> struct PCG32 {
         else
             return next_float32(mask);
     }
+
+    /// Generate a normally distributed single precision floating point value
+    template <typename T2, typename...Args>
+    DRJIT_INLINE T2 next_float_normal(const Args&... args) {
+        T2 value = next_float<T2>(args...);
+        value = clip(value, Epsilon<T2>, OneMinusEpsilon<T2>);
+        return -SqrtTwo<T2> * erfinv(fmadd(value, -2.f, 1.f));
+    }
+
+    DRJIT_INLINE Float32 next_float32_normal() { return next_float_normal<Float32>(); }
+    DRJIT_INLINE Float64 next_float64_normal() { return next_float_normal<Float64>(); }
+    DRJIT_INLINE Float32 next_float32_normal(const Mask &mask) { return next_float_normal<Float32>(mask); }
+    DRJIT_INLINE Float64 next_float64_normal(const Mask &mask) { return next_float_normal<Float64>(mask); }
 
     /// Generate a uniformly distributed integer r, where 0 <= r < bound
     UInt32 next_uint32_bounded(uint32_t bound, Mask mask = true) {

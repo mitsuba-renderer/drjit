@@ -258,6 +258,13 @@ def test06_select():
         with pytest.raises(RuntimeError) as e:
             result = dr.select(l.Array4b(True, False, True, True), a, 0)
 
+        assert dr.select(True, None, None) is None
+        assert dr.select(l.Array1b(True), None, None) is None
+        class Dummy(int):
+            pass
+        with pytest.raises(RuntimeError, match=r"encountered incompatible objects with an unknown type \(not a Dr.Jit array, not a PyTree\)."):
+            dr.select(l.Array2b(True, False), Dummy(1), Dummy(2))
+
 @pytest.test_arrays('type=float32,shape=(*)')
 def test07_power(t):
     assert dr.allclose(t(2)**0, t(1))
