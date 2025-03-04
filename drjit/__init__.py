@@ -1891,7 +1891,7 @@ def resample(
       filter is susceptible to ringing when the input array contains
       discontinuities.
 
-    - Besides he above choices, is also possible to specify a custom filter.
+    - Besides the above choices, it is also possible to specify a custom filter.
       To do so, use the ``filter`` argument to pass a Python callable with
       signature ``Callable[[float], float]``. In this case, you must also
       specify a filter radius via the ``filter_radius`` parameter.
