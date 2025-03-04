@@ -18,6 +18,7 @@ Makefile
 /build*
 /Testing
 /tests/Testing
+/.cache
 *.dir
 *~
 \.DS_Store
