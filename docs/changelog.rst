@@ -8,13 +8,29 @@ Changelog
 DrJit 1.1.0 (TBA)
 -----------------
 
-- New operation :py:func:`drjit.resample() <resample>` to increase/decrease the
-  resolution of Dr.Jit arrays/tensors along a set of axes. (PR `#358
-  <https://github.com/mitsuba-renderer/drjit/pull/358>`__).
-- New operation :py:func:`dr.concat() <concat>` to concatenate arrays/tensors.
-  (PR `#354 <https://github.com/mitsuba-renderer/drjit/pull/354>`__).
-- Use packet memory operations when accessing multi-channel textures (PR `#329
+- Added the function :py:func:`drjit.resample() <resample>` to
+  increase/decrease the resolution of Dr.Jit arrays/tensors along a set of
+  axes. (PR `#358 <https://github.com/mitsuba-renderer/drjit/pull/358>`__).
+- Added infrastructure for gradient-based optimization
+  (:py:class:`dr.opt.Optimizer <drjit.opt.Optimizer>`, :py:class:`dr.opt.SGD
+  <drjit.opt.SGD>`, :py:class:`dr.opt.Adam <drjit.opt.Adam>`,
+  :py:class:`dr.opt.RMSProp <drjit.opt.RMSProp>`), and mixed-precision training
+  (:py:class:`dr.opt.GradScaler <drjit.opt.GradScaler>`). (PR `#345
+  <https://github.com/mitsuba-renderer/drjit/pull/345/files>`__).
+- Added the function :py:func:`dr.concat() <concat>` to concatenate
+  arrays/tensors. (PR `#354
+  <https://github.com/mitsuba-renderer/drjit/pull/354>`__).
+- Enabled the use of packet memory operations when accessing multi-channel
+  textures to improve performance. (PR `#329
   <https://github.com/mitsuba-renderer/drjit/pull/329>`__).
+- Conversion between tensors and nested arrays (e.g. ``Array3f``) now
+  offers an option of whether to flip the axis order (e.g., `Nx3` vs `3xN`).
+  (PR `#348 <https://github.com/mitsuba-renderer/drjit/pull/348>`__).
+- The semantics of the :py:func:`dr.forward_from() <forward_from>` and
+  :py:func:`dr.backward_from() <backward_from>` was adjusted. In particular,
+  they now preserve an existing gradient (if set) instead of unconditionally
+  overriding it with the value ``1.0``. (PR `#351
+  <https://github.com/mitsuba-renderer/drjit/pull/351>`__).
 - Compile the :py:func:`dr.rsqrt() <rsqrt>` operation to a faster instruction
   sequence on the LLVM backend, e.g., ``VRSQRTPS`` plus one Newton-Raphson
   iteration on Intel-compatible processors. (PR `#343
@@ -25,8 +41,13 @@ DrJit 1.1.0 (TBA)
   <drjit.llvm.PCG32.next_float64_normal>` to generate standard normal
   variates. (PR `#353
   <https://github.com/mitsuba-renderer/drjit/pull/353/files>`__).
-- Make :py:func:`dr.any() <any>`, :py:func:`dr.all() <all>`, and
-  :py:func:`dr.none() <none>` asynchronous with respect to the host. (PR `#344
+- Added the functions :py:func:`dr.zeros_like() <zeros_like>`,
+  :py:func:`dr.ones_like() <ones_like>`, and :py:func:`dr.empty_like()
+  <empty_like>`. (PR `#345
+  <https://github.com/mitsuba-renderer/drjit/pull/345/files>`__).
+- Made :py:func:`dr.any() <any>`, :py:func:`dr.all() <all>`, and
+  :py:func:`dr.none() <none>` asynchronous with respect to the host.
+  This can improve performance in some situations. (PR `#344
   <https://github.com/mitsuba-renderer/drjit/pull/344>`__).
 - Added :py:attr:`JitFlag.ForbidSynchronization` to turn synchronization into
   an error. (PR `#350 <https://github.com/mitsuba-renderer/drjit/pull/350>`__).
@@ -65,7 +86,7 @@ DrJit 1.0.2 (January 14, 2025)
 - Warning about NVIDIA drivers v565+. (commit `b5fd886 <https://github.com/mitsuba-renderer/drjit-core/commit/b5fd886dcced5b7e5b229e94e2b9e702ae6aba46>`__).
 - Support for boolean Python arguments in :py:func:`drjit.select`. (commit `d0c8811 <https://github.com/mitsuba-renderer/drjit/commit/d0c881187c9ec0def50ef3f6cde32dacd86a96b4>`__).
 - Backend refactoring: vectorized calls are now also isolated per variant. (commit `17bc707 <https://github.com/mitsuba-renderer/drjit/commit/17bc7078918662b06c6e80c3b5f3ac1d5f9f118f>`__).
-- Fixes to `dr::safe_cbrt`. (commit `2f8a3ab <https://github.com/mitsuba-renderer/drjit/commit/2f8a3ab1acbf8e187a0ef4e248d0f65c00e27e3f>`__).
+- Fixes to :cpp:func:`dr::safe_cbrt() <drjit::safe_cbrt>`. (commit `2f8a3ab <https://github.com/mitsuba-renderer/drjit/commit/2f8a3ab1acbf8e187a0ef4e248d0f65c00e27e3f>`__).
 
 DrJit 1.0.1 (November 23, 2024)
 -------------------------------
