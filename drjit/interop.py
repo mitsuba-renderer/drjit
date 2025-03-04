@@ -241,7 +241,7 @@ def pytorch_make_dual(a, b, /):
     return apply2(fn, a, b)
 
 
-def fixup_grad(a, b, target, /):
+def fixup_grad(a, b, target, /, tf_add_zero = False):
     '''
     Fix up gradients so that they are accepted by routines like ``jax.vjp``,
     ``torch.autograd.backward``, etc.
@@ -254,6 +254,9 @@ def fixup_grad(a, b, target, /):
     - replaces gradients for non-differentiable arrays with special objects
       that JAX expects.
     '''
+    if (target == 'tf') and not tf_add_zero:
+        # Nothing to do, let's save the trouble
+        return a
 
     def fn(a, b):
         # Ignore structural PyTree elements
@@ -262,6 +265,7 @@ def fixup_grad(a, b, target, /):
 
         is_jax = target == 'jax' and jax_check(a)
         is_torch = target == 'torch' and pytorch_check(a)
+        is_tf_fp = target == 'tf' and tf_add_zero and tf_fp_check(a)
 
         # JAX really doesn't like receiving gradients/tangents for non-diff.
         # elements. It wants a special array with dtype `jax.float0`. Such
@@ -272,6 +276,11 @@ def fixup_grad(a, b, target, /):
             import jax
             import numpy
             return numpy.zeros(getattr(b, 'shape', ()), dtype=jax.float0)
+
+        if is_tf_fp and tf_add_zero:
+            import tensorflow as tf
+            with tf.device(a.device):
+                return tf.zeros_like(a) + a
 
         if type(a) is type(b):
             if is_jax or (is_torch and a.dtype.is_floating_point):
@@ -449,7 +458,8 @@ class WrapADOp(dr.CustomOp):
     def backward(self):
         target = self.target
         grad_out, _ = from_drjit(self.grad_out(), target)
-        grad_out    = fixup_grad(grad_out, self.out, target)
+        # Sever link to DrJit (via DLPack `owner` field) to avoid leaks (TF only).
+        grad_out    = fixup_grad(grad_out, self.out, target, tf_add_zero=True)
 
         if target == 'torch':
             import torch
@@ -469,6 +479,7 @@ class WrapADOp(dr.CustomOp):
             import tensorflow as tf
             with tf.device(self.device): # Ensure that TF runs on the correct device
                 out = wrap_into_tf_tensor(self.out)
+
                 grad_args, grad_kwargs = self.tape.gradient(out, self.watched_vars,
                                                             output_gradients=grad_out)
         else:
@@ -642,8 +653,8 @@ def wrap(source: typing.Union[str, types.ModuleType],
 
            .. code-block:: python
 
-              @dr.wrap(source='drjit', target='jax')
-              @jtf.function(jit_compile=False) # Set to True for XLA mode
+              @dr.wrap(source='drjit', target='tf')
+              @tf.function(jit_compile=False) # Set to True for XLA mode
 
            **Limitation**: There is an issue for tf.int32 tensors which are
            wrongly placed on CPU by DLPack. This can lead to inconsistent device
@@ -744,14 +755,14 @@ def wrap(source: typing.Union[str, types.ModuleType],
     valid_types = ('drjit', 'torch', 'jax', 'tf')
 
     if source not in valid_types:
-        raise Exception("drjit.wrap(): unknown 'source' argument.")
+        raise ValueError("drjit.wrap(): unknown 'source' argument.")
 
     if target not in valid_types:
-        raise Exception("drjit.wrap(): unknown 'target' argument.")
+        raise ValueError("drjit.wrap(): unknown 'target' argument.")
 
     if source != 'drjit' and target != 'drjit':
-        raise Exception("drjit.wrap(): at least one of 'source' and "
-                        "'target' must equal \"drjit\".")
+        raise ValueError("drjit.wrap(): at least one of 'source' and "
+                         "'target' must equal \"drjit\".")
 
     if source == target:
         # Nothing to do
@@ -803,7 +814,7 @@ def wrap(source: typing.Union[str, types.ModuleType],
                     grads = from_drjit(grads, 'tf')[0]
                     # Set gradients for non-differentiable tensors to None
                     grads = [(g if dr.grad_enabled(vars[i]) else None) \
-                             for i, g in enumerate(flatten(grads)[1:])] 
+                             for i, g in enumerate(flatten(grads)[1:])]
                     return grads
                 return from_drjit(outputs, 'tf')[0], grad
 
@@ -811,4 +822,4 @@ def wrap(source: typing.Union[str, types.ModuleType],
 
         return wrapper
     else:
-        raise Exception("drjit.wrap(): unsupported combination of 'source' and 'target'.")
+        raise ValueError("drjit.wrap(): unsupported combination of 'source' and 'target'.")
