@@ -254,6 +254,9 @@ def fixup_grad(a, b, target, /):
     - replaces gradients for non-differentiable arrays with special objects
       that JAX expects.
     '''
+    if target not in ('jax', 'torch'):
+        # Nothing to do except for Jax and PyTorch
+        return a
 
     def fn(a, b):
         # Ignore structural PyTree elements
@@ -468,7 +471,11 @@ class WrapADOp(dr.CustomOp):
         elif target == 'tf':
             import tensorflow as tf
             with tf.device(self.device): # Ensure that TF runs on the correct device
+                # Sever link to DrJit (via DLPack `owner` field) to avoid leaks.
+                if grad_out is not None:
+                    grad_out = tf.zeros_like(grad_out) + grad_out
                 out = wrap_into_tf_tensor(self.out)
+
                 grad_args, grad_kwargs = self.tape.gradient(out, self.watched_vars,
                                                             output_gradients=grad_out)
         else:
@@ -642,8 +649,8 @@ def wrap(source: typing.Union[str, types.ModuleType],
 
            .. code-block:: python
 
-              @dr.wrap(source='drjit', target='jax')
-              @jtf.function(jit_compile=False) # Set to True for XLA mode
+              @dr.wrap(source='drjit', target='tf')
+              @tf.function(jit_compile=False) # Set to True for XLA mode
 
            **Limitation**: There is an issue for tf.int32 tensors which are
            wrongly placed on CPU by DLPack. This can lead to inconsistent device
@@ -744,14 +751,14 @@ def wrap(source: typing.Union[str, types.ModuleType],
     valid_types = ('drjit', 'torch', 'jax', 'tf')
 
     if source not in valid_types:
-        raise Exception("drjit.wrap(): unknown 'source' argument.")
+        raise ValueError("drjit.wrap(): unknown 'source' argument.")
 
     if target not in valid_types:
-        raise Exception("drjit.wrap(): unknown 'target' argument.")
+        raise ValueError("drjit.wrap(): unknown 'target' argument.")
 
     if source != 'drjit' and target != 'drjit':
-        raise Exception("drjit.wrap(): at least one of 'source' and "
-                        "'target' must equal \"drjit\".")
+        raise ValueError("drjit.wrap(): at least one of 'source' and "
+                         "'target' must equal \"drjit\".")
 
     if source == target:
         # Nothing to do
@@ -803,7 +810,7 @@ def wrap(source: typing.Union[str, types.ModuleType],
                     grads = from_drjit(grads, 'tf')[0]
                     # Set gradients for non-differentiable tensors to None
                     grads = [(g if dr.grad_enabled(vars[i]) else None) \
-                             for i, g in enumerate(flatten(grads)[1:])] 
+                             for i, g in enumerate(flatten(grads)[1:])]
                     return grads
                 return from_drjit(outputs, 'tf')[0], grad
 
@@ -811,4 +818,4 @@ def wrap(source: typing.Union[str, types.ModuleType],
 
         return wrapper
     else:
-        raise Exception("drjit.wrap(): unsupported combination of 'source' and 'target'.")
+        raise ValueError("drjit.wrap(): unsupported combination of 'source' and 'target'.")
