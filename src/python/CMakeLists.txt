@@ -82,6 +82,7 @@ nanobind_add_module(
   profile.h     profile.cpp
   tracker.h     tracker.cpp
   local.h       local.cpp
+  resample.h    resample.cpp
 
   # Backends
   scalar.h      scalar.cpp

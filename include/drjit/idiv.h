@@ -225,7 +225,7 @@ template <typename Value> DRJIT_INLINE Value imod(const Value &a, const divisor<
             return a & (div.div - 1);
     }
 
-    return a - div(a) * div.div;
+    return fmadd(div(a), -div.div, a);
 }
 
 template <typename Value> DRJIT_INLINE std::pair<Value, Value> idivmod(const Value &a, const divisor<scalar_t<Value>> &div) {
@@ -237,7 +237,7 @@ template <typename Value> DRJIT_INLINE std::pair<Value, Value> idivmod(const Val
             return { d, a & (div.div - 1) };
     }
 
-    return { d, a - d*div.div };
+    return { d, fmadd(d, -div.div, a) };
 }
 
 NAMESPACE_END(drjit)

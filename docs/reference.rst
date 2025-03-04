@@ -114,6 +114,7 @@ Rearranging array contents
 .. autofunction:: reshape
 .. autofunction:: tile
 .. autofunction:: repeat
+.. autofunction:: resample
 
 Mask operations
 ---------------
