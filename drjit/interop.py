@@ -241,7 +241,7 @@ def pytorch_make_dual(a, b, /):
     return apply2(fn, a, b)
 
 
-def fixup_grad(a, b, target, /):
+def fixup_grad(a, b, target, /, tf_add_zero = False):
     '''
     Fix up gradients so that they are accepted by routines like ``jax.vjp``,
     ``torch.autograd.backward``, etc.
@@ -254,8 +254,8 @@ def fixup_grad(a, b, target, /):
     - replaces gradients for non-differentiable arrays with special objects
       that JAX expects.
     '''
-    if target not in ('jax', 'torch'):
-        # Nothing to do except for Jax and PyTorch
+    if (target == 'tf') and not tf_add_zero:
+        # Nothing to do, let's save the trouble
         return a
 
     def fn(a, b):
@@ -265,6 +265,7 @@ def fixup_grad(a, b, target, /):
 
         is_jax = target == 'jax' and jax_check(a)
         is_torch = target == 'torch' and pytorch_check(a)
+        is_tf = target == 'tf' and tf_add_zero and tf_check(a)
 
         # JAX really doesn't like receiving gradients/tangents for non-diff.
         # elements. It wants a special array with dtype `jax.float0`. Such
@@ -275,6 +276,10 @@ def fixup_grad(a, b, target, /):
             import jax
             import numpy
             return numpy.zeros(getattr(b, 'shape', ()), dtype=jax.float0)
+
+        if is_tf and tf_add_zero:
+            import tensorflow as tf
+            return tf.zeros_like(a) + a
 
         if type(a) is type(b):
             if is_jax or (is_torch and a.dtype.is_floating_point):
@@ -452,7 +457,8 @@ class WrapADOp(dr.CustomOp):
     def backward(self):
         target = self.target
         grad_out, _ = from_drjit(self.grad_out(), target)
-        grad_out    = fixup_grad(grad_out, self.out, target)
+        # Sever link to DrJit (via DLPack `owner` field) to avoid leaks (TF only).
+        grad_out    = fixup_grad(grad_out, self.out, target, tf_add_zero=True)
 
         if target == 'torch':
             import torch
@@ -471,9 +477,6 @@ class WrapADOp(dr.CustomOp):
         elif target == 'tf':
             import tensorflow as tf
             with tf.device(self.device): # Ensure that TF runs on the correct device
-                # Sever link to DrJit (via DLPack `owner` field) to avoid leaks.
-                if grad_out is not None:
-                    grad_out = tf.zeros_like(grad_out) + grad_out
                 out = wrap_into_tf_tensor(self.out)
 
                 grad_args, grad_kwargs = self.tape.gradient(out, self.watched_vars,
