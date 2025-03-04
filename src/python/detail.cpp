@@ -111,13 +111,15 @@ void collect_indices(nb::handle h, dr::vector<uint64_t> &indices, bool inc_ref) 
         void operator()(nb::handle h) override {
             auto index_fn = supp(h.type()).index;
             if (index_fn)
-                operator()(index_fn(inst_ptr(h)));
+                operator()(index_fn(inst_ptr(h)), nullptr, nullptr);
         }
 
-        void operator()(uint64_t index) override {
+        uint64_t operator()(uint64_t index, const char *,
+                            const char *) override {
             if (inc_ref)
                 ad_var_inc_ref(index);
             result.push_back(index);
+            return 0;
         }
     };
 
@@ -281,6 +283,85 @@ bool leak_warnings() {
     return nb::leak_warnings() || jit_leak_warnings() || ad_leak_warnings();
 }
 
+// Have to wrap this in an unnamed namespace to prevent collisions with the
+// other declaration of ``recursion_guard``.
+namespace {
+static int recursion_level = 0;
+
+// PyTrees could theoretically include cycles. Catch infinite recursion below
+struct recursion_guard {
+    recursion_guard() {
+        if (++recursion_level >= 50) {
+            PyErr_SetString(PyExc_RecursionError, "runaway recursion detected");
+            nb::raise_python_error();
+        }
+    }
+    ~recursion_guard() { recursion_level--; }
+};
+} // namespace
+
+void traverse_py_cb_ro_impl(nb::handle self, nb::callable c) {
+    recursion_guard guard;
+
+    struct PyTraverseCallback : TraverseCallback {
+        void operator()(nb::handle h) override {
+            const ArraySupplement &s = supp(h.type());
+            auto index_fn = s.index;
+            if (index_fn){
+                if (s.is_class)
+                    operator()(
+                        index_fn(inst_ptr(h)),
+                        nb::borrow<nb::str>(nb::getattr(h, "Variant")).c_str(),
+                        nb::borrow<nb::str>(nb::getattr(h, "Domain")).c_str());
+                else
+                    operator()(index_fn(inst_ptr(h)), "", "");
+            }
+        }
+        uint64_t operator()(uint64_t index, const char *variant,
+                            const char *domain) override {
+            m_callback(index, variant, domain);
+            return 0;
+        }
+        nb::callable m_callback;
+
+        PyTraverseCallback(nb::callable c) : m_callback(c) {}
+    };
+
+    PyTraverseCallback traverse_cb(std::move(c));
+
+    auto dict = nb::borrow<nb::dict>(nb::getattr(self, "__dict__"));
+
+    for (auto value : dict.values()) {
+        jit_log(LogLevel::Warn, "%s", nb::str(dict).c_str());
+        traverse("traverse_py_cb_ro", traverse_cb, value);
+    }
+}
+
+void traverse_py_cb_rw_impl(nb::handle self, nb::callable c) {
+    recursion_guard guard;
+
+    struct PyTraverseCallback : TraverseCallback {
+        void operator()(nb::handle h) override {
+            const ArraySupplement &s = supp(h.type());
+            if (s.index)
+                s.reset_index(operator()(s.index(inst_ptr(h)), nullptr, nullptr), inst_ptr(h));
+        }
+        uint64_t operator()(uint64_t index, const char *variant, const char *domain) override {
+            return nb::cast<uint64_t>(m_callback(index, variant, domain));
+        }
+        nb::callable m_callback;
+
+        PyTraverseCallback(nb::callable c) : m_callback(c) {}
+    };
+
+    PyTraverseCallback traverse_cb(std::move(c));
+
+    auto dict = nb::borrow<nb::dict>(nb::getattr(self, "__dict__"));
+
+    for (auto value : dict.values()) {
+        traverse("traverse_py_cb_rw", traverse_cb, value);
+    }
+}
 
 void export_detail(nb::module_ &) {
     nb::module_ d = nb::module_::import_("drjit.detail");
@@ -344,6 +425,8 @@ void export_detail(nb::module_ &) {
 
     d.def("leak_warnings", &leak_warnings, doc_leak_warnings);
     d.def("set_leak_warnings", &set_leak_warnings, doc_set_leak_warnings);
+    d.def("traverse_py_cb_ro", &traverse_py_cb_ro_impl);
+    d.def("traverse_py_cb_rw", traverse_py_cb_rw_impl);
 
     trace_func_handle = d.attr("trace_func");
 }
