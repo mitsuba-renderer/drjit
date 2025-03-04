@@ -590,6 +590,7 @@ Debugging
 Profiling
 ---------
 
+.. autoclass:: profile_enable
 .. autofunction:: profile_mark
 .. autoclass:: profile_range
 

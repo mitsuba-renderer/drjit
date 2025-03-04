@@ -7247,6 +7247,26 @@
     <https://developer.nvidia.com/nsight-systems>`__. The operation is a no-op when
     no profile collection tool is attached.
 
+    Note the difference between this context manager and :py:ref:`dr.profile_enable()
+    <profile_enable>`, which enables targeted profiling of a smaller region of code
+    (as opposed to profiling the entire program).
+
+.. topic:: profile_enable
+
+    Context manager to selectively activate profiling for a region of a program.
+
+    Some profiling tools (e.g., NSight Compute) support targeted profiling of
+    smaller parts of a program. Use this context manager to locally enable profiling.
+
+    .. code-block: python
+
+       with dr.profile_enable():
+           code_to_be_profiled()
+
+    Note the difference between this context manager and
+    :py:ref:`dr.profile_range() <profile_range>`, which annotates a profiled
+    region with a label.
+
 .. topic:: ReduceMode
 
     Compilation strategy for atomic scatter-reductions.
