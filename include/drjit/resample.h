@@ -140,7 +140,7 @@ public:
      * \brief Backward derivative of \ref resample_fwd()
      *
      * This function computes the backward derivative of \ref resample_fwd().
-     * Given a the drivative of the resampled output array, it computes the
+     * Given the drivative of the resampled output array, it computes the
      * derivative of the input. The function is usable with LLVM and CUDA arrays.
      */
     template <typename Array>
