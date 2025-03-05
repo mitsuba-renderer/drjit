@@ -12,7 +12,6 @@
 #include "base.h"
 #include "../ext/nanobind/src/buffer.h"
 #include <nanobind/ndarray.h>
-#include <string>
 
 /// Check if the given metadata record is valid
 bool meta_check(ArrayMeta m) noexcept {

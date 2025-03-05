@@ -446,7 +446,8 @@ NB_NOINLINE PyObject *apply_tensor(ArrayOp op, Slot slot,
             expanded_shapes_alloc[index] = vector<size_t>(ndim, 1);
             vector<size_t>& expanded_shape = expanded_shapes_alloc[index];
             size_t offset = ndim - src_ndim;
-            memcpy(&expanded_shape[offset], shape->data(), sizeof(size_t) * src_ndim);
+            if (src_ndim)
+                memcpy(&expanded_shape[offset], shape->data(), sizeof(size_t) * src_ndim);
             return (const vector<size_t>*)&expanded_shape;
         };
 
@@ -635,20 +636,18 @@ void traverse(const char *op, TraverseCallback &tc, nb::handle h) {
         } else if (tp.is(&PyDict_Type)) {
             for (nb::handle h2 : nb::borrow<nb::dict>(h).values())
                 traverse(op, tc, h2);
-        } else {
-            if (nb::dict ds = get_drjit_struct(tp); ds.is_valid()) {
-                for (auto [k, v] : ds)
-                    traverse(op, tc, nb::getattr(h, k));
-            } else if (nb::object df = get_dataclass_fields(tp); df.is_valid()) {
-                for (nb::handle field : df) {
-                    nb::object k = field.attr(DR_STR(name));
-                    traverse(op, tc, nb::getattr(h, k));
-                }
-            } else if (nb::object cb = get_traverse_cb_ro(tp); cb.is_valid()) {
-                cb(h, nb::cpp_function([&](uint64_t index) { tc(index); }));
-            } else {
-                tc.traverse_unknown(h);
+        } else if (nb::dict ds = get_drjit_struct(tp); ds.is_valid()) {
+            for (auto [k, v] : ds)
+                traverse(op, tc, nb::getattr(h, k));
+        } else if (nb::object df = get_dataclass_fields(tp); df.is_valid()) {
+            for (nb::handle field : df) {
+                nb::object k = field.attr(DR_STR(name));
+                traverse(op, tc, nb::getattr(h, k));
             }
+        } else if (nb::object cb = get_traverse_cb_ro(tp); cb.is_valid()) {
+            cb(h, nb::cpp_function([&](uint64_t index) { tc(index); }));
+        } else {
+            tc.traverse_unknown(h);
         }
     } catch (nb::python_error &e) {
         nb::raise_from(e, PyExc_RuntimeError,
@@ -889,25 +888,23 @@ nb::object transform(const char *op, TransformCallback &tc, nb::handle h) {
             for (auto [k, v] : nb::borrow<nb::dict>(h))
                 tmp[k] = transform(op, tc, v);
             result = std::move(tmp);
-        } else {
-            if (nb::dict ds = get_drjit_struct(tp); ds.is_valid()) {
-                nb::object tmp = tp();
-                for (auto [k, v] : ds)
-                    nb::setattr(tmp, k, transform(op, tc, nb::getattr(h, k)));
-                result = std::move(tmp);
-            } else if (nb::object df = get_dataclass_fields(tp); df.is_valid()) {
-                nb::object tmp = nb::dict();
-                for (nb::handle field : df) {
-                    nb::object k = field.attr(DR_STR(name));
-                    tmp[k] = transform(op, tc, nb::getattr(h, k));
-                }
-                result = tp(**tmp);
-            } else if (nb::object cb = get_traverse_cb_rw(tp); cb.is_valid()) {
-                cb(h, nb::cpp_function([&](uint64_t index) { return tc(index); }));
-                result = nb::borrow(h);
-            } else if (!result.is_valid()) {
-               result = tc.transform_unknown(h);
+        } else if (nb::dict ds = get_drjit_struct(tp); ds.is_valid()) {
+            nb::object tmp = tp();
+            for (auto [k, v] : ds)
+                nb::setattr(tmp, k, transform(op, tc, nb::getattr(h, k)));
+            result = std::move(tmp);
+        } else if (nb::object df = get_dataclass_fields(tp); df.is_valid()) {
+            nb::object tmp = nb::dict();
+            for (nb::handle field : df) {
+                nb::object k = field.attr(DR_STR(name));
+                tmp[k] = transform(op, tc, nb::getattr(h, k));
             }
+            result = tp(**tmp);
+        } else if (nb::object cb = get_traverse_cb_rw(tp); cb.is_valid()) {
+            cb(h, nb::cpp_function([&](uint64_t index) { return tc(index); }));
+            result = nb::borrow(h);
+        } else if (!result.is_valid()) {
+           result = tc.transform_unknown(h);
         }
         return result;
     } catch (nb::python_error &e) {

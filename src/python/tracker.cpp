@@ -17,6 +17,7 @@
 #include "base.h"
 #include "local.h"
 #include "shape.h"
+#include "coop_vec.h"
 #include <string_view>
 #include <drjit/autodiff.h>
 #include <tsl/robin_map.h>
@@ -332,6 +333,8 @@ bool VariableTracker::Impl::traverse(Context &ctx, nb::handle h) {
                   ctx.label.c_str(), nb::inst_name(prev).c_str(),
                   nb::type_name(tp).c_str());
 
+    // Were there any external changes to sub-PyTree variable indices (As
+    // opposed to changes done by the VariableTracker)
     bool changed = false;
 
     if (is_drjit_type(tp)) {
@@ -402,8 +405,7 @@ bool VariableTracker::Impl::traverse(Context &ctx, nb::handle h) {
             VarInfo vi = jit_set_backend((uint32_t) idx);
 
             if (new_variable) {
-                if (!v->index_orig)
-                    v->index_orig = ad_var_inc_ref(idx);
+                v->index_orig = ad_var_inc_ref(idx);
                 v->index = ad_var_inc_ref(idx);
                 v->size = vi.size;
             } else {
@@ -521,6 +523,41 @@ bool VariableTracker::Impl::traverse(Context &ctx, nb::handle h) {
             ScopedAppendLabel guard(ctx, "[", nb::repr(kv[0]).c_str(), "]");
             changed |= traverse(ctx, kv[1]);
         }
+    } else if (tp.is(coop_vector_type)) {
+        CoopVec *vec = nb::cast<CoopVec *>(h, false);
+        uint32_t idx = vec->m_index;
+        size_t size = size_valid(v, ctx.label, h, vec->m_size);
+
+        if (new_variable) {
+            v->index_orig = ad_var_inc_ref(idx);
+            v->index = ad_var_inc_ref(idx);
+        } else {
+            changed = idx != v->index;
+            if (changed) {
+                uint64_t old = v->index;
+                v->index = ad_var_inc_ref(idx);
+                ad_var_dec_ref(old);
+            }
+        }
+
+        if (!ctx.write && !changed && !new_variable) {
+            for (size_t i = 0; i < size; ++i) {
+                ScopedAppendLabel guard(ctx, "[", i, "]");
+                changed |= traverse(ctx, state.find(ctx.label)->second.value);
+            }
+        } else {
+            nb::list l(h), r;
+            for (size_t i = 0; i < size; ++i) {
+                ScopedAppendLabel guard(ctx, "[", i, "]");
+                changed |= traverse(ctx, l[i]);
+            }
+            if (ctx.write) {
+                *vec = CoopVec(l);
+                ad_var_inc_ref(vec->m_index);
+                ad_var_dec_ref(v->index);
+                v->index = vec->m_index;
+            }
+        }
     } else {
         nb::object traverse_cb = nb::getattr(
             h, ctx.write ? DR_STR(_traverse_1_cb_rw) : DR_STR(_traverse_1_cb_ro),
@@ -631,7 +668,7 @@ void VariableTracker::verify_size(size_t size) {
             strcmp(jit_var_kind_name((uint32_t) v.index), "loop_phi") == 0)
             continue;
 
-        size_t size_2 = jit_var_size((uint32_t)v.index);
+        size_t size_2 = jit_var_size((uint32_t) v.index);
 
         if (size != size_2 && size != 1 && size_2 != 1 && !jit_var_is_dirty((uint32_t)v.index))
             nb::raise("this operation processes arrays of size %zu, while "
@@ -730,6 +767,11 @@ nb::object VariableTracker::Impl::restore(dr::string &label) {
             ScopedAppendLabel guard(label, "[", nb::repr(k).c_str(), "]");
             d[k] = restore(label);
         }
+    } else if (tp.is(coop_vector_type)) {
+        CoopVec *vec = nb::cast<CoopVec *>(value, false);
+        ad_var_inc_ref(v->index_orig);
+        ad_var_dec_ref(vec->m_index);
+        vec->m_index = v->index_orig;
     } else {
         if (nb::dict ds = get_drjit_struct(tp); ds.is_valid()) {
             for (auto [k, _] : ds) {
@@ -847,48 +889,58 @@ std::pair<nb::object, bool> VariableTracker::Impl::rebuild(dr::string &label) {
                 value = tmp;
             }
         }
-    } else {
-        if (nb::dict ds = get_drjit_struct(tp); ds.is_valid()) {
-            nb::object tmp = tp();
-            for (auto [k, _] : ds) {
-                ScopedAppendLabel guard(label, ".", nb::str(k).c_str());
-                auto [o, n] = rebuild(label);
-                nb::setattr(tmp, k, o);
-                new_object |= n;
-            }
-            if (new_object) {
-                if (mutate) {
-                    for (nb::handle k : ds.keys())
-                        nb::setattr(value, k, nb::getattr(tmp, k));
-                    new_object = false;
-                } else {
-                    value = tmp;
-                }
-            }
-        } else if (nb::object df = get_dataclass_fields(tp); df.is_valid()) {
-            nb::dict tmp;
-            for (auto field : df) {
-                nb::object k = field.attr(DR_STR(name));
-                ScopedAppendLabel guard(label, ".", nb::str(k).c_str());
-                auto [o, n] = rebuild(label);
-                tmp[k] = o;
-                new_object |= n;
-            }
-            if (new_object) {
-                if (mutate) {
-                    for (auto field : df) {
-                        nb::object k = field.attr(DR_STR(name));
-                        nb::setattr(value, k, tmp[k]);
-                    }
-                    new_object = false;
-                } else {
-                    value = tp(**tmp);
-                }
-            }
-        } else if (!value.is(v->value)) {
-            value = v->value;
-            new_object = true;
+    } else if (tp.is(coop_vector_type)) {
+        size_t size = size_valid(v, label, value, nb::len(value));
+        nb::list tmp;
+
+        for (size_t i = 0; i < size; ++i) {
+            ScopedAppendLabel guard(label, "[", i, "]");
+            auto [o, n] = rebuild(label);
+            tmp.append(o);
         }
+
+        value = nb::cast(CoopVec(tmp));
+        new_object = true;
+    } else if (nb::dict ds = get_drjit_struct(tp); ds.is_valid()) {
+        nb::object tmp = tp();
+        for (auto [k, _] : ds) {
+            ScopedAppendLabel guard(label, ".", nb::str(k).c_str());
+            auto [o, n] = rebuild(label);
+            nb::setattr(tmp, k, o);
+            new_object |= n;
+        }
+        if (new_object) {
+            if (mutate) {
+                for (nb::handle k : ds.keys())
+                    nb::setattr(value, k, nb::getattr(tmp, k));
+                new_object = false;
+            } else {
+                value = tmp;
+            }
+        }
+    } else if (nb::object df = get_dataclass_fields(tp); df.is_valid()) {
+        nb::dict tmp;
+        for (auto field : df) {
+            nb::object k = field.attr(DR_STR(name));
+            ScopedAppendLabel guard(label, ".", nb::str(k).c_str());
+            auto [o, n] = rebuild(label);
+            tmp[k] = o;
+            new_object |= n;
+        }
+        if (new_object) {
+            if (mutate) {
+                for (auto field : df) {
+                    nb::object k = field.attr(DR_STR(name));
+                    nb::setattr(value, k, tmp[k]);
+                }
+                new_object = false;
+            } else {
+                value = tp(**tmp);
+            }
+        }
+    } else if (!value.is(v->value)) {
+        value = v->value;
+        new_object = true;
     }
 
     return { value, new_object };
