@@ -310,6 +310,13 @@ void export_detail(nb::module_ &) {
               return nb::str("{}.{}.{}").format(major, minor, patch);
           })
 
+     .def("cuda_version",
+          []() {
+              int major, minor;
+              jit_cuda_version(&major, &minor);
+              return nb::str("{}.{}").format(major, minor);
+          })
+
      .def("trace_func", &trace_func, "frame"_a, "event"_a,
           "arg"_a = nb::none())
 

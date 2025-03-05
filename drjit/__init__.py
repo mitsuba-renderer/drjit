@@ -334,6 +334,26 @@ def lerp(a, b, t):
     return fma(b, t, fma(a, -t, a));
 
 
+def relu(x: T, /) -> T:
+    r"""
+    Rectified linear unit activation function.
+
+    This function computes
+
+    .. math::
+
+       \mathrm{relu}(x) = \mathrm{max}\{x, 0\}
+
+    Args:
+        x (int | float | drjit.ArrayBase | drjit.CoopVec): A Python or Dr.Jit type
+
+    Returns:
+        int | float | drjit.ArrayBase | drjit.CoopVec: The activated input
+    """
+
+    return maximum(t, 0)
+
+
 # -------------------------------------------------------------------
 #     Deprecated wrappers for old Dr.Jit operations
 # -------------------------------------------------------------------

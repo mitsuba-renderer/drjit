@@ -18,6 +18,7 @@
 #include "shape.h"
 #include "dlpack.h"
 #include "init.h"
+#include "coop_vec.h"
 #include <algorithm>
 
 /// Forward declaration
@@ -645,6 +646,26 @@ static void ndarray_keep_alive(JitBackend backend, uint32_t index, nb::detail::n
 nb::object full_alt(nb::type_object dtype, nb::handle value, size_t size);
 nb::object empty_alt(nb::type_object dtype, size_t size);
 
+nb::object view_to_tensor(nb::handle h, dr::vector<size_t> &shape) {
+    MatrixView &view = nb::cast<MatrixView &>(nb::handle(h));
+    if (view.transpose)
+        nb::raise("The view is transposed. Conversion into tensor format still "
+                  "needs to be implemented.");
+
+    if (view.descr.layout != MatrixLayout::RowMajor)
+        nb::raise("This tensor is in an inference/training-optimal layout. You "
+                  "must first unpack it into a row-major representaiton.");
+
+    if (view.descr.stride != view.descr.cols)
+        nb::raise("Unsupported row stride!");
+
+    shape.push_back(view.descr.rows);
+    shape.push_back(view.descr.cols);
+
+    return view.buffer[nb::slice(view.descr.offset,
+                                 view.descr.offset + view.descr.size, 1u)];
+}
+
 int tp_init_tensor(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
     PyTypeObject *self_tp = Py_TYPE(self);
 
@@ -690,6 +711,8 @@ int tp_init_tensor(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
                 // Try to construct from an instance created by another
                 // array programming framework
                 flat = import_ndarray(s, array, &shape_vec);
+            } else if (nb::isinstance<MatrixView>(nb::handle(array))) {
+                flat = view_to_tensor(array, shape_vec);
             } else {
                 // Infer the shape of an arbitrary data structure & flatten it
                 VarType vt = (VarType) s.type;
