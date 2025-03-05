@@ -22,8 +22,8 @@ struct Resampler::Impl {
     uint32_t source_res;
     uint32_t target_res;
     uint32_t taps;
-    unique_ptr<uint32_t> offset;
-    unique_ptr<double> weights;
+    unique_ptr<uint32_t[]> offset;
+    unique_ptr<double[]> weights;
     mutable std::any offset_cache;
     mutable std::any weights_cache;
 
@@ -85,7 +85,7 @@ struct Resampler::Impl {
         const T *r = std::any_cast<T>(&weights_cache);
         if (!r) {
             using Scalar = scalar_t<T>;
-            unique_ptr<Scalar> weights_tmp;
+            unique_ptr<Scalar[]> weights_tmp;
             size_t size = taps * target_res;
             const Scalar *weights_p;
             if constexpr (std::is_same_v<Scalar, double>) {
