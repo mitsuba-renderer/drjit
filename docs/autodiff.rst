@@ -427,8 +427,8 @@ Dr.Jit how a particular operation should be differentiated. Reasons for this
 may include:
 
 - The automatic differentiation backend cannot keep track of computation
-  performed outside of Dr.Jit (e.g. using a highly optimized :ref:`CUDA kernel
-  <custom-cuda>`). In this case, review the section on :ref:`interoperability
+  performed outside of Dr.Jit (e.g. using custom CUDA kernels). In this case,
+  review the section on :ref:`interoperability
   <interop>`, since it presents a potentially simpler solution.
 
 - The derivative may admit a simplified analytic expression that is superior to

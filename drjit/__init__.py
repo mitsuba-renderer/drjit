@@ -2269,7 +2269,7 @@ def upsample(t, shape=None, scale_factor=None):
 
 _rand_seed : int = 0
 
-def seed(value: int):
+def seed(value: int) -> None:
     """
     Reset the seed value that is used for pseudorandom number generation.
 
@@ -2647,18 +2647,20 @@ def assert_equal(
         **kwargs,
     )
 
-def srgb_to_linear(x: ArrayT, clip_range: bool = True) -> ArrayT:
+_clip = clip
+
+def srgb_to_linear(x: ArrayT, clip: bool = True) -> ArrayT:
     """
     Convert a sRGB gamma-corrected intensity value on the interval [0, 1] into
     a linear intensity value on the interval [0, 1].
 
     Values outside of the range [0, 1] are clipped by default. You may specify
-    `clip_range=False` to avoid this step if your data is already guranteed to be in
+    `clip=False` to avoid this step if your data is already guranteed to be in
     this range.
     """
 
-    if clip_range:
-        x = clip(x, 0, 1)
+    if clip:
+        x = _clip(x, 0, 1)
 
     return select(
         x < 0.04045,
@@ -2666,18 +2668,18 @@ def srgb_to_linear(x: ArrayT, clip_range: bool = True) -> ArrayT:
         fma(x, 1 / 1.055, 0.055 / 1.055) ** 2.4
     )
 
-def linear_to_srgb(x: ArrayT, clip_range: bool = True) -> ArrayT:
+def linear_to_srgb(x: ArrayT, clip: bool = True) -> ArrayT:
     """
     Convert a linear intensity value on the interval [0, 1] to into a sRGB
     value by applying the underlying gamma correction curve.
 
     Values outside of the range [0, 1] are clipped by default. You may specify
-    `clip_range=False` to avoid this step if your data is already guranteed to be in
+    `clip=False` to avoid this step if your data is already guranteed to be in
     this range.
     """
 
-    if clip_range:
-        x = clip(x, 0, 1)
+    if clip:
+        x = _clip(x, 0, 1)
 
     return select(
         x < 0.0031308,

@@ -307,7 +307,14 @@ void export_detail(nb::module_ &) {
           []() {
               int major, minor, patch;
               jit_llvm_version(&major, &minor, &patch);
-              return nb::str("{}.{}.{}").format(major, minor, patch);
+              return nb::make_tuple(major, minor, patch);
+          })
+
+     .def("cuda_version",
+          []() {
+              int major, minor;
+              jit_cuda_version(&major, &minor);
+              return nb::make_tuple(major, minor);
           })
 
      .def("trace_func", &trace_func, "frame"_a, "event"_a,

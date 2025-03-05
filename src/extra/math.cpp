@@ -93,7 +93,6 @@ DEFINE_MATH_OP(acos)
 DEFINE_MATH_OP(atan)
 DEFINE_MATH_OP(sinh)
 DEFINE_MATH_OP(cosh)
-DEFINE_MATH_OP(tanh)
 DEFINE_MATH_OP(asinh)
 DEFINE_MATH_OP(acosh)
 DEFINE_MATH_OP(atanh)
@@ -233,6 +232,26 @@ DRJIT_EXTRA_EXPORT uint32_t jit_var_cos(uint32_t i0) {
             return dr::cos<Float64, false>(Float64::borrow(i0)).release();
         default:
             jit_fail("jit_var_cos(): invalid operand!");
+            return 0;
+    }
+}
+
+DRJIT_EXTRA_EXPORT uint32_t jit_var_tanh(uint32_t i0) {
+    VarInfo info = jit_set_backend(i0);
+
+    switch (info.type) {
+        case VarType::Float16:
+            return dr::tanh<Float16, false>(Float16::borrow(i0)).release();
+
+        case VarType::Float32:
+            if (info.backend == JitBackend::CUDA)
+                return jit_var_tanh_intrinsic(i0);
+            return dr::tanh<Float32, false>(Float32::borrow(i0)).release();
+
+        case VarType::Float64:
+            return dr::tanh<Float64, false>(Float64::borrow(i0)).release();
+        default:
+            jit_fail("jit_var_tanh(): invalid operand!");
             return 0;
     }
 }

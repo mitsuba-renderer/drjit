@@ -40,6 +40,7 @@
 #include "tracker.h"
 #include "local.h"
 #include "resample.h"
+#include "coop_vec.h"
 
 static int active_backend = -1;
 
@@ -228,6 +229,7 @@ NB_MODULE(_drjit_ext, m_) {
     jit_init_async(backends);
 
     export_bind(detail);
+    export_coop_vec(m);
     export_base(m);
     export_init(m);
     export_shape(m);

@@ -54,7 +54,7 @@ void bind_pcg32(nb::module_ &m) {
                  }
 
                  if (!key)
-                     nb::raise_type_error("Invalid 'dtype'");
+                     nb::raise_type_error("PCG32.next_float(): invalid 'dtype'");
 
                  auto &&fn = self.attr(key);
                  return !mask.is(Py_True) ? fn(mask) : fn();

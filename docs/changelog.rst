@@ -348,7 +348,7 @@ Here is what's new:
 
 
 ⚠️ Compatibility ⚠️
-------------------
+-------------------
 
 - **Symbolic loop syntax**: the old "recorded loop" syntax is no longer
   supported. Existing code will need adjustments to use

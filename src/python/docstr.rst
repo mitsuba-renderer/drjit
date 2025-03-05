@@ -579,7 +579,7 @@
     Returns:
         object: The result of the operation ``arg*arg``
 
-.. topic:: pow
+.. topic:: power
 
     Raise the first argument to a power specified via the second argument.
 
@@ -591,7 +591,7 @@
     reduces operation to a sequence of multiplies and adds (potentially
     followed by a reciprocation operation when ``arg1`` is negative).
 
-    The general case involves recursive use of the identity ``pow(arg0, arg1) =
+    The general case involves recursive use of the identity ``power(arg0, arg1) =
     exp2(log2(arg0) * arg1)``.
 
     There is no difference between using :py:func:`drjit.power()` and the builtin
@@ -2108,6 +2108,10 @@
 
     This function generates an evenly spaced floating point sequence of size
     ``num`` covering the interval [``start``, ``stop``].
+
+    When half-precision output is requested, the function first computes an
+    intermediate result in 32-bit precision and then casts it to 16 bit to
+    limit the effect of rounding errors.
 
     Args:
         dtype (type): Desired Dr.Jit array type. The ``dtype`` must refer to a
@@ -7311,7 +7315,7 @@
     <https://developer.nvidia.com/nsight-systems>`__. The operation is a no-op when
     no profile collection tool is attached.
 
-    Note the difference between this context manager and :py:ref:`dr.profile_enable()
+    Note the difference between this context manager and :py:func:`dr.profile_enable()
     <profile_enable>`, which enables targeted profiling of a smaller region of code
     (as opposed to profiling the entire program).
 
@@ -7328,7 +7332,7 @@
            code_to_be_profiled()
 
     Note the difference between this context manager and
-    :py:ref:`dr.profile_range() <profile_range>`, which annotates a profiled
+    :py:func:`dr.profile_range() <profile_range>`, which annotates a profiled
     region with a label.
 
 .. topic:: ReduceMode
@@ -7503,7 +7507,7 @@
 
           >>> from drjit.llvm.ad import TensorXf
           >>> value = dr.arange(TensorXf, 6)
-          >>> dr.reshape(dtype=TensorXf, value=value, shape=(3, -1))
+          >>> dr.reshape(value, (3, -1))
           [[0, 1]
            [2, 3]
            [4, 5]]
@@ -7511,16 +7515,17 @@
     2. **Reshaping nested arrays**: The function can ravel and unravel nested
        arrays (which have some static dimensions). This provides a high-level
        interface that subsumes the functions :py:func:`drjit.ravel` and
-       :py:func:`drjit.unravel`.
+       :py:func:`drjit.unravel`. In this case, the target ``dtype`` must be
+       specified:
 
        .. code-block:: pycon
 
           >>> from drjit.llvm.ad import Array2f, Array3f
           >>> value = Array2f([1, 2, 3], [4, 5, 6])
-          >>> dr.reshape(dtype=Array3f, value=value, shape=(3, -1), order='C')
+          >>> dr.reshape(Array3f, value, shape=(3, -1), order='C')
           [[1, 4, 2],
            [5, 3, 6]]
-          >>> dr.reshape(dtype=Array3f, value=value, shape=(3, -1), order='F')
+          >>> dr.reshape(Array3f, value, shape=(3, -1), order='F')
           [[1, 3, 5],
            [2, 4, 6]]
 
@@ -7604,11 +7609,12 @@
                                         f'{size} elements in a queue of size {queue_size}')
 
                  # Reshape the queue and re-run the loop
-                 state = dr.reshape(dtype=type(state), value=queue, shape=size, shrink=True)
+                 state = dr.reshape(queue, shape=size, shrink=True)
 
     Args:
         dtype (type): Desired output type of the reshaped array. This could
           equal ``type(value)`` or refer to an entirely different array type.
+          Must only be specified if the target dtype is different.
 
         value (object): An arbitrary Dr.Jit array, tensor, or :ref:`PyTree
           <pytrees>`. The function returns unknown objects of other types
@@ -8104,3 +8110,216 @@
 .. topic:: leak_warnings
 
    Query whether leak warnings are enabled. See :py:func:`drjit.detail.set_leak_warnings()`.
+
+.. topic:: step
+
+   Step function.
+
+   This function generates a step function by comparing ``arg0`` to ``arg1``.
+   The function is equivalent to
+
+   .. code-block:: python
+
+      dr.select(
+          arg0 < arg1,
+          0,        # if arg0 <  arg1
+          1,        # if arg1 >= arg1
+      )
+
+    Args:
+        arg0 (object): A Dr.Jit array/tensor or Python arithmetic type
+
+        arg1 (object): A Dr.Jit array/tensor or Python arithmetic type
+
+    Returns:
+        object: The computed array as described above
+
+.. topic:: nn_CoopVec
+
+   A *cooperative vector* is a dynamically-sized container of elements of a
+   consistent type. It admits both floating point and integer 1D arrays as
+   elements (e.g., :py:class:`drjit.cuda.Float16`,
+   :py:class:`drjit.llvm.UInt32`). Cooperative vectors primarily exist to
+   enable the compilation of expressions that make use of matrix-vector
+   multiplication.
+
+   Seen from a high level, cooperative vectors resemble nested array types,
+   such as as :py:class:`drjit.cuda.ArrayXf16`. A variety of conversions
+   between cooperative vectors and regular Dr.Jit arrays are possible.
+
+   .. code-block:: python
+
+      # Pack individual components into a cooperative vector
+      vec = drjit.nn.CoopVec(x, y, z)
+
+      # Unpack components
+      x, y, z = vec
+
+      # Unpack directly into 3D array
+      xyz = Array3f(vec)
+
+      # Convert a 3D array and a 2D array into a 5D cooperative vector
+      a1: Array3f = ...
+      a2: Array2f = ...
+      vec = drjit.nn.CoopVec(a1, a2)
+
+   The main difference between regular Dr.Jit arrays and cooperative vectors is
+   that they *do not permit indexed element access*. For example, the following
+   operation raises an Exception:
+
+   .. code-block:: pycon
+
+      >>> vec = drjit.nn.CoopVec(x, y, z)
+      >>> vec[1]
+      Traceback (most recent call last):
+        File "<stdin>", line 1, in <module>
+      TypeError: 'drjit.nn.CoopVec' object is not subscriptable
+
+   The compilation stack may arbitrarily redistribute the elements of a
+   cooperative vector across threads for efficiency (this is what
+   *cooperative* refers to). Indexed access to a cooperative vector's elements
+   would interfere with such optimizations.
+
+   To unpack a cooperative vector into its components, use an expression
+   like ``x, y, z = vec``, ``ArrayXf(vec)``, or ``list(vec)``.
+
+.. topic:: nn_CoopVec_init
+
+   The constructor accepts a variable number of arguments including Dr.Jit
+   arrays, scalar Python integers and floating point values, and :ref:`PyTrees
+   <pytrees>`. It flattens this input into a list of vector components.
+
+   At least one Jit-compiled array must be provided as input so that Dr.Jit can
+   infer the cooperative vector's element type. An exception will be raised if
+   the input contains Dr.Jit arrays of inconsistent scalar types (e.g.,
+   :py:class:`drjit.cuda.Array2f` and :py:class:`drjit.cuda.UInt`).
+
+.. topic:: nn_MatrixView
+
+   The :py:class:`drjit.nn.MatrixView` provides pointer into a buffer along with
+   shape and type metadata.
+
+   Dr.Jit uses views to tightly pack sequences of matrices and bias vectors
+   into a joint buffer, and to preserve information about the underlying data
+   type and layout. The :py:func:`__getitem__` function can be used to slice a
+   view into smaller sub-blocks.
+
+   The typical process is to pack a PyTree of weight and bias vectors via
+   :py:func:`drjit.pack()` into an inference or training-optimal
+   representation. The returned views can then be passed to
+   :py:func:`drjit.nn.matvec()`.
+
+.. topic:: nn_MatrixView_dtype
+
+   Scalar type underlying the view.
+
+.. topic:: nn_MatrixView_shape
+
+   Number of rows/columns. Vectors are stored as matrices with one column.
+
+.. topic:: nn_MatrixView_layout
+
+   One of several possible matrix layouts (training/inference-optimal and
+   row-major).
+
+.. topic:: nn_MatrixView_stride
+
+   Row stride (in # of elements)
+
+.. topic:: nn_MatrixView_size
+
+   Total number of elements
+
+.. topic:: nn_MatrixView_offset
+
+   Offset of the matrix data within ``buffer`` (counted in # of elements)
+
+.. topic:: nn_MatrixView_transpose
+
+   The ``MatrixView.T`` property flips this flag (all other
+   values stay unchanged).
+
+.. topic:: nn_MatrixView_buffer
+
+   The underlying buffer, which may contain additional matrices/vectors
+   besides the data referenced by the :py:class:`MatrixView`.
+
+.. topic:: nn_view
+
+   Convert a Dr.Jit array or tensor into a *view*.
+
+   This function simply returns a view of the original tensor without
+   transforming the underlying representation. This is useful to
+
+   - Use :py:func:`drjit.nn.matvec` with a row-major matrix layout (which,
+     however, is not recommended, since this can be significantly slower
+     compared to matrices in inference/training-optimal layouts).
+
+   - Slice a larger matrix into sub-blocks before passing them to
+     :py:func:`drjit.nn.pack` (which also accepts *views* as inputs).
+     This is useful when several matrices are already packed into a single
+     matrix (which is, however, still in row-major layout). They can then be
+     directly re-packed into optimal layouts without performing further
+     unnecessary copies.
+
+.. topic:: nn_pack
+
+   A training-optimal layout must be used used if the program *backpropagates*
+   (as in :py:func:`dr.backward*() <drjit.backward>`) gradients through
+   matrix-vector products. Inference (primal evaluation) and forward derivative
+   propagation (as in :py:func:`dr.forward*() <drjit.forward>`) does not
+   require a training-optimal layout.
+
+   If the input matrices are already packed in a row-major layout, call
+   :py:func:`dr.nn.view() <drjit.nn.view>` to create an efficient reference
+   and then pass slices of the view to :py:func:`dr.nn.pack()
+   <drjit.nn.pack>`. This avoids additional copies.
+
+   .. code-block::
+
+      mat: TensorXf = ...
+      mat_view = dr.nn.view(mat)
+
+      A1_view, A2_view = dr.nn.pack(
+          mat_view[0:32, :],
+          mat_view[32:64, :]
+      )
+
+.. topic:: nn_unpack
+
+   The function :py:func:`dr.nn.unpack() <drjit.nn.unpack>` transforms a
+   sequence (or :ref:`PyTree <pytrees>`) of vectors and optimal-layout matrices
+   back into row-major layout.
+
+   .. code-block:: python
+
+      A_out, b_out = dr.nn.unpack(A_opt, b_opt)
+
+   Note that the output of this function are (row-major) *views* into a shared
+   buffer. Each view holds a reference to the shared buffer. Views can be
+   converted back into regular tensors:
+
+   .. code-block:: python
+
+      A = TensorXf16(A)
+
+.. topic:: nn_matvec
+
+   Evaluate a matrix-vector multiplication involving a cooperative vector.
+
+   This function takes a *matrix view* ``A`` (see :py:func:`drjit.nn.pack`
+   and :py:func:`drjit.nn.view` for details on views) and a *cooperative
+   vector* ``x``. It then computes the associated matrix-vector product and
+   returns it in the form of a new cooperative vector (potentially with a
+   different size).
+
+   The function can optionally apply an additive bias (i.e., to evaluate ``A@x
+   + b``). This bias vector ``b`` should also be specified as a view.
+
+   Specify ``tranpose=True`` to multiply by the transpose of the matrix ``A``.
+   On the CUDA/OptiX backend, this feature requires that ``A`` is in inference
+   or training-optimal layout.
+
+.. topic:: nn_cast
+
+   Cast the numeric type underlying a cooperative vector
