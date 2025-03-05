@@ -1261,7 +1261,7 @@ void export_base(nb::module_ &m) {
 
     m.def("power",
           [](Py_ssize_t arg0, Py_ssize_t arg1) { return std::pow(arg0, arg1); },
-          doc_pow);
+          doc_power);
 
     m.def("power", [](double arg0, double arg1) { return std::pow(arg0, arg1); });
 

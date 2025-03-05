@@ -43,6 +43,7 @@
  */
 
 #include "common.h"
+#include "drjit-core/jit.h"
 #include <drjit-core/half.h>
 #include <drjit/jit.h>
 #include <drjit/math.h>
@@ -140,11 +141,37 @@ DRJIT_NOINLINE JitVar scalar(JitBackend backend, VarType type, double value) {
     }
 }
 
+/// As above, but for cooperative vectors
+DRJIT_NOINLINE JitVar scalar_coop_vec(JitBackend backend, VarType type, double value, uint32_t length) {
+    switch (type) {
+        case VarType::Float16: {
+            drjit::half v = (drjit::half) value;
+            return JitVar::steal(jit_coop_vec_literal(backend, VarType::Float16, &v, 1, length));
+        }
+        case VarType::Float32: {
+            float v = (float) value;
+            return JitVar::steal(jit_coop_vec_literal(backend, VarType::Float32, &v, 1, length));
+        }
+        case VarType::Float64: {
+            return JitVar::steal(jit_coop_vec_literal(backend, VarType::Float64, &value, 1, length));
+        }
+        default:
+            ad_fail("scalar_coop_vec(): unsupported AD scalar type");
+            return JitVar();
+    }
+}
+
 /// Create a scalar Jit variable with the same floating point type and backend
 /// as an already existing variable with the provided ``index``
 DRJIT_INLINE JitVar scalar(Index index, double value) {
     VarInfo info = jit_set_backend(jit_index(index));
     return scalar(info.backend, info.type, value);
+}
+
+/// As above, but for cooperative vectors
+DRJIT_INLINE JitVar scalar_coop_vec(Index index, double value) {
+    VarInfo info = jit_set_backend(jit_index(index));
+    return scalar_coop_vec(info.backend, info.type, value, jit_coop_vec_length(index));
 }
 
 // ==========================================================================
@@ -216,7 +243,10 @@ enum VariableFlags : uint8_t {
     Visited = 1 << 4,
 
     /// Is this variable on an iteration boundary of an evaluated loop?
-    LoopBoundary = 1 << 5
+    LoopBoundary = 1 << 5,
+
+    /// Does this variable store a cooperative vector?
+    CoopVec = 1 << 6
 };
 
 /**
@@ -311,6 +341,15 @@ struct Variable {
     void mul_accum(const JitVar &v1, const JitVar &v2, size_t src_size) {
         JitVar zero = scalar(v1.index(), 0.f), weight;
 
+        if (unlikely(flags & CoopVec)) {
+            // Specialized gradient propagation for cooperative vectors
+            if (grad.valid())
+                grad = JitVar::steal(jit_coop_vec_ternary_op(JitOp::Fma, v1.index(), v2.index(), grad.index()));
+            else
+                grad = JitVar::steal(jit_coop_vec_binary_op(JitOp::Mul, v1.index(), v2.index()));
+            return;
+        }
+
         // Elide the zero check if ``v2`` is known not to be NaN/infinite
         if (jit_var_is_finite_literal(v2.index()))
             weight = v2;
@@ -353,6 +392,15 @@ struct Variable {
      * optimizations.
      */
     void accum(const JitVar& v, size_t src_size) {
+        if (unlikely(flags & CoopVec)) {
+            // Specialized gradient propagation for cooperative vectors
+            if (grad.valid())
+                grad = JitVar::steal(jit_coop_vec_binary_op(JitOp::Add, v.index(), grad.index()));
+            else
+                grad = v;
+            return;
+        }
+
         if (size == 1 && src_size != 1) {
             /* When this variable is scalar (size == 1) and the source is
                not (src_size != 1), the gradient must be reduced to a single
@@ -857,6 +905,9 @@ static void ad_propagate_size(Variable *v) {
     }
 }
 
+/// A tag to signal cooperative weights in the Arg() constructor
+struct coop { };
+
 // This data structure encodes an ordinary dependence on a function argument
 struct Arg {
     Arg() = default;
@@ -866,6 +917,9 @@ struct Arg {
 
     Arg(Index index, double value)
         : ad_index(::ad_index(index)), weight(scalar(index, value)) { }
+
+    Arg(Index index, double value, coop)
+        : ad_index(::ad_index(index)), weight(scalar_coop_vec(index, value)) { }
 
     Arg(Arg &&a) = default;
     Arg(const Arg &a) = delete;
@@ -1016,6 +1070,8 @@ DRJIT_NOINLINE Index ad_var_new_impl(const char *label, JitVar &&result,
 
     auto [ad_index, var] = ad_var_new(info.backend, info.size, info.type,
                                       symbolic, reuse_indices, label);
+    if (info.is_coop_vec)
+        var->flags |= VariableFlags::CoopVec;
     const char *tname = jit_type_name(info.type);
 
     if constexpr (N == 0) {
@@ -2918,8 +2974,7 @@ Index ad_var_map_get(Index index) {
 /// Potentially use ad_var_map_get to rewrite the source or target of a
 /// gatter/scatter operation
 static Index ad_var_memop_remap(Index index, bool input) {
-    uint32_t flags = jit_flags();
-    if (flags & (uint32_t) JitFlag::SymbolicScope) {
+    if (jit_flags() & (uint32_t) JitFlag::SymbolicScope) {
         index = ad_var_map_get(index);
 
         // Add to set of implicit variable dependencies
@@ -3047,8 +3102,8 @@ private:
 
 void ad_var_gather_packet(size_t n, Index source, JitIndex offset,
                           JitIndex mask, uint64_t *out, ReduceMode mode) {
-    uint32_t *out2 = (uint32_t *) alloca(sizeof(uint32_t) * n);
-    jit_var_gather_packet(n, jit_index(source), offset, mask, out2);
+    uint32_t *tmp = (uint32_t *) alloca(sizeof(uint32_t) * n);
+    jit_var_gather_packet(n, jit_index(source), offset, mask, tmp);
     ADIndex source_ad = ad_index(source);
 
     const std::vector<Scope> &scopes = local_state.scopes;
@@ -3064,16 +3119,16 @@ void ad_var_gather_packet(size_t n, Index source, JitIndex offset,
         op->add_index(backend, source_ad, true);
 
         for (size_t i = 0; i < n; ++i) {
-            out[i] = ad_var_new(out2[i]);
-            jit_var_dec_ref(out2[i]);
+            out[i] = ad_var_new(tmp[i]);
+            jit_var_dec_ref(tmp[i]);
             op->add_output(ad_index(out[i]));
         }
 
         if (!ad_custom_op(op.get()))
-            ad_raise("ad_var_gather_packet(): could not create CustomOp");
+            ad_raise("ad_var_gather_packet(): could not create CustomOp!");
     } else {
         for (size_t i = 0; i < n; ++i)
-            out[i] = out2[i];
+            out[i] = tmp[i];
     }
 }
 
@@ -3152,11 +3207,11 @@ public:
 
         if (op == ReduceOp::Identity && mode != ReduceMode::Permute) {
             JitMask value(true);
-            uint32_t *values = (uint32_t *) alloca(sizeof(uint32_t)*n);
+            uint32_t *tmp = (uint32_t *) alloca(sizeof(uint32_t)*n);
             for (size_t i = 0; i < n; ++i)
-                values[i] = value.index();
+                tmp[i] = value.index();
             m_blend = JitMask::steal(jit_var_scatter_packet(
-                n, m_blend.index(), values, offset, mask));
+                n, m_blend.index(), tmp, offset, mask));
         }
 
         if (op != ReduceOp::Add && op != ReduceOp::Identity)
@@ -3171,7 +3226,7 @@ public:
 
     void forward() override {
         std::lock_guard<Lock> guard(state.lock);
-        JitIndex *grad_in = (JitIndex *)  alloca(sizeof(JitIndex) * m_n);
+        JitIndex *grad_in = (JitIndex *) alloca(sizeof(JitIndex) * m_n);
         size_t n_valid = 0;
         JitVar zero = scalar(m_backend, m_type, 0.0);
 
@@ -3212,7 +3267,7 @@ public:
 
     void backward() override {
         std::lock_guard<Lock> guard(state.lock);
-        JitIndex *out = (JitIndex *)  alloca(sizeof(JitIndex) * m_n);
+        JitIndex *out = (JitIndex *) alloca(sizeof(JitIndex) * m_n);
 
         Variable *v = state[m_output_indices[0]];
         if (!v->grad.valid())
@@ -3268,23 +3323,20 @@ private:
 Index ad_var_scatter_packet(size_t n, Index target, const Index *values,
                             JitIndex offset, JitIndex mask, ReduceOp op,
                             ReduceMode mode) {
-    JitIndex *values2 = (JitIndex *) alloca(sizeof(JitIndex) * n);
+    JitIndex *tmp = (JitIndex *) alloca(sizeof(JitIndex) * n);
     bool attached = ad_index(target) != 0;
 
     for (size_t i = 0; i < n; ++i) {
         Index index = values[i];
-        values2[i] = jit_index(index);
-        if (ad_index(index))
-            attached = true;
+        tmp[i] = jit_index(index);
+        attached |= ad_index(index) != 0;
     }
 
     JitVar result = JitVar::steal(jit_var_scatter_packet(
-        n, jit_index(target), values2, offset, mask, op, mode));
+        n, jit_index(target), tmp, offset, mask, op, mode));
     bool perm_scatter = op == ReduceOp::Identity && mode == ReduceMode::Permute;
 
-    if (!attached) {
-        return result.release();
-    } else {
+    if (attached) {
         // Track implicit dependencies & potentially remap variable IDs
         target = ad_var_memop_remap(target, false);
 
@@ -3299,11 +3351,13 @@ Index ad_var_scatter_packet(size_t n, Index target, const Index *values,
         uint64_t ad_result = ad_var_new(result.index());
         ps->add_output(ad_index(ad_result));
 
-        if (!ad_custom_op(ps.get()))
-            ad_raise("ad_var_scatter_packet(): could not create CustomOp");
+        if (ad_custom_op(ps.get()))
+            return ad_result;
 
-        return ad_result;
+        ad_var_dec_ref(ad_result);
     }
+
+    return result.release();
 }
 
 void ad_var_scatter_add_kahan(Index *target_1, Index *target_2, Index value,
@@ -3563,9 +3617,10 @@ const char *ad_var_graphviz() {
         if (v->flags & VariableFlags::Symbolic)
             buffer.put("|{Symbolic}");
 
-        buffer.fmt("|{Type: %s|Size: %zu}|{a%u|Refs: %u}}\"",
-            type_name_short[v->type], v->size,
-            index, (uint32_t) v->ref_count);
+        buffer.fmt("|{Type: %s%s|Size: %zu}|{a%u|Refs: %u}}\"",
+            type_name_short[v->type],
+            (v->flags & VariableFlags::CoopVec) ? " [coop]" : "",
+            v->size, index, (uint32_t) v->ref_count);
 
         if (color)
             buffer.fmt(" fillcolor=%s style=filled", color);
@@ -3605,7 +3660,7 @@ const char *ad_var_graphviz() {
         "        l4 [style=filled fillcolor=yellowgreen label=\"Gradient present\"];\n"
         "        l3 [style=filled fillcolor=salmon label=\"Input\"];\n"
         "        l2 [style=filled fillcolor=lightblue2 label=\"Output\"];\n"
-        "        l1 [style=filled fillcolor=wheat label=\"Labeled\"];\n"
+        "        l0 [style=filled fillcolor=wheat label=\"Labeled\"];\n"
         "    }\n"
         "}\n");
 
@@ -3736,6 +3791,520 @@ void ad_copy_implicit_deps(drjit::vector<uint32_t>& result, bool input) {
         ad_log(" - a%u", index);
         ad_var_inc_ref_int(index, state[index]);
         result.push_back(index);
+    }
+}
+
+// ==========================================================================
+// Cooperative vector API
+// ==========================================================================
+
+class CoopVecPack : public dr::detail::CustomOpBase {
+public:
+    ~CoopVecPack() {
+        std::lock_guard<Lock> guard(state.lock);
+        for (uint32_t index: m_output_indices)
+            ad_var_dec_ref_int(index, state[index]);
+    }
+
+    void forward() override {
+        std::lock_guard<Lock> guard(state.lock);
+        uint32_t size = (uint32_t) m_input_indices.size();
+        JitIndex *tmp = (JitIndex *) alloca(sizeof(JitIndex) * size);
+        size_t n_valid = 0;
+
+        Variable *target = state[m_output_indices[0]];
+        JitVar zero = scalar(m_backend, (VarType) target->type, 0.0);
+
+        for (uint32_t i = 0; i < size; ++i) {
+            tmp[i] = zero.index();
+
+            if (m_inputs[i]) {
+                Variable *v2 = state[m_inputs[i]];
+                if (v2->grad.valid()) {
+                    tmp[i] = v2->grad.index();
+                    n_valid++;
+                }
+            }
+        }
+
+        if (n_valid) {
+            JitVar packed = JitVar::steal(jit_coop_vec_pack(size, tmp));
+            target->accum(packed, target->size);
+        }
+    }
+
+    void backward() override {
+        std::lock_guard<Lock> guard(state.lock);
+        uint32_t n = (uint32_t) m_input_indices.size();
+
+        Variable *v = state[m_output_indices[0]];
+        if (!v->grad.valid())
+            return;
+
+        JitIndex *tmp = (JitIndex *) alloca(sizeof(JitIndex) * n);
+        jit_coop_vec_unpack(v->grad.index(), n, tmp);
+
+        for (size_t i = 0; i < m_input_indices.size(); ++i) {
+            Variable *v2 = state[m_inputs[i]];
+            v2->accum(JitVar::steal(tmp[i]), v2->size);
+        }
+    }
+
+    void add_input(JitBackend backend, uint32_t index) {
+        add_index(backend, index, true);
+        // No need for extra reference counting
+        m_inputs.push_back(index);
+    }
+
+    void add_output(JitBackend backend, uint32_t index) {
+        add_index(backend, index, false);
+        std::lock_guard<Lock> guard(state.lock);
+        ad_var_inc_ref_int(index, state[index]);
+    }
+
+    const char *name() const override { return "pack"; }
+
+private:
+    std::vector<uint32_t> m_inputs;
+};
+
+/// Pack a set of regular Dr.Jit variables to form a cooperative vector
+Index ad_coop_vec_pack(uint32_t n, const Index *in) {
+    JitIndex *tmp = (JitIndex *) alloca(sizeof(JitIndex) * n);
+    bool attached = false;
+
+    if (n == 0)
+        return 0;
+
+    for (uint32_t i = 0; i < n; ++i) {
+        Index index = in[i];
+        tmp[i] = jit_index(index);
+        attached |= ad_index(index) != 0;
+    }
+
+    JitVar result = JitVar::steal(jit_coop_vec_pack(n, tmp));
+
+    if (attached) {
+        VarInfo vi = jit_set_backend(result.index());
+
+        ref<CoopVecPack> ps = new CoopVecPack();
+        for (size_t i = 0; i < n; ++i)
+            ps->add_input(vi.backend, ad_index(in[i]));
+
+        uint64_t ad_result = ad_var_new(result.index());
+        ps->add_output(vi.backend, ad_index(ad_result));
+
+        if (ad_custom_op(ps.get()))
+            return ad_result;
+
+        ad_var_dec_ref(ad_result);
+    }
+
+    return result.release();
+}
+
+class CoopVecUnpack : public dr::detail::CustomOpBase {
+public:
+    ~CoopVecUnpack() {
+        std::lock_guard<Lock> guard(state.lock);
+        for (ADIndex index : m_output_indices)
+            ad_var_dec_ref_int(index, state[index]);
+    }
+
+    void forward() override {
+        std::lock_guard<Lock> guard(state.lock);
+        size_t n = m_output_indices.size();
+
+        const Variable *v = state[m_input_indices[0]];
+        if (!v->grad.valid())
+            return;
+
+        JitIndex *tmp = (JitIndex *) alloca(sizeof(JitIndex) * n);
+        jit_coop_vec_unpack(v->grad.index(), n, tmp);
+
+        for (size_t i = 0; i < n; ++i) {
+            Variable *vo = state[m_output_indices[i]];
+            vo->accum(JitVar::steal(tmp[i]), vo->size);
+        }
+    }
+
+    void backward() override {
+        std::lock_guard<Lock> guard(state.lock);
+        size_t n = m_output_indices.size();
+
+        JitIndex *tmp = (JitIndex *) alloca(sizeof(JitIndex) * n);
+
+        for (size_t i = 0; i < n; ++i) {
+            const Variable *v = state[m_output_indices[i]];
+            uint32_t index = v->grad.index();
+
+            if (index)
+                jit_var_inc_ref(index);
+            else
+                index = scalar(m_backend, (VarType) v->type, 0.0).release();
+
+            tmp[i] = index;
+        }
+
+        JitVar packed = JitVar::steal(jit_coop_vec_pack(n, tmp));
+        for (size_t i = 0; i < m_output_indices.size(); ++i)
+            jit_var_dec_ref(tmp[i]);
+
+        Variable *source = state[m_input_indices[0]];
+        source->accum(packed, source->size);
+    }
+
+    void add_output(uint32_t index) {
+        add_index(m_backend, index, false);
+
+        std::lock_guard<Lock> guard(state.lock);
+        ad_var_inc_ref_int(index, state[index]);
+    }
+
+    const char *name() const override { return "unpack"; }
+};
+
+/// Unpack a cooperative vector into its components
+void ad_coop_vec_unpack(uint64_t index, uint32_t n, uint64_t *out) {
+    uint32_t *tmp = (uint32_t *) alloca(sizeof(uint32_t) * n);
+    jit_coop_vec_unpack(index, n, tmp);
+
+    ADIndex ad_index = ::ad_index(index);
+    const std::vector<Scope> &scopes = local_state.scopes;
+    if (!scopes.empty())
+        scopes.back().maybe_disable(ad_index);
+
+    if (ad_index) {
+        ref<CoopVecUnpack> op = new CoopVecUnpack();
+        JitBackend backend = jit_set_backend(jit_index(index)).backend;
+        op->add_index(backend, ad_index, true);
+
+        for (uint32_t i = 0; i < n; ++i) {
+            out[i] = ad_var_new(tmp[i]);
+            jit_var_dec_ref(tmp[i]);
+            op->add_output(::ad_index(out[i]));
+        }
+
+        if (!ad_custom_op(op.get()))
+            ad_raise("ad_coop_vec_unpack(): could not create CustomOp!");
+    } else {
+        for (uint32_t i = 0; i < n; ++i)
+            out[i] = tmp[i];
+    }
+}
+
+/// Perform a unary operation on a cooperative vector
+uint64_t ad_coop_vec_unary_op(JitOp op, uint64_t i0) {
+    JitVar result = JitVar::steal(
+        jit_coop_vec_unary_op(op, jit_index(i0)));
+
+    if (is_detached(i0)) {
+        return result.release();
+    } else {
+        switch (op) {
+            case JitOp::Exp2: {
+                JitVar scale = scalar_coop_vec(i0, dr::LogTwo<double>);
+                JitVar w0 = JitVar::steal(jit_coop_vec_binary_op(JitOp::Mul, result.index(), scale.index()));
+                return ad_var_new("exp2", std::move(result), Arg(i0, std::move(w0)));
+            }
+
+            case JitOp::Tanh: {
+                // Mini-max polynomial fit made using Sollya (max. relative error = 0.0052)
+                // Q1 = fpminimax(4*y/((1 + y)^2)-y, [|1, 2, 3, 4, 5|], [|halfprecision...|], [0, 1-1e-20]);
+                // Q2 = horner(Q1 + y);
+                // print(Q2);
+
+                JitVar scale = scalar_coop_vec(i0, -2.8853900817779268), // -2/log(2)
+                       c0 = scalar_coop_vec(i0, 3.98046875),
+                       c1 = scalar_coop_vec(i0, -7.4140625),
+                       c2 = scalar_coop_vec(i0, 8.2421875),
+                       c3 = scalar_coop_vec(i0, -5.1640625),
+                       c4 = scalar_coop_vec(i0, 1.35546875);
+
+                JitVar x0 = JitVar::steal(jit_coop_vec_binary_op(JitOp::Mul, (uint32_t) i0, scale.index())),
+                       x1 = JitVar::steal(jit_coop_vec_unary_op(JitOp::Exp2, x0.index())),
+                       y0 = JitVar::steal(jit_coop_vec_ternary_op(JitOp::Fma, x1.index(), c4.index(), c3.index())),
+                       y1 = JitVar::steal(jit_coop_vec_ternary_op(JitOp::Fma, x1.index(), y0.index(), c2.index())),
+                       y2 = JitVar::steal(jit_coop_vec_ternary_op(JitOp::Fma, x1.index(), y1.index(), c1.index())),
+                       y3 = JitVar::steal(jit_coop_vec_ternary_op(JitOp::Fma, x1.index(), y2.index(), c0.index())),
+                       y4 = JitVar::steal(jit_coop_vec_binary_op(JitOp::Mul, x1.index(), y3.index()));
+
+                return ad_var_new("tanh", std::move(result), Arg(i0, std::move(y4)));
+            }
+
+            default:
+                ad_raise("ad_coop_vec_unary_op(): differentiable version not implemented.");
+        }
+    }
+}
+
+/// Perform a binary operation on a pair of cooperative vectors
+uint64_t ad_coop_vec_binary_op(JitOp op, uint64_t i0, uint64_t i1) {
+    JitVar result = JitVar::steal(
+        jit_coop_vec_binary_op(op, jit_index(i0), jit_index(i1)));
+
+    if (is_detached(i0, i1)) {
+        return result.release();
+    } else {
+        switch (op) {
+            case JitOp::Add:
+                return ad_var_new("add", std::move(result),
+                                  Arg(i0, 1.0, coop{}),
+                                  Arg(i1, 1.0, coop{}));
+                break;
+
+            case JitOp::Sub:
+                return ad_var_new("sub", std::move(result),
+                                  Arg(i0, 1.0, coop{}),
+                                  Arg(i1, -1.0, coop{}));
+                break;
+
+            case JitOp::Mul:
+                return ad_var_new("mul", std::move(result),
+                                  Arg(i0, JitVar::borrow(jit_index(i1))),
+                                  Arg(i1, JitVar::borrow(jit_index(i0))));
+                break;
+
+            case JitOp::Min: {
+                    JitVar w0 = JitVar::steal(jit_coop_vec_binary_op(JitOp::Step, jit_index(i0), jit_index(i1))),
+                           w1 = JitVar::steal(jit_coop_vec_binary_op(JitOp::Step, jit_index(i1), jit_index(i0)));
+                    return ad_var_new("min", std::move(result),
+                                      Arg(i0, std::move(w1)),
+                                      Arg(i1, std::move(w0)));
+                }
+                break;
+
+            case JitOp::Max: {
+                    JitVar w0 = JitVar::steal(jit_coop_vec_binary_op(JitOp::Step, jit_index(i0), jit_index(i1))),
+                           w1 = JitVar::steal(jit_coop_vec_binary_op(JitOp::Step, jit_index(i1), jit_index(i0)));
+                    return ad_var_new("max", std::move(result),
+                                      Arg(i0, std::move(w0)),
+                                      Arg(i1, std::move(w1)));
+                }
+                break;
+
+            case JitOp::Step:
+                return result.release();
+
+            default:
+                ad_raise("ad_coop_vec_binary_op(): differentiable version not implemented.");
+        }
+    }
+}
+
+/// Perform a ternary operation on a triplet of cooperative vectors
+uint64_t ad_coop_vec_ternary_op(JitOp op, uint64_t i0, uint64_t i1, uint64_t i2) {
+    JitVar result = JitVar::steal(
+        jit_coop_vec_ternary_op(op, jit_index(i0), jit_index(i1), jit_index(i2)));
+
+    if (is_detached(i0, i1, i2)) {
+        return result.release();
+    } else {
+        switch (op) {
+            case JitOp::Fma:
+                return ad_var_new("fma", std::move(result),
+                                  Arg(i0, JitVar::borrow(jit_index(i1))),
+                                  Arg(i1, JitVar::borrow(jit_index(i0))),
+                                  Arg(i2, 1.0, coop{}));
+
+            default:
+                ad_raise("ad_coop_vec_ternary_op(): differentiable version not implemented.");
+        }
+    }
+}
+
+
+struct CoopCast : Special {
+    CoopCast(VarType v1, VarType v2) : v1(v1), v2(v2) { }
+
+    void backward(Variable *source, const Variable *target) override {
+        source->accum(JitVar::steal(jit_coop_vec_cast(target->grad.index(), v1)),
+                      target->size);
+    }
+
+    void forward(const Variable *source, Variable *target) override {
+        target->accum(JitVar::steal(jit_coop_vec_cast(source->grad.index(), v2)),
+                      source->size);
+    }
+
+    VarType v1, v2;
+};
+
+
+Index ad_coop_vec_cast(Index i0, VarType vt) {
+    JitVar result = JitVar::steal(jit_coop_vec_cast(jit_index(i0), vt));
+
+    if (is_detached(i0)) {
+        return result.release();
+    } else {
+        return ad_var_new("cast", std::move(result),
+                          SpecialArg(i0, new CoopCast(jit_var_type((JitIndex) i0), vt)));
+    }
+}
+
+
+class CoopMatVec : public dr::detail::CustomOpBase {
+public:
+    CoopMatVec(Index A_index, const MatrixDescr *A_descr, Index x_index,
+               Index b_index, const MatrixDescr *b_descr, int transpose)
+        : m_A(A_index), m_A_descr(*A_descr), m_x(x_index), m_b(b_index),
+          m_transpose(transpose) {
+        if (b_descr)
+            m_b_descr = *b_descr;
+        ad_var_inc_ref(m_A);
+        ad_var_inc_ref(m_b);
+        ad_var_inc_ref(m_x);
+        m_out = 0;
+    }
+
+    ~CoopMatVec() {
+        ad_var_dec_ref(m_A);
+        ad_var_dec_ref(m_b);
+        ad_var_dec_ref(m_x);
+        ad_var_dec_ref(m_out);
+    }
+
+    void forward() override {
+        std::lock_guard<Lock> guard(state.lock);
+
+        const Variable *A_v = ad_index(m_A) ? state[ad_index(m_A)] : nullptr,
+                       *x_v = ad_index(m_x) ? state[ad_index(m_x)] : nullptr,
+                       *b_v = ad_index(m_b) ? state[ad_index(m_b)] : nullptr;
+
+        Variable *out_v = state[m_output_indices[0]];
+        bool has_b_grad = b_v && b_v->grad.valid();
+
+        if (A_v && A_v->grad.valid()) {
+            JitVar result = JitVar::steal(jit_coop_vec_matvec(
+                A_v->grad.index(), &m_A_descr, jit_index(m_x),
+                has_b_grad ? b_v->grad.index() : 0,
+                has_b_grad ? &m_b_descr : nullptr, m_transpose));
+            out_v->accum(result, out_v->size);
+            has_b_grad = false;
+        }
+
+        if (x_v && x_v->grad.valid()) {
+            JitVar result = JitVar::steal(jit_coop_vec_matvec(
+                jit_index(m_A), &m_A_descr, x_v->grad.index(),
+                has_b_grad ? b_v->grad.index() : 0,
+                has_b_grad ? &m_b_descr : nullptr, m_transpose));
+            out_v->accum(result, out_v->size);
+            has_b_grad = false;
+        }
+
+        if (has_b_grad) {
+            JitVar result = JitVar::steal(jit_coop_vec_load(
+                b_v->grad.index(), m_b_descr.offset, m_b_descr.rows));
+            out_v->accum(result, out_v->size);
+        }
+    }
+
+    void backward() override {
+        std::lock_guard<Lock> guard(state.lock);
+        Variable *out_v = state[m_output_indices[0]];
+        const JitVar &grad = out_v->grad;
+
+        if (!grad.valid())
+            return;
+
+        Variable *A_v = ad_index(m_A) ? state[ad_index(m_A)] : nullptr,
+                 *x_v = ad_index(m_x) ? state[ad_index(m_x)] : nullptr,
+                 *b_v = ad_index(m_b) ? state[ad_index(m_b)] : nullptr;
+
+        if (x_v) {
+            JitVar result = JitVar::steal(jit_coop_vec_matvec(
+                jit_index(m_A), &m_A_descr, grad.index(), 0,
+                nullptr, m_transpose == 0 ? 1 : 0));
+            x_v->accum(result, x_v->size);
+        }
+
+        if (A_v) {
+            uint32_t vec_a = jit_index(m_x),
+                     vec_b = jit_index(grad.index());
+            if (m_transpose)
+                std::swap(vec_a, vec_b);
+
+            A_v->grad = JitVar::steal(jit_coop_vec_outer_product_accum(
+                A_v->grad.index(), jit_var_size(jit_index(m_A)), &m_A_descr,
+                vec_b, vec_a));
+        }
+
+        if (b_v) {
+            b_v->grad = JitVar::steal(jit_coop_vec_accum(
+                b_v->grad.index(), jit_var_size(jit_index(m_b)), m_b_descr.offset,
+                grad.index()));
+        }
+    }
+
+    void set_output(JitBackend backend, Index index) {
+        add_index(backend, ad_index(index), false);
+        m_out = (index >> 32) << 32;
+        ad_var_inc_ref(m_out);
+    }
+
+    const char *name() const override { return "matvec"; }
+
+private:
+    Index m_A;
+    MatrixDescr m_A_descr;
+    Index m_x;
+    Index m_b;
+    Index m_out;
+    MatrixDescr m_b_descr;
+    int m_transpose;
+};
+
+uint64_t ad_coop_vec_matvec(uint64_t A_index, const MatrixDescr *A_descr,
+                            uint64_t x_index, uint64_t b_index,
+                            const MatrixDescr *b_descr, int transpose) {
+
+    uint32_t A_index_j = jit_index(A_index),
+             x_index_j = jit_index(x_index),
+             b_index_j = jit_index(b_index),
+             A_index_a = ad_index(A_index),
+             x_index_a = ad_index(x_index),
+             b_index_a = ad_index(b_index);
+
+    if (A_index_a || x_index_a || b_index_a) {
+        const std::vector<Scope> &scopes = local_state.scopes;
+        if (!scopes.empty()) {
+            const Scope &s = scopes.back();
+            s.maybe_disable(A_index_a);
+            s.maybe_disable(x_index_a);
+            s.maybe_disable(b_index_a);
+        }
+    }
+
+    JitVar result = JitVar::steal(jit_coop_vec_matvec(
+        A_index_j, A_descr, x_index_j, b_index_j, b_descr, transpose));
+
+    if (!A_index_a && !x_index_a && !b_index_a) {
+        return result.release();
+    } else {
+        {
+            std::lock_guard<Lock> guard(state.lock);
+            A_index = ad_var_memop_remap(A_index, true);
+            b_index = ad_var_memop_remap(b_index, true);
+            A_index_j = jit_index(A_index);
+            b_index_j = jit_index(b_index);
+            A_index_a = ad_index(A_index);
+            b_index_a = ad_index(b_index);
+        }
+
+        ref<CoopMatVec> op = new CoopMatVec(A_index, A_descr, x_index,
+                                            b_index, b_descr, transpose);
+        JitBackend backend = jit_set_backend(x_index_j).backend;
+        op->add_index(backend, A_index_a, true);
+        op->add_index(backend, x_index_a, true);
+        op->add_index(backend, b_index_a, true);
+
+        uint64_t result_diff = ad_var_new(result.index());
+        op->set_output(backend, result_diff);
+
+        if (!ad_custom_op(op.get()))
+            ad_raise("ad_coop_vec_matvec(): could not create CustomOp!");
+
+        return result_diff;
     }
 }
 

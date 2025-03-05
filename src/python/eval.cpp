@@ -11,6 +11,7 @@
 #include "eval.h"
 #include "apply.h"
 #include "local.h"
+#include "coop_vec.h"
 
 bool schedule(nb::handle h) {
     bool result_ = false;
@@ -31,6 +32,8 @@ bool schedule(nb::handle h) {
                 for (uint32_t index : local.arrays())
                     result |= (bool) jit_var_schedule(index);
             }
+            if (h.type().is(coop_vector_type))
+                nb::raise("Cooperative vectors cannot be evaluated. They must be unpacked into regular variables.");
         }
     };
 
