@@ -9,12 +9,14 @@
     BSD-style license that can be found in the LICENSE.txt file.
 */
 
+#include "drjit/python.h"
 #include "memop.h"
 #include "base.h"
 #include "init.h"
 #include "shape.h"
 #include "base.h"
 #include "slice.h"
+#include "meta.h"
 #include <vector>
 
 /// Holds metadata about slicing component
@@ -246,6 +248,23 @@ PyObject *mp_subscript(PyObject *self, PyObject *key) noexcept {
             }
 
             return o.release().ptr();
+        } else if (key_tp.is(&PySlice_Type) && s.ndim == 1 && s.shape[0] == DRJIT_DYNAMIC) {
+            auto [start, end, step, slicelen] = nb::borrow<nb::slice>(key).compute(
+                s.len(inst_ptr(self))
+            );
+
+            ArrayMeta m = s;
+            m.type = (uint16_t) VarType::UInt32;
+
+            nb::type_object_t<ArrayBase> index_type =
+                nb::borrow<nb::type_object_t<ArrayBase>>(meta_get_type(m));
+
+            nb::object index = arange(index_type, start, end, step);
+
+            return gather(nb::borrow<nb::type_object>(self_tp), nb::borrow(self), index,
+                          nb::borrow(Py_True), ReduceMode::Auto, nb::none())
+                .release()
+                .ptr();
         } else if (key == Py_None || key_tp.is(&PyEllipsis_Type) || key_tp.is(&PySlice_Type) || key_is_array) {
             complex_case = true;
         }

@@ -559,7 +559,8 @@ static void ravel_recursive(nb::handle result, nb::handle value,
             nb::object index =
                 arange(nb::borrow<nb::type_object_t<ArrayBase>>(index_dtype), offset,
                        offset + strides[depth] * shape[depth], strides[depth]);
-            ::scatter(nb::borrow(result), nb::borrow(value), index, nb::cast(true));
+            ::scatter(nb::borrow(result), nb::borrow(value), index, nb::cast(true),
+                      ReduceMode::Permute);
         } else {
             result[offset] = value;
         }
@@ -625,6 +626,21 @@ nb::object ravel(nb::handle h, char order,
         vt = (VarType) s.type;
         is_dynamic = s.shape[s.ndim - 1] == DRJIT_DYNAMIC;
         is_diff = s.is_diff;
+    } else if (nb::isinstance<nb::sequence>(h)) {
+        nb::object o = nb::borrow(h);
+        while (true) {
+            if (nb::len(o) == 0)
+                break;
+            if (is_drjit_array(o)) {
+                const ArraySupplement &s = supp(o.type());
+                backend = (JitBackend) s.backend;
+                vt = (VarType) s.type;
+                is_dynamic = s.ndim != 0 && s.shape[s.ndim - 1] == DRJIT_DYNAMIC;
+                is_diff = s.is_diff;
+                break;
+            }
+            o = o[0];
+        }
     } else if (vt_in) {
         vt = (VarType) *vt_in;
     }

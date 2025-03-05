@@ -579,7 +579,7 @@
     Returns:
         object: The result of the operation ``arg*arg``
 
-.. topic:: pow
+.. topic:: power
 
     Raise the first argument to a power specified via the second argument.
 
@@ -591,7 +591,7 @@
     reduces operation to a sequence of multiplies and adds (potentially
     followed by a reciprocation operation when ``arg1`` is negative).
 
-    The general case involves recursive use of the identity ``pow(arg0, arg1) =
+    The general case involves recursive use of the identity ``power(arg0, arg1) =
     exp2(log2(arg0) * arg1)``.
 
     There is no difference between using :py:func:`drjit.power()` and the builtin
@@ -8056,3 +8056,96 @@
 .. topic:: leak_warnings
 
    Query whether leak warnings are enabled. See :py:func:`drjit.detail.set_leak_warnings()`.
+
+.. topic:: step
+
+   Step function.
+
+   This function generates a step function by comparing ``arg0`` to ``arg1``.
+   The function is equivalent to
+
+   .. code-block:: python
+
+      dr.select(
+          arg0 < arg1,
+          0,        # if arg0 <  arg1
+          1,        # if arg1 >= arg1
+      )
+
+    Args:
+        arg0 (object): A Dr.Jit array/tensor or Python arithmetic type
+
+        arg1 (object): A Dr.Jit array/tensor or Python arithmetic type
+
+    Returns:
+        object: The computed array as described above
+
+.. topic:: coop_Vector
+
+   A *cooperative vector* is a dynamically-sized container of elements of a
+   consistent type. It admits both floating point and integer 1D arrays as
+   elements (e.g., :py:class:`drjit.cuda.Float16`,
+   :py:class:`drjit.llvm.UInt32`).
+
+   Seen from a high level, cooperative vectors resemble nested array types,
+   such as as :py:class:`drjit.cuda.ArrayXf16`. The reason for their existence
+   is that cooperative vector arithmetic compiles to a specialized set of
+   compiler intrinsics that are more efficient when this arithmetic is
+   interspersed with cooperative vector multiplication operations (see
+   :py:func:`drjit.coop.matvec`).
+
+.. topic:: coop_View
+
+   The :py:class:`drjit.coop.View` provides pointer into a buffer along with
+   shape and type metadata.
+
+   Dr.Jit uses views to tightly pack sequences of matrices and bias vectors
+   into a joint buffer, and to preserve information about the underlying data
+   type and layout. The :py:func:`__getitem__` function can be used to slice a
+   view into smaller sub-blocks.
+
+   The typical process is to pack a PyTree of weight and bias vectors via
+   :py:func:`drjit.pack()` into an inference or training-optimal
+   representation. The returned views can then be passed to
+   :py:func:`drjit.coop.matvec()`.
+
+.. topic:: coop_view
+
+   Convert a Dr.Jit array or tensor into a *view*.
+
+   This function simply returns a view of the original tensor without
+   transforming the underlying representation. This is useful to
+
+   - Use :py:func:`drjit.coop.matvec` with a row-major matrix layout (which,
+     however, is not recommended, since this can be significantly slower
+     compared to matrices in inference/training-optimal layouts).
+
+   - Slice a larger matrix into sub-blocks before passing them to
+     :py:func:`drjit.coop.pack` (which also accepts *views* as inputs).
+     This is useful when several matrices are already packed into a single
+     matrix (which is, however, still in row-major layout). They can then be
+     directly re-packed into optimal layouts without performing further
+     unnecessary copies.
+
+.. topic:: coop_pack
+
+   Convert
+
+.. topic:: coop_unpack
+
+.. topic:: coop_matvec
+
+   Evaluate a matrix-vector multiplication involving a cooperative vector.
+
+   This function takes a *matrix view* ``A`` (see :py:func:`drjit.coop.pack`
+   and :py:func:`drjit.coop.view` for details on views) and a *cooperative
+   vector* `x`. It then computes the associated matrix-vector product and
+   returns it in the form of a new cooperative vector (potentially with a
+   different size).
+
+   The function can optionally apply an additive bias (i.e., to evaluate ``A@x
+   + b``). This bias vector ``b`` should also be specified as a view.
+
+   Specify ``tranpose=True`` to multiply by the transpose of the matrix ``A``.
+   On the CUDA/OptiX backend, this feature requires that ``A`` is inference
+   or training-optimal layout.

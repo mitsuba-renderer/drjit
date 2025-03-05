@@ -109,7 +109,7 @@ def test06_swizzle_assignment(t):
 
 
 @pytest.test_arrays('shape=(3, *), uint32')
-def test06_bad_swizzle(t):
+def test07_bad_swizzle(t):
     a = t(1,2,3)
     with pytest.raises(AttributeError):
         b = a.xw
@@ -121,3 +121,10 @@ def test06_bad_swizzle(t):
     with pytest.raises(IndexError):
         a = t(1,2,3)
         a.xywx = a.yyx
+
+@pytest.test_arrays('shape=(*), float32')
+def test08_1d_slice(t):
+    a = t(1,2,3,4,5)
+    assert dr.all(a[1::2] == t(2, 4))
+    assert dr.all(a[:-2] == t(1, 2, 3))
+    assert a[:].index is a.index

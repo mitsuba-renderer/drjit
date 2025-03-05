@@ -46,6 +46,7 @@ public API.
    bench
    cpp
    textures
+   coop_vec
    faq
 
 .. toctree::

@@ -83,6 +83,7 @@ nanobind_add_module(
   tracker.h     tracker.cpp
   local.h       local.cpp
   resample.h    resample.cpp
+  coop_vec.h    coop_vec.cpp
 
   # Backends
   scalar.h      scalar.cpp
@@ -208,6 +209,13 @@ if (NOT (DRJIT_SANITIZE_ASAN OR DRJIT_SANITIZE_UBSAN))
     drjit-stub-detail
     MODULE drjit.detail
     OUTPUT ${DRJIT_PYTHON_DST_DIR}/detail.pyi
+    ${STUB_ARGS}
+  )
+
+  nanobind_add_stub(
+    drjit-stub-coop
+    MODULE drjit.coop
+    OUTPUT ${DRJIT_PYTHON_DST_DIR}/coop.pyi
     ${STUB_ARGS}
   )
 

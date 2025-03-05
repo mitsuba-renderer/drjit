@@ -274,6 +274,8 @@ Standard mathematical functions
 .. autofunction:: sign
 .. autofunction:: copysign
 .. autofunction:: mulsign
+.. autofunction:: relu
+.. autofunction:: step
 
 Operations for vectors and matrices
 -----------------------------------
@@ -711,3 +713,50 @@ gradient-based optimization and adaptive mixed-precision training.
    .. automethod:: step
    .. automethod:: scale
    .. automethod:: unscale
+
+Cooperative vectors
+-------------------
+
+.. py:module:: drjit.coop
+
+The :py:mod:`drjit.coop` module provides infrastructure to perform matrix
+multiplications using *cooperative vectors*. Please see the separate
+:ref:`documentation section <coop_vec>` for an introduction.
+
+.. autoclass:: Vector
+
+   .. automethod:: __init__
+   .. automethod:: __getitem__
+   .. automethod:: __setitem__
+   .. automethod:: __add__
+   .. automethod:: __sub__
+   .. automethod:: __mul__
+   .. automethod:: __len__
+   .. automethod:: __repr__
+
+.. autoclass:: View
+
+   .. automethod:: __getitem__
+
+   .. property:: dtype
+      :type: drjit.VarType
+
+   .. property:: shape
+      :type: tuple[int, int]
+
+   .. property:: layout
+      :type: MatrixLayout
+
+   .. property:: stride
+      :type: int
+
+   .. property:: size
+      :type: int
+
+   .. property:: buffer
+      :type: drjit.ArrayBase
+
+.. autofunction:: view
+.. autofunction:: pack
+.. autofunction:: unpack
+.. autofunction:: matvec
