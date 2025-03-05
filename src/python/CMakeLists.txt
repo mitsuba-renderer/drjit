@@ -21,7 +21,7 @@ configure_file(
 )
 
 set(PY_FILES
-  config.py __init__.py ast.py detail.py interop.py dda.py opt.py
+  config.py __init__.py ast.py detail.py interop.py dda.py opt.py nn.py
   _sh_eval.py _reduce.py scalar/__init__.py llvm/__init__.py llvm/ad.py
   cuda/__init__.py cuda/ad.py)
 
@@ -83,6 +83,7 @@ nanobind_add_module(
   tracker.h     tracker.cpp
   local.h       local.cpp
   resample.h    resample.cpp
+  coop_vec.h    coop_vec.cpp
 
   # Backends
   scalar.h      scalar.cpp
@@ -208,6 +209,13 @@ if (NOT (DRJIT_SANITIZE_ASAN OR DRJIT_SANITIZE_UBSAN))
     drjit-stub-detail
     MODULE drjit.detail
     OUTPUT ${DRJIT_PYTHON_DST_DIR}/detail.pyi
+    ${STUB_ARGS}
+  )
+
+  nanobind_add_stub(
+    drjit-stub-nn
+    MODULE drjit.nn
+    OUTPUT ${DRJIT_PYTHON_DST_DIR}/nn.pyi
     ${STUB_ARGS}
   )
 

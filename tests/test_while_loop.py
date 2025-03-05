@@ -736,3 +736,4 @@ def test31_tensor_loop_preserve_shape(t, mode):
         assert a.shape == (10, 11)
 
     assert a.shape == (10, 11)
+

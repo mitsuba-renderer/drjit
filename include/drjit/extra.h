@@ -523,6 +523,34 @@ DRJIT_INLINE void ad_var_dec_ref(uint64_t index) JIT_NOEXCEPT {
 // Return the AD reference count of a variable (for debugging)
 extern DRJIT_EXTRA_EXPORT uint32_t ad_var_ref(uint64_t index);
 
+/// --------------------- Cooperative vector API ---------------------
+
+/// Pack a set of regular Dr.Jit variables to form a cooperative vector
+extern DRJIT_EXTRA_EXPORT uint64_t ad_coop_vec_pack(uint32_t n, const uint64_t *in);
+
+/// Unpack a cooperative vector into its components
+extern DRJIT_EXTRA_EXPORT void ad_coop_vec_unpack(uint64_t index, uint32_t n, uint64_t *out);
+
+/// Perform a unary operation on a cooperative vector
+extern DRJIT_EXTRA_EXPORT uint64_t ad_coop_vec_unary_op(JitOp op, uint64_t a0);
+
+/// Perform a binary operation on a pair of cooperative vectors
+extern DRJIT_EXTRA_EXPORT uint64_t ad_coop_vec_binary_op(JitOp op, uint64_t a0, uint64_t a1);
+
+/// Perform a ternary operation on a triplet of cooperative vectors
+extern DRJIT_EXTRA_EXPORT uint64_t ad_coop_vec_ternary_op(JitOp op, uint64_t a0, uint64_t a1, uint64_t a2);
+
+/// Perform a matrix-vector multiplication + bias addition
+extern DRJIT_EXTRA_EXPORT uint64_t ad_coop_vec_matvec(uint64_t A_index,
+                                                      const MatrixDescr *A_descr,
+                                                      uint64_t x_index,
+                                                      uint64_t b_index,
+                                                      const MatrixDescr *b_descr,
+                                                      int transpose);
+
+/// Cast a cooperative vector to a different precision
+extern DRJIT_EXTRA_EXPORT uint64_t ad_coop_vec_cast(uint64_t index, VarType vt);
+
 #if defined(__cplusplus)
 }
 #endif

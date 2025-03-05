@@ -17,6 +17,7 @@
 #include "init.h"
 #include "apply.h"
 #include "detail.h"
+#include "coop_vec.h"
 #include <nanobind/stl/optional.h>
 
 using ReduceInit = nb::object();
@@ -542,6 +543,10 @@ nb::object dot(nb::handle h0, nb::handle h1) {
         }
 
         if (use_fma) {
+            if (tp0.is(coop_vector_type) || tp1.is(coop_vector_type)) {
+                nb::list o0 = nb::list(h0), o1 = nb::list(h1);
+                return dot(o1, o1);
+            }
             nb::object result = h0[0] * h1[0],
                        fma = array_module.attr("fma");
             for (size_t i = 1; i < lr; ++i)
