@@ -108,13 +108,30 @@ drjit.select$:
     @overload
     def select(arg0: bool | AnyArray, arg1: T, arg2: T) -> T: ...
 
-drjit.(atan2|minimum|maximum)$:
+drjit.atan2$:
+    @overload
+    def \1(arg0: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], arg1: SelfCpT, /) -> SelfT:
+        \doc
+    @overload
+    def \1(arg0: SelfCpT, arg1: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], /) -> SelfT: ...
+
+drjit.step$:
+    @overload
+    def \1(arg0: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], arg1: SelfCpT, /) -> SelfT:
+        \doc
+    @overload
+    def \1(arg0: SelfCpT, arg1: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], /) -> SelfT: ...
+
+drjit.(minimum|maximum)$:
     @overload
     def \1(arg0: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], arg1: SelfCpT, /) -> SelfT:
         \doc
     @overload
     def \1(arg0: SelfCpT, arg1: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], /) -> SelfT: ...
     @overload
+    def \1(arg0: CoopVec[ArrayT], arg1: object) -> CoopVec[ArrayT]: ...
+    @overload
+    def \1(arg0: object, arg1: CoopVec[ArrayT]) -> CoopVec[ArrayT]: ...
     def \1(arg0: T, arg1: T, /) -> T: ...
 
 drjit.(empty|zeros|ones)$:
@@ -128,21 +145,41 @@ drjit.(full|opaque)$:
     @overload
     def \1(dtype: type[T], value: T, shape: int | Sequence[int]) -> T: ...
 
-drjit.(fma|lerp)$:
+drjit.lerp$:
     @overload
-    def \1(arg0: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], arg1: SelfCpT, arg2: SelfCpT, /) -> SelfT:
+    def lerp(arg0: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], arg1: SelfCpT, arg2: SelfCpT, /) -> SelfT:
         \doc
     @overload
-    def \1(arg0: SelfCpT, arg1: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], arg2: SelfCpT, /) -> SelfT: ...
+    def lerp(arg0: SelfCpT, arg1: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], arg2: SelfCpT, /) -> SelfT: ...
     @overload
-    def \1(arg0: SelfCpT, arg1: SelfCpT, arg2: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], /) -> SelfT: ...
+    def lerp(arg0: SelfCpT, arg1: SelfCpT, arg2: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], /) -> SelfT: ...
     @overload
-    def \1(arg0: T, arg1: T, arg2: T) -> T: ...
+    def lerp(arg0: T, arg1: T, arg2: T) -> T: ...
+
+drjit.fma$:
+    @overload
+    def fma(arg0: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], arg1: SelfCpT, arg2: SelfCpT, /) -> SelfT:
+        \doc
+    @overload
+    def fma(arg0: SelfCpT, arg1: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], arg2: SelfCpT, /) -> SelfT: ...
+    @overload
+    def fma(arg0: SelfCpT, arg1: SelfCpT, arg2: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], /) -> SelfT: ...
+    @overload
+    def fma(arg0: CoopVec[ArrayT], arg1: object, arg2: object) -> CoopVec[ArrayT]: ...
+    @overload
+    def fma(arg0: object, arg1: CoopVec[ArrayT], arg2: object) -> CoopVec[ArrayT]: ...
+    @overload
+    def fma(arg0: object, arg1: object, arg2: CoopVec[ArrayT]) -> CoopVec[ArrayT]: ...
+    @overload
+    def fma(arg0: T, arg1: T, arg2: T) -> T: ...
 
 drjit.reshape$:
     \from typing import Literal
+    @overload
     def reshape(dtype: type[T], value: object, shape: int | Sequence[int], order: Literal['A', 'C', 'F'] = 'A', shrink: bool = False) -> T:
         \doc
+    @overload
+    def reshape(value: object, shape: int | Sequence[int], order: Literal['A', 'C', 'F'] = 'A', shrink: bool = False) -> T: ...
 
 drjit.(isnan|isinf|isfinite)$:
     @overload
@@ -264,7 +301,6 @@ drjit.sh_eval$:
 drjit.sh_eval$:
     def sh_eval(d: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], order: int) -> list[ValT]:
         \doc
-
 
 # -------------- drjit.syntax, interop, detail ----------------
 
@@ -645,3 +681,6 @@ drjit.__prefix__:
     \from typing import TypeAlias
     \from collections.abc import Iterable, Sequence
     Axis: TypeAlias = int | tuple[int] | None
+
+drjit.coop.__prefix__:
+    \from typing import overload, Literal

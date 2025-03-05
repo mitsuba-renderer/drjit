@@ -559,7 +559,8 @@ static void ravel_recursive(nb::handle result, nb::handle value,
             nb::object index =
                 arange(nb::borrow<nb::type_object_t<ArrayBase>>(index_dtype), offset,
                        offset + strides[depth] * shape[depth], strides[depth]);
-            ::scatter(nb::borrow(result), nb::borrow(value), index, nb::cast(true));
+            ::scatter(nb::borrow(result), nb::borrow(value), index, nb::cast(true),
+                      ReduceMode::Permute);
         } else {
             result[offset] = value;
         }
@@ -625,6 +626,26 @@ nb::object ravel(nb::handle h, char order,
         vt = (VarType) s.type;
         is_dynamic = s.shape[s.ndim - 1] == DRJIT_DYNAMIC;
         is_diff = s.is_diff;
+    } else if (nb::isinstance<nb::sequence>(h)) {
+        nb::object o = nb::borrow(h);
+        while (true) {
+            if (!nb::hasattr(o, "__len__") || nb::len(o) == 0) {
+                if (vt_in)
+                    vt = (VarType) *vt_in;
+                break;
+            }
+            if (is_drjit_array(o)) {
+                const ArraySupplement &s = supp(o.type());
+                backend = (JitBackend) s.backend;
+                vt = (VarType) s.type;
+                is_dynamic = s.ndim != 0 && s.shape[s.ndim - 1] == DRJIT_DYNAMIC;
+                is_diff = s.is_diff;
+                break;
+            }
+            o = o[0];
+        }
+    } else if (nb::isinstance<nb::iterable>(h)) {
+        return ravel(nb::list(h), order, shape_out, strides_out, vt_in);
     } else if (vt_in) {
         vt = (VarType) *vt_in;
     }
@@ -1065,6 +1086,18 @@ static nb::object reshape_2(nb::type_object dtype, nb::handle value,
     return reshape(dtype, value, shape_vec, order, shrink);
 }
 
+static nb::object reshape_same_dtype(nb::handle value,
+                                     const dr::vector<Py_ssize_t> &target_shape,
+                                     char order, bool shrink) {
+    return reshape(nb::borrow<nb::type_object>(value.type()), value, target_shape,
+                   order, shrink);
+}
+
+static nb::object reshape_same_dtype_2(nb::handle value, Py_ssize_t shape,
+                                     char order, bool shrink) {
+    return reshape_2(nb::borrow<nb::type_object>(value.type()), value, shape, order, shrink);
+}
+
 static nb::object repeat_or_tile(nb::handle h, size_t count, bool tile) {
     struct RepeatOrTileOp : TransformCallback {
         size_t count;
@@ -1148,6 +1181,10 @@ void export_memop(nb::module_ &m) {
      .def("reshape", &reshape, "dtype"_a, "value"_a,
           "shape"_a, "order"_a = 'A', "shrink"_a = false, doc_reshape)
      .def("reshape", &reshape_2, "dtype"_a, "value"_a,
+          "shape"_a, "order"_a = 'A', "shrink"_a = false)
+     .def("reshape", &reshape_same_dtype, "value"_a,
+          "shape"_a, "order"_a = 'A', "shrink"_a = false, doc_reshape)
+     .def("reshape", &reshape_same_dtype_2, "value"_a,
           "shape"_a, "order"_a = 'A', "shrink"_a = false)
      .def("tile",
           [](nb::handle h, size_t count) {

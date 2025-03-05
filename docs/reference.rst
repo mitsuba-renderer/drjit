@@ -275,6 +275,7 @@ Standard mathematical functions
 .. autofunction:: sign
 .. autofunction:: copysign
 .. autofunction:: mulsign
+.. autofunction:: step
 
 Operations for vectors and matrices
 -----------------------------------
@@ -630,6 +631,8 @@ Low-level bits
 .. py:currentmodule:: drjit.detail
 .. autofunction:: set_leak_warnings
 .. autofunction:: leak_warnings
+.. autofunction:: llvm_version
+.. autofunction:: cuda_version
 .. py:currentmodule:: drjit
 
 Typing
@@ -689,7 +692,6 @@ gradient-based optimization and adaptive mixed-precision training.
    .. automethod:: __delitem__
    .. automethod:: __contains__
    .. automethod:: __len__
-   .. automethod:: update
    .. automethod:: keys
    .. automethod:: values
    .. automethod:: items
@@ -712,3 +714,121 @@ gradient-based optimization and adaptive mixed-precision training.
    .. automethod:: step
    .. automethod:: scale
    .. automethod:: unscale
+
+.. _coop_vec_ref:
+
+Cooperative Vectors
+-------------------
+
+.. py:module:: drjit.nn
+
+The :py:mod:`drjit.nn` module provides infrastructure to implement small
+neural networks and revolves around the notion of *cooperative vectors* that
+facilitate code generation of matrix-vector products. Please see the separate
+:ref:`documentation section <coop_vec>` for an introduction.
+
+.. autoclass:: CoopVec
+
+   .. automethod:: __init__
+   .. automethod:: __add__
+   .. automethod:: __sub__
+   .. automethod:: __mul__
+   .. automethod:: __len__
+   .. automethod:: __repr__
+
+   .. property:: index
+      :type: int
+
+      Stores the Dr.Jit variable index of the cooperative vector.
+
+   .. property:: type
+      :type: type[drjit.ArrayBase]
+
+      Stores the element type
+
+.. autoclass:: MatrixView
+
+   .. automethod:: __getitem__
+
+   .. property:: dtype
+      :type: drjit.VarType
+
+      Scalar type underlying the view.
+
+   .. property:: shape
+      :type: tuple[int, int]
+
+      Number of rows/columns. Vectors are stored as matrices with one column.
+
+   .. property:: layout
+      :type: MatrixLayout
+
+      One of several possible matrix layouts (training/inference-optimal and
+      row-major).
+
+   .. property:: stride
+      :type: int
+
+      Row stride (in # of elements)
+
+   .. property:: size
+      :type: int
+
+      Total number of elements
+
+   .. property:: transpose
+      :type: bool
+
+      The ``MatrixView.T`` property flips this flag (all other
+      values stay unchanged).
+
+   .. property:: buffer
+      :type: drjit.ArrayBase
+
+      The underlying buffer, which may contain additional matrices/vectors
+      besides the data referenced by the :py:class:`MatrixView`.
+
+   .. property:: T
+      :type: MatrixView
+
+      Return a transposed view.
+
+   .. property:: grad
+      :type: MatrixView
+
+      Return an analogous view of the gradient.
+
+.. autofunction:: view
+.. autofunction:: pack
+.. autofunction:: unpack
+.. autofunction:: matvec
+.. autofunction:: cast
+
+Neural Networks
+---------------
+
+Besides :ref:`cooperative vector classes <coop_vec_ref>`, the
+:py:mod:`drjit.nn` module also provides convenient abstractions to declare,
+evaluate, and train networks. Please see the separate :ref:`documentation
+section <neural_nets>` for an introduction.
+
+.. autoclass:: Model
+
+   .. automethod:: __call__
+   .. automethod:: alloc
+
+.. autoclass:: Sequential
+
+   .. automethod:: __len__
+   .. automethod:: __getitem__
+
+.. autoclass:: Linear
+.. autoclass:: ReLU
+.. autoclass:: LeakyReLU
+.. autoclass:: SinEncode
+.. autoclass:: TriEncode
+.. autoclass:: Exp
+.. autoclass:: Exp2
+.. autoclass:: Tanh
+.. autoclass:: Cast
+.. autoclass:: ScaleAdd
