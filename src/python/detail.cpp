@@ -308,11 +308,15 @@ void traverse_py_cb_ro_impl(nb::handle self, nb::callable c) {
             const ArraySupplement &s = supp(h.type());
             auto index_fn = s.index;
             if (index_fn){
-                if (s.is_class)
-                    operator()(
-                        index_fn(inst_ptr(h)),
-                        nb::borrow<nb::str>(nb::getattr(h, "Variant")).c_str(),
-                        nb::borrow<nb::str>(nb::getattr(h, "Domain")).c_str());
+                if (s.is_class){
+                    auto variant =
+                        nb::borrow<nb::str>(nb::getattr(h, "Variant"));
+                    auto domain =
+                        nb::borrow<nb::str>(nb::getattr(h, "Domain"));
+                    operator()(index_fn(inst_ptr(h)),
+                               variant.is_valid() ? variant.c_str() : "",
+                               domain.is_valid() ? domain.c_str() : "");
+                }
                 else
                     operator()(index_fn(inst_ptr(h)), "", "");
             }
@@ -343,8 +347,21 @@ void traverse_py_cb_rw_impl(nb::handle self, nb::callable c) {
     struct PyTraverseCallback : TraverseCallback {
         void operator()(nb::handle h) override {
             const ArraySupplement &s = supp(h.type());
-            if (s.index)
-                s.reset_index(operator()(s.index(inst_ptr(h)), nullptr, nullptr), inst_ptr(h));
+            auto index_fn            = s.index;
+            if (index_fn){
+                uint64_t new_index;
+                if (s.is_class) {
+                    auto variant =
+                        nb::borrow<nb::str>(nb::getattr(h, "Variant"));
+                    auto domain = nb::borrow<nb::str>(nb::getattr(h, "Domain"));
+                    new_index   = operator()(
+                        index_fn(inst_ptr(h)),
+                        variant.is_valid() ? variant.c_str() : "",
+                        domain.is_valid() ? domain.c_str() : "");
+                } else
+                    new_index = operator()(index_fn(inst_ptr(h)), "", "");
+                s.reset_index(new_index, inst_ptr(h));
+            }
         }
         uint64_t operator()(uint64_t index, const char *variant, const char *domain) override {
             return nb::cast<uint64_t>(m_callback(index, variant, domain));
