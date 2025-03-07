@@ -369,13 +369,22 @@ template DRJIT_EXTRA_EXPORT void Resampler::resample(const half *, half *, uint3
 template DRJIT_EXTRA_EXPORT void Resampler::resample(const float *, float *, uint32_t, uint32_t) const;
 template DRJIT_EXTRA_EXPORT void Resampler::resample(const double *, double *, uint32_t, uint32_t) const;
 
-#if defined(DRJIT_ENABLE_CUDA) || defined(DRJIT_ENABLE_LLVM)
-template GenericArray<half> Resampler::resample_fwd(const GenericArray<half> &, uint32_t) const;
-template GenericArray<float> Resampler::resample_fwd(const GenericArray<float> &, uint32_t) const;
-template GenericArray<double> Resampler::resample_fwd(const GenericArray<double> &, uint32_t) const;
-template GenericArray<half> Resampler::resample_bwd(const GenericArray<half> &, uint32_t) const;
-template GenericArray<float> Resampler::resample_bwd(const GenericArray<float> &, uint32_t) const;
-template GenericArray<double> Resampler::resample_bwd(const GenericArray<double> &, uint32_t) const;
+#if defined(DRJIT_ENABLE_CUDA)
+template CUDAArray<half> Resampler::resample_fwd(const CUDAArray<half> &, uint32_t) const;
+template CUDAArray<float> Resampler::resample_fwd(const CUDAArray<float> &, uint32_t) const;
+template CUDAArray<double> Resampler::resample_fwd(const CUDAArray<double> &, uint32_t) const;
+template CUDAArray<half> Resampler::resample_bwd(const CUDAArray<half> &, uint32_t) const;
+template CUDAArray<float> Resampler::resample_bwd(const CUDAArray<float> &, uint32_t) const;
+template CUDAArray<double> Resampler::resample_bwd(const CUDAArray<double> &, uint32_t) const;
+#endif
+
+#if defined(DRJIT_ENABLE_LLVM)
+template LLVMArray<half> Resampler::resample_fwd(const LLVMArray<half> &, uint32_t) const;
+template LLVMArray<float> Resampler::resample_fwd(const LLVMArray<float> &, uint32_t) const;
+template LLVMArray<double> Resampler::resample_fwd(const LLVMArray<double> &, uint32_t) const;
+template LLVMArray<half> Resampler::resample_bwd(const LLVMArray<half> &, uint32_t) const;
+template LLVMArray<float> Resampler::resample_bwd(const LLVMArray<float> &, uint32_t) const;
+template LLVMArray<double> Resampler::resample_bwd(const LLVMArray<double> &, uint32_t) const;
 #endif
 
 NAMESPACE_END(drjit)
