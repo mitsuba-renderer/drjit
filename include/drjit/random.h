@@ -37,6 +37,7 @@ template <typename T> struct PCG32 {
     using  Int32     = int32_array_t<T>;
     using UInt64     = uint64_array_t<T>;
     using UInt32     = uint32_array_t<T>;
+    using Float16    = float16_array_t<T>;
     using Float64    = float64_array_t<T>;
     using Float32    = float32_array_t<T>;
     using Mask       = mask_t<UInt64>;
@@ -128,6 +129,16 @@ template <typename T> struct PCG32 {
             return next_uint32(mask);
     }
 
+    /// Generate a half precision floating point value on the interval [0, 1)
+    DRJIT_INLINE Float16 next_float16() {
+        return Float16(next_float32());
+    }
+
+    /// Masked version of \ref next_float16
+    DRJIT_INLINE Float16 next_float16(const Mask &mask) {
+        return Float16(next_float32(mask));
+    }
+
     /// Generate a single precision floating point value on the interval [0, 1)
     DRJIT_INLINE Float32 next_float32() {
         return reinterpret_array<Float32>(sr<9>(next_uint32()) | 0x3f800000u) - 1.f;
@@ -159,25 +170,35 @@ template <typename T> struct PCG32 {
     }
 
     /// Forward \ref next_float call to the correct method based given type size
-    template <typename Value,
-              enable_if_t<std::is_same_v<scalar_t<Value>, float> ||
-                          std::is_same_v<scalar_t<Value>, double>> = 0>
+    template <typename Value>
     DRJIT_INLINE Value next_float() {
-        if constexpr (std::is_same_v<scalar_t<Value>, double>)
-            return next_float64();
-        else
+        using Scalar = scalar_t<Value>;
+        constexpr size_t Size = sizeof(Scalar);
+        static_assert((Size == 2 || Size == 4 || Size == 8) &&
+                      std::is_floating_point_v<Scalar>);
+
+        if constexpr (Size == 2)
+            return next_float16();
+        else if constexpr (Size == 4)
             return next_float32();
+        else
+            return next_float64();
     }
 
     /// Forward \ref next_float call to the correct method based given type size (masked version)
-    template <typename Value,
-              enable_if_t<std::is_same_v<scalar_t<Value>, float> ||
-                          std::is_same_v<scalar_t<Value>, double>> = 0>
+    template <typename Value>
     DRJIT_INLINE Value next_float(const Mask &mask) {
-        if constexpr (std::is_same_v<scalar_t<Value>, double>)
-            return next_float64(mask);
-        else
+        using Scalar = scalar_t<Value>;
+        constexpr size_t Size = sizeof(Scalar);
+        static_assert((Size == 2 || Size == 4 || Size == 8) &&
+                      std::is_floating_point_v<Scalar>);
+
+        if constexpr (Size == 2)
+            return next_float16(mask);
+        else if constexpr (Size == 4)
             return next_float32(mask);
+        else
+            return next_float64(mask);
     }
 
     /// Generate a normally distributed single precision floating point value
@@ -188,8 +209,10 @@ template <typename T> struct PCG32 {
         return -SqrtTwo<T2> * erfinv(fmadd(value, -2.f, 1.f));
     }
 
+    DRJIT_INLINE Float16 next_float16_normal() { return Float16(next_float_normal<Float32>()); }
     DRJIT_INLINE Float32 next_float32_normal() { return next_float_normal<Float32>(); }
     DRJIT_INLINE Float64 next_float64_normal() { return next_float_normal<Float64>(); }
+    DRJIT_INLINE Float16 next_float16_normal(const Mask &mask) { return Float16(next_float_normal<Float32>(mask)); }
     DRJIT_INLINE Float32 next_float32_normal(const Mask &mask) { return next_float_normal<Float32>(mask); }
     DRJIT_INLINE Float64 next_float64_normal(const Mask &mask) { return next_float_normal<Float64>(mask); }
 
