@@ -336,7 +336,6 @@ void traverse_py_cb_ro_impl(nb::handle self, nb::callable c) {
     auto dict = nb::borrow<nb::dict>(nb::getattr(self, "__dict__"));
 
     for (auto value : dict.values()) {
-        jit_log(LogLevel::Warn, "%s", nb::str(dict).c_str());
         traverse("traverse_py_cb_ro", traverse_cb, value);
     }
 }
