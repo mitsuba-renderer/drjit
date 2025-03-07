@@ -116,6 +116,13 @@ Rearranging array contents
 .. autofunction:: repeat
 .. autofunction:: resample
 
+Random number generation
+------------------------
+
+.. autofunction:: rand
+.. autofunction:: normal
+.. autofunction:: seed
+
 Mask operations
 ---------------
 

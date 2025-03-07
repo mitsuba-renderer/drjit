@@ -18,9 +18,9 @@
 
 #if defined(_MSC_VER)
 #  include <stdio.h>
-#  define drjit_fail(...) do { printf(__VA_ARGS__); abort(); } while(0)
+#  define drjit_fail(fmt, ...) do { printf(fmt "\n", ##__VA_ARGS__); abort(); } while(0)
 #else
-#  define drjit_fail(...) do { __builtin_printf(__VA_ARGS__); abort(); } while(0)
+#  define drjit_fail(fmt, ...) do { __builtin_printf(fmt "\n", ##__VA_ARGS__); abort(); } while(0)
 #endif
 
 NAMESPACE_BEGIN(drjit)

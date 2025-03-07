@@ -568,14 +568,16 @@ Random number generators
 
    .. automethod:: __init__
    .. automethod:: seed
-   .. automethod:: next_uint32
-   .. automethod:: next_uint64
    .. automethod:: next_float
+   .. automethod:: next_float16
    .. automethod:: next_float32
    .. automethod:: next_float64
    .. automethod:: next_float_normal
+   .. automethod:: next_float16_normal
    .. automethod:: next_float32_normal
    .. automethod:: next_float64_normal
+   .. automethod:: next_uint32
+   .. automethod:: next_uint64
    .. automethod:: next_uint32_bounded
    .. automethod:: next_uint64_bounded
    .. automethod:: __add__
@@ -1139,14 +1141,16 @@ Random number generators
 
    .. automethod:: __init__
    .. automethod:: seed
-   .. automethod:: next_uint32
-   .. automethod:: next_uint64
    .. automethod:: next_float
+   .. automethod:: next_float16
    .. automethod:: next_float32
    .. automethod:: next_float64
    .. automethod:: next_float_normal
+   .. automethod:: next_float16_normal
    .. automethod:: next_float32_normal
    .. automethod:: next_float64_normal
+   .. automethod:: next_uint32
+   .. automethod:: next_uint64
    .. automethod:: next_uint32_bounded
    .. automethod:: next_uint64_bounded
    .. automethod:: __add__
@@ -1704,14 +1708,16 @@ Random number generators
 
    .. automethod:: __init__
    .. automethod:: seed
-   .. automethod:: next_uint32
-   .. automethod:: next_uint64
    .. automethod:: next_float
+   .. automethod:: next_float16
    .. automethod:: next_float32
    .. automethod:: next_float64
    .. automethod:: next_float_normal
+   .. automethod:: next_float16_normal
    .. automethod:: next_float32_normal
    .. automethod:: next_float64_normal
+   .. automethod:: next_uint32
+   .. automethod:: next_uint64
    .. automethod:: next_uint32_bounded
    .. automethod:: next_uint64_bounded
    .. automethod:: __add__
@@ -2108,14 +2114,16 @@ Random number generators
 
    .. automethod:: __init__
    .. automethod:: seed
-   .. automethod:: next_uint32
-   .. automethod:: next_uint64
    .. automethod:: next_float
+   .. automethod:: next_float16
    .. automethod:: next_float32
    .. automethod:: next_float64
    .. automethod:: next_float_normal
+   .. automethod:: next_float16_normal
    .. automethod:: next_float32_normal
    .. automethod:: next_float64_normal
+   .. automethod:: next_uint32
+   .. automethod:: next_uint64
    .. automethod:: next_uint32_bounded
    .. automethod:: next_uint64_bounded
    .. automethod:: __add__
@@ -2512,14 +2520,16 @@ Random number generators
 
    .. automethod:: __init__
    .. automethod:: seed
-   .. automethod:: next_uint32
-   .. automethod:: next_uint64
    .. automethod:: next_float
+   .. automethod:: next_float16
    .. automethod:: next_float32
    .. automethod:: next_float64
    .. automethod:: next_float_normal
+   .. automethod:: next_float16_normal
    .. automethod:: next_float32_normal
    .. automethod:: next_float64_normal
+   .. automethod:: next_uint32
+   .. automethod:: next_uint64
    .. automethod:: next_uint32_bounded
    .. automethod:: next_uint64_bounded
    .. automethod:: __add__
@@ -3093,14 +3103,16 @@ Random number generators
 
    .. automethod:: __init__
    .. automethod:: seed
-   .. automethod:: next_uint32
-   .. automethod:: next_uint64
    .. automethod:: next_float
+   .. automethod:: next_float16
    .. automethod:: next_float32
    .. automethod:: next_float64
    .. automethod:: next_float_normal
+   .. automethod:: next_float16_normal
    .. automethod:: next_float32_normal
    .. automethod:: next_float64_normal
+   .. automethod:: next_uint32
+   .. automethod:: next_uint64
    .. automethod:: next_uint32_bounded
    .. automethod:: next_uint64_bounded
    .. automethod:: __add__
@@ -3674,10 +3686,16 @@ Random number generators
 
    .. automethod:: __init__
    .. automethod:: seed
-   .. automethod:: next_uint32
-   .. automethod:: next_uint64
+   .. automethod:: next_float
+   .. automethod:: next_float16
    .. automethod:: next_float32
    .. automethod:: next_float64
+   .. automethod:: next_float_normal
+   .. automethod:: next_float16_normal
+   .. automethod:: next_float32_normal
+   .. automethod:: next_float64_normal
+   .. automethod:: next_uint32
+   .. automethod:: next_uint64
    .. automethod:: next_uint32_bounded
    .. automethod:: next_uint64_bounded
    .. automethod:: __add__

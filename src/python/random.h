@@ -42,7 +42,9 @@ void bind_pcg32(nb::module_ &m) {
                  if constexpr (dr::is_jit_v<Guide>) {
                      if (is_drjit_type(dtype)) {
                          const ArraySupplement &s = supp(dtype);
-                         if ((VarType) s.type == VarType::Float32)
+                         if ((VarType) s.type == VarType::Float16)
+                             key = "next_float16";
+                         else if ((VarType) s.type == VarType::Float32)
                              key = "next_float32";
                          else if ((VarType) s.type == VarType::Float64)
                              key = "next_float64";
@@ -57,6 +59,11 @@ void bind_pcg32(nb::module_ &m) {
                  auto &&fn = self.attr(key);
                  return !mask.is(Py_True) ? fn(mask) : fn();
              }, "dtype"_a, "mask"_a = true, doc_PCG32_next_float)
+        .def("next_float16",
+             nb::overload_cast<>(&PCG32::next_float16),
+             doc_PCG32_next_float16)
+        .def("next_float16",
+             nb::overload_cast<const Mask &>(&PCG32::next_float16))
         .def("next_float32",
              nb::overload_cast<>(&PCG32::next_float32),
              doc_PCG32_next_float32)
@@ -73,7 +80,9 @@ void bind_pcg32(nb::module_ &m) {
                  if constexpr (dr::is_jit_v<Guide>) {
                      if (is_drjit_type(dtype)) {
                          const ArraySupplement &s = supp(dtype);
-                         if ((VarType) s.type == VarType::Float32)
+                         if ((VarType) s.type == VarType::Float16)
+                             key = "next_float16_normal";
+                         else if ((VarType) s.type == VarType::Float32)
                              key = "next_float32_normal";
                          else if ((VarType) s.type == VarType::Float64)
                              key = "next_float64_normal";
@@ -88,6 +97,11 @@ void bind_pcg32(nb::module_ &m) {
                  auto &&fn = self.attr(key);
                  return !mask.is(Py_True) ? fn(mask) : fn();
              }, "dtype"_a, "mask"_a = true, doc_PCG32_next_float_normal)
+        .def("next_float16_normal",
+             nb::overload_cast<>(&PCG32::next_float16_normal),
+             doc_PCG32_next_float16_normal)
+        .def("next_float16_normal",
+             nb::overload_cast<const Mask &>(&PCG32::next_float16))
         .def("next_float32_normal",
              nb::overload_cast<>(&PCG32::next_float32_normal),
              doc_PCG32_next_float32_normal)

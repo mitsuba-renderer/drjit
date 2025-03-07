@@ -29,6 +29,8 @@ nb::handle leaf_t(nb::handle h) {
                 break;
             tp = tp2;
         } while (true);
+
+        return supp(tp).array;
     }
     return tp;
 }
