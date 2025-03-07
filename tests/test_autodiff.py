@@ -2128,7 +2128,7 @@ def test138_loop_state(t):
 
     Float = dr.float32_array_t(t)
 
-    @dr.syntax(print_code=True)
+    @dr.syntax
     def loop(t, x: Float, y: Float, n: int = 10) -> Float:
         UInt32 = dr.uint32_array_t(t)
 
