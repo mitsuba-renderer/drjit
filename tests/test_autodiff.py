@@ -2124,7 +2124,7 @@ def test137_forward_from_existing_gradient(t):
     assert dr.allclose(b.grad, 2000)
 
 @pytest.test_arrays("is_diff,float,shape=(*)")
-def test138_loop_state(t):
+def test138_loop_state_backprop(t):
 
     Float = dr.float32_array_t(t)
 
