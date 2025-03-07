@@ -45,9 +45,14 @@ template <typename Float> struct Base : drjit::TraversableBase {
     virtual void scatter_packet(UInt32, dr::Array<Float, 4>) = 0;
     virtual void scatter_add_packet(UInt32, dr::Array<Float, 4>) = 0;
 
+    static constexpr const char *variant_() {
+        return Float::Backend == JitBackend::CUDA ? "cuda" : "llvm";
+    }
+
     Base() {
-        if constexpr (dr::is_jit_v<Float>)
-            drjit::registry_put("", "Base", this);
+        if constexpr (dr::is_jit_v<Float>){
+            drjit::registry_put(Base::variant_(), "Base", this);
+        }
     }
 
     virtual ~Base() { jit_registry_remove(this); }
@@ -58,6 +63,10 @@ template <typename Float> struct Base : drjit::TraversableBase {
 template <typename Float> struct A : Base<Float> {
     using Mask = dr::mask_t<Float>;
     using UInt32 = dr::uint32_array_t<Float>;
+
+    // static constexpr const char *variant_() {
+    //     return Float::Backend == JitBackend::CUDA ? "cuda" : "llvm";
+    // }
 
     virtual std::pair<Float, Float> f(Float x, Float y) override {
         return { 2 * y, -x };
@@ -173,6 +182,10 @@ template <typename Float> struct B : Base<Float> {
     DR_TRAVERSE_CB(Base<Float>, value, opaque)
 };
 
+template<typename Float> constexpr const char *get_variant(){
+    return Float::Backend == JitBackend::CUDA ? "cuda" : "llvm";
+}
+
 DRJIT_CALL_TEMPLATE_BEGIN(Base)
     DRJIT_CALL_METHOD(f)
     DRJIT_CALL_METHOD(f_masked)
@@ -189,6 +202,8 @@ DRJIT_CALL_TEMPLATE_BEGIN(Base)
     DRJIT_CALL_GETTER(complex_getter)
     DRJIT_CALL_GETTER(constant_getter)
     DRJIT_CALL_METHOD(get_self)
+public:
+    static constexpr const char *variant_() { return get_variant<Ts...>(); }
 DRJIT_CALL_END(Base)
 
 

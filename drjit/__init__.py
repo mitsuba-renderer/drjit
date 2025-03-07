@@ -2019,6 +2019,7 @@ def freeze(
     state: Optional[Callable],
     max_cache_size: Optional[int] = None,
     warn_recording_count: int = 10,
+    auto_opaque: bool = False,
 ) -> Callable[[F], F]:
     """
     Decorator to freeze a function for replaying kernels without re-tracing.
@@ -2079,6 +2080,7 @@ def freeze(
     state: Optional[Callable] = None,
     max_cache_size: Optional[int] = None,
     warn_recording_count: int = 10,
+    auto_opaque: bool = False,
 ) -> F: ...
 
 
@@ -2088,6 +2090,7 @@ def freeze(
     state: Optional[Callable] = None,
     max_cache_size: Optional[int] = None,
     warn_recording_count: int = 10,
+    auto_opaque: bool = False,
 ) -> Union[F, Callable[[F2], F2]]:
     max_cache_size = max_cache_size if max_cache_size is not None else -1
 
@@ -2111,7 +2114,7 @@ def freeze(
                 closure = inspect.getclosurevars(f)
                 self.closure = (closure.nonlocals, closure.globals)
                 self.frozen = detail.FrozenFunction(
-                    inner, max_cache_size, warn_recording_count
+                    inner, max_cache_size, warn_recording_count, auto_opaque
                 )
 
             def __call__(self, *args, **kwargs):
