@@ -2122,3 +2122,31 @@ def test137_forward_from_existing_gradient(t):
     a.grad = 1000
     dr.forward_from(a)
     assert dr.allclose(b.grad, 2000)
+
+@pytest.test_arrays("is_diff,float,shape=(*)")
+def test138_loop_state(t):
+
+    Float = dr.float32_array_t(t)
+
+    @dr.syntax(print_code=True)
+    def loop(t, x: Float, y: Float, n: int = 10) -> Float:
+        UInt32 = dr.uint32_array_t(t)
+
+        i = UInt32(0)
+        while dr.hint(i < n, max_iterations=-1):
+            y += 1
+            dr.scatter(x, y, i % 3)
+            i += 1
+
+        return y
+
+    x = dr.arange(Float, 3)
+    dr.make_opaque(x)
+
+    y = dr.arange(Float, 10)
+    dr.make_opaque(y)
+    dr.enable_grad(y)
+
+    y = loop(t, x, y)
+
+    dr.backward(y)
