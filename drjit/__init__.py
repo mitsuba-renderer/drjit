@@ -16,16 +16,15 @@ with detail.scoped_rtld_deepbind():
         err.__cause__ = e
         raise err
 
-import sys
-if sys.version_info < (3, 11):
+import sys as _sys
+if _sys.version_info < (3, 11):
     try:
-        from typing_extensions import overload, Optional, Tuple, Sequence, Union, Literal, Callable
+        from typing_extensions import overload, Optional, Type, Tuple, Sequence, Union, Literal, Callable
     except ImportError:
         raise RuntimeError(
             "Dr.Jit requires the 'typing_extensions' package on Python <3.11")
 else:
-    from typing import overload, Optional, Tuple, Sequence, Union, Literal, Callable
-del sys
+    from typing import overload, Optional, Type, Tuple, Sequence, Union, Literal, Callable
 
 from .ast import syntax, hint
 from .interop import wrap
@@ -472,8 +471,7 @@ def imag(arg, /):
     if is_complex_v(tp) or issubclass(tp, complex):
         return arg.imag
     elif is_quaternion_v(tp):
-        import sys
-        m = sys.modules[tp.__module__]
+        m = _sys.modules[tp.__module__]
         Array3f = replace_type_t(m.Array3f, type_v(arg))
         return Array3f(arg[0], arg[1], arg[2])
     else:
@@ -737,9 +735,8 @@ def polar_decomp(arg, it=10):
         i += 1
         return q, i
 
-    import sys
     tp = type(arg)
-    m = sys.modules[tp.__module__]
+    m = _sys.modules[tp.__module__]
 
     q = type(arg)(arg)
     i = m.UInt32(0)
@@ -770,8 +767,7 @@ def matrix_to_quat(mtx, /):
     if s != (3,3) and s != (4, 4):
         raise Exception('drjit.matrix_to_quat(): invalid input shape!')
 
-    import sys
-    m = sys.modules[mtx.__module__]
+    m = _sys.modules[mtx.__module__]
     Q = replace_type_t(m.Quaternion4f, type_v(mtx))
 
     o = 1.0
@@ -820,8 +816,7 @@ def quat_to_matrix(q, size=4):
     if size != 3 and size != 4:
         raise Exception('drjit.quat_to_matrix(): Unsupported input size!')
 
-    import sys
-    m = sys.modules[q.__module__]
+    m = _sys.modules[q.__module__]
     Matrix3f = replace_type_t(m.Matrix3f, type_v(q))
     Matrix4f = replace_type_t(m.Matrix4f, type_v(q))
 
@@ -862,8 +857,7 @@ def quat_to_euler(q, /):
     if not is_quaternion_v(q):
         raise Exception('drjit.quat_to_euler(): unsupported input type!')
 
-    import sys
-    m = sys.modules[q.__module__]
+    m = _sys.modules[q.__module__]
     Array3f = replace_type_t(m.Array3f, type_v(q))
 
     # Clamp the result to stay in the valid range for asin
@@ -906,8 +900,7 @@ def euler_to_quat(a, /):
     if len(a) != 3:
         raise Exception('drjit.euler_to_quat(): input has invalid shape!')
 
-    import sys
-    m = sys.modules[a.__module__]
+    m = _sys.modules[a.__module__]
     Quaternion4f = replace_type_t(m.Quaternion4f, type_v(a))
 
     angles = a / 2.0
@@ -948,8 +941,7 @@ def transform_decompose(a, it=10):
     if a.shape[:2] != (4,4):
         raise Exception('drjit.transform_decompose(): invalid input shape!')
 
-    import sys
-    m = sys.modules[a.__module__]
+    m = _sys.modules[a.__module__]
     Matrix3f = replace_type_t(m.Matrix3f, type_v(a))
     Array3f  = replace_type_t(m.Array3f, type_v(a))
 
@@ -992,8 +984,7 @@ def transform_compose(s, q, t, /):
     if len(t) != 3:
         raise Exception('drjit.transform_decompose(): translation has invalid shape!')
 
-    import sys
-    m = sys.modules[s.__module__]
+    m = _sys.modules[s.__module__]
     Matrix3f = replace_type_t(m.Matrix3f, type_v(s))
     Matrix4f = replace_type_t(m.Matrix4f, type_v(s))
 
@@ -1989,6 +1980,11 @@ def upsample(t, shape=None, scale_factor=None):
     ``shape`` values are not required to be multiples of the source shape values.
     When `scale_factor` is used, its values must be integers.
 
+    .. warning::
+
+       This function is deprecated and will be removed in a future release.
+       Instead, please use the function :py:func:`drjit.resample()`.
+
     Args:
         source (object): A Dr.Jit tensor or texture type.
 
@@ -2113,6 +2109,181 @@ def upsample(t, shape=None, scale_factor=None):
 
         return type(t)(gather(type(t.array), t.array, index), tuple(shape))
 
+
+_rand_seed : int = 0
+
+def seed(value: int):
+    """
+    Reset the seed value that is used for pseudorandom number generation.
+
+    Every successive call to :py:func:`rand` and :py:func:`normal` (without
+    manually specified ``seed``) increments an internal counter that is used to
+    initialize the random number generator to ensure independent output.
+
+    This function can be used to reset this counter to a specific value.
+    """
+    global _rand_seed
+    _rand_seed = value
+
+def rand(dtype: Type[ArrayT],
+         shape: Union[int, Tuple[int, ...]],
+         *,
+         seed: Union[int, AnyArray, None] = None,
+         version: int = 1,
+         _func_name='next_float') -> ArrayT:
+    """
+    Return a Dr.Jit array or tensor containing uniformly distributed
+    pseudorandom variates.
+
+    This function supports floating point arrays/tensors of various
+    configurations and precisions, e.g.:
+
+    .. code-block:: python
+
+       from drjit.cuda import Float, TensorXf, Array3f, Matrix4f
+
+       # Example usage
+       rand_array = dr.rand(Float, 128)
+       rand_tensor = dr.rand(TensorXf16, (128, 128))
+       rand_vec = dr.rand(Array3f, (3, 128))
+       rand_mat = dr.rand(Matrix4f64, (4, 4, 128))
+
+    The output is uniformly distributed the interval :math:`[0, 1)`. Integer
+    arrays are not supported.
+
+    Successive calls to :py:func:`drjit.rand()` produce independent random
+    variates. You can manually specify a 64-bit integer via the ``seed``
+    parameter to avoid this. Use the :py:func:`drjit.seed()` function to reset
+    the global default seed value.
+
+    .. warning::
+
+       This function is still considered experimental, and the algorithm used
+       to generate random variates may change in future versions of Dr.Jit.
+       Specify ``version=1`` to to ensure that your program remains unaffected
+       by such future changes.
+
+    .. note::
+
+       When this function is used within a symbolic operation (e.g.
+       :py:func:`drjit.while_loop()`), you *must* provide the ``seed``
+       parameter.
+
+       In the non-symbolic case, the seed parameter is internally made opaque
+       via :py:func:`drjit.make_opaque` so that the use of this function does
+       not interfere with kernel caching.
+
+       In applications that require repeated generation of random variates
+       (e.g., in a symbolic loop), is more efficient to directly work with the
+       underlying random number generator (e.g., :py:class:`drjit.cuda.PCG32`)
+       instead of using the high-level :py:func:`drjit.rand` interface.
+
+    Args:
+        source (type[ArrayT]): A Dr.Jit tensor or array type.
+
+        shape (int | tuple[int, ...]): The target shape
+
+        seed (int | None): A seed value used to initialize the random number generator.
+          If no value is provided, a global seed value is used (and then subsequently
+          incremented). Refer to :py:func:`drjit.seed()`.
+
+        version (int): Optional parameter to target a specific implementation
+          of this function in the case of future changes.
+
+    Returns:
+        ArrayT: The generated array of random variates.
+    """
+
+    global _rand_seed
+
+    if isinstance(shape, int):
+        shape = (shape, )
+
+    # Resolve details about the array type
+    is_jit = is_jit_v(dtype)
+    is_tensor = is_tensor_v(dtype)
+    value_tp = leaf_t(dtype)
+    seed_tp = uint64_array_t(value_tp)
+    rng_tp = _sys.modules[value_tp.__module__].PCG32
+
+    # Compute an opaque seed value
+    if flag(JitFlag.SymbolicScope):
+        if seed is None:
+            raise Exception("drjit.rand(): when used within a symbolic "
+                            "operation, you *must* provide the 'seed' "
+                            "parameter'")
+        seed_v = seed_tp(seed)
+    else:
+        seed_v = seed_tp(_rand_seed if seed is None else seed)
+        make_opaque(seed_v)
+
+    if is_tensor:
+        size = prod(shape)
+    else:
+        size = shape[-1]
+
+    # Construct a suitably sized PCG32 instance
+    if version == 1:
+        if is_jit:
+            rng = rng_tp(size, seed_v)
+            leaf_tp = value_tp
+        else:
+            rng = rng_tp(1, seed_v[0])
+            leaf_tp = float
+        func = getattr(rng, _func_name)
+    else:
+        raise Exception("drjit.rand(): unsupported 'version' specified!")
+
+    if depth_v(dtype) <= 1:
+        # Default case: tensors, 1D arrays
+        if is_jit:
+            value = func(leaf_tp)
+        else:
+            value = value_tp(func(leaf_tp) for _ in range(size))
+    else:
+        # Complex case: vectors, matrices, etc.
+        value = empty(dtype, shape)
+
+        def fill(v):
+            if depth_v(v) == 1:
+                if is_jit:
+                    return func(leaf_tp)
+                else:
+                    return value_tp(func(leaf_tp) for _ in range(size))
+
+            for i in range(len(v)):
+                v[i] = fill(v[i])
+
+        fill(value)
+
+    if seed is None:
+        _rand_seed += 1
+
+    if is_tensor:
+        return dtype(value, shape)
+    else:
+        return value
+
+def normal(dtype: Type[ArrayT],
+           shape: Union[int, Tuple[int, ...]],
+           *,
+           seed: Union[int, AnyArray, None] = None,
+           version: int = 1) -> ArrayT:
+    """
+    Return a Dr.Jit array or tensor containing pseudorandom variates
+    following a standard normal distribution
+
+    Please refer to :py:func:`drjit.rand()`, the interfaces of these
+    two functions are identical.
+    """
+
+    return rand(
+        dtype=dtype,
+        shape=shape,
+        seed=seed,
+        version=version,
+        _func_name='next_float_normal'
+    )
 
 def binary_search(start, end, pred):
     '''
@@ -2241,12 +2412,12 @@ def assert_true(
     if cond is True or (not detail.any_symbolic(cond) and all(cond)):
         return
 
-    import traceback, sys, types
+    import traceback, types
 
     active = not cond if isinstance(cond, bool) else ~cond
 
     if detail.any_symbolic((active, args, kwargs)):
-        tb_frame = sys._getframe(tb_skip + 1)
+        tb_frame = _sys._getframe(tb_skip + 1)
         tb = types.TracebackType(tb_next=None,
                                  tb_frame=tb_frame,
                                  tb_lasti=tb_frame.f_lasti,
@@ -2260,7 +2431,7 @@ def assert_true(
             *args,
             tb_msg=tb_msg,
             active=active,
-            file=sys.stderr,
+            file=_sys.stderr,
             **kwargs
         )
 

@@ -179,6 +179,7 @@ def test01_traits(t):
     assert dr.float32_array_t(dr.scalar.Array3u64) is dr.scalar.Array3f
     assert dr.float_array_t(dr.scalar.TensorXu64) is dr.scalar.TensorXf64
     assert dr.leaf_t(dr.scalar.Matrix3f) is dr.scalar.Array3f
+    assert dr.leaf_t(dr.scalar.TensorXf) is dr.scalar.ArrayXf
 
 @pytest.test_arrays("float, shape=(*)")
 def test02_expr_t(t):
