@@ -446,7 +446,8 @@ NB_NOINLINE PyObject *apply_tensor(ArrayOp op, Slot slot,
             expanded_shapes_alloc[index] = vector<size_t>(ndim, 1);
             vector<size_t>& expanded_shape = expanded_shapes_alloc[index];
             size_t offset = ndim - src_ndim;
-            memcpy(&expanded_shape[offset], shape->data(), sizeof(size_t) * src_ndim);
+            if (src_ndim)
+                memcpy(&expanded_shape[offset], shape->data(), sizeof(size_t) * src_ndim);
             return (const vector<size_t>*)&expanded_shape;
         };
 

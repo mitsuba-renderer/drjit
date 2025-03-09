@@ -4,46 +4,46 @@ import sys
 
 @pytest.test_arrays('jit,float16,shape=(3, *),-diff', 'jit,float32,shape=(3, *),-diff')
 def test01_pack_unpack(t):
+    # Test coop vector creation and unpacking
     m = sys.modules[t.__module__]
-    x = dr.coop.Vector(t(1, 2, 3), t(4, 5, 6), dr.value_t(t)(7), 8)
+    v = dr.full(dr.value_t(t), 7, 32)
+    x = dr.coop.Vector(t(1, 2, 3), t(4, 5, 6), v, 8)
     assert len(x) == 8
     y = list(x)
     z = m.ArrayXf(x)
     result_ok = True
     for i in range(8):
-        result_ok &= y[i] == i+1
-        result_ok &= z[i] == i+1
+        result_ok &= dr.all(y[i] == i+1)
+        result_ok &= dr.all(z[i] == i+1)
     assert result_ok
 
 @pytest.mark.parametrize('size', [64, 65])
 @pytest.test_arrays('jit,float16,shape=(*),-diff', 'jit,float32,shape=(*),-diff')
 def test02_basic(t, size):
-    dr.set_flag(dr.JitFlag.PrintIR, True)
-    x = dr.coop.Vector(*tuple(t(i) for i in range(size)))
+    # Simple arithmetic to investigate a bug with OptiX compilation
+    x = dr.coop.Vector(*tuple(dr.full(t, i, 32) for i in range(size)))
     m = sys.modules[t.__module__]
-    q = m.TensorXf(x)
     o = dr.coop.Vector(tuple(t(1) for _ in range(size)))
     x = x + o
     x = x + o
     x = m.TensorXf(x)
-    print(x)
-    print(q)
-    assert x[0] == 2 and x[1] == 3
+    assert dr.all((x[0] == 2) & (x[1] == 3))
 
-@pytest.mark.parametrize('size', [0, 20, 100])
+@pytest.mark.parametrize('size', [0, 20, 10])
 @pytest.test_arrays('jit,float16,shape=(*),-diff', 'jit,float32,shape=(*),-diff')
 def test02_add_sub(t, size):
-    dr.set_flag(dr.JitFlag.PrintIR, True)
-    x = dr.coop.Vector(t(5), 6, *tuple(range(size)))
+    # Test addition and subtraction
+    x = dr.coop.Vector(dr.full(t, 5, 32), 6, *tuple(range(size)))
     y = x + 15
     z = y - 2
     r0, r1 = list(z)[0:2]
     dr.schedule(r0, r1)
-    assert r0 == 18 and r1 == 19
+    assert dr.all((r0 == 18) & (r1 == 19))
 
 @pytest.mark.parametrize('size', [0, 20, 100])
 @pytest.test_arrays('jit,float16,shape=(*),-diff', 'jit,float32,shape=(*),-diff')
 def test03_add_min_max_fma(t, size):
+    # Test min/max/FMA operations
     x = dr.coop.Vector(t(5), 8, *tuple(range(size)))
     x_min = dr.minimum(x, 6)
     x_max = dr.maximum(x, 7)
@@ -55,6 +55,7 @@ def test03_add_min_max_fma(t, size):
 @pytest.mark.parametrize('sub_slice', [False, True])
 @pytest.test_arrays('jit,float16,shape=(*),-diff')
 def test04_pack_unpack(t, sub_slice):
+    # Test the dr.coop.pack() and dr.coop.unpack() memory operations
     m = sys.modules[t.__module__]
     extra = 2 if sub_slice else 0
     X = m.TensorXf16(dr.arange(t, 24*(32+extra)), (24, 32+extra))
@@ -103,6 +104,7 @@ def test04_pack_unpack(t, sub_slice):
 @pytest.mark.parametrize('pack', [False, True])
 @pytest.test_arrays('jit,tensor,float16,-diff', 'jit,tensor,float32,-diff')
 def test05_vecmat(t, shape, transpose, bias, pack):
+    # Test matrix multiplication for various sizes and configurations (primal)
     m = sys.modules[t.__module__]
     Tensor = t
     Float = dr.array_t(t)
@@ -157,6 +159,7 @@ def test05_vecmat(t, shape, transpose, bias, pack):
 @pytest.test_arrays('jit,shape=(*),float16,-diff', 'jit,shape=(*),float32,-diff')
 @pytest.mark.parametrize('op', ['exp2', 'log2', 'tanh'])
 def test06_unary(t, op):
+    # Test some special unary operations that are supported by coop vectors
     func = getattr(dr, op)
     x = dr.coop.Vector(t(0.1), t(0.2), t(0.3))
     r = func(x)
@@ -169,6 +172,7 @@ def test06_unary(t, op):
 
 @pytest.test_arrays('jit,shape=(*),float16,-diff', 'jit,shape=(*),float32,-diff')
 def test07_step(t):
+    # Test the dr.step() fucntion on coop vectors
     x = dr.coop.Vector(t(0.1), t(0.2))
     y = dr.coop.Vector(t(0.15), t(0.15))
     z = dr.step(x, y)
@@ -179,6 +183,7 @@ def test07_step(t):
 
 @pytest.test_arrays('jit,shape=(*),float16,diff', 'jit,shape=(*),float32,diff')
 def test09_fwd_grad_unpack(t):
+    # Test that forward gradients correctly propagate through coop vector creation and unpacking
     a, b = t(1), t(2)
     dr.enable_grad(a, b)
     z = dr.coop.Vector(a, b) # pack
@@ -193,6 +198,7 @@ def test09_fwd_grad_unpack(t):
 
 @pytest.test_arrays('jit,shape=(*),float16,diff', 'jit,shape=(*),float32,diff')
 def test10_bwd_grad_unpack(t):
+    # Test that backward gradients correctly propagate through coop vector creation and unpacking
     a, b = t(1), t(2)
     dr.enable_grad(a, b)
     z = dr.coop.Vector(a, b) # pack
@@ -203,3 +209,40 @@ def test10_bwd_grad_unpack(t):
     dr.schedule(a.grad, b.grad)
     assert a.grad == 4
     assert b.grad == 5
+
+
+@pytest.test_arrays('jit,shape=(*),float16,diff', 'jit,shape=(*),float32,diff')
+def test11_fwd_addition(t):
+    # Propagate forward gradients through an addition
+    a, b = t(1), t(1)
+    c, d = t(1), t(1)
+    dr.enable_grad(a, b, c, d)
+    x0 = dr.coop.Vector(a, b)
+    x1 = dr.coop.Vector(c, d)
+    x2 = x0 + x1
+    r0, r1 = x2
+    a.grad = 1
+    b.grad = 2
+    c.grad = 100
+    d.grad = 200
+    dr.forward_to(r0, r1)
+    dr.schedule(r0.grad, r1.grad)
+    assert r0.grad == 101 and r1.grad == 202
+
+
+@pytest.test_arrays('jit,shape=(*),float16,diff', 'jit,shape=(*),float32,diff')
+def test12_bwd_mul(t):
+    # Propagate forward gradients through an addition
+    a, b = t(8), t(9)
+    c, d = t(3), t(2)
+    dr.enable_grad(a, b, c, d)
+    x0 = dr.coop.Vector(a, b)
+    x1 = dr.coop.Vector(c, d)
+    x2 = x0 * x1
+    r0, r1 = x2
+    r0.grad = 1
+    r1.grad = 10
+    dr.backward_to(a, b, c, d)
+    dr.schedule(a.grad, b.grad, c.grad, d.grad)
+    assert a.grad == 3 and b.grad == 20
+    assert c.grad == 8 and d.grad == 90

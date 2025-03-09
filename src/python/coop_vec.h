@@ -23,7 +23,7 @@ struct Vector {
     Vector(nb::handle arg);
 
     /// Steals ownership of 'index'
-    Vector(uint32_t index, uint32_t size, nb::handle type)
+    Vector(uint64_t index, uint32_t size, nb::handle type)
         : m_index(index), m_size(size), m_type(type) { }
 
     /// Copy constructor
@@ -60,6 +60,6 @@ struct View {
 
     nb::str repr() const;
     View getitem(nb::object arg) const;
-    uint32_t index() const;
+    uint64_t index() const;
 };
 

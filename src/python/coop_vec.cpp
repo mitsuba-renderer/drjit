@@ -175,8 +175,9 @@ static nb::object coop_vec_binary_op(nb::handle h0, nb::handle h1) {
             continue;
 
         nb::list args;
+        nb::object oi = c->m_type(o[i]);
         for (uint32_t j = 0; j < c->m_size; ++j)
-            args.append(c->m_type(o[i]));
+            args.append(oi);
 
         o[i] = nb::cast(Vector(nb::borrow<nb::args>(nb::tuple(args))));
         if (!nb::try_cast(o[i], ptr[i], false))
@@ -216,8 +217,9 @@ static nb::object coop_vec_step(nb::handle h0, nb::handle h1) {
             continue;
 
         nb::list args;
+        nb::object oi = c->m_type(o[i]);
         for (uint32_t j = 0; j < c->m_size; ++j)
-            args.append(c->m_type(o[i]));
+            args.append(oi);
 
         o[i] = nb::cast(Vector(nb::borrow<nb::args>(nb::tuple(args))));
         if (!nb::try_cast(o[i], ptr[i], false))
@@ -323,7 +325,7 @@ nb::str View::repr() const {
     );
 }
 
-uint32_t View::index() const {
+uint64_t View::index() const {
     return supp(buffer.type()).index(inst_ptr(buffer));
 }
 
@@ -445,7 +447,7 @@ static nb::object repack_impl(const char *name, MatrixLayout layout,
 
     if (arg_tp.is(view_type)) {
         View *in_view = nb::cast<View *>(arg, false);
-        uint32_t in_index = supp(in_view->buffer.type()).index(inst_ptr(in_view->buffer));
+        uint64_t in_index = supp(in_view->buffer.type()).index(inst_ptr(in_view->buffer));
         MatrixDescr out_descr =
             jit_coop_vec_compute_layout(in_index, &in_view->descr, layout, offset);
         View *out_view = new View{out_descr, nb::none()};
@@ -577,27 +579,12 @@ void export_coop_vec(nb::module_ &m) {
         .def("__repr__", &View::repr)
         .def("__getitem__", &View::getitem,
              nb::sig("def __getitem__(self, int | slice | tuple[int | slice, int | slice]) -> View"))
-        .def_prop_rw("dtype",
-                     [](View &r) { return r.descr.dtype; },
-                     [](View &r, VarType value) { r.descr.dtype = value; })
-        .def_prop_rw("offset",
-                     [](View &r) { return r.descr.offset; },
-                     [](View &r, uint32_t value) { r.descr.offset = value; })
-        .def_prop_rw("stride",
-                     [](View &r) { return r.descr.stride; },
-                     [](View &r, uint32_t value) { r.descr.stride = value; })
-        .def_prop_rw("size",
-                     [](View &r) { return r.descr.size; },
-                     [](View &r, uint32_t value) { r.descr.size = value; })
-        .def_prop_rw("layout",
-                     [](View &r) { return r.descr.layout; },
-                     [](View &r, MatrixLayout value) { r.descr.layout = value; })
-        .def_prop_rw("shape",
-                     [](View &r) { return std::make_pair(r.descr.rows, r.descr.cols); },
-                     [](View &r, std::pair<uint32_t, uint32_t> shape) {
-                        r.descr.rows = shape.first;
-                        r.descr.cols = shape.second;
-                     })
+        .def_prop_ro("dtype", [](View &r) { return r.descr.dtype; })
+        .def_prop_ro("offset", [](View &r) { return r.descr.offset; })
+        .def_prop_ro("stride", [](View &r) { return r.descr.stride; })
+        .def_prop_ro("size", [](View &r) { return r.descr.size; })
+        .def_prop_ro("layout", [](View &r) { return r.descr.layout; })
+        .def_prop_ro("shape", [](View &r) { return std::make_pair(r.descr.rows, r.descr.cols); })
         .def_rw("buffer", &View::buffer);
 
     nb::enum_<MatrixLayout>(view_type, "MatrixLayout")

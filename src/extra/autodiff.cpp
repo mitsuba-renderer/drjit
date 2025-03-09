@@ -141,11 +141,37 @@ DRJIT_NOINLINE JitVar scalar(JitBackend backend, VarType type, double value) {
     }
 }
 
+/// As above, but for cooperative vectors
+DRJIT_NOINLINE JitVar scalar_coop_vec(JitBackend backend, VarType type, double value, uint32_t length) {
+    switch (type) {
+        case VarType::Float16: {
+            drjit::half v = (drjit::half) value;
+            return JitVar::steal(jit_coop_vec_literal(backend, VarType::Float16, &v, 1, length));
+        }
+        case VarType::Float32: {
+            float v = (float) value;
+            return JitVar::steal(jit_coop_vec_literal(backend, VarType::Float32, &v, 1, length));
+        }
+        case VarType::Float64: {
+            return JitVar::steal(jit_coop_vec_literal(backend, VarType::Float64, &value, 1, length));
+        }
+        default:
+            ad_fail("scalar_coop_vec(): unsupported AD scalar type");
+            return JitVar();
+    }
+}
+
 /// Create a scalar Jit variable with the same floating point type and backend
 /// as an already existing variable with the provided ``index``
 DRJIT_INLINE JitVar scalar(Index index, double value) {
     VarInfo info = jit_set_backend(jit_index(index));
     return scalar(info.backend, info.type, value);
+}
+
+/// As above, but for cooperative vectors
+DRJIT_INLINE JitVar scalar_coop_vec(Index index, double value) {
+    VarInfo info = jit_set_backend(jit_index(index));
+    return scalar_coop_vec(info.backend, info.type, value, jit_coop_vec_length(index));
 }
 
 // ==========================================================================
@@ -315,6 +341,15 @@ struct Variable {
     void mul_accum(const JitVar &v1, const JitVar &v2, size_t src_size) {
         JitVar zero = scalar(v1.index(), 0.f), weight;
 
+        if (unlikely(flags & CoopVec)) {
+            // Specialized gradient propagation for cooperative vectors
+            if (grad.valid())
+                grad = JitVar::steal(jit_coop_vec_ternary_op(JitOp::Fma, v1.index(), v2.index(), grad.index()));
+            else
+                grad = JitVar::steal(jit_coop_vec_binary_op(JitOp::Mul, v1.index(), v2.index()));
+            return;
+        }
+
         // Elide the zero check if ``v2`` is known not to be NaN/infinite
         if (jit_var_is_finite_literal(v2.index()))
             weight = v2;
@@ -357,6 +392,15 @@ struct Variable {
      * optimizations.
      */
     void accum(const JitVar& v, size_t src_size) {
+        if (unlikely(flags & CoopVec)) {
+            // Specialized gradient propagation for cooperative vectors
+            if (grad.valid())
+                grad = JitVar::steal(jit_coop_vec_binary_op(JitOp::Add, v.index(), grad.index()));
+            else
+                grad = v;
+            return;
+        }
+
         if (size == 1 && src_size != 1) {
             /* When this variable is scalar (size == 1) and the source is
                not (src_size != 1), the gradient must be reduced to a single
@@ -861,6 +905,9 @@ static void ad_propagate_size(Variable *v) {
     }
 }
 
+/// A tag to signal cooperative weights in the Arg() constructor
+struct coop { };
+
 // This data structure encodes an ordinary dependence on a function argument
 struct Arg {
     Arg() = default;
@@ -870,6 +917,9 @@ struct Arg {
 
     Arg(Index index, double value)
         : ad_index(::ad_index(index)), weight(scalar(index, value)) { }
+
+    Arg(Index index, double value, coop)
+        : ad_index(::ad_index(index)), weight(scalar_coop_vec(index, value)) { }
 
     Arg(Arg &&a) = default;
     Arg(const Arg &a) = delete;
@@ -1020,6 +1070,8 @@ DRJIT_NOINLINE Index ad_var_new_impl(const char *label, JitVar &&result,
 
     auto [ad_index, var] = ad_var_new(info.backend, info.size, info.type,
                                       symbolic, reuse_indices, label);
+    if (info.is_coop_vec)
+        var->flags |= VariableFlags::CoopVec;
     const char *tname = jit_type_name(info.type);
 
     if constexpr (N == 0) {
@@ -3566,9 +3618,10 @@ const char *ad_var_graphviz() {
         if (v->flags & VariableFlags::Symbolic)
             buffer.put("|{Symbolic}");
 
-        buffer.fmt("|{Type: %s|Size: %zu}|{a%u|Refs: %u}}\"",
-            type_name_short[v->type], v->size,
-            index, (uint32_t) v->ref_count);
+        buffer.fmt("|{Type: %s%s|Size: %zu}|{a%u|Refs: %u}}\"",
+            type_name_short[v->type],
+            (v->flags & VariableFlags::CoopVec) ? " [coop]" : "",
+            v->size, index, (uint32_t) v->ref_count);
 
         if (color)
             buffer.fmt(" fillcolor=%s style=filled", color);
@@ -3608,7 +3661,7 @@ const char *ad_var_graphviz() {
         "        l4 [style=filled fillcolor=yellowgreen label=\"Gradient present\"];\n"
         "        l3 [style=filled fillcolor=salmon label=\"Input\"];\n"
         "        l2 [style=filled fillcolor=lightblue2 label=\"Output\"];\n"
-        "        l1 [style=filled fillcolor=wheat label=\"Labeled\"];\n"
+        "        l0 [style=filled fillcolor=wheat label=\"Labeled\"];\n"
         "    }\n"
         "}\n");
 
@@ -3958,12 +4011,53 @@ uint64_t ad_coop_vec_binary_op(JitOp op, uint64_t i0, uint64_t i1) {
     JitVar result = JitVar::steal(
         jit_coop_vec_binary_op(op, jit_index(i0), jit_index(i1)));
 
-    if (is_detached(i0, i1))
+    if (is_detached(i0, i1)) {
         return result.release();
-    else
-        return ad_var_new("fma", std::move(result),
-                          Arg(i0, JitVar::borrow(jit_index(i1))),
-                          Arg(i1, JitVar::borrow(jit_index(i0))));
+    } else {
+        switch (op) {
+            case JitOp::Add:
+                return ad_var_new("coop_vec_add", std::move(result),
+                                  Arg(i0, 1.0, coop{}),
+                                  Arg(i1, 1.0, coop{}));
+                break;
+
+            case JitOp::Sub:
+                return ad_var_new("coop_vec_sub", std::move(result),
+                                  Arg(i0, 1.0, coop{}),
+                                  Arg(i1, -1.0, coop{}));
+                break;
+
+            case JitOp::Mul:
+                return ad_var_new("coop_vec_mul", std::move(result),
+                                  Arg(i0, JitVar::borrow(jit_index(i1))),
+                                  Arg(i1, JitVar::borrow(jit_index(i0))));
+                break;
+
+            case JitOp::Min: {
+                    JitVar w0 = JitVar::steal(jit_coop_vec_binary_op(JitOp::Step, jit_index(i0), jit_index(i1))),
+                           w1 = JitVar::steal(jit_coop_vec_binary_op(JitOp::Step, jit_index(i1), jit_index(i0)));
+                    return ad_var_new("coop_vec_max", std::move(result),
+                                      Arg(i0, std::move(w1)),
+                                      Arg(i1, std::move(w0)));
+                }
+                break;
+
+            case JitOp::Max: {
+                    JitVar w0 = JitVar::steal(jit_coop_vec_binary_op(JitOp::Step, jit_index(i0), jit_index(i1))),
+                           w1 = JitVar::steal(jit_coop_vec_binary_op(JitOp::Step, jit_index(i1), jit_index(i0)));
+                    return ad_var_new("coop_vec_max", std::move(result),
+                                      Arg(i0, std::move(w0)),
+                                      Arg(i1, std::move(w1)));
+                }
+                break;
+
+            case JitOp::Step:
+                return result.release();
+
+            default:
+                ad_raise("ad_coop_vec_binary_op(): differentiable version not implemented yet.");
+        }
+    }
 }
 
 /// Perform a ternary operation on a triplet of cooperative vectors
@@ -3971,14 +4065,22 @@ uint64_t ad_coop_vec_ternary_op(JitOp op, uint64_t i0, uint64_t i1, uint64_t i2)
     JitVar result = JitVar::steal(
         jit_coop_vec_ternary_op(op, jit_index(i0), jit_index(i1), jit_index(i2)));
 
-    if (is_detached(i0, i1, i2))
+    if (is_detached(i0, i1, i2)) {
         return result.release();
-    else
-        return ad_var_new("fma", std::move(result),
-                          Arg(i0, JitVar::borrow(jit_index(i1))),
-                          Arg(i1, JitVar::borrow(jit_index(i0))),
-                          Arg(i2, 1.0));
+    } else {
+        switch (op) {
+            case JitOp::Fma:
+                return ad_var_new("coop_vec_fma", std::move(result),
+                                  Arg(i0, JitVar::borrow(jit_index(i1))),
+                                  Arg(i1, JitVar::borrow(jit_index(i0))),
+                                  Arg(i2, 1.0, coop{}));
+
+            default:
+                ad_raise("ad_coop_vec_ternary_op(): differentiable version not implemented yet.");
+        }
+    }
 }
+
 
 // ==========================================================================
 // Custom operations
