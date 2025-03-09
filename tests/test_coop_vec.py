@@ -2,15 +2,18 @@ import drjit as dr
 import pytest
 import sys
 
-@pytest.mark.parametrize('size', [0, 20, 100])
-@pytest.test_arrays('jit,float16,shape=(*),-diff', 'jit,float32,shape=(*),-diff')
-def test01_init_get_set(t, size):
-    x = dr.coop.Vector(t(5), 6, *tuple(range(size)))
-    assert len(x) == 2 + size
-    x[1] = 11
-    r0, r1 = x[0], x[1]
-    dr.schedule(r0, r1)
-    assert r0 == 5 and r1 == 11
+@pytest.test_arrays('jit,float16,shape=(3, *),-diff', 'jit,float32,shape=(3, *),-diff')
+def test01_pack_unpack(t):
+    m = sys.modules[t.__module__]
+    x = dr.coop.Vector(t(1, 2, 3), t(4, 5, 6), dr.value_t(t)(7), 8)
+    assert len(x) == 8
+    y = list(x)
+    z = m.ArrayXf(x)
+    result_ok = True
+    for i in range(8):
+        result_ok &= y[i] == i+1
+        result_ok &= z[i] == i+1
+    assert result_ok
 
 @pytest.mark.parametrize('size', [64, 65])
 @pytest.test_arrays('jit,float16,shape=(*),-diff', 'jit,float32,shape=(*),-diff')
@@ -34,7 +37,7 @@ def test02_add_sub(t, size):
     x = dr.coop.Vector(t(5), 6, *tuple(range(size)))
     y = x + 15
     z = y - 2
-    r0, r1 = z[0], z[1]
+    r0, r1 = list(z)[0:2]
     dr.schedule(r0, r1)
     assert r0 == 18 and r1 == 19
 
@@ -45,7 +48,7 @@ def test03_add_min_max_fma(t, size):
     x_min = dr.minimum(x, 6)
     x_max = dr.maximum(x, 7)
     z = dr.fma(x_min, x_max, 1)
-    r0, r1 = z[0], z[1]
+    r0, r1 = list(z)[0:2]
     dr.schedule(r0, r1)
     assert r0 == 36 and r1 == 49
 
@@ -104,9 +107,6 @@ def test05_vecmat(t, shape, transpose, bias, pack):
     Tensor = t
     Float = dr.array_t(t)
 
-    if dr.backend_v(t) == dr.JitBackend.CUDA and not pack:
-        pytest.skip("Skip for now, crashes on driver R570")
-
     if dr.backend_v(t) == dr.JitBackend.CUDA:
         if (not pack and shape[1] == 2) or \
            (not pack and transpose) or \
@@ -153,6 +153,7 @@ def test05_vecmat(t, shape, transpose, bias, pack):
 
     assert dr.allclose(r_n, ref)
 
+
 @pytest.test_arrays('jit,shape=(*),float16,-diff', 'jit,shape=(*),float32,-diff')
 @pytest.mark.parametrize('op', ['exp2', 'log2', 'tanh'])
 def test06_unary(t, op):
@@ -174,3 +175,31 @@ def test07_step(t):
     r0, r1 = z
     dr.schedule(r0, r1)
     assert r0 == 0 and r1 == 1
+
+
+@pytest.test_arrays('jit,shape=(*),float16,diff', 'jit,shape=(*),float32,diff')
+def test09_fwd_grad_unpack(t):
+    a, b = t(1), t(2)
+    dr.enable_grad(a, b)
+    z = dr.coop.Vector(a, b) # pack
+    x, y = z # unpack
+    a.grad = 4
+    b.grad = 5
+    dr.forward_to(x, y)
+    dr.schedule(x.grad, y.grad)
+    assert x.grad == 4
+    assert y.grad == 5
+
+
+@pytest.test_arrays('jit,shape=(*),float16,diff', 'jit,shape=(*),float32,diff')
+def test10_bwd_grad_unpack(t):
+    a, b = t(1), t(2)
+    dr.enable_grad(a, b)
+    z = dr.coop.Vector(a, b) # pack
+    x, y = z # unpack
+    x.grad = 4
+    y.grad = 5
+    dr.backward_to(a, b)
+    dr.schedule(a.grad, b.grad)
+    assert a.grad == 4
+    assert b.grad == 5

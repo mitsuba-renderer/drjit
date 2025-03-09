@@ -726,13 +726,17 @@ multiplications using *cooperative vectors*. Please see the separate
 .. autoclass:: Vector
 
    .. automethod:: __init__
-   .. automethod:: __getitem__
-   .. automethod:: __setitem__
    .. automethod:: __add__
    .. automethod:: __sub__
    .. automethod:: __mul__
    .. automethod:: __len__
    .. automethod:: __repr__
+   .. property:: index
+      :type: int
+      Stores the Dr.Jit variable index underlying a cooperative vector.
+   .. property:: type
+      :type: int
+      Stores the element type underlying a cooperative vector.
 
 .. autoclass:: View
 

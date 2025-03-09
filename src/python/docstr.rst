@@ -8088,11 +8088,55 @@
    :py:class:`drjit.llvm.UInt32`).
 
    Seen from a high level, cooperative vectors resemble nested array types,
-   such as as :py:class:`drjit.cuda.ArrayXf16`. The reason for their existence
-   is that cooperative vector arithmetic compiles to a specialized set of
-   compiler intrinsics that are more efficient when this arithmetic is
-   interspersed with cooperative vector multiplication operations (see
-   :py:func:`drjit.coop.matvec`).
+   such as as :py:class:`drjit.cuda.ArrayXf16`. A variety of conversions
+   between cooperative vectors and regular Dr.Jit arrays are possible.
+
+   .. code-block:: python
+
+      # Pack individual components into a cooperative vector
+      vec = drjit.coop.Vector(x, y, z)
+
+      # Unpack components
+      x, y, z = vec
+
+      # Unpack directly into 3D array
+      xyz = Array3f(vec)
+
+      # Convert a 3D array and a 2D array into a 5D cooperative vector
+      a1: Array3f = ...
+      a2: Array2f = ...
+      vec = drjit.coop.Vector(a1, a2)
+
+   The main difference between regular Dr.Jit arrays and cooperative vectors is
+   that they *do not permit indexed element access*. For example, the following
+   operation raises an Exception:
+
+   .. code-block:: pycon
+
+      >>> vec = drjit.coop.Vector(x, y, z)
+      >>> vec[1]
+      Traceback (most recent call last):
+        File "<stdin>", line 1, in <module>
+      TypeError: 'drjit.coop.Vector' object is not subscriptable
+
+   The compilation stack may arbitrarily redistribute the elements of a
+   cooperative vector across threads for efficiency (this is what
+   *cooperative* refers to). Indexed access to a cooperative vector's elements
+   would interfere with such optimizations.
+
+   To unpack a cooperative vector into its components, use an expression
+   like ``x, y, z = vec``, ``ArrayXf(vec)``, or ``list(vec)``.
+
+.. topic:: coop_Vector_init
+
+   The constructor accepts a variable number of arguments including Dr.Jit
+   arrays, scalar Python integers and floating point values, and :ref:`PyTrees
+   <pytrees>`. It flattens this input into a list of vector components.
+
+   At least one Jit-compiled array must be provided as input so that Dr.Jit can
+   infer the cooperative vector's element type. An exception will be raised if
+   the input contains Dr.Jit arrays of inconsistent scalar types (e.g.,
+   :py:class:`drjit.cuda.Array2f` and :py:class:`drjit.cuda.UInt32`).
 
 .. topic:: coop_View
 

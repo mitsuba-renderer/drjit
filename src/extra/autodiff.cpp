@@ -43,6 +43,7 @@
  */
 
 #include "common.h"
+#include "drjit-core/jit.h"
 #include <drjit-core/half.h>
 #include <drjit/jit.h>
 #include <drjit/math.h>
@@ -216,7 +217,10 @@ enum VariableFlags : uint8_t {
     Visited = 1 << 4,
 
     /// Is this variable on an iteration boundary of an evaluated loop?
-    LoopBoundary = 1 << 5
+    LoopBoundary = 1 << 5,
+
+    /// Does this variable store a cooperative vector?
+    CoopVec = 1 << 6
 };
 
 /**
@@ -3047,8 +3051,8 @@ private:
 
 void ad_var_gather_packet(size_t n, Index source, JitIndex offset,
                           JitIndex mask, uint64_t *out, ReduceMode mode) {
-    uint32_t *out2 = (uint32_t *) alloca(sizeof(uint32_t) * n);
-    jit_var_gather_packet(n, jit_index(source), offset, mask, out2);
+    uint32_t *tmp = (uint32_t *) alloca(sizeof(uint32_t) * n);
+    jit_var_gather_packet(n, jit_index(source), offset, mask, tmp);
     ADIndex source_ad = ad_index(source);
 
     const std::vector<Scope> &scopes = local_state.scopes;
@@ -3064,16 +3068,16 @@ void ad_var_gather_packet(size_t n, Index source, JitIndex offset,
         op->add_index(backend, source_ad, true);
 
         for (size_t i = 0; i < n; ++i) {
-            out[i] = ad_var_new(out2[i]);
-            jit_var_dec_ref(out2[i]);
+            out[i] = ad_var_new(tmp[i]);
+            jit_var_dec_ref(tmp[i]);
             op->add_output(ad_index(out[i]));
         }
 
         if (!ad_custom_op(op.get()))
-            ad_raise("ad_var_gather_packet(): could not create CustomOp");
+            ad_raise("ad_var_gather_packet(): could not create CustomOp!");
     } else {
         for (size_t i = 0; i < n; ++i)
-            out[i] = out2[i];
+            out[i] = tmp[i];
     }
 }
 
@@ -3152,11 +3156,11 @@ public:
 
         if (op == ReduceOp::Identity && mode != ReduceMode::Permute) {
             JitMask value(true);
-            uint32_t *values = (uint32_t *) alloca(sizeof(uint32_t)*n);
+            uint32_t *tmp = (uint32_t *) alloca(sizeof(uint32_t)*n);
             for (size_t i = 0; i < n; ++i)
-                values[i] = value.index();
+                tmp[i] = value.index();
             m_blend = JitMask::steal(jit_var_scatter_packet(
-                n, m_blend.index(), values, offset, mask));
+                n, m_blend.index(), tmp, offset, mask));
         }
 
         if (op != ReduceOp::Add && op != ReduceOp::Identity)
@@ -3171,7 +3175,7 @@ public:
 
     void forward() override {
         std::lock_guard<Lock> guard(state.lock);
-        JitIndex *grad_in = (JitIndex *)  alloca(sizeof(JitIndex) * m_n);
+        JitIndex *grad_in = (JitIndex *) alloca(sizeof(JitIndex) * m_n);
         size_t n_valid = 0;
         JitVar zero = scalar(m_backend, m_type, 0.0);
 
@@ -3212,7 +3216,7 @@ public:
 
     void backward() override {
         std::lock_guard<Lock> guard(state.lock);
-        JitIndex *out = (JitIndex *)  alloca(sizeof(JitIndex) * m_n);
+        JitIndex *out = (JitIndex *) alloca(sizeof(JitIndex) * m_n);
 
         Variable *v = state[m_output_indices[0]];
         if (!v->grad.valid())
@@ -3268,23 +3272,20 @@ private:
 Index ad_var_scatter_packet(size_t n, Index target, const Index *values,
                             JitIndex offset, JitIndex mask, ReduceOp op,
                             ReduceMode mode) {
-    JitIndex *values2 = (JitIndex *) alloca(sizeof(JitIndex) * n);
+    JitIndex *tmp = (JitIndex *) alloca(sizeof(JitIndex) * n);
     bool attached = ad_index(target) != 0;
 
     for (size_t i = 0; i < n; ++i) {
         Index index = values[i];
-        values2[i] = jit_index(index);
-        if (ad_index(index))
-            attached = true;
+        tmp[i] = jit_index(index);
+        attached |= ad_index(index) != 0;
     }
 
     JitVar result = JitVar::steal(jit_var_scatter_packet(
-        n, jit_index(target), values2, offset, mask, op, mode));
+        n, jit_index(target), tmp, offset, mask, op, mode));
     bool perm_scatter = op == ReduceOp::Identity && mode == ReduceMode::Permute;
 
-    if (!attached) {
-        return result.release();
-    } else {
+    if (attached) {
         // Track implicit dependencies & potentially remap variable IDs
         target = ad_var_memop_remap(target, false);
 
@@ -3299,11 +3300,13 @@ Index ad_var_scatter_packet(size_t n, Index target, const Index *values,
         uint64_t ad_result = ad_var_new(result.index());
         ps->add_output(ad_index(ad_result));
 
-        if (!ad_custom_op(ps.get()))
-            ad_raise("ad_var_scatter_packet(): could not create CustomOp");
+        if (ad_custom_op(ps.get()))
+            return ad_result;
 
-        return ad_result;
+        ad_var_dec_ref(ad_result);
     }
+
+    return result.release();
 }
 
 void ad_var_scatter_add_kahan(Index *target_1, Index *target_2, Index value,
@@ -3737,6 +3740,244 @@ void ad_copy_implicit_deps(drjit::vector<uint32_t>& result, bool input) {
         ad_var_inc_ref_int(index, state[index]);
         result.push_back(index);
     }
+}
+
+// ==========================================================================
+// Cooperative vector API
+// ==========================================================================
+
+class CoopVecPack : public dr::detail::CustomOpBase {
+public:
+    ~CoopVecPack() {
+        std::lock_guard<Lock> guard(state.lock);
+        for (uint32_t index: m_output_indices)
+            ad_var_dec_ref_int(index, state[index]);
+    }
+
+    void forward() override {
+        std::lock_guard<Lock> guard(state.lock);
+        uint32_t size = (uint32_t) m_input_indices.size();
+        JitIndex *tmp = (JitIndex *) alloca(sizeof(JitIndex) * size);
+        size_t n_valid = 0;
+
+        Variable *target = state[m_output_indices[0]];
+        JitVar zero = scalar(m_backend, (VarType) target->type, 0.0);
+
+        for (uint32_t i = 0; i < size; ++i) {
+            tmp[i] = zero.index();
+
+            if (m_inputs[i]) {
+                Variable *v2 = state[m_inputs[i]];
+                if (v2->grad.valid()) {
+                    tmp[i] = v2->grad.index();
+                    n_valid++;
+                }
+            }
+        }
+
+        if (n_valid) {
+            JitVar packed = JitVar::steal(jit_coop_vec_pack(size, tmp));
+            target->accum(packed, target->size);
+        }
+    }
+
+    void backward() override {
+        std::lock_guard<Lock> guard(state.lock);
+        uint32_t size = (uint32_t) m_input_indices.size();
+
+        Variable *v = state[m_output_indices[0]];
+        if (!v->grad.valid())
+            return;
+
+        JitIndex *tmp = (JitIndex *) alloca(sizeof(JitIndex) * size);
+        jit_coop_vec_unpack(v->grad.index(), tmp);
+
+        for (size_t i = 0; i < m_input_indices.size(); ++i) {
+            Variable *v2 = state[m_inputs[i]];
+            v2->accum(JitVar::steal(tmp[i]), v2->size);
+        }
+    }
+
+    void add_input(JitBackend backend, uint32_t index) {
+        add_index(backend, index, true);
+        // No need for extra reference counting
+        m_inputs.push_back(index);
+    }
+
+    void add_output(JitBackend backend, uint32_t index) {
+        add_index(backend, index, false);
+        std::lock_guard<Lock> guard(state.lock);
+        ad_var_inc_ref_int(index, state[index]);
+    }
+
+    const char *name() const override { return "coop_vec_pack"; }
+
+private:
+    std::vector<uint32_t> m_inputs;
+};
+
+/// Pack a set of regular Dr.Jit variables to form a cooperative vector
+Index ad_coop_vec_pack(uint32_t n, const Index *in) {
+    JitIndex *tmp = (JitIndex *) alloca(sizeof(JitIndex) * n);
+    bool attached = false;
+
+    if (n == 0)
+        return 0;
+
+    for (uint32_t i = 0; i < n; ++i) {
+        Index index = in[i];
+        tmp[i] = jit_index(index);
+        attached |= ad_index(index) != 0;
+    }
+
+    JitVar result = JitVar::steal(jit_coop_vec_pack(n, tmp));
+
+    if (attached) {
+        VarInfo vi = jit_set_backend(result.index());
+
+        ref<CoopVecPack> ps = new CoopVecPack();
+        for (size_t i = 0; i < n; ++i)
+            ps->add_input(vi.backend, ad_index(in[i]));
+
+        uint64_t ad_result = ad_var_new(result.index());
+        ps->add_output(vi.backend, ad_index(ad_result));
+
+        if (ad_custom_op(ps.get()))
+            return ad_result;
+
+        ad_var_dec_ref(ad_result);
+    }
+
+    return result.release();
+}
+
+class CoopVecUnpack : public dr::detail::CustomOpBase {
+public:
+    ~CoopVecUnpack() {
+        std::lock_guard<Lock> guard(state.lock);
+        for (ADIndex index : m_output_indices)
+            ad_var_dec_ref_int(index, state[index]);
+    }
+
+    void forward() override {
+        std::lock_guard<Lock> guard(state.lock);
+        size_t n = m_output_indices.size();
+
+        const Variable *v = state[m_input_indices[0]];
+        if (!v->grad.valid())
+            return;
+
+        JitIndex *tmp = (JitIndex *) alloca(sizeof(JitIndex) * n);
+        jit_coop_vec_unpack(v->grad.index(), tmp);
+
+        for (size_t i = 0; i < n; ++i) {
+            Variable *vo = state[m_output_indices[i]];
+            vo->accum(JitVar::steal(tmp[i]), vo->size);
+        }
+    }
+
+    void backward() override {
+        std::lock_guard<Lock> guard(state.lock);
+        size_t n = m_output_indices.size();
+
+        JitIndex *tmp = (JitIndex *) alloca(sizeof(JitIndex) * n);
+
+        for (size_t i = 0; i < n; ++i) {
+            const Variable *v = state[m_output_indices[i]];
+            uint32_t index = v->grad.index();
+
+            if (index)
+                jit_var_inc_ref(index);
+            else
+                index = scalar(m_backend, (VarType) v->type, 0.0).release();
+
+            tmp[i] = index;
+        }
+
+        JitVar packed = JitVar::steal(jit_coop_vec_pack(n, tmp));
+        for (size_t i = 0; i < m_output_indices.size(); ++i)
+            jit_var_dec_ref(tmp[i]);
+
+        Variable *source = state[m_input_indices[0]];
+        source->accum(packed, source->size);
+    }
+
+    void add_output(uint32_t index) {
+        add_index(m_backend, index, false);
+
+        std::lock_guard<Lock> guard(state.lock);
+        ad_var_inc_ref_int(index, state[index]);
+    }
+
+    const char *name() const override { return "coop_vec_unpack"; }
+};
+
+/// Unpack a cooperative vector into its components
+void ad_coop_vec_unpack(uint64_t index, uint32_t n, uint64_t *out) {
+    uint32_t *tmp = (uint32_t *) alloca(sizeof(uint32_t) * n);
+    jit_coop_vec_unpack(index, tmp);
+
+    ADIndex ad_index = ::ad_index(index);
+    const std::vector<Scope> &scopes = local_state.scopes;
+    if (!scopes.empty())
+        scopes.back().maybe_disable(ad_index);
+
+    if (ad_index) {
+        ref<CoopVecUnpack> op = new CoopVecUnpack();
+        JitBackend backend = jit_set_backend(jit_index(index)).backend;
+        op->add_index(backend, ad_index, true);
+
+        for (uint32_t i = 0; i < n; ++i) {
+            out[i] = ad_var_new(tmp[i]);
+            jit_var_dec_ref(tmp[i]);
+            op->add_output(::ad_index(out[i]));
+        }
+
+        if (!ad_custom_op(op.get()))
+            ad_raise("ad_coop_vec_unpack(): could not create CustomOp!");
+    } else {
+        for (uint32_t i = 0; i < n; ++i)
+            out[i] = tmp[i];
+    }
+}
+
+/// Perform a unary operation on a cooperative vector
+uint64_t ad_coop_vec_unary_op(JitOp op, uint64_t i0) {
+    JitVar result = JitVar::steal(
+        jit_coop_vec_unary_op(op, jit_index(i0)));
+
+    if (is_detached(i0))
+        return result.release();
+    else
+        return ad_var_new("fma", std::move(result),
+                          Arg(i0, JitVar::borrow(jit_index(i0))));
+}
+
+/// Perform a binary operation on a pair of cooperative vectors
+uint64_t ad_coop_vec_binary_op(JitOp op, uint64_t i0, uint64_t i1) {
+    JitVar result = JitVar::steal(
+        jit_coop_vec_binary_op(op, jit_index(i0), jit_index(i1)));
+
+    if (is_detached(i0, i1))
+        return result.release();
+    else
+        return ad_var_new("fma", std::move(result),
+                          Arg(i0, JitVar::borrow(jit_index(i1))),
+                          Arg(i1, JitVar::borrow(jit_index(i0))));
+}
+
+/// Perform a ternary operation on a triplet of cooperative vectors
+uint64_t ad_coop_vec_ternary_op(JitOp op, uint64_t i0, uint64_t i1, uint64_t i2) {
+    JitVar result = JitVar::steal(
+        jit_coop_vec_ternary_op(op, jit_index(i0), jit_index(i1), jit_index(i2)));
+
+    if (is_detached(i0, i1, i2))
+        return result.release();
+    else
+        return ad_var_new("fma", std::move(result),
+                          Arg(i0, JitVar::borrow(jit_index(i1))),
+                          Arg(i1, JitVar::borrow(jit_index(i0))),
+                          Arg(i2, 1.0));
 }
 
 // ==========================================================================

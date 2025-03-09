@@ -641,6 +641,8 @@ nb::object ravel(nb::handle h, char order,
             }
             o = o[0];
         }
+    } else if (nb::isinstance<nb::iterable>(h)) {
+        return ravel(nb::list(h), order, shape_out, strides_out, vt_in);
     } else if (vt_in) {
         vt = (VarType) *vt_in;
     }
