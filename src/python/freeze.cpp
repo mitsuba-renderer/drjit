@@ -63,6 +63,23 @@ struct ADScopeContext {
     ~ADScopeContext() { ad_scope_leave(process_postponed); }
 };
 
+struct scoped_set_flag {
+    uint32_t backup;
+    scoped_set_flag(JitFlag flag, bool enabled) : backup(jit_flags()) {
+        uint32_t flags = backup;
+        if (enabled)
+            flags |= (uint32_t)flag;
+        else
+            flags &= ~(uint32_t) flag;
+
+        jit_set_flags(flags);
+    }
+
+    ~scoped_set_flag() {
+        jit_set_flags(backup);
+    }
+};
+
 using namespace detail;
 
 bool Layout::operator==(const Layout &rhs) const {
@@ -644,6 +661,8 @@ void FlatVariables::assign_cb(drjit::TraversableBase *traversable) {
 void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
     recursion_guard guard(this);
 
+    scoped_set_flag traverse_scope(JitFlag::FreezingTraverseScope, true);
+
     ProfilerPhase profiler("traverse");
     nb::handle tp = h.type();
 
@@ -875,6 +894,7 @@ nb::object FlatVariables::construct() {
  */
 void FlatVariables::assign(nb::handle dst) {
     recursion_guard guard(this);
+    scoped_set_flag traverse_scope(JitFlag::FreezingTraverseScope, true);
 
     nb::handle tp  = dst.type();
     Layout &layout = this->layout[layout_index++];
@@ -1000,6 +1020,7 @@ void FlatVariables::assign(nb::handle dst) {
  * additional data to vcalls is tracked correctly.
  */
 void FlatVariables::traverse_with_registry(nb::handle h, TraverseContext &ctx) {
+    scoped_set_flag traverse_scope(JitFlag::FreezingTraverseScope, true);
 
     // Traverse the handle
     traverse(h, ctx);
@@ -1057,6 +1078,7 @@ void FlatVariables::traverse_with_registry(nb::handle h, TraverseContext &ctx) {
  * Corresponds to `traverse_with_registry`.
  */
 void FlatVariables::assign_with_registry(nb::handle dst) {
+    scoped_set_flag traverse_scope(JitFlag::FreezingTraverseScope, true);
 
     // Assign the handle
     assign(dst);
