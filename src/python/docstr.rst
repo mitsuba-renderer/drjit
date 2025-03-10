@@ -7136,7 +7136,7 @@
 
     - ``backend``: The used JIT backend.
 
-    - ``execution_time``: The time (in microseconds) used by this operation.
+    - ``execution_time``: The time (in milliseconds) used by this operation.
 
       On the CUDA backend, this value is captured via CUDA events. On the LLVM
       backend, this involves querying ``CLOCK_MONOTONIC`` (Linux/macOS) or
@@ -7162,11 +7162,11 @@
       - ``cache_disk``: Was this kernel present in Dr.Jit's on-disk cache?
         Otherwise, it had to be recompiled from scratch.
 
-      - ``codegen_time``: The time (in microseconds) which Dr.Jit needed to
+      - ``codegen_time``: The time (in milliseconds) which Dr.Jit needed to
         generate the textual low-level IR representation of the kernel. This
         step is always needed even if the resulting kernel is already cached.
 
-      - ``backend_time``: The time (in microseconds) which the backend (either the
+      - ``backend_time``: The time (in milliseconds) which the backend (either the
         LLVM compiler framework or the CUDA PTX just-in-time compiler) required to
         compile and link the low-level IR into machine code. This step is only
         needed when the kernel did not already exist in the in-memory or on-disk cache.
