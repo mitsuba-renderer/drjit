@@ -1605,6 +1605,8 @@ static PyType_Slot slots[] = { { Py_tp_traverse,
 void export_freeze(nb::module_ & /*m*/) {
 
     nb::module_ d = nb::module_::import_("drjit.detail");
+    auto traversable_base =
+        nb::class_<drjit::TraversableBase>(d, "TraversableBase");
     nb::class_<FrozenFunction>(d, "FrozenFunction", nb::type_slots(slots))
         .def(nb::init<nb::callable, int, uint32_t>())
         .def_prop_ro(
