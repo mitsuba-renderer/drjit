@@ -661,7 +661,7 @@ void FlatVariables::assign_cb(drjit::TraversableBase *traversable) {
 void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
     recursion_guard guard(this);
 
-    scoped_set_flag traverse_scope(JitFlag::FreezingTraverseScope, true);
+    scoped_set_flag traverse_scope(JitFlag::EnableObjectTraversal, true);
 
     ProfilerPhase profiler("traverse");
     nb::handle tp = h.type();
@@ -894,7 +894,7 @@ nb::object FlatVariables::construct() {
  */
 void FlatVariables::assign(nb::handle dst) {
     recursion_guard guard(this);
-    scoped_set_flag traverse_scope(JitFlag::FreezingTraverseScope, true);
+    scoped_set_flag traverse_scope(JitFlag::EnableObjectTraversal, true);
 
     nb::handle tp  = dst.type();
     Layout &layout = this->layout[layout_index++];
@@ -1020,7 +1020,7 @@ void FlatVariables::assign(nb::handle dst) {
  * additional data to vcalls is tracked correctly.
  */
 void FlatVariables::traverse_with_registry(nb::handle h, TraverseContext &ctx) {
-    scoped_set_flag traverse_scope(JitFlag::FreezingTraverseScope, true);
+    scoped_set_flag traverse_scope(JitFlag::EnableObjectTraversal, true);
 
     // Traverse the handle
     traverse(h, ctx);
@@ -1078,7 +1078,7 @@ void FlatVariables::traverse_with_registry(nb::handle h, TraverseContext &ctx) {
  * Corresponds to `traverse_with_registry`.
  */
 void FlatVariables::assign_with_registry(nb::handle dst) {
-    scoped_set_flag traverse_scope(JitFlag::FreezingTraverseScope, true);
+    scoped_set_flag traverse_scope(JitFlag::EnableObjectTraversal, true);
 
     // Assign the handle
     assign(dst);
