@@ -629,8 +629,11 @@ nb::object ravel(nb::handle h, char order,
     } else if (nb::isinstance<nb::sequence>(h)) {
         nb::object o = nb::borrow(h);
         while (true) {
-            if (nb::len(o) == 0)
+            if (!nb::hasattr(o, "__len__") || nb::len(o) == 0) {
+                if (vt_in)
+                    vt = (VarType) *vt_in;
                 break;
+            }
             if (is_drjit_array(o)) {
                 const ArraySupplement &s = supp(o.type());
                 backend = (JitBackend) s.backend;

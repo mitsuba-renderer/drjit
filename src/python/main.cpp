@@ -229,6 +229,7 @@ NB_MODULE(_drjit_ext, m_) {
     jit_init_async(backends);
 
     export_bind(detail);
+    export_coop_vec(m);
     export_base(m);
     export_init(m);
     export_shape(m);
@@ -251,7 +252,6 @@ NB_MODULE(_drjit_ext, m_) {
     export_tracker(detail);
     export_local(m);
     export_resample(m);
-    export_coop_vec(m);
 
     export_scalar(scalar);
 

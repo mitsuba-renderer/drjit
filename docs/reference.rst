@@ -690,7 +690,6 @@ gradient-based optimization and adaptive mixed-precision training.
    .. automethod:: __delitem__
    .. automethod:: __contains__
    .. automethod:: __len__
-   .. automethod:: update
    .. automethod:: keys
    .. automethod:: values
    .. automethod:: items

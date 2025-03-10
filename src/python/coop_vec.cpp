@@ -150,7 +150,7 @@ template <JitOp Op> static Vector coop_vec_unary_op(const Vector &arg) {
     }
 
     return Vector(
-        jit_coop_vec_unary_op(Op, arg.m_index),
+        ad_coop_vec_unary_op(Op, arg.m_index),
         arg.m_size,
         arg.m_type
     );
@@ -193,53 +193,6 @@ static nb::object coop_vec_binary_op(nb::handle h0, nb::handle h1) {
         c->m_size,
         c->m_type
     ));
-}
-
-/// Implements the step() operation for ordinary arrays and cooperative vectors
-static nb::object coop_vec_step(nb::handle h0, nb::handle h1) {
-    nb::object o[2] { nb::borrow(h0), nb::borrow(h1) };
-    Vector *ptr[2] { };
-    Vector *c = nullptr;
-
-    for (uint32_t i = 0; i < 2; ++i) {
-        if (nb::try_cast(o[i], ptr[i], false))
-            c = ptr[i];
-    }
-
-    if (!c) {
-        return select(
-            nb::steal(PyObject_RichCompare(h0.ptr(), h1.ptr(), Py_LT)),
-            nb::int_(0), nb::int_(1));
-    }
-
-    for (uint32_t i = 0; i < 2; ++i) {
-        if (ptr[i])
-            continue;
-
-        nb::list args;
-        nb::object oi = c->m_type(o[i]);
-        for (uint32_t j = 0; j < c->m_size; ++j)
-            args.append(oi);
-
-        o[i] = nb::cast(Vector(nb::borrow<nb::args>(nb::tuple(args))));
-        if (!nb::try_cast(o[i], ptr[i], false))
-            nb::raise("Vector::binary_op(): internal error");
-    }
-
-    if ((JitBackend) supp(c->m_type).backend == JitBackend::LLVM) {
-        return nb::cast(Vector(coop_vec_step(ptr[0]->expand_to_vector(),
-                                             ptr[1]->expand_to_vector())));
-    } else {
-        return nb::cast(Vector(
-            ad_coop_vec_binary_op(
-                JitOp::Step,
-                ptr[0]->m_index,
-                ptr[1]->m_index
-            ),
-            c->m_size,
-            c->m_type
-        ));
-    }
 }
 
 /// Perform a ternary operation (currently only FMA)
@@ -289,7 +242,7 @@ static Vector matvec(const View &A,
                      bool transpose) {
 
     return {
-        jit_coop_vec_matvec(
+        ad_coop_vec_matvec(
             A.index(),
             &A.descr,
             x.m_index,
@@ -473,6 +426,18 @@ static nb::object repack_impl(const char *name, MatrixLayout layout,
         for (auto [k, v] : d)
             result[k] = repack_impl(name, layout, v, offset, items);
         return result;
+    } else if (nb::dict ds = get_drjit_struct(arg_tp); ds.is_valid()) {
+        nb::object tmp = arg_tp();
+        for (auto [k, v] : ds)
+            nb::setattr(tmp, k, repack_impl(name, layout, nb::getattr(arg, k), offset, items));
+        return tmp;
+    } else if (nb::object df = get_dataclass_fields(arg_tp); df.is_valid()) {
+        nb::object tmp = nb::dict();
+        for (nb::handle field : df) {
+            nb::object k = field.attr(DR_STR(name));
+            tmp[k] = repack_impl(name, layout, nb::getattr(arg, k), offset, items);
+        }
+        return arg_tp(**tmp);
     } else {
         nb::raise_type_error("drjit.%s(): unsupported type %s",
                              name, nb::type_name(arg_tp).c_str());
@@ -620,8 +585,13 @@ void export_coop_vec(nb::module_ &m) {
     m.def("fma", &coop_vec_ternary_op<JitOp::Fma>);
     m.def("minimum", &coop_vec_binary_op<JitOp::Min>);
     m.def("maximum", &coop_vec_binary_op<JitOp::Max>);
+    m.def("step", &coop_vec_binary_op<JitOp::Step>, doc_step);
     m.def("log2", &coop_vec_unary_op<JitOp::Log2>);
     m.def("exp2", &coop_vec_unary_op<JitOp::Exp2>);
     m.def("tanh", &coop_vec_unary_op<JitOp::Tanh>);
-    m.def("step", &coop_vec_step, doc_step);
+    m.def("step", [](nb::handle h0, nb::handle h1) {
+        return select(
+            nb::steal(PyObject_RichCompare(h0.ptr(), h1.ptr(), Py_LT)),
+            nb::int_(0), nb::int_(1));
+    });
 }

@@ -537,6 +537,13 @@ extern DRJIT_EXTRA_EXPORT uint64_t ad_coop_vec_binary_op(JitOp op, uint64_t a0, 
 /// Perform a ternary operation on a triplet of cooperative vectors
 extern DRJIT_EXTRA_EXPORT uint64_t ad_coop_vec_ternary_op(JitOp op, uint64_t a0, uint64_t a1, uint64_t a2);
 
+/// Perform a matrix-vector multiplication + bias addition
+extern DRJIT_EXTRA_EXPORT uint64_t ad_coop_vec_matvec(uint64_t A_index,
+                                                      const MatrixDescr *A_descr,
+                                                      uint64_t x_index,
+                                                      uint64_t b_index,
+                                                      const MatrixDescr *b_descr,
+                                                      int transpose);
 #if defined(__cplusplus)
 }
 #endif

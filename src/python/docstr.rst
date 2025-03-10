@@ -7263,7 +7263,7 @@
     <https://developer.nvidia.com/nsight-systems>`__. The operation is a no-op when
     no profile collection tool is attached.
 
-    Note the difference between this context manager and :py:ref:`dr.profile_enable()
+    Note the difference between this context manager and :py:func:`dr.profile_enable()
     <profile_enable>`, which enables targeted profiling of a smaller region of code
     (as opposed to profiling the entire program).
 
@@ -7280,7 +7280,7 @@
            code_to_be_profiled()
 
     Note the difference between this context manager and
-    :py:ref:`dr.profile_range() <profile_range>`, which annotates a profiled
+    :py:func:`dr.profile_range() <profile_range>`, which annotates a profiled
     region with a label.
 
 .. topic:: ReduceMode
