@@ -237,6 +237,11 @@ static void accum_grad(nb::handle target, nb::handle source) {
 
 static nb::object replace_grad(nb::handle h0, nb::handle h1) {
     struct ReplaceGrad : TransformPairCallback {
+
+        nb::object transform_unknown(nb::handle h1, nb::handle /*unused*/) const override {
+            return nb::borrow(h1);
+        }
+
         void operator()(nb::handle h1, nb::handle h2, nb::handle h3) override {
             const ArraySupplement &s = supp(h1.type());
 
@@ -266,6 +271,9 @@ static nb::object replace_grad(nb::handle h0, nb::handle h1) {
                          i3 = ((uint32_t) i1) | ((i2 >> 32) << 32);
 
                 s.init_index(i3, inst_ptr(h3));
+            } else {
+                uint32_t index = (uint32_t) s.index(inst_ptr(h1));
+                s.init_index(index, inst_ptr(h3));
             }
         }
     } rg;

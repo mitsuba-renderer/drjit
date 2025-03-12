@@ -1233,12 +1233,35 @@ def test090_replace_grad(t):
     z = t(1.0, 2.0 ,3.0)
     dr.enable_grad(a, z)
     b = dr.replace_grad(z, a)
-
     assert type(b) is type(a)
     assert dr.width(b) == dr.width(z) == 3
     assert dr.width(dr.grad(b) == 3)
     assert b.index_ad != 0
     assert b.index_ad != a.index_ad
+
+    UInt32 = dr.uint32_array_t(t)
+    a = {
+        "one": t(1, 2, 3),
+        "two": UInt32(0, 2, 4),
+        "three": True
+    }
+    y = {
+        "one": t(1, 2, 3),
+        "two": UInt32(0, 2, 4),
+        "three": False
+    }
+    dr.enable_grad(y)
+    b = dr.replace_grad(a, y)
+    assert type(b["one"]) is type(a["one"])
+    assert type(b["two"]) is type(a["two"])
+    assert b["one"].index_ad != 0
+    assert b["one"].index_ad != a["one"].index_ad
+    assert b["two"].index_ad == 0
+    assert b["two"].index_ad == y["two"].index_ad
+    assert dr.allclose(b["two"], y["two"])
+    assert dr.allclose(b["two"], [0, 2, 4])
+    assert b["three"] == True
+    assert y["three"] == False
 
 @pytest.test_arrays('is_diff,float32,shape=(*)')
 def test091_safe_functions(t):
