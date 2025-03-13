@@ -1157,31 +1157,6 @@ std::ostream &operator<<(std::ostream &os, const FlatVariables &r) {
     return os;
 }
 
-void traverse_traversable(drjit::TraversableBase *traversable,
-                          TraverseCallback &cb, bool rw = false) {
-    struct Payload{
-        TraverseCallback &cb;
-    };
-    Payload p{ cb };
-    if (rw) {
-        traversable->traverse_1_cb_rw(
-            (void *) &p,
-            [](void *p, uint64_t index, const char *variant,
-               const char *domain) -> uint64_t {
-                Payload *payload   = (Payload *) p;
-                uint64_t new_index = payload->cb(index, variant, domain);
-                return new_index;
-            });
-    } else {
-        traversable->traverse_1_cb_ro((void *) &p, [](void *p, uint64_t index,
-                                                      const char *variant,
-                                                      const char *domain) {
-            Payload *payload = (Payload *) p;
-            payload->cb(index, variant, domain);
-        });
-    }
-}
-
 inline void hash_combine(size_t &seed, size_t value) {
     /// From CityHash (https://github.com/google/cityhash)
     const size_t mult = 0x9ddfea08eb382d69ull;
