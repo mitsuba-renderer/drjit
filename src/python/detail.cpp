@@ -389,7 +389,7 @@ void traverse_py_cb_rw_impl(nb::handle self, nb::callable c) {
     auto dict = nb::borrow<nb::dict>(nb::getattr(self, "__dict__"));
 
     for (auto value : dict.values()) {
-        traverse("traverse_py_cb_rw", traverse_cb, value);
+        traverse("traverse_py_cb_rw", traverse_cb, value, true);
     }
 }
 
