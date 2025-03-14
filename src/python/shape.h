@@ -24,6 +24,8 @@ extern size_t ndim(nb::handle_t<ArrayBase> h) noexcept;
 /// Return the vectorization width of the given input array or PyTree
 extern size_t width(nb::handle h);
 
+extern nb::object opaque_width(nb::handle h);
+
 /// Convert vector<size_t> into a python tuple
 extern nb::tuple cast_shape(const vector<size_t> &shape);
 
