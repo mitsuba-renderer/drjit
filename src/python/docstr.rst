@@ -6161,6 +6161,40 @@
     The :py:class:`PCG32` class is implemented as a :ref:`PyTree <pytrees>`, which
     means that it is compatible with symbolic function calls, loops, etc.
 
+    .. note::
+
+       Please watch out for the following pitfall when using the PCG32 class in
+       long-running Dr.Jit calculations (e.g., steps of a gradient-based optimizer).
+
+       Consuming random variates (e.g., through :py:func:`next_float`) changes
+       the internal RNG state. If this state is never explicitly evaluated, the
+       computation graph describing the state transformation keeps growing
+       without bound, causing kernel compilation of increasingly large programs
+       to eventually become a bottleneck. To evaluate the RNG, simply run
+
+       .. code-block:: python
+
+          rng: PCG32 = ....
+          dr.eval(rng)
+
+       For computation involving very large arrays, storing the RNG state (16
+       bytes per entry) can be prohibitive. In this case, it is better to keep
+       the RNG in symbolic form and re-seed it at every optimization iteration.
+
+       .. code-block:: python
+
+          rng = PCG32(size, dr.opaque(UIn64, iteration_index))
+
+       Finally, the functions :py:func:`drjit.rand` and :py:func:`drjit.normal`
+       provide a higher-level wrapper around the PCG32 class. These are
+       equivalent to constructing a newly seeded PCG32 instance and drawing a
+       single sample.
+
+       In cases where a sampler is repeatedly used in a symbolic loop, it is
+       more efficient to use the PCG32 API directly to seed once and reuse the
+       random number generator throughout the loop.
+
+
 .. topic:: PCG32_PCG32
 
     Initialize a random number generator that generates ``size`` variates in parallel.
