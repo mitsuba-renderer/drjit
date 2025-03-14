@@ -1,5 +1,7 @@
 #pragma once
 
+#define NB_INTRUSIVE_EXPORT NB_IMPORT
+
 #include "fwd.h"
 #include <drjit-core/jit.h>
 #include <drjit-core/macros.h>
