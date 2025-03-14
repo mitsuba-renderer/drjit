@@ -8,7 +8,7 @@
     BSD-style license that can be found in the LICENSE.txt file.
 */
 
-#define NB_INTRUSIVE_EXPORT NB_EXPORT
+#define NB_INTRUSIVE_EXPORT NB_IMPORT
 
 #include <nanobind/nanobind.h>
 #include <nanobind/intrusive/counter.h>
