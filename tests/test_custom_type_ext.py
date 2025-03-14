@@ -1,7 +1,6 @@
 import drjit as dr
 import pytest
 
-
 def get_pkg(t):
     with dr.detail.scoped_rtld_deepbind():
         m = pytest.importorskip("custom_type_ext")
@@ -69,3 +68,67 @@ def test03_cpp_make_opaque(t):
 
     pkg.cpp_make_opaque(holder)
     assert holder.value().state == dr.VarState.Evaluated
+
+
+@pytest.test_arrays("float32,-diff,shape=(*),jit")
+def test04_traverse_opaque(t):
+    """
+    Tests that it is possible to traverse an opaque C++ object.
+    """
+    pkg = get_pkg(t)
+    Float = t
+
+    v = dr.arange(Float, 10)
+
+    a = pkg.CustomA(v)
+    assert dr.detail.collect_indices(a) == [v.index]
+
+
+@pytest.test_arrays("float32,-diff,shape=(*),jit")
+def test05_traverse_py(t):
+    """
+    Tests the implementation of ``traverse_py_cb_ro``, which is used to traverse
+    python objects in trampoline classes.
+    """
+    Float = t
+
+    v = dr.arange(Float, 10)
+
+    class PyClass:
+        def __init__(self, v) -> None:
+            self.v = v
+
+    c = PyClass(v)
+
+    result = []
+
+    def callback(index, domain, variant):
+        result.append(index)
+
+    dr.detail.traverse_py_cb_ro(c, callback)
+
+    assert result == [v.index]
+
+
+@pytest.test_arrays("float32,-diff,shape=(*),jit")
+def test06_trampoline_traversal(t):
+    """
+    Tests that classes inheriting from trampoline classes are traversed
+    automatically.
+    """
+    pkg = get_pkg(t)
+    Float = t
+
+    v = dr.opaque(Float, 0, 3)
+
+    class B(pkg.CustomBase):
+        def __init__(self, v) -> None:
+            super().__init__()
+            self.v = v
+
+        def value(self):
+            return self.v
+
+    b = B(v)
+
+    assert dr.detail.collect_indices(b) == [v.index]
