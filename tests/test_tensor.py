@@ -430,6 +430,7 @@ def test14_preserve_attached(t):
 
 
 @pytest.test_arrays('is_tensor, float, is_jit')
+@pytest.mark.filterwarnings("ignore::DeprecationWarning")
 def test15_upsampling_tensor(t):
 
     a = t([1, 2, 3, 4], shape=(2, 2))
@@ -513,6 +514,7 @@ def test15_upsampling_tensor(t):
     assert "must be greater than 0" in str(ei.value)
 
 
+@pytest.mark.filterwarnings("ignore::DeprecationWarning")
 @pytest.test_arrays('is_tensor, float32, is_jit')
 def test15_upsampling_texture(t):
     mod = sys.modules[t.__module__]
