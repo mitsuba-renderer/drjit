@@ -1507,9 +1507,14 @@ public:
     void
     traverse_1_cb_ro(void *payload,
                      drjit ::detail ::traverse_callback_ro fn) const override {
+        // Only traverse the texture for frozen functions, since accidentally
+        // traversing the scene in loops or vcalls can cause issues.
+        if (!jit_flag(JitFlag::EnableObjectTraversal))
+            return;
+
         DRJIT_MAP(DR_TRAVERSE_MEMBER_RO, m_value, m_unpadded_value,
                   m_resolution_opaque, m_inv_resolution);
-        if constexpr (HasCudaTexture){
+        if constexpr (HasCudaTexture) {
             uint32_t n_textures = 1 + ((m_channels - 1) / 4);
             std::vector<uint32_t> indices(n_textures);
             jit_cuda_tex_get_indices(m_handle, indices.data());
@@ -1520,9 +1525,14 @@ public:
     }
     void traverse_1_cb_rw(void *payload,
                           drjit ::detail ::traverse_callback_rw fn) override {
+        // Only traverse the texture for frozen functions, since accidentally
+        // traversing the scene in loops or vcalls can cause issues.
+        if (!jit_flag(JitFlag::EnableObjectTraversal))
+            return;
+
         DRJIT_MAP(DR_TRAVERSE_MEMBER_RW, m_value, m_unpadded_value,
                   m_resolution_opaque, m_inv_resolution);
-        if constexpr (HasCudaTexture){
+        if constexpr (HasCudaTexture) {
             uint32_t n_textures = 1 + ((m_channels - 1) / 4);
             std::vector<uint32_t> indices(n_textures);
             jit_cuda_tex_get_indices(m_handle, indices.data());
