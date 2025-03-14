@@ -800,3 +800,4 @@ facilitate code generation of matrix-vector products. Please see the separate
 .. autofunction:: pack
 .. autofunction:: unpack
 .. autofunction:: matvec
+.. autofunction:: cast

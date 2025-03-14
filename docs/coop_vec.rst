@@ -254,8 +254,8 @@ The function also accepts an optional ``transpose=True`` parameter to compute
 :math:`A^Tx + b`.
 
 The standard Python ``A @ x`` and ``A.T @ x`` matrix multiplication syntax
-works as well. If your computation requires the addition of a ``b`` vector,
-prefer :py:func:`nn.matvec() <drjit.nn.matvec>` over this syntax, since
+works as well. However, if your computation requires the addition of a ``b``
+vector, prefer :py:func:`nn.matvec() <drjit.nn.matvec>` over this syntax, since
 it merges both steps into a single operation.
 
 Differentiation
@@ -287,7 +287,7 @@ in every optimization step (once for the weights and once for their
 derivatives).
 
 The following AD operations recognize :py:func:`nn.CoopVector
-<drjit.nn.CoopVec>` and :py:func:`nn.MatrixView <drjit.nn.MatrixView>` objects:
+<drjit.nn.CoopVector>` and :py:func:`nn.MatrixView <drjit.nn.MatrixView>` objects:
 
 - :py:func:`grad_enabled`, :py:func:`enable_grad`, :py:func:`disable_grad`.
 - :py:func:`detach`, :py:func:`grad` (TODO not yet for CoopVec..)
