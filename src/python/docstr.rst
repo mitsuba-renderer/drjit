@@ -6161,6 +6161,40 @@
     The :py:class:`PCG32` class is implemented as a :ref:`PyTree <pytrees>`, which
     means that it is compatible with symbolic function calls, loops, etc.
 
+    .. note::
+
+       Please watch out for the following pitfall when using the PCG32 class in
+       long-running Dr.Jit calculations (e.g., steps of a gradient-based optimizer).
+
+       Consuming random variates (e.g., through :py:func:`next_float`) changes
+       the internal RNG state. If this state is never explicitly evaluated, the
+       computation graph describing the state transformation keeps growing
+       without bound, causing kernel compilation of increasingly large programs
+       to eventually become a bottleneck. To evaluate the RNG, simply run
+
+       .. code-block:: python
+
+          rng: PCG32 = ....
+          dr.eval(rng)
+
+       For computation involving very large arrays, storing the RNG state (16
+       bytes per entry) can be prohibitive. In this case, it is better to keep
+       the RNG in symbolic form and re-seed it at every optimization iteration.
+
+       .. code-block:: python
+
+          rng = PCG32(size, dr.opaque(UIn64, iteration_index))
+
+       Finally, the functions :py:func:`drjit.rand` and :py:func:`drjit.normal`
+       provide a higher-level wrapper around the PCG32 class. These are
+       equivalent to constructing a newly seeded PCG32 instance and drawing a
+       single sample.
+
+       In cases where a sampler is repeatedly used in a symbolic loop, it is
+       more efficient to use the PCG32 API directly to seed once and reuse the
+       random number generator throughout the loop.
+
+
 .. topic:: PCG32_PCG32
 
     Initialize a random number generator that generates ``size`` variates in parallel.
@@ -6205,14 +6239,23 @@
 
 .. topic:: PCG32_next_float
 
-    Generate a uniformly distributed single precision floating point number on the
+    Generate a uniformly distributed precision floating point number on the
     interval :math:`[0, 1)`.
 
     The function analyzes the provided target ``dtype`` and either invokes
-    :py:func:`next_float32` or :py:func:`next_float64` depending on the
+    :py:func:`next_float16`, :py:func:`next_float32` or :py:func:`next_float64`
+    depending on the
     requested precision.
 
     A mask can be optionally provided. Masked entries do not advance the PRNG state.
+
+.. topic:: PCG32_next_float16
+
+    Generate a uniformly distributed half precision floating point number on the
+    interval :math:`[0, 1)`.
+
+    Two overloads of this function exist: the masked variant does not advance
+    the PRNG state of entries ``i`` where ``mask[i] == False``.
 
 .. topic:: PCG32_next_float32
 
@@ -6232,13 +6275,20 @@
 
 .. topic:: PCG32_next_float_normal
 
-    Generate a (standard) normally distributed single precision floating point number.
+    Generate a (standard) normally distributed precision floating point number.
 
     The function analyzes the provided target ``dtype`` and either invokes
-    :py:func:`next_float32_normal` or :py:func:`next_float64_normal` depending on the
-    requested precision.
+    :py:func:`next_float16_normal`, :py:func:`next_float32_normal` or
+    :py:func:`next_float64_normal` depending on the requested precision.
 
     A mask can be optionally provided. Masked entries do not advance the PRNG state.
+
+.. topic:: PCG32_next_float16_normal
+
+    Generate a (standard) normally distributed half precision floating point number.
+
+    Two overloads of this function exist: the masked variant does not advance
+    the PRNG state of entries ``i`` where ``mask[i] == False``.
 
 .. topic:: PCG32_next_float32_normal
 

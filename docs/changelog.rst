@@ -8,6 +8,10 @@ Changelog
 DrJit 1.1.0 (TBA)
 -----------------
 
+- Added the functions :py:func:`drjit.rand() <rand>` and
+  :py:func:`drjit.normal() <normal>` for generating arrays containing uniform
+  and normally distributed variates. (PR `#360
+  <https://github.com/mitsuba-renderer/drjit/pull/360>`__).
 - Added the function :py:func:`drjit.resample() <resample>` to
   increase/decrease the resolution of Dr.Jit arrays/tensors along a set of
   axes. (PR `#358 <https://github.com/mitsuba-renderer/drjit/pull/358>`__).
