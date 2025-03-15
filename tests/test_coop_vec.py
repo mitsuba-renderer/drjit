@@ -477,3 +477,12 @@ def test18_symbolic_loop_if_stmt(t):
     dr.schedule(x, y, i)
     assert x[0] == 16 and y[0] == 32
 
+
+@pytest.test_arrays('jit,shape=(*),float32,-diff')
+@dr.syntax
+def test19_no_eval(t):
+    # Cooperative vectors cannot be evaluted via dr.eval()
+    UInt32 = dr.uint32_array_t(t)
+    a = nn.CoopVector(t(1), t(2))
+    with pytest.raises(RuntimeError, match="Cooperative vectors cannot be evaluated"):
+        dr.eval(a)
