@@ -77,7 +77,7 @@ NAMESPACE_END(detail)
  * in the function ``drjit::registry_put`` that takes a ``TraversableBase`` for
  * the pointer argument.
  */
-struct DRJIT_EXPORT TraversableBase : public nanobind::intrusive_base {
+struct DRJIT_EXTRA_EXPORT TraversableBase : public nanobind::intrusive_base {
     /**
      * \brief Traverse all jit arrays in this c++ object. For every jit
      *     variable, the callback should be called, with the provided payload
