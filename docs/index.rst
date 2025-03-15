@@ -47,6 +47,7 @@ public API.
    cpp
    textures
    coop_vec
+   nn
    faq
 
 .. toctree::

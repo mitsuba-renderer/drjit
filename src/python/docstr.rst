@@ -8114,7 +8114,7 @@
     Returns:
         object: The computed array as described above
 
-.. topic:: coop_CoopVector
+.. topic:: coop_CoopVec
 
    A *cooperative vector* is a dynamically-sized container of elements of a
    consistent type. It admits both floating point and integer 1D arrays as
@@ -8128,7 +8128,7 @@
    .. code-block:: python
 
       # Pack individual components into a cooperative vector
-      vec = drjit.nn.CoopVector(x, y, z)
+      vec = drjit.nn.CoopVec(x, y, z)
 
       # Unpack components
       x, y, z = vec
@@ -8139,7 +8139,7 @@
       # Convert a 3D array and a 2D array into a 5D cooperative vector
       a1: Array3f = ...
       a2: Array2f = ...
-      vec = drjit.nn.CoopVector(a1, a2)
+      vec = drjit.nn.CoopVec(a1, a2)
 
    The main difference between regular Dr.Jit arrays and cooperative vectors is
    that they *do not permit indexed element access*. For example, the following
@@ -8147,11 +8147,11 @@
 
    .. code-block:: pycon
 
-      >>> vec = drjit.nn.CoopVector(x, y, z)
+      >>> vec = drjit.nn.CoopVec(x, y, z)
       >>> vec[1]
       Traceback (most recent call last):
         File "<stdin>", line 1, in <module>
-      TypeError: 'drjit.nn.CoopVector' object is not subscriptable
+      TypeError: 'drjit.nn.CoopVec' object is not subscriptable
 
    The compilation stack may arbitrarily redistribute the elements of a
    cooperative vector across threads for efficiency (this is what
@@ -8161,7 +8161,7 @@
    To unpack a cooperative vector into its components, use an expression
    like ``x, y, z = vec``, ``ArrayXf(vec)``, or ``list(vec)``.
 
-.. topic:: coop_CoopVector_init
+.. topic:: coop_CoopVec_init
 
    The constructor accepts a variable number of arguments including Dr.Jit
    arrays, scalar Python integers and floating point values, and :ref:`PyTrees

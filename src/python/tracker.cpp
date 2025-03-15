@@ -524,7 +524,7 @@ bool VariableTracker::Impl::traverse(Context &ctx, nb::handle h) {
             changed |= traverse(ctx, kv[1]);
         }
     } else if (tp.is(coop_vector_type)) {
-        CoopVector *vec = nb::cast<CoopVector *>(h, false);
+        CoopVec *vec = nb::cast<CoopVec *>(h, false);
         uint32_t idx = vec->m_index;
         size_t size = size_valid(v, ctx.label, h, vec->m_size);
 
@@ -552,7 +552,7 @@ bool VariableTracker::Impl::traverse(Context &ctx, nb::handle h) {
                 changed |= traverse(ctx, l[i]);
             }
             if (ctx.write) {
-                *vec = CoopVector(l);
+                *vec = CoopVec(l);
                 ad_var_inc_ref(vec->m_index);
                 ad_var_dec_ref(v->index);
                 v->index = vec->m_index;
@@ -768,7 +768,7 @@ nb::object VariableTracker::Impl::restore(dr::string &label) {
             d[k] = restore(label);
         }
     } else if (tp.is(coop_vector_type)) {
-        CoopVector *vec = nb::cast<CoopVector *>(value, false);
+        CoopVec *vec = nb::cast<CoopVec *>(value, false);
         ad_var_inc_ref(v->index_orig);
         ad_var_dec_ref(vec->m_index);
         vec->m_index = v->index_orig;
@@ -899,7 +899,7 @@ std::pair<nb::object, bool> VariableTracker::Impl::rebuild(dr::string &label) {
             tmp.append(o);
         }
 
-        value = nb::cast(CoopVector(tmp));
+        value = nb::cast(CoopVec(tmp));
         new_object = true;
     } else if (nb::dict ds = get_drjit_struct(tp); ds.is_valid()) {
         nb::object tmp = tp();

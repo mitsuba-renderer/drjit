@@ -274,7 +274,6 @@ Standard mathematical functions
 .. autofunction:: sign
 .. autofunction:: copysign
 .. autofunction:: mulsign
-.. autofunction:: relu
 .. autofunction:: step
 
 Operations for vectors and matrices
@@ -715,17 +714,19 @@ gradient-based optimization and adaptive mixed-precision training.
    .. automethod:: scale
    .. automethod:: unscale
 
-Neural networks
----------------
+.. _coop_vec_ref:
+
+Cooperative Vectors
+-------------------
 
 .. py:module:: drjit.nn
 
-The :py:mod:`drjit.coop` module provides infrastructure to implement small
+The :py:mod:`drjit.nn` module provides infrastructure to implement small
 neural networks and revolves around the notion of *cooperative vectors* that
 facilitate code generation of matrix-vector products. Please see the separate
 :ref:`documentation section <coop_vec>` for an introduction.
 
-.. autoclass:: CoopVector
+.. autoclass:: CoopVec
 
    .. automethod:: __init__
    .. automethod:: __add__
@@ -801,3 +802,16 @@ facilitate code generation of matrix-vector products. Please see the separate
 .. autofunction:: unpack
 .. autofunction:: matvec
 .. autofunction:: cast
+
+Neural Networks
+---------------
+
+Besides :ref:`cooperative vector classes <coop_vec_ref>`, the
+:py:mod:`drjit.nn` module also provides convenient helper classes to declare,
+evaluate, and train networks. Please see the separate :ref:`documentation
+section <neural_nets>` for an introduction.
+
+.. autoclass:: Sequence
+.. autoclass:: Linear
+.. autoclass:: ReLU
+.. autoclass:: Tanh

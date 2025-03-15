@@ -8,9 +8,9 @@ def test01_pack_unpack(t):
     # Test coop vector creation and unpacking
     m = sys.modules[t.__module__]
     v = dr.full(dr.value_t(t), 7, 32)
-    x = nn.CoopVector(t(1, 2, 3), t(4, 5, 6), v, 8)
+    x = nn.CoopVec(t(1, 2, 3), t(4, 5, 6), v, 8)
     assert len(x) == 8
-    assert len(nn.CoopVector(*x, 2, (4, 5), *x)) == 19
+    assert len(nn.CoopVec(*x, 2, (4, 5), *x)) == 19
     y = list(x)
     z = m.ArrayXf(x)
     result_ok = True
@@ -23,7 +23,7 @@ def test01_pack_unpack(t):
 @pytest.test_arrays('jit,float16,shape=(*),-diff', 'jit,float32,shape=(*),-diff')
 def test02_add_sub(t, size):
     # Test addition and subtraction
-    x = nn.CoopVector(dr.full(t, 5, 32), 6, *tuple(range(size)))
+    x = nn.CoopVec(dr.full(t, 5, 32), 6, *tuple(range(size)))
     y = x + 15
     z = y - 2
     r0, r1 = list(z)[0:2]
@@ -34,7 +34,7 @@ def test02_add_sub(t, size):
 @pytest.test_arrays('jit,float16,shape=(*),-diff', 'jit,float32,shape=(*),-diff')
 def test03_add_min_max_fma(t, size):
     # Test min/max/FMA operations
-    x = nn.CoopVector(t(5), 8, *tuple(range(size)))
+    x = nn.CoopVec(t(5), 8, *tuple(range(size)))
     x_min = dr.minimum(x, 6)
     x_max = dr.maximum(x, 7)
     # zero addition needed to work around a constant propagation bug in R570 driver..
@@ -134,7 +134,7 @@ def test05_matvec(t, shape, transpose, bias, pack):
     x = [rng_3.next_float_normal(Float) for _ in range(input_size)]
     x_n = Tensor(x).numpy()
 
-    x = nn.CoopVector(x)
+    x = nn.CoopVec(x)
     r = nn.matvec(A, x, b, transpose=transpose)
     r_n = Tensor(r).numpy()
 
@@ -153,7 +153,7 @@ def test05_matvec(t, shape, transpose, bias, pack):
 def test06_unary(t, op):
     # Test some special unary operations that are supported by coop vectors
     func = getattr(dr, op)
-    x = nn.CoopVector(t(0.1), t(0.2), t(0.3))
+    x = nn.CoopVec(t(0.1), t(0.2), t(0.3))
     r = func(x)
     x, y, z = r
     dr.schedule(x, y, z)
@@ -165,8 +165,8 @@ def test06_unary(t, op):
 @pytest.test_arrays('jit,shape=(*),float16,-diff', 'jit,shape=(*),float32,-diff')
 def test07_step(t):
     # Test the dr.step() function on coop vectors
-    x = nn.CoopVector(t(0.1), t(0.2))
-    y = nn.CoopVector(t(0.15), t(0.15))
+    x = nn.CoopVec(t(0.1), t(0.2))
+    y = nn.CoopVec(t(0.15), t(0.15))
     z = dr.step(x, y)
     r0, r1 = z
     dr.schedule(r0, r1)
@@ -178,7 +178,7 @@ def test08_fwd_grad_unpack(t):
     # Test that forward gradients correctly propagate through coop vector creation and unpacking
     a, b = t(1), t(2)
     dr.enable_grad(a, b)
-    z = nn.CoopVector(a, b) # pack
+    z = nn.CoopVec(a, b) # pack
     assert dr.grad_enabled(z)
     assert not dr.grad_enabled(dr.detach(z))
     x, y = z # unpack
@@ -198,7 +198,7 @@ def test09_bwd_grad_unpack(t):
     # Test that backward gradients correctly propagate through coop vector creation and unpacking
     a, b = t(1), t(2)
     dr.enable_grad(a, b)
-    z = nn.CoopVector(a, b) # pack
+    z = nn.CoopVec(a, b) # pack
     x, y = z # unpack
     x.grad = 4
     y.grad = 5
@@ -214,8 +214,8 @@ def test10_fwd_addition(t):
     a, b = t(1), t(1)
     c, d = t(1), t(1)
     dr.enable_grad(a, b, c, d)
-    x0 = nn.CoopVector(a, b)
-    x1 = nn.CoopVector(c, d)
+    x0 = nn.CoopVec(a, b)
+    x1 = nn.CoopVec(c, d)
     x2 = x0 + x1
     r0, r1 = x2
     a.grad = 1
@@ -233,8 +233,8 @@ def test11_bwd_mul(t):
     a, b = t(8), t(9)
     c, d = t(3), t(2)
     dr.enable_grad(a, b, c, d)
-    x0 = nn.CoopVector(a, b)
-    x1 = nn.CoopVector(c, d)
+    x0 = nn.CoopVec(a, b)
+    x1 = nn.CoopVec(c, d)
     x2 = x0 * x1
     r0, r1 = x2
     r0.grad = 1
@@ -254,7 +254,7 @@ def test12_bwd_min_max_fma(t):
     minval = t(25)
     maxval = t(12)
     dr.enable_grad(x, y, z, minval, maxval)
-    q = nn.CoopVector(x)
+    q = nn.CoopVec(x)
 
     q = dr.fma(q, y, z)
     q = dr.minimum(q, minval)
@@ -273,7 +273,7 @@ def test13_exp2_tanh_fwd(t):
     # Check derivatives of supported unary transcendental operations
     x = t(2)
     dr.enable_grad(x)
-    y = nn.CoopVector(x)
+    y = nn.CoopVec(x)
     r0 = dr.exp2(y)
     r1 = dr.tanh(y)
     r0, = r0; r1, = r1
@@ -323,7 +323,7 @@ def test14_matvec_fwd(t, transpose, has_A_grad, has_x_grad, has_b_grad, layout):
     if has_x_grad:
         dr.enable_grad(x)
         x.grad = [2, 1]
-    x_v = nn.CoopVector(x)
+    x_v = nn.CoopVec(x)
 
     # Set up 'b' vector
     b_v = None
@@ -366,7 +366,7 @@ def test15_matvec_in_vcall(t, transpose):
     _, A, b = nn.pack(A, b)
 
     def mult_it():
-        x = nn.CoopVector(
+        x = nn.CoopVec(
             Float(i/(size-1) - 0.5) for i in range(size)
         )
         return list(nn.matvec(A, x, b, transpose=transpose))[0]
@@ -407,7 +407,7 @@ def test16_matvec_bwd(t, in_vcall):
     x = m.Array2f16(2, 4)
 
     def do_mul(x):
-        xv = nn.CoopVector(x)
+        xv = nn.CoopVec(x)
         yv = nn.matvec(Av, xv)
         return m.Array3f16(yv)
 
@@ -446,7 +446,7 @@ def test16_matvec_bwd(t, in_vcall):
 @pytest.test_arrays('jit,shape=(*),float16,diff')
 def test17_cast(t):
     z = dr.opaque(t, 0)
-    a = nn.CoopVector(
+    a = nn.CoopVec(
         z + 1,
         z + 2,
         z + 3
@@ -465,7 +465,7 @@ def test18_symbolic_loop_if_stmt(t):
     # Test that cooperative vectors can be passed through
     # symbolic loops and conditionals
     UInt32 = dr.uint32_array_t(t)
-    a = nn.CoopVector(t(1), t(2))
+    a = nn.CoopVec(t(1), t(2))
     i = UInt32(0)
 
     while i < 10:
@@ -483,6 +483,6 @@ def test18_symbolic_loop_if_stmt(t):
 def test19_no_eval(t):
     # Cooperative vectors cannot be evaluted via dr.eval()
     UInt32 = dr.uint32_array_t(t)
-    a = nn.CoopVector(t(1), t(2))
+    a = nn.CoopVec(t(1), t(2))
     with pytest.raises(RuntimeError, match="Cooperative vectors cannot be evaluated"):
         dr.eval(a)

@@ -1,5 +1,5 @@
 /*
-    src/coop_vec.cpp -- Python bindings for Cooperative CoopVectors
+    src/coop_vec.cpp -- Python bindings for Cooperative CoopVecs
 
     Copyright (c) 2025 Wenzel Jakob <wenzel.jakob@epfl.ch>
 
@@ -23,8 +23,8 @@
 
 
 /// Cooperative vector constructor
-CoopVector::CoopVector(nb::handle arg) {
-    if (CoopVector *v; nb::len(arg) == 1 && nb::try_cast(arg[0], v, false)) {
+CoopVec::CoopVec(nb::handle arg) {
+    if (CoopVec *v; nb::len(arg) == 1 && nb::try_cast(arg[0], v, false)) {
         m_index = ad_var_inc_ref(v->m_index);
         m_size = v->m_size;
         m_type = v->m_type;
@@ -42,7 +42,7 @@ CoopVector::CoopVector(nb::handle arg) {
 
         void traverse_unknown(nb::handle h) {
             if (PyIter_Check(h.ptr()))
-                traverse("drjit.nn.CoopVector", *this, nb::list(h));
+                traverse("drjit.nn.CoopVec", *this, nb::list(h));
             else if (PyLong_CheckExact(h.ptr()) || PyFloat_CheckExact(h.ptr()))
                 result.push_back(nb::borrow(h));
             else
@@ -51,12 +51,12 @@ CoopVector::CoopVector(nb::handle arg) {
     };
 
     Flatten cb;
-    traverse("drjit.nn.CoopVector", cb, arg);
+    traverse("drjit.nn.CoopVec", cb, arg);
 
     uint32_t size = (uint32_t) cb.result.size();
 
     if (cb.result.empty())
-        nb::raise("drjit.nn.CoopVector(): cannot be empty!");
+        nb::raise("drjit.nn.CoopVec(): cannot be empty!");
 
     // Identify type
     for (uint32_t i = 0; i < size; ++i) {
@@ -70,13 +70,13 @@ CoopVector::CoopVector(nb::handle arg) {
     // Check that this type makes sense
     if (!m_type.is_valid())
         nb::raise_type_error(
-            "drjit.nn.CoopVector(): at least one Jit-compiled 1D array is required as input "
+            "drjit.nn.CoopVec(): at least one Jit-compiled 1D array is required as input "
             "(e.g., of type 'drjit.cuda.Float16')!");
 
     const ArraySupplement &s = supp(m_type);
     if (s.ndim != 1 || (JitBackend) s.backend == JitBackend::None)
         nb::raise_type_error(
-            "drjit.nn.CoopVector(): expected Jit-compiled 1D arrays as input "
+            "drjit.nn.CoopVec(): expected Jit-compiled 1D arrays as input "
             "(e.g., of type 'drjit.cuda.Float16')!");
 
     // Check/cast the other arguments
@@ -91,7 +91,7 @@ CoopVector::CoopVector(nb::handle arg) {
             tmp[i] = s.index(inst_ptr(value));
         } catch (...) {
             nb::raise_type_error(
-                "drjit.nn.CoopVector.__init__(): encountered an incompatible "
+                "drjit.nn.CoopVec.__init__(): encountered an incompatible "
                 "argument of type \"%s\" (expected \"%s\")!",
                 nb::inst_name(value).c_str(),
                 nb::type_name(m_type).c_str());
@@ -103,7 +103,7 @@ CoopVector::CoopVector(nb::handle arg) {
 }
 
 /// Unpack a cooperative vector into a Python list
-nb::list CoopVector::expand_to_list() const {
+nb::list CoopVec::expand_to_list() const {
     uint64_t *tmp = (uint64_t *) alloca(m_size * sizeof(uint64_t));
     ad_coop_vec_unpack(m_index, m_size, tmp);
 
@@ -119,8 +119,8 @@ nb::list CoopVector::expand_to_list() const {
     return result;
 }
 
-/// Unpack a cooperative vecotr into a Dr.Jit array type like CoopVectorXf
-nb::object CoopVector::expand_to_vector() const {
+/// Unpack a cooperative vecotr into a Dr.Jit array type like CoopVecXf
+nb::object CoopVec::expand_to_vector() const {
     ArrayMeta m = supp(m_type);
     m.ndim = 2;
     m.shape[0] = DRJIT_DYNAMIC;
@@ -129,7 +129,7 @@ nb::object CoopVector::expand_to_vector() const {
 }
 
 /// Perform one of several supported unary operations
-template <JitOp Op> static CoopVector coop_vec_unary_op(const CoopVector &arg) {
+template <JitOp Op> static CoopVec coop_vec_unary_op(const CoopVec &arg) {
     if ((JitBackend) supp(arg.m_type).backend == JitBackend::LLVM) {
         nb::object unpacked = arg.expand_to_vector(), func;
 
@@ -141,10 +141,10 @@ template <JitOp Op> static CoopVector coop_vec_unary_op(const CoopVector &arg) {
                 nb::raise("Unsupported operation!");
         }
 
-        return CoopVector(func(unpacked));
+        return CoopVec(func(unpacked));
     }
 
-    return CoopVector(
+    return CoopVec(
         ad_coop_vec_unary_op(Op, arg.m_index),
         arg.m_size,
         arg.m_type
@@ -155,8 +155,8 @@ template <JitOp Op> static CoopVector coop_vec_unary_op(const CoopVector &arg) {
 template <JitOp Op>
 static nb::object coop_vec_binary_op(nb::handle h0, nb::handle h1) {
     nb::object o[2] { nb::borrow(h0), nb::borrow(h1) };
-    CoopVector *ptr[2] { };
-    CoopVector *c = nullptr;
+    CoopVec *ptr[2] { };
+    CoopVec *c = nullptr;
 
     for (uint32_t i = 0; i < 2; ++i) {
         if (nb::try_cast(o[i], ptr[i], false))
@@ -174,12 +174,12 @@ static nb::object coop_vec_binary_op(nb::handle h0, nb::handle h1) {
         for (uint32_t j = 0; j < c->m_size; ++j)
             args.append(oi);
 
-        o[i] = nb::cast(CoopVector(nb::borrow<nb::args>(nb::tuple(args))));
+        o[i] = nb::cast(CoopVec(nb::borrow<nb::args>(nb::tuple(args))));
         if (!nb::try_cast(o[i], ptr[i], false))
-            nb::raise("CoopVector::binary_op(): internal error");
+            nb::raise("CoopVec::binary_op(): internal error");
     }
 
-    return nb::cast(CoopVector(
+    return nb::cast(CoopVec(
         ad_coop_vec_binary_op(
             Op,
             ptr[0]->m_index,
@@ -195,8 +195,8 @@ template <JitOp Op>
 static nb::object coop_vec_ternary_op(nb::handle h0, nb::handle h1,
                                       nb::handle h2) {
     nb::object o[3] { nb::borrow(h0), nb::borrow(h1), nb::borrow(h2) };
-    CoopVector *ptr[3] { };
-    CoopVector *c = nullptr;
+    CoopVec *ptr[3] { };
+    CoopVec *c = nullptr;
 
     for (uint32_t i = 0; i < 3; ++i) {
         if (nb::try_cast(o[i], ptr[i], false))
@@ -213,12 +213,12 @@ static nb::object coop_vec_ternary_op(nb::handle h0, nb::handle h1,
         for (uint32_t j = 0; j < c->m_size; ++j)
             args.append(c->m_type(o[i]));
 
-        o[i] = nb::cast(CoopVector(nb::borrow<nb::args>(nb::tuple(args))));
+        o[i] = nb::cast(CoopVec(nb::borrow<nb::args>(nb::tuple(args))));
         if (!nb::try_cast(o[i], ptr[i], false))
-            nb::raise("CoopVector::ternary_op(): internal error");
+            nb::raise("CoopVec::ternary_op(): internal error");
     }
 
-    return nb::cast(CoopVector(
+    return nb::cast(CoopVec(
         ad_coop_vec_ternary_op(
             Op,
             ptr[0]->m_index,
@@ -231,8 +231,8 @@ static nb::object coop_vec_ternary_op(nb::handle h0, nb::handle h1,
 }
 
 /// Matrix-vector product
-static CoopVector matvec(const MatrixView &A,
-                     const CoopVector &x,
+static CoopVec matvec(const MatrixView &A,
+                     const CoopVec &x,
                      std::optional<const MatrixView *> b,
                      bool transpose) {
 
@@ -520,31 +520,32 @@ static std::pair<nb::object, nb::object> repack(const char *name, const char *la
 }
 
 void export_coop_vec(nb::module_ &m) {
-    nb::module_ nn = nb::module_::import_("drjit.nn");
+    nb::module_ nn = m.def_submodule("detail").def_submodule("nn");
+    nn.attr("__name__") = "drjit.nn";
 
     nn.attr("ArrayT") = nb::type_var("ArrayT", "bound"_a = "drjit.ArrayBase");
     for (const char *name :
          { "T", "SelfT", "SelfCpT", "ValT", "ValCpT", "RedT", "PlainT", "MaskT" })
         nn.attr(name) = nb::type_var(name);
 
-    coop_vector_type = nb::class_<CoopVector>(nn, "CoopVector", nb::is_generic(), nb::sig("class CoopVector(typing.Generic[T])"))
+    coop_vector_type = nb::class_<CoopVec>(nn, "CoopVec", nb::is_generic(), nb::sig("class CoopVec(typing.Generic[T])"))
         .def(nb::init<nb::args>(),
-             nb::sig("def __init__(self, *args: *typing.Tuple[typing.Union[drjit.ArrayBase[SelfT, SelfCpT, ValT, ValCpT, T, PlainT, MaskT], float, int], ...]) -> None"),
-             doc_coop_CoopVector_init)
-        .def("__iter__", [](const CoopVector &v) { return iter(v.expand_to_list()); },
+             nb::sig("def __init__(self, *args: typing.Unpack[typing.Tuple[typing.Union[drjit.ArrayBase[SelfT, SelfCpT, ValT, ValCpT, T, PlainT, MaskT], float, int], ...]]) -> None"),
+             doc_coop_CoopVec_init)
+        .def("__iter__", [](const CoopVec &v) { return iter(v.expand_to_list()); },
              nb::sig("def __iter__(self, /) -> typing.Iterator[T]"))
         .def("__add__", &coop_vec_binary_op<JitOp::Add>,
-             nb::sig("def __add__(self, arg: CoopVector[T] | T | float | int, /) -> CoopVector[T]"))
+             nb::sig("def __add__(self, arg: CoopVec[T] | T | float | int, /) -> CoopVec[T]"))
         .def("__sub__", &coop_vec_binary_op<JitOp::Sub>,
-             nb::sig("def __sub__(self, arg: CoopVector[T] | T | float | int, /) -> CoopVector[T]"))
+             nb::sig("def __sub__(self, arg: CoopVec[T] | T | float | int, /) -> CoopVec[T]"))
         .def("__mul__", &coop_vec_binary_op<JitOp::Mul>,
-             nb::sig("def __mul__(self, arg: CoopVector[T] | T | float | int, /) -> CoopVector[T]"))
-        .def_prop_ro("index", [](const CoopVector &v) { return v.m_index; })
-        .def_prop_ro("type", [](const CoopVector &v) { return v.m_type; })
-        .def("__len__", [](const CoopVector &v) { return v.m_size; })
+             nb::sig("def __mul__(self, arg: CoopVec[T] | T | float | int, /) -> CoopVec[T]"))
+        .def_prop_ro("index", [](const CoopVec &v) { return v.m_index; })
+        .def_prop_ro("type", [](const CoopVec &v) { return v.m_type; })
+        .def("__len__", [](const CoopVec &v) { return v.m_size; })
         .def("__repr__",
-             [](const CoopVector &v) {
-                 return nb::str("drjit.nn.CoopVector[{}, shape=({}, {})]")
+             [](const CoopVec &v) {
+                 return nb::str("drjit.nn.CoopVec[{}, shape=({}, {})]")
                      .format(nb::type_name(v.m_type), v.m_size,
                              jit_var_size(v.m_index));
              });
@@ -598,8 +599,8 @@ void export_coop_vec(nb::module_ &m) {
                          v.descr.rows = v2.first;
                          v.descr.cols = v2.second;
                      })
-        .def("__matmul__", [](const MatrixView &self, const CoopVector &x) { return matvec(self, x, {}, false); },
-             nb::sig("def __matmul__(self, arg: CoopVector[T], /) -> CoopVector[T]"))
+        .def("__matmul__", [](const MatrixView &self, const CoopVec &x) { return matvec(self, x, {}, false); },
+             nb::sig("def __matmul__(self, arg: CoopVec[T], /) -> CoopVec[T]"))
         .def_rw("buffer", &MatrixView::buffer)
         .def_prop_ro("T",
                      [](MatrixView &v) {
@@ -649,7 +650,7 @@ void export_coop_vec(nb::module_ &m) {
            "args"_a, "layout"_a = "inference",
            nb::sig("def pack(*args: PyTree, layout: typing.Literal['inference', "
                    "'training'] = 'inference') -> typing.Tuple[drjit.ArrayBase, "
-                   "typing.Expand[typing.Tuple[PyTree, ...]]]"));
+                   "typing.Unpack[typing.Tuple[PyTree, ...]]]"));
 
     nn.def("unpack", [](nb::handle arg) {
         return repack("unpack", nullptr, arg); },
@@ -666,23 +667,23 @@ void export_coop_vec(nb::module_ &m) {
            },
            "args"_a,
            nb::sig("def unpack(*args: PyTree) -> typing.Tuple[drjit.ArrayBase, "
-                   "typing.Expand[typing.Tuple[PyTree, ...]]]"));
+                   "typing.Unpack[typing.Tuple[PyTree, ...]]]"));
 
     nn.def("matvec", &matvec, "A"_a.noconvert(), "x"_a.noconvert(),
            "b"_a.noconvert() = nb::none(), "transpose"_a = false,
-            nb::sig("def matvec(A: MatrixView, x: drjit.nn.CoopVector[T], b: typing.Optional[MatrixView] = "
-                    "None, /, transpose: bool = False) -> drjit.nn.CoopVector[T]"),
+            nb::sig("def matvec(A: MatrixView, x: drjit.nn.CoopVec[T], b: typing.Optional[MatrixView] = "
+                    "None, /, transpose: bool = False) -> drjit.nn.CoopVec[T]"),
             doc_coop_matvec);
 
     nn.def("cast",
-           [](CoopVector vec, nb::type_object_t<drjit::ArrayBase> tp) {
+           [](CoopVec vec, nb::type_object_t<drjit::ArrayBase> tp) {
                const ArraySupplement &s = supp(tp);
                ArrayMeta m = supp(vec.m_type);
                m.type = s.type;
                nb::handle new_type = meta_get_type(m);
-               return CoopVector(jit_coop_vec_cast(vec.m_index, (VarType) s.type),
+               return CoopVec(jit_coop_vec_cast(vec.m_index, (VarType) s.type),
                                  vec.m_size, new_type);
-           }, nb::sig("def cast(arg0: CoopVector[T], arg1: typing.Type[ArrayT], /) -> CoopVector[ArrayT]"),
+           }, nb::sig("def cast(arg0: CoopVec[T], arg1: typing.Type[ArrayT], /) -> CoopVec[ArrayT]"),
            doc_coop_cast
     );
 

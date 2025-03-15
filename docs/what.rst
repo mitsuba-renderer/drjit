@@ -23,7 +23,7 @@ Using Dr.Jit involves two steps:
 
 Perhaps the most significant difference to the majority of existing tools is
 that Dr.Jit is *not primarily* a machine learning library. While it does
-provide support for neural network :ref:`evaluation and training <coop_vec>`,
+provide support for neural network :ref:`evaluation and training <neural_nets>`,
 it its sweet spot are non-neural programs characterized by *embarrassing
 parallelism*---that is to say, programs with large data-parallel regions. A
 good example of this are `Monte Carlo

@@ -1,5 +1,5 @@
 /*
-    src/coop_vec.h -- Python bindings for Cooperative CoopVectors
+    src/coop_vec.h -- Python bindings for Cooperative CoopVecs
 
     Copyright (c) 2025 Wenzel Jakob <wenzel.jakob@epfl.ch>
 
@@ -12,7 +12,7 @@
 extern void export_coop_vec(nb::module_ &m);
 
 /// Cooperative vector container data structure
-struct CoopVector {
+struct CoopVec {
     /// JIT variable ID
     uint64_t m_index = 0;
     /// Number of entries
@@ -20,24 +20,24 @@ struct CoopVector {
     /// Element type
     nb::handle m_type;
 
-    CoopVector(nb::handle arg);
+    CoopVec(nb::handle arg);
 
     /// Steals ownership of 'index'
-    CoopVector(uint64_t index, uint32_t size, nb::handle type)
+    CoopVec(uint64_t index, uint32_t size, nb::handle type)
         : m_index(index), m_size(size), m_type(type) { }
 
     /// Copy constructor
-    CoopVector(const CoopVector &vec)
+    CoopVec(const CoopVec &vec)
         : m_index(vec.m_index), m_size(vec.m_size), m_type(vec.m_type) {
         ad_var_inc_ref(m_index);
     }
-    CoopVector(CoopVector &&vec) noexcept
+    CoopVec(CoopVec &&vec) noexcept
         : m_index(vec.m_index), m_size(vec.m_size), m_type(vec.m_type) {
         vec.m_index = 0;
         vec.m_size = 0;
         vec.m_type = nb::handle();
     }
-    CoopVector& operator=(CoopVector &&x) {
+    CoopVec& operator=(CoopVec &&x) {
         ad_var_dec_ref(m_index);
         m_index = x.m_index;
         m_size = x.m_size;
@@ -46,7 +46,7 @@ struct CoopVector {
         x.m_type = nb::handle();
         return *this;
     }
-    ~CoopVector() { ad_var_dec_ref(m_index); }
+    ~CoopVec() { ad_var_dec_ref(m_index); }
 
     /// Expand a cooperative vector into a Python list
     nb::list expand_to_list() const;

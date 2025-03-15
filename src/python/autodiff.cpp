@@ -46,7 +46,7 @@ static void set_grad_enabled(nb::handle h, bool enable_) {
         }
 
         void traverse_unknown(nb::handle h) override {
-            if (CoopVector *v; nb::try_cast(h, v, false)) {
+            if (CoopVec *v; nb::try_cast(h, v, false)) {
                 uint64_t index = v->m_index;
                 bool grad_enabled = ((uint32_t) index) != index;
                 if (enable != grad_enabled) {
@@ -109,7 +109,7 @@ bool grad_enabled(nb::handle h) {
         }
 
         void traverse_unknown(nb::handle h) override {
-            if (CoopVector *v; nb::try_cast(h, v, false))
+            if (CoopVec *v; nb::try_cast(h, v, false))
                 result |= ad_grad_enabled(v->m_index);
         }
     };
@@ -165,10 +165,10 @@ static nb::object detach(nb::handle h, bool preserve_type_ = true) {
         }
 
         nb::object transform_unknown(nb::handle h) const override {
-            if (CoopVector *v; nb::try_cast(h, v, false)) {
+            if (CoopVec *v; nb::try_cast(h, v, false)) {
                 uint32_t index = (uint32_t) v->m_index;
                 jit_var_inc_ref(index);
-                return nb::cast(CoopVector(index, v->m_size, v->m_type));
+                return nb::cast(CoopVec(index, v->m_size, v->m_type));
             }
             return nb::borrow(h);
         }

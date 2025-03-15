@@ -10,11 +10,10 @@ Cooperative vectors
 *Cooperative vectors* are a `new API
 <https://github.com/KhronosGroup/GLSL/blob/main/extensions/nv/GLSL_NV_cooperative_vector.txt>`__
 for evaluating matrix-vector products in certain types of GPU workloads. They
-are specifically designed for situations, where the matrices in question are
-relatively small (e.g., 64x64 or smaller), and where each thread of a parallel
-program needs to multiply a different vector by such a matrix. By working
-together, threads can perform these multiplications more efficiently, which is
-why this approach is called *cooperative*.
+are designed to handle cases, where each thread of a parallel program needs
+to multiply a vector by a reasonably small matrix (e.g., 64x64 or fewer
+entries). By working together, the threads can perform these multiplications
+more efficiently, which is why the approach is called *cooperative*.
 
 Cooperative vectors are especially useful for evaluating small `multilayer
 perceptrons <https://en.wikipedia.org/wiki/Multilayer_perceptron>`__ (MLPs)
@@ -22,7 +21,7 @@ within larger programs while fully *fusing* all steps of the process into a
 single kernel. Other workloads that heavily rely on matrix-vector products may
 benefit as well.
 
-Dr.Jit supports cooperative vectors on both backends:
+Dr.Jit supports cooperative vectors on both of its backends:
 
 - On **NVIDIA GPUs (Turing or newer)**, cooperative vectors map to the OptiX
   `cooperative vector API
@@ -33,67 +32,53 @@ Dr.Jit supports cooperative vectors on both backends:
 - On the **CPU (LLVM) backend**, compilation of cooperative vector operations
   targets the available instruction set extensions (AVX512, NEON, etc.).
 
-Note: code examples in the remainder of this section assume the following
-include directive:
+Code snippets in the remainder of this section assume the following include
+directives:
 
 .. code-block:: python
 
+   import drjit as dr
    import drjit.nn as nn
-   from drjit.auto.ad import Float16
+   from drjit.auto.ad import Float16, TensorXf16
 
 Motivation
 ----------
 
 The cooperative vector API is available via the :py:mod:`drjit.nn` submodule.
-Below is an example demonstrating how to evaluate a simple MLP.
+Below is an example demonstrating how to use it to perform a matrix
+multiplication.
 
 .. code-block:: python
 
-   import drjit as dr
-   from drjit.auto.ad import TensorXf16  # Import a FP16 tensor type
+   # Matrix shape
+   m, n = 3, 16
 
-   # Define MLP layer shapes
-   shapes = [(16, 3), (16, 16), (16, 16), (3, 16)]
+   # Create a random matrix + offset
+   A = dr.normal(TensorXf, (m, n))
+   b = dr.rand(TensorXf, m)
 
-   # Initialize weights and biases
-   A, b = [], []
-   for m, n in shapes:
-       A.append(dr.rand(TensorXf16, (m, n), scale='xavier'))
-       b.append(dr.zeros(TensorXf16, m))
+   # Pack 'A' and 'b' into a buffer with an optimal layout
+   buffer, A_view, b_view = nn.pack(A, b)
 
-   # Pack layers into an inference-optimal layout
-   A, b = nn.pack(A, b)
+   # Create a cooperative vector
+   x = nn.CoopVec(... 16 values ...)
 
-   # Define MLP input values
-   x, y, z = ... # (type: Float16)
-
-   # Pack inputs into a cooperative vector
-   v = nn.CoopVector(x, y, z)
-
-   # Forward pass through the MLP
-   for i in range(len(shapes)):
-       v = nn.matvec(A[i], v, b[i])
-
-       # Apply activation for hidden layers
-       if i != len(shapes) - 1:
-           v = dr.relu(v)
+   # Evaluate A @ x + b
+   v_out = nn.matvec(A_view, v_in, b_view)
 
    # Unpack the resulting cooperative vector
-   x, y, z = v
+   x, y, z = v_out
 
 This involves the following steps:
 
-- Initializing weight matrices (e.g, via :py:func:`dr.zeros() <drjit.zeros>`,
-  :py:func:`dr.rand() <drjit.rand>` and/or :py:func:`dr.normal()
-  <drjit.normal>`).
-
-- Packing coefficients into an optimized memory layout using
+- Initializing matrix data and packing it into an optimized memory layout using
   :py:func:`nn.pack() <drjit.nn.pack>`.
 
-- Constructing a :py:class:`nn.CoopVector` containing the MLP inputs.
+- Constructing a :py:class:`nn.CoopVec` containing the inputs to the matrix
+  multiplication.inputs.
 
-- Performing matrix-vector multiplications and other arithmetic, while keeping
-  the state in cooperative vector form.
+- Performing one or more matrix-vector multiplications and other arithmetic,
+  while keeping the state in cooperative vector form.
 
 - Unpacking the final cooperative vector into regular Dr.Jit arrays.
 
@@ -101,7 +86,7 @@ Cooperative vectors
 -------------------
 
 The central type of this API is the *cooperative vector* class
-:py:class:`nn.CoopVector`. This is a dynamically sized vector with uniformly
+:py:class:`nn.CoopVec`. This is a dynamically sized vector with uniformly
 typed elements.
 
 Unlike regular Dr.Jit arrays (e.g. :py:class:`drjit.cuda.ArrayXf`), cooperative
@@ -110,23 +95,23 @@ operation raises an exception:
 
 .. code-block:: pycon
 
-   >>> vec = nn.CoopVector(Float16(1), Float16(2))
+   >>> vec = nn.CoopVec(Float16(1), Float16(2))
    >>> vec[1]
    Traceback (most recent call last):
      File "<stdin>", line 1, in <module>
-   TypeError: 'drjit.nn.CoopVector' object is not subscriptable
+   TypeError: 'drjit.nn.CoopVec' object is not subscriptable
 
 This restriction exists because the compiler may arbitrarily distribute
 cooperative vector components across threads for efficiency. Allowing direct
 indexing would interfere with this optimization.
 
-The :py:class:`drjit.nn.CoopVector` constructor accepts an arbitrary sequence
+The :py:class:`drjit.nn.CoopVec` constructor accepts an arbitrary sequence
 of :ref:`PyTrees <pytrees>` containing Dr.Jit array and Python scalars and
 flattens them into a cooperative vector:
 
 .. code-block:: python
 
-   vec = nn.CoopVector( # Construct a 4D vector
+   vec = nn.CoopVec( # Construct a 4D vector
        Float16(1),
        3.0,
        Array2f(4, 5)
@@ -144,7 +129,7 @@ The same syntax can also be used to concatenate vectors:
 
 .. code-block:: python
 
-   vec_3 = nn.CoopVector(*vec_1, *vec_2)
+   vec_3 = nn.CoopVec(*vec_1, *vec_2)
 
 Cooperative vectors can also be converted into nested arrays, tensors, or
 Python lists:
@@ -169,7 +154,7 @@ Cooperative vectors support a restricted set of arithmetic operations:
 - :py:func:`dr.minimum() <minimum>`, :py:func:`dr.maximum() <maximum>`,
 - :py:func:`dr.log2() <log2>`, :py:func:`dr.exp2() <exp2>`,
 - :py:func:`dr.tanh() <tanh>`,
-- :py:func:`dr.relu() <relu>`, :py:func:`dr.step() <relu>`.
+- :py:func:`dr.step() <step>`.
 - :py:func:`nn.matvec() <drjit.nn.matvec>`
 
 These operations directly map to hardware-optimized operations on CUDA/OptiX.
@@ -177,8 +162,8 @@ Operations outside of this set can be realized via unpacking/repacking, e.g.:
 
 .. code-block::
 
-   x : nn.CoopVector = ...
-   y = nn.CoopVector(dr.sin(v) for v in x)
+   x : nn.CoopVec = ...
+   y = nn.CoopVec(dr.sin(v) for v in x)
 
 However, this may degrade performance. It is best to keep cooperative vectors
 in their opaque layout whenever possible.
@@ -188,7 +173,7 @@ Python scalars, which will undergo implicit broadcasting.
 
 .. code-block::
 
-   x: nn.CoopVector[dr.cuda.Float16] = ...
+   x: nn.CoopVec[dr.cuda.Float16] = ...
    y: dr.cuda.Float16 = ...
    z = dr.maximum(x, 0) + y
 
@@ -220,14 +205,11 @@ memory layouts for either *inference* (the default) and *training*. You must
 specify ``layout='training'`` if you wish to differentiate matrix
 multiplication in reverse mode.
 
-Following this step, the layout-converted ``A`` and ``b`` are stored in the
-same buffer, (accessible via :py:attr:`MatrixView.buffer
-<drjit.nn.MatrixView.buffer>`), and ``A_view`` and ``b_view`` merely encode the
-offset and layout.
-
-Matrix views cannot be used in arithmetic expressions (e.g., ``A_view + 1``
-fails) and are best thought of an opaque handle. They exist to characterize the
-input of the matrix-vector multiplication operation explained next.
+Following this step, ``A`` and ``b`` have been merged into ``buffer``, and
+``A_view`` and ``b_view`` encode the offset and layout within this larger
+buffer. Matrix views *cannot* be used in arithmetic expressions and are best
+thought of as opaque handles. They only exist to describe the input of the
+matrix-vector multiplication operation explained next.
 
 Two other view-related operations be useful in certain situations, please
 see the linked documentation for details.
@@ -265,33 +247,46 @@ it merges both steps into a single operation.
 Differentiation
 ---------------
 
-Cooperative vectors are compatible with automatic differentiation. Simply pack
-variables with tracked gradients into cooperative vectors---the system will
-then propagate derivatives through cooperative operations. Here is an example:
+Cooperative vectors support automatic differentiation. Simply pack variables
+with tracked gradients into cooperative vectors---the system will then
+propagate derivatives through subsequent operations. Here is an example:
 
 .. code-block:: python
 
-   a, b = Float16(1), Float16(2)
-   dr.enable_grad(a, b)
+   # Differentiable input
+   a = Array2f16(..)
+   dr.enable_grad(a)
 
-   vec = nn.CoopVector(a, b) # Pack grad-enabled variables
+   # Differentiable matrix + bias vector
+   buffer, A_view, b_view = nn.pack(A, b)
+   dr.enable_grad(buffer)
 
-   # ... Computation involving 'vec' ...
+   # Pack grad-enabled variables into a cooperative vector
+   x = nn.CoopVec(a)
 
-   x, y = vec                    # Unpack
-   loss = x**2 + y**2            # Continue calculation and ..
+   # Differentiable matrix-vector multiplication
+   y = dr.matvec(A_view, x, b_view)
+
+   r0, r1 = y                    # Unpack
+   loss = r0**2 + r1**2          # Continue calculation and ..
    dr.backward_from(loss)        # .. eventually backpropagate
 
-The layout conversion functions :py:func:`nn.pack() <drjit.nn.pack()>`
-and :py:func:`nn.unpack() <drjit.nn.unpack()>` are *not differentiable*,
-which is intentional. To train a neural network, convert the initial
-coefficient values into training-optimal layout and optimize this
-representation directly. Doing so is more efficient than changing layouts twice
-in every optimization step (once for the weights and once for their
-derivatives).
+Specific views or cooperative vectors can also be detached via
+:py:func:`drjit.detach()` to inhibit gradient propagation, e.g.:
 
-The following AD operations recognize :py:func:`nn.CoopVector
-<drjit.nn.CoopVector>` and :py:func:`nn.MatrixView <drjit.nn.MatrixView>` objects:
+.. code-block:: python
+
+   y = nn.matvec(A_view, dr.detach(x), dr.detach(b_view))
+
+Note that the conversion functions :py:func:`nn.pack() <drjit.nn.pack()>` and
+:py:func:`nn.unpack() <drjit.nn.unpack()>` are *not differentiable*. This is
+intentional: to train a neural network, convert the initial coefficient values
+into training-optimal layout and optimize this representation directly. Doing
+so is more efficient than changing layouts twice in every optimization step
+(once for the weights and once for their derivatives).
+
+The following AD operations recognize :py:func:`nn.CoopVec
+<drjit.nn.CoopVec>` and :py:func:`nn.MatrixView <drjit.nn.MatrixView>` objects:
 
 - :py:func:`grad_enabled`, :py:func:`enable_grad`, :py:func:`disable_grad`.
 - :py:func:`detach`, :py:func:`grad` (TODO not yet for CoopVec..)
@@ -312,7 +307,7 @@ Performance considerations
 
   - There is no difference between row-major and training/inference-optimal
     layouts on the CPU. However, using :py:func:`nn.pack()
-    <drjit.nn.pack>` is still recommended , since packing multiple arrays
+    <drjit.nn.pack>` is still recommended, since packing multiple arrays
     into a shared buffer has a small performance benefit.
 
   - On Intel-compatible processors, using half precision cooperative vectors is
