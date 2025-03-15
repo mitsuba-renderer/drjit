@@ -37,6 +37,15 @@ struct CoopVector {
         vec.m_size = 0;
         vec.m_type = nb::handle();
     }
+    CoopVector& operator=(CoopVector &&x) {
+        ad_var_dec_ref(m_index);
+        m_index = x.m_index;
+        m_size = x.m_size;
+        m_type = x.m_type;
+        x.m_index  = x.m_size = 0;
+        x.m_type = nb::handle();
+        return *this;
+    }
     ~CoopVector() { ad_var_dec_ref(m_index); }
 
     /// Expand a cooperative vector into a Python list
@@ -66,3 +75,6 @@ struct MatrixView {
     uint64_t index() const;
 };
 
+
+extern nb::handle view_type;
+extern nb::handle coop_vector_type;

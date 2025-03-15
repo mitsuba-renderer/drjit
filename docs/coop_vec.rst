@@ -155,6 +155,10 @@ Python lists:
    vec_ten = TensorXf(vec)
    vec_lst = list(vec)
 
+Cooperative vectors are compatible with Dr.Jit's symbolic tracing
+infrastructure and may be used as state variables in
+:py:func:`drjit.while_loop` and :py:func:`drjit.if_stmt`.
+
 Arithmetic
 ^^^^^^^^^^
 

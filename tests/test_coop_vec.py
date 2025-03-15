@@ -456,3 +456,24 @@ def test17_cast(t):
     x, y, z = c
     dr.eval(x, y, z)
     assert x[0] == 1 and y[0] == 2 and z[0] == 3
+
+
+
+@pytest.test_arrays('jit,shape=(*),float32,-diff')
+@dr.syntax
+def test18_symbolic_loop_if_stmt(t):
+    # Test that cooperative vectors can be passed through
+    # symbolic loops and conditionals
+    UInt32 = dr.uint32_array_t(t)
+    a = nn.CoopVector(t(1), t(2))
+    i = UInt32(0)
+
+    while i < 10:
+        if i > 5:
+            a += a
+        i += 1
+
+    x, y = a
+    dr.schedule(x, y, i)
+    assert x[0] == 16 and y[0] == 32
+

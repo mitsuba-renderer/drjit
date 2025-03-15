@@ -24,6 +24,13 @@
 
 /// Cooperative vector constructor
 CoopVector::CoopVector(nb::handle arg) {
+    if (CoopVector *v; nb::len(arg) == 1 && nb::try_cast(arg[0], v, false)) {
+        m_index = ad_var_inc_ref(v->m_index);
+        m_size = v->m_size;
+        m_type = v->m_type;
+        return;
+    }
+
     /// Flatten a PyTree into a set of 1D arrays used to construct a cooperative vector
     struct Flatten: TraverseCallback {
         std::vector<nb::object> result;
@@ -45,7 +52,7 @@ CoopVector::CoopVector(nb::handle arg) {
 
     Flatten cb;
     traverse(
-        "drjit.nn.CoopVector()",
+        "drjit.nn.CoopVector",
         cb,
         arg
     );
@@ -377,7 +384,8 @@ struct RepackItem {
     RepackItem(const RepackItem&) = default;
 };
 
-static nb::handle view_type;
+nb::handle view_type;
+nb::handle coop_vector_type;
 
 static nb::object repack_impl(const char *name, MatrixLayout layout,
                               nb::handle arg_, uint32_t &offset,
@@ -511,7 +519,7 @@ void export_coop_vec(nb::module_ &m) {
          { "T", "SelfT", "SelfCpT", "ValT", "ValCpT", "RedT", "PlainT", "MaskT" })
         nn.attr(name) = nb::type_var(name);
 
-    nb::class_<CoopVector>(nn, "CoopVector", nb::is_generic(), nb::sig("class CoopVector(typing.Generic[T])"))
+    coop_vector_type = nb::class_<CoopVector>(nn, "CoopVector", nb::is_generic(), nb::sig("class CoopVector(typing.Generic[T])"))
         .def(nb::init<nb::args>(),
              nb::sig("def __init__(self, *args: *tuple[drjit.ArrayBase[SelfT, SelfCpT, ValT, ValCpT, T, PlainT, MaskT] | float | int, ...]) -> None"),
              doc_coop_CoopVector_init)
