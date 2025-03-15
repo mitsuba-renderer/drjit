@@ -8261,3 +8261,7 @@
    Specify ``tranpose=True`` to multiply by the transpose of the matrix ``A``.
    On the CUDA/OptiX backend, this feature requires that ``A`` is inference
    or training-optimal layout.
+
+.. topic:: coop_cast
+
+   Cast the numeric type underlying a cooperative vector

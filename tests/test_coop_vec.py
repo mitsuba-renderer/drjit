@@ -80,12 +80,12 @@ def test04_pack_unpack(t, sub_slice):
     assert Xv2.buffer is X.array
 
     for i in range(2):
-        Pa = nn.pack(
+        _, *Pa = nn.pack(
             Xv1, Xv2,
             layout='inference' if i == 0 else 'training'
         )
 
-        X1a, X2a = nn.unpack(*Pa)
+        _, X1a, X2a = nn.unpack(*Pa)
         assert dr.all(m.TensorXf16(X1a) == X1[:, 0:32], axis=None)
         assert dr.all(m.TensorXf16(X2a) == X2[:, 0:32], axis=None)
 
@@ -121,10 +121,10 @@ def test05_matvec(t, shape, transpose, bias, pack):
 
     if pack:
         if bias:
-            A, b = nn.pack(A, b)
+            _, A, b = nn.pack(A, b)
             assert A.buffer is b.buffer
         else:
-            A = nn.pack(A)
+            _, A = nn.pack(A)
     else:
         A = nn.view(A)
         if bias:
@@ -306,10 +306,10 @@ def test14_matvec_fwd(t, transpose, has_A_grad, has_x_grad, has_b_grad, layout):
     # Set up 'A' matrix
     A      = [[4, 2], [5, 1]]
     A_grad = [[2, 1], [1, -1]]
-    A_v = nn.pack(Tensor(A), layout=layout)
+    _, A_v = nn.pack(Tensor(A), layout=layout)
     A_ref = Matrix2f(A)
     if has_A_grad:
-        A_grad_v = nn.pack(Tensor(A_grad))
+        _, A_grad_v = nn.pack(Tensor(A_grad))
         assert not dr.grad_enabled(A_v)
         dr.enable_grad(A_v)
         assert dr.grad_enabled(A_v)
@@ -331,12 +331,12 @@ def test14_matvec_fwd(t, transpose, has_A_grad, has_x_grad, has_b_grad, layout):
     if has_b_grad is not None:
         b1, b2 = Float(-1), Float(1)
         b_ref = Array2f(b1, b2)
-        b_v = nn.pack(Tensor([-1, 1]))
+        _, b_v = nn.pack(Tensor([-1, 1]))
 
         if has_b_grad is True:
             dr.enable_grad(b_ref)
             b_ref.grad = [1, -1]
-            b_grad_v = nn.pack(Tensor([1, -1]))
+            _, b_grad_v = nn.pack(Tensor([1, -1]))
             dr.enable_grad(b_v.buffer)
             b_v.buffer.grad = b_grad_v.buffer
 
@@ -363,7 +363,7 @@ def test15_matvec_in_vcall(t, transpose):
     size = 64
     A = dr.normal(t, (size, size))
     b = dr.normal(t, size)
-    A, b = nn.pack(A, b)
+    _, A, b = nn.pack(A, b)
 
     def mult_it():
         x = nn.CoopVector(
@@ -451,8 +451,8 @@ def test17_cast(t):
         z + 2,
         z + 3
     )
-    b = nn.cast(a, dr.VarType.Float32)
-    c = nn.cast(b, dr.VarType.Float16)
+    b = nn.cast(a, dr.float32_array_t(t))
+    c = nn.cast(b, dr.float16_array_t(t))
     x, y, z = c
     dr.eval(x, y, z)
     assert x[0] == 1 and y[0] == 2 and z[0] == 3

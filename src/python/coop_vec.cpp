@@ -51,11 +51,7 @@ CoopVector::CoopVector(nb::handle arg) {
     };
 
     Flatten cb;
-    traverse(
-        "drjit.nn.CoopVector",
-        cb,
-        arg
-    );
+    traverse("drjit.nn.CoopVector", cb, arg);
 
     uint32_t size = (uint32_t) cb.result.size();
 
@@ -255,6 +251,13 @@ static CoopVector matvec(const MatrixView &A,
 }
 
 nb::str MatrixView::repr() const {
+    const char *layout;
+    switch (descr.layout) {
+       case MatrixLayout::InferencingOptimal: layout = "inference"; break;
+       case MatrixLayout::TrainingOptimal: layout = "training"; break;
+       case MatrixLayout::RowMajor: layout = "row_major"; break;
+       default: layout = "unknown"; break;
+    }
     return nb::str(
         "drjit.nn.MatrixView[\n"
         "    dtype={},\n"
@@ -267,7 +270,7 @@ nb::str MatrixView::repr() const {
         "]"
     ).format(
         descr.dtype,
-        descr.layout,
+        layout,
         descr.rows,
         descr.cols,
         descr.stride,
@@ -356,10 +359,12 @@ static MatrixView view(nb::handle_t<dr::ArrayBase> arg) {
         d.rows = shape[0];
         d.cols = shape.size() > 1 ? shape[1] : 1;
         result.buffer = nb::steal(s.tensor_array(arg.ptr()));
-    } else if (s.ndim == 1) {
-        d.rows = s.shape[0];
+    } else if (s.ndim == 1 && s.shape[0] == DRJIT_DYNAMIC) {
+        d.rows = nb::len(arg);
         d.cols = 1;
         result.buffer = nb::borrow(arg);
+    } else {
+        nb::raise("Unsupported input type!");
     }
 
     d.stride = d.cols;
@@ -443,7 +448,7 @@ static nb::object repack_impl(const char *name, MatrixLayout layout,
     }
 }
 
-static nb::object repack(const char *name, const char *layout_str, nb::handle arg) {
+static std::pair<nb::object, nb::object> repack(const char *name, const char *layout_str, nb::handle arg) {
     uint32_t offset = 0;
     std::vector<RepackItem> items;
     MatrixLayout layout;
@@ -460,11 +465,13 @@ static nb::object repack(const char *name, const char *layout_str, nb::handle ar
     }
 
     nb::object result = repack_impl(name, layout, arg, offset, items);
+    nb::object buffer = nb::none();
+
     if (items.size() > 0) {
         nb::handle buf_cur = items[0].in->buffer,
                    buf_tp = buf_cur.type();
 
-        nb::object buf_o = full("zeros", buf_tp, nb::int_(0), offset, true);
+        buffer = full("zeros", buf_tp, nb::int_(0), offset, true);
         const ArraySupplement &s = supp(buf_tp);
 
         std::vector<MatrixDescr> in, out;
@@ -476,7 +483,7 @@ static nb::object repack(const char *name, const char *layout_str, nb::handle ar
                 (uint32_t) in.size(),
                 s.index(inst_ptr(buf_cur)),
                 in.data(),
-                s.index(inst_ptr(buf_o)),
+                s.index(inst_ptr(buffer)),
                 out.data()
             );
         };
@@ -499,7 +506,7 @@ static nb::object repack(const char *name, const char *layout_str, nb::handle ar
                 buf_cur = buf_i;
             }
 
-            items[i].out->buffer = buf_o;
+            items[i].out->buffer = buffer;
 
             in.push_back(items[i].in->descr);
             out.push_back(items[i].out->descr);
@@ -509,19 +516,20 @@ static nb::object repack(const char *name, const char *layout_str, nb::handle ar
             submit();
     }
 
-    return result;
+    return { buffer, result };
 }
 
 void export_coop_vec(nb::module_ &m) {
     nb::module_ nn = nb::module_::import_("drjit.nn");
 
+    nn.attr("ArrayT") = nb::type_var("ArrayT", "bound"_a = "drjit.ArrayBase");
     for (const char *name :
          { "T", "SelfT", "SelfCpT", "ValT", "ValCpT", "RedT", "PlainT", "MaskT" })
         nn.attr(name) = nb::type_var(name);
 
     coop_vector_type = nb::class_<CoopVector>(nn, "CoopVector", nb::is_generic(), nb::sig("class CoopVector(typing.Generic[T])"))
         .def(nb::init<nb::args>(),
-             nb::sig("def __init__(self, *args: *tuple[drjit.ArrayBase[SelfT, SelfCpT, ValT, ValCpT, T, PlainT, MaskT] | float | int, ...]) -> None"),
+             nb::sig("def __init__(self, *args: *typing.Tuple[typing.Union[drjit.ArrayBase[SelfT, SelfCpT, ValT, ValCpT, T, PlainT, MaskT], float, int], ...]) -> None"),
              doc_coop_CoopVector_init)
         .def("__iter__", [](const CoopVector &v) { return iter(v.expand_to_list()); },
              nb::sig("def __iter__(self, /) -> typing.Iterator[T]"))
@@ -545,7 +553,7 @@ void export_coop_vec(nb::module_ &m) {
         .def(nb::init<>())
         .def("__repr__", &MatrixView::repr)
         .def("__getitem__", &MatrixView::getitem,
-             nb::sig("def __getitem__(self, arg: int | slice | tuple[int | slice, int | slice]) -> MatrixView"))
+             nb::sig("def __getitem__(self, arg: typing.Union[int, slice, typing.Tuple[typing.Union[int, slice], typing.Union[int, slice]]]) -> MatrixView"))
         .def_prop_rw("dtype",
                      [](MatrixView &v) { return v.descr.dtype; },
                      [](MatrixView &v, VarType v2) { v.descr.dtype = v2; })
@@ -559,8 +567,26 @@ void export_coop_vec(nb::module_ &m) {
                      [](MatrixView &v) { return v.descr.size; },
                      [](MatrixView &v, uint32_t v2) { v.descr.size = v2; })
         .def_prop_rw("layout",
-                     [](MatrixView &v) { return v.descr.layout; },
-                     [](MatrixView &v, MatrixLayout v2) { v.descr.layout = v2; })
+                     [](MatrixView &v) {
+                         switch (v.descr.layout) {
+                            case MatrixLayout::InferencingOptimal: return "inference";
+                            case MatrixLayout::TrainingOptimal: return "training";
+                            case MatrixLayout::RowMajor: return "row_major";
+                            default: return "unknown";
+                         }
+                     },
+                     [](MatrixView &v, const char *s) {
+                         if (strcmp(s, "inference") == 0)
+                             v.descr.layout = MatrixLayout::InferencingOptimal;
+                         else if (strcmp(s, "training") == 0)
+                             v.descr.layout = MatrixLayout::TrainingOptimal;
+                         else if (strcmp(s, "row_major") == 0)
+                             v.descr.layout = MatrixLayout::RowMajor;
+                         else
+                             nb::raise("Unknown layout!");
+                     },
+                     nb::for_getter(nb::sig("def layout(self) -> typing.Literal['inference', 'training', 'row_major']")),
+                     nb::for_setter(nb::sig("def layout(self, value: typing.Literal['inference', 'training', 'row_major']) -> None")))
         .def_prop_rw("transpose",
                      [](MatrixView &v) { return v.transpose; },
                      [](MatrixView &v, bool v2) { v.transpose = v2; })
@@ -592,14 +618,9 @@ void export_coop_vec(nb::module_ &m) {
                          return r;
                      });
 
-    auto layout_type = nb::enum_<MatrixLayout>(view_type, "MatrixLayout")
-        .value("RowMajor", MatrixLayout::RowMajor)
-        .value("InferencingOptimal", MatrixLayout::InferencingOptimal)
-        .value("TrainingOptimal", MatrixLayout::TrainingOptimal);
-
 
     nb::dict drjit_struct;
-    drjit_struct["layout"] = layout_type;
+    drjit_struct["layout"] = nb::handle(&PyUnicode_Type);
     drjit_struct["buffer"] = nb::none();
     drjit_struct["dtype"] = nb::type<VarType>();
     drjit_struct["shape"] = nb::handle(&PyTuple_Type);
@@ -614,33 +635,56 @@ void export_coop_vec(nb::module_ &m) {
 
     nn.def("pack", [](nb::handle arg, const char *layout) { return repack("pack", layout, arg); },
            nb::arg(), "layout"_a = "inference",
-           nb::sig("def pack(arg: MatrixView | dr.AnyArray, *, layout: typing.Literal['inference', 'training'] = 'inference') -> dr.ArrayBase, MatrixView"),
+           nb::sig("def pack(arg: MatrixView | drjit.AnyArray, *, layout: typing.Literal['inference', 'training'] = 'inference') -> typing.Tuple[drjit.ArrayBase, MatrixView]"),
            doc_coop_pack);
 
-    nn.def("pack", [](nb::args args, const char *layout) { return repack("pack", layout, args); },
-           "args"_a, "layout"_a = "inference");
-           nb::sig("def pack(*args: *tuple[MatrixView | dr.AnyArray, ...], layout: typing.Literal['inference', 'training'] = 'inference') -> dr.ArrayBase, *tuple[MatrixView, ...]");
+    nn.def("pack",
+           [](nb::args args, const char *layout) {
+               auto temp = repack("pack", layout, args);
+               nb::list l;
+               l.append(temp.first);
+               l.extend(temp.second);
+               return nb::tuple(l);
+           },
+           "args"_a, "layout"_a = "inference",
+           nb::sig("def pack(*args: PyTree, layout: typing.Literal['inference', "
+                   "'training'] = 'inference') -> typing.Tuple[drjit.ArrayBase, "
+                   "typing.Expand[typing.Tuple[PyTree, ...]]]"));
 
-    nn.def("unpack", [](nb::handle arg) { return repack("unpack", nullptr, arg); },
-           nb::sig("def unpack(arg: MatrixView | dr.AnyArray, /) -> dr.ArrayBase, MatrixView"),
+    nn.def("unpack", [](nb::handle arg) {
+        return repack("unpack", nullptr, arg); },
+           nb::sig("def unpack(arg: MatrixView | drjit.AnyArray, /) -> typing.Tuple[drjit.ArrayBase, MatrixView]"),
            doc_coop_unpack);
 
-    nn.def("unpack", [](nb::args args) { return repack("unpack", nullptr, args); });
-           nb::sig("def unpack(*args: *tuple[MatrixView | dr.AnyArray, ...]) -> dr.ArrayBase, *tuple[MatrixView, ...]");
+    nn.def("unpack",
+           [](nb::args args) {
+               auto temp = repack("unpack", nullptr, args);
+               nb::list l;
+               l.append(temp.first);
+               l.extend(temp.second);
+               return nb::tuple(l);
+           },
+           "args"_a,
+           nb::sig("def unpack(*args: PyTree) -> typing.Tuple[drjit.ArrayBase, "
+                   "typing.Expand[typing.Tuple[PyTree, ...]]]"));
 
-    nn.def("matvec", &matvec, "A"_a, "x"_a, "b"_a = nb::none(),
-             "transpose"_a = false,
-             nb::sig("def matvec(A: MatrixView, x: drjit.nn.CoopVector[T], b: typing.Optional[MatrixView] = "
-                     "None, /, transpose: bool = False) -> drjit.nn.CoopVector[T]"),
-             doc_coop_matvec);
+    nn.def("matvec", &matvec, "A"_a.noconvert(), "x"_a.noconvert(),
+           "b"_a.noconvert() = nb::none(), "transpose"_a = false,
+            nb::sig("def matvec(A: MatrixView, x: drjit.nn.CoopVector[T], b: typing.Optional[MatrixView] = "
+                    "None, /, transpose: bool = False) -> drjit.nn.CoopVector[T]"),
+            doc_coop_matvec);
 
-    nn.def("cast", [](CoopVector vec, VarType vt) {
-        ArrayMeta m = supp(vec.m_type);
-        m.type = (uint16_t) vt;
-        nb::handle new_type = meta_get_type(m);
-        return CoopVector(jit_coop_vec_cast(vec.m_index, vt), vec.m_size,
-                          new_type);
-    });
+    nn.def("cast",
+           [](CoopVector vec, nb::type_object_t<drjit::ArrayBase> tp) {
+               const ArraySupplement &s = supp(tp);
+               ArrayMeta m = supp(vec.m_type);
+               m.type = s.type;
+               nb::handle new_type = meta_get_type(m);
+               return CoopVector(jit_coop_vec_cast(vec.m_index, (VarType) s.type),
+                                 vec.m_size, new_type);
+           }, nb::sig("def cast(arg0: CoopVector[T], arg1: typing.Type[ArrayT], /) -> CoopVector[ArrayT]"),
+           doc_coop_cast
+    );
 
     m.def("fma", &coop_vec_ternary_op<JitOp::Fma>);
     m.def("minimum", &coop_vec_binary_op<JitOp::Min>);
