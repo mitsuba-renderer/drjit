@@ -51,12 +51,15 @@ class Object : public drjit::TraversableBase {
 
 template <typename Value>
 class CustomBase : public Object{
-public:
-    CustomBase() : Object() {}
+    Value m_base_value;
 
+public:
+    CustomBase(const Value &base_value) : Object(), m_base_value(base_value) {}
+
+    Value &base_value() { return m_base_value; }
     virtual Value &value() = 0;
 
-    DR_TRAVERSE_CB(Object);
+    DR_TRAVERSE_CB(Object, m_base_value);
 };
 
 template <typename Value>
@@ -65,7 +68,7 @@ public:
     using Base = CustomBase<Value>;
     NB_TRAMPOLINE(Base, 1);
 
-    PyCustomBase() : Base() {}
+    PyCustomBase(const Value &base_value) : Base(base_value) {}
 
     Value &value() override { NB_OVERRIDE_PURE(value); }
 
@@ -77,8 +80,7 @@ class CustomA: public CustomBase<Value>{
 public:
     using Base = CustomBase<Value>;
 
-    CustomA() {}
-    CustomA(const Value &v) : m_value(v) {}
+    CustomA(const Value &value, const Value &base_value) : Base(base_value), m_value(value) {}
 
     Value &value() override { return m_value; }
 
@@ -119,13 +121,15 @@ template <JitBackend Backend> void bind(nb::module_ &m) {
         nb::intrusive_ptr<Object>(
             [](Object *o, PyObject *po) noexcept { o->set_self_py(po); }));
 
-    auto base = nb::class_<CustomBase, Object, PyCustomBase>(m, "CustomBase")
-                    .def(nb::init())
-                    .def("value", nb::overload_cast<>(&CustomBase::value));
+    auto base =
+        nb::class_<CustomBase, Object, PyCustomBase>(m, "CustomBase")
+            .def(nb::init<Float>())
+            .def("value", nb::overload_cast<>(&CustomBase::value))
+            .def("base_value", nb::overload_cast<>(&CustomBase::base_value));
 
     drjit::bind_traverse(base);
 
-    auto a = nb::class_<CustomA>(m, "CustomA").def(nb::init<Float>());
+    auto a = nb::class_<CustomA>(m, "CustomA").def(nb::init<Float, Float>());
 
     drjit::bind_traverse(a);
 
