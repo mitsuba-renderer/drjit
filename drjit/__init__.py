@@ -2396,11 +2396,6 @@ def freeze(
     ```python
     y = dr.gather(type(x), x, dr.width(x)//2)
     ```
-
-    Similarly, calculating the mean of a variable relies on the number of entries,
-    which will be baked into the frozen function. To avoid this, we suggest
-    supplying the number of entries as a Dr.Jit literal in the arguments to the
-    function.
     """
 
 
