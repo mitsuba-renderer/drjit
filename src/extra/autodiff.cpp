@@ -2381,7 +2381,7 @@ Index ad_var_abs(Index i0) {
                vn = scalar(i0, -1.0);
 
         return ad_var_new("abs", std::move(result),
-                          Arg(i0, dr::select(v0 >= vz, vp, vn)));
+                          Arg(i0, dr::select(v0 == vz, vz, dr::select(v0 > vz, vp, vn))));
     }
 }
 
