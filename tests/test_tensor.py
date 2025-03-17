@@ -626,3 +626,25 @@ def test20_concat(t):
 
         assert out_numpy.shape == out_drjit.shape
         assert np.allclose(out_numpy, out_drjit.numpy())
+
+@pytest.test_arrays('is_tensor, jit, uint32')
+def test21_moveaxis(t):
+    np = pytest.importorskip("numpy")
+
+    configs = [
+        ((3, 4, 5), 0, 0), ((3, 4, 5), 0, 1), ((3, 4, 5), 0, 2),
+        ((3, 4, 5), 1, 0), ((3, 4, 5), 1, 1), ((3, 4, 5), 1, 2),
+        ((3, 4, 5), 2, 0), ((3, 4, 5), 2, 1), ((3, 4, 5), 2, 2),
+        ((3, 4, 5), (0, 1), (0, 1)), ((3, 4, 5), (0, 1), (0, 2)),
+        ((3, 4, 5), (0, 1), (1, 0)), ((3, 4, 5), (0, 1), (2, 1)),
+        ((3, 4, 5), (0, 2), (0, 1)), ((3, 4, 5), (0, 2), (0, 2)),
+        ((3, 4, 5), (0, 2), (1, 0)), ((3, 4, 5), (0, 2), (2, 1))
+    ]
+
+    for shape, in_ax, out_ax in configs:
+        v0 = t(dr.arange(dr.array_t(t), dr.prod(shape)), shape)
+        v1 = np.arange(dr.prod(shape)).reshape(shape)
+
+        v0_out = dr.moveaxis(v0, in_ax, out_ax)
+        v1_out = np.moveaxis(v1, in_ax, out_ax)
+        pass
