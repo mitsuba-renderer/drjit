@@ -19,12 +19,12 @@ with detail.scoped_rtld_deepbind():
 import sys as _sys
 if _sys.version_info < (3, 11):
     try:
-        from typing_extensions import overload, Optional, Type, Tuple, Sequence, Union, Literal, Callable
+        from typing_extensions import overload, Optional, Type, Tuple, List, Sequence, Union, Literal, Callable
     except ImportError:
         raise RuntimeError(
             "Dr.Jit requires the 'typing_extensions' package on Python <3.11")
 else:
-    from typing import overload, Optional, Type, Tuple, Sequence, Union, Literal, Callable
+    from typing import overload, Optional, Type, Tuple, List, Sequence, Union, Literal, Callable
 
 from .ast import syntax, hint
 from .interop import wrap
@@ -1960,6 +1960,70 @@ def resample(
         return tp(value, shape)
     else:
         return value
+
+
+def _normalize_axis_tuple(t: Union[int, Tuple[int, ...]], ndim: int, name: str) -> List[int]:
+    if isinstance(t, int):
+        t = (t, )
+    axes = []
+    for i in t:
+        if i < 0:
+            i += ndim
+        if i < 0 or i >= ndim:
+            raise RuntimeError(f"'{name}' axis is out of bounds")
+        axes.append(i)
+    if len(set(axes)) != len(axes):
+        raise RuntimeError(f"'{name}' contains repeated axes")
+    return axes
+
+
+def moveaxis(arg: ArrayBase, /, source: Union[int, Tuple[int, ...]], destination: Union[int, Tuple[int, ...]]):
+    """
+    Move one or more axes of an input tensor to another position.
+
+    Dimensions of that are not explicitly moved remain in their original order
+    and appear at the positions not specified in the destination. Negative axis
+    values count backwards from the end.
+    """
+
+    if not is_tensor_v(arg):
+        raise TypeError("drjit.moveaxis(): expects a tensor instance as input!")
+
+    shape_in = arg.shape
+    ndim = len(shape_in)
+    source_l = _normalize_axis_tuple(source, ndim, 'source')
+    destination_l = _normalize_axis_tuple(destination, ndim, 'destination')
+
+    if len(source_l) != len(destination_l):
+        raise ValueError("'source' and 'destination` must have the "
+                         "same number of elements");
+
+    # Determine the final axis order (based on NumPy)
+    order = [n for n in range(ndim) if n not in source_l]
+    for dest, src in sorted(zip(destination_l, source_l)):
+        order.insert(dest, src)
+
+    shape_out = tuple(shape_in[i] for i in order)
+    strides_in = _compute_strides(shape_in)
+    strides_out = _compute_strides(shape_out)
+
+    last_axis = 0
+    for i, j in enumerate(order):
+        if i != j:
+            last_axis = i + 1
+
+    arr = arg.array
+    index_out = arange(uint32_array_t(arr), prod(shape_in))
+    index_in = 0
+
+    for i in range(last_axis):
+        pos = index_out // strides_out[i]
+        index_out -= pos * strides_out[i]
+        index_in += pos * strides_in[order[i]]
+
+    index_in += index_out
+
+    return type(arg)(gather(type(arr), arr, index_in, mode=ReduceMode.Permute), shape_out)
 
 
 def upsample(t, shape=None, scale_factor=None):
