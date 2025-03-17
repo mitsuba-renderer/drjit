@@ -114,3 +114,13 @@ def test4_binop_promote_ad():
     assert type(x) is dr.llvm.ad.Complex2f
     x = dr.zeros(dr.llvm.ad.Float) + dr.zeros(dr.llvm.Complex2f)
     assert type(x) is dr.llvm.ad.Complex2f
+
+
+@pytest.test_arrays('float16, shape=(*)')
+def test5_half_precision_promotion(t):
+    x = t(1.0)
+    y = x + 1
+    z = x + 1.0
+    assert dr.type_v(x) == dr.VarType.Float16
+    assert dr.type_v(y) == dr.VarType.Float16
+    assert dr.type_v(z) == dr.VarType.Float16

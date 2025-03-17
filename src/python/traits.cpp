@@ -72,6 +72,9 @@ nb::object expr_t(nb::handle h0, nb::handle h1) {
               m1 = meta_get_general(h1),
               m  = meta_promote(m0, m1);
 
+    if ((VarType) m.type == VarType::BaseFloat)
+        m.type = (uint32_t) VarType::Float32;
+
     if (!meta_check(m))
         nb::raise_type_error(
             "drjit.expr_t(): incompatible types \"%s\" and \"%s\"",
