@@ -1,9 +1,10 @@
-#include <drjit/python.h>
 #include <drjit/autodiff.h>
 #include <drjit/packet.h>
+#include <drjit/python.h>
 #include <drjit/traversable_base.h>
 #include <nanobind/nanobind.h>
 #include <nanobind/trampoline.h>
+#include <vector>
 
 namespace nb = nanobind;
 namespace dr = drjit;
@@ -90,6 +91,20 @@ private:
     DR_TRAVERSE_CB(Base, m_value);
 };
 
+template<typename Value>
+class Nested: Object{
+    using Base = Object;
+
+    std::vector<std::pair<nb::ref<Object>, size_t>> m_nested;
+
+public:
+    Nested(nb::ref<Object> a, nb::ref<Object> b) {
+        m_nested.push_back(std::make_pair(a, 0));
+        m_nested.push_back(std::make_pair(b, 1));
+    }
+
+    DR_TRAVERSE_CB(Base, m_nested);
+};
 
 template <JitBackend Backend> void bind(nb::module_ &m) {
     dr::ArrayBinding b;
@@ -115,6 +130,7 @@ template <JitBackend Backend> void bind(nb::module_ &m) {
     using CustomBase   = CustomBase<Float>;
     using PyCustomBase = PyCustomBase<Float>;
     using CustomA      = CustomA<Float>;
+    using Nested       = Nested<Float>;
 
     auto object = nb::class_<Object>(
         m, "Object",
@@ -129,9 +145,15 @@ template <JitBackend Backend> void bind(nb::module_ &m) {
 
     drjit::bind_traverse(base);
 
-    auto a = nb::class_<CustomA>(m, "CustomA").def(nb::init<Float, Float>());
+    auto a = nb::class_<CustomA, CustomBase>(m, "CustomA")
+                 .def(nb::init<Float, Float>());
 
     drjit::bind_traverse(a);
+
+    auto nested = nb::class_<Nested>(m, "Nested")
+                      .def(nb::init<nb::ref<Object>, nb::ref<Object>>());
+
+    drjit::bind_traverse(nested);
 
     m.def("cpp_make_opaque",
           [](CustomFloatHolder &holder) { dr::make_opaque(holder); }

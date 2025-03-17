@@ -134,3 +134,30 @@ def test06_trampoline_traversal(t):
     b = B(value, base_value)
 
     assert dr.detail.collect_indices(b) == [base_value.index, value.index]
+
+@pytest.test_arrays("float32,-diff,shape=(*),jit")
+def test07_nested_traversal(t):
+    """
+    Test traversal of nested objects, and more specifically the traversal of
+    ``std::vector<std::pair<nb::ref<Object>, size_t>>`` members.
+    """
+    pkg = get_pkg(t)
+    Float = t
+
+    value = dr.arange(Float, 10) + 0
+    base_value = dr.arange(Float, 10) + 1
+
+    a = pkg.CustomA(value, base_value)
+
+    value = dr.arange(Float, 10) + 2
+    base_value = dr.arange(Float, 10) + 3
+
+    b = pkg.CustomA(value, base_value)
+
+    nested = pkg.Nested(a, b)
+
+    indices_a = dr.detail.collect_indices(a)
+    indices_b = dr.detail.collect_indices(b)
+    indices_nested = dr.detail.collect_indices(nested)
+
+    assert indices_nested == indices_a + indices_b
