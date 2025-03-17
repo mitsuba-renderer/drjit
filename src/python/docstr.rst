@@ -6051,6 +6051,24 @@
     If this flag is disabled, replay of previously frozen functions is disabled
     as well.
 
+.. topic:: JitFlag_FreezingScope
+
+    This flag is set to ``True`` when Dr.Jit is currently recording a frozen
+    function. The flag is automatically managed and should not be updated by
+    application code.
+
+    User code may query this flag to conditionally optimize kernels for frozen
+    function recording, such as re-seeding the sampler, used for rendering.
+
+.. topic:: JitFlag_EnableObjectTraversal
+
+    This flag is set to ``True`` when Dr.Jit is currently traversing
+    inputs and outputs of a frozen function. The flag is automatically managed
+    and should not be updated by application code.
+
+    When enabled, traversal of objects such as the ``Scene`` or ``BSDFs`` in
+    mitsuba is enabled.
+
 .. topic:: JitFlag_Default
 
     The default set of optimization flags consisting of
