@@ -1747,7 +1747,7 @@ nb::object FrozenFunction::operator()(nb::args args, nb::kwargs kwargs) {
                         "literal variables have been discovered which changed "
                         "from one call to another. These will be made opaque, "
                         "and the input will be traversed again. This will "
-                        "incur some overhead. To prevent this, make those "
+                        "incurr some overhead. To prevent this, make those "
                         "variables opaque in beforehand. Below, a list of "
                         "variables that changed will be shown.");
                 if (prev_key)
