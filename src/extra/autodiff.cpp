@@ -3398,7 +3398,7 @@ Index ad_var_block_reduce(ReduceOp op, Index index, uint32_t block_size, int sym
 
 static const char *type_name_short[(int) VarType::Count] {
     "void ", "msk", "i8",  "u8",  "i16", "u16", "i32",
-    "u32", "i64", "u64", "ptr", "f16", "f32", "f64"
+    "u32", "i64", "u64", "ptr", "???", "f16", "f32", "f64"
 };
 
 

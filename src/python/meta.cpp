@@ -24,17 +24,17 @@ bool meta_check(ArrayMeta m) noexcept {
 
 static const char *type_name_lowercase[] = {
     "void", "bool", "int8", "uint8", "int16", "uint16", "int32", "uint32",
-    "int64", "uint64", "pointer", "float162", "float32", "float64"
+    "int64", "uint64", "pointer", "base_float", "float16", "float32", "float64"
 };
 
 static const char *type_name[] = {
     "Void", "Bool", "Int8", "UInt8", "Int16", "UInt16", "Int", "UInt",
-    "Int64", "UInt64", "Pointer", "Float16", "Float", "Float64"
+    "Int64", "UInt64", "Pointer", "BaseFloat", "Float16", "Float", "Float64"
 };
 
 static const char *type_suffix[] = {
     "?", "b", "i8", "u8", "i16", "u16", "i", "u",
-    "i64", "u64", "p", "f16", "f", "f64"
+    "i64", "u64", "p", "", "f16", "f", "f64"
 };
 
 /// Convert a metadata record into a string representation (for debugging)
@@ -175,7 +175,7 @@ ArrayMeta meta_get(nb::handle h) noexcept {
         }
         m.type = (uint8_t) vt;
     } else if (tp.is(&PyFloat_Type)) {
-        m.type = (uint8_t) VarType::Float32;
+        m.type = (uint8_t) VarType::BaseFloat;
     } else if (tp.is(&PyTuple_Type) || tp.is(&PyList_Type)) {
         Py_ssize_t len = PySequence_Size(h.ptr());
 
@@ -299,7 +299,7 @@ ArrayMeta meta_get_general(nb::handle h) noexcept {
     else if (h.is(&PyLong_Type))
         m.type = (uint8_t) VarType::Int32;
     else if (h.is(&PyFloat_Type))
-        m.type = (uint8_t) VarType::Float32;
+        m.type = (uint8_t) VarType::BaseFloat;
     else
         m.is_valid = false;
 
@@ -349,6 +349,9 @@ void promote(nb::object *o, size_t n, bool select) {
 
     if (!meta_check(m))
         nb::raise("Incompatible arguments.");
+
+    if ((VarType) m.type == VarType::BaseFloat)
+        m.type = (uint32_t) VarType::Float32;
 
     for (size_t i = 0; i < n; ++i) {
         // if this is a compatible Dr.Jit array
