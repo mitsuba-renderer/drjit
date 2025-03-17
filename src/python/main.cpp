@@ -108,6 +108,8 @@ NB_MODULE(_drjit_ext, m_) {
         .value("SymbolicConditionals", JitFlag::SymbolicConditionals, doc_JitFlag_SymbolicConditionals)
         .value("SymbolicScope", JitFlag::SymbolicScope, doc_JitFlag_SymbolicScope)
         .value("KernelFreezing", JitFlag::KernelFreezing, doc_JitFlag_KernelFreezing)
+        .value("FreezingScope", JitFlag::FreezingScope, doc_JitFlag_FreezingScope)
+        .value("EnableObjectTraversal", JitFlag::EnableObjectTraversal, doc_JitFlag_EnableObjectTraversal)
         .value("Default", JitFlag::Default, doc_JitFlag_Default)
 
         // Deprecated aliases
