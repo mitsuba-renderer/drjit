@@ -2554,6 +2554,20 @@ def assert_equal(
         **kwargs,
     )
 
+def srgb_to_linear(x):
+    return select(
+        x < 0.04045,
+        x / 12.92,
+        ((x + 0.055) / 1.055) ** 2.4
+    )
+
+def linear_to_srgb(x):
+    return select(
+        x < 0.0031308,
+        x * 12.92,
+        1.055 * (x ** (1.0 / 2.4)) - 0.055
+    )
+
 
 newaxis = None
 
