@@ -214,7 +214,7 @@ public:
                 jit_raise("Texture::set_value(): unexpected array size!");
             m_value.array() = value;
         } else /* JIT variant */ {
-            Storage padded_value = value;
+            Storage padded_value;
 
             if (m_channels_storage != m_channels) {
                 using Mask = mask_t<_Storage>;
@@ -224,10 +224,16 @@ public:
                 Mask active = channel_idx < m_channels;
                 idx = fmadd(pixels_idx, m_channels, channel_idx);
                 padded_value = gather<Storage>(value, idx, active);
+            } else {
+                padded_value = value;
             }
 
             if (padded_value.size() != m_size)
                 jit_raise("Texture::set_value(): unexpected array size!");
+
+            if constexpr (IsDiff)
+                m_unpadded_value.array() = replace_grad(
+                    m_unpadded_value.array(), value);
 
             if constexpr (HasCudaTexture) {
                 if (m_use_accel) {
@@ -285,7 +291,7 @@ public:
                 jit_cuda_tex_get_shape(Dimension, m_handle, current_shape);
             } else {
                 for (size_t i = 0; i < Dimension + 1; ++i)
-                    current_shape[i] = m_value.shape(i);
+                    current_shape[i] = m_shape[i];
             }
 
             for (size_t i = 0; i < Dimension + 1; ++i) {
@@ -332,18 +338,18 @@ public:
         } else {
             sync_host_data();
             if (m_tensor_dirty) {
-
-                m_unpadded_value = m_value;
-
                 if (m_channels != m_channels_storage) {
                     UInt32 idx = arange<UInt32>((m_size * m_channels)
                         / m_channels_storage);
                     UInt32 pixels_idx = idx / m_channels;
                     UInt32 channel_idx = idx % m_channels;
                     idx = fmadd(pixels_idx, m_channels_storage, channel_idx);
-                    m_unpadded_value = TensorXf(
-                        gather<Storage>(m_value.array(), idx),
-                        Dimension + 1, m_shape);
+                    if constexpr (IsDiff)
+                        m_unpadded_value.array() = replace_grad(gather<Storage>(m_value.array(), idx), m_unpadded_value.array());
+                    else
+                        m_unpadded_value.array() = gather<Storage>(m_value.array(), idx);
+                } else {
+                    m_unpadded_value.array() = m_value.array();
                 }
                 m_tensor_dirty = false;
             }
@@ -1328,6 +1334,7 @@ protected:
         }
 
         m_size = m_channels_storage;
+        size_t unpadded_size = m_channels;
 
         size_t tensor_shape[Dimension + 1]{};
 
@@ -1337,16 +1344,20 @@ protected:
             m_resolution_opaque[Dimension - 1 - i] = opaque<UInt32>((uint32_t) shape[i]);
             m_inv_resolution[Dimension - 1 - i] = divisor<int32_t>((int32_t) shape[i]);
             m_size *= shape[i];
+            unpadded_size *= shape[i];
         }
         tensor_shape[Dimension] = m_channels_storage;
-
-        if (init_tensor)
-            m_value = TensorXf(zeros<Storage>(m_size), Dimension + 1, tensor_shape);
 
         m_shape[Dimension] = channels;
         m_use_accel = use_accel;
         m_filter_mode = filter_mode;
         m_wrap_mode = wrap_mode;
+
+        if (init_tensor)
+        {
+            m_value = TensorXf(zeros<Storage>(m_size), Dimension + 1, tensor_shape);
+            m_unpadded_value = TensorXf(empty<Storage>(unpadded_size), Dimension + 1, m_shape);
+        }
 
         if constexpr (HasCudaTexture) {
             if (m_use_accel) {
