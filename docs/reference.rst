@@ -146,6 +146,8 @@ Miscellaneous operations
 .. autofunction:: binary_search
 .. autofunction:: make_opaque
 .. autofunction:: copy
+.. autofunction:: linear_to_srgb
+.. autofunction:: srgb_to_linear
 
 Just-in-time compilation
 ------------------------
