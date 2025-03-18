@@ -2647,6 +2647,44 @@ def assert_equal(
         **kwargs,
     )
 
+def srgb_to_linear(x: ArrayT, clip_range: bool = True) -> ArrayT:
+    """
+    Convert a sRGB gamma-corrected intensity value on the interval [0, 1] into
+    a linear intensity value on the interval [0, 1].
+
+    Values outside of the range [0, 1] are clipped by default. You may specify
+    `clip_range=False` to avoid this step if your data is already guranteed to be in
+    this range.
+    """
+
+    if clip_range:
+        x = clip(x, 0, 1)
+
+    return select(
+        x < 0.04045,
+        x / 12.92,
+        fma(x, 1 / 1.055, 0.055 / 1.055) ** 2.4
+    )
+
+def linear_to_srgb(x: ArrayT, clip_range: bool = True) -> ArrayT:
+    """
+    Convert a linear intensity value on the interval [0, 1] to into a sRGB
+    value by applying the underlying gamma correction curve.
+
+    Values outside of the range [0, 1] are clipped by default. You may specify
+    `clip_range=False` to avoid this step if your data is already guranteed to be in
+    this range.
+    """
+
+    if clip_range:
+        x = clip(x, 0, 1)
+
+    return select(
+        x < 0.0031308,
+        x * 12.92,
+        fma(1.055, x ** (1.0 / 2.4), -0.055)
+    )
+
 
 newaxis = None
 
