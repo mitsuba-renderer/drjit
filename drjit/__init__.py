@@ -2555,6 +2555,7 @@ def assert_equal(
     )
 
 def srgb_to_linear(x):
+    x = clip(x, 0, 1)
     return select(
         x < 0.04045,
         x / 12.92,
@@ -2562,6 +2563,7 @@ def srgb_to_linear(x):
     )
 
 def linear_to_srgb(x):
+    x = clip(x, 0, 1)
     return select(
         x < 0.0031308,
         x * 12.92,
