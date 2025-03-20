@@ -498,17 +498,20 @@ struct FrozenFunction {
     detail::RecordingMap recordings;
     std::shared_ptr<detail::FlatVariables> prev_key;
 
-    uint32_t recording_counter = 0;
-    uint32_t call_counter = 0;
-    int max_cache_size = -1;
+    uint32_t recording_counter    = 0;
+    uint32_t call_counter         = 0;
+    int max_cache_size            = -1;
     uint32_t warn_recording_count = 10;
+    JitBackend default_backend    = JitBackend::None;
 
     detail::FlatVariables::Heuristic in_heuristics;
 
     FrozenFunction(nb::callable func, int max_cache_size = -1,
-                   uint32_t warn_recording_count = 10)
+                   uint32_t warn_recording_count = 10,
+                   JitBackend backend            = JitBackend::None)
         : func(func), max_cache_size(max_cache_size),
-          warn_recording_count(warn_recording_count) {}
+          warn_recording_count(warn_recording_count), default_backend(backend) {
+    }
     ~FrozenFunction() {}
 
     FrozenFunction(const FrozenFunction &)            = delete;

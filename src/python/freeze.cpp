@@ -1413,6 +1413,7 @@ nb::object FrozenFunction::operator()(nb::args args, nb::kwargs kwargs) {
 
         auto in_variables =
             std::make_shared<FlatVariables>(FlatVariables(in_heuristics));
+        in_variables->backend = this->default_backend;
         // Evaluate and traverse input variables (args and kwargs)
         {
             // Enter Resume scope, so we can track gradients
@@ -1584,7 +1585,7 @@ void export_freeze(nb::module_ & /*m*/) {
     auto traversable_base =
         nb::class_<drjit::TraversableBase>(d, "TraversableBase");
     nb::class_<FrozenFunction>(d, "FrozenFunction", nb::type_slots(slots))
-        .def(nb::init<nb::callable, int, uint32_t>())
+        .def(nb::init<nb::callable, int, uint32_t, JitBackend>())
         .def_prop_ro(
             "n_cached_recordings",
             [](FrozenFunction &self) { return self.n_cached_recordings(); })

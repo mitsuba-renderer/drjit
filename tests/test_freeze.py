@@ -2768,21 +2768,18 @@ def test71_texture(t, force_optix):
 
     assert frozen.n_recordings < n
 
+@pytest.test_arrays("float32, jit, shape=(*)")
+def test72_no_input(t):
+    mod = sys.modules[t.__module__]
 
-# @pytest.test_arrays("float32, jit, diff, shape=(*)")
-# def test42_raise(t):
-#
-#     def func(x):
-#         # return t(1, 2, 3) + x
-#         return x + 1
-#
-#
-#
-#     frozen = dr.freeze(func)
-#
-#     for i in range(3):
-#         x = dr.arange(t, 3)
-#         dr.make_opaque(x)
-#
-#         with pytest.raises(RuntimeError):
-#             z = frozen(x)
+    backend = dr.backend_v(t)
+
+    def func():
+        return dr.arange(t, 10)
+
+    frozen = dr.freeze(func, backend = backend)
+
+    res = frozen()
+    ref = func()
+
+    assert dr.allclose(res, ref)
