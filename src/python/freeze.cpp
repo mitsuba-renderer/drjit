@@ -1483,14 +1483,18 @@ nb::object FunctionRecording::record(nb::callable func,
     JitBackend backend = in_variables.backend;
 
     frozen_func->recording_counter++;
-    if (frozen_func->recording_counter > frozen_func->warn_recording_count)
+    if (frozen_func->recording_counter > frozen_func->warn_recording_count &&
+        frozen_func->recordings.size() >= 1) {
         jit_log(
             LogLevel::Warn,
             "The frozen function has been recorded %u times, this indicates a "
             "problem with how the frozen function is being called. For "
-            "example, calling it with changing python values such as a "
-            "index.",
+            "example, calling it with changing python values such as an "
+            "index. For more information about which variables changed set the "
+            "log level to ``LogLevel::Debug``.",
             frozen_func->recording_counter);
+        log_diff(LogLevel::Debug, in_variables, *frozen_func->prev_key);
+    }
 
     jit_log(LogLevel::Info,
             "Recording (n_inputs=%u):", in_variables.variables.size());
@@ -1789,16 +1793,6 @@ nb::object FrozenFunction::operator()(nb::args args, nb::kwargs kwargs) {
         }
 
         if (it == this->recordings.end()) {
-#ifndef NDEBUG
-            if (this->recordings.size() >= 1)
-                log_diff(LogLevel::Debug, *in_variables, *prev_key);
-#else
-            if (this->recordings.size() >= 1 &&
-                recording_counter + 1 > warn_recording_count) {
-                log_diff(LogLevel::Warn, *in_variables, *prev_key);
-            }
-#endif
-
             {
                 // TODO: single traverse
                 ADScopeContext ad_scope(drjit::ADScope::Resume, 0, nullptr, 0,
