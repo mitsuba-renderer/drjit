@@ -767,10 +767,11 @@ void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
             this->layout[layout_index].num = num_fields;
         } else {
             jit_log(LogLevel::Info,
-                    "traverse(): You passed a value to a frozen function, "
-                    "that could not be converted to Dr.Jit types. This is "
-                    "not recommended and the value will be cached.",
-                    nb::type_name(tp).c_str());
+                    "traverse(): You passed a value of type %s to a frozen "
+                    "function, it could not be converted to a Dr.Jit type. "
+                    "Changing this value in future calls to the frozen "
+                    "function will cause it to be re-traced.",
+                    nb::str(tp).c_str());
 
             layout.py_object = nb::borrow<nb::object>(h);
         }
