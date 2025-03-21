@@ -2888,3 +2888,27 @@ def test74_auto_opaque_retraverse(t):
         assert dr.allclose(ref, res)
 
     assert frozen.n_recordings == 2
+
+
+@pytest.test_arrays("float32, jit, shape=(*)")
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test75_changing_literal_width(t, auto_opaque):
+
+    def func(x: t, lit: t):
+        return x + 1
+
+    # Note: only fails with auto_opaque=True
+    frozen = dr.freeze(func, warn_recording_count=3, auto_opaque=auto_opaque)
+
+    n = 10
+    for i in range(n):
+        lit = dr.zeros(t, (i+1) * 10)
+        x = lit + 0.5
+        dr.make_opaque(x)
+
+        res = frozen(x, lit)
+        ref = func(x, lit)
+
+        assert dr.allclose(ref, res)
+
+    assert frozen.n_recordings == 2 if auto_opaque else 1

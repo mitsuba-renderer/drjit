@@ -299,7 +299,8 @@ bool FlatVariables::fill_opaque_mask(FlatVariables &prev,
 
         if (layout.flags & (uint32_t) LayoutFlag::Literal &&
             prev_layout.flags & (uint32_t) LayoutFlag::Literal &&
-            (layout.literal != prev_layout.literal)) {
+            (layout.literal != prev_layout.literal ||
+             layout.index != prev_layout.index)) {
             opaque_mask[i] = true;
             new_opaques = true;
         }
