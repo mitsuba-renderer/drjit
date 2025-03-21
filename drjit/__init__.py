@@ -2176,7 +2176,7 @@ def upsample(t, shape=None, scale_factor=None):
 
 _rand_seed : int = 0
 
-def seed(value: int):
+def seed(value: int) -> None:
     """
     Reset the seed value that is used for pseudorandom number generation.
 
