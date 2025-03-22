@@ -1483,7 +1483,7 @@ nb::object FrozenFunction::operator()(nb::args args, nb::kwargs kwargs) {
         }
 
         if (it == this->recordings.end()) {
-// #ifndef NDEBUG
+#ifndef NDEBUG
             if (this->recordings.size() >= 1) {
                 jit_log(LogLevel::Info,
                         "Function input missmatch! Function will be retraced.");
@@ -1498,7 +1498,7 @@ nb::object FrozenFunction::operator()(nb::args args, nb::kwargs kwargs) {
                 jit_log(LogLevel::Warn, "old key: %s",
                         repr_prev.str().c_str());
             }
-// #endif
+#endif
 
             {
                 // TODO: single traverse
