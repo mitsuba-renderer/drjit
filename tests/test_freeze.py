@@ -2811,5 +2811,3 @@ def test76_changing_literal_width_holder(t):
         assert dr.allclose(ref, res)
 
     assert frozen.n_recordings == 1
-
-
