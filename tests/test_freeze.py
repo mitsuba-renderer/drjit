@@ -2783,3 +2783,33 @@ def test72_no_input(t):
     ref = func()
 
     assert dr.allclose(res, ref)
+
+
+@pytest.test_arrays("float32, jit, shape=(*)")
+def test76_changing_literal_width_holder(t):
+
+    class MyHolder:
+        DRJIT_STRUCT = {"lit": t}
+        def __init__(self, lit):
+            self.lit = lit
+
+    def func(x: t, lit: MyHolder):
+        return x + 1
+
+    # Note: only fails with auto_opaque=True
+    frozen = dr.freeze(func, warn_recording_count=3)
+
+    n = 10
+    for i in range(n):
+        holder = MyHolder(dr.zeros(dr.tensor_t(t), (i+1) * 10))
+        x = holder.lit + 0.5
+        dr.make_opaque(x)
+
+        res = frozen(x, holder)
+        ref = func(x, holder)
+
+        assert dr.allclose(ref, res)
+
+    assert frozen.n_recordings == 1
+
+

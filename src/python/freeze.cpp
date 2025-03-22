@@ -3,6 +3,7 @@
 #include "autodiff.h"
 #include "base.h"
 #include "common.h"
+#include "reduce.h"
 #include "listobject.h"
 #include "object.h"
 #include "pyerrors.h"
@@ -139,7 +140,7 @@ static void log_layouts(const std::vector<Layout> &layouts, std::ostream &os,
     auto tp_name = layout.type ? nb::type_name(layout.type).c_str() : "None";
     os << padding << "type = " << tp_name << std::endl;
     os << padding << "num: " << layout.num << std::endl;
-    os << padding << "flats: " << std::bitset<8>(layout.flags) << std::endl;
+    os << padding << "flags: " << std::bitset<8>(layout.flags) << std::endl;
     os << padding << "index: " << layout.index << std::endl;
     os << padding << "py_object: " << nb::str(layout.py_object).c_str()
        << std::endl;
@@ -678,8 +679,15 @@ void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
             if (s.is_tensor) {
                 nb::handle array = s.tensor_array(h.ptr());
 
-                layout.py_object = shape(h);
-                layout.index   = width(array);
+                auto full_shape = nb::borrow<nb::tuple>(shape(h));
+
+                nb::list outer_shape;
+                if (full_shape.size() > 0)
+                    for (uint32_t i = 0; i < full_shape.size() - 1; i++) {
+                        outer_shape.append(full_shape[i]);
+                    }
+
+                layout.py_object = nb::tuple(outer_shape);
 
                 traverse(nb::steal(array), ctx);
             } else if (s.ndim != 1) {
@@ -816,7 +824,18 @@ nb::object FlatVariables::construct() {
             const ArraySupplement &s = supp(layout.type);
             if (s.is_tensor) {
                 nb::object array = construct();
-                nb::object tensor = layout.type(array, layout.py_object);
+
+                auto outer_shape = nb::borrow<nb::tuple>(layout.py_object);
+                auto last_dim    = prod(shape(array), nb::none())
+                                    .floor_div(prod(outer_shape, nb::none()));
+
+                nb::list full_shape;
+                for (uint32_t i = 0; i < outer_shape.size(); i++) {
+                    full_shape.append(outer_shape[i]);
+                }
+                full_shape.append(last_dim);
+
+                nb::object tensor = layout.type(array, nb::tuple(full_shape));
                 return tensor;
             } else if (s.ndim != 1) {
                 auto result      = nb::inst_alloc_zero(layout.type);
@@ -1464,7 +1483,7 @@ nb::object FrozenFunction::operator()(nb::args args, nb::kwargs kwargs) {
         }
 
         if (it == this->recordings.end()) {
-#ifndef NDEBUG
+// #ifndef NDEBUG
             if (this->recordings.size() >= 1) {
                 jit_log(LogLevel::Info,
                         "Function input missmatch! Function will be retraced.");
@@ -1475,11 +1494,11 @@ nb::object FrozenFunction::operator()(nb::args args, nb::kwargs kwargs) {
                 std::ostringstream repr_prev;
                 repr_prev << *prev_key;
 
-                jit_log(LogLevel::Debug, "new key: %s", repr.str().c_str());
-                jit_log(LogLevel::Debug, "old key: %s",
+                jit_log(LogLevel::Warn, "new key: %s", repr.str().c_str());
+                jit_log(LogLevel::Warn, "old key: %s",
                         repr_prev.str().c_str());
             }
-#endif
+// #endif
 
             {
                 // TODO: single traverse
