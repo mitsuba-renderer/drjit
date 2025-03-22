@@ -1483,23 +1483,6 @@ nb::object FrozenFunction::operator()(nb::args args, nb::kwargs kwargs) {
         }
 
         if (it == this->recordings.end()) {
-#ifndef NDEBUG
-            if (this->recordings.size() >= 1) {
-                jit_log(LogLevel::Info,
-                        "Function input missmatch! Function will be retraced.");
-
-                std::ostringstream repr;
-                repr << *in_variables;
-
-                std::ostringstream repr_prev;
-                repr_prev << *prev_key;
-
-                jit_log(LogLevel::Warn, "new key: %s", repr.str().c_str());
-                jit_log(LogLevel::Warn, "old key: %s",
-                        repr_prev.str().c_str());
-            }
-#endif
-
             {
                 // TODO: single traverse
                 ADScopeContext ad_scope(drjit::ADScope::Resume, 0, nullptr, 0,
