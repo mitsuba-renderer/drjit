@@ -257,7 +257,7 @@ The advantage of symbolic mode is that it can keep variable state in fast
 CPU/GPU registers, which improves performance and reduces storage costs.
 
 The main *disadvantage* is that symbolic variables cannot be evaluated while
-tracing. Likewise, they cannot be passed to other frameworks like like PyTorch or
+tracing. Likewise, they cannot be passed to other frameworks like PyTorch or
 Tensorflow. Indeed, *any* attempt to reveal the content of symbolic variables
 is doomed to fail since it literally does not exist (yet). The upcoming section
 on :ref:`variable evaluation <eval>` clarifies what operations require
@@ -280,7 +280,7 @@ usually outweigh these disadvantages.
      :py:func:`dr.print() <drjit.print>` that prints in a delayed manner
      (i.e., asynchronously from the device) to avoid this problem.
 
-   - Symbolic mode tends to create much large kernels. Indeed, the idea is to
+   - Symbolic mode tends to create much larger kernels. Indeed, the idea is to
      preserve the entire program and generate one giant output kernel (a
      *megakernel*). Such large kernels can be costly to compile, though
      this cost is usually offset by *kernel caching* discussed in the next

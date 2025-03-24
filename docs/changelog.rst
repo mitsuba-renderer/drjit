@@ -314,7 +314,7 @@ Here is what's new:
   :py:attr:`drjit.ArrayBase.index_ad`) used to monotonically increase as
   variables were being created. Internally, multiple hash tables were needed to
   associate these ever-growing indices with locations in an internal variable
-  array, which which had a surprisingly large impact on tracing performance.
+  array, which had a surprisingly large impact on tracing performance.
   Dr.Jit removes this mapping both at the AD and JIT levels and eagerly reuses
   variable indices.
 

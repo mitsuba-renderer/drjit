@@ -218,7 +218,7 @@ difference between the two can be quite subtle.
 
 However, the program and metaprogram could also be different. For example,
 let's modify the code so that it asks the user to enter a number on the
-keyboard that is then used to to raise the integrand to a custom power:
+keyboard that is then used to raise the integrand to a custom power:
 
 .. code-block:: python
    :emphasize-lines: 3
@@ -316,4 +316,3 @@ this documentation explain how Dr.Jit generalizes to bigger programs:
    debugging, printing, benchmarking, pitfalls
    how to clear the cache for benchmarking
    faq
-

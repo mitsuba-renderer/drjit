@@ -611,7 +611,7 @@
     Python's `PEP 465 <https://peps.python.org/pep-0465/>`__. There is no practical
     difference between using :py:func:`drjit.matul()` or ``@`` in Dr.Jit-based
     code. Multiplication of matrix types (e.g., :py:class:`drjit.scalar.Matrix2f`)
-    using the standard multiplication operator (``*``) is also based on on matrix
+    using the standard multiplication operator (``*``) is also based on matrix
     multiplication.
 
     This function takes two Dr.Jit arrays and picks one of the following 5 cases
@@ -651,7 +651,7 @@
 
        This operation only handles fixed-sizes arrays. A different approach is
        needed for multiplications involving potentially large dynamic
-       arrays/tensors. Other other tools like PyTorch, JAX, or Tensorflow will be
+       arrays/tensors. Other tools like PyTorch, JAX, or Tensorflow will be
        preferable in such situations (e.g., to train neural networks).
 
     Args:
@@ -3700,7 +3700,7 @@
     are connected by an edge and subsequently separately differentiated.
 
     In advanced applications that require multiple AD traversals of the same graph,
-    specify specify different combinations of the enumeration
+    specify different combinations of the enumeration
     :py:class:`drjit.ADFlag` via the ``flags`` parameter.
 
     Args:
@@ -4631,7 +4631,7 @@
 
     2. **Evaluated mode**: Dr.Jit *evaluates* the inputs  ``index``, ``args``,
        ``kwargs`` via :py:func:`drjit.eval`, groups them by ``index``, and invokes
-       each function with with the subset of inputs that reference it. Callables
+       each function with the subset of inputs that reference it. Callables
        that are not referenced by any element of ``index`` are ignored.
 
        In this mode, a :py:func:`drjit.switch` statement will cause Dr.Jit to
@@ -5039,7 +5039,7 @@
           :py:attr:`drjit.JitFlag.SymbolicLoops` and then either performs a
           symbolic or an evaluated loop.
 
-        compress (Optional[bool]): Set this this parameter to ``True`` or ``False``
+        compress (Optional[bool]): Set this parameter to ``True`` or ``False``
           to enable or disable *loop state compression* in evaluated loops (see the
           text above for a description of this feature). The function
           queries the value of :py:attr:`drjit.JitFlag.CompressLoops` when the
@@ -5635,7 +5635,7 @@
     more verbose debug level).
 
     Dr.Jit aggressively reuses the indices of expired variables by default, but
-    this can make debug output difficult to interpret. When when debugging Dr.Jit
+    this can make debug output difficult to interpret. When debugging Dr.Jit
     itself, it is often helpful to investigate the history of a particular
     variable. In such cases, set this flag to ``False`` to disable variable reuse
     both at the JIT and AD levels. This comes at a cost: the internal data
@@ -5873,7 +5873,7 @@
     On the LLVM backend, the operation replaces vector/scatter instructions
     with a combination of aligned packet loads/stores and a matrix transpose
     (implemented for 2, 4, and 8-D inputs, larger vectors perform several 8D
-    transposes). Speedups here are are rather dramatic (up to >20× for
+    transposes). Speedups here are rather dramatic (up to >20× for
     scatters, 1.5-2× for gathers have been measured).
 
     This optimization is expected to make an even bigger difference following
@@ -6615,7 +6615,7 @@
     :py:func:`drjit.compress()`, which can likewise be used to reduce a stream to a
     smaller subset of active items. The downside of :py:func:`drjit.compress()` is
     that it requires evaluating the variables to be reduced, which can be very
-    costly in terms of of memory traffic and storage footprint. Reducing through
+    costly in terms of memory traffic and storage footprint. Reducing through
     :py:func:`drjit.scatter_inc()` does not have this limitation: it can operate on
     symbolic arrays that greatly exceed the available device memory. One advantage
     of :py:func:`drjit.compress()` is that it essentially boils down to a
@@ -6839,7 +6839,7 @@
        **Technical details on symbolic printing**
 
        When Dr.Jit compiles and executes queued computation on the target device,
-       it includes additional code for symbolic print operations that that captures
+       it includes additional code for symbolic print operations that captures
        referenced arguments and copies them back to the host (CPU). The information
        is then printed following the end of that process.
 
@@ -6908,7 +6908,7 @@
           thread_id=[0, 0, 1, 1, 1], i=[0, 1, 0, 1, 2]
 
        The example above runs a symbolic loop twice in parallel: the first thread
-       runs for for 2 iterations, and the second runs for 3 iterations. The loop
+       runs for 2 iterations, and the second runs for 3 iterations. The loop
        prints the iteration counter ``i``, which then leads to the output ``[0, 1,
        0, 1, 2]`` where the first two entries are produced by the first thread, and
        the trailing three belong to the second thread. The ``thread_id`` output
@@ -6978,7 +6978,7 @@
     the number of items being processed in parallel.
 
     The function raises an exception when the input(s) is ragged, i.e., when it
-    contains arrays with incompatible sizes. It returns ``1`` if if the input is
+    contains arrays with incompatible sizes. It returns ``1`` if the input is
     scalar and/or does not contain any Dr.Jit arrays.
 
     Args:
@@ -7321,7 +7321,7 @@
 
     Compilation strategy for atomic scatter-reductions.
 
-    Elements of of this enumeration determine how Dr.Jit executes *atomic
+    Elements of this enumeration determine how Dr.Jit executes *atomic
     scatter-reductions*, which refers to indirect writes that update an existing
     element in an array, while avoiding problems arising due to concurrency.
 
@@ -7351,7 +7351,7 @@
 
     - use :py:attr:`drjit.ReduceMode.Expand` if the computation uses the LLVM
       backend and the ``target`` array storage size is smaller or equal
-      than than the value given by :py:func:`drjit.expand_threshold`. This
+      than the value given by :py:func:`drjit.expand_threshold`. This
       threshold can be changed using the :py:func:`drjit.set_expand_threshold`
       function.
 
