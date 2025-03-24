@@ -5352,8 +5352,8 @@
 
        def dispatch(inst, target, *args, **kwargs):
            result = []
-           for in in inst:
-               result.append(target(inst, *args, **kwargs))
+           for inst_ in inst:
+               result.append(target(inst_, *args, **kwargs))
 
     However, the implementation accomplishes this more efficiently using only a
     single call per unique instance. Instead of a Python ``list``, it returns a
