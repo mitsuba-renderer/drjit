@@ -145,6 +145,7 @@ public:
         for (size_t i = 0; i < Dimension + 1; ++i)
             m_shape[i] = std::move(other.m_shape[i]);
         m_value = std::move(other.m_value);
+        m_unpadded_value = std::move(other.m_value);
         m_resolution_opaque = std::move(other.m_resolution_opaque);
         for (size_t i = 0; i < Dimension; ++i)
             m_inv_resolution[i] = std::move(other.m_inv_resolution[i]);
@@ -166,6 +167,7 @@ public:
         for (size_t i = 0; i < Dimension + 1; ++i)
             m_shape[i] = std::move(other.m_shape[i]);
         m_value = std::move(other.m_value);
+        m_unpadded_value = std::move(other.m_unpadded_value);
         m_resolution_opaque = std::move(other.m_resolution_opaque);
         for (size_t i = 0; i < Dimension; ++i)
             m_inv_resolution[i] = std::move(other.m_inv_resolution[i]);
