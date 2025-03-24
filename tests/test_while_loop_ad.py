@@ -226,7 +226,7 @@ def test09_sum_loop_extra(t, mode):
 
         return y
 
-    # Construct an array so that the the m_inputs field in LoopOp looks like this:
+    # Construct an array so that the m_inputs field in LoopOp looks like this:
     # [{has_grad_in = false, ...}, {has_grad_in = true, ...}, {has_grad_in = false, ...}]
     l = [t(1), t(2)]
     dr.make_opaque(l[0])
