@@ -445,7 +445,6 @@ def test18_scatter_reduce(t, op):
         rng = mod.PCG32(size)
         j = t(rng.next_uint32())
         i = rng.next_uint32_bounded(k)
-        l = dr.arange(t, size)
         if dr.type_v(t) == dr.VarType.Float16:
             j = dr.full(t, 1, size)
 
@@ -485,6 +484,25 @@ def test18_scatter_reduce(t, op):
                     assert dr.allclose(buf_1, v)
                 else:
                     assert dr.all(buf_1 == v)
+
+    np = pytest.importorskip("numpy")
+    UInt32 = dr.uint32_array_t(t)
+    perm = UInt32(np.random.permutation(size))
+
+    rng = mod.PCG32(size)
+    j = t(rng.next_uint32())
+    if dr.type_v(t) == dr.VarType.Float16:
+        j = dr.full(t, 1, size)
+    buf_1 = dr.full(t, identity[0], size)
+    dr.scatter_reduce(op, buf_1, index=perm, value=j, mode=dr.ReduceMode.NoConflicts)
+
+    buf_2 = dr.full(t, identity[0], size)
+    dr.scatter_reduce(op, buf_2, index=perm, value=j, mode=dr.ReduceMode.Direct)
+
+    if dr.is_float_v(t):
+        assert dr.allclose(buf_1, buf_2)
+    else:
+        assert dr.all(buf_1 == buf_2)
 
 
 @pytest.test_arrays('jit,tensor,float32')
