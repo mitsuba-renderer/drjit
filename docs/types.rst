@@ -319,7 +319,7 @@ Matrices change the behavior of various operations:
 - True division (``arg0 / arg1``) with a matrix-valued denominator ``arg1``
   involves a matrix inverse.
 
-- Additionally, the following operations generalize by internally replace
+- Additionally, the following operations generalize by internally replacing
   ordinary multiplication and division operations with their matrix analogs:
 
   - :py:func:`drjit.fma`
