@@ -1552,7 +1552,7 @@ template <typename Value, bool Native> Value erf(const Value &x) {
     }
 }
 
-// Inverse real error function approximation based on on "Approximating the
+// Inverse real error function approximation based on "Approximating the
 // erfinv function" by Mark Giles
 template <typename Value> Value erfinv(const Value &x) {
     Value w = -log((Value(1.f) - x) * (Value(1.f) + x));

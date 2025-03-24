@@ -220,7 +220,7 @@ nb::object reduce(uint32_t op, nb::handle h, nb::handle axis_, nb::handle mode) 
         int ndim = (int)::ndim(h);
         if (ndim == 0) {
             int value;
-            // Accept 0-dim tensors and axis==0 (the default); return the the
+            // Accept 0-dim tensors and axis==0 (the default); return the
             // tensor without changes instead of failing with an error message.
             if (nb::try_cast(axis_, value) && value == 0)
                 return nb::borrow(h);
@@ -510,7 +510,7 @@ nb::object mean(nb::handle value, nb::handle axis, nb::handle mode) {
     }
 
     // mean = sum / (num_input/num_output)
-    return (out * prod(shape(out), nb::none())) / prod(shape(value), nb::none()); 
+    return (out * prod(shape(out), nb::none())) / prod(shape(value), nb::none());
 }
 
 nb::object dot(nb::handle h0, nb::handle h1) {
