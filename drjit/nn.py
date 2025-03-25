@@ -1,6 +1,6 @@
 from __future__ import annotations
 import drjit
-from typing import Tuple, Sequence, Union, Type, TypeAlias, Optional, Any
+from typing import Tuple, Sequence, Union, Type, Optional, Any
 
 # Import classes/functions from C++ extension
 MatrixView = drjit.detail.nn.MatrixView
@@ -12,13 +12,13 @@ view = drjit.detail.nn.view
 cast = drjit.detail.nn.cast
 T = drjit.detail.nn.T
 
-TensorOrViewOrNone: TypeAlias = Union[
+TensorOrViewOrNone = Union[
     drjit.ArrayBase,
     MatrixView,
     None
 ]
 
-AnyCoopVec : TypeAlias = CoopVec[Any]
+AnyCoopVec = CoopVec[Any]
 
 class Model:
     """
