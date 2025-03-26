@@ -133,40 +133,6 @@ bool VarLayout::operator==(const VarLayout &rhs) const {
     return true;
 }
 
-static void log_layouts(const std::vector<Layout> &layouts, std::ostream &os,
-                        uint32_t &index, std::string &padding) {
-    const Layout &layout = layouts[index++];
-
-    auto tp_name = layout.type ? nb::type_name(layout.type).c_str() : "None";
-    os << padding << "type = " << tp_name << std::endl;
-    os << padding << "num: " << layout.num << std::endl;
-    os << padding << "flags: " << std::bitset<8>(layout.flags) << std::endl;
-    os << padding << "index: " << layout.index << std::endl;
-    os << padding << "py_object: " << nb::str(layout.py_object).c_str()
-       << std::endl;
-
-    if (layout.fields.size() == 0)
-        for (uint32_t i = 0; i < layout.num; i++) {
-            os << padding << "Layout[" << std::endl;
-            padding.append("    ");
-
-            log_layouts(layouts, os, index, padding);
-
-            padding.resize(padding.length() - 4);
-            os << padding << "]" << std::endl;
-        }
-    else
-        for (const auto &field : layout.fields) {
-            os << padding << nb::str(field).c_str() << ": Layout[" << std::endl;
-            padding.append("    ");
-
-            log_layouts(layouts, os, index, padding);
-
-            padding.resize(padding.length() - 4);
-            os << padding << "]" << std::endl;
-        }
-}
-
 /**
  * \brief Add a variant domain pair to be traversed using the registry.
  *
@@ -402,7 +368,7 @@ void FlatVariables::traverse_ad_index(uint64_t index, TraverseContext &ctx,
     // NOTE: instead of emplacing a Layout representing the ad variable always,
     // we only do so if the gradients have been enabled. We use this format,
     // since most variables will not be ad enabled. The layout therefore has to
-    // be peeked in ``construct_ad_index`` before descending if an ad or jit
+    // be peeked in ``construct_ad_index`` before deciding if an ad or jit
     // index should be constructed/assigned.
     int grad_enabled = ad_grad_enabled(index);
     if (grad_enabled) {
@@ -1143,38 +1109,6 @@ void FlatVariables::assign_with_registry(nb::handle dst) {
         }
         jit_log(LogLevel::Debug, "}");
     }
-}
-
-std::ostream &operator<<(std::ostream &os, const FlatVariables &r) {
-    std::string offset = "    ";
-
-    os << "FlatVariables[" << std::endl;
-
-    std::string padding("    ");
-    uint32_t index = 0;
-
-    os << padding << "variables = [";
-    for (uint64_t index : r.variables) {
-        os << "r%u, ";
-    }
-    os << "]" << std::endl;
-
-    os << padding << "sizes = [";
-    for (uint64_t index : r.variables) {
-        os << "%u, ";
-    }
-    os << "]" << std::endl;
-
-    os << padding << "Layout[" << std::endl;
-
-    padding.append("    ");
-    log_layouts(r.layout, os, index, padding);
-    padding.resize(padding.length() - 4);
-
-    os << padding << "]" << std::endl;
-
-    os << "]" << std::endl;
-    return os;
 }
 
 inline void hash_combine(size_t &seed, size_t value) {
