@@ -3,6 +3,7 @@ import pytest
 from math import ceil
 from dataclasses import dataclass
 import sys
+import drjit.nn as nn
 
 def get_single_entry(x):
     tp = type(x)
@@ -2956,3 +2957,29 @@ def test76_changing_literal_width_holder(t, auto_opaque):
     else:
         assert frozen.n_recordings == 1
 
+@pytest.test_arrays('jit,float16,shape=(*),-diff')
+def test77_coopvec(t):
+    m = sys.modules[t.__module__]
+
+    Tensor = m.TensorXf16
+
+    def func(A, x, b):
+        buffer, A, b = nn.pack(A, b)
+
+        x = nn.CoopVec(x)
+
+        return nn.matvec(A, x, b)
+
+    frozen = dr.freeze(func)
+
+    for i in range(3):
+        n = 32
+        k = (i + 1) * 4
+        A = dr.normal(Tensor, (n, k))
+        x = dr.rand(Tensor, k)
+        b = dr.rand(Tensor, n)
+
+        res = Tensor(frozen(A, x, b))
+        ref = Tensor(func(A, x, b))
+
+        assert dr.allclose(ref, res)
