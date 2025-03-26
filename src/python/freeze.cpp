@@ -647,6 +647,13 @@ void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
 
                 auto full_shape = nb::borrow<nb::tuple>(shape(h));
 
+                // Instead of adding the whole shape of a tensor to the key, we
+                // only add the inner part, not containing dimension 0. When
+                // indexing into a tensor, this is the only dimension that is
+                // not used in the index calculation. When constructing a tensor
+                // this dimension is reconstructed from the width of the
+                // underlying array.
+
                 nb::list inner_shape;
                 if (full_shape.size() > 0)
                     for (uint32_t i = 1; i < full_shape.size(); i++) {
@@ -791,12 +798,14 @@ nb::object FlatVariables::construct() {
             if (s.is_tensor) {
                 nb::object array = construct();
 
-                auto inner_shape = nb::borrow<nb::tuple>(layout.py_object);
-                auto last_dim    = prod(shape(array), nb::none())
+                // Reconstruct the full shape from the inner part, stored in the
+                // layout and the width of the underlying array.
+                auto inner_shape  = nb::borrow<nb::tuple>(layout.py_object);
+                auto first_dim    = prod(shape(array), nb::none())
                                     .floor_div(prod(inner_shape, nb::none()));
 
                 nb::list full_shape;
-                full_shape.append(last_dim);
+                full_shape.append(first_dim);
                 for (uint32_t i = 0; i < inner_shape.size(); i++) {
                     full_shape.append(inner_shape[i]);
                 }
