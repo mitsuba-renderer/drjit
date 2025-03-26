@@ -717,6 +717,9 @@ void FlatVariables::assign_cb(drjit::TraversableBase *traversable) {
                   "of variables traversed when recording!");
 }
 
+/**
+ * Helper struct, to construct path strings to variables.
+ */
 struct scoped_path {
     std::string &path;
     size_t size;
