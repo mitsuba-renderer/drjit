@@ -283,46 +283,22 @@ public:
             jit_raise("Texture::set_tensor(): tensor dimension must equal "
                         "texture dimension plus one (channels).");
 
-        bool is_inplace_update = (&tensor == &m_value);
-
         bool shape_changed = false;
         {
-            size_t current_shape[Dimension + 1];
-
-            if (HasCudaTexture && is_inplace_update && m_use_accel) {
-                jit_cuda_tex_get_shape(Dimension, m_handle, current_shape);
-            } else {
-                for (size_t i = 0; i < Dimension + 1; ++i)
-                    current_shape[i] = m_shape[i];
-            }
-
             for (size_t i = 0; i < Dimension + 1; ++i) {
-                if (current_shape[i] != tensor.shape(i)) {
+                if (m_shape[i] != tensor.shape(i)) {
                     shape_changed = true;
                     break;
                 }
             }
         }
 
-        if constexpr (HasCudaTexture) {
-            if (m_use_accel) {
-                if (shape_changed) {
-                    jit_cuda_tex_destroy(m_handle);
-                    init(tensor.shape().data(), tensor.shape(Dimension), m_use_accel,
-                         m_filter_mode, m_wrap_mode, !is_inplace_update);
-                }
-            } else {
-                init(tensor.shape().data(), tensor.shape(Dimension),
-                     m_use_accel, m_filter_mode, m_wrap_mode, shape_changed);
-            }
-        } else {
-            init(tensor.shape().data(), tensor.shape(Dimension),
-                 m_use_accel, m_filter_mode, m_wrap_mode, shape_changed);
-        }
+        init(tensor.shape().data(), tensor.shape(Dimension),
+            m_use_accel, m_filter_mode, m_wrap_mode, shape_changed);
 
         // Avoid unnecessary copy when working with `DynamicArray`
         if constexpr (!IsDynamic)
-            if (is_inplace_update)
+            if (&tensor == &m_value)
                 return;
 
         set_value(tensor.array(), migrate);
@@ -346,10 +322,12 @@ public:
                     UInt32 pixels_idx = idx / m_channels;
                     UInt32 channel_idx = idx % m_channels;
                     idx = fmadd(pixels_idx, m_channels_storage, channel_idx);
+                    Storage values = gather<Storage>(m_value.array(), idx);
                     if constexpr (IsDiff)
-                        m_unpadded_value.array() = replace_grad(gather<Storage>(m_value.array(), idx), m_unpadded_value.array());
+                        m_unpadded_value.array() = replace_grad(values, 
+                            m_unpadded_value.array());
                     else
-                        m_unpadded_value.array() = gather<Storage>(m_value.array(), idx);
+                        m_unpadded_value.array() = values;
                 } else {
                     m_unpadded_value.array() = m_value.array();
                 }
@@ -370,6 +348,14 @@ public:
     TensorXf &tensor() {
         return const_cast<TensorXf &>(
             const_cast<const Texture<_Storage, Dimension> *>(this)->tensor());
+    }
+
+    /**
+     * \brief Refresh internal state after external inplace update
+     */
+    void inplace_update() {
+        if constexpr (is_jit_v<Storage>)
+            set_tensor(m_unpadded_value);
     }
 
     /**
@@ -1357,14 +1343,33 @@ protected:
 
         if (init_tensor)
         {
-            m_value = TensorXf(zeros<Storage>(m_size), Dimension + 1, tensor_shape);
-            m_unpadded_value = TensorXf(empty<Storage>(unpadded_size), Dimension + 1, m_shape);
+            size_t shape_bytes = sizeof(size_t) * (Dimension + 1);
+            size_t* value_shape_ptr = m_value.shape().data();
+            size_t* unpadded_value_shape_ptr = m_unpadded_value.shape().data();
+
+            /* An external inplace update in scalar mode means we shouldn't 
+               init tensor */
+            if (!value_shape_ptr || 
+                memcmp(value_shape_ptr, tensor_shape, shape_bytes))
+                m_value = TensorXf(
+                    empty<Storage>(m_size), Dimension + 1, tensor_shape);
+
+            /* An external inplace update in JIT mode means we shouldn't
+               init tensor */
+            if (!unpadded_value_shape_ptr || 
+                memcmp(unpadded_value_shape_ptr, m_shape, shape_bytes))
+                m_unpadded_value = TensorXf(
+                    empty<Storage>(unpadded_size), Dimension + 1, m_shape);
         }
 
         if constexpr (HasCudaTexture) {
             if (m_use_accel) {
                 size_t tex_shape[Dimension];
                 reverse_tensor_shape(tex_shape, false);
+
+                if (m_handle)
+                    jit_cuda_tex_destroy(m_handle);
+
                 m_handle = jit_cuda_tex_create(
                     Dimension, tex_shape, m_channels_storage, (int) CudaFormat,
                     (int) filter_mode, (int) wrap_mode);
