@@ -95,7 +95,7 @@ class Optimizer(Generic[Extra], MutableMapping[str, dr.ArrayBase]):
 
          Compared to PyTorch, an optimization loop therefore involves some
          boilerplate code (e.g., ``my_param = opt["my_param"]``) to fetch
-         parameter values and and use them to compute a differentiable
+         parameter values and use them to compute a differentiable
          objective.
 
        In general, it is recommended that you optimize Dr.Jit code using Dr.Jit
@@ -147,7 +147,7 @@ class Optimizer(Generic[Extra], MutableMapping[str, dr.ArrayBase]):
 
             mask_updates (bool):
                 Set this parameter to ``True`` to mask updates to zero-valued
-                gradient components. This can can be preferable in some types
+                gradient components. This can be preferable in some types
                 of differentiable Monte Carlo simulations, where only a subset
                 of the parameters is observed during a typical optimization
                 step.
@@ -1119,7 +1119,7 @@ class GradScaler:
                 to begin exploring larger scale factors.
 
             debug (bool):
-                Print a debug message whenever the scale changes. This this
+                Print a debug message whenever the scale changes. This
                 synchronizes with the device after each step, which will have a
                 negative effect on optimization performance.
         """

@@ -143,7 +143,7 @@ conveying a medical connotation that is emphasized by the `Rod of Asclepius
 <https://en.wikipedia.org/wiki/Rod_of_Asclepius>`_. Differentiable rendering
 algorithms are growing beyond our control in terms of conceptual and
 implementation-level complexity. A doctor is a person, who can offer help in
-such a time of great need. *Dr.Jit* tries to fill this role to to improve the
+such a time of great need. *Dr.Jit* tries to fill this role to improve the
 well-being of differentiable rendering researchers.
 
 *Dr.Jit* is the successor of the `Enoki

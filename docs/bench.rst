@@ -39,7 +39,7 @@ we could add a call to :py:func:`dr.sync_thread()`.
    dr.sync_thread(y)
    end = time.end()
 
-However,explicit synchronization is generally an *anti-pattern* and not
+However, explicit synchronization is generally an *anti-pattern* and not
 recommended. Measuring kernels timings on the CPU will also add considerable
 noise due to OS scheduling, etc.
 

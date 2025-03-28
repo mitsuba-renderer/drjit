@@ -636,7 +636,7 @@ def wrap(source: typing.Union[str, types.ModuleType],
 
          - **Limitation**: The passed/returned :ref:`PyTrees <pytrees>` can
            contain arbitrary arrays or tensors, but other types
-           (e.g., a custom Python object not understood by PyTorch) will will
+           (e.g., a custom Python object not understood by PyTorch) will
            raise errors when differentiating in *forward mode* (backward mode
            works fine).
 

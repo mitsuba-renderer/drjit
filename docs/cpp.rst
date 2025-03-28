@@ -510,7 +510,7 @@ trees:
     }
 
 The type trait :cpp:var:`dr::is_traversable\<T\> <drjit::is_traversable_v>`
-checks if an instance of a particular type type can be traversed.
+checks if an instance of a particular type can be traversed.
 
 The helper functions :cpp:func:`drjit::traverse_1`
 :cpp:func:`drjit::traverse_2`, :cpp:func:`drjit::traverse_3`, respectively

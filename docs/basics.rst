@@ -84,7 +84,7 @@ members:
 
 Static 1-4D arrays also support `swizzling
 <https://en.wikipedia.org/wiki/Swizzling_(computer_graphics)>`__, which
-arbitrarily reorders elements. For example, the following compact compact
+arbitrarily reorders elements. For example, the following compact
 notation updates and combines entries of a larger array.
 
 .. code-block:: python

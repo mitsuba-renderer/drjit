@@ -375,7 +375,7 @@ bool VariableTracker::Impl::traverse(Context &ctx, nb::handle h) {
 
             if (!idx && new_variable && ctx.write) {
                 // This case arises when revisiting a state variables as part
-                // of an AD traversal. This state state will have been passed
+                // of an AD traversal. This state will have been passed
                 // through drjit.detail.reset(), which creates a structural copy
                 // with uninitialized Dr.Jit arrays.
 

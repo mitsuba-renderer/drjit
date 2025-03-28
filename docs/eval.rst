@@ -214,7 +214,7 @@ Kernel caching
 When Dr.Jit evaluates an expression, it must generate and compile a *kernel*,
 i.e., a self-contained parallel program that can run on the target device. This
 compilation step is not free---in fact, compilation can sometimes take *longer*
-than the actual runtime of a associated kernel.
+than the actual runtime of an associated kernel.
 
 To mitigate this cost, Dr.Jit implements a *kernel cache*. Roughly speaking,
 the idea is that we often end up repeating the same kind of computation with
@@ -341,7 +341,7 @@ this list.
       - device            : 4 KiB/4 KiB used (peak: 4 KiB).
 
 
-It shows that a three variables are registered with the system, of which one
+It shows that three variables are registered with the system, of which one
 (index 4, label ``y``) is evaluated and occupies 4 KiB of device memory on CUDA
 device 0.
 

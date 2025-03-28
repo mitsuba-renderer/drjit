@@ -19,7 +19,7 @@ Consider a program that consumes certain inputs :math:`x_1`, :math:`x_2`, etc.,
 performs a computation, and then generates outputs :math:`y_1`, :math:`y_2`,
 etc. Systems for *automatic differentiation* (AD) automate the computation of
 derivatives :math:`\partial y_i/\partial x_i`, which is instrumental when the
-program should be be optimized to accomplish a certain task.
+program should be optimized to accomplish a certain task.
 
 AD does this by decomposing the program into a sequence of steps that are
 individually easy to differentiate. Given such a decomposition, it then applies
@@ -224,7 +224,7 @@ this as well.
 
 As a consequence, gradients are only stored in *leaf* variables, which refers
 to variables that aren't referenced by other computation (*forward mode*), or
-variables that were made made differentiable via :py:func:`drjit.enable_grad()`
+variables that were made differentiable via :py:func:`drjit.enable_grad()`
 (*reverse mode*).
 
 If you require derivatives of interior nodes, simply pass the ``flags=`` parameter
@@ -325,7 +325,7 @@ feature are noteworthy:
 Visualizations
 --------------
 
-It is possible to visualize the AD computation graph graph via
+It is possible to visualize the AD computation graph via
 :py:func:`dr.graphviz_ad() <graphviz_ad>` (this requires installing the
 ``graphviz`` `PyPI package <https://pypi.org/project/graphviz/>`__).
 Variables can be labeled to identify them more easily.

@@ -2224,7 +2224,7 @@ def rand(dtype: Type[ArrayT],
 
        This function is still considered experimental, and the algorithm used
        to generate random variates may change in future versions of Dr.Jit.
-       Specify ``version=1`` to to ensure that your program remains unaffected
+       Specify ``version=1`` to ensure that your program remains unaffected
        by such future changes.
 
     .. note::

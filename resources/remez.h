@@ -508,7 +508,7 @@ template<typename Target, typename Source> Target memcpy_cast(const Source &sour
 /**
  * \brief Atomic floating point data type
  *
- * The class implements an an atomic floating point data type (which is not
+ * The class implements an atomic floating point data type (which is not
  * possible with the existing overloads provided by <tt>std::atomic</tt>). It
  * internally casts floating point values to an integer storage format and uses
  * atomic integer compare and exchange operations to perform changes.

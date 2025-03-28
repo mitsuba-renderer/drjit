@@ -31,7 +31,7 @@ NAMESPACE_BEGIN(detail)
  * reverse mode. In some cases, it may be useful or even necessary to tell
  * it how a particular operation should be differentiated.
  *
- * To do so, extend this class and and provide callback functions that will be
+ * To do so, extend this class and provide callback functions that will be
  * invoked when the AD backend traverses the associated node in the computation
  * graph. This class also provides a convenient way of stashing temporary
  * results during the original function evaluation that can be accessed later
