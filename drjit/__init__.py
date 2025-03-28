@@ -2410,81 +2410,129 @@ F2 = TypeVar("F2")
 def freeze(
     f: None = None,
     *,
-    state: Optional[Callable],
-    max_cache_size: Optional[int] = None,
-    warn_recording_count: int = 10,
+    state_fn: Optional[Callable],
+    limit: Optional[int] = None,
+    warn_after: int = 10,
     backend: Optional[JitBackend] = None,
 ) -> Callable[[F], F]:
     """
-    Decorator to freeze a function for replaying kernels without re-tracing.
+    Decorator to "freeze" functions, which improves efficiency by removing
+    repeated JIT tracing overheads.
 
-    This decorator wraps a function, and enables replaying it in order remove the
-    need for tracing python operations. The first time a frozen function is called,
-    it is executed regularly, while all operations performed are recorded. When the
-    frozen function is called again, with compatible arguments, the recorded
-    operations are replayed instead of launching the Python function. This saves on
-    the overhead that is inherent when tracing and compiling python operations into
-    kernels. The frozen function keeps a record of all previously recorded calls,
-    and associates them with the input layout. Since the kernels might be compiled
-    differently when changing certain attributes of variables, the frozen function
-    will be re-recorded if the inputs are no longer compatible with previous
-    recordings. We also track the layout of any container and the values of Python
-    types of the inputs to the frozen function. The following are the input
-    attributes which are tracked and might cause the function to be re-recorded if
-    changed.
+    In general, Dr.Jit traces computation and then compiles and launches kernels
+    containing this trace (see the section on :ref:`evaluation <eval>` for
+    details). While the compilation step can often be skipped via caching, the
+    tracing cost can still be significant especially when repeatedly evaluating
+    complex models, e.g., as part of an optimization loop.
 
-    - Type of any variable or container
-    - Number of members in a container, such as the length of a list
-    - Key or field names, such as dictionary keys or dataclass field names
-    - The `Dr.Jit` type of any variable
-    - Whether a variable has size $1$
-    - Whether the memory, referenced by a variable is unaligned (only applies to
-      mapped NumPy arrays)
-    - Whether the variable has gradients enabled
-    - The sets of variables that have the same size
-    - The hash of any Python variable, that is not a Dr.Jit variable or a container
+    The :py:func:`@dr.freeze <drjit.freeze>` decorator adresses this problem by
+    altogether removing the need to trace repeatedly. For example, consider the
+    following decorated function:
 
-    Generally, the widths of the DrJit variables in the input can be changed in
-    each call without triggering a retracing of the function.
-    However, variables that had the same width during recording must keep the
-    same width in future calls, otherwise the function must be traced again.
+    .. code-block:: python
 
-    Please be particularly wary of using `dr.width()` within a recorded function.
-    Usage such as `dr.arange(UInt32, dr.width(a))` is allowed, since `dr.arange`
-    uses the width only implicitly, via the launch dimension of the kernel.
-    But direct usage, or computations on the width, would no longer be correct
-    in subsequent launches of the frozen function if the width of the inputs changes,
-    for example:
+       @dr.freeze
+       def f(x, y, z):
+          return ... # Complicated code involving the arguments
 
-    ```python
-    y = dr.gather(type(x), x, dr.width(x)//2)
-    ```
+    Dr.Jit will trace the first call to the decorated function ``f()``, while
+    collecting additional information regarding the nature of the function's inputs
+    and regarding the CPU/GPU kernel launches representing the body of ``f()``.
 
-    Similarly, calculating the mean of a variable relies on the number of entries,
-    which will be baked into the frozen function. To avoid this, we suggest
-    supplying the number of entries as a Dr.Jit literal in the arguments to the
-    function.
+    If the function is subsequently called with *compatible* arguments (more on
+    this below), it will immediately launch the previously made CPU/GPU kernels
+    without re-tracing, which can substantially improve performance.
+
+    When :py:func:`@dr.freeze <drjit.freeze>` detects *incompatibilities* (e.g., ``x``
+    having a different type compared to the previous call), it will conservatively
+    re-trace the body and keep track of another potential input configuration.
+
+    Frozen functions support arbitrary :ref:`PyTrees <pytrees>` as function
+    arguments and return values.
+
+    The following may trigger re-tracing:
+
+    - Changes in the **type** of an argument or :ref:`PyTree <pytrees>` element.
+    - Changes in the **length** of a container (``list``, ``tuple``, ``dict``).
+    - Changes of **dictionary keys**  or **field names** of dataclasses.
+    - Changes in the AD status (:py:`dr.grad_enabled() <drjit.grad_enabled>`) of a variable.
+    - Changes of (non-PyTree) **Python objects**, as detected by mismatching ``hash()``.
+
+    The following more technical conditions also trigger re-tracing:
+    - A Dr.Jit variable changes from/to a **scalar** configuration (size ``1``).
+    - The sets of variables of the same size change. In the example above, this
+      would be the case if ``len(x) == len(y)`` in one call, and ``len(x) != len(y)``
+      subsequently.
+    - When Dr.Jit variables reference external memory (e.g. mapped NumPy arrays), the
+      memory can be aligned or unaligned. A re-tracing step is needed when this
+      status changes.
+
+    These all correspond to situations where the generated kernel code may need to
+    change, and the system conservatively re-traces to ensure correctness.
+
+    Frozen functions support arguments with a different variable *width* (see
+    :py:func:`dr.with() <drjit.width>`) without re-tracing, as long as the sets of
+    variables of the same width stay consistent.
+
+    Some constructions are problematic and should be avoided in frozen functions.
+
+    - The function :py:func:`dr.width() <drjit.width>` returns an integer literal
+      that may be merged into the generated code. If the frozen function is later
+      rerun with differently-sized arguments, the executed kernels will still
+      reference the old size. One exception to this rule are constructions like
+      `dr.arange(UInt32, dr.width(a))`, where the result only implicitly depends on
+      the width value.
+
+    - @Christian: Should we say something about calling frozen functions from
+      other frozen functions?
+
+    - @Christian: Any other caveats? Is the part about dr.mean() still relevant? I
+      had removed that part since I thought we had a solution for dr.mean().
+
+    **Advanced features**. The :py:func:`@dr.freeze <drjit.freeze>` decorator takes
+    several optional parameters that are helpful in certain situations.
+
+    - **Warning when re-tracing happens too often**: Incompatible arguments trigger
+      re-tracing, which can mask issues where *accidentally* incompatible arguments
+      keep :py:func:`@dr.freeze <drjit.freeze>` from producing the expected
+      performance benefits.
+
+      In such situations, it can be helpful to warn and identify changing
+      parameters by name. This feature is enabled and set to ``10`` by default.
+
+       .. code-block:: pycon
+
+          >>> @dr.freeze(warn_after=1)
+          >>> def f(x):
+          ...     return x
+          ...
+          >>> f(Int(1))
+          >>> f(Float(1))
+          >>> <<< @Christian: needs an example of what the warning looks like
+
+    - **Limiting memory usage**. Storing kernels for many possible input
+      configuration requires device memory, which can become problematic. Set the
+      ``limit=`` parameter to enable a LRU cache. This is useful when calls to a
+      function are mostly compatible but require occasional re-tracing.
 
     Args:
-        f: The function to be frozen
+        limit (Optional[int]): An optional integer specifying the maximum number of
+          stored configurations. Once this limit is reached, incompatible calls
+          requiring re-tracing will cause the last used configuration to be dropped.
 
-        state (Optional[Callable]): An optional function, specifying additional
-          state. It is called with the same arguments as the function will be,
-          and should return a traversable object such as list or tuple, which will
-          be added to the input state.
-
-        max_cache_size (Optional[int]): An optional integer, specifying the maximum
-          number of recordings kept of the function. If more recordings have to be
-          made, the least recently used one will be dropped.
-
-        warn_recording_count (int): An integer, specifying the number of recordings
-          after which a warning will be generated, explaining which variables changed
+        warn_after (int): When the number of re-tracing steps exceeds this value,
+          Dr.Jit will generate a warning that explains which variables changed
           between calls to the function.
+
+        state_fn (Optional[Callable]): This optional callable can specify additional
+          state to identifies the configuration. ``state_fn`` will be called with
+          the same arguments as that of the decorated function. It should return a
+          traversable object (e.g., a list or tuple) that is conceptually treated
+          as if it was another input of the function.
 
         backend (Optional[JitBackend]): If no inputs are given when calling the
           frozen function, the backend used has to be specified using this argument.
-          It has to be the same backend that is used for variables inside the function,
-          otherwise recording will fail and variables may be leaked.
+          It must match the backend used for computation within the function.
     """
 
 
@@ -2492,9 +2540,9 @@ def freeze(
 def freeze(
     f: F,
     *,
-    state: Optional[Callable] = None,
-    max_cache_size: Optional[int] = None,
-    warn_recording_count: int = 10,
+    state_fn: Optional[Callable] = None,
+    limit: Optional[int] = None,
+    warn_after: int = 10,
     backend: Optional[JitBackend] = None,
 ) -> F: ...
 
@@ -2502,12 +2550,12 @@ def freeze(
 def freeze(
     f: Optional[F] = None,
     *,
-    state: Optional[Callable] = None,
-    max_cache_size: Optional[int] = None,
-    warn_recording_count: int = 10,
+    state_fn: Optional[Callable] = None,
+    limit: Optional[int] = None,
+    warn_after: int = 10,
     backend: Optional[JitBackend] = None,
 ) -> Union[F, Callable[[F2], F2]]:
-    max_cache_size = max_cache_size if max_cache_size is not None else -1
+    limit = limit if limit is not None else -1
     backend = backend if backend is not None else JitBackend.Invalid
 
     def decorator(f):
@@ -2531,13 +2579,13 @@ def freeze(
                 self.closure = (closure.nonlocals, closure.globals)
                 self.frozen = detail.FrozenFunction(
                     inner,
-                    max_cache_size,
-                    warn_recording_count,
+                    limit,
+                    warn_after,
                     backend,
                 )
 
             def __call__(self, *args, **kwargs):
-                _state = state(*args, **kwargs) if state is not None else None
+                _state = state_fn(*args, **kwargs) if state_fn is not None else None
                 return self.frozen([self.closure, _state], *args, **kwargs)
 
             @property
@@ -2593,7 +2641,7 @@ def freeze(
                 self.closure = closure
 
             def __call__(self, *args, **kwargs):
-                _state = state(self.obj, *args, **kwargs) if state is not None else None
+                _state = state_fn(self.obj, *args, **kwargs) if state_fn is not None else None
                 return self.frozen([self.closure, _state], self.obj, *args, **kwargs)
 
         return functools.wraps(f)(FrozenFunction(f))
