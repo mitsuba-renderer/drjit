@@ -2637,7 +2637,7 @@ def test68_state_decorator(t):
             self.something1 = 4.5
             self.something2 = Float([1, 2, 3, 4, 5])
 
-        @dr.freeze(state=lambda self, *_, **__: (self.something2))
+        @dr.freeze(state_fn=lambda self, *_, **__: (self.something2))
         def frozen(self, x: Float, idx: UInt32) -> Float:
             return x * self.something1 * dr.gather(Float, self.something2, idx)
 
@@ -2658,8 +2658,8 @@ def test68_state_decorator(t):
 
 
 @pytest.test_arrays("float32, jit, shape=(*)")
-@pytest.mark.parametrize("max_cache_size", (-1, None, 0, 1, 2))
-def test69_max_cache_size(t, max_cache_size):
+@pytest.mark.parametrize("limit", (-1, None, 0, 1, 2))
+def test69_max_cache_size(t, limit):
     """
     Tests different cache size limitations for the frozen function.
     """
@@ -2667,7 +2667,7 @@ def test69_max_cache_size(t, max_cache_size):
     def func(x, p):
         return x + p
 
-    frozen = dr.freeze(func, max_cache_size=max_cache_size)
+    frozen = dr.freeze(func, limit=limit)
 
     n = 3
     for i in range(n):
@@ -2679,15 +2679,15 @@ def test69_max_cache_size(t, max_cache_size):
 
         assert dr.allclose(res, ref)
 
-    if max_cache_size == -1 or max_cache_size is None:
+    if limit == -1 or limit is None:
         assert frozen.n_recordings == n
         assert frozen.n_cached_recordings == n
-    elif max_cache_size == 0:
+    elif limit == 0:
         assert frozen.n_recordings == 0
         assert frozen.n_cached_recordings == 0
     else:
         assert frozen.n_recordings == n
-        assert frozen.n_cached_recordings == max_cache_size
+        assert frozen.n_cached_recordings == limit
 
 
 @pytest.test_arrays("float32, jit, shape=(*)")
@@ -2700,7 +2700,7 @@ def test69_lru_eviction(t):
     def func(x, p):
         return x + p
 
-    frozen = dr.freeze(func, max_cache_size=2)
+    frozen = dr.freeze(func, limit=2)
 
     x = t(0, 1, 2)
 
@@ -2735,7 +2735,7 @@ def test70_warn_recordings(t):
     def func(x, i):
         return x + i
 
-    frozen = dr.freeze(func, warn_recording_count=2)
+    frozen = dr.freeze(func, warn_after=2)
 
     for i in range(4):
         x = t(1, 2, 3)
@@ -2808,7 +2808,7 @@ def test76_changing_literal_width_holder(t):
         return x + 1
 
     # Note: only fails with auto_opaque=True
-    frozen = dr.freeze(func, warn_recording_count=3)
+    frozen = dr.freeze(func, warn_after=3)
 
     n = 10
     for i in range(n):
