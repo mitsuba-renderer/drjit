@@ -1485,6 +1485,12 @@ void FrozenFunction::clear() {
     call_counter      = 0;
 }
 
+/**
+ * This function inspects the content of the frozen function to detect reference
+ * cycles, that could lead to memory or type leaks. It can be called by the
+ * garbage collector by adding it to the ``type_slots`` of the
+ * ``FrozenFunction`` definition.
+ */
 int frozen_function_tp_traverse(PyObject *self, visitproc visit, void *arg) {
     FrozenFunction *f = nb::inst_ptr<FrozenFunction>(self);
 
@@ -1509,7 +1515,12 @@ int frozen_function_tp_traverse(PyObject *self, visitproc visit, void *arg) {
     return 0;
 }
 
-
+/**
+ * This function releases the internal function of the ``FrozenFunction``
+ * object. It is used by the garbage collector to "break" potential reference
+ * cycles, resulting from the frozen function being referenced in the closure of
+ * the wrapped variable.
+ */
 int frozen_function_clear(PyObject *self) {
     FrozenFunction *f = nb::inst_ptr<FrozenFunction>(self);
 
