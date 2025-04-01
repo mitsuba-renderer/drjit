@@ -1742,7 +1742,7 @@ def test110_scatter_add_kahan(t):
     buf1 = dr.zeros(t, 2)
     buf2 = dr.zeros(t, 2)
     value = t(1, 2, 3)
-    dr.enable_grad(buf1, buf2, value)
+    dr.enable_grad(value)
     ti = dr.uint32_array_t(t)
 
     dr.scatter_add_kahan(

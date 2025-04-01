@@ -3308,19 +3308,13 @@ Index ad_var_scatter_packet(size_t n, Index target, const Index *values,
 
 void ad_var_scatter_add_kahan(Index *target_1, Index *target_2, Index value,
                               JitIndex offset, JitIndex mask) {
-    bool detached_1 = is_detached(*target_1),
-         detached_2 = is_detached(*target_2);
-
-    if (detached_1 != detached_2)
-        ad_raise("ad_var_scatter_kahan: AD status of the two target arrays is "
-                 "inconsistent!");
-
     uint32_t target_1_jit = jit_index(*target_1),
              target_2_jit = jit_index(*target_2);
 
     jit_var_scatter_add_kahan(&target_1_jit, &target_2_jit, (JitIndex) value, offset,
                               mask);
 
+    bool detached_1 = is_detached(*target_1);
     if (is_detached(value) && detached_1) {
         *target_1 = (Index) target_1_jit;
         *target_2 = (Index) target_2_jit;
@@ -3339,7 +3333,8 @@ void ad_var_scatter_add_kahan(Index *target_1, Index *target_2, Index value,
             SpecialArg(*target_1, new MaskEdge(JitMask(true))));
 
         std::lock_guard<Lock> guard(state.lock);
-        ad_var_dec_ref_int(ad_index_1, state[ad_index_1]);
+        if (ad_index_1)
+            ad_var_dec_ref_int(ad_index_1, state[ad_index_1]);
 
         Index combined_2 = combine(ad_index_2, target_2_jit);
 
