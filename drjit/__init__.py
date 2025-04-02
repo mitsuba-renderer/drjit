@@ -2483,12 +2483,6 @@ def freeze(
       `dr.arange(UInt32, dr.width(a))`, where the result only implicitly depends on
       the width value.
 
-    - @Christian: Should we say something about calling frozen functions from
-      other frozen functions?
-
-    - @Christian: Any other caveats? Is the part about dr.mean() still relevant? I
-      had removed that part since I thought we had a solution for dr.mean().
-
     **Advanced features**. The :py:func:`@dr.freeze <drjit.freeze>` decorator takes
     several optional parameters that are helpful in certain situations.
 
@@ -2508,7 +2502,10 @@ def freeze(
           ...
           >>> f(Int(1))
           >>> f(Float(1))
-          >>> <<< @Christian: needs an example of what the warning looks like
+          The frozen function has been recorded 2 times, this indicates a problem
+          with how the frozen function is being called. For example, calling it
+          with changing python values such as an index. For more information about
+          which variables changed set the log level to ``LogLevel::Debug``.
 
     - **Limiting memory usage**. Storing kernels for many possible input
       configuration requires device memory, which can become problematic. Set the
