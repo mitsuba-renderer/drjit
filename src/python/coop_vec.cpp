@@ -566,10 +566,16 @@ void export_coop_vec(nb::module_ &m) {
              nb::sig("def __iter__(self, /) -> typing.Iterator[T]"))
         .def("__add__", &coop_vec_binary_op<JitOp::Add>,
              nb::sig("def __add__(self, arg: CoopVec[T] | T | float | int, /) -> CoopVec[T]"))
+        .def("__radd__", &coop_vec_binary_op<JitOp::Add>,
+             nb::sig("def __radd__(self, arg: CoopVec[T] | T | float | int, /) -> CoopVec[T]"))
         .def("__sub__", &coop_vec_binary_op<JitOp::Sub>,
              nb::sig("def __sub__(self, arg: CoopVec[T] | T | float | int, /) -> CoopVec[T]"))
+        .def("__rsub__", &coop_vec_binary_op<JitOp::Sub>,
+             nb::sig("def __rsub__(self, arg: CoopVec[T] | T | float | int, /) -> CoopVec[T]"))
         .def("__mul__", &coop_vec_binary_op<JitOp::Mul>,
              nb::sig("def __mul__(self, arg: CoopVec[T] | T | float | int, /) -> CoopVec[T]"))
+        .def("__rmul__", &coop_vec_binary_op<JitOp::Mul>,
+             nb::sig("def __rmul__(self, arg: CoopVec[T] | T | float | int, /) -> CoopVec[T]"))
         .def_prop_ro("index", [](const CoopVec &v) { return v.m_index; })
         .def_prop_ro("type", [](const CoopVec &v) { return v.m_type; })
         .def("__len__", [](const CoopVec &v) { return v.m_size; })
