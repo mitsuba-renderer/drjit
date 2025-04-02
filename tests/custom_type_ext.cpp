@@ -1,6 +1,10 @@
-#include <drjit/python.h>
 #include <drjit/autodiff.h>
 #include <drjit/packet.h>
+#include <drjit/python.h>
+#include <drjit/traversable_base.h>
+#include <nanobind/nanobind.h>
+#include <nanobind/trampoline.h>
+#include <vector>
 
 namespace nb = nanobind;
 namespace dr = drjit;
@@ -42,6 +46,65 @@ private:
     Value m_value;
 };
 
+class Object : public drjit::TraversableBase {
+    DR_TRAVERSE_CB(drjit::TraversableBase);
+};
+
+template <typename Value>
+class CustomBase : public Object{
+    Value m_base_value;
+
+public:
+    CustomBase(const Value &base_value) : Object(), m_base_value(base_value) {}
+
+    Value &base_value() { return m_base_value; }
+    virtual Value &value() = 0;
+
+    DR_TRAVERSE_CB(Object, m_base_value);
+};
+
+template <typename Value>
+class PyCustomBase : public CustomBase<Value>{
+public:
+    using Base = CustomBase<Value>;
+    NB_TRAMPOLINE(Base, 1);
+
+    PyCustomBase(const Value &base_value) : Base(base_value) {}
+
+    Value &value() override { NB_OVERRIDE_PURE(value); }
+
+    DR_TRAMPOLINE_TRAVERSE_CB(Base);
+};
+
+template <typename Value>
+class CustomA: public CustomBase<Value>{
+public:
+    using Base = CustomBase<Value>;
+
+    CustomA(const Value &value, const Value &base_value) : Base(base_value), m_value(value) {}
+
+    Value &value() override { return m_value; }
+
+private:
+    Value m_value;
+
+    DR_TRAVERSE_CB(Base, m_value);
+};
+
+template<typename Value>
+class Nested: Object{
+    using Base = Object;
+
+    std::vector<std::pair<nb::ref<Object>, size_t>> m_nested;
+
+public:
+    Nested(nb::ref<Object> a, nb::ref<Object> b) {
+        m_nested.push_back(std::make_pair(a, 0));
+        m_nested.push_back(std::make_pair(b, 1));
+    }
+
+    DR_TRAVERSE_CB(Base, m_nested);
+};
 
 template <JitBackend Backend> void bind(nb::module_ &m) {
     dr::ArrayBinding b;
@@ -64,12 +127,50 @@ template <JitBackend Backend> void bind(nb::module_ &m) {
         .def(nb::init<Float>())
         .def("value", &CustomFloatHolder::value, nanobind::rv_policy::reference);
 
+    using CustomBase   = CustomBase<Float>;
+    using PyCustomBase = PyCustomBase<Float>;
+    using CustomA      = CustomA<Float>;
+    using Nested       = Nested<Float>;
+
+    auto object = nb::class_<Object>(
+        m, "Object",
+        nb::intrusive_ptr<Object>(
+            [](Object *o, PyObject *po) noexcept { o->set_self_py(po); }));
+
+    auto base =
+        nb::class_<CustomBase, Object, PyCustomBase>(m, "CustomBase")
+            .def(nb::init<Float>())
+            .def("value", nb::overload_cast<>(&CustomBase::value))
+            .def("base_value", nb::overload_cast<>(&CustomBase::base_value));
+
+    drjit::bind_traverse(base);
+
+    auto a = nb::class_<CustomA, CustomBase>(m, "CustomA")
+                 .def(nb::init<Float, Float>());
+
+    drjit::bind_traverse(a);
+
+    auto nested = nb::class_<Nested>(m, "Nested")
+                      .def(nb::init<nb::ref<Object>, nb::ref<Object>>());
+
+    drjit::bind_traverse(nested);
+
     m.def("cpp_make_opaque",
           [](CustomFloatHolder &holder) { dr::make_opaque(holder); }
     );
 }
 
 NB_MODULE(custom_type_ext, m) {
+    nb::intrusive_init(
+        [](PyObject *o) noexcept {
+            nb::gil_scoped_acquire guard;
+            Py_INCREF(o);
+        },
+        [](PyObject *o) noexcept {
+            nb::gil_scoped_acquire guard;
+            Py_DECREF(o);
+        });
+
 #if defined(DRJIT_ENABLE_LLVM)
     nb::module_ llvm = m.def_submodule("llvm");
     bind<JitBackend::LLVM>(llvm);
