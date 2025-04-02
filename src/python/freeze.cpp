@@ -1444,7 +1444,7 @@ nb::object FrozenFunction::operator()(nb::args args, nb::kwargs kwargs) {
                 jit_freeze_abort(in_variables->backend);
                 nb::raise_from(
                     e, PyExc_RuntimeError,
-                    "record(): error encountered while recording a frozen"
+                    "record(): error encountered while recording a frozen "
                     "function (see above).");
             } catch (const std::exception &e) {
                 in_variables->release();
