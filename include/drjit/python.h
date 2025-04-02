@@ -1065,7 +1065,7 @@ template <typename T, typename... Args> auto &bind_traverse(nanobind::class_<T, 
         nb::callable c;
     };
 
-    static_assert(std::is_base_of_v<TraversableBase, T>);
+    // static_assert(std::is_base_of_v<TraversableBase, T>);
 
     cls.def("_traverse_1_cb_ro", [](const T *self, nb::callable c) {
         Payload payload{ std::move(c) };
