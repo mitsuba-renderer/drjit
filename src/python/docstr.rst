@@ -7144,6 +7144,16 @@
     then you have found a bug. Please report it on the project's
     `GitHub issue tracker <https://github.com/mitsuba-renderer/drjit>`__.
 
+
+.. topic:: sync_device
+
+    Wait for all computation on the current device to finish.
+
+.. topic:: sync_all_devices
+
+    Wait for all computation on *all devices* to finish.
+
+
 .. topic:: flush_malloc_cache
 
     Free the memory allocation cache maintained by Dr.Jit.
