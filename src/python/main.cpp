@@ -171,6 +171,8 @@ NB_MODULE(_drjit_ext, m_) {
     m.def("has_backend", &jit_has_backend, doc_has_backend);
 
     m.def("sync_thread", &jit_sync_thread, doc_sync_thread)
+     .def("sync_device", &jit_sync_device, doc_sync_device)
+     .def("sync_all_devices", &jit_sync_all_devices, doc_sync_all_devices)
      .def("flush_kernel_cache", &jit_flush_kernel_cache, doc_flush_kernel_cache)
      .def("flush_malloc_cache", &jit_flush_malloc_cache, doc_flush_malloc_cache)
      .def("malloc_clear_statistics", &jit_malloc_clear_statistics)
