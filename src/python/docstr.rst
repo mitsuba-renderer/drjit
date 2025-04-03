@@ -6439,6 +6439,10 @@
 
     If ``False`` then a copy of the array data will additionally be retained .
 
+.. topic:: Texture_inplace_update
+
+    Refresh internal state after external inplace update
+
 .. topic:: Texture_shape
 
     Return the texture shape
