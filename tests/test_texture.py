@@ -13,7 +13,6 @@ def test01_interp_1d(t, wrap_mode, force_optix, texture_type):
 
     with dr.scoped_set_flag(dr.JitFlag.ForceOptiX, force_optix):
         mod = sys.modules[t.__module__]
-        Array1f = getattr(mod, 'Array1f')
         TexType = getattr(mod, texture_type)
 
         tex = TexType([2], 1, True, dr.FilterMode.Linear, wrap_mode)
@@ -101,7 +100,7 @@ def test02_interp_1d(t, wrap_mode, texture_type):
 
         StorageType = dr.array_t(tex.value())
 
-        for j in range(0, 4):
+        for _ in range(0, 4):
             values = StorageType(rng_1.next_float32())
             tex.set_value(values)
             tex_no_accel.set_value(values)
@@ -132,7 +131,7 @@ def test03_interp_2d(t, wrap_mode, texture_type):
         tex = TexType([N, M], ch, True, dr.FilterMode.Linear, wrap_mode)
         tex_no_accel = TexType([N, M], ch, False, dr.FilterMode.Linear, wrap_mode)
 
-        for j in range(0, 4):
+        for _ in range(0, 4):
             values = rng_1.next_float32()
             tex.set_value(values)
             tex_no_accel.set_value(values)
@@ -162,7 +161,7 @@ def test04_interp_3d(t, wrap_mode, texture_type):
         tex = TexType([N, M, L], ch, True, dr.FilterMode.Linear, wrap_mode)
         tex_no_accel = TexType([N, M, L], ch, False, dr.FilterMode.Linear, wrap_mode)
 
-        for j in range(0, 4):
+        for _ in range(0, 4):
             values = rng_1.next_float32()
             tex.set_value(values)
             tex_no_accel.set_value(values)
@@ -183,7 +182,6 @@ def test05_grad(t, migrate, texture_type):
     Float = getattr(mod, 'Float')
     Array1f = getattr(mod, 'Array1f')
     TexType = getattr(mod, texture_type)
-    PCG32 = getattr(mod, 'PCG32')
 
     N = 3
 
@@ -210,7 +208,6 @@ def test05_grad(t, migrate, texture_type):
 @pytest.test_arrays("is_jit, float32, shape=(*)")
 def test_06_nearest(t, texture_type):
     mod = sys.modules[t.__module__]
-    Array1f = getattr(mod, 'Array1f')
     TexType = getattr(mod, texture_type)
 
     N = 3
@@ -243,7 +240,7 @@ def test07_cubic_analytic(t, texture_type):
     tex.set_value(value)
 
     pos = Array1f(0.5)
-    (val_64, grad_64) = tex.eval_cubic_grad(pos)
+    (_, grad_64) = tex.eval_cubic_grad(pos)
     dr.enable_grad(pos)
 
     res = Array1f(tex.eval_cubic(pos, True, True))
@@ -267,7 +264,6 @@ def test07_cubic_analytic(t, texture_type):
 @pytest.test_arrays("is_jit, float32, shape=(*)")
 def test08_cubic_interp_1d(t, texture_type, wrap_mode):
     mod = sys.modules[t.__module__]
-    Array1f = getattr(mod, 'Array1f')
     TexType = getattr(mod, texture_type)
 
     tex = TexType([5], 1, True, dr.FilterMode.Linear, wrap_mode)
@@ -340,7 +336,6 @@ def test08_cubic_interp_1d(t, texture_type, wrap_mode):
 @pytest.test_arrays("is_jit, float32, shape=(*)")
 def test09_cubic_interp_2d(t, texture_type, wrap_mode):
     mod = sys.modules[t.__module__]
-    Array2f = getattr(mod, 'Array2f')
     TexType = getattr(mod, texture_type)
     PCG32 = getattr(mod, 'PCG32')
 

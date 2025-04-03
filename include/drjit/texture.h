@@ -233,18 +233,16 @@ public:
             if (padded_value.size() != m_size)
                 jit_raise("Texture::set_value(): unexpected array size!");
 
-            if constexpr (IsDiff)
-                m_unpadded_value.array() = replace_grad(
-                    m_unpadded_value.array(), value);
+            //if constexpr (IsDiff)
+            //    m_unpadded_value.array() = replace_grad(
+            //        m_unpadded_value.array(), value);
 
             if constexpr (HasCudaTexture) {
                 if (m_use_accel) {
-                    padded_value.eval_(); // Sync the value before copying to texture memory
-
                     size_t tex_shape[Dimension + 1];
                     reverse_tensor_shape(tex_shape, true);
                     jit_cuda_tex_memcpy_d2t(Dimension, tex_shape,
-                        padded_value.data(), m_handle);
+                                            padded_value.data(), m_handle);
 
                     if (migrate) {
                         Storage dummy = zeros<Storage>(m_size);
@@ -254,7 +252,6 @@ public:
                             m_value.array() = replace_grad(dummy, padded_value);
                         else
                             m_value.array() = dummy;
-
                         m_migrated = true;
 
                         return;
@@ -284,12 +281,10 @@ public:
                         "texture dimension plus one (channels).");
 
         bool shape_changed = false;
-        {
-            for (size_t i = 0; i < Dimension + 1; ++i) {
-                if (m_shape[i] != tensor.shape(i)) {
-                    shape_changed = true;
-                    break;
-                }
+        for (size_t i = 0; i < Dimension + 1; ++i) {
+            if (m_shape[i] != tensor.shape(i)) {
+                shape_changed = true;
+                break;
             }
         }
 
@@ -310,7 +305,6 @@ public:
      * \brief Return the texture data as a tensor object
      */
     const TensorXf &tensor() const {
-
         if constexpr (!is_jit_v<_Storage>) {
             return m_value;
         } else {
@@ -1323,9 +1317,7 @@ protected:
 
         m_size = m_channels_storage;
         size_t unpadded_size = m_channels;
-
         size_t tensor_shape[Dimension + 1]{};
-
         for (size_t i = 0; i < Dimension; ++i) {
             tensor_shape[i] = shape[i];
             m_shape[i] = shape[i];
@@ -1335,8 +1327,8 @@ protected:
             unpadded_size *= shape[i];
         }
         tensor_shape[Dimension] = m_channels_storage;
-
         m_shape[Dimension] = channels;
+
         m_use_accel = use_accel;
         m_filter_mode = filter_mode;
         m_wrap_mode = wrap_mode;
