@@ -116,6 +116,7 @@ Rearranging array contents
 .. autofunction:: tile
 .. autofunction:: repeat
 .. autofunction:: resample
+.. autofunction:: convolve
 
 Random number generation
 ------------------------
