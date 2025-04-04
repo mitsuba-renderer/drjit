@@ -1830,8 +1830,7 @@ _resample_cache = {}
 def resample(
     source: ArrayT,
     shape: Sequence[int],
-    *,
-    filter: Union[Literal["box", "linear", "hamming", "cubic", "lanczos"], Callable[[float], float]] = "cubic",
+    filter: Union[Literal["box", "linear", "hamming", "cubic", "lanczos", "gaussian"], Callable[[float], float]] = "cubic",
     filter_radius: Optional[float] = None
 ) -> ArrayT:
     """
@@ -1872,15 +1871,20 @@ def resample(
     - ``"hamming"``: uses the same number of input samples as ``"linear"`` but
       better preserves sharpness when downscaling. Do not use for upscaling.
 
-    - ``"cubic"``: use cubic filter kernel that uses :math:`4^n`
+    - ``"cubic"``: use cubic filter kernel that queries :math:`4^n`
       neighbors to reconstruct each output sample when upsampling. Produces
       high-quality results. This is the default.
 
-    - ``"lanczos"``: use a windowed Lanczos filter that uses :math:`6^n`
+    - ``"lanczos"``: use a windowed Lanczos filter that queries :math:`6^n`
       neighbors to reconstruct each output sample when upsampling. This is the
       best filter for smooth signals, but also the costliest. The Lanczos
       filter is susceptible to ringing when the input array contains
       discontinuities.
+
+    - ``"gaussian"``: use a Gaussian filter that queries :math:4^n` neighbors
+      to reconstruct each output sample when upsampling. The kernel has a
+      standard deviation of 0.5 and is truncated after 4 standard deviations.
+      This filter is mainly useful when intending to blur a signal.
 
     - Besides the above choices, it is also possible to specify a custom filter.
       To do so, use the ``filter`` argument to pass a Python callable with
@@ -1948,6 +1952,95 @@ def resample(
                 target_res=target_res,
                 filter=filter,
                 filter_radius=filter_radius,
+            )
+            _resample_cache[key] = resampler
+
+        value = custom(_ResampleOp,
+            resampler=resampler,
+            source=value,
+            stride=strides[i])
+
+    if is_tensor_v(tp):
+        return tp(value, shape)
+    else:
+        return value
+
+def convolve(
+    source: ArrayT,
+    filter: Union[Literal["box", "linear", "hamming", "cubic", "lanczos", "gaussian"], Callable[[float], float]],
+    filter_radius: float,
+    axis: Union[int, Tuple[int, ...], None] = None
+) -> ArrayT:
+    """
+    Convolve one or more axes of an input array/tensor with a 1D filter
+
+    This function filters one more axes of a Dr.Jit array or tensor, for
+    example to convolve an image with a 2D Gaussian filter to blur spatial
+    detail.
+
+    .. code-block:: python
+
+       image: TensorXf = ...  # a RGB image
+
+       blured_image = dr.convolve(
+           image,
+           filter='gaussian',
+           filter_radius=10
+       )
+
+    The filter weights are renormalized to reduce edge effects near the
+    boundary of the array.
+
+    The function supports a set of provided filters, and custom filters
+    can also be specified. This works analogously to the :py:func:`resample`
+    function, please refer to its documentation for detail.
+
+    Args:
+        source (dr.ArrayBase): The Dr.Jit tensor or 1D array to be resampled.
+
+        filter (str | Callable[[float], float])
+          The desired reconstruction filter, see the above text for an overview.
+          Alternatively, a custom reconstruction filter function can also be
+          specified.
+
+        filter_radius (float)
+          The radius of the continous function to be used in the convolution.
+
+        axis (int | tuple[int, ...] | ... | None): The axis or set of axes
+          along which to convolve. The default argument ``axis=None`` causes all
+          axes to be convolved. Negative values count from the last dimension.
+
+    Returns:
+        drjit.ArrayBase: The resampled output array. Its type matches ``source``.
+    """
+
+    shape = source.shape
+    strides = _compute_strides(shape)
+    ndim = len(shape)
+    tp = type(source)
+    value = source.array
+
+    if axis is None:
+        axis = tuple(range(ndim))
+    elif isinstance(axis, int):
+        axis = (axis, )
+
+    for i in axis:
+        if i < 0:
+            i = ndim + i
+        res = shape[i]
+
+        # Cache resampler in case it can be reused
+        key = (res, res, filter, filter_radius)
+
+        resampler = _resample_cache.get(key, None)
+        if resampler is None:
+            resampler = detail.Resampler(
+                source_res=res,
+                target_res=res,
+                filter=filter,
+                filter_radius=filter_radius,
+                convolve=True
             )
             _resample_cache[key] = resampler
 
