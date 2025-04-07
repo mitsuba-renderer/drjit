@@ -2949,7 +2949,7 @@ static Index ad_var_memop_remap(Index index, bool input) {
 uint64_t ad_var_gather(Index source, JitIndex offset, JitIndex mask, ReduceMode mode) {
     JitVar result = JitVar::steal(jit_var_gather(jit_index(source), offset, mask));
 
-    if (is_detached(source)) {
+    if (is_detached(source) || !result.valid()) {
         return result.release();
     } else {
         // Track implicit dependencies & potentially remap variable IDs
@@ -3055,7 +3055,7 @@ void ad_var_gather_packet(size_t n, Index source, JitIndex offset,
     if (!scopes.empty())
         scopes.back().maybe_disable(source_ad);
 
-    if (source_ad) {
+    if (source_ad && offset) {
         // Track implicit dependencies & potentially remap variable IDs
         source = ad_var_memop_remap(source, true);
 
