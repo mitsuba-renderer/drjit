@@ -35,7 +35,8 @@ def dda(
        from drjit.scalar import Array3f, Array3u, Float, Bool
 
        def dda_fun(state: list, index: Array3u,
-                   pt_in: Array3f, pt_out: Array3f) -> tuple[list, bool]:
+                   pt_in: Array3f, pt_out: Array3f,
+                   active: Bool) -> tuple[list, bool]:
            # Entered a grid cell, stash it in the 'state' variable
            state.append(Array3f(index))
            return state, Bool(True)
