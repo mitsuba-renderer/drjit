@@ -32,9 +32,9 @@ def dda(
 
     .. code-block:: python
 
-       from drjit.scalar import Array3f, Array3i, Float, Bool
+       from drjit.scalar import Array3f, Array3u, Float, Bool
 
-       def dda_fun(state: list, index: Array3i,
+       def dda_fun(state: list, index: Array3u,
                    pt_in: Array3f, pt_out: Array3f) -> tuple[list, bool]:
            # Entered a grid cell, stash it in the 'state' variable
            state.append(Array3f(index))
@@ -44,7 +44,7 @@ def dda(
             ray_o = Array3f(-.1),
             ray_d = Array3f(.1, .2, .3),
             ray_max = Float(float('inf')),
-            grid_res = Array3i(10),
+            grid_res = Array3u(10),
             grid_min = Array3f(0),
             grid_max = Array3f(1),
             func = dda_fun,
