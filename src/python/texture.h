@@ -28,11 +28,11 @@ void bind_texture(nb::module_ &m, const char *name) {
              doc_Texture_init_tensor)
         .def("set_value",  &Tex::set_value,  "value"_a,  "migrate"_a = false, doc_Texture_set_value)
         .def("set_tensor", &Tex::set_tensor, "tensor"_a, "migrate"_a = false, doc_Texture_set_tensor)
+        .def("inplace_update", &Tex::inplace_update, "migrate"_a = false, doc_Texture_inplace_update)
         .def("value", &Tex::value, nb::rv_policy::reference_internal, doc_Texture_value)
         .def("tensor",
              nb::overload_cast<>(&Tex::tensor, nb::const_),
              nb::rv_policy::reference_internal, doc_Texture_tensor)
-        .def("inplace_update", &Tex::inplace_update, doc_Texture_inplace_update)
         .def("filter_mode", &Tex::filter_mode, doc_Texture_filter_mode)
         .def("wrap_mode", &Tex::wrap_mode, doc_Texture_wrap_mode)
         .def("use_accel", &Tex::use_accel, doc_Texture_use_accel)

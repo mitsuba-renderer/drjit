@@ -6412,6 +6412,20 @@
     the texture exclusively stores a copy of the input data as a CUDA texture to avoid
     redundant storage.Note that the texture is still differentiable even when migrated.
 
+.. topic:: Texture_inplace_update
+    Update the texture after applying an indirect update to its tensor
+    representation (obtained with py:func:`tensor()`).
+
+    A tensor representation of this texture object can be retrived with
+    py:func:`tensor()`. That representation can be modified, but in order to apply
+    it succesfuly to the texture, this method must also be called. In short,
+    this method will use the tensor representation to update the texture's
+    internal state.
+
+    In CUDA mode, when both the argument ``migrate`` and :py:func:`use_accel()` are ``True``,
+    the texture exclusively stores a copy of the input data as a CUDA texture to avoid
+    redundant storage.)
+
 .. topic:: Texture_value
 
     Return the texture data as an array object
@@ -6438,10 +6452,6 @@
     the data as a hardware-accelerated CUDA texture.
 
     If ``False`` then a copy of the array data will additionally be retained .
-
-.. topic:: Texture_inplace_update
-
-    Refresh internal state after external inplace update
 
 .. topic:: Texture_shape
 

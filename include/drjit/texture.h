@@ -51,7 +51,7 @@ public:
     static constexpr bool IsHalf = std::is_same_v<scalar_t<_Storage>, drjit::half>;
     static constexpr bool IsSingle = std::is_same_v<scalar_t<_Storage>, float>;
     static constexpr bool HasCudaTexture = (IsHalf || IsSingle) && IsCUDA;
-    static constexpr int CudaFormat = HasCudaTexture ? 
+    static constexpr int CudaFormat = HasCudaTexture ?
         IsHalf ? (int)CudaTextureFormat::Float16 : (int)CudaTextureFormat::Float32 : -1;
 
     using Int32 = int32_array_t<_Storage>;
@@ -210,7 +210,6 @@ public:
      * is *fully* migrated to GPU texture memory to avoid redundant storage.
      */
     void set_value(const Storage &value, bool migrate=false) {
-
         if constexpr (!is_jit_v<_Storage>) {
             if (value.size() != m_size)
                 jit_raise("Texture::set_value(): unexpected array size!");
@@ -233,29 +232,38 @@ public:
             if (padded_value.size() != m_size)
                 jit_raise("Texture::set_value(): unexpected array size!");
 
+            // We can always re-compute the unpadded values from the padded
+            // ones. However, if we systematically do that, users will not be
+            // able to lookup gradients on the unpadded tensor (`tensor().grad`).
+            // The reason for that is that `m_unpadded_value` would be overriden
+            // on the next `tensor()` call, which was the original source of
+            // gradient tracking. Unless the AD traversal was configured to
+            // keep intermediate vertices, user would not be able to reference
+            // the correct gradient value.
+            // To solve this issue, we store the AD index now, and re-attach
+            // it to the output of `tensor()` on every call.
             if constexpr (IsDiff)
-                m_unpadded_value.array() = replace_grad(
-                    m_unpadded_value.array(), value);
+                m_unpadded_value.array() =
+                    replace_grad(m_unpadded_value.array(), value);
 
             if constexpr (HasCudaTexture) {
                 if (m_use_accel) {
-                    padded_value.eval_(); // Sync the value before copying to texture memory
-
                     size_t tex_shape[Dimension + 1];
                     reverse_tensor_shape(tex_shape, true);
                     jit_cuda_tex_memcpy_d2t(Dimension, tex_shape,
-                        padded_value.data(), m_handle);
+                                            padded_value.data(), m_handle);
 
                     if (migrate) {
+                        // Fully migrate to texture memory, set m_value to zero
                         Storage dummy = zeros<Storage>(m_size);
 
-                        // Fully migrate to texture memory, set m_value to zero
                         if constexpr (IsDiff)
                             m_value.array() = replace_grad(dummy, padded_value);
                         else
                             m_value.array() = dummy;
 
                         m_migrated = true;
+                        m_tensor_dirty = true;
 
                         return;
                     }
@@ -283,25 +291,78 @@ public:
             jit_raise("Texture::set_tensor(): tensor dimension must equal "
                         "texture dimension plus one (channels).");
 
+        if (&tensor == &m_unpadded_value) {
+            jit_log(::LogLevel::Warn,
+                    "Texture::set_tensor(): the `tensor` argument is a "
+                    "reference to this texture's own tensor representation "
+                    "(obtained through `Texture::tensor()`. Such an update "
+                    "must be applied with the `Texture::inplace_update()` "
+                    "method.");
+            return;
+        }
+
         bool shape_changed = false;
-        {
-            for (size_t i = 0; i < Dimension + 1; ++i) {
-                if (m_shape[i] != tensor.shape(i)) {
-                    shape_changed = true;
-                    break;
-                }
+        for (size_t i = 0; i < Dimension + 1; ++i) {
+            if (m_shape[i] != tensor.shape(i)) {
+                shape_changed = true;
+                break;
             }
         }
 
+        // Only update tensors & CUDA texture if shape changed
         init(tensor.shape().data(), tensor.shape(Dimension),
             m_use_accel, m_filter_mode, m_wrap_mode, shape_changed);
 
-        // Avoid unnecessary copy when working with `DynamicArray`
-        if constexpr (!IsDynamic)
-            if (&tensor == &m_value)
-                return;
-
         set_value(tensor.array(), migrate);
+    }
+
+    /**
+     * \brief Update the texture after applying an indirect update to its tensor
+     * representation (obtained with \ref tensor()).
+     *
+     * A tensor representation of this texture object can be retrived with
+     * \ref tensor(). That representation can be modified, but in order to apply
+     * it succesfuly to the texture, this method must also be called. In short,
+     * this method will use the tensor representation to update the texture's
+     * internal state.
+     *
+     * When \c migrate is set to \c true on CUDA mode, the texture information
+     * is *fully* migrated to GPU texture memory to avoid redundant storage.
+     */
+    void inplace_update(bool migrate = false) {
+        if (m_unpadded_value.ndim() != Dimension + 1)
+            jit_raise("Texture::inplace_update(): tensor dimension must equal "
+                      "texture dimension plus one (channels).");
+
+        bool shape_changed = false;
+        for (size_t i = 0; i < Dimension + 1; ++i) {
+            if (m_shape[i] != m_unpadded_value.shape(i)) {
+                shape_changed = true;
+                break;
+            }
+        }
+
+        if constexpr (!is_jit_v<_Storage>) {
+            if (shape_changed)
+                init(m_unpadded_value.shape().data(),
+                     m_unpadded_value.shape(Dimension), m_use_accel, m_filter_mode,
+                     m_wrap_mode, true);
+            else
+                // Avoid unnecessary copy when working with `DynamicArray`
+                return;
+        } else {
+            // `Texture::init` might overwrite `m_unpadded_value` with a
+            // zero-initialized tensor, so let's copy it first
+            TensorXf inbound_tensor(m_unpadded_value);
+
+            init(m_unpadded_value.shape().data(),
+                 m_unpadded_value.shape(Dimension), m_use_accel, m_filter_mode,
+                 m_wrap_mode, shape_changed);
+
+            m_unpadded_value.array() = inbound_tensor;
+        }
+
+        set_value(m_unpadded_value.array(), migrate);
     }
 
     const Storage &value() const { return tensor().array(); }
@@ -310,27 +371,31 @@ public:
      * \brief Return the texture data as a tensor object
      */
     const TensorXf &tensor() const {
-
         if constexpr (!is_jit_v<_Storage>) {
             return m_value;
         } else {
-            sync_host_data();
+            sync_device_data();
             if (m_tensor_dirty) {
                 if (m_channels != m_channels_storage) {
-                    UInt32 idx = arange<UInt32>((m_size * m_channels)
-                        / m_channels_storage);
+                    UInt32 idx = arange<UInt32>(
+                        (m_size * m_channels) / m_channels_storage
+                    );
                     UInt32 pixels_idx = idx / m_channels;
                     UInt32 channel_idx = idx % m_channels;
                     idx = fmadd(pixels_idx, m_channels_storage, channel_idx);
                     Storage values = gather<Storage>(m_value.array(), idx);
+
+                    // On the last call to `set_value` we saved the AD index
+                    // of the unpadded values. We can re-attach it here.
                     if constexpr (IsDiff)
-                        m_unpadded_value.array() = replace_grad(values, 
-                            m_unpadded_value.array());
+                        m_unpadded_value.array() =
+                            replace_grad(values, m_unpadded_value.array());
                     else
                         m_unpadded_value.array() = values;
                 } else {
                     m_unpadded_value.array() = m_value.array();
                 }
+
                 m_tensor_dirty = false;
             }
 
@@ -348,14 +413,6 @@ public:
     TensorXf &tensor() {
         return const_cast<TensorXf &>(
             const_cast<const Texture<_Storage, Dimension> *>(this)->tensor());
-    }
-
-    /**
-     * \brief Refresh internal state after external inplace update
-     */
-    void inplace_update() {
-        if constexpr (is_jit_v<Storage>)
-            set_tensor(m_unpadded_value);
     }
 
     /**
@@ -501,8 +558,14 @@ public:
                 eval_cuda(pos, out, active);
 
                 if constexpr (IsDiff) {
+                    // Re-attach the computation if gradient tracking is enabled
                     if (grad_enabled(m_value, pos)) {
-                        sync_host_data(); // Will un-migrate the data if necessary
+
+                        // Derivtives w.r.t. `pos` require the primal value of
+                        // the texture. We therefore must sync up the texture
+                        // if it was fully migrated.
+                        if (grad_enabled(pos))
+                            sync_device_data();
 
                         ArrayX out_nonaccel = empty<ArrayX>(m_channels);
                         eval_nonaccel(pos, out_nonaccel.data(), active);
@@ -555,7 +618,7 @@ public:
                     PosF32 pos(pos_);
 
                     uint32_t pos_idx[Dimension];
-                    uint32_t *out_idx = (uint32_t *) alloca(4 * 
+                    uint32_t *out_idx = (uint32_t *) alloca(4 *
                         m_channels_storage * sizeof(uint32_t));
                     for (size_t i = 0; i < Dimension; ++i)
                         pos_idx[i] = pos[i].index();
@@ -669,8 +732,14 @@ public:
                 eval_fetch_cuda(pos, out, active);
 
                 if constexpr (IsDiff) {
+                    // Re-attach the computation if gradient tracking is enabled
                     if (grad_enabled(m_value, pos)) {
-                        sync_host_data(); // Will un-migrate the data if necessary
+
+                        // Derivtives w.r.t. `pos` require the primal value of
+                        // the texture. We therefore must sync up the texture
+                        // if it was fully migrated.
+                        if (grad_enabled(pos))
+                            sync_device_data();
 
                         constexpr size_t out_size = 1 << Dimension;
 
@@ -918,11 +987,15 @@ public:
         }
 
         if constexpr (IsDiff) {
-            /* When `pos` has gradient enabled, call a helper function to
-               replace the AD graph. The result is unused (and never computed)
-               and only the AD graph is replaced. */
+            // Re-attach the computation if gradient tracking is enabled
             if (grad_enabled(m_value, pos)) {
-                sync_host_data(); // Will un-migrate the data if necessary
+
+                // Derivtives w.r.t. `pos` require the primal value of
+                // the texture. We therefore must sync up the texture
+                // if it was fully migrated.
+                if (grad_enabled(pos))
+                    sync_device_data();
+
                 ArrayX result_diff = empty<ArrayX>(m_channels);
                 eval_cubic_helper(pos, result_diff.data(), active); // AD graph only
                 for (size_t ch = 0; ch < m_channels; ++ch)
@@ -1323,9 +1396,7 @@ protected:
 
         m_size = m_channels_storage;
         size_t unpadded_size = m_channels;
-
         size_t tensor_shape[Dimension + 1]{};
-
         for (size_t i = 0; i < Dimension; ++i) {
             tensor_shape[i] = shape[i];
             m_shape[i] = shape[i];
@@ -1335,35 +1406,21 @@ protected:
             unpadded_size *= shape[i];
         }
         tensor_shape[Dimension] = m_channels_storage;
-
         m_shape[Dimension] = channels;
+
         m_use_accel = use_accel;
         m_filter_mode = filter_mode;
         m_wrap_mode = wrap_mode;
 
-        if (init_tensor)
-        {
-            size_t shape_bytes = sizeof(size_t) * (Dimension + 1);
-            size_t* value_shape_ptr = m_value.shape().data();
-            size_t* unpadded_value_shape_ptr = m_unpadded_value.shape().data();
-
-            /* An external inplace update in scalar mode means we shouldn't 
-               init tensor */
-            if (!value_shape_ptr || 
-                memcmp(value_shape_ptr, tensor_shape, shape_bytes))
-                m_value = TensorXf(
-                    empty<Storage>(m_size), Dimension + 1, tensor_shape);
-
-            /* An external inplace update in JIT mode means we shouldn't
-               init tensor */
-            if (!unpadded_value_shape_ptr || 
-                memcmp(unpadded_value_shape_ptr, m_shape, shape_bytes))
-                m_unpadded_value = TensorXf(
-                    empty<Storage>(unpadded_size), Dimension + 1, m_shape);
+        if (init_tensor) {
+            m_value =
+                TensorXf(empty<Storage>(m_size), Dimension + 1, tensor_shape);
+            m_unpadded_value =
+                TensorXf(empty<Storage>(unpadded_size), Dimension + 1, m_shape);
         }
 
         if constexpr (HasCudaTexture) {
-            if (m_use_accel) {
+            if (m_use_accel && init_tensor) {
                 size_t tex_shape[Dimension];
                 reverse_tensor_shape(tex_shape, false);
 
@@ -1380,17 +1437,17 @@ protected:
     #undef DR_TEX_ALLOC_PACKET
 
 private:
-    /// Updates the host-side padded tensor
-    void sync_host_data() const {
+    /// Updates the device-side padded tensor
+    void sync_device_data() const {
         if constexpr (HasCudaTexture) {
             if (m_use_accel && m_migrated) {
                 Storage primal = empty<Storage>(m_size);
 
-                /* The CUDA texture here is already padded with respect to the 
-                 * m_channels_storage size so we directly copy into host
+                /* The CUDA texture here is already padded with respect to the
+                 * m_channels_storage size so we directly copy into device
                  * memory. Note, that for correct gradient tracking during
-                 * texture evaluation, we need the tensor to be on the host,
-                 * and moreover the padded storage allows us to leverage 
+                 * texture evaluation, we need the tensor to be on the device,
+                 * and moreover the padded storage allows us to leverage
                  * PacketOps when performing gathers/scatters.
                  */
                 size_t tex_shape[Dimension + 1];
@@ -1404,7 +1461,6 @@ private:
                     m_value.array() = primal;
 
                 m_migrated = false;
-                m_tensor_dirty = true;
             }
         }
     }
@@ -1500,8 +1556,7 @@ private:
     size_t m_channels_storage = 0;          /* Rounded-up number of channels
                                                depending on backened */
     size_t m_shape[Dimension + 1] = {};     /* Unpadded shape of texture */
-    mutable TensorXf m_value;               /* Host-side store of tensor
-                                               padded for packet size */
+    mutable TensorXf m_value;               /* Tensor padded for packet size */
     mutable TensorXf m_unpadded_value;      /* Lazily computed if texture data
                                                is updated after initialization */
 
@@ -1513,7 +1568,7 @@ private:
     WrapMode m_wrap_mode;
     bool m_use_accel = false;
     mutable bool m_migrated = false;        /* CUDA backend flag to indicate
-                                               whether texture data is 
+                                               whether texture data is
                                                exclusively on the device */
     mutable bool m_tensor_dirty = false;    /* Flag to indicate whether
                                                public-facing unpadded tensor
