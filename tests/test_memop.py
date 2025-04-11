@@ -832,7 +832,7 @@ def test32_packet_ravel_unravel(t, capsys, drjit_verbose):
 @pytest.mark.parametrize('optimize', [True, False])
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
 @dr.syntax
-def test33_scatter_reduce_loop(t, mode, optimize, capsys):
+def test33_scatter_reduce_loop(t, mode, optimize):
     with dr.scoped_set_flag(dr.JitFlag.OptimizeLoops, optimize):
         i = dr.ones(t, 64)
         v = dr.zeros(t, 64)

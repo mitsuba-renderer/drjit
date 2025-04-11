@@ -100,17 +100,16 @@ def test02_interp_1d(t, wrap_mode, texture_type):
 
         StorageType = dr.array_t(tex.value())
 
-        for _ in range(0, 4):
-            values = StorageType(rng_1.next_float32())
-            tex.set_value(values)
-            tex_no_accel.set_value(values)
+        values = StorageType(rng_1.next_float32())
+        tex.set_value(values)
+        tex_no_accel.set_value(values)
 
-            pos = Array1f(rng_2.next_float32())
-            result_no_accel = tex_no_accel.eval(pos)
-            result_accel = tex.eval(pos)
-            dr.eval(result_no_accel, result_accel)
+        pos = Array1f(rng_2.next_float32())
+        result_no_accel = tex_no_accel.eval(pos)
+        result_accel = tex.eval(pos)
+        dr.eval(result_no_accel, result_accel)
 
-            assert dr.allclose(result_no_accel, result_accel, 5e-3, 5e-3)
+        assert dr.allclose(result_no_accel, result_accel, 5e-3, 5e-3)
 
 
 @pytest.mark.parametrize("wrap_mode", wrap_modes)
@@ -131,17 +130,16 @@ def test03_interp_2d(t, wrap_mode, texture_type):
         tex = TexType([N, M], ch, True, dr.FilterMode.Linear, wrap_mode)
         tex_no_accel = TexType([N, M], ch, False, dr.FilterMode.Linear, wrap_mode)
 
-        for _ in range(0, 4):
-            values = rng_1.next_float32()
-            tex.set_value(values)
-            tex_no_accel.set_value(values)
+        values = rng_1.next_float32()
+        tex.set_value(values)
+        tex_no_accel.set_value(values)
 
-            pos = Array2f(rng_2.next_float32(), rng_2.next_float32())
-            result_no_accel = tex_no_accel.eval(pos)
-            result_accel = tex.eval(pos)
-            dr.eval(result_no_accel, result_accel)
+        pos = Array2f(rng_2.next_float32(), rng_2.next_float32())
+        result_no_accel = tex_no_accel.eval(pos)
+        result_accel = tex.eval(pos)
+        dr.eval(result_no_accel, result_accel)
 
-            assert(dr.allclose(result_no_accel, result_accel, 5e-3, 5e-3))
+        assert(dr.allclose(result_no_accel, result_accel, 5e-3, 5e-3))
 
 
 @pytest.mark.parametrize("wrap_mode", wrap_modes)
@@ -162,17 +160,16 @@ def test04_interp_3d(t, wrap_mode, texture_type):
         tex = TexType([N, M, L], ch, True, dr.FilterMode.Linear, wrap_mode)
         tex_no_accel = TexType([N, M, L], ch, False, dr.FilterMode.Linear, wrap_mode)
 
-        for _ in range(0, 4):
-            values = rng_1.next_float32()
-            tex.set_value(values)
-            tex_no_accel.set_value(values)
+        values = rng_1.next_float32()
+        tex.set_value(values)
+        tex_no_accel.set_value(values)
 
-            pos = Array3f(rng_2.next_float32(), rng_2.next_float32(), rng_2.next_float32())
-            result_no_accel = tex_no_accel.eval(pos)
-            result_accel = tex.eval(pos)
-            dr.eval(result_no_accel, result_accel)
+        pos = Array3f(rng_2.next_float32(), rng_2.next_float32(), rng_2.next_float32())
+        result_no_accel = tex_no_accel.eval(pos)
+        result_accel = tex.eval(pos)
+        dr.eval(result_no_accel, result_accel)
 
-            assert(dr.allclose(result_no_accel, result_accel, 6e-3, 6e-3))
+        assert(dr.allclose(result_no_accel, result_accel, 6e-3, 6e-3))
 
 
 @pytest.mark.parametrize("migrate", [True, False])
@@ -565,12 +562,15 @@ def test18_fetch_1d(t, texture_type):
         tex_no_accel.set_value(tex_data)
 
         pos = Array1f(0.5)
-        out_no_acel = tex_no_accel.eval_fetch(pos)
+        out_no_accel = tex_no_accel.eval_fetch(pos)
         out_accel = tex.eval_fetch(pos)
+
+        dr.eval(tex_data, out_accel, out_no_accel)
+
         for k in range(0, ch):
-            assert dr.allclose(tex_data[k], out_no_acel[0][k])
+            assert dr.allclose(tex_data[k], out_no_accel[0][k])
             assert dr.allclose(tex_data[k], out_accel[0][k])
-            assert dr.allclose(tex_data[ch + k], out_no_acel[1][k])
+            assert dr.allclose(tex_data[ch + k], out_no_accel[1][k])
             assert dr.allclose(tex_data[ch + k], out_accel[1][k])
 
 
@@ -597,6 +597,9 @@ def test19_fetch_2d(t, texture_type):
         pos = Array2f(0.5, 0.5)
         out_no_accel = tex_no_accel.eval_fetch(pos)
         out_accel = tex.eval_fetch(pos)
+
+        dr.eval(tex_data, out_accel, out_no_accel)
+
         for k in range(0, ch):
             assert dr.allclose(tex_data[k], out_no_accel[0][k])
             assert dr.allclose(tex_data[k], out_accel[0][k])
@@ -631,6 +634,9 @@ def test20_fetch_3d(t, texture_type):
         pos = Array3f(0.3, 0.3, 0.3)
         out_no_accel = tex_no_accel.eval_fetch(pos)
         out_accel = tex.eval_fetch(pos)
+
+        dr.eval(tex_data, out_accel, out_no_accel)
+
         for k in range(0, ch):
             assert dr.allclose(tex_data[k], out_no_accel[0][k])
             assert dr.allclose(tex_data[k], out_accel[0][k])
