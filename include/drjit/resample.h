@@ -34,7 +34,7 @@ public:
      * Create a Resampler that uses a predefined reconstruction filter to
      * resample a signal from resolution ``source_res`` to ``target_res``.
      *
-     * The following options are available:
+     * The following ``filter`` presets are available:
      *
      * - ``"box"``: use nearest-neighbor interpolation/averaging. This is
      *   very efficient but generally produces sub-par output that is either
@@ -44,16 +44,29 @@ public:
      *    reconstruct each output sample when upsampling. Tends to produce
      *    relatively blurry results.
      *
-     * - ``"cubic"``: use cubic filter kernel that uses 4 neighbors to
+     * - ``"hamming"``: uses the same number of input samples as ``"linear"``
+     *    but better preserves sharpness when downscaling. Do not use for
+     *    upscaling.
+     *
+     * - ``"cubic"``: use cubic filter kernel that queries 4 neighbors to
      *   reconstruct each output sample when upsampling. Produces high-quality
      *   results.
      *
-     * - ``"lanczos"``: use a windowed Lanczos filter that uses 6 neighbors to
-     *   reconstruct each output sample when upsampling. This is the best filter
-     *   for smooth signals, but also the costliest. The Lanczos filter is
-     *   susceptible to ringing when the input array contains discontinuities.
+     * - ``"lanczos"``: use a windowed Lanczos filter that queries 6 neighbors
+     *   to reconstruct each output sample when upsampling. This is the best
+     *   filter for smooth signals, but also the costliest. The Lanczos filter
+     *   is susceptible to ringing when the input array contains discontinuities.
+     *
+     * - ``"gaussian"``: use a Gaussian filter that queries 4 neighbors to
+     *    reconstruct each output sample when upsampling. The Gaussian has a
+     *    standard deviation of 0.5 and is truncated after 4 standard
+     *    deviations. This filter is mainly useful when intending to blur a signal.
+     *
+     * The optional ``radius_scale`` parameter can be used to scale the
+     * filter kernel radius.
      */
-    Resampler(uint32_t source_res, uint32_t target_res, const char *filter);
+    Resampler(uint32_t source_res, uint32_t target_res, const char *filter,
+              double radius_scale = 1.0);
 
     /**
      * \brief Construct a Resampler using a custom filter kernel.
