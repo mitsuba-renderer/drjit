@@ -1467,8 +1467,21 @@ FlatVariablesHasher::operator()(const std::shared_ptr<FlatVariables> &key) const
         hash_combine(hash, (size_t) layout.vt);
         if (layout.type)
             hash_combine(hash, nb::hash(layout.type));
-        if (layout.py_object)
-            hash_combine(hash, nb::hash(layout.py_object));
+        if (layout.py_object){
+            PyObject *ptr = layout.py_object.ptr();
+            uint32_t object_hash;
+            Py_hash_t rv = PyObject_Hash(ptr);
+
+            // Try to hash the object, and otherwise fallback to ``id()``
+            if (rv == -1 && PyErr_Occurred()) {
+                PyErr_Clear();
+                object_hash = (uintptr_t) ptr;
+            } else {
+                object_hash = rv;
+            }
+
+            hash_combine(hash, object_hash);
+        }
         for (auto &field : layout.fields) {
             hash_combine(hash, nb::hash(field));
         }
