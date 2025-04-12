@@ -2956,6 +2956,7 @@ def test76_changing_literal_width_holder(t, auto_opaque):
     else:
         assert frozen.n_recordings == 1
 
+
 @pytest.test_arrays("float32, jit, diff, shape=(*)")
 @pytest.mark.parametrize("optimizer", ["sdg", "rmsprop", "adam"])
 @pytest.mark.parametrize("auto_opaque", [False, True])
@@ -3008,4 +3009,40 @@ def test77_optimizers(t, optimizer, auto_opaque):
             assert frozen.n_recordings == 2
         else:
             assert frozen.n_recordings == 1
+
+
+@pytest.test_arrays("float32, jit, shape=(*)")
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test78_hash_id_fallback(t, auto_opaque):
+
+    """
+    Test the hash to id fallback for object hashing if the object is not
+    traversible nor hashable.
+    """
+
+    n = 3
+
+    class Test:
+        x = 0
+
+        def __init__(self, x) -> None:
+            self.x = x
+
+        __hash__ = None
+
+    def func(x, test):
+        return x + test.x
+
+    frozen = dr.freeze(func)
+
+    for i in range(n):
+        x = dr.arange(t, 3)
+        y = Test(i)
+
+        res = frozen(x, y)
+        ref = func(x, y)
+
+        assert dr.allclose(res, ref)
+
+    assert frozen.n_recordings == 3
 
