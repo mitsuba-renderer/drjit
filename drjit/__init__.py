@@ -2550,7 +2550,8 @@ def freeze(
     - Changes in the **length** of a container (``list``, ``tuple``, ``dict``).
     - Changes of **dictionary keys**  or **field names** of dataclasses.
     - Changes in the AD status (:py:`dr.grad_enabled() <drjit.grad_enabled>`) of a variable.
-    - Changes of (non-PyTree) **Python objects**, as detected by mismatching ``hash()``.
+    - Changes of (non-PyTree) **Python objects**, as detected by mismatching ``hash()``
+      or ``id()`` if they are not hashable.
 
     The following more technical conditions also trigger re-tracing:
     - A Dr.Jit variable changes from/to a **scalar** configuration (size ``1``).
