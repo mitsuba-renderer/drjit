@@ -293,7 +293,11 @@ void FlatVariables::schedule_jit_variables(bool schedule_force,
         uint32_t index = layout.index;
 
         int rv = 0;
-        if (schedule_force || (opaque_mask && opaque_mask->at(i-layout_index))) {
+        // We have to force scheduling of undefined variables, in order to
+        // handle variables initialized with ``empty``.
+        if (schedule_force ||
+            (opaque_mask && opaque_mask->at(i - layout_index)) ||
+            jit_var_state(index) == VarState::Undefined) {
             // Returns owning reference
             index = jit_var_schedule_force(index, &rv);
         } else {
