@@ -139,18 +139,24 @@ template <typename T> struct PCG32 {
         return Float16(next_float32(mask));
     }
 
-    /// Generate a single precision floating point value on the interval [0, 1)
+    /// Generate a single precision floating point value on the interval (0, 1)
     DRJIT_INLINE Float32 next_float32() {
-        return reinterpret_array<Float32>(sr<9>(next_uint32()) | 0x3f800000u) - 1.f;
+        UInt32 rand_bits = next_uint32();
+        UInt32 mantissa_bits = select((rand_bits & sl<9>(~0u)) != 0u, sr<9>(rand_bits), sl<14>(rand_bits) | sl<13>(1u));
+        UInt32 float_bits = (mantissa_bits) | 0x3f800000u;
+        return reinterpret_array<Float32>(float_bits) - 1.f;
     }
 
     /// Masked version of \ref next_float32
     DRJIT_INLINE Float32 next_float32(const Mask &mask) {
-        return reinterpret_array<Float32>(sr<9>(next_uint32(mask)) | 0x3f800000u) - 1.f;
+        UInt32 rand_bits = next_uint32(mask);
+        UInt32 mantissa_bits = select((rand_bits & sl<9>(~0u)) != 0u, sr<9>(rand_bits), sl<14>(rand_bits) | sl<13>(1u));
+        UInt32 float_bits = (mantissa_bits) | 0x3f800000u;
+        return reinterpret_array<Float32>(float_bits) - 1.f;
     }
 
     /**
-     * \brief Generate a double precision floating point value on the interval [0, 1)
+     * \brief Generate a double precision floating point value on the interval (0, 1)
      *
      * \remark Since the underlying random number generator produces 32 bit output,
      * only the first 32 mantissa bits will be filled (however, the resolution is still
@@ -158,15 +164,15 @@ template <typename T> struct PCG32 {
      */
     DRJIT_INLINE Float64 next_float64() {
         /* Trick from MTGP: generate an uniformly distributed
-           double precision number in [1,2) and subtract 1. */
+           double precision number in (1,2) and subtract 1. */
         return reinterpret_array<Float64>(sl<20>(UInt64(next_uint32())) |
-                                          0x3ff0000000000000ull) - 1.0;
+                                          0x3ff0000000080000ull) - 1.0;
     }
 
     /// Masked version of next_float64
     DRJIT_INLINE Float64 next_float64(const Mask &mask) {
         return reinterpret_array<Float64>(sl<20>(UInt64(next_uint32(mask))) |
-                                          0x3ff0000000000000ull) - 1.0;
+                                          0x3ff0000000080000ull) - 1.0;
     }
 
     /// Forward \ref next_float call to the correct method based given type size
