@@ -10,6 +10,7 @@
 
 #include <drjit/resample.h>
 #include <drjit/while_loop.h>
+#include <drjit/math.h>
 #include <nanothread/nanothread.h>
 #include <cmath>
 #include <algorithm>
@@ -28,7 +29,7 @@ struct Resampler::Impl {
     mutable std::any weights_cache;
 
     Impl(uint32_t source_res, uint32_t target_res, Resampler::Filter filter,
-         const void *payload, double radius)
+         const void *payload, double radius, double radius_scale)
         : source_res(source_res), target_res(target_res) {
         if (source_res == 0 || target_res == 0)
             throw std::runtime_error("drjit.Resampler(): source/target resolution cannot be zero!");
@@ -41,7 +42,14 @@ struct Resampler::Impl {
             radius *= scale;
         }
 
+        if (source_res == target_res) {
+            // Convolution mode, adapt to filter size scale factor
+            radius *= radius_scale;
+            filter_scale /= radius_scale;
+        }
+
         taps = (uint32_t) std::ceil(radius * 2);
+
         offset = unique_ptr<uint32_t[]>(new uint32_t[target_res]);
         weights = unique_ptr<double[]>(new double[taps * target_res]);
 
@@ -121,7 +129,7 @@ static inline double sinc(double x) {
     return std::sin(x) / x;
 }
 
-Resampler::Resampler(uint32_t source_res, uint32_t target_res, const char *filter) {
+Resampler::Resampler(uint32_t source_res, uint32_t target_res, const char *filter, double radius_scale) {
     Resampler::Filter filter_cb = nullptr;
     double radius = 0.0;
 
@@ -167,18 +175,29 @@ Resampler::Resampler(uint32_t source_res, uint32_t target_res, const char *filte
             return sinc(x) * sinc(x * (1.0 / 3.0));
         };
         radius = 3.f;
+    } else if (strcmp(filter, "gaussian") == 0) {
+        filter_cb = [](double x, const void *) -> double {
+            if (x < -2.0 || x >= 2.0)
+                return 0.0;
+            double stddev = .5,
+                   alpha = -1.0 / (2.0 * square(stddev));
+            return maximum(0.f, exp(alpha * square(x)) - exp(alpha * square(2.0)));
+
+
+        };
+        radius = 2.f;
     } else {
         throw std::runtime_error("'filter': unknown value ('box', 'linear', "
                                  "'hamming', 'cubic', and 'lanczos' are supported).");
     }
 
-    d = new Impl(source_res, target_res, filter_cb, nullptr, radius);
+    d = new Impl(source_res, target_res, filter_cb, nullptr, radius, radius_scale);
 }
 
 Resampler::Resampler(uint32_t source_res, uint32_t target_res,
                      Resampler::Filter filter, const void *payload,
                      double radius)
-    : d(new Impl(source_res, target_res, filter, payload, radius)) {
+    : d(new Impl(source_res, target_res, filter, payload, radius, 1.0)) {
 }
 
 Resampler::~Resampler() { }

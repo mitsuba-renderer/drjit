@@ -102,3 +102,14 @@ def test06_manual_filter(t):
     )
 
     assert dr.allclose(r1, r2)
+
+# Test filtering a signal without changing its resolution
+@pytest.test_arrays('float, -jit, shape=(*)')
+def test07_convolve(t):
+    x = t(1, 2, 10, 100)
+    y = dr.convolve(x, 'linear', 1)
+    assert dr.allclose(x, y)
+
+    y = dr.convolve(x, 'linear', 2)
+    z = t((1+2*.5)/1.5, (1*.5+2+10*.5)/2, (2*.5+10+100*.5)/2, (100+10*.5)/1.5)
+    assert dr.allclose(y, z)
