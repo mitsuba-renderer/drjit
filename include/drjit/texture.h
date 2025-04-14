@@ -42,34 +42,34 @@ enum class CudaTextureFormat : uint32_t {
     Float16 = 1, /// Half precision storage format
 };
 
-template <typename _Storage, size_t Dimension> class Texture {
+template <typename Storage_, size_t Dimension> class Texture {
 public:
-    static constexpr bool IsCUDA = is_cuda_v<_Storage>;
-    static constexpr bool IsDiff = is_diff_v<_Storage>;
-    static constexpr bool IsDynamic = is_dynamic_v<_Storage>;
+    static constexpr bool IsCUDA = is_cuda_v<Storage_>;
+    static constexpr bool IsDiff = is_diff_v<Storage_>;
+    static constexpr bool IsDynamic = is_dynamic_v<Storage_>;
     // Only half/single-precision floating-point CUDA textures are supported
-    static constexpr bool IsHalf = std::is_same_v<scalar_t<_Storage>, drjit::half>;
-    static constexpr bool IsSingle = std::is_same_v<scalar_t<_Storage>, float>;
+    static constexpr bool IsHalf = std::is_same_v<scalar_t<Storage_>, drjit::half>;
+    static constexpr bool IsSingle = std::is_same_v<scalar_t<Storage_>, float>;
     static constexpr bool HasCudaTexture = (IsHalf || IsSingle) && IsCUDA;
     static constexpr int CudaFormat = HasCudaTexture ?
         IsHalf ? (int)CudaTextureFormat::Float16 : (int)CudaTextureFormat::Float32 : -1;
 
-    using Int32 = int32_array_t<_Storage>;
-    using UInt32 = uint32_array_t<_Storage>;
-    using Storage = std::conditional_t<IsDynamic, _Storage, DynamicArray<_Storage>>;
-    using Packet = std::conditional_t<is_jit_v<_Storage>,
-        DynamicArray<_Storage>, _Storage*>;
+    using Int32 = int32_array_t<Storage_>;
+    using UInt32 = uint32_array_t<Storage_>;
+    using Storage = std::conditional_t<IsDynamic, Storage_, DynamicArray<Storage_>>;
+    using Packet = std::conditional_t<is_jit_v<Storage_>,
+        DynamicArray<Storage_>, Storage_*>;
     using TensorXf = Tensor<Storage>;
 
     #define DR_TEX_ALLOC_PACKET(name, size)                     \
         Packet _packet;                                         \
-        _Storage* name;                                         \
+        Storage_* name;                                         \
                                                                 \
         if constexpr (is_jit_v<Value>) {                        \
             _packet = empty<Packet>(m_channels_storage);        \
             name = _packet.data();                              \
         } else {                                                \
-            name = (_Storage*) alloca(sizeof(_Storage) * size); \
+            name = (Storage_*) alloca(sizeof(Storage_) * size); \
             (void) _packet;                                     \
         }
 
@@ -125,7 +125,8 @@ public:
      * Both the \c filter_mode and \c wrap_mode have the same defaults and
      * behaviors as for the previous constructor.
      */
-    Texture(const TensorXf &tensor, bool use_accel = true, bool migrate = true,
+    template <typename TensorT>
+    Texture(TensorT &&tensor, bool use_accel = true, bool migrate = true,
             FilterMode filter_mode = FilterMode::Linear,
             WrapMode wrap_mode = WrapMode::Clamp) {
         if (tensor.ndim() != Dimension + 1)
@@ -133,7 +134,7 @@ public:
                         "texture dimension plus one.");
         init(tensor.shape().data(), tensor.shape(Dimension), use_accel,
              filter_mode, wrap_mode);
-        set_tensor(tensor, migrate);
+        set_tensor(std::forward<TensorT>(tensor), migrate);
     }
 
     Texture(Texture &&other) noexcept {
@@ -209,16 +210,17 @@ public:
      * When \c migrate is set to \c true on CUDA mode, the texture information
      * is *fully* migrated to GPU texture memory to avoid redundant storage.
      */
-    void set_value(const Storage &value, bool migrate=false) {
-        if constexpr (!is_jit_v<_Storage>) {
+    template <typename StorageT>
+    void set_value(StorageT &&value, bool migrate = false) {
+        if constexpr (!is_jit_v<Storage_>) {
             if (value.size() != m_size)
                 jit_raise("Texture::set_value(): unexpected array size!");
-            m_value.array() = value;
+            m_value.array() = std::forward<StorageT>(value);
         } else /* JIT variant */ {
             Storage padded_value;
 
             if (m_channels_storage != m_channels) {
-                using Mask = mask_t<_Storage>;
+                using Mask = mask_t<Storage_>;
                 UInt32 idx = arange<UInt32>(m_size);
                 UInt32 pixels_idx = idx / m_channels_storage;
                 UInt32 channel_idx = idx % m_channels_storage;
@@ -230,7 +232,9 @@ public:
             }
 
             if (padded_value.size() != m_size)
-                jit_raise("Texture::set_value(): unexpected array size!");
+                jit_raise(
+                    "Texture::set_value(): unexpected array size (%zu vs %zu)!",
+                    padded_value.size(), m_size);
 
             // We can always re-compute the unpadded values from the padded
             // ones. However, if we systematically do that, users will not be
@@ -242,9 +246,11 @@ public:
             // the correct gradient value.
             // To solve this issue, we store the AD index now, and re-attach
             // it to the output of `tensor()` on every call.
-            if constexpr (IsDiff)
-                m_unpadded_value.array() =
-                    replace_grad(m_unpadded_value.array(), value);
+            if constexpr (IsDiff) {
+                if (grad_enabled(value))
+                    m_unpadded_value.array() =
+                        replace_grad(m_unpadded_value.array(), value);
+            }
 
             if constexpr (HasCudaTexture) {
                 if (m_use_accel) {
@@ -286,12 +292,13 @@ public:
      * When \c migrate is set to \c true on CUDA mode, the texture information
      * is *fully* migrated to GPU texture memory to avoid redundant storage.
      */
-    void set_tensor(const TensorXf &tensor, bool migrate=false) {
+    template <typename TensorT>
+    void set_tensor(TensorT &&tensor, bool migrate = false) {
         if (tensor.ndim() != Dimension + 1)
             jit_raise("Texture::set_tensor(): tensor dimension must equal "
-                        "texture dimension plus one (channels).");
+                      "texture dimension plus one (channels).");
 
-        if (&tensor == &m_unpadded_value) {
+        if ((void *) &tensor == (void *) &m_unpadded_value) {
             jit_log(::LogLevel::Warn,
                     "Texture::set_tensor(): the `tensor` argument is a "
                     "reference to this texture's own tensor representation "
@@ -311,9 +318,12 @@ public:
 
         // Only update tensors & CUDA texture if shape changed
         init(tensor.shape().data(), tensor.shape(Dimension),
-            m_use_accel, m_filter_mode, m_wrap_mode, shape_changed);
+             m_use_accel, m_filter_mode, m_wrap_mode, shape_changed);
 
-        set_value(tensor.array(), migrate);
+        if constexpr (std::is_lvalue_reference_v<TensorT>)
+            set_value(tensor.array(), migrate);
+        else
+            set_value(std::move(tensor.array()), migrate);
     }
 
     /**
@@ -342,7 +352,7 @@ public:
             }
         }
 
-        if constexpr (!is_jit_v<_Storage>) {
+        if constexpr (!is_jit_v<Storage_>) {
             if (shape_changed)
                 init(m_unpadded_value.shape().data(),
                      m_unpadded_value.shape(Dimension), m_use_accel, m_filter_mode,
@@ -371,7 +381,7 @@ public:
      * \brief Return the texture data as a tensor object
      */
     const TensorXf &tensor() const {
-        if constexpr (!is_jit_v<_Storage>) {
+        if constexpr (!is_jit_v<Storage_>) {
             return m_value;
         } else {
             sync_device_data();
@@ -412,7 +422,7 @@ public:
      */
     TensorXf &tensor() {
         return const_cast<TensorXf &>(
-            const_cast<const Texture<_Storage, Dimension> *>(this)->tensor());
+            const_cast<const Texture<Storage_, Dimension> *>(this)->tensor());
     }
 
     /**
@@ -1386,7 +1396,7 @@ protected:
         m_channels = channels;
 
         // Determine padding used for channels depending on backend
-        if constexpr (is_jit_v<_Storage>) {
+        if constexpr (is_jit_v<Storage_>) {
             m_channels_storage = 1;
             while (m_channels_storage < m_channels)
                 m_channels_storage <<= 1;
@@ -1413,10 +1423,18 @@ protected:
         m_wrap_mode = wrap_mode;
 
         if (init_tensor) {
-            m_value =
-                TensorXf(empty<Storage>(m_size), Dimension + 1, tensor_shape);
-            m_unpadded_value =
-                TensorXf(empty<Storage>(unpadded_size), Dimension + 1, m_shape);
+            if constexpr (is_jit_v<Storage_>) {
+                m_value =
+                    TensorXf(empty<Storage>(m_size), Dimension + 1, tensor_shape);
+                m_unpadded_value =
+                    TensorXf(empty<Storage>(unpadded_size), Dimension + 1, m_shape);
+            } else {
+                // Don't allocate memory in scalar modes
+                m_value =
+                    TensorXf(Storage::map_(nullptr, m_size), Dimension + 1, tensor_shape);
+                m_unpadded_value =
+                    TensorXf(Storage::map_(nullptr, unpadded_size), Dimension + 1, m_shape);
+            }
         }
 
         if constexpr (HasCudaTexture) {

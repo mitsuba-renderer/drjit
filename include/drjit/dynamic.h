@@ -407,6 +407,14 @@ struct DynamicArray
         m_free = true;
     }
 
+    static DynamicArray map_(Value *value, size_t size) {
+        DynamicArray result;
+        result.m_data = value;
+        result.m_size = size;
+        result.m_free = false;
+        return result;
+    }
+
     static auto counter(size_t size) {
         uint32_array_t<DynamicArray> result;
         result.init_(size);

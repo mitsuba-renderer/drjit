@@ -26,8 +26,8 @@ void bind_texture(nb::module_ &m, const char *name) {
              "filter_mode"_a = dr::FilterMode::Linear,
              "wrap_mode"_a = dr::WrapMode::Clamp,
              doc_Texture_init_tensor)
-        .def("set_value",  &Tex::set_value,  "value"_a,  "migrate"_a = false, doc_Texture_set_value)
-        .def("set_tensor", &Tex::set_tensor, "tensor"_a, "migrate"_a = false, doc_Texture_set_tensor)
+        .def("set_value", &Tex::template set_value<const typename Tex::Storage &>, "value"_a, "migrate"_a = false, doc_Texture_set_value)
+        .def("set_tensor", &Tex::template set_tensor<const typename Tex::TensorXf &>, "tensor"_a,  "migrate"_a = false, doc_Texture_set_tensor)
         .def("inplace_update", &Tex::inplace_update, "migrate"_a = false, doc_Texture_inplace_update)
         .def("value", &Tex::value, nb::rv_policy::reference_internal, doc_Texture_value)
         .def("tensor",
