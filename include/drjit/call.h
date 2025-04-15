@@ -17,21 +17,15 @@
 #include <drjit/autodiff.h>
 
 NAMESPACE_BEGIN(drjit)
-
 NAMESPACE_BEGIN(detail)
+// Helper template to extract the ::Variant member if it exists
+template <typename T, typename = void> struct variant {
+    static constexpr const char *value = "";
+};
 
-template <typename T>
-using has_variant_override = decltype(T::variant_());
-
-template <typename CallSupport>
-constexpr const char *get_variant(const char *fallback) {
-    if constexpr (is_detected_v<has_variant_override, CallSupport>) {
-        return CallSupport::variant_();
-    } else {
-        return fallback;
-    }
-}
-
+template <typename T> struct variant<T, std::void_t<decltype(T::Variant)>> {
+    static constexpr const char *value = T::Variant;
+};
 NAMESPACE_END(detail)
 
 #define DRJIT_CALL_BEGIN(Name)                                                 \
@@ -42,6 +36,9 @@ NAMESPACE_END(detail)
             using Class_ = Name;                                               \
             using Mask_ = mask_t<Self>;                                        \
             using CallSupport_ = call_support<Name, Self>;                     \
+            static constexpr const char *Domain = #Name;                       \
+            static constexpr const char *Variant =                             \
+                detail::variant<Name>::value;                                  \
             call_support(const Self &self) : self(self) { }                    \
             const call_support *operator->() const {                           \
                 return this;                                                   \
@@ -55,6 +52,9 @@ NAMESPACE_END(detail)
             using Class_ = Name<Ts...>;                                        \
             using Mask_ = mask_t<Self>;                                        \
             using CallSupport_ = call_support<Name<Ts...>, Self>;              \
+            static constexpr const char *Domain = #Name;                       \
+            static constexpr const char *Variant =                             \
+                drjit::detail::variant<Class_>::value;                         \
             call_support(const Self &self) : self(self) { }                    \
             const call_support *operator->() const {                           \
                 return this;                                                   \
@@ -80,13 +80,7 @@ NAMESPACE_END(detail)
         };                                                                     \
     }
 
-#define DRJIT_CALL_END(Name)                                                   \
-        public:                                                                \
-            static constexpr const char *Domain = #Name;                       \
-            /* Define `Variant` at the end so that the optional `variant_()`*/ \
-            /* method provided by the user can be detected (if given).      */ \
-            static constexpr const char *Variant =                             \
-                detail::get_variant<CallSupport_>("");                         \
+#define DRJIT_CALL_END()                                                       \
         protected:                                                             \
             const Self &self;                                                  \
         };                                                                     \
