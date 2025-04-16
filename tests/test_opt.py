@@ -300,3 +300,15 @@ def test08_amp(t):
         scaler.step(opt)
     assert dr.shape(opt["x"] == (2, 2))
     assert dr.allclose(opt["x"], 2.00245)
+
+@pytest.test_arrays("is_diff,float,shape=(3, *),float32")
+def test09_optimize_nested(t):
+    # Test that nested arrays are correctly handled
+    opt = Adam(lr=1)
+    opt["x"] = t(1, 2, 3)
+    opt["x"].grad = t(-1, -1, -1)
+    opt.step()
+    opt["x"].grad = t(-1, -1, -1)
+    opt.step()
+    print(opt["x"])
+    assert dr.width(opt["x"]) == 1

@@ -652,11 +652,12 @@ class SGD(Optimizer[Optional[dr.ArrayBase]]):
         return dr.fma(step, scale, value), v_next
 
     def _reset(self, key: str, value: dr.ArrayBase, /) -> None:
-        tp = dr.array_t(value)
+        valarr = value.array
+        tp = type(valarr)
         if self.momentum == 0:
             m = None
         else:
-            m = dr.opaque(tp, 0, dr.prod(value.shape))
+            m = dr.opaque(tp, 0, valarr.shape)
         self.state[key] = value, None, m
 
     def __repr__(self):
@@ -787,8 +788,9 @@ class RMSProp(Optimizer[dr.ArrayBase]):
 
     # Implementation detail of Optimizer.reset()
     def _reset(self, key: str, value: dr.ArrayBase, /) -> None:
-        tp = dr.array_t(value)
-        m_t = dr.opaque(tp, 0, dr.prod(value.shape))
+        valarr = value.array
+        tp = type(valarr)
+        m_t = dr.opaque(tp, 0, valarr.shape)
         self.state[key] = value, None, m_t
 
     def __repr__(self):
@@ -977,10 +979,10 @@ class Adam(Optimizer[Tuple[int, dr.ArrayBase, dr.ArrayBase]]):
 
     # Implementation detail of Optimizer.reset()
     def _reset(self, key: str, value: dr.ArrayBase, /) -> None:
-        tp = dr.array_t(value)
-        size = dr.prod(value.shape)
-        m_t = dr.opaque(tp, 0, size)
-        v_t = dr.opaque(tp, 0, size)
+        valarr = value.array
+        tp = type(valarr)
+        m_t = dr.opaque(tp, 0, valarr.shape)
+        v_t = dr.opaque(tp, 0, valarr.shape)
         self.state[key] = value, None, (0, m_t, v_t)
 
     # Blend between the old and new versions of the optimizer extra state
