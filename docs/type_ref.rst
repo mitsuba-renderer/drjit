@@ -395,7 +395,7 @@ Textures
    .. automethod:: __init__
    .. automethod:: set_value
    .. automethod:: set_tensor
-   .. automethod:: inplace_update
+   .. automethod:: update_inplace
    .. automethod:: value
    .. automethod:: tensor
    .. automethod:: filter_mode
@@ -415,7 +415,7 @@ Textures
    .. automethod:: __init__
    .. automethod:: set_value
    .. automethod:: set_tensor
-   .. automethod:: inplace_update
+   .. automethod:: update_inplace
    .. automethod:: value
    .. automethod:: tensor
    .. automethod:: filter_mode
@@ -435,7 +435,7 @@ Textures
    .. automethod:: __init__
    .. automethod:: set_value
    .. automethod:: set_tensor
-   .. automethod:: inplace_update
+   .. automethod:: update_inplace
    .. automethod:: value
    .. automethod:: tensor
    .. automethod:: filter_mode
@@ -455,7 +455,7 @@ Textures
    .. automethod:: __init__
    .. automethod:: set_value
    .. automethod:: set_tensor
-   .. automethod:: inplace_update
+   .. automethod:: update_inplace
    .. automethod:: value
    .. automethod:: tensor
    .. automethod:: filter_mode
@@ -475,7 +475,7 @@ Textures
    .. automethod:: __init__
    .. automethod:: set_value
    .. automethod:: set_tensor
-   .. automethod:: inplace_update
+   .. automethod:: update_inplace
    .. automethod:: value
    .. automethod:: tensor
    .. automethod:: filter_mode
@@ -495,7 +495,7 @@ Textures
    .. automethod:: __init__
    .. automethod:: set_value
    .. automethod:: set_tensor
-   .. automethod:: inplace_update
+   .. automethod:: update_inplace
    .. automethod:: value
    .. automethod:: tensor
    .. automethod:: filter_mode
@@ -515,7 +515,7 @@ Textures
    .. automethod:: __init__
    .. automethod:: set_value
    .. automethod:: set_tensor
-   .. automethod:: inplace_update
+   .. automethod:: update_inplace
    .. automethod:: value
    .. automethod:: tensor
    .. automethod:: filter_mode
@@ -535,7 +535,7 @@ Textures
    .. automethod:: __init__
    .. automethod:: set_value
    .. automethod:: set_tensor
-   .. automethod:: inplace_update
+   .. automethod:: update_inplace
    .. automethod:: value
    .. automethod:: tensor
    .. automethod:: filter_mode
@@ -555,7 +555,7 @@ Textures
    .. automethod:: __init__
    .. automethod:: set_value
    .. automethod:: set_tensor
-   .. automethod:: inplace_update
+   .. automethod:: update_inplace
    .. automethod:: value
    .. automethod:: tensor
    .. automethod:: filter_mode
@@ -977,7 +977,7 @@ Textures
    .. automethod:: __init__
    .. automethod:: set_value
    .. automethod:: set_tensor
-   .. automethod:: inplace_update
+   .. automethod:: update_inplace
    .. automethod:: value
    .. automethod:: tensor
    .. automethod:: filter_mode

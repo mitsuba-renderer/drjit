@@ -811,7 +811,7 @@ def test24_set_tensor_ad(t, texture_type):
     current_tensor = tex.tensor()
     dr.scatter(current_tensor.array, new_tensor.array, dr.arange(UInt32, 12))
     new_tensor_index_ad = current_tensor.array.index_ad
-    tex.inplace_update(migrate=False) # Signal update
+    tex.update_inplace(migrate=False) # Signal update
     assert tex.tensor().array.index_ad == new_tensor_index_ad
     assert dr.allclose(tex.tensor(), new_tensor)
 
@@ -823,7 +823,7 @@ def test24_set_tensor_ad(t, texture_type):
     current_tensor = tex.tensor()
     dr.scatter(current_tensor.array, new_tensor.array, dr.arange(UInt32, 12))
     new_tensor_index_ad = current_tensor.array.index_ad
-    tex.inplace_update(migrate=True) # Signal update
+    tex.update_inplace(migrate=True) # Signal update
     assert tex.tensor().array.index_ad == new_tensor_index_ad
     assert dr.allclose(tex.tensor(), new_tensor)
 

@@ -28,7 +28,7 @@ void bind_texture(nb::module_ &m, const char *name) {
              doc_Texture_init_tensor)
         .def("set_value", &Tex::template set_value<const typename Tex::Storage &>, "value"_a, "migrate"_a = false, doc_Texture_set_value)
         .def("set_tensor", &Tex::template set_tensor<const typename Tex::TensorXf &>, "tensor"_a,  "migrate"_a = false, doc_Texture_set_tensor)
-        .def("inplace_update", &Tex::inplace_update, "migrate"_a = false, doc_Texture_inplace_update)
+        .def("update_inplace", &Tex::update_inplace, "migrate"_a = false, doc_Texture_update_inplace)
         .def("value", &Tex::value, nb::rv_policy::reference_internal, doc_Texture_value)
         .def("tensor",
              nb::overload_cast<>(&Tex::tensor, nb::const_),

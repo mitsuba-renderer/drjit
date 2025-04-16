@@ -303,7 +303,7 @@ public:
                     "Texture::set_tensor(): the `tensor` argument is a "
                     "reference to this texture's own tensor representation "
                     "(obtained through `Texture::tensor()`. Such an update "
-                    "must be applied with the `Texture::inplace_update()` "
+                    "must be applied with the `Texture::update_inplace()` "
                     "method.");
             return;
         }
@@ -339,9 +339,9 @@ public:
      * When \c migrate is set to \c true on CUDA mode, the texture information
      * is *fully* migrated to GPU texture memory to avoid redundant storage.
      */
-    void inplace_update(bool migrate = false) {
+    void update_inplace(bool migrate = false) {
         if (m_unpadded_value.ndim() != Dimension + 1)
-            jit_raise("Texture::inplace_update(): tensor dimension must equal "
+            jit_raise("Texture::update_inplace(): tensor dimension must equal "
                       "texture dimension plus one (channels).");
 
         bool shape_changed = false;

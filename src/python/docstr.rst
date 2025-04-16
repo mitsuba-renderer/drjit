@@ -6412,7 +6412,7 @@
     the texture exclusively stores a copy of the input data as a CUDA texture to avoid
     redundant storage.Note that the texture is still differentiable even when migrated.
 
-.. topic:: Texture_inplace_update
+.. topic:: Texture_update_inplace
     Update the texture after applying an indirect update to its tensor
     representation (obtained with py:func:`tensor()`).
 
