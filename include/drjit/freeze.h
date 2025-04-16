@@ -10,6 +10,7 @@
     license that can be found in the LICENSE file.
 */
 
+#include "drjit-core/jit.h"
 #include <drjit/autodiff.h>
 #include <drjit/array_router.h>
 #include <drjit/jit.h>
@@ -62,13 +63,13 @@ void update_indices(Value &value, uint32_t n_indices, uint32_t *indices) {
     traverse_1_fn_rw(value, (void *) &p,
                      [](void *payload, uint64_t, const char * /*variant*/,
                         const char * /*domain*/) {
-                         Payload *p = (Payload *) p;
+                         Payload *p = (Payload *) payload;
                          if (p->i >= p->n_indices)
                              jit_fail("More indices available to assign that "
                                       "where provided");
-                         return p->indices[p->i++];
+                         return (uint64_t) p->indices[p->i++];
                      });
-    if (p->i < n_indices)
+    if (p.i < n_indices)
         jit_fail("Tried to assign more indices than the value could accept");
 }
 
@@ -80,25 +81,36 @@ auto custom_fn(Func func, Args &&...args) {
         return func(args...);
     } else {
         using Output     = typename std::invoke_result<Func, Args...>::type;
-        using InputState = std::tuple<typename std::decay<Args>::type...>;
 
         scoped_set_flag fscope(JitFlag::EnableObjectTraversal, true);
-
-        make_opaque(args...);
 
         drjit::vector<uint32_t> input_indices;
         drjit::vector<uint32_t> output_indices;
 
-        auto input = std::tuple(args...);
+        auto input = std::make_tuple(args...);
+        using InputState = decltype(input);
 
-        detail::collect_indices<true>(input, input_indices);
+        collect_indices<true>(input, input_indices);
+        for (uint32_t i = 0; i < input_indices.size(); i++) {
+            jit_var_schedule(input_indices[i]);
+            // int rv;
+            // input_indices[i] = jit_var_schedule_force(input_indices[i], &rv);
+        }
+        jit_eval();
+        // update_indices(input, input_indices.size(), input_indices.data());
 
         jit_freeze_pause(Backend);
         auto output = func(args...);
         make_opaque(output);
         jit_freeze_resume(Backend);
 
-        detail::collect_indices<true>(output, output_indices);
+        collect_indices<true>(output, output_indices);
+        for (uint32_t i = 0; i < output_indices.size(); i++) {
+            int rv;
+            output_indices[i] = jit_var_schedule_force(output_indices[i], &rv);
+        }
+        jit_eval();
+        update_indices(output, output_indices.size(), output_indices.data());
 
         struct Payload{
             Func func;
@@ -108,21 +120,21 @@ auto custom_fn(Func func, Args &&...args) {
         };
 
         Payload p = { func, (uint32_t) input_indices.size(),
-                      (uint32_t) output_indices.size(), std::move(input) };
+                      (uint32_t) output_indices.size(), input };
 
         auto wrapper = [](void *payload, uint32_t *inputs, uint32_t *outputs) {
             Payload *p = (Payload *) payload;
 
             drjit::vector<uint32_t> input_backup;
-            detail::collect_indices<false>(input, input_backup);
-            detail::update_indices(p->input, p->n_inputs, inputs);
+            collect_indices<false>(p->input, input_backup);
+            update_indices(p->input, (uint32_t) p->n_inputs, inputs);
 
             auto output = std::apply(p->func, p->input);
 
             make_opaque(output);
-            detail::collect_indices<false>(output, p->n_outputs, outputs);
+            collect_indices<false>(output, p->n_outputs, outputs);
 
-            detail::update_indices(p->input, input_backup);
+            update_indices(p->input, input_backup.size(), input_backup.data());
         };
 
         jit_freeze_custom_fn(Backend, wrapper, nullptr, &p,

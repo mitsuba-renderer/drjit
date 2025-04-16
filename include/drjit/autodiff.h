@@ -1004,7 +1004,8 @@ void update_indices(Value &value, const vector<uint64_t> &indices, size_t &pos) 
     traverse_1_fn_rw(value, (void *) &payload, update_indices_fn);
 }
 
-template <typename T> void update_indices(T &value, const vector<uint64_t> &indices) {
+template <typename T>
+void update_indices(T &value, const vector<uint64_t> &indices) {
     size_t pos = 0;
     update_indices(value, indices, pos);
 #if !defined(NDEBUG)
