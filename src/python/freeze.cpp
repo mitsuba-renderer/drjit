@@ -3,6 +3,7 @@
 #include "autodiff.h"
 #include "base.h"
 #include "common.h"
+#include "detail.h"
 #include "reduce.h"
 #include "listobject.h"
 #include "object.h"
@@ -1034,8 +1035,10 @@ void FlatVariables::assign(nb::handle dst, TraverseContext &ctx) {
     nb::handle tp  = dst.type();
     Layout &layout = this->layout[layout_index++];
 
+    // jit_log(LogLevel::Debug, "FlatVariables::assign(): %s with %s {",
+    //         nb::type_name(tp).c_str(), nb::type_name(layout.type).c_str());
     jit_log(LogLevel::Debug, "FlatVariables::assign(): %s with %s {",
-            nb::type_name(tp).c_str(), nb::type_name(layout.type).c_str());
+            nb::str(tp).c_str(), nb::str(layout.type).c_str());
 
     if (!layout.type.equal(tp))
         jit_raise("Type missmatch! Type of the object at location %s when "
@@ -1926,13 +1929,125 @@ int frozen_function_clear(PyObject *self) {
     return 0;
 }
 
+nb::object custom_fn(nb::callable func, nb::args args, nb::kwargs kwargs) {
+    bool recording = jit_flag(JitFlag::FreezingScope);
+
+    if (!recording) {
+        return func(*args, **kwargs);
+    } else {
+
+        struct Payload {
+            nb::callable func;
+            nb::list input;
+            FlatVariables input_variables;
+            FlatVariables output_variables;
+
+            Payload(nb::callable func) : func(func) {}
+        };
+        Payload *p = new Payload(func);
+        p->input.append(args);
+        p->input.append(kwargs);
+
+        jit_log(LogLevel::Trace, "custom_fn(): traverse inputs");
+        {
+            TraverseContext ctx;
+            p->input_variables.traverse(p->input, ctx);
+            p->input_variables.layout_index = 0;
+            p->input_variables.schedule_jit_variables(true, nullptr);
+            p->input_variables.layout_index = 0;
+            { // Evaluate the variables, scheduled when traversing
+                nb::gil_scoped_release guard;
+                jit_eval();
+            }
+            p->input_variables.record_jit_variables();
+
+            p->input_variables.assign(p->input, ctx);
+            p->input_variables.layout_index = 0;
+        }
+
+        jit_freeze_pause(p->input_variables.backend);
+        nb::object output = func(*args, **kwargs);
+
+        jit_log(LogLevel::Trace, "custom_fn(): traverse outputs");
+        {
+            TraverseContext ctx;
+            p->output_variables.traverse(output, ctx);
+            p->output_variables.schedule_jit_variables(true, nullptr);
+            p->output_variables.layout_index = 0;
+            { // Evaluate the variables, scheduled when traversing
+                nb::gil_scoped_release guard;
+                jit_eval();
+            }
+            p->output_variables.record_jit_variables();
+        }
+
+        jit_freeze_resume(p->input_variables.backend);
+
+        auto inner = [](void *payload, uint32_t *inputs, uint32_t *outputs) {
+            nb::gil_scoped_acquire guard;
+            Payload *p = (Payload *) payload;
+
+            // FlatVariables input_backup;
+            dr::vector<uint64_t> input_backup;
+            {
+                scoped_set_flag scoped_flags(JitFlag::EnableObjectTraversal,
+                                             true);
+                collect_indices(p->input, input_backup);
+            }
+            for (uint64_t index : input_backup)
+                ad_var_inc_ref(index);
+
+            for (uint32_t i = 0; i < p->input_variables.variables.size(); i++)
+                p->input_variables.variables[i] = inputs[i];
+            {
+                TraverseContext ctx;
+                p->input_variables.layout_index = 0;
+                p->input_variables.assign(p->input, ctx);
+            }
+
+            auto output = p->func(*p->input[0], **p->input[1]);
+
+            FlatVariables output_variables;
+            {
+                TraverseContext ctx;
+                output_variables.traverse(output, ctx);
+                output_variables.schedule_jit_variables(true, nullptr);
+                { // Evaluate the variables, scheduled when traversing
+                    nb::gil_scoped_release guard;
+                    jit_eval();
+                }
+                output_variables.record_jit_variables();
+                output_variables.layout_index = 0;
+
+                // Evaluate the variables, scheduled when traversing
+                nb::gil_scoped_release guard;
+                jit_eval();
+            }
+            for (uint32_t i = 0; i < output_variables.variables.size(); i++)
+                outputs[i] = output_variables.variables[i];
+
+            {
+                scoped_set_flag scoped_flags(JitFlag::EnableObjectTraversal, true);
+                update_indices(p->input, input_backup);
+            }
+        };
+
+        jit_freeze_custom_fn(p->input_variables.backend, inner, nullptr, p,
+                             p->input_variables.variables.size(),
+                             p->input_variables.variables.data(),
+                             p->output_variables.variables.size(),
+                             p->output_variables.variables.data());
+        return output;
+    }
+}
+
 // Slot data structure referencing the above two functions
 static PyType_Slot slots[] = { { Py_tp_traverse,
                                  (void *) frozen_function_tp_traverse },
                                { Py_tp_clear, (void *) frozen_function_clear },
                                { 0, nullptr } };
 
-void export_freeze(nb::module_ & /*m*/) {
+void export_freeze(nb::module_ & m) {
 
     nb::module_ d = nb::module_::import_("drjit.detail");
     auto traversable_base =
@@ -1945,4 +2060,6 @@ void export_freeze(nb::module_ & /*m*/) {
         .def_ro("n_recordings", &FrozenFunction::recording_counter)
         .def("clear", &FrozenFunction::clear)
         .def("__call__", &FrozenFunction::operator());
+
+    m.def("custom_fn", custom_fn);
 }

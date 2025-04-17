@@ -270,7 +270,7 @@ struct FlatVariables {
      *     will be ignored.
      */
     void schedule_jit_variables(bool schedule_force,
-                                std::vector<bool> *opaque_mask);
+                                std::vector<bool> *opaque_mask = nullptr);
 
     /**
      * \brief Records information about jit variables, that have been traversed.
