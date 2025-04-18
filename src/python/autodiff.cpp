@@ -12,6 +12,7 @@
 #include <drjit/custom.h>
 #include <nanobind/trampoline.h>
 #include "autodiff.h"
+#include "coop_vec.h"
 #include "apply.h"
 #include "meta.h"
 #include "init.h"
@@ -40,6 +41,24 @@ static void set_grad_enabled(nb::handle h, bool enable_) {
                     ad_var_dec_ref(new_index);
                 } else {
                     s.reset_index((uint32_t) index, p);
+                }
+            }
+        }
+
+        void traverse_unknown(nb::handle h) override {
+            if (CoopVec *v = nullptr; nb::try_cast(h, v, false), v != nullptr) {
+                uint64_t index = v->m_index;
+                bool grad_enabled = ((uint32_t) index) != index;
+                if (enable != grad_enabled) {
+                    if (enable) {
+                        nb::raise(
+                            "to create a differentiable cooperative vector, "
+                            "construct it from grad-enabled components.");
+                    } else {
+                        jit_var_inc_ref((uint32_t) index);
+                        ad_var_dec_ref(index);
+                        v->m_index = (uint32_t) index;
+                    }
                 }
             }
         }
@@ -87,6 +106,11 @@ bool grad_enabled(nb::handle h) {
             const ArraySupplement &s = supp(h.type());
             if (s.is_diff && is_float(s))
                 result |= ad_grad_enabled(s.index(inst_ptr(h))) != 0;
+        }
+
+        void traverse_unknown(nb::handle h) override {
+            if (CoopVec *v = nullptr; nb::try_cast(h, v, false), v != nullptr)
+                result |= ad_grad_enabled(v->m_index);
         }
     };
 
@@ -138,6 +162,15 @@ static nb::object detach(nb::handle h, bool preserve_type_ = true) {
             else {
                 nb::inst_copy(h2, h1);
             }
+        }
+
+        nb::object transform_unknown(nb::handle h) const override {
+            if (CoopVec *v = nullptr; nb::try_cast(h, v, false), v != nullptr) {
+                uint32_t index = (uint32_t) v->m_index;
+                jit_var_inc_ref(index);
+                return nb::cast(CoopVec(index, v->m_size, v->m_type));
+            }
+            return nb::borrow(h);
         }
     };
 

@@ -529,7 +529,7 @@ resolve at a later point. So here, we have
 - ``SelfCp``: a forward reference to ``drjit.llvm.ad._Array2fCp`` (more on this shortly),
 - ``ValT``: :py:class:`drjit.llvm.ad.Float`,
 - ``ValCpT``: a forward reference to ``drjit.llvm.ad._FloatCp`` (more on this shortly),
-- ``RedT``: :py:class`drjit.llvm.ad.Float`,
+- ``RedT``: :py:class:`drjit.llvm.ad.Float`,
 - ``PlainT``: :py:class:`drjit.llvm.ad.Array2f`, and
 - ``MaskT``: :py:class:`drjit.llvm.ad.Array2b`.
 
