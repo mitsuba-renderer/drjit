@@ -1544,8 +1544,8 @@ void set_label(T &value, Labels... prefix) {
  * this behavior.
  */
 template <typename T>
-struct scoped_symbolic_independence {
-    scoped_symbolic_independence() {
+struct scoped_disable_symbolic {
+    scoped_disable_symbolic() {
         if constexpr(drjit::is_jit_v<T>) {
             uint32_t index = jit_var_mask_default(T::Backend, 1);
             jit_var_mask_push(T::Backend, index);
@@ -1553,7 +1553,7 @@ struct scoped_symbolic_independence {
         }
     }
 
-    ~scoped_symbolic_independence() {
+    ~scoped_disable_symbolic() {
         if constexpr (drjit::is_jit_v<T>)
             jit_var_mask_pop(T::Backend);
     }
