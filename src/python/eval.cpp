@@ -68,6 +68,16 @@ static void make_opaque(nb::handle h) {
 
             ad_var_dec_ref(index_new);
         }
+
+        void traverse_unknown(nb::handle h) override {
+            if (h.type().is(local_type)) {
+                Local & local = nb::cast<Local&>(h);
+                for (uint32_t index : local.arrays())
+                    result |= (bool) jit_var_schedule(index);
+            }
+            if (h.type().is(coop_vector_type))
+                nb::raise("Cooperative vectors cannot be evaluated. They must be unpacked into regular variables.");
+        }
     };
 
     ScheduleForceCallback sfc;

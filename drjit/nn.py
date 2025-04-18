@@ -61,6 +61,16 @@ class Module:
         raise NotImplementedError(f"{type(self).__name__}.__call__() implementation is missing.")
 
     def _alloc(self, dtype: Type[drjit.ArrayBase], size: int, /) -> Tuple[Module, int]:
+        """
+        Internal method used to propagate argument sizes and allocate weight
+        storage of all NN modules.
+
+        The method takes to parameters as input: a weight storage type
+        ``dtype`` (e.g., :py:class:`drjit.cuda.ad.TensorXf16`) and ``size``,
+        the number of input arguments of the module. The function returns a
+        potentially new module instance with allocated weights, plus the number
+        of outputs.
+        """
         return self, size
 
     def alloc(self, dtype: Type[drjit.ArrayBase], size: int = -1) -> Module:
@@ -110,7 +120,7 @@ class Sequential(Module, Sequence[Module]):
         """Return the number of contained models"""
         return len(self.layers)
 
-    def __getitem__(self, index: Union[int], /) -> Module: # type: ignore
+    def __getitem__(self, index: int, /) -> Module: # type: ignore
         """Return the model at position ``index``"""
         return self.layers[index]
 
@@ -155,8 +165,8 @@ class LeakyReLU(Module):
        \end{cases}
     """
 
-    DRJIT_STRUCT = { 'negative_slope': float }
-    def __init__(self, negative_slope: float = 1e-2):
+    DRJIT_STRUCT = { 'negative_slope': Union[float, drjit.ArrayBase] }
+    def __init__(self, negative_slope: Union[float, drjit.ArrayBase] = 1e-2):
         self.negative_slope = negative_slope
 
     def __call__(self, arg: CoopVec, /) -> CoopVec:
@@ -449,8 +459,8 @@ class SinEncode(Module):
         if shift == 0:
             self.shift = None
         else:
-            self.shift = (drjit.sin(shift*2*drjit.pi),
-                          drjit.cos(shift*2*drjit.pi))
+            self.shift = (drjit.sin(shift * 2 * drjit.pi),
+                          drjit.cos(shift * 2 * drjit.pi))
 
     def _alloc(self, dtype: Type[drjit.ArrayBase], size : int = -1, /) -> Tuple[Module, int]:
         return self, size * self.octaves * 2

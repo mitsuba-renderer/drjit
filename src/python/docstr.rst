@@ -8130,12 +8130,14 @@
     Returns:
         object: The computed array as described above
 
-.. topic:: coop_CoopVec
+.. topic:: nn_CoopVec
 
    A *cooperative vector* is a dynamically-sized container of elements of a
    consistent type. It admits both floating point and integer 1D arrays as
    elements (e.g., :py:class:`drjit.cuda.Float16`,
-   :py:class:`drjit.llvm.UInt32`).
+   :py:class:`drjit.llvm.UInt32`). Cooperative vectors primarily exist to
+   enable the compilation of expressions that make use of matrix-vector
+   multiplication.
 
    Seen from a high level, cooperative vectors resemble nested array types,
    such as as :py:class:`drjit.cuda.ArrayXf16`. A variety of conversions
@@ -8177,7 +8179,7 @@
    To unpack a cooperative vector into its components, use an expression
    like ``x, y, z = vec``, ``ArrayXf(vec)``, or ``list(vec)``.
 
-.. topic:: coop_CoopVec_init
+.. topic:: nn_CoopVec_init
 
    The constructor accepts a variable number of arguments including Dr.Jit
    arrays, scalar Python integers and floating point values, and :ref:`PyTrees
@@ -8188,7 +8190,7 @@
    the input contains Dr.Jit arrays of inconsistent scalar types (e.g.,
    :py:class:`drjit.cuda.Array2f` and :py:class:`drjit.cuda.UInt`).
 
-.. topic:: coop_MatrixView
+.. topic:: nn_MatrixView
 
    The :py:class:`drjit.nn.MatrixView` provides pointer into a buffer along with
    shape and type metadata.
@@ -8203,7 +8205,7 @@
    representation. The returned views can then be passed to
    :py:func:`drjit.nn.matvec()`.
 
-.. topic:: coop_view
+.. topic:: nn_view
 
    Convert a Dr.Jit array or tensor into a *view*.
 
@@ -8221,13 +8223,13 @@
      directly re-packed into optimal layouts without performing further
      unnecessary copies.
 
-.. topic:: coop_pack
+.. topic:: nn_pack
 
-   A training-optimal layout must be used used if the program
-   *backpropagates* (as in :py:func:`dr.backward*() <drjit.backward>`)
-   gradients through matrix-vector products. Forward derivative propagation (as
-   in :py:func:`dr.forward*() <drjit.forward>`) does not require a
-   training-optimal layout.
+   A training-optimal layout must be used used if the program *backpropagates*
+   (as in :py:func:`dr.backward*() <drjit.backward>`) gradients through
+   matrix-vector products. Inference (primal evaluation) and forward derivative
+   propagation (as in :py:func:`dr.forward*() <drjit.forward>`) does not
+   require a training-optimal layout.
 
    If the input matrices are already packed in a row-major layout, call
    :py:func:`dr.nn.view() <drjit.nn.view>` to create an efficient reference
@@ -8244,7 +8246,7 @@
           mat_view[32:64, :]
       )
 
-.. topic:: coop_unpack
+.. topic:: nn_unpack
 
    The function :py:func:`dr.nn.unpack() <drjit.nn.unpack>` transforms a
    sequence (or :ref:`PyTree <pytrees>`) of vectors and optimal-layout matrices
@@ -8255,13 +8257,14 @@
       A_out, b_out = dr.nn.unpack(A_opt, b_opt)
 
    Note that the output of this function are (row-major) *views* into a shared
-   buffer. These views can be converted back into regular tensors:
+   buffer. Each view holds a reference to the shared buffer. Views can be
+   converted back into regular tensors:
 
    .. code-block:: python
 
       A = TensorXf16(A)
 
-.. topic:: coop_matvec
+.. topic:: nn_matvec
 
    Evaluate a matrix-vector multiplication involving a cooperative vector.
 
@@ -8275,9 +8278,9 @@
    + b``). This bias vector ``b`` should also be specified as a view.
 
    Specify ``tranpose=True`` to multiply by the transpose of the matrix ``A``.
-   On the CUDA/OptiX backend, this feature requires that ``A`` is inference
+   On the CUDA/OptiX backend, this feature requires that ``A`` is in inference
    or training-optimal layout.
 
-.. topic:: coop_cast
+.. topic:: nn_cast
 
    Cast the numeric type underlying a cooperative vector

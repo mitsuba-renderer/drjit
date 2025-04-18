@@ -6,7 +6,7 @@ import sys
 def skip_if_coopvec_not_supported(t):
     if dr.backend_v(t) == dr.JitBackend.CUDA:
         if dr.detail.cuda_version() < (12, 8):
-            pytest.skip("CUDA driver does not support cooperative vectors")
+            pytest.skip("CUDA driver does not support cooperative vectors (Driver R570) or later is required")
 
 @pytest.test_arrays('jit,float16,shape=(3, *),-diff', 'jit,float32,shape=(3, *),-diff')
 def test01_pack_unpack(t):
@@ -20,6 +20,7 @@ def test01_pack_unpack(t):
     assert len(nn.CoopVec(*x, 2, (4, 5), *x)) == 19
     y = list(x)
     z = m.ArrayXf(x)
+    assert len(y) == 8 and len(z) == 8
     result_ok = True
     for i in range(8):
         result_ok &= dr.all(y[i] == i+1)
@@ -258,7 +259,7 @@ def test10_fwd_addition(t):
 def test11_bwd_mul(t):
     skip_if_coopvec_not_supported(t)
 
-    # Propagate forward gradients through an addition
+    # Propagate forward gradients through a multiplication
     a, b = t(8), t(9)
     c, d = t(3), t(2)
     dr.enable_grad(a, b, c, d)
@@ -524,4 +525,8 @@ def test19_no_eval(t):
     UInt32 = dr.uint32_array_t(t)
     a = nn.CoopVec(t(1), t(2))
     with pytest.raises(RuntimeError, match="Cooperative vectors cannot be evaluated"):
+        dr.schedule(a)
+    with pytest.raises(RuntimeError, match="Cooperative vectors cannot be evaluated"):
         dr.eval(a)
+    with pytest.raises(RuntimeError, match="Cooperative vectors cannot be evaluated"):
+        dr.make_opaque(a)

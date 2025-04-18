@@ -28,6 +28,7 @@ Dr.Jit supports cooperative vectors on both of its backends:
   <https://raytracing-docs.nvidia.com/optix9/guide/index.html#cooperative_vectors#neural-rendering-with-cooperative-vectors>`__,
   leveraging built-in `tensor cores
   <https://www.nvidia.com/en-us/data-center/tensor-cores/>`__ for acceleration.
+  Driver version R570 or newer is required to use this feature.
 
 - On the **CPU (LLVM) backend**, compilation of cooperative vector operations
   targets the available instruction set extensions (AVX512, NEON, etc.).
