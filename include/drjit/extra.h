@@ -546,7 +546,7 @@ extern DRJIT_EXTRA_EXPORT uint64_t ad_coop_vec_matvec(uint64_t A_index,
                                                       int transpose);
 
 /// Cast a cooperative vector to a different precision
-extern JIT_EXPORT uint64_t ad_coop_vec_cast(uint64_t index, VarType vt);
+extern DRJIT_EXTRA_EXPORT uint64_t ad_coop_vec_cast(uint64_t index, VarType vt);
 
 #if defined(__cplusplus)
 }

@@ -90,14 +90,14 @@ mixed-precision training.
     net = net.alloc(TensorXf16, 2)
 
     # Convert to training-optimal layout
-    coeffs, net = nn.pack(net, layout='training')
+    weights, net = nn.pack(net, layout='training')
     print(net)
 
-    # Optimize a single precision copy of the parameters
-    opt = Adam(lr=1e-3, params={'coeffs': Float32(coeffs)})
+    # Optimize a single-precision copy of the parameters
+    opt = Adam(lr=1e-3, params={'weights': Float32(weights)})
 
     # This is an adaptive mixed-precision (AMP) optimization, where a half
-    # precision computation runs within a larger single precision program.
+    # precision computation runs within a larger single-precision program.
     # Gradient scaling is required to make this numerically well-behaved.
     scaler = GradScaler()
 
@@ -105,15 +105,15 @@ mixed-precision training.
 
     for i in tqdm(range(40000)):
         # Update network state from optimizer
-        coeffs[:] = Float16(opt['coeffs'])
+        weights[:] = Float16(opt['weights'])
 
         # Generate jittered positions on [0, 1]^2
         t = dr.arange(Float32, res)
-        p = (Array2f(dr.meshgrid(t, t)) + dr.rand(Array2f, (2, res*res))) / res
+        p = (Array2f(dr.meshgrid(t, t)) + dr.rand(Array2f, (2, res * res))) / res
 
         # Evaluate neural net + L2 loss
         img = Array3f(net(nn.CoopVec(p)))
-        loss = dr.squared_norm(tex.eval(p)-img)
+        loss = dr.squared_norm(tex.eval(p) - img)
 
         # Mixed-precision training: take suitably scaled steps
         dr.backward(scaler.scale(loss))
@@ -121,8 +121,10 @@ mixed-precision training.
 
     # Done optimizing, now let's plot the result
     t = dr.linspace(Float32, 0, 1, res)
-    p= Array2f(dr.meshgrid(t, t))
+    p = Array2f(dr.meshgrid(t, t))
     img = Array3f(net(nn.CoopVec(p)))
+
+    # Convert 'img' with shape 3 x (N*N) into a N x N x 3 tensor
     img = dr.reshape(TensorXf(img, flip_axes=True), (res, res, 3))
 
     import matplotlib.pyplot as plt

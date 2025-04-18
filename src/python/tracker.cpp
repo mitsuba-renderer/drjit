@@ -333,7 +333,7 @@ bool VariableTracker::Impl::traverse(Context &ctx, nb::handle h) {
                   ctx.label.c_str(), nb::inst_name(prev).c_str(),
                   nb::type_name(tp).c_str());
 
-    // Were there any external changes to sub-PyTree variable indices (As
+    // Were there any external changes to sub-PyTree variable indices (as
     // opposed to changes done by the VariableTracker)
     bool changed = false;
 
