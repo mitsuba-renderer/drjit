@@ -2822,3 +2822,44 @@ def test76_changing_literal_width_holder(t):
         assert dr.allclose(ref, res)
 
     assert frozen.n_recordings == 1
+
+@pytest.test_arrays("float32, jit, diff, shape=(*)")
+@pytest.mark.parametrize("optimizer", ["sdg", "rmsprop", "adam"])
+def test77_optimizers(t, optimizer):
+    n = 10
+
+    def func(y, opt):
+        loss = dr.mean(dr.square(opt["x"] - y))
+
+        dr.backward(loss)
+
+        opt.step()
+
+        return opt["x"], loss
+
+    def init_optimizer():
+        if optimizer == "sdg":
+            opt = dr.opt.SGD(lr = 0.001, momentum = 0.9)
+        elif optimizer == "rmsprop":
+            opt = dr.opt.RMSProp(lr = 0.001)
+        elif optimizer == "adam":
+            opt = dr.opt.Adam(lr = 0.001)
+        return opt
+
+    frozen = dr.freeze(func)
+
+    opt_func = init_optimizer()
+    opt_frozen = init_optimizer()
+
+    for i in range(n):
+        x = dr.full(t, 1, 10)
+        y = dr.full(t, 0, 10)
+
+        opt_func["x"] = x
+        opt_frozen["x"] = x
+
+        res_x, res_loss = frozen(y, opt_frozen)
+        ref_x, ref_loss = func(y, opt_func)
+
+        assert dr.allclose(res_x, ref_x)
+        assert dr.allclose(res_loss, ref_loss)
