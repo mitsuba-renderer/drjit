@@ -2999,16 +2999,10 @@ def test77_optimizers(t, optimizer, auto_opaque):
         assert dr.allclose(res_x, ref_x)
         assert dr.allclose(res_loss, ref_loss)
 
-    if auto_opaque:
-        if optimizer == "adam":
-            assert frozen.n_recordings == 2
-        else:
-            assert frozen.n_recordings == 1
+    if optimizer == "adam":
+        assert frozen.n_recordings == 2
     else:
-        if optimizer == "adam":
-            assert frozen.n_recordings == 2
-        else:
-            assert frozen.n_recordings == 1
+        assert frozen.n_recordings == 1
 
 
 @pytest.test_arrays("float32, jit, shape=(*)")
