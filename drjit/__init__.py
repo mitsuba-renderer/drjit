@@ -2507,6 +2507,7 @@ def freeze(
     limit: Optional[int] = None,
     warn_after: int = 10,
     backend: Optional[JitBackend] = None,
+    auto_opaque: bool = True,
 ) -> Callable[[F], F]:
     """
     Decorator to "freeze" functions, which improves efficiency by removing
@@ -2549,7 +2550,8 @@ def freeze(
     - Changes in the **length** of a container (``list``, ``tuple``, ``dict``).
     - Changes of **dictionary keys**  or **field names** of dataclasses.
     - Changes in the AD status (:py:`dr.grad_enabled() <drjit.grad_enabled>`) of a variable.
-    - Changes of (non-PyTree) **Python objects**, as detected by mismatching ``hash()``.
+    - Changes of (non-PyTree) **Python objects**, as detected by mismatching ``hash()``
+      or ``id()`` if they are not hashable.
 
     The following more technical conditions also trigger re-tracing:
     - A Dr.Jit variable changes from/to a **scalar** configuration (size ``1``).
@@ -2623,6 +2625,12 @@ def freeze(
         backend (Optional[JitBackend]): If no inputs are given when calling the
           frozen function, the backend used has to be specified using this argument.
           It must match the backend used for computation within the function.
+
+        auto_opaque: (bool): If this flag is set true and only literal values
+          or their size changes between calls to the function, these variables
+          will be marked and made opaque. This reduces the memory usage, traversal
+          overhead, and can improved the performance of generated kernels.
+          If the flag is set to false, all input variables will be made opaque.
     """
 
 
@@ -2634,6 +2642,7 @@ def freeze(
     limit: Optional[int] = None,
     warn_after: int = 10,
     backend: Optional[JitBackend] = None,
+    auto_opaque: bool = True,
 ) -> F: ...
 
 
@@ -2644,6 +2653,7 @@ def freeze(
     limit: Optional[int] = None,
     warn_after: int = 10,
     backend: Optional[JitBackend] = None,
+    auto_opaque: bool = True,
 ) -> Union[F, Callable[[F2], F2]]:
     limit = limit if limit is not None else -1
     backend = backend if backend is not None else JitBackend.Invalid
@@ -2668,10 +2678,7 @@ def freeze(
                 closure = inspect.getclosurevars(f)
                 self.closure = (closure.nonlocals, closure.globals)
                 self.frozen = detail.FrozenFunction(
-                    inner,
-                    limit,
-                    warn_after,
-                    backend,
+                    inner, limit, warn_after, backend, auto_opaque
                 )
 
             def __call__(self, *args, **kwargs):
