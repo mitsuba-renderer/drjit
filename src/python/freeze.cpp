@@ -727,11 +727,16 @@ void FlatVariables::assign_cb(drjit::TraversableBase *traversable) {
 struct scoped_path {
     std::string &path;
     size_t size;
-    scoped_path(std::string &path, const char *suffix)
+    scoped_path(std::string &path, const char *suffix, bool dict = false)
         : path(path), size(path.size()) {
-        path += "[\"";
-        path += suffix;
-        path += "\"]";
+        if (dict) {
+            path += "[\"";
+            path += suffix;
+            path += "\"]";
+        } else {
+            path += ".";
+            path += suffix;
+        }
     }
     scoped_path(std::string &path, uint32_t suffix)
         : path(path), size(path.size()) {
@@ -835,7 +840,7 @@ void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
             }
 
             for (auto [k, v] : dict) {
-                scoped_path ps(ctx.path, nb::str(k).c_str());
+                scoped_path ps(ctx.path, nb::str(k).c_str(), true);
                 traverse(v, ctx);
             }
         } else if (nb::dict ds = get_drjit_struct(tp); ds.is_valid()) {
@@ -1092,7 +1097,7 @@ void FlatVariables::assign(nb::handle dst, TraverseContext &ctx) {
         } else if (tp.is(&PyDict_Type)) {
             nb::dict dict = nb::borrow<nb::dict>(dst);
             for (auto &k : layout.fields) {
-                scoped_path ps(ctx.path, nb::str(k).c_str());
+                scoped_path ps(ctx.path, nb::str(k).c_str(), true);
                 if (dict.contains(&k))
                     assign(dict[k], ctx);
                 else
