@@ -244,6 +244,8 @@ class Cast(Module):
         self.dtype = dtype
     def __call__(self, arg: CoopVec, /) -> CoopVec:
         return cast(arg, self.dtype)
+    def __repr__(self):
+        return f'Cast(dtype={self.dtype.__name__})'
 
 class Linear(Module):
     r"""
@@ -286,7 +288,7 @@ class Linear(Module):
         self.weights = self.bias = None
 
     def __repr__(self) -> str:
-        s = f'Linear({self.config[0]}, {self.config[1]}'
+        s = f'Linear(in_features={self.config[0]}, out_features={self.config[1]}'
         if not self.config[2]:
             s += ', bias=False'
         s += ')'
@@ -391,15 +393,20 @@ class TriEncode(Module):
       :align: center
     """
 
+    DRJIT_STRUCT = { 'octaves' : int, 'shift': float, 'channels': int }
+
     def __init__(self, octaves: int = 0, shift: float = 0) -> None:
         self.octaves = octaves
         self.shift = shift
+        self.channels = -1
 
     def _alloc(self, dtype: Type[drjit.ArrayBase], size : int = -1, /) -> Tuple[Module, int]:
-        return self, size * self.octaves * 2
+        r = TriEncode(self.octaves, self.shift)
+        r.channels = size
+        return r, size * self.octaves * 2
 
     def __repr__(self) -> str:
-        return f'TriEncode({self.octaves})'
+        return f'TriEncode(octaves={self.octaves}, shift={self.shift}, in_channels={self.channels}, out_features={self.channels*self.octaves*2})'
 
     def __call__(self, arg: CoopVec, /) -> CoopVec:
         args, r = list(arg), list()
@@ -453,8 +460,11 @@ class SinEncode(Module):
       :align: center
     """
 
+    DRJIT_STRUCT = { 'octaves' : int, 'shift': Union[tuple, None], 'channels': int }
+
     def __init__(self, octaves: int = 0, shift: float = 0) -> None:
         self.octaves = octaves
+        self.channels = -1
 
         if shift == 0:
             self.shift = None
@@ -463,10 +473,13 @@ class SinEncode(Module):
                           drjit.cos(shift * 2 * drjit.pi))
 
     def _alloc(self, dtype: Type[drjit.ArrayBase], size : int = -1, /) -> Tuple[Module, int]:
-        return self, size * self.octaves * 2
+        r = SinEncode(self.octaves)
+        r.channels = size
+        r.shift = self.shift
+        return r, size * self.octaves * 2
 
     def __repr__(self) -> str:
-        return f'SinEncode({self.octaves})'
+        return f'SinEncode(octaves={self.octaves}, shift={self.shift}, in_channels={self.channels}, out_features={self.channels*self.octaves*2})'
 
     def __call__(self, arg: CoopVec, /) -> CoopVec:
         args, r = list(arg), list()
