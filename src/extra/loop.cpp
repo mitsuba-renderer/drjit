@@ -743,8 +743,7 @@ public:
                     before the loop>
 
          state_i = <subset of 'state' for which derivative
-                    tracking was enabled before and after
-                    the loop>
+                    tracking was enabled before the loop>
 
          grad_state_o = <zero-initialized gradients>
 
@@ -756,26 +755,21 @@ public:
              dr.disable_grad(state)
      */
 
-    void bwd_body_simple() {
-        // Create differentiable loop state variables
+    void bwd_body_simple() { // Create differentiable loop state variables
         m_state2.release();
 
-        index32_vector tmp;
-        size_t offset = m_inputs.size();
         for (size_t i = 0; i < m_inputs.size(); ++i) {
             const Input &in = m_inputs[i];
 
             uint64_t index;
-            if (in.has_grad_out && in.has_grad_in) {
+            if (in.has_grad_in) {
                 index = ad_var_new((uint32_t) m_state[i]);
-                tmp.push_back_borrow((uint32_t) m_state[offset]);
+                ad_var_map_put(combine(m_input_indices[in.grad_in_index]), index);
             } else {
                 index = ad_var_inc_ref(m_state[i]);
             }
-            m_state2.push_back_steal(index);
 
-            if (in.has_grad_out)
-                offset++;
+            m_state2.push_back_steal(index);
         }
 
         // Run the loop body
@@ -792,16 +786,18 @@ public:
         m_read_cb(m_payload, m_state2);
 
         // AD backward propagation pass
-        offset = m_inputs.size();
+        size_t offset = m_inputs.size();
         for (size_t i = 0; i < m_inputs.size(); ++i) {
             const Input &in = m_inputs[i];
-            if (!in.has_grad_out)
+            if (!in.has_grad_in && !in.has_grad_out)
                 continue;
 
-            ad_accum_grad(m_state2[i], (uint32_t) m_state[offset]);
-
-            if (!in.has_grad_in)
+            if (in.has_grad_out && (m_state2[i] >> 32)) {
+                ad_accum_grad(m_state2[i], (uint32_t) m_state[offset]);
                 ad_enqueue(dr::ADMode::Backward, m_state2[i]);
+            } else if (in.has_grad_in) {
+                ad_accum_grad(m_state2[i], (uint32_t) m_state[offset]);
+            }
 
             offset++;
         }
@@ -809,18 +805,23 @@ public:
         ad_traverse(dr::ADMode::Backward, (uint32_t) dr::ADFlag::ClearNone);
 
         // Read the loop output + derivatives copy to loop state vars
-        m_state.release();
-        for (size_t i = 0; i < m_inputs.size(); ++i)
-            m_state.push_back_borrow((uint32_t) m_state2[i]);
+        for (size_t i = 0; i < m_inputs.size(); ++i) {
+            jit_var_inc_ref((uint32_t) m_state2[i]);
+            ad_var_dec_ref((uint32_t) m_state[i]);
+            m_state[i] = (uint32_t) m_state2[i];
+        }
 
         offset = m_inputs.size();
         for (size_t i = 0; i < m_inputs.size(); ++i) {
             const Input &in = m_inputs[i];
-
-            if (!in.has_grad_out)
+            if (!in.has_grad_in && !in.has_grad_out)
                 continue;
-            uint32_t grad = ad_grad(m_state2[i]);
-            m_state.push_back_steal(grad);
+
+            if (in.has_grad_in) {
+                ad_var_dec_ref(m_state[offset]);
+                m_state[offset] = ad_grad(m_state2[i]);
+            }
+
             offset++;
         }
 
@@ -834,10 +835,17 @@ public:
         for (const Input &i : m_inputs)
             m_state.push_back_borrow(i.index);
 
+        uint32_t index = 0;
         for (const Input &in : m_inputs) {
-            uint32_t grad;
-            if (!in.has_grad_out)
+            index++;
+            if (!in.has_grad_out && !in.has_grad_in)
                 continue;
+            uint32_t grad;
+
+            if (in.has_grad_in && in.has_grad_out)
+                jit_raise("LoopOp::backward_simple(): unsupported "
+                          "configuration. Variable %u (r%u) is marked both as a "
+                          "differentiable output and an input.", index, (uint32_t) in.index);
 
             if (in.has_grad_in) {
                 uint64_t zero = 0;
@@ -856,29 +864,30 @@ public:
             [](void *p) { return ((LoopOp *) p)->fwd_cond(); },
             [](void *p) { return ((LoopOp *) p)->bwd_body_simple(); }, nullptr, false);
 
-
         size_t offset = m_inputs.size();
         for (const Input &in : m_inputs) {
-            if (!in.has_grad_out)
+            if (!in.has_grad_out && !in.has_grad_in)
                 continue;
 
-            if (in.has_grad_in) {
-                ad_accum_grad(combine(m_input_indices[in.grad_in_index]),
+            if (in.has_grad_out)
+                ad_accum_grad(combine(m_output_indices[in.grad_out_offset]),
                               (uint32_t) m_state[offset]);
-            }
 
             offset++;
         }
 
+        offset = m_inputs.size();
         for (size_t i = 0; i < m_inputs.size(); ++i) {
             const Input &in = m_inputs[i];
-            if (!in.has_grad_out)
+            if (!in.has_grad_out && !in.has_grad_in)
                 continue;
 
-            ad_accum_grad(combine(m_output_indices[in.grad_out_offset]),
-                          (uint32_t) m_state[m_inputs.size() + in.grad_in_offset]);
-        }
+            if (in.has_grad_in)
+                ad_accum_grad(combine(m_input_indices[in.grad_in_index]),
+                              (uint32_t) m_state[offset]);
 
+            offset++;
+        }
 
         m_state.release();
     }
@@ -1006,8 +1015,7 @@ bool ad_loop(JitBackend backend, int symbolic, int compress,
                     vt != VarType::Float64)
                     continue;
 
-                if (max_iterations == 0 &&
-                    (uint32_t) indices_in[i] == (uint32_t) indices_out[i]) {
+                if ((uint32_t) indices_in[i] == (uint32_t) indices_out[i]) {
                     // Keep unchanged variables out of the AD system
                     if (indices_in[i] != indices_out[i]) {
                         ad_var_inc_ref(indices_in[i]);
