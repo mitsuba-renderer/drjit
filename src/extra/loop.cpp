@@ -156,6 +156,7 @@ static size_t ad_loop_evaluated_mask(JitBackend backend, const char *name,
     JitVar active_it;
     size_t it = 0;
     bool grad_suspended = ad_grad_suspended();
+    dr::vector<bool> copy_bit(indices1.size(), true);
 
     while (true) {
         // Evaluate the loop state
@@ -190,14 +191,27 @@ static size_t ad_loop_evaluated_mask(JitBackend backend, const char *name,
         }
 
         for (size_t i = 0; i < indices2.size(); ++i) {
-            // Kernel caching: Must create an AD copy so that gradient
-            // computation steps involving this variable (even if unchangecd
-            // & only used as a read-only dependency) are correctly placed
-            // within their associated loop iterations. This does not create
-            // a copy of the underlying JIT variable.
+            // Potentially create an AD copy here (i.e., assign a new AD node
+            // representing a copy of the original loop state). Note that this
+            // is a symbolic copy in the AD graph that does not consume actual
+            // device memory. This copy is needed to prevent a degeneracy of
+            // forward derivative propagation, where a loop variable does not
+            // change at all, yet all loop iterations depend on this variable in
+            // a differentiable sense. When the AD traversal reaches this
+            // variable, this will generate a huge kernel that propagates the
+            // derivative to every single loop iteration, instead of splitting
+            // the computation into per-iteration kernels. By creating marked
+            // (ad_mark_loop-boundary) copies, we can ensure correct sequencing.
+            // The extra copies are only used within the loop and removed below.
 
-            uint64_t i1 = indices2[i],
-                     i2 = grad_suspended ? ad_var_inc_ref(i1) : ad_var_copy(i1);
+            uint64_t i1 = indices2[i], i2;
+
+            if (!grad_suspended && (i1 >> 32) != 0 && (indices1[i] >> 32) == (i1 >> 32)) {
+                i2 = ad_var_copy(i1);
+            } else {
+                i2 = ad_var_inc_ref(i1);
+                copy_bit[i] = false;
+            }
 
             ad_var_dec_ref(i1);
             ad_mark_loop_boundary(i2);
@@ -208,12 +222,36 @@ static size_t ad_loop_evaluated_mask(JitBackend backend, const char *name,
 
         write_cb(payload, indices2, false);
         indices1.release();
-        indices1.swap(indices2);
+        indices2.release();
+        read_cb(payload, indices1);
 
         active_it = JitVar::borrow(cond_cb(payload));
         active_it.schedule_();
         active &= active_it;
         active.schedule_force_();
+    }
+
+    {
+        bool changed = false;
+        for (size_t i = 0; i < indices1.size(); ++i) {
+            if (!copy_bit[i])
+                continue;
+
+            // The AD index of this was copied a number of times (see above for
+            // the rationale). Let's now remove these again.
+            uint32_t ad_index = (uint32_t) (indices1[i] >> 32);
+            for (uint32_t j = 0; j < it; ++j)
+                ad_index = ad_pred(ad_index, 0);
+
+            uint64_t index_new = (((uint64_t) ad_index) << 32) | (uint32_t) indices1[i];
+            ad_var_inc_ref(index_new);
+            ad_var_dec_ref(indices1[i]);
+            indices1[i] = index_new;
+            changed = true;
+        }
+
+        if (changed)
+            write_cb(payload, indices1, false);
     }
 
     return it;
