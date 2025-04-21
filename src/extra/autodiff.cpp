@@ -2288,6 +2288,20 @@ void ad_mark_loop_boundary(Index index) {
     }
 }
 
+uint32_t ad_pred(uint32_t ad_index, uint32_t i_) {
+    std::lock_guard<Lock> guard(state.lock);
+    const Variable *v = state[ad_index];
+    uint32_t edge = v->next_bwd;
+
+    for (uint32_t i = 0; i < i_; ++i) {
+        if (!edge)
+            return 0;
+        edge = state.edges[edge].next_bwd;
+    }
+
+    return state.edges[edge].source;
+}
+
 
 // ==========================================================================
 // Implementation of arithmetic operations and transcendental functions
