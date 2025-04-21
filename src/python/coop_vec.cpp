@@ -284,7 +284,7 @@ nb::str MatrixView::repr() const {
     return nb::str(
         "drjit.nn.MatrixView[\n"
         "    dtype={},\n"
-        "    layout={},\n"
+        "    layout=\"{}\",\n"
         "    shape=({}, {}),\n"
         "    stride={},\n"
         "    offset={}\n"

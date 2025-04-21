@@ -1233,7 +1233,7 @@ void ad_accum_grad(Index index, JitIndex value) {
     size_t size_in = value_v.size();
 
     if (v->size != size_in && size_in != 1 && size_in != 0 && v->size != 1)
-        ad_raise("ad_set_grad(): attempted to store a gradient of size "
+        ad_raise("ad_accum_grad(): attempted to store a gradient of size "
                  "%zu into AD variable a%u, which has size %zu!",
                  size_in, ad_index, v->size);
 
@@ -2942,6 +2942,7 @@ Index ad_var_cast(Index i0, VarType vt) {
 void ad_var_map_put(Index source, Index target) {
     uint32_t ad_index_source = ad_index(source),
              ad_index_target = ad_index(target);
+    ad_log("ad_var_map_put(): a%u -> a%u", ad_index_source, ad_index_target);
     if (ad_index_target == 0)
         return;
 
@@ -3822,7 +3823,7 @@ public:
 
     void forward() override {
         std::lock_guard<Lock> guard(state.lock);
-        uint32_t size = (uint32_t) m_input_indices.size();
+        uint32_t size = (uint32_t) m_inputs.size();
         JitIndex *tmp = (JitIndex *) alloca(sizeof(JitIndex) * size);
         size_t n_valid = 0;
 
@@ -3849,7 +3850,7 @@ public:
 
     void backward() override {
         std::lock_guard<Lock> guard(state.lock);
-        uint32_t n = (uint32_t) m_input_indices.size();
+        uint32_t n = (uint32_t) m_inputs.size();
 
         Variable *v = state[m_output_indices[0]];
         if (!v->grad.valid())
@@ -3858,9 +3859,13 @@ public:
         JitIndex *tmp = (JitIndex *) alloca(sizeof(JitIndex) * n);
         jit_coop_vec_unpack(v->grad.index(), n, tmp);
 
-        for (size_t i = 0; i < m_input_indices.size(); ++i) {
-            Variable *v2 = state[m_inputs[i]];
-            v2->accum(JitVar::steal(tmp[i]), v2->size);
+        for (size_t i = 0; i < m_inputs.size(); ++i) {
+            uint32_t index = m_inputs[i];
+            JitVar var = JitVar::steal(tmp[i]);
+            if (!index)
+                continue;
+            Variable *v2 = state[index];
+            v2->accum(var, v2->size);
         }
     }
 
