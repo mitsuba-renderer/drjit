@@ -64,9 +64,10 @@ def test03_sum_loop_fwd(t, mode):
 
 
 @pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
+@pytest.mark.parametrize('make_copy', [True, False])
 @pytest.test_arrays('float32,diff,shape=(*)')
 @dr.syntax
-def test04_sum_loop_rev(t, mode):
+def test04_sum_loop_rev(t, mode, make_copy):
     # Test the "sum loop" optimization (max_iterations=-1) for
     # consistency against test03
     UInt32 = dr.uint32_array_t(t)
@@ -74,8 +75,11 @@ def test04_sum_loop_rev(t, mode):
 
     y, i = Float(0), UInt32(0)
     x = dr.linspace(Float, .25, 1, 4)
-    xo = x
     dr.enable_grad(x)
+    if make_copy:
+        xo = Float(x)
+    else:
+        xo = x
 
     while dr.hint(i < 10, max_iterations=-1, mode=mode):
         y += x**i
@@ -86,6 +90,7 @@ def test04_sum_loop_rev(t, mode):
 
     assert dr.allclose(y, [1.33333, 1.99805, 3.77475, 10])
     assert dr.allclose(xo.grad, [1.77773, 3.95703, 12.0956, 45])
+
 
 @pytest.mark.parametrize('variant', ['fwd', 'bwd'])
 @pytest.test_arrays('float32,is_diff,shape=(*)')
@@ -131,6 +136,7 @@ def test05_evaluated_ad_kernel_launch_count(t, variant):
     assert len(h) >= iterations and len(h) < iterations + 3
     for k in h:
         assert k['operation_count'] < iterations
+
 
 @pytest.mark.parametrize('variant', [0, 1])
 @pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
@@ -240,3 +246,20 @@ def test09_sum_loop_extra(t, mode):
 
         dr.backward(loss)
 
+
+@pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+@dr.syntax
+def test32_simple_loop(t, mode):
+    # Testcase for simple backwards derivatives with gathers
+    i = dr.uint32_array_t(t)(0)
+    x = dr.ones(t, 10)
+    q = dr.zeros(t)
+    dr.enable_grad(x, 10)
+
+    while dr.hint(i < 10, max_iterations=-1, mode=mode):
+        q += dr.gather(t, x, i)
+        i += 1
+
+    dr.backward(q)
+    assert dr.all(x.grad == [1]*10)
