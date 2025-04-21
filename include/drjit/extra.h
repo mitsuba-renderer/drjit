@@ -488,6 +488,9 @@ extern DRJIT_EXTRA_EXPORT uint64_t ad_var_map_get(uint64_t index);
 extern DRJIT_EXTRA_EXPORT int ad_leak_warnings();
 extern DRJIT_EXTRA_EXPORT void ad_set_leak_warnings(int value);
 
+/// Extract the i-th predecessor of an AD node (or return 0)
+extern DRJIT_EXTRA_EXPORT uint32_t ad_pred(uint32_t index, uint32_t i);
+
 #if defined(__GNUC__)
 DRJIT_INLINE uint64_t ad_var_inc_ref(uint64_t index) JIT_NOEXCEPT {
     /* If 'index' is known at compile time, it can only be zero, in
