@@ -538,6 +538,7 @@ def test19_no_eval(t):
 def test20_matvec_in_loop(t, mode):
     # Check that derivative inference works when
     # cooperative vectors are used inside loops
+    skip_if_coopvec_not_supported(t)
 
     m = sys.modules[t.__module__]
     Float16 = t
@@ -568,6 +569,7 @@ def test20_matvec_in_loop(t, mode):
 def test21_optimize_in_loop_bwd(t, mode):
     # Check that derivative backpropagation occurs when
     # cooperative vectors are used inside loops
+    skip_if_coopvec_not_supported(t)
 
     m = sys.modules[t.__module__]
     Float16 = t
@@ -591,6 +593,45 @@ def test21_optimize_in_loop_bwd(t, mode):
         cnt += 1
 
     dr.backward(res)
+
+    _, A_view, b_view = nn.unpack(A_view.grad, b_view.grad)
+    A = TensorXf16(A_view)
+    b = TensorXf16(b_view)
+    assert dr.all(A == TensorXf16([[3, 3], [0, 0]]))
+    assert dr.all(b == TensorXf16([[6], [0]]))
+
+
+@pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
+@pytest.test_arrays('jit,shape=(*),float16,diff')
+@dr.syntax
+def test22_optimize_in_loop_bwd_v2(t, mode):
+    # Check that derivative backpropagation occurs when
+    # cooperative vectors are used inside loops, and the
+    # backprop call is placed there as well
+
+    skip_if_coopvec_not_supported(t)
+
+    m = sys.modules[t.__module__]
+    Float16 = t
+    TensorXf16 = m.TensorXf16
+    Float32 = m.Float32
+    UInt32 = m.UInt32
+
+    A = dr.ones(TensorXf16, shape=(2, 2))
+    b = dr.zeros(Float16, shape=(2))
+
+    buf, A_view, b_view = nn.pack(A, b, layout='training')
+    dr.enable_grad(buf)
+
+    cnt = dr.zeros(UInt32, 2)
+    res = dr.zeros(Float32, 2)
+
+    while dr.hint(cnt < 3, mode=mode, exclude=[A_view, b_view]):
+        x = nn.CoopVec(Float16(0.5), Float16(0.5))
+        a, _ = nn.matvec(A_view, x, b_view)
+        res = Float32(a)
+        dr.backward(res)
+        cnt += 1
 
     _, A_view, b_view = nn.unpack(A_view.grad, b_view.grad)
     A = TensorXf16(A_view)

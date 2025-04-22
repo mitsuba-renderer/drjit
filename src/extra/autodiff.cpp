@@ -2345,6 +2345,9 @@ void ad_mark_loop_boundary(Index index) {
 }
 
 uint32_t ad_pred(uint32_t ad_index, uint32_t i_) {
+    if (ad_index == 0)
+        return 0;
+
     std::lock_guard<Lock> guard(state.lock);
     const Variable *v = state[ad_index];
     uint32_t edge = v->next_bwd;

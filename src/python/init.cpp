@@ -676,7 +676,8 @@ nb::object view_to_tensor(nb::handle h, dr::vector<size_t> &shape) {
                   "row-major representation via drjit.nn.unpack().");
 
     if (view.descr.stride != view.descr.cols)
-        nb::raise("Unsupported row stride!");
+        nb::raise("Unsupported row stride: expected stride %u, found %u.",
+                  view.descr.cols, view.descr.stride);
 
     shape.push_back(view.descr.rows);
     shape.push_back(view.descr.cols);
