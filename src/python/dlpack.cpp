@@ -118,21 +118,24 @@ static nb::ndarray<> dlpack(nb::handle_t<ArrayBase> h, bool force_cpu, nb::handl
                 // https://data-apis.org/array-api/latest/API_specification/generated/array_api.array.__dlpack__.html
                 /*
                     stream = -1 request producer to perform no synchronization
-                    stream = 0 is ambiguous
+                    stream = 0 is ambiguous (could mean either None, 1, or 2)
                     stream = 1 or None is the legacy default stream
                     stream = 2 is the per-thread default stream
                     stream > 2 is a CUDA handle to the consumer's stream
                 */
                 if (!stream.is_none() && !stream.equal(nb::int_(-1)) && !stream.equal(nb::int_(1))) {
-                    if (stream.equal(nb::int_(0)))
+                    if (stream.equal(nb::int_(0))) {
                         jit_sync_thread();
-                    else {
+                    } else {
+                        // Note: the special value 2 (syncing w.r.t. the per-thread default stream)
+                        // is handled by `jit_cuda_sync_stream()`.
                         uintptr_t stream_handle;
                         if (!nb::try_cast(stream, stream_handle))
                             nb::raise_type_error("__dlpack__(): 'stream' argument must be 'None' or of type 'int'.");
                         jit_cuda_sync_stream(stream_handle);
                     }
                 }
+
             } else {
                 jit_sync_thread();
             }
@@ -265,6 +268,11 @@ void export_dlpack(nb::module_ &) {
       .def("tf",
            [](nb::handle_t<ArrayBase> h) {
                 nb::module_ tf = nb::module_::import_("tensorflow.experimental.dlpack");
-                return tf.attr("from_dlpack")(dlpack(h, false));
+                // TensorFlow uses non-default streams for compute and data transfer, so
+                // we must synchronize on the stream used by DrJit (producer) before
+                // proceeding with TF. Unfortunately, we do not have access to TF's streams,
+                // so we cannot use a lightweight stream-to-stream synchronization.
+                return tf.attr("from_dlpack")(dlpack(h, /* force_cpu */ false,
+                                                     /* stream */ nb::int_(0)));
            }, doc_tf);
 }
