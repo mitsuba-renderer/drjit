@@ -107,10 +107,26 @@ slice_index(const nb::type_object_t<ArrayBase> &dtype,
             size_out *= slice_length;
             continue;
         } else if (is_drjit_type(tp)) {
-            ArrayMeta m = supp(tp);
+            const ArraySupplement *s = &supp(tp);
+            nb::object tmp;
 
-            if (m.ndim == 1 && m.shape[0] == DRJIT_DYNAMIC) {
-                VarType vt = (VarType) m.type;
+            if (s->is_tensor) {
+                const dr::vector<size_t> &shape = s->tensor_shape(inst_ptr(h));
+
+                if (shape.size() != 1) {
+                    nb::raise("drjit.slice_index(): encountered a %zu-D tensor "
+                              "of type '%s' in slice expression. However, only "
+                              "1D tensors are permitted.",
+                              shape.size(), nb::inst_name(h).c_str());
+                }
+
+                tmp = nb::steal(s->tensor_array(h.ptr()));
+                s = &supp(tmp.type());
+                h = tmp;
+            }
+
+            if (s->ndim == 1 && s->shape[0] == DRJIT_DYNAMIC) {
+                VarType vt = (VarType) s->type;
                 nb::object o = nb::borrow(h);
 
                 size_t slice_size = nb::len(h);

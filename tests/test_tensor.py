@@ -650,3 +650,9 @@ def test21_moveaxis(t):
         v0_out = dr.moveaxis(v0, in_ax, out_ax)
         v1_out = np.moveaxis(v1, in_ax, out_ax)
         pass
+
+@pytest.test_arrays('is_tensor, jit, uint32')
+def test21_tensor_index_with_tensor(t):
+    x = t([1, 2, 3], shape=(1, 3))
+    idx = t([2, 0])
+    assert dr.all(x[:, idx] == t([3, 1]))
