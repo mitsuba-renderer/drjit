@@ -156,6 +156,7 @@ static size_t ad_loop_evaluated_mask(JitBackend backend, const char *name,
     JitVar active_it;
     size_t it = 0;
     bool grad_suspended = ad_grad_suspended();
+    dr::vector<bool> copy_bit(indices1.size(), true);
 
     while (true) {
         // Evaluate the loop state
@@ -190,14 +191,27 @@ static size_t ad_loop_evaluated_mask(JitBackend backend, const char *name,
         }
 
         for (size_t i = 0; i < indices2.size(); ++i) {
-            // Kernel caching: Must create an AD copy so that gradient
-            // computation steps involving this variable (even if unchangecd
-            // & only used as a read-only dependency) are correctly placed
-            // within their associated loop iterations. This does not create
-            // a copy of the underlying JIT variable.
+            // Potentially create an AD copy here (i.e., assign a new AD node
+            // representing a copy of the original loop state). Note that this
+            // is a symbolic copy in the AD graph that does not consume actual
+            // device memory. This copy is needed to prevent a degeneracy of
+            // forward derivative propagation, where a loop variable does not
+            // change at all, yet all loop iterations depend on this variable in
+            // a differentiable sense. When the AD traversal reaches this
+            // variable, this will generate a huge kernel that propagates the
+            // derivative to every single loop iteration, instead of splitting
+            // the computation into per-iteration kernels. By creating marked
+            // (ad_mark_loop-boundary) copies, we can ensure correct sequencing.
+            // The extra copies are only used within the loop and removed below.
 
-            uint64_t i1 = indices2[i],
-                     i2 = grad_suspended ? ad_var_inc_ref(i1) : ad_var_copy(i1);
+            uint64_t i1 = indices2[i], i2;
+
+            if (!grad_suspended && (i1 >> 32) != 0 && (indices1[i] >> 32) == (i1 >> 32)) {
+                i2 = ad_var_copy(i1);
+            } else {
+                i2 = ad_var_inc_ref(i1);
+                copy_bit[i] = false;
+            }
 
             ad_var_dec_ref(i1);
             ad_mark_loop_boundary(i2);
@@ -208,12 +222,36 @@ static size_t ad_loop_evaluated_mask(JitBackend backend, const char *name,
 
         write_cb(payload, indices2, false);
         indices1.release();
-        indices1.swap(indices2);
+        indices2.release();
+        read_cb(payload, indices1);
 
         active_it = JitVar::borrow(cond_cb(payload));
         active_it.schedule_();
         active &= active_it;
         active.schedule_force_();
+    }
+
+    {
+        bool changed = false;
+        for (size_t i = 0; i < indices1.size(); ++i) {
+            if (!copy_bit[i])
+                continue;
+
+            // The AD index of this was copied a number of times (see above for
+            // the rationale). Let's now remove these again.
+            uint32_t ad_index = (uint32_t) (indices1[i] >> 32);
+            for (uint32_t j = 0; j < it; ++j)
+                ad_index = ad_pred(ad_index, 0);
+
+            uint64_t index_new = (((uint64_t) ad_index) << 32) | (uint32_t) indices1[i];
+            ad_var_inc_ref(index_new);
+            ad_var_dec_ref(indices1[i]);
+            indices1[i] = index_new;
+            changed = true;
+        }
+
+        if (changed)
+            write_cb(payload, indices1, false);
     }
 
     return it;
@@ -705,8 +743,7 @@ public:
                     before the loop>
 
          state_i = <subset of 'state' for which derivative
-                    tracking was enabled before and after
-                    the loop>
+                    tracking was enabled before the loop>
 
          grad_state_o = <zero-initialized gradients>
 
@@ -718,26 +755,21 @@ public:
              dr.disable_grad(state)
      */
 
-    void bwd_body_simple() {
-        // Create differentiable loop state variables
+    void bwd_body_simple() { // Create differentiable loop state variables
         m_state2.release();
 
-        index32_vector tmp;
-        size_t offset = m_inputs.size();
         for (size_t i = 0; i < m_inputs.size(); ++i) {
             const Input &in = m_inputs[i];
 
             uint64_t index;
-            if (in.has_grad_out && in.has_grad_in) {
+            if (in.has_grad_in) {
                 index = ad_var_new((uint32_t) m_state[i]);
-                tmp.push_back_borrow((uint32_t) m_state[offset]);
+                ad_var_map_put(combine(m_input_indices[in.grad_in_index]), index);
             } else {
                 index = ad_var_inc_ref(m_state[i]);
             }
-            m_state2.push_back_steal(index);
 
-            if (in.has_grad_out)
-                offset++;
+            m_state2.push_back_steal(index);
         }
 
         // Run the loop body
@@ -754,16 +786,18 @@ public:
         m_read_cb(m_payload, m_state2);
 
         // AD backward propagation pass
-        offset = m_inputs.size();
+        size_t offset = m_inputs.size();
         for (size_t i = 0; i < m_inputs.size(); ++i) {
             const Input &in = m_inputs[i];
-            if (!in.has_grad_out)
+            if (!in.has_grad_in && !in.has_grad_out)
                 continue;
 
-            ad_accum_grad(m_state2[i], (uint32_t) m_state[offset]);
-
-            if (!in.has_grad_in)
+            if (in.has_grad_out && (m_state2[i] >> 32)) {
+                ad_accum_grad(m_state2[i], (uint32_t) m_state[offset]);
                 ad_enqueue(dr::ADMode::Backward, m_state2[i]);
+            } else if (in.has_grad_in) {
+                ad_accum_grad(m_state2[i], (uint32_t) m_state[offset]);
+            }
 
             offset++;
         }
@@ -771,18 +805,23 @@ public:
         ad_traverse(dr::ADMode::Backward, (uint32_t) dr::ADFlag::ClearNone);
 
         // Read the loop output + derivatives copy to loop state vars
-        m_state.release();
-        for (size_t i = 0; i < m_inputs.size(); ++i)
-            m_state.push_back_borrow((uint32_t) m_state2[i]);
+        for (size_t i = 0; i < m_inputs.size(); ++i) {
+            jit_var_inc_ref((uint32_t) m_state2[i]);
+            ad_var_dec_ref((uint32_t) m_state[i]);
+            m_state[i] = (uint32_t) m_state2[i];
+        }
 
         offset = m_inputs.size();
         for (size_t i = 0; i < m_inputs.size(); ++i) {
             const Input &in = m_inputs[i];
-
-            if (!in.has_grad_out)
+            if (!in.has_grad_in && !in.has_grad_out)
                 continue;
-            uint32_t grad = ad_grad(m_state2[i]);
-            m_state.push_back_steal(grad);
+
+            if (in.has_grad_in) {
+                ad_var_dec_ref(m_state[offset]);
+                m_state[offset] = ad_grad(m_state2[i]);
+            }
+
             offset++;
         }
 
@@ -796,10 +835,17 @@ public:
         for (const Input &i : m_inputs)
             m_state.push_back_borrow(i.index);
 
+        uint32_t index = 0;
         for (const Input &in : m_inputs) {
-            uint32_t grad;
-            if (!in.has_grad_out)
+            index++;
+            if (!in.has_grad_out && !in.has_grad_in)
                 continue;
+            uint32_t grad;
+
+            if (in.has_grad_in && in.has_grad_out)
+                jit_raise("LoopOp::backward_simple(): unsupported "
+                          "configuration. Variable %u (r%u) is marked both as a "
+                          "differentiable output and an input.", index, (uint32_t) in.index);
 
             if (in.has_grad_in) {
                 uint64_t zero = 0;
@@ -818,29 +864,30 @@ public:
             [](void *p) { return ((LoopOp *) p)->fwd_cond(); },
             [](void *p) { return ((LoopOp *) p)->bwd_body_simple(); }, nullptr, false);
 
-
         size_t offset = m_inputs.size();
         for (const Input &in : m_inputs) {
-            if (!in.has_grad_out)
+            if (!in.has_grad_out && !in.has_grad_in)
                 continue;
 
-            if (in.has_grad_in) {
-                ad_accum_grad(combine(m_input_indices[in.grad_in_index]),
+            if (in.has_grad_out)
+                ad_accum_grad(combine(m_output_indices[in.grad_out_offset]),
                               (uint32_t) m_state[offset]);
-            }
 
             offset++;
         }
 
+        offset = m_inputs.size();
         for (size_t i = 0; i < m_inputs.size(); ++i) {
             const Input &in = m_inputs[i];
-            if (!in.has_grad_out)
+            if (!in.has_grad_out && !in.has_grad_in)
                 continue;
 
-            ad_accum_grad(combine(m_output_indices[in.grad_out_offset]),
-                          (uint32_t) m_state[m_inputs.size() + in.grad_in_offset]);
-        }
+            if (in.has_grad_in)
+                ad_accum_grad(combine(m_input_indices[in.grad_in_index]),
+                              (uint32_t) m_state[offset]);
 
+            offset++;
+        }
 
         m_state.release();
     }
@@ -968,8 +1015,7 @@ bool ad_loop(JitBackend backend, int symbolic, int compress,
                     vt != VarType::Float64)
                     continue;
 
-                if (max_iterations == 0 &&
-                    (uint32_t) indices_in[i] == (uint32_t) indices_out[i]) {
+                if ((uint32_t) indices_in[i] == (uint32_t) indices_out[i]) {
                     // Keep unchanged variables out of the AD system
                     if (indices_in[i] != indices_out[i]) {
                         ad_var_inc_ref(indices_in[i]);

@@ -12,12 +12,14 @@
 #include <drjit-core/half.h>
 #include <nanobind/ndarray.h>
 #include "../ext/nanobind/src/buffer.h"
+#include "drjit/python.h"
 #include "meta.h"
 #include "base.h"
 #include "memop.h"
 #include "shape.h"
 #include "dlpack.h"
 #include "init.h"
+#include "coop_vec.h"
 #include <algorithm>
 
 /// Forward declaration
@@ -134,7 +136,7 @@ int tp_init_array(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
             }
 
             // Try to construct from an instance created by another
-            // array programming framework
+            // array programming framework or a Dr.Jit tensor
             nb::object converted_complex_scalar;
             if (is_drjit_tensor || (!arg_is_drjit && !is_builtin(arg_tp) && nb::ndarray_check(arg))) {
                 // For scalar types we want to rely on broadcasting below
@@ -142,13 +144,30 @@ int tp_init_array(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
                     // Import flattened array in C-style ordering
                     nb::object flattened;
 
-                    if (is_drjit_tensor)
-                        flattened = nb::steal(supp(arg_tp).tensor_array(arg));
-                    else
-                        flattened = import_ndarray(s, arg);
-
                     if (s.is_complex)
                         do_flip_axes = true;
+
+                    if (is_drjit_tensor) {
+                        const ArraySupplement &as = supp(arg_tp);
+                        const dr::vector<size_t> &shape = as.tensor_shape(inst_ptr(arg));
+                        if (shape.size() != s.ndim)
+                            nb::raise("dimensionality mismatch (target has %u, "
+                                      "source has %zu dimensions)",
+                                      s.ndim, shape.size());
+                        for (uint32_t d = 0; d < s.ndim; ++d) {
+                            if (s.shape[d] == DRJIT_DYNAMIC)
+                                continue;
+                            size_t source_shape =
+                                do_flip_axes ? shape[shape.size() - 1 - d]
+                                             : shape[d];
+                            if (s.shape[d] != source_shape)
+                            nb::raise("mismatched shape (axis %u has size %u in target type, %zu in source tensor)",
+                                      d, s.shape[d], source_shape);
+                        }
+                        flattened = nb::steal(as.tensor_array(arg));
+                    } else {
+                        flattened = import_ndarray(s, arg);
+                    }
 
                     nb::object unraveled = unravel(
                         nb::borrow<nb::type_object_t<dr::ArrayBase>>(self_tp),
@@ -645,6 +664,28 @@ static void ndarray_keep_alive(JitBackend backend, uint32_t index, nb::detail::n
 nb::object full_alt(nb::type_object dtype, nb::handle value, size_t size);
 nb::object empty_alt(nb::type_object dtype, size_t size);
 
+nb::object view_to_tensor(nb::handle h, dr::vector<size_t> &shape) {
+    MatrixView &view = nb::cast<MatrixView &>(nb::handle(h));
+    if (view.transpose)
+        nb::raise("The view is transposed. Conversion into tensor format still "
+                  "needs to be implemented.");
+
+    if (view.descr.layout != MatrixLayout::RowMajor)
+        nb::raise("This tensor is in an inference/training-optimal layout. To "
+                  "convert it back into tensor form, you must unpack it into a "
+                  "row-major representation via drjit.nn.unpack().");
+
+    if (view.descr.stride != view.descr.cols)
+        nb::raise("Unsupported row stride: expected stride %u, found %u.",
+                  view.descr.cols, view.descr.stride);
+
+    shape.push_back(view.descr.rows);
+    shape.push_back(view.descr.cols);
+
+    return view.buffer[nb::slice(view.descr.offset,
+                                 view.descr.offset + view.descr.size, 1u)];
+}
+
 int tp_init_tensor(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
     PyTypeObject *self_tp = Py_TYPE(self);
 
@@ -660,7 +701,9 @@ int tp_init_tensor(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
         bool do_flip_axes = flip_axes == Py_True;
 
         PyTypeObject *array_tp = array ? Py_TYPE(array) : nullptr;
-        raise_if(do_flip_axes && (shape || !array_tp || !is_drjit_type(array_tp) ||
+        raise_if(do_flip_axes && (shape || !array_tp ||
+                                  (!is_drjit_type(array_tp) &&
+                                   !nb::handle(array_tp).is(coop_vector_type)) ||
                                   array_tp == self_tp),
                  "flip_axes=True requires that 'shape' is not specified, and "
                  "that the input is a nested Dr.Jit array type (e.g. "
@@ -676,6 +719,14 @@ int tp_init_tensor(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
 
         // Same type -> copy constructor
         if (array_tp == self_tp) {
+            if (shape)
+                nb::raise(
+                    "use 'Tensor(x.array, shape)' or 'drjit.reshape(Tensor, x, "
+                    "shape)' to reshape a tensor");
+            if (do_flip_axes)
+                nb::raise("The flip_axes argument is only supported when "
+                          "constructing tensors from N-D arrays or cooperative "
+                          "vectors");
             nb::detail::nb_inst_copy(self, array);
             return 0;
         }
@@ -690,6 +741,8 @@ int tp_init_tensor(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
                 // Try to construct from an instance created by another
                 // array programming framework
                 flat = import_ndarray(s, array, &shape_vec);
+            } else if (nb::isinstance<MatrixView>(nb::handle(array))) {
+                flat = view_to_tensor(array, shape_vec);
             } else {
                 // Infer the shape of an arbitrary data structure & flatten it
                 VarType vt = (VarType) s.type;
@@ -984,12 +1037,24 @@ nb::object linspace(const nb::type_object_t<ArrayBase> &dtype,
     if (size == 0)
         return dtype();
 
-    nb::object result = nb::inst_alloc(counter_tp);
-    counter_s.init_counter((size_t) size, inst_ptr(result));
-    nb::inst_mark_ready(result);
+    nb::object counter = nb::inst_alloc(counter_tp);
+    counter_s.init_counter((size_t) size, inst_ptr(counter));
+    nb::inst_mark_ready(counter);
+
+    nb::handle dtype_c = dtype;
+    if ((VarType) s.type == VarType::Float16) {
+        ArrayMeta m = s;
+        m.type = (uint16_t) VarType::Float32;
+        dtype_c = meta_get_type(m);
+    }
 
     double step = (stop - start) / (size - ((endpoint && size > 0) ? 1 : 0));
-    return fma(dtype(result), dtype(step), dtype(start));
+    nb::object result = fma(dtype_c(counter), dtype_c(step), dtype_c(start));
+
+    if (!dtype_c.is(dtype))
+        result = dtype(result);
+
+    return result;
 }
 
 /// Extract types from typing.Optional[T], typing.Union[T, None], etc.
