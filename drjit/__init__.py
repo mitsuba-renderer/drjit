@@ -1974,7 +1974,7 @@ def convolve(
     """
     Convolve one or more axes of an input array/tensor with a 1D filter
 
-    This function filters one more axes of a Dr.Jit array or tensor, for
+    This function filters one or more axes of a Dr.Jit array or tensor, for
     example to convolve an image with a 2D Gaussian filter to blur spatial
     detail.
 
