@@ -141,8 +141,8 @@ if (DRJIT_ENABLE_CUDA)
   target_compile_definitions(drjit-python PRIVATE -DDRJIT_ENABLE_CUDA)
 endif()
 
-# Disable leak warnings by default in PyPI release builds
-if (SKBUILD)
+# Disable DrJit and nanobind leak warnings (disabled by default in PyPi builds)
+if (NOT DRJIT_ENABLE_LEAK_WARNINGS)
   target_compile_definitions(drjit-python PRIVATE -DDRJIT_DISABLE_LEAK_WARNINGS)
 endif()
 
