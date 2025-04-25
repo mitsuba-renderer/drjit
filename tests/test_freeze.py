@@ -2963,14 +2963,14 @@ def test76_changing_literal_width_holder(t, auto_opaque):
 def test77_optimizers(t, optimizer, auto_opaque):
     n = 10
 
-    def func(y, opt):
-        loss = dr.mean(dr.square(opt["x"] - y))
+    def func(target, opt):
+        loss = dr.mean(dr.square(opt["x"] - target))
 
         dr.backward(loss)
 
         opt.step()
 
-        return opt["x"], loss
+        return [opt["x"], opt["y"]], loss
 
     def init_optimizer():
         if optimizer == "sdg":
@@ -2988,15 +2988,22 @@ def test77_optimizers(t, optimizer, auto_opaque):
 
     for i in range(n):
         x = dr.full(t, 1, 10)
-        y = dr.full(t, 0, 10)
+        y = dr.full(t, -1, 10)
+        target = dr.full(t, 0, 10)
 
         opt_func["x"] = x
         opt_frozen["x"] = x
 
-        res_x, res_loss = frozen(y, opt_frozen)
-        ref_x, ref_loss = func(y, opt_func)
+        opt_func["y"] = y
+        opt_frozen["y"] = y
 
-        assert dr.allclose(res_x, ref_x)
+        opt_func.set_learning_rate({"x": 1e-4, "y": 1e-3})
+        opt_frozen.set_learning_rate({"x": 1e-4, "y": 1e-3})
+
+        res_params, res_loss = frozen(target, opt_frozen)
+        ref_params, ref_loss = func(target, opt_func)
+
+        assert dr.allclose(res_params, ref_params)
         assert dr.allclose(res_loss, ref_loss)
 
     if optimizer == "adam":
