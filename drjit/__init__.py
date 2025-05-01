@@ -2578,6 +2578,12 @@ def freeze(
       `dr.arange(UInt32, dr.width(a))`, where the result only implicitly depends on
       the width value.
 
+    When calling a frozen function from within an outer frozen function, the content
+    of the inner function will be executed and recorded by the outer function.
+    No separate recording will be made for the inner function, and its ``n_recordings``
+    count will not change. Calling the inner function separately from outside a
+    frozen function will therefore require re-tracing for the provided inputs.
+
     **Advanced features**. The :py:func:`@dr.freeze <drjit.freeze>` decorator takes
     several optional parameters that are helpful in certain situations.
 
