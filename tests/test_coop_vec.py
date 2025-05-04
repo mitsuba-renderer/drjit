@@ -638,3 +638,199 @@ def test22_optimize_in_loop_bwd_v2(t, mode):
     b = TensorXf16(b_view)
     assert dr.all(A == TensorXf16([[3, 3], [0, 0]]))
     assert dr.all(b == TensorXf16([[6], [0]]))
+
+
+@pytest.test_arrays("jit,shape=(*),cuda,float16,diff")
+def test23_hash_grid_encoding(t):
+    skip_if_coopvec_not_supported(t)
+
+    dr.set_flag(dr.JitFlag.KernelHistory, True)
+    import tinycudann as tcnn
+    import torch
+
+    m = sys.modules[t.__module__]
+    Float16 = t
+    Float32 = m.Float32
+
+    config = {
+        "hashmap_size": 2**19,
+        "num_levels": 16,
+        "base_res": 16,
+        "per_level_scale": 1.5,
+        "num_features": 2,
+    }
+
+    hg = nn.HashGridEncoding(
+        3,
+        **config,
+        align_corners=False,
+        torchngp_compat=False,
+    )
+    hg = hg.alloc(Float16)
+
+    config = {
+        "otype": "Grid",
+        "type": "Hash",
+        "n_levels": 16,
+        "n_features_per_level": 2,
+        "log2_hashmap_size": 19,
+        "base_resolution": 16,
+        "per_level_scale": 1.5,
+        "interpolation": "Linear",
+    }
+
+    hg_ref = tcnn.Encoding(3, config, )
+    # print(f"{next(hg_ref.named_parameters())=}")
+    data = hg_ref.params.data
+
+    hg.set_params(Float16(data.to(dtype = torch.float16)))
+
+    sampler = m.PCG32(2**18)
+
+    x = [sampler.next_float32(), sampler.next_float32(), sampler.next_float32()]
+    x_torch = torch.stack([xx.torch() for xx in x], dim = 1)
+
+    dr.kernel_history_clear()
+
+    res = m.ArrayXf16(hg(x)).torch().permute(1, 0)
+
+    kernels = dr.kernel_history()
+    execution_time = 0
+    for kernel in kernels:
+        execution_time += kernel["execution_time"]
+    print(f"Dr.Jit: {execution_time=}ms")
+
+    start = torch.cuda.Event(enable_timing = True)
+    end = torch.cuda.Event(enable_timing = True)
+
+    start.record()
+    ref = hg_ref(x_torch)
+    end.record()
+
+    torch.cuda.synchronize()
+    print(f"PyTorch: execution_time={start.elapsed_time(end)}ms")
+
+    assert torch.allclose(res, ref, atol=0.00001)
+
+
+@pytest.test_arrays("jit,shape=(*),cuda,float16,diff")
+def test24_hash_grid_net(t):
+    skip_if_coopvec_not_supported(t)
+
+    import tinycudann as tcnn
+    import torch
+
+    m = sys.modules[t.__module__]
+    Float16 = t
+    Float32 = m.Float32
+
+    net = nn.Sequential(
+        nn.HashGridEncoding(-1, 16, 2),
+        nn.Cast(Float16),
+        nn.Linear(-1, -1, bias = False),
+        nn.Linear(-1, -1, bias=False),
+        nn.LeakyReLU(),
+        nn.Linear(-1, -1, bias=False),
+        nn.LeakyReLU(),
+        nn.Linear(-1, -1, bias=False),
+        nn.LeakyReLU(),
+        nn.Linear(-1, 3, bias=False),
+    )
+
+    net = net.alloc(m.TensorXf16, 3)
+
+    weights, net = nn.pack(net, layout = "training")
+
+    sampler = m.PCG32(2**18)
+
+    x = nn.CoopVec([sampler.next_float32(), sampler.next_float32(), sampler.next_float32()])
+    print(f"{net}")
+
+    y = net(x)
+
+# @pytest.test_arrays("jit,shape=(*),cuda,float16,diff")
+# def test25_hash_grid_img(t):
+#     skip_if_coopvec_not_supported(t)
+#
+#     from tqdm.auto import tqdm
+#     import imageio.v3 as iio
+#     import drjit as dr
+#     import drjit.nn as nn
+#     from drjit.opt import Adam, GradScaler
+#     from drjit.auto.ad import Texture2f, TensorXf, TensorXf16, Float16, Float32, Array2f, Array3f
+#
+#     # Load a test image and construct a texture object
+#     ref = TensorXf(iio.imread("https://rgl.s3.eu-central-1.amazonaws.com/media/uploads/wjakob/2024/06/wave-128.png") / 256)
+#     tex = Texture2f(ref)
+#
+#      # Ensure consistent results when re-running the following
+#     dr.seed(0)
+#
+#     # Establish the network structure
+#     net = nn.Sequential(
+#         nn.HashGridEncoding(-1, 16, 2),
+#         # nn.TriEncode(16, 0.2),
+#         nn.Cast(Float16),
+#         nn.Linear(-1, -1, bias=False),
+#         nn.LeakyReLU(),
+#         nn.Linear(-1, -1, bias=False),
+#         nn.LeakyReLU(),
+#         nn.Linear(-1, -1, bias=False),
+#         nn.LeakyReLU(),
+#         nn.Linear(-1, 3, bias=False),
+#         nn.Exp()
+#     )
+#
+#     # Instantiate the network for a specific backend + input size
+#     net = net.alloc(TensorXf16, 2)
+#
+#     # Convert to training-optimal layout
+#     weights, net = nn.pack(net, layout='training')
+#     print(net)
+#
+#     # Optimize a single-precision copy of the parameters
+#     opt = Adam(lr=1e-3, params={'weights': Float32(weights)})
+#
+#     # This is an adaptive mixed-precision (AMP) optimization, where a half
+#     # precision computation runs within a larger single-precision program.
+#     # Gradient scaling is required to make this numerically well-behaved.
+#     scaler = GradScaler()
+#
+#     res = 256
+#
+#     for i in tqdm(range(4000)):
+#         with dr.profile_range("iteration"):
+#             # Update network state from optimizer
+#             weights[:] = Float16(opt['weights'])
+#
+#             # Generate jittered positions on [0, 1]^2
+#             t = dr.arange(Float32, res)
+#             p = (Array2f(dr.meshgrid(t, t)) + dr.rand(Array2f, (2, res * res))) / res
+#
+#             # Evaluate neural net + L2 loss
+#             with dr.profile_range("fwd"):
+#                 img = Array3f(net(nn.CoopVec(p)))
+#             with dr.profile_range("loss"):
+#                 loss = dr.squared_norm(tex.eval(p) - img)
+#
+#             # Mixed-precision training: take suitably scaled steps
+#             with dr.profile_range("bwd"):
+#                 dr.backward(scaler.scale(loss))
+#             with dr.profile_range("step"):
+#                 scaler.step(opt)
+#
+#     # Done optimizing, now let's plot the result
+#     t = dr.linspace(Float32, 0, 1, res)
+#     p = Array2f(dr.meshgrid(t, t))
+#     img = Array3f(net(nn.CoopVec(p)))
+#
+#     # Convert 'img' with shape 3 x (N*N) into a N x N x 3 tensor
+#     img = dr.reshape(TensorXf(img, flip_axes=True), (res, res, 3))
+#
+#     # import matplotlib.pyplot as plt
+#     # fig, ax = plt.subplots(1, 2, figsize=(10,5))
+#     # ax[0].imshow(ref)
+#     # ax[1].imshow(dr.clip(img, 0, 1))
+#     # fig.tight_layout()
+#     # plt.show()
+#
