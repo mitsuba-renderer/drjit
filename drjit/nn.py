@@ -1,6 +1,7 @@
 from __future__ import annotations
 import drjit
 import sys
+from dataclasses import dataclass, field
 
 if sys.version_info < (3, 11):
     from typing_extensions import Tuple, Sequence, Union, Type, TypeAlias, Optional, Any
@@ -502,4 +503,425 @@ class SinEncode(Module):
 
         return CoopVec(r)
 
+
+def cosine_ramp(x):
+    """ "Smoothed" ramp to help features blend-in without instabilities"""
+    return 0.5 * (1.0 - drjit.cos(drjit.pi * x))
+
+def div_round_up(num: int, divisor: int) -> int:
+    return (num + divisor - 1) // divisor
+
+
+def next_multiple(num: int, multiple: int) -> int:
+    return multiple * div_round_up(num, multiple)
+
+@dataclass
+class HashGridConfig:
+    dimension: int
+    num_levels: int
+    num_features: int
+    hashmap_size: int
+    base_res: int
+    per_level_scale: float
+    log2_per_level_scale: float
+    align_corners: bool
+    torchngp_compat: bool
+    smooth_weight_gradients: bool
+    smooth_weight_lambda: float
+    grid_offsets: list
+    level_offsets: list
+    cell_sizes: list
+
+    def __init__(
+        self,
+        dimension: int = -1,
+        num_levels: int = -1,
+        num_features: int = -1,
+        hashmap_size: int = 2**19,
+        base_res: int = 16,
+        per_level_scale: float = 2,
+        log2_per_level_scale: float = 1,
+        align_corners: bool = False,
+        torchngp_compat: bool = False,
+        smooth_weight_gradients: bool = False,
+        smooth_weight_lambda: float = 1.0,
+        grid_offsets: list = [],
+        level_offsets: list = [],
+        cell_sizes: list = [],
+    ) -> None:
+        self.dimension = dimension
+        self.num_levels = num_levels
+        self.num_features = num_features
+        self.hashmap_size = hashmap_size
+        self.base_res = base_res
+        self.per_level_scale = per_level_scale
+        self.log2_per_level_scale = log2_per_level_scale
+        self.align_corners = align_corners
+        self.torchngp_compat = torchngp_compat
+        self.smooth_weight_gradients = smooth_weight_gradients
+        self.smooth_weight_lambda = smooth_weight_lambda
+        self.grid_offsets = grid_offsets
+        self.level_offsets = level_offsets
+        self.cell_sizes = cell_sizes
+
+
+class HashGridEncoding(Module):
+    DRJIT_STRUCT = {
+        "data": drjit.ArrayBase,
+        "dtype": type,
+        "_config": HashGridConfig,
+    }
+
+    def __init__(
+        self,
+        dimension: int = -1,
+        num_levels: int = -1,
+        num_features: int = -1,
+        *,
+        hashmap_size: int = 2**19,
+        base_res: int = 16,
+        per_level_scale: float = 2,
+        align_corners: bool = False,
+        torchngp_compat: bool = False,
+        smooth_weight_gradients: bool = False,
+        smooth_weight_lambda: float = 1.0,
+    ) -> None:
+        self._config = HashGridConfig(
+            dimension=dimension,
+            hashmap_size=hashmap_size,
+            num_levels=num_levels,
+            base_res=base_res,
+            per_level_scale=per_level_scale,
+            num_features=num_features,
+            align_corners=align_corners,
+            torchngp_compat=torchngp_compat,
+            log2_per_level_scale=drjit.log2(per_level_scale),
+            smooth_weight_gradients=smooth_weight_gradients,
+            smooth_weight_lambda=smooth_weight_lambda,
+        )
+
+    def __call__(
+        self, p: drjit.ArrayBase | list[drjit.ArrayBase] | CoopVec, active=True
+    ) -> CoopVec:
+        dtype = self.dtype
+        mod = sys.modules[dtype.__module__]
+        StorageFloat = dtype
+        UInt32 = drjit.uint32_array_t(dtype)
+        ArrayXu = mod.ArrayXu
+        StorageFloatXf = mod.ArrayXf16 if drjit.is_half_v(dtype) else mod.ArrayXf
+
+        if isinstance(p, CoopVec):
+            p = list(p)
+
+        if isinstance(p, list):
+            PositionFloat = drjit.leaf_t(p[0])
+        else:
+            PositionFloat = drjit.leaf_t(p)
+
+        PositionFloatXf = mod.ArrayXf16 if drjit.is_half_v(PositionFloat) else mod.ArrayXf
+
+        if isinstance(p, list) or isinstance(p, CoopVec):
+            p = PositionFloatXf(p)
+
+        indexing_primes = [1, UInt32(2654435761), UInt32(805459861)]
+
+        invalid = active & drjit.any((p < 0) | (p >= 1))
+
+        result = []
+
+        for level_i in range(self.num_levels):
+            scale = self._grid_scale(level_i)
+            res = self._grid_resolution(scale)
+            level_offset = self._config.level_offsets[level_i]
+            this_level_size = self._config.level_offsets[level_i + 1] - level_offset
+            num_features_fourth = self.num_features - (self.num_features % 4)
+            num_features_even = self.num_features - (self.num_features % 2)
+
+            p_offset: float = 0.0 if self.align_corners else 0.5
+            pos = drjit.fma(p, scale, p_offset)
+
+            pos0 = ArrayXu(drjit.floor(pos))
+
+            w1 = pos - pos0
+            w0 = 1.0 - w1
+
+            # We define a gather function to be able to handle MatrixViews
+            if isinstance(self.data, MatrixView):
+                assert self.data.shape[1] == 1
+                assert self.data.stride == 1
+                def gather(type, source, index, mask, **kwargs):
+                    return drjit.gather(type, source.buffer, self.data.offset + index, mask, **kwargs)
+            else:
+                def gather(type, source, index, mask, **kwargs):
+                    return drjit.gather(type, source, index, mask, **kwargs)
+
+            def indexing_function(pos_grid: ArrayXu):
+                """
+                This function is used to index the underlying data array of the
+                hash grid given a grid position.
+                """
+                stride = 1
+                index = UInt32(0)
+                for d in range(self.dimension):
+                    index += pos_grid[d] * stride
+                    stride *= res
+
+                    if stride > this_level_size:
+                        break
+
+                if this_level_size < stride:
+                    index = UInt32(0)
+                    for d in range(0, self.dimension):
+                        index ^= pos_grid[d] * indexing_primes[d]
+
+                sub_grid_index = level_offset + (index % UInt32(this_level_size))
+                return self.num_features * sub_grid_index
+
+            def acc_features(weight: StorageFloat, index: UInt32):
+                """
+                Accumulates the ``self.num_features`` features at the given index.
+                It tries to use packet gather operations if possible, to improve
+                the performance of the backward pass, as atomic packet scatters
+                perform better than their non packeted counterparts.
+                """
+                if self.smooth_weight_gradients:
+                    weight_smooth = cosine_ramp(weight)
+                    weight = weight + self.smooth_weight_lambda * (weight_smooth - drjit.detach(weight_smooth))
+
+                for k in range(0, num_features_fourth, 4):
+                    v = gather(
+                        StorageFloatXf,
+                        self.data,
+                        (index + k) // 4,
+                        active,
+                        shape=(4, drjit.width(index)),
+                    )
+                    values[k + 0] = drjit.fma(v[0], weight, values[k + 0])
+                    values[k + 1] = drjit.fma(v[1], weight, values[k + 1])
+                    values[k + 2] = drjit.fma(v[2], weight, values[k + 2])
+                    values[k + 3] = drjit.fma(v[3], weight, values[k + 3])
+                for k in range(num_features_fourth, num_features_even, 2):
+                    v = gather(
+                        StorageFloatXf,
+                        self.data,
+                        (index + k) // 2,
+                        active,
+                        shape=(2, drjit.width(index)),
+                    )
+                    values[k + 0] = drjit.fma(v[0], weight, values[k + 0])
+                    values[k + 1] = drjit.fma(v[1], weight, values[k + 1])
+                for k in range(num_features_even, self.num_features):
+                    v = gather(StorageFloat, self.data, index + k, active)
+                    values[k] = drjit.fma(v, weight, values[k])
+
+            values = [StorageFloat(0.0)] * self.num_features
+
+            def acc(offset: ArrayXu):
+                """
+                Given one of the ``2**self.dimensionality()`` vertices, this function
+                calculates the grid position and interpolation weight and accumulates
+                the features into the ``values`` field.
+                """
+                pos_grid = pos0 + ArrayXu(offset)
+                weight = drjit.select(ArrayXu(offset) == 0, w0, w1)
+                weight = drjit.prod(weight, axis = 0)
+
+                index = indexing_function(pos_grid)
+                acc_features(weight, index)
+
+            for offset in self._config.grid_offsets:
+                acc(ArrayXu(offset))
+
+            for v in values:
+                # Since we're not really validating the inputs, let's at least
+                # consistently output NaNs for out-of-range inputs.
+                # Without this `select`, NaNs would often show up only in the
+                # backward pass, which is really difficult to debug.
+                v = drjit.select(invalid, drjit.nan, v & active)
+
+                result.append(v)
+
+        return CoopVec(*result)
+
+    def _alloc_internal(self, dtype: Type[drjit.ArrayBase]):
+        mod = sys.modules[dtype.__module__]
+        self.dtype = drjit.leaf_t(dtype)
+
+        assert (self.hashmap_size % 8) == 0, (
+            f"Invalid hashmap size {self.hashmap_size}, must be a multiple of 8."
+        )
+
+        self._config.level_offsets = [None] * (self.num_levels + 1)
+        self._config.cell_sizes = [0.0] * self.num_levels
+        max_params = drjit.scalar.UInt32(0xffffffff) // 2
+        offset = 0
+
+        for level_i in range(self.num_levels):
+            res = self._grid_resolution(self._grid_scale(level_i))
+            stride = drjit.power(float(res), self.dimension)
+
+            params_in_level = int(max_params) if (stride > max_params) else (res**self.dimension)
+            params_in_level = next_multiple(params_in_level, 8)
+            params_in_level = min(params_in_level, self.hashmap_size)
+
+            self._config.level_offsets[level_i] = offset
+            self._config.cell_sizes[level_i] = 1.0 / (self.base_res * self.per_level_scale**level_i)
+            offset += params_in_level
+
+        self._config.level_offsets[-1] = offset
+
+        params_size = self._config.level_offsets[-1] * self.num_features
+        self.data = drjit.zeros(dtype, params_size)
+
+        # Stores the pattern of offsets used to index the 2** n corners of a voxel
+        self._config.grid_offsets = [
+            [(i >> j) & 1 for j in range(self.dimension)]
+            for i in range(2**self.dimension)
+        ]
+
+    def _alloc(self, dtype: Type[drjit.ArrayBase], size: int = -1, /) -> Tuple[Module, int]:
+
+        dimension = self.dimension
+        if dimension < 0:
+            dimension = size
+
+        num_levels = self.num_levels
+        num_features = self.num_features
+
+        if dimension < 0 or num_levels < 0 or num_features < 0:
+            raise RuntimeError(
+                "The network contains layers with an unspecified "
+                "size. You must specify the input size to drjit.nn.Module.alloc()."
+            )
+
+        result = HashGridEncoding(
+            dimension,
+            hashmap_size=self.hashmap_size,
+            num_levels=self.num_levels,
+            base_res=self.base_res,
+            per_level_scale=self.per_level_scale,
+            num_features=self.num_features,
+            align_corners=self.align_corners,
+            torchngp_compat=self.torchngp_compat,
+            smooth_weight_gradients=self.smooth_weight_gradients,
+            smooth_weight_lambda=self.smooth_weight_lambda,
+        )
+        result._alloc_internal(dtype)
+
+        return result, result.out_features
+
+    def _grid_scale(self, level) -> float:
+        """
+        The -1 means that `base_resolution` refers to the number of grid _vertices_ rather
+        than the number of cells. This is slightly different from the notation in the paper,
+        but results in nice, power-of-2-scaled parameter grids that fit better into cache lines.
+        """
+        return drjit.exp2(level * self._config.log2_per_level_scale) * self.base_res - 1.0
+
+    def _grid_resolution(self, scale) -> int:
+        return (
+            int(drjit.ceil(scale))
+            + (0 if self.align_corners else 1)
+            + (1 if self.torchngp_compat else 0)
+        )
+
+    def __repr__(self) -> str:
+        return (
+            f"HashGrid(\n"
+            f"    dtype={self.dtype},\n"
+            f"    dimension={self.dimension},\n"
+            f"    hashmap_size={self.hashmap_size},\n"
+            f"    num_levels={self.num_levels},\n"
+            f"    num_features={self.num_features},\n"
+            f"    base_res={self.base_res},\n"
+            f"    per_level_scale={self.per_level_scale},\n"
+            f"    align_corners={self.align_corners},\n"
+            f"    torchngp_compat={self.torchngp_compat},\n"
+            f"    smooth_weight_gradients={self.smooth_weight_gradients},\n"
+            f"    smooth_weight_lambda={self.smooth_weight_lambda}\n"
+            ")"
+        )
+
+    # --------------------
+
+    def dimensionality(self) -> int:
+        return 3
+
+    def default_padding_value(self) -> float:
+        return 0.0
+
+    def n_dims_encoded(self, n_dims_in: int) -> int:
+        return self.num_features * self.num_levels
+
+    def n_params(self) -> int:
+        return drjit.width(self.data)
+
+    def set_params(self, values: drjit.ArrayBase, copy=False) -> None:
+        """
+        Should pass `values` as a DrJit array (float32 only for now).
+        """
+        assert drjit.width(values) == drjit.width(self.data)
+        assert type(values) is type(self.data)
+        if copy:
+            self.data = type(self.data)(values)
+        else:
+            assert isinstance(values, type(self.data))
+            self.data = values
+
+    @property
+    def dimension(self) -> int:
+        return self._config.dimension
+
+    @property
+    def hashmap_size(self) -> int:
+        return self._config.hashmap_size
+
+    @property
+    def num_levels(self) -> int:
+        return self._config.num_levels
+
+    @property
+    def base_res(self) -> int:
+        return self._config.base_res
+
+    @property
+    def per_level_scale(self) -> float:
+        return self._config.per_level_scale
+
+    @property
+    def num_features(self) -> int:
+        return self._config.num_features
+
+    @property
+    def align_corners(self) -> bool:
+        return self._config.align_corners
+
+    @property
+    def torchngp_compat(self) -> int:
+        return self._config.torchngp_compat
+
+    @property
+    def smooth_weight_gradients(self) -> bool:
+        return self._config.smooth_weight_gradients
+
+    @property
+    def smooth_weight_lambda(self) -> float:
+        return self._config.smooth_weight_lambda
+
+    @property
+    def out_features(self) -> int:
+        return self._config.num_features *  self.num_levels
+
+    # --------------------
+
+    def level_offset(self, level_i: int) -> int:
+        """
+        Helpful to build e.g. debug visualizations by splitting params per level
+        Must be called with an index up to and including `num_levels()`.
+
+        Warning: the level offset returned does *not* account for the feature count.
+        Each level contains `num_features()` times the difference between the next
+        offset entries.
+        """
+        return self._level_offsets[level_i]
 
