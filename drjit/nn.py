@@ -1,11 +1,12 @@
 from __future__ import annotations
 import drjit
 import sys
+from dataclasses import dataclass, field
 
 if sys.version_info < (3, 11):
-    from typing_extensions import Tuple, Sequence, Union, Type, TypeAlias, Optional, Any
+    from typing_extensions import Tuple, Sequence, Union, Type, TypeAlias, Optional, Any, overload
 else:
-    from typing import Tuple, Sequence, Union, Type, TypeAlias, Optional, Any
+    from typing import Tuple, Sequence, Union, Type, TypeAlias, Optional, Any, overload
 
 # Import classes/functions from C++ extension
 MatrixView = drjit.detail.nn.MatrixView
@@ -503,267 +504,375 @@ class SinEncode(Module):
         return CoopVec(r)
 
 
-class PyHashGrid3D:
+def cosine_ramp(x):
+    """ "Smoothed" ramp to help features blend-in without instabilities"""
+    return 0.5 * (1.0 - drjit.cos(drjit.pi * x))
+
+def div_round_up(num: int, divisor: int) -> int:
+    return (num + divisor - 1) // divisor
+
+
+def next_multiple(num: int, multiple: int) -> int:
+    return multiple * div_round_up(num, multiple)
+
+@dataclass
+class HashEncodingConfig:
+    dimension: int
+    n_levels: int
+    n_features_per_level: int
+    hashmap_size: int
+    base_resolution: int
+    per_level_scale: float
+    align_corners: bool
+    torchngp_compat: bool
+    smooth_weight_gradients: bool
+    smooth_weight_lambda: float
+
     def __init__(
         self,
-        array_type,
-        hashmap_size: int,
-        num_levels: int,
-        base_res: int,
-        per_level_scale: float,
-        num_features: int = 2,
+        dimension: int = -1,
+        n_levels: int = -1,
+        n_features_per_level: int = -1,
+        hashmap_size: int = 2**19,
+        base_resolution: int = 16,
+        per_level_scale: float = 2,
         align_corners: bool = False,
         torchngp_compat: bool = False,
-        grid_lod: GridLod = None,
         smooth_weight_gradients: bool = False,
         smooth_weight_lambda: float = 1.0,
-    ):
-        """Python-based implementation of the INGP hashgrid.
-
-        :parameter smooth_weight_gradients: whether to smooth the gradients of the weights
-            by using a straight-through estimator.
-        :parameter smooth_weight_lambda: the value of lambda used for the straight-through estimator.
-        """
-        # Note: we don't want to lose precision during e.g. interpolation
-        # weight computations, so we will still use f32 in many computation
-        # even when the `array_type` is `mi.Float16`.
-        self.StorageFloat = array_type
-        self.Float = dr.float32_array_t(array_type) if dr.is_half_v(array_type) else array_type
-        self.VectorDf = {
-            (mi.Float16, 2): mi.Vector2f,  # Still f32
-            (mi.Float32, 2): mi.Vector2f,
-            (mi.Float64, 2): mi.Vector2d,
-            (mi.Float16, 3): mi.Vector3f,  # Still f32
-            (mi.Float32, 3): mi.Vector3f,
-            (mi.Float64, 3): mi.Vector3d,
-        }[(array_type, self.dimensionality())]
-        self.VectorDu = dr.uint32_array_t(self.VectorDf)
-
-        self._hashmap_size = hashmap_size
-        self._num_levels = num_levels
-        self._base_res = base_res
-        self._per_level_scale = per_level_scale
-        self.log2_per_level_scale = dr.log2(self._per_level_scale)
-        self._num_features = num_features
-        self._align_corners = align_corners
-
-        # TODO: add support for Torch NGP indexing compatibility
-        self._torchngp_compat = torchngp_compat
-        if self._torchngp_compat:
-            raise NotImplementedError("Not supported yet: `torchngp_compat = True` in the Python-based hashgrid.")
-
-        self.grid_lod = grid_lod
-
-        assert (self._hashmap_size % 8) == 0
-
-        self.level_offsets = [None] * (self._num_levels + 1)
-        self.cell_sizes = [0.0] * self._num_levels
-        max_params = dr.largest(dr.scalar.UInt32) // 2
-        dimensionality = self.dimensionality()
-        offset = 0
-        for level_i in range(self._num_levels):
-            res = self._grid_resolution(self._grid_scale(level_i))
-            stride = dr.power(float(res), dimensionality)
-            params_in_level = int(max_params) if (stride > max_params) else (res**dimensionality)
-            params_in_level = next_multiple(params_in_level, 8)
-            params_in_level = min(params_in_level, self._hashmap_size)
-
-            self.level_offsets[level_i] = offset
-            self.cell_sizes[level_i] = 1.0 / (self._base_res * self._per_level_scale**level_i)
-            offset += params_in_level
-
-        self.level_offsets[-1] = offset
-
-        self.current_step = 0
+    ) -> None:
+        self.dimension = dimension
+        self.n_levels = n_levels
+        self.n_features_per_level = n_features_per_level
+        self.hashmap_size = hashmap_size
+        self.base_resolution = base_resolution
+        self.per_level_scale = per_level_scale
+        self.log2_per_level_scale = drjit.log2(per_level_scale)
+        self.align_corners = align_corners
+        self.torchngp_compat = torchngp_compat
         self.smooth_weight_gradients = smooth_weight_gradients
         self.smooth_weight_lambda = smooth_weight_lambda
 
-        params_size = self.level_offsets[-1] * self._num_features
-        self.data = dr.zeros(array_type, params_size)
 
-    @annotate("PyHashGrid3D.__call__")
-    def __call__(
-        self, p: mi.Array3f | mi.Array3h | list[mi.Float32] | list[mi.Float16], active: dr.ArrayBase
-    ) -> list[mi.Float32] | list[mi.Float16]:
-        # TODO: check if faster as a drjit loop (although then a custom backward is mandatory)
-        assert len(p) == 3
+class HashEncoding(Module):
+    """
+    Interface, representing a hash encoding.
+    """
+    DRJIT_STRUCT = {
+        "data": drjit.ArrayBase,
+        "dtype": type,
+        "_config": HashEncodingConfig,
+        "_level_offsets": list,
+        "_cell_sizes": list,
+    }
 
-        p = self.VectorDf(*p)
-        invalid = active & dr.any((p < 0) | (p >= 1))
+    def _alloc(
+        self, dtype: Type[drjit.ArrayBase], size: int = -1, /
+    ) -> Tuple[Module, int]:
 
-        result = []
-        grid = self.data
+        dimension = self.dimension
+        if dimension < 0:
+            dimension = size
 
-        for level_i in range(self._num_levels):
-            if not self.grid_lod.is_level_used(level_i, self.current_step):
-                # Unused level, output some zeros
-                zeros = dr.full(self.StorageFloat, 0, dr.width(p))
-                for _ in range(self._num_features):
-                    result.append(zeros)
-                continue
+        n_levels = self.n_levels
+        n_features_per_level = self.n_features_per_level
 
-            scale = self._grid_scale(level_i)
-            res = self._grid_resolution(scale)
-            level_offset = self.level_offsets[level_i]
-            this_level_size = self.level_offsets[level_i + 1] - level_offset
-            num_features_fourth = self._num_features - (self._num_features % 4)
-            num_features_even = self._num_features - (self._num_features % 2)
+        if dimension < 0 or n_levels < 0 or n_features_per_level < 0:
+            raise RuntimeError(
+                "The network contains layers with an unspecified "
+                "size. You must specify the input size to drjit.nn.Module.alloc()."
+            )
 
-            omega_l = self.grid_lod.interpolation_weight(level_i, self.current_step)
 
-            def indexing_function(x, y, z):
-                index = x  # Warning: not a copy
-                stride = res
-                if stride <= this_level_size:
-                    index = index + stride * y
-                    stride *= res
-                if stride <= this_level_size:
-                    index = index + stride * z
-                    stride *= res
+        result = type(self)()
+        result._config = HashEncodingConfig(
+            dimension=dimension,
+            hashmap_size=self.hashmap_size,
+            n_levels=n_levels,
+            base_resolution=self.base_resolution,
+            per_level_scale=self.per_level_scale,
+            n_features_per_level=n_features_per_level,
+            align_corners=self.align_corners,
+            torchngp_compat=self.torchngp_compat,
+            smooth_weight_gradients=self.smooth_weight_gradients,
+            smooth_weight_lambda=self.smooth_weight_lambda,
+        )
+        result._alloc_internal(dtype)
 
-                if this_level_size < stride:
-                    index = x ^ (y * mi.UInt32(2654435761)) ^ (z * mi.UInt32(805459861))
-
-                sub_grid_index = level_offset + (index % mi.UInt32(this_level_size))
-                return self._num_features * sub_grid_index
-
-            # Unrolls and use packed gathers
-            def acc_features(weight: self.StorageFloat, index: mi.UInt32):
-                if self.smooth_weight_gradients:
-                    weight_smooth = cosine_ramp(weight)
-                    weight = weight + self.smooth_weight_lambda * (weight_smooth - dr.detach(weight_smooth))
-                for k in range(0, num_features_fourth, 4):
-                    v = dr.gather4(self.StorageFloat, grid, index + k, active)
-                    values[k] = dr.fma(v[0], weight, values[k])
-                    values[k + 1] = dr.fma(v[1], weight, values[k + 1])
-                    values[k + 2] = dr.fma(v[2], weight, values[k + 2])
-                    values[k + 3] = dr.fma(v[3], weight, values[k + 3])
-                for k in range(num_features_fourth, num_features_even, 2):
-                    v = dr.gather2(self.StorageFloat, grid, index + k, active)
-                    values[k] = dr.fma(v[0], weight, values[k])
-                    values[k + 1] = dr.fma(v[1], weight, values[k + 1])
-                for k in range(num_features_even, self._num_features):
-                    v = dr.gather(self.StorageFloat, grid, index + k, active)
-                    values[k] = dr.fma(v, weight, values[k])
-
-            # --- Trilinear interpolation at this level
-            # Note: f32 precision, even when StorageFloat is f16
-            p_offset: float = 0.0 if self._align_corners else 0.5
-            pos = dr.fma(p, scale, p_offset)
-            pos0 = dr.floor2int(self.VectorDu, pos)
-            pos1 = pos0 + 1
-
-            w1 = pos - pos0
-            w0 = self.Float(1.0) - w1
-
-            values = [self.StorageFloat(0.0)] * self._num_features
-
-            weight = self.StorageFloat(w0.x * w0.y * w0.z)
-            index = indexing_function(pos0.x, pos0.y, pos0.z)
-            acc_features(weight, index)
-            weight = self.StorageFloat(w0.x * w0.y * w1.z)
-            index = indexing_function(pos0.x, pos0.y, pos1.z)
-            acc_features(weight, index)
-            weight = self.StorageFloat(w0.x * w1.y * w0.z)
-            index = indexing_function(pos0.x, pos1.y, pos0.z)
-            acc_features(weight, index)
-            weight = self.StorageFloat(w0.x * w1.y * w1.z)
-            index = indexing_function(pos0.x, pos1.y, pos1.z)
-            acc_features(weight, index)
-            weight = self.StorageFloat(w1.x * w0.y * w0.z)
-            index = indexing_function(pos1.x, pos0.y, pos0.z)
-            acc_features(weight, index)
-            weight = self.StorageFloat(w1.x * w0.y * w1.z)
-            index = indexing_function(pos1.x, pos0.y, pos1.z)
-            acc_features(weight, index)
-            weight = self.StorageFloat(w1.x * w1.y * w0.z)
-            index = indexing_function(pos1.x, pos1.y, pos0.z)
-            acc_features(weight, index)
-            weight = self.StorageFloat(w1.x * w1.y * w1.z)
-            index = indexing_function(pos1.x, pos1.y, pos1.z)
-            acc_features(weight, index)
-
-            for v in values:
-                # Since we're not really validating the inputs, let's at least
-                # consistently output NaNs for out-of-range inputs.
-                # Without this `select`, NaNs would often show up only in the
-                # backward pass, which is really difficult to debug.
-                v = omega_l * dr.select(invalid, dr.nan, v & active)
-
-                # TODO: reset optimizer state (e.g. Adam) when the level gets enabled?
-                if not self.grid_lod.is_level_optimized(level_i, self.current_step):
-                    v = dr.detach(v)
-                result.append(v)
-
-        return result
-
-    # --------------------
-
-    def step(self, step_i: int, optimizer, rng):
-        self.current_step = step_i
-
-    # --------------------
-
-    def dimensionality(self) -> int:
-        return 3
-
-    def default_padding_value(self) -> float:
-        return 0.0
-
-    def n_dims_encoded(self, n_dims_in: int) -> int:
-        return self._num_features * self._num_levels
+        return result, result.out_features
 
     def n_params(self) -> int:
-        return dr.width(self.data)
+        return drjit.width(self.data)
 
-    def params(self) -> mi.Float16 | mi.Float32:
-        return self.data
-
-    def set_params(self, values: dr.ArrayBase, copy=False) -> None:
+    def set_params(self, values: drjit.ArrayBase, copy=False) -> None:
         """
         Should pass `values` as a DrJit array (float32 only for now).
         """
-        assert dr.width(values) == dr.width(self.data)
-        assert type(values) == type(self.data)
+        assert drjit.width(values) == drjit.width(self.data)
+        assert type(values) is type(self.data)
         if copy:
             self.data = type(self.data)(values)
         else:
             assert isinstance(values, type(self.data))
             self.data = values
 
+    @property
+    def dimension(self) -> int:
+        return self._config.dimension
+
+    @property
     def hashmap_size(self) -> int:
-        return self._hashmap_size
+        return self._config.hashmap_size
 
-    def num_levels(self) -> int:
-        return self._num_levels
+    @property
+    def n_levels(self) -> int:
+        return self._config.n_levels
 
-    def base_res(self) -> int:
-        return self._base_res
+    @property
+    def base_resolution(self) -> int:
+        return self._config.base_resolution
 
+    @property
     def per_level_scale(self) -> float:
-        return self._per_level_scale
+        return self._config.per_level_scale
 
-    def num_features(self) -> int:
-        return self._num_features
+    @property
+    def n_features_per_level(self) -> int:
+        return self._config.n_features_per_level
 
+    @property
     def align_corners(self) -> bool:
-        return self._align_corners
+        return self._config.align_corners
 
+    @property
     def torchngp_compat(self) -> int:
-        return self._torchngp_compat
+        return self._config.torchngp_compat
 
-    def level_offset(self, level_i: int) -> int:
+    @property
+    def smooth_weight_gradients(self) -> bool:
+        return self._config.smooth_weight_gradients
+
+    @property
+    def smooth_weight_lambda(self) -> float:
+        return self._config.smooth_weight_lambda
+
+    @property
+    def out_features(self) -> int:
+        return self._config.n_features_per_level *  self.n_levels
+
+    def _init_types(self, p):
         """
-        Helpful to build e.g. debug visualizations by splitting params per level
-        Must be called with an index up to and including `num_levels()`.
-
-        Warning: the level offset returned does *not* account for the feature count.
-        Each level contains `num_features()` times the difference between the next
-        offset entries.
+        Gets the type aliases used for this hash encoding computation, given a
+        position value ``p``.
         """
-        return self.level_offsets[level_i]
+        dtype = self.dtype
+        mod = sys.modules[dtype.__module__]
+        self.PCG32 = mod.PCG32
+        self.StorageFloat = dtype
+        self.UInt32 = drjit.uint32_array_t(dtype)
+        self.Int32 = drjit.int32_array_t(dtype)
+        self.ArrayXu = mod.ArrayXu
+        self.ArrayXi = mod.ArrayXi
+        self.StorageFloatXf = mod.ArrayXf16 if drjit.is_half_v(dtype) else mod.ArrayXf
 
-    # --------------------
+        if isinstance(p, CoopVec):
+            p = list(p)
+
+        if isinstance(p, list):
+            self.PositionFloat = drjit.leaf_t(p[0])
+        else:
+            self.PositionFloat = drjit.leaf_t(p)
+
+        self.PositionFloatXf = mod.ArrayXf16 if drjit.is_half_v(self.PositionFloat) else mod.ArrayXf
+
+    def _acc_features(self, weight, index, values: list, active):
+        """
+        Accumulates the ``self.num_features`` features at the given index.
+        This function tries to use packet gather operations if possible, to improve
+        the performance of the backward pass, as atomic packet scatters
+        perform better than their non packeted counterparts.
+        """
+
+        # We define a gather function to be able to handle MatrixViews
+        if isinstance(self.data, MatrixView):
+            assert self.data.shape[1] == 1
+            assert self.data.stride == 1
+            def gather(type, source, index, mask, **kwargs):
+                return drjit.gather(type, source.buffer, self.data.offset + index, mask, **kwargs)
+        else:
+            def gather(type, source, index, mask, **kwargs):
+                return drjit.gather(type, source, index, mask, **kwargs)
+
+        if self.smooth_weight_gradients:
+            weight_smooth = cosine_ramp(weight)
+            weight = weight + self.smooth_weight_lambda * (weight_smooth - drjit.detach(weight_smooth))
+
+        v = gather(
+            self.StorageFloatXf,
+            self.data,
+            index // self.n_features_per_level,
+            active,
+            shape=(self.n_features_per_level, drjit.width(index)),
+        )
+
+        for k in range(0, self.n_features_per_level):
+            values[k] = drjit.fma(v[k], weight, values[k])
+
+    def indexing_function(self, key, level_i):
+        raise NotImplementedError()
+
+
+class HashGridEncoding(HashEncoding):
+    DRJIT_STRUCT = {
+        "data": drjit.ArrayBase,
+        "dtype": type,
+        "_config": HashEncodingConfig,
+        "_level_offsets": list,
+        "_cell_sizes": list,
+        "_grid_offsets": list,
+    }
+
+    @overload
+    def __init__(
+        self,
+        dimension: int = -1,
+        n_levels: int = -1,
+        n_features_per_level: int = -1,
+        *,
+        hashmap_size: int = 2**19,
+        base_resolution: int = 16,
+        per_level_scale: float = 2,
+        align_corners: bool = False,
+        torchngp_compat: bool = False,
+        smooth_weight_gradients: bool = False,
+        smooth_weight_lambda: float = 1.0,
+    ) -> None: ...
+
+    @overload
+    def __init__(self) -> None: ...
+
+    def __init__(self, *args, **kwargs) -> None:
+        if len(args) == 0:
+            self._config = HashEncodingConfig()
+        else:
+            self._config = HashEncodingConfig(*args, **kwargs)
+
+    def __call__(
+        self, p: drjit.ArrayBase | list[drjit.ArrayBase] | CoopVec, active=True
+    ) -> CoopVec:
+        self._init_types(p)
+
+        if isinstance(p, list) or isinstance(p, CoopVec):
+            p = self.PositionFloatXf(p)
+
+        invalid = active & drjit.any((p < 0) | (p > 1))
+
+        result = []
+
+        for level_i in range(self.n_levels):
+            scale = self._grid_scale(level_i)
+
+            p_offset: float = 0.0 if self.align_corners else 0.5
+            pos = drjit.fma(p, scale, p_offset)
+
+            pos0 = self.ArrayXu(drjit.floor(pos))
+
+            w1 = pos - pos0
+            w0 = 1.0 - w1
+
+            values = [self.StorageFloat(0.0)] * self.n_features_per_level
+
+            def acc(offset: self.ArrayXu):
+                """
+                Given one of the ``2**self.dimensionality()`` vertices, this function
+                calculates the grid position and interpolation weight and accumulates
+                the features into the ``values`` field.
+                """
+                pos_grid = pos0 + self.ArrayXu(offset)
+                weight = drjit.select(self.ArrayXu(offset) == 0, w0, w1)
+                weight = drjit.prod(weight, axis=0)
+
+                index = self.indexing_function(pos_grid, level_i)
+                self._acc_features(weight, index, values, active)
+
+            for offset in self._grid_offsets:
+                acc(self.ArrayXu(offset))
+
+            for v in values:
+                v = v & active
+
+                result.append(v)
+
+        return CoopVec(*result)
+
+    def indexing_function(self, key, level_i):
+        """
+        This function is used to index the underlying data array of the
+        hash grid given a grid position.
+        """
+
+        scale = self._grid_scale(level_i)
+        res = self._grid_resolution(scale)
+        level_offset = self._level_offsets[level_i]
+        this_level_size = self._level_offsets[level_i + 1] - level_offset
+
+        indexing_primes = [1, self.UInt32(2654435761), self.UInt32(805459861)]
+
+        stride = 1
+        index = self.UInt32(0)
+        for d in range(self.dimension):
+            index += key[d] * stride
+            stride *= res
+
+            if stride > this_level_size:
+                break
+
+        if this_level_size < stride:
+            index = self.UInt32(0)
+            for d in range(0, self.dimension):
+                index ^= key[d] * indexing_primes[d]
+
+        sub_grid_index = level_offset + (index % self.UInt32(this_level_size))
+        return self.n_features_per_level * sub_grid_index
+
+    def _alloc_internal(self, dtype: Type[drjit.ArrayBase]):
+        self.dtype = drjit.leaf_t(dtype)
+
+        assert (self.hashmap_size % 8) == 0, (
+            f"Invalid hashmap size {self.hashmap_size}, must be a multiple of 8."
+        )
+
+        self._level_offsets = [None] * (self.n_levels + 1)
+        self._cell_sizes = [0.0] * self.n_levels
+        max_params = drjit.scalar.UInt32(0xFFFFFFFF) // 2
+        offset = 0
+
+        for level_i in range(self.n_levels):
+            res = self._grid_resolution(self._grid_scale(level_i))
+            stride = drjit.power(float(res), self.dimension)
+
+            params_in_level = (
+                int(max_params) if (stride > max_params) else (res**self.dimension)
+            )
+            params_in_level = next_multiple(params_in_level, 8)
+            params_in_level = min(params_in_level, self.hashmap_size)
+
+            self._level_offsets[level_i] = offset
+            self._cell_sizes[level_i] = 1.0 / (
+                self.base_resolution * self.per_level_scale**level_i
+            )
+            offset += params_in_level
+
+        self._level_offsets[-1] = offset
+
+        params_size = self._level_offsets[-1] * self.n_features_per_level
+        self.data = drjit.zeros(dtype, params_size)
+
+        # Stores the pattern of offsets used to index the 2** n corners of a voxel
+        self._grid_offsets = [
+            [(i >> j) & 1 for j in range(self.dimension)]
+            for i in range(2**self.dimension)
+        ]
 
     def _grid_scale(self, level) -> float:
         """
@@ -771,7 +880,535 @@ class PyHashGrid3D:
         than the number of cells. This is slightly different from the notation in the paper,
         but results in nice, power-of-2-scaled parameter grids that fit better into cache lines.
         """
-        return dr.exp2(level * self.log2_per_level_scale) * self._base_res - 1.0
+        return (
+            drjit.exp2(level * self._config.log2_per_level_scale) * self.base_resolution
+            - 1.0
+        )
 
-    def _grid_resolution(self, scale):
-        return int(dr.ceil(scale)) + (0 if self._align_corners else 1)
+    def _grid_resolution(self, scale) -> int:
+        return (
+            int(drjit.ceil(scale))
+            + (0 if self.align_corners else 1)
+            + (1 if self.torchngp_compat else 0)
+        )
+
+    def __repr__(self) -> str:
+        return (
+            f"HashGrid(\n"
+            f"    dtype={self.dtype},\n"
+            f"    dimension={self.dimension},\n"
+            f"    hashmap_size={self.hashmap_size},\n"
+            f"    n_levels={self.n_levels},\n"
+            f"    n_features_per_level={self.n_features_per_level},\n"
+            f"    base_resolution={self.base_resolution},\n"
+            f"    per_level_scale={self.per_level_scale},\n"
+            f"    align_corners={self.align_corners},\n"
+            f"    torchngp_compat={self.torchngp_compat},\n"
+            f"    smooth_weight_gradients={self.smooth_weight_gradients},\n"
+            f"    smooth_weight_lambda={self.smooth_weight_lambda}\n"
+            ")"
+        )
+
+    # --------------------
+
+    def default_padding_value(self) -> float:
+        return 0.0
+
+    def n_dims_encoded(self, n_dims_in: int) -> int:
+        return self.n_features_per_level * self.n_levels
+
+    # --------------------
+
+    def level_offset(self, level_i: int) -> int:
+        """
+        Helpful to build e.g. debug visualizations by splitting params per level
+        Must be called with an index up to and including `n_levels`.
+
+        Warning: the level offset returned does *not* account for the feature count.
+        Each level contains `num_features()` times the difference between the next
+        offset entries.
+        """
+        return self._level_offsets[level_i]
+
+
+class PermutohedralEncoding(HashEncoding):
+    """
+    Permutohedral Encoding
+    ----------------------
+
+    This encoding is based on the encoding presented in :cite:`rosu2023permutosdf`.
+    Whereas hash grid encodings use a grid lattice, this uses a permutohedral lattice,
+    where the simplexes are consist of triangles, tetrahedrons etc. The main advantage
+    is that the number of vertices per simplex and therefore the number of memory
+    lookups per sample per layer grow linear with the number of dimensions.
+    """
+
+    DRJIT_STRUCT = {
+        "data": drjit.ArrayBase,
+        "dtype": type,
+        "_config": HashEncodingConfig,
+        "_level_offsets": list,
+    }
+
+    @overload
+    def __init__(
+        self,
+        dimension: int = -1,
+        n_levels: int = -1,
+        n_features_per_level: int = -1,
+        *,
+        hashmap_size: int = 2**19,
+        base_resolution: int = 16,
+        per_level_scale: float = 2,
+        smooth_weight_gradients: bool = False,
+        smooth_weight_lambda: float = 1.0,
+    ) -> None: ...
+
+    @overload
+    def __init__(self) -> None: ...
+
+    def __init__(self, *args, **kwargs) -> None:
+        if len(args) == 0:
+            self._config = HashEncodingConfig()
+        else:
+            self._config = HashEncodingConfig(*args, **kwargs)
+
+    def __call__(
+        self, p: drjit.ArrayBase | list[drjit.ArrayBase] | CoopVec, active=True
+    ) -> Any:
+        self._init_types(p)
+
+        if isinstance(p, list) or isinstance(p, CoopVec):
+            p = self.PositionFloatXf(p)
+
+        invalid = active & drjit.any((p < 0) | (p >= 1))
+
+        result = []
+
+        for level_i in range(self.n_levels):
+            scale = self._level_scale(level_i)
+
+            values = [self.StorageFloat(0.0)] * self.n_features_per_level
+
+            # Helper Functions
+
+            def permuto_elevate(
+                pos: self.PositionFloatXf,
+                scales_per_dim: self.PositionFloatXf,
+                shifts_per_dim: self.PositionFloatXf,
+            ) -> self.PositionFloatXf:
+                """
+                Elevate d-dimension vector to (d+1)-dimension homogeneous vector on hyperplane H_d
+                    a) The sum of the components of `elevated` is zero, ensuring it within hyperplane H_d
+                    b) The magnitudes of the components of `elevated` are similar to each other.
+                """
+                elevated = drjit.zeros(
+                    self.PositionFloatXf, shape=(self.dimension + 1, drjit.width(p))
+                )
+
+                sum = self.PositionFloat(0)
+                for dim in range(self.dimension, 0, -1):
+                    cf = (pos[dim - 1] + shifts_per_dim[dim - 1]) * scales_per_dim[dim - 1]
+                    elevated[dim] = sum - dim * cf
+                    sum += cf
+
+                elevated[0] = sum
+
+                return elevated
+
+            def permuto_find_rem0(
+                elevated: self.PositionFloatXf,
+            ) -> Tuple[self.PositionFloatXf, self.PositionFloatXf]:
+                """
+                Find the closest remainder-0 point through rounding
+                """
+                sum = self.Int32(0)
+                rem0 = drjit.zeros(
+                    self.ArrayXi, shape=(self.dimension + 1, drjit.width(p))
+                )
+                rank = drjit.zeros(
+                    self.ArrayXi, shape=(self.dimension + 1, drjit.width(p))
+                )
+                for dim in range(self.dimension + 1):
+                    v = elevated[dim] * (1.0 / (self.dimension + 1))
+                    up = drjit.ceil(v) * (self.dimension + 1)
+                    down = drjit.floor(v) * (self.dimension + 1)
+
+                    rem0[dim] = drjit.select(
+                        up - elevated[dim] < elevated[dim] - down, up, down
+                    )
+
+                    sum += rem0[dim]
+
+                sum //= self.dimension + 1
+
+                # Find the simplex we are in and store it in rank
+                #  (where rank describes what position coordinate i has in the sorted order of the features values)
+                for dim in range(self.dimension):
+                    di = elevated[dim] - rem0[dim]
+                    for other_dim in range(dim + 1, self.dimension + 1):
+                        less = di < elevated[other_dim] - rem0[other_dim]
+                        rank[dim][less] += 1
+                        rank[other_dim][~less] += 1
+
+                # If the point doesn't lie on the plane (sum != 0) bring it back
+                for dim in range(self.dimension + 1):
+                    rank[dim] += sum
+
+                    wrap = rank[dim] < 0
+                    rank[dim][wrap] += self.dimension + 1
+                    rem0[dim][wrap] += self.dimension + 1
+
+                    wrap = (rank[dim] > self.dimension) & ~wrap
+                    rank[dim][wrap] -= self.dimension + 1
+                    rem0[dim][wrap] -= self.dimension + 1
+
+                return rem0, rank
+
+            def permuto_barycentric(
+                elevated: self.PositionFloatXf,
+                rem0: self.PositionFloatXf,
+                rank: self.PositionFloatXf,
+            ) -> self.PositionFloatXf:
+                """
+                Compute the barycentric coordinates (p.10 in [Adams etal 2010])
+                """
+                barycentric = drjit.alloc_local(
+                    self.PositionFloat,
+                    self.dimension + 2,
+                    value=drjit.zeros(self.PositionFloat),
+                )
+
+                for dim in range(self.dimension + 1):
+                    delta = (elevated[dim] - rem0[dim]) * (1.0 / (self.dimension + 1))
+                    barycentric[self.UInt32(self.dimension - rank[dim])] += delta
+                    barycentric[self.UInt32(self.dimension + 1 - rank[dim])] -= delta
+
+                # Wrap around
+                barycentric[0] += 1.0 + barycentric[self.dimension + 1]
+
+                barycentric = self.PositionFloatXf(barycentric)
+
+                return barycentric
+
+            # ---- Per dimension scaling factor & random shift
+
+            pos = p
+
+            scales_per_dim = drjit.zeros(
+                self.PositionFloatXf, shape=(self.dimension, drjit.width(p))
+            )
+            shifts_per_dim = drjit.zeros(
+                self.PositionFloatXf, shape=(self.dimension, drjit.width(p))
+            )
+
+            rng = self.PCG32(drjit.width(p))
+            rng.seed(level_i * self.dimension)
+
+            for dim in range(self.dimension):
+                scales_per_dim[dim] = scale * drjit.rsqrt(
+                    (self.dimension + 1) * (self.dimension + 2)
+                )
+                shifts_per_dim[dim] = drjit.fma(
+                    rng.next_float32(), 10.0, -5.0
+                )  # [-5, 5)
+
+            # ---- Elevate d-dimension vector to (d+1)-dimension homogeneous vector on hyperplane H_d
+            elevated = permuto_elevate(pos, scales_per_dim, shifts_per_dim)
+
+            # ---- Find the closest remainder-0 and rank
+            rem0, rank = permuto_find_rem0(elevated)
+
+            # ---- Compute the barycentric coordinates (p.10 in [Adams etal 2010])
+            barycentric = permuto_barycentric(elevated, rem0, rank)
+
+            key = drjit.zeros(self.ArrayXi, shape=(self.dimension, drjit.width(p)))
+            for k in range(self.dimension + 1):
+                # Compute the location of the lattice point explicitly (all but
+                # the last coordinate - it's redundant because they sum to zero)
+                for dim in range(self.dimension):
+                    key[dim] = rem0[dim] + k
+                    wrap = rank[dim] > self.dimension - k
+                    key[dim][wrap] -= self.dimension + 1
+
+                # TODO: in the original implementation they multiply by another weight.
+                index = self.indexing_function(key, level_i)
+                weight = barycentric[k]
+
+                self._acc_features(weight, index, values, active)
+
+            for v in values:
+                v = v & active
+
+                result.append(v)
+
+        return CoopVec(*result)
+
+    def indexing_function(self, key, level_i):
+        """
+        This function is used to index the underlying data array of the
+        hash grid given a grid position.
+        """
+
+        def base_convert_hash(key: self.ArrayXu) -> self.UInt32:
+            k = self.UInt32(0)
+            for dim in range(self.dimension):
+                k += key[dim]
+                k *= 2531011
+            return k
+
+        level_offset = self._level_offsets[level_i]
+        this_level_size = self._level_offsets[level_i + 1] - level_offset
+
+        index = base_convert_hash(key)
+        sub_grid_index = level_offset + (index % self.UInt32(this_level_size))
+        return self.n_features_per_level * sub_grid_index
+
+    def _alloc_internal(self, dtype: Type[drjit.ArrayBase]):
+        self.dtype = drjit.leaf_t(dtype)
+
+        assert (self.hashmap_size % 8) == 0, (
+            f"Invalid hashmap size {self.hashmap_size}, must be a multiple of 8."
+        )
+
+        self._level_offsets = [None] * (self.n_levels + 1)
+
+        offset = 0
+        for i in range(self.n_levels):
+            params_in_level = self.hashmap_size
+            self._level_offsets[i] = offset
+            offset += params_in_level
+
+        self._level_offsets[-1] = offset
+
+        params_size = self._level_offsets[-1] * self.n_features_per_level
+        self.data = drjit.zeros(dtype, params_size)
+
+    def _level_scale(self, level) -> float:
+        return (
+            drjit.exp2(level * self._config.log2_per_level_scale) * self.base_resolution
+        )
+
+    def _resolution(self, scale) -> int:
+        return int(drjit.ceil(scale))
+
+    def __repr__(self):
+        return (
+            f"Permutohedral(\n"
+            f"    dtype={self.dtype},\n"
+            f"    dimension={self.dimension},\n"
+            f"    hashmap_size={self.hashmap_size},\n"
+            f"    n_levels={self.n_levels},\n"
+            f"    n_features_per_level={self.n_features_per_level},\n"
+            f"    base_resolution={self.base_resolution},\n"
+            f"    per_level_scale={self.per_level_scale},\n"
+            f"    smooth_weight_gradients={self.smooth_weight_gradients},\n"
+            f"    smooth_weight_lambda={self.smooth_weight_lambda}\n"
+            ")"
+        )
+
+
+class SimplifiedPermutohedralEncoding(HashEncoding):
+    """
+    Permutohedral Encoding
+    ----------------------
+
+    This encoding is based on the encoding presented in :cite:`rosu2023permutosdf`.
+    Whereas hash grid encodings use a grid lattice, this uses a permutohedral lattice,
+    where the simplexes are consist of triangles, tetrahedrons etc. The main advantage
+    is that the number of vertices per simplex and therefore the number of memory
+    lookups per sample per layer grow linear with the number of dimensions.
+
+    In contrast to the default ``PermutohedralEncoding`` this encoding foregoes the
+    elevation to a hyperplane in d + 1 dimensional space. It instead performs the
+    sorting and interpolation steps in the d dimensional space.
+
+    """
+
+    DRJIT_STRUCT = {
+        "data": drjit.ArrayBase,
+        "dtype": type,
+        "_config": HashEncodingConfig,
+        "_level_offsets": list,
+    }
+
+    @overload
+    def __init__(
+        self,
+        dimension: int = -1,
+        n_levels: int = -1,
+        n_features_per_level: int = -1,
+        *,
+        hashmap_size: int = 2**19,
+        base_resolution: int = 16,
+        per_level_scale: float = 2,
+        smooth_weight_gradients: bool = False,
+        smooth_weight_lambda: float = 1.0,
+    ) -> None: ...
+
+    @overload
+    def __init__(self) -> None: ...
+
+    def __init__(self, *args, **kwargs) -> None:
+        if len(args) == 0:
+            self._config = HashEncodingConfig()
+        else:
+            self._config = HashEncodingConfig(*args, **kwargs)
+
+    def __call__(
+        self, p: drjit.ArrayBase | list[drjit.ArrayBase] | CoopVec, active=True
+    ) -> Any:
+        self._init_types(p)
+
+        if isinstance(p, list) or isinstance(p, CoopVec):
+            p = self.PositionFloatXf(p)
+
+        # invalid = active & drjit.any((p < 0) | (p > 1))
+
+        result = []
+
+        for level_i in range(self.n_levels):
+            scale = self._level_scale(level_i)
+
+            values = [self.StorageFloat(0.0)] * self.n_features_per_level
+
+            # ---- Per dimension scaling factor & random shift
+
+            rng = self.PCG32(drjit.width(p))
+            rng.seed(level_i * self.dimension)
+
+            # TODO: check if we need the same random shift for the
+            # simplified permutohedral encoding?
+            #
+            # x = drjit.zeros_like(p)
+            #
+            # for dim in range(self.dimension):
+            #     scale_dim = scale * drjit.rsqrt(
+            #         (self.dimension + 1) * (self.dimension + 2)
+            #     )
+            #     shift_dim = drjit.fma(rng.next_float32(), 10.0, -5.0) # [-5, 5)
+            #     x[dim] = (p[dim] + shift_dim) * scale_dim
+            x = p * scale
+
+            base = self.ArrayXi(drjit.floor(x))
+            fract = x - base
+
+            # ---- Insertion sort fract into xk and indices xki
+            xk = self.PositionFloatXf(fract)
+            xki = self.ArrayXi([i for i in range(self.dimension)])
+
+            for i in range(self.dimension):
+                for j in range(i, self.dimension):
+                    xk_i = self.PositionFloat(xk[i])
+                    xk_j = self.PositionFloat(xk[j])
+                    swap = xk_i > xk_j
+                    xk[i] = drjit.select(swap, xk_j, xk_i)
+                    xk[j] = drjit.select(swap, xk_i, xk_j)
+
+                    xki_i = self.Int32(xki[i])
+                    xki_j = self.Int32(xki[j])
+                    xki[i] = drjit.select(swap, xki_j, xki_i)
+                    xki[j] = drjit.select(swap, xki_i, xki_j)
+
+            # ---- Calculate Barycentric coordinates and grid offset vectors
+            grid_offsets = [None] * (self.dimension + 1)
+            weights = drjit.zeros(
+                self.PositionFloatXf, shape=(self.dimension + 1, drjit.width(p))
+            )
+
+            for rank in range(self.dimension):
+                weights[rank] = xk[rank] - (xk[rank - 1] if rank > 0 else 0)
+                grid_offset = drjit.select(
+                    (fract > xk[rank])
+                    | (fract == xk[rank])
+                    & (self.ArrayXi([i for i in range(self.dimension)]) >= xki[rank]),
+                    1,
+                    0,
+                )
+                grid_offsets[rank] = grid_offset
+
+            weights[self.dimension] = 1 - xk[self.dimension - 1]
+            grid_offsets[self.dimension] = drjit.zeros(
+                self.ArrayXi, shape=(self.dimension, drjit.width(p))
+            )
+
+            # ---- Accumulate features for each offset vector
+            for rank in range(self.dimension + 1):
+                offset = grid_offsets[rank]
+
+                pos_grid = base + self.ArrayXu(offset)
+                weight = weights[rank]
+
+                index = self.indexing_function(pos_grid, level_i)
+                self._acc_features(weight, index, values, active)
+
+            for v in values:
+                v = v & active
+
+                result.append(v)
+
+        return CoopVec(*result)
+
+    def _alloc_internal(self, dtype: Type[drjit.ArrayBase]):
+        self.dtype = drjit.leaf_t(dtype)
+
+        assert (self.hashmap_size % 8) == 0, (
+            f"Invalid hashmap size {self.hashmap_size}, must be a multiple of 8."
+        )
+
+        self._level_offsets = [None] * (self.n_levels + 1)
+
+        offset = 0
+        for i in range(self.n_levels):
+            params_in_level = self.hashmap_size
+            self._level_offsets[i] = offset
+            offset += params_in_level
+
+        self._level_offsets[-1] = offset
+
+        params_size = self._level_offsets[-1] * self.n_features_per_level
+        self.data = drjit.zeros(dtype, params_size)
+
+    def _level_scale(self, level) -> float:
+        return (
+            drjit.exp2(level * self._config.log2_per_level_scale) * self.base_resolution
+        )
+
+    def _resolution(self, scale) -> int:
+        return int(drjit.ceil(scale))
+
+    def indexing_function(self, key, level_i):
+        """
+        This function is used to index the underlying data array of the
+        hash grid given a grid position.
+        """
+
+        def base_convert_hash(key: self.ArrayXu) -> self.UInt32:
+            k = self.UInt32(0)
+            for dim in range(self.dimension):
+                k += key[dim]
+                k *= 2531011
+            return k
+
+        level_offset = self._level_offsets[level_i]
+        this_level_size = self._level_offsets[level_i + 1] - level_offset
+
+        index = base_convert_hash(key)
+        sub_grid_index = level_offset + (index % self.UInt32(this_level_size))
+        return self.n_features_per_level * sub_grid_index
+
+    def __repr__(self):
+        return (
+            f"SimplifiedPermutohedral(\n"
+            f"    dtype={self.dtype},\n"
+            f"    dimension={self.dimension},\n"
+            f"    hashmap_size={self.hashmap_size},\n"
+            f"    n_levels={self.n_levels},\n"
+            f"    n_features_per_level={self.n_features_per_level},\n"
+            f"    base_resolution={self.base_resolution},\n"
+            f"    per_level_scale={self.per_level_scale},\n"
+            f"    smooth_weight_gradients={self.smooth_weight_gradients},\n"
+            f"    smooth_weight_lambda={self.smooth_weight_lambda}\n"
+            ")"
+        )
+
