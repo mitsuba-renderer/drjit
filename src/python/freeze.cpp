@@ -81,6 +81,11 @@ struct scoped_set_flag {
     }
 };
 
+struct state_lock_guard {
+    state_lock_guard() { jit_state_lock(); }
+    ~state_lock_guard() { jit_state_unlock(); }
+};
+
 using namespace detail;
 
 bool Layout::operator==(const Layout &rhs) const {
@@ -254,7 +259,7 @@ bool compatible_auto_opaque(FlatVariables &cur, FlatVariables &prev){
 }
 
 bool FlatVariables::fill_opaque_mask(FlatVariables &prev,
-                                   std::vector<bool> &opaque_mask) {
+                                   drjit::vector<bool> &opaque_mask) {
     // If we notice that only a literal has changed, we can set the
     // corresponding bit in the mask, indicating that this literal should be
     // made opaque next time.
@@ -283,7 +288,7 @@ bool FlatVariables::fill_opaque_mask(FlatVariables &prev,
 }
 
 void FlatVariables::schedule_jit_variables(bool schedule_force,
-                                           std::vector<bool> *opaque_mask) {
+                                           drjit::vector<bool> *opaque_mask) {
     for (uint32_t i = layout_index; i < layout.size(); i++) {
         Layout &layout = this->layout[i];
 
@@ -296,7 +301,7 @@ void FlatVariables::schedule_jit_variables(bool schedule_force,
         // We have to force scheduling of undefined variables, in order to
         // handle variables initialized with ``empty``.
         if (schedule_force ||
-            (opaque_mask && opaque_mask->at(i - layout_index)) ||
+            (opaque_mask && (*opaque_mask)[i - layout_index]) ||
             jit_var_state(index) == VarState::Undefined) {
             // Returns owning reference
             index = jit_var_schedule_force(index, &rv);
@@ -324,13 +329,14 @@ void FlatVariables::schedule_jit_variables(bool schedule_force,
             // Store size in index variable, as this is not used for literals
             layout.index = info.size;
             layout.vt    = info.type;
+            layout.literal_index = index;
 
             layout.flags |= (uint32_t) LayoutFlag::Literal;
         } else {
             layout.index = this->add_jit_index(index);
             layout.vt    = info.type;
+            jit_var_dec_ref(index);
         }
-        jit_var_dec_ref(index);
     }
     layout_index = layout.size();
 }
@@ -438,8 +444,10 @@ uint32_t FlatVariables::construct_jit_index(uint32_t prev_index) {
     uint32_t index;
     VarType vt;
     if (layout.flags & (uint32_t) LayoutFlag::Literal) {
-        index = jit_var_literal(this->backend, layout.vt, &layout.literal,
-                                layout.index);
+        // index = jit_var_literal(this->backend, layout.vt, &layout.literal,
+        //                         layout.index);
+        index = layout.literal_index;
+        jit_var_inc_ref(index);
         vt    = layout.vt;
     } else {
         VarLayout &var_layout = this->var_layout[layout.index];
@@ -1191,7 +1199,7 @@ void FlatVariables::traverse_with_registry(nb::handle h, TraverseContext &ctx) {
 
         jit_log(LogLevel::Debug, "registry{");
 
-        std::vector<void *> registry_pointers;
+        drjit::vector<void *> registry_pointers;
         for (std::string &domain : domains) {
             uint32_t registry_bound =
                 jit_registry_id_bound(variant.c_str(), domain.c_str());
@@ -1245,7 +1253,7 @@ void FlatVariables::assign_with_registry(nb::handle dst, TraverseContext &ctx) {
 
         jit_log(LogLevel::Debug, "registry{");
 
-        std::vector<void *> registry_pointers;
+        drjit::vector<void *> registry_pointers;
         for (std::string &domain : domains) {
             uint32_t registry_bound =
                 jit_registry_id_bound(variant.c_str(), domain.c_str());
@@ -1619,6 +1627,7 @@ nb::object FunctionRecording::record(nb::callable func,
     // For catching input assignment mismatches, we assign the input and
     // output
     {
+        state_lock_guard guard;
         // Enter Resume scope, so we can track gradients
         ADScopeContext ad_scope(drjit::ADScope::Resume, 0, nullptr, -1, false);
 
@@ -1681,6 +1690,7 @@ nb::object FunctionRecording::replay(nb::callable func,
     // Construct Output variables
     nb::object output;
     {
+        state_lock_guard guard;
         // Enter Resume scope, so we can track gradients
         ADScopeContext ad_scope(drjit::ADScope::Resume, 0, nullptr, -1, false);
         out_variables.layout_index = 0;
@@ -1732,6 +1742,7 @@ nb::object FrozenFunction::operator()(nb::args args, nb::kwargs kwargs) {
         // Repeat this a max of 2 times if the number of variables that should
         // be made opaque changed.
         for (uint32_t i = 0; i < 2; i++) {
+            state_lock_guard guard;
             // Enter Resume scope, so we can track gradients
             ADScopeContext ad_scope(drjit::ADScope::Resume, 0, nullptr, 0,
                                     true);

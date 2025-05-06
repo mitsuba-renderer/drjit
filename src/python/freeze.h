@@ -50,7 +50,7 @@ struct Layout {
     uint32_t num = 0;
     /// Optional field identifiers of the container
     /// for example: keys in dictionary
-    std::vector<nb::object> fields;
+    drjit::vector<nb::object> fields;
     /// The index in the flat_variables array of this variable.
     /// This can be used to determine aliasing.
     uint32_t index = 0;
@@ -62,6 +62,7 @@ struct Layout {
     uint64_t literal = 0;
     /// Optional drjit type of the variable
     VarType vt = VarType::Void;
+    uint32_t literal_index = 0;
 
     /// If a non drjit type is passed as function arguments or result, we simply
     /// cache it here.
@@ -72,6 +73,7 @@ struct Layout {
     nb::type_object type;
 
     bool operator==(const Layout &rhs) const;
+    bool operator!=(const Layout &rhs) const { return !(*this == rhs); }
 
     Layout() = default;
 
@@ -113,8 +115,8 @@ struct VarLayout{
     VarLayout &operator=(VarLayout &&) = default;
 
     bool operator==(const VarLayout &rhs) const;
+    bool operator!=(const VarLayout &rhs) const { return !(*this == rhs); }
 };
-
 
 // Additional context required when traversing the inputs
 struct TraverseContext {
@@ -145,7 +147,7 @@ struct FlatVariables {
 
     /// The flattened and de-duplicated variable indices of the input/output to
     /// a frozen function
-    std::vector<uint32_t> variables;
+    drjit::vector<uint32_t> variables;
     /// Mapping from drjit jit index to index in flat variables. Used to
     /// deduplicate jit indices.
     tsl::robin_map<uint32_t, uint32_t, UInt32Hasher> index_to_slot;
@@ -156,16 +158,16 @@ struct FlatVariables {
     /// This vector represents the different sizes, encountered during
     /// traversal. The algorithm used to "add" a size is the same as for adding
     /// a variable index.
-    std::vector<uint32_t> sizes;
+    drjit::vector<uint32_t> sizes;
     /// Mapping from the size to its index in the ``sizes`` vector. This is used
     /// to construct size equivalence classes (i.e. deduplicating sizes).
     tsl::robin_map<uint32_t, uint32_t, UInt32Hasher> size_to_slot;
 
     /// This saves information about the type, size and fields of pytree
     /// objects. The information is stored in DFS order.
-    std::vector<Layout> layout;
+    drjit::vector<Layout> layout;
     /// Stores information about non-literal jit variables.
-    std::vector<VarLayout> var_layout;
+    drjit::vector<VarLayout> var_layout;
     /// The collective backend for all input variables. It can be used to ensure
     /// that all variables have the same backend.
     JitBackend backend = JitBackend::None;
@@ -175,7 +177,7 @@ struct FlatVariables {
     /// its C++ objects. This can be used to traverse the registry. We use a
     /// vector instead of a hash set, since we expect the number of domains not
     /// to exceed 100.
-    std::vector<std::string> domains;
+    drjit::vector<std::string> domains;
 
     uint32_t recursion_level = 0;
 
@@ -224,6 +226,15 @@ struct FlatVariables {
     FlatVariables(FlatVariables &&)            = default;
     FlatVariables &operator=(FlatVariables &&) = default;
 
+    ~FlatVariables() {
+        for (uint32_t i = 0; i < layout.size(); ++i) {
+            Layout &l = layout[i];
+            if (l.flags & (uint32_t) LayoutFlag::JitIndex && l.literal_index) {
+                jit_var_dec_ref(l.literal_index);
+            }
+        }
+    }
+
     void clear() {
         this->layout_index = 0;
         this->variables.clear();
@@ -250,7 +261,7 @@ struct FlatVariables {
      * Returns true if new variables have been discovered that should be made
      * opaque, otherwise returns false.
      */
-    bool fill_opaque_mask(FlatVariables &prev, std::vector<bool> &opaque_mask);
+    bool fill_opaque_mask(FlatVariables &prev, drjit::vector<bool> &opaque_mask);
 
     /**
      * Schedule variables that have been collected when traversing the PyTree.
@@ -270,7 +281,7 @@ struct FlatVariables {
      *     will be ignored.
      */
     void schedule_jit_variables(bool schedule_force,
-                                std::vector<bool> *opaque_mask);
+                                drjit::vector<bool> *opaque_mask);
 
     /**
      * \brief Records information about jit variables, that have been traversed.
@@ -531,7 +542,7 @@ struct FrozenFunction {
 
     detail::RecordingMap recordings;
     std::shared_ptr<detail::FlatVariables> prev_key;
-    std::vector<bool> opaque_mask;
+    drjit::vector<bool> opaque_mask;
 
     uint32_t recording_counter    = 0;
     uint32_t call_counter         = 0;
