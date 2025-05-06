@@ -289,6 +289,7 @@ bool FlatVariables::fill_opaque_mask(FlatVariables &prev,
 
 void FlatVariables::schedule_jit_variables(bool schedule_force,
                                            drjit::vector<bool> *opaque_mask) {
+    ProfilerPhase profiler("schedule_jit_variables");
     for (uint32_t i = layout_index; i < layout.size(); i++) {
         Layout &layout = this->layout[i];
 
@@ -311,7 +312,7 @@ void FlatVariables::schedule_jit_variables(bool schedule_force,
             jit_var_inc_ref(index);
         }
 
-        VarInfo info = jit_set_backend(index);
+        VarInfo info = jit_var_info(index);
         if (backend == info.backend || this->backend == JitBackend::None) {
             backend = info.backend;
         } else {
@@ -352,12 +353,13 @@ void FlatVariables::schedule_jit_variables(bool schedule_force,
  * over the collected indices and collects that information.
  */
 void FlatVariables::record_jit_variables() {
+    ProfilerPhase profiler("record_jit_variables");
     assert(variables.size() == var_layout.size());
     for (uint32_t i = 0; i < var_layout.size(); i++){
         uint32_t index = variables[i];
         VarLayout &layout = var_layout[i];
 
-        VarInfo info = jit_set_backend(index);
+        VarInfo info = jit_var_info(index);
         if (info.type == VarType::Pointer) {
             // We do not support pointers as inputs. It might be possible with
             // some extra handling, but they are never used directly.
@@ -444,8 +446,6 @@ uint32_t FlatVariables::construct_jit_index(uint32_t prev_index) {
     uint32_t index;
     VarType vt;
     if (layout.flags & (uint32_t) LayoutFlag::Literal) {
-        // index = jit_var_literal(this->backend, layout.vt, &layout.literal,
-        //                         layout.index);
         index = layout.literal_index;
         jit_var_inc_ref(index);
         vt    = layout.vt;
@@ -1288,6 +1288,28 @@ void FlatVariables::assign_with_registry(nb::handle dst, TraverseContext &ctx) {
     }
 }
 
+FlatVariables::~FlatVariables() {
+    state_lock_guard guard;
+    for (uint32_t i = 0; i < layout.size(); ++i) {
+        Layout &l = layout[i];
+        if (l.flags & (uint32_t) LayoutFlag::Literal && l.literal_index) {
+            jit_var_dec_ref(l.literal_index);
+        }
+    }
+}
+
+void FlatVariables::borrow() {
+    state_lock_guard guard;
+    for (uint32_t &index : this->variables)
+        jit_var_inc_ref(index);
+}
+
+void FlatVariables::release() {
+    state_lock_guard guard;
+    for (uint32_t &index : this->variables)
+        jit_var_dec_ref(index);
+}
+
 bool log_diff_variable(LogLevel level, const FlatVariables &curr,
                        const FlatVariables &prev, std::string &path,
                        uint32_t slot) {
@@ -1777,6 +1799,7 @@ nb::object FrozenFunction::operator()(nb::args args, nb::kwargs kwargs) {
             in_variables->layout_index = 0;
 
             { // Evaluate the variables, scheduled when traversing
+                ProfilerPhase profiler("eval");
                 nb::gil_scoped_release guard;
                 jit_eval();
             }

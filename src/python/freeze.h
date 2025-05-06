@@ -226,14 +226,7 @@ struct FlatVariables {
     FlatVariables(FlatVariables &&)            = default;
     FlatVariables &operator=(FlatVariables &&) = default;
 
-    ~FlatVariables() {
-        for (uint32_t i = 0; i < layout.size(); ++i) {
-            Layout &l = layout[i];
-            if (l.flags & (uint32_t) LayoutFlag::JitIndex && l.literal_index) {
-                jit_var_dec_ref(l.literal_index);
-            }
-        }
-    }
+    ~FlatVariables();
 
     void clear() {
         this->layout_index = 0;
@@ -243,15 +236,9 @@ struct FlatVariables {
         this->backend = JitBackend::None;
     }
     /// Borrow all variables held by this struct.
-    void borrow() {
-        for (uint32_t &index : this->variables)
-            jit_var_inc_ref(index);
-    }
+    void borrow();
     /// Release all variables held by this struct.
-    void release() {
-        for (uint32_t &index : this->variables)
-            jit_var_dec_ref(index);
-    }
+    void release();
 
     /**
      * Generates a mask of variables that should be made opaque in the next
