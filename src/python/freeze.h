@@ -23,6 +23,7 @@ struct FrozenFunction;
 namespace detail {
 
 using index64_vector = drjit::detail::index64_vector;
+using index32_vector = drjit::detail::index32_vector;
 
 enum class LayoutFlag : uint32_t {
     /// Whether this variable has size 1
@@ -30,35 +31,47 @@ enum class LayoutFlag : uint32_t {
     /// Whether this variable is unaligned in memory
     Unaligned = (1 << 1),
     /// Whether this layout represents a literal variable
-    Literal   = (1 << 2),
+    Literal = (1 << 2),
+    /// Whether this layout represents an undefined variable (they behave
+    /// similarly to literals)
+    Undefined = (1 << 3),
     /// Whether this variable has gradients enabled
-    GradEnabled = (1 << 3),
+    GradEnabled = (1 << 4),
     /// Did this variable have gradient edges attached when recording, that
     /// where postponed by the ``isolate_grad`` function?
-    Postponed = (1 << 4),
+    Postponed = (1 << 5),
+    /// Does this node represent a JIT Index?
+    JitIndex = (1 << 6),
 };
 
 /// Stores information about python objects, such as their type, their number of
 /// sub-elements or their field keys. This can be used to reconstruct a PyTree
 /// from a flattened variable array.
 struct Layout {
+
+    /// The literal data
+    uint64_t literal = 0;
+
+    /// Optional field identifiers of the container
+    /// for example: keys in dictionary
+    drjit::vector<nb::object> fields;
+
     /// Number of members in this container.
     /// Can be used to traverse the layout without knowing the type.
     uint32_t num = 0;
-    /// Optional field identifiers of the container
-    /// for example: keys in dictionary
-    std::vector<nb::object> fields;
     /// The index in the flat_variables array of this variable.
     /// This can be used to determine aliasing.
     uint32_t index = 0;
 
     /// Flags, storing information about variables and literals.
-    uint32_t flags = 0;
+    uint32_t flags : 8; // LayoutFlag
 
-    /// The literal data
-    uint64_t literal = 0;
     /// Optional drjit type of the variable
-    VarType vt = VarType::Void;
+    uint32_t vt: 4; // VarType
+
+    /// Variable index of literal. Instead of constructing a literal every time,
+    /// we keep a reference to it.
+    uint32_t literal_index = 0;
 
     /// If a non drjit type is passed as function arguments or result, we simply
     /// cache it here.
@@ -69,8 +82,11 @@ struct Layout {
     nb::type_object type;
 
     bool operator==(const Layout &rhs) const;
+    bool operator!=(const Layout &rhs) const { return !(*this == rhs); }
 
-    Layout() = default;
+    Layout()
+        : literal(0), fields(), num(0), index(0), flags(0), vt(0),
+          literal_index(0), py_object(), type() {};
 
     Layout(const Layout &)            = delete;
     Layout &operator=(const Layout &) = delete;
@@ -110,14 +126,15 @@ struct VarLayout{
     VarLayout &operator=(VarLayout &&) = default;
 
     bool operator==(const VarLayout &rhs) const;
+    bool operator!=(const VarLayout &rhs) const { return !(*this == rhs); }
 };
-
 
 // Additional context required when traversing the inputs
 struct TraverseContext {
     /// Set of postponed ad nodes, used to mark inputs to functions.
     const tsl::robin_set<uint32_t, UInt32Hasher> *postponed = nullptr;
-    bool schedule_force                                     = false;
+    index32_vector free_list;
+    std::string path;
 };
 
 /**
@@ -141,7 +158,7 @@ struct FlatVariables {
 
     /// The flattened and de-duplicated variable indices of the input/output to
     /// a frozen function
-    std::vector<uint32_t> variables;
+    drjit::vector<uint32_t> variables;
     /// Mapping from drjit jit index to index in flat variables. Used to
     /// deduplicate jit indices.
     tsl::robin_map<uint32_t, uint32_t, UInt32Hasher> index_to_slot;
@@ -152,16 +169,16 @@ struct FlatVariables {
     /// This vector represents the different sizes, encountered during
     /// traversal. The algorithm used to "add" a size is the same as for adding
     /// a variable index.
-    std::vector<uint32_t> sizes;
+    drjit::vector<uint32_t> sizes;
     /// Mapping from the size to its index in the ``sizes`` vector. This is used
     /// to construct size equivalence classes (i.e. deduplicating sizes).
     tsl::robin_map<uint32_t, uint32_t, UInt32Hasher> size_to_slot;
 
     /// This saves information about the type, size and fields of pytree
     /// objects. The information is stored in DFS order.
-    std::vector<Layout> layout;
+    drjit::vector<Layout> layout;
     /// Stores information about non-literal jit variables.
-    std::vector<VarLayout> var_layout;
+    drjit::vector<VarLayout> var_layout;
     /// The collective backend for all input variables. It can be used to ensure
     /// that all variables have the same backend.
     JitBackend backend = JitBackend::None;
@@ -171,7 +188,7 @@ struct FlatVariables {
     /// its C++ objects. This can be used to traverse the registry. We use a
     /// vector instead of a hash set, since we expect the number of domains not
     /// to exceed 100.
-    std::vector<std::string> domains;
+    drjit::vector<std::string> domains;
 
     uint32_t recursion_level = 0;
 
@@ -220,6 +237,8 @@ struct FlatVariables {
     FlatVariables(FlatVariables &&)            = default;
     FlatVariables &operator=(FlatVariables &&) = default;
 
+    ~FlatVariables();
+
     void clear() {
         this->layout_index = 0;
         this->variables.clear();
@@ -228,15 +247,39 @@ struct FlatVariables {
         this->backend = JitBackend::None;
     }
     /// Borrow all variables held by this struct.
-    void borrow() {
-        for (uint32_t &index : this->variables)
-            jit_var_inc_ref(index);
-    }
+    void borrow();
     /// Release all variables held by this struct.
-    void release() {
-        for (uint32_t &index : this->variables)
-            jit_var_dec_ref(index);
-    }
+    void release();
+
+    /**
+     * Generates a mask of variables that should be made opaque in the next
+     * iteration. This should only be called if \c compatible_auto_opaque
+     * returns true for the corresponding \c FlatVariables pair.
+     *
+     * Returns true if new variables have been discovered that should be made
+     * opaque, otherwise returns false.
+     */
+    bool fill_opaque_mask(FlatVariables &prev, drjit::vector<bool> &opaque_mask);
+
+    /**
+     * Schedule variables that have been collected when traversing the PyTree.
+     *
+     * This function iterates over all ``Layout`` nodes that represent JIT
+     * indices and either calls ``jit_var_schedule`` or
+     * ``jit_var_schedule_force`` on them, depending on whether
+     * ``schedule_force`` is true or the boolean in the ``opaque_mask``
+     * corresponding to that variable is true.
+     *
+     * \param schedule_force
+     *     Overrides the use of \c opaque_mask and makes all variables opaque
+     *
+     * \param opaque_mask
+     *     A pointer to a compatible boolean array, indicating if some of the
+     *     variables should be made opaque. Can be \c nullptr, in which case it
+     *     will be ignored.
+     */
+    void schedule_jit_variables(bool schedule_force,
+                                drjit::vector<bool> *opaque_mask);
 
     /**
      * \brief Records information about jit variables, that have been traversed.
@@ -414,13 +457,13 @@ struct FlatVariables {
      * Assigns the flattened variables to an already existing PyTree.
      * This is used when input variables have changed.
      */
-    void assign(nb::handle dst);
+    void assign(nb::handle dst, TraverseContext &ctx);
 
     /**
      * First assigns the registry and then the PyTree.
      * Corresponds to `traverse_with_registry`.
      */
-    void assign_with_registry(nb::handle dst);
+    void assign_with_registry(nb::handle dst, TraverseContext &ctx);
 
     bool operator==(const FlatVariables &rhs) const {
         return this->layout == rhs.layout &&
@@ -497,21 +540,24 @@ struct FrozenFunction {
 
     detail::RecordingMap recordings;
     std::shared_ptr<detail::FlatVariables> prev_key;
+    drjit::vector<bool> opaque_mask;
 
     uint32_t recording_counter    = 0;
     uint32_t call_counter         = 0;
     int max_cache_size            = -1;
     uint32_t warn_recording_count = 10;
     JitBackend default_backend    = JitBackend::None;
+    bool auto_opaque = false;
 
     detail::FlatVariables::Heuristic in_heuristics;
 
     FrozenFunction(nb::callable func, int max_cache_size = -1,
                    uint32_t warn_recording_count = 10,
-                   JitBackend backend            = JitBackend::None)
+                   JitBackend backend            = JitBackend::None,
+                   bool auto_opaque              = false)
         : func(func), max_cache_size(max_cache_size),
-          warn_recording_count(warn_recording_count), default_backend(backend) {
-    }
+          warn_recording_count(warn_recording_count), default_backend(backend),
+          auto_opaque(auto_opaque) {}
     ~FrozenFunction() {}
 
     FrozenFunction(const FrozenFunction &)            = delete;
