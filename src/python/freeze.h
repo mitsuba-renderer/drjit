@@ -31,14 +31,17 @@ enum class LayoutFlag : uint32_t {
     /// Whether this variable is unaligned in memory
     Unaligned = (1 << 1),
     /// Whether this layout represents a literal variable
-    Literal   = (1 << 2),
+    Literal = (1 << 2),
+    /// Whether this layout represents an undefined variable (they behave
+    /// similarly to literals)
+    Undefined = (1 << 3),
     /// Whether this variable has gradients enabled
-    GradEnabled = (1 << 3),
+    GradEnabled = (1 << 4),
     /// Did this variable have gradient edges attached when recording, that
     /// where postponed by the ``isolate_grad`` function?
-    Postponed = (1 << 4),
+    Postponed = (1 << 5),
     /// Does this node represent a JIT Index?
-    JitIndex = (1 << 5),
+    JitIndex = (1 << 6),
 };
 
 /// Stores information about python objects, such as their type, their number of
@@ -61,7 +64,7 @@ struct Layout {
     uint32_t index = 0;
 
     /// Flags, storing information about variables and literals.
-    uint32_t flags : 6; // LayoutFlag
+    uint32_t flags : 8; // LayoutFlag
 
     /// Optional drjit type of the variable
     uint32_t vt: 4; // VarType

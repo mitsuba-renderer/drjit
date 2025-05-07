@@ -265,8 +265,8 @@ void FlatVariables::schedule_jit_variables(bool schedule_force,
         // We have to force scheduling of undefined variables, in order to
         // handle variables initialized with ``empty``.
         if (schedule_force ||
-            (opaque_mask && (*opaque_mask)[i - layout_index]) ||
-            jit_var_state(index) == VarState::Undefined) {
+            (opaque_mask && (*opaque_mask)[i - layout_index]) /* ||
+            jit_var_state(index) == VarState::Undefined */) {
             // Returns owning reference
             index = jit_var_schedule_force(index, &rv);
         } else {
@@ -286,16 +286,22 @@ void FlatVariables::schedule_jit_variables(bool schedule_force,
         }
 
         if (info.state == VarState::Literal) {
-            // Special case, where the variable is a literal. This should not
-            // occur, as all literals are made opaque in beforehand, however it
-            // is nice to have a fallback.
+            // Special case, where the variable is a literal.
             layout.literal = info.literal;
-            // Store size in index variable, as this is not used for literals
+            // Store size in index variable, as this is not used for literals.
             layout.index         = info.size;
             layout.vt            = (uint32_t) info.type;
             layout.literal_index = index;
 
             layout.flags |= (uint32_t) LayoutFlag::Literal;
+        } else if (info.state == VarState::Undefined) {
+            // Special case, where the variable is a literal.
+            // Store size in index variable, as this is not used for literals.
+            layout.index         = info.size;
+            layout.vt            = (uint32_t) info.type;
+            layout.literal_index = index;
+
+            layout.flags |= (uint32_t) LayoutFlag::Undefined;
         } else {
             layout.index = this->add_jit_index(index);
             layout.vt    = (uint32_t) info.type;
@@ -408,7 +414,8 @@ uint32_t FlatVariables::construct_jit_index(uint32_t prev_index) {
 
     uint32_t index;
     VarType vt;
-    if (layout.flags & (uint32_t) LayoutFlag::Literal) {
+    if ((layout.flags & (uint32_t) LayoutFlag::Literal) ||
+        (layout.flags & (uint32_t) LayoutFlag::Undefined)) {
         index = layout.literal_index;
         jit_var_inc_ref(index);
         vt = (VarType) layout.vt;
@@ -1255,7 +1262,9 @@ FlatVariables::~FlatVariables() {
     state_lock_guard guard;
     for (uint32_t i = 0; i < layout.size(); ++i) {
         Layout &l = layout[i];
-        if (l.flags & (uint32_t) LayoutFlag::Literal && l.literal_index) {
+        if (((l.flags & (uint32_t) LayoutFlag::Literal) ||
+             (l.flags & (uint32_t) LayoutFlag::Undefined)) &&
+            l.literal_index) {
             jit_var_dec_ref(l.literal_index);
         }
     }
@@ -1279,12 +1288,12 @@ bool log_diff_variable(LogLevel level, const FlatVariables &curr,
     const VarLayout &curr_l = curr.var_layout[slot];
     const VarLayout &prev_l = prev.var_layout[slot];
 
-    if(curr_l.vt != prev_l.vt){
+    if (curr_l.vt != prev_l.vt) {
         jit_log(level, "%s: The variable type changed from %u to %u.",
                 path.c_str(), prev_l.vt, curr_l.vt);
         return false;
     }
-    if(curr_l.size_index != prev_l.size_index){
+    if (curr_l.size_index != prev_l.size_index) {
         jit_log(level,
                 "%s: The size equivalence class of the variable changed from "
                 "%u to %u.",
@@ -1321,7 +1330,8 @@ bool log_diff(LogLevel level, const FlatVariables &curr,
     }
 
     if (curr_l.flags & (uint32_t) LayoutFlag::JitIndex &&
-        !(curr_l.flags & (uint32_t) LayoutFlag::Literal)) {
+        !(curr_l.flags & (uint32_t) LayoutFlag::Literal) &&
+        !(curr_l.flags & (uint32_t) LayoutFlag::Undefined)) {
         uint32_t slot = curr_l.index;
         if (!log_diff_variable(level, curr, prev, path, slot))
             return false;

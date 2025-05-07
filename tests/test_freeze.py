@@ -3015,7 +3015,6 @@ def test77_optimizers(t, optimizer, auto_opaque):
 @pytest.test_arrays("float32, jit, shape=(*)")
 @pytest.mark.parametrize("auto_opaque", [False, True])
 def test78_hash_id_fallback(t, auto_opaque):
-
     """
     Test the hash to id fallback for object hashing if the object is not
     traversible nor hashable.
@@ -3046,4 +3045,28 @@ def test78_hash_id_fallback(t, auto_opaque):
         assert dr.allclose(res, ref)
 
     assert frozen.n_recordings == 3
+
+@pytest.test_arrays("float32, jit, shape=(*)")
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test79_empty(t, auto_opaque):
+
+    n = 5
+
+    mod = sys.modules[t.__module__]
+
+    def func(x, i, v):
+        dr.scatter(x, v, i)
+
+    frozen = dr.freeze(func, auto_opaque = auto_opaque)
+
+    for i in range(n):
+        i = mod.UInt32(i)
+
+        res = dr.empty(t, n)
+        frozen(res, i, 1)
+
+        ref = dr.empty(t, n)
+        func(ref, i, 1)
+
+        assert res[i] == ref[i]
 
