@@ -1471,12 +1471,21 @@ FlatVariablesHasher::operator()(const std::shared_ptr<FlatVariables> &key) const
                     (uint64_t) (key->var_layout.size() << 2);
 
     for (const Layout &layout : key->layout) {
-        // if layout.fields is not 0 then layout.num == layout.fields.size()
+        // If layout.fields is not 0 then layout.num == layout.fields.size()
         // therefore we can omit layout.fields.size().
-        hash_combine(hash,
-                     ((uint64_t) layout.num << 32) | ((uint64_t) layout.index));
-        hash_combine(hash,
-                     ((uint64_t) layout.flags << 32) | ((uint64_t) layout.vt));
+        // Layout of the hash key data:
+        // struct {
+        //     uint64_t num : 20;
+        //     uint64_t index: 32;
+        //     uint64_t flags: 8;
+        //     uint64_t vt: 4;
+        // };
+        // This makes the assumption that we either don't have more than 1M
+        // elements in one layout.
+        hash_combine(hash, ((uint64_t) layout.num << 44) |
+                               ((uint64_t) layout.index << 12) |
+                               ((uint64_t) layout.flags << 4) |
+                               ((uint64_t) layout.vt));
         if (layout.flags & (uint32_t) LayoutFlag::JitIndex)
             hash_combine(hash, layout.literal);
 
@@ -1507,7 +1516,7 @@ FlatVariablesHasher::operator()(const std::shared_ptr<FlatVariables> &key) const
     for (const VarLayout &layout : key->var_layout) {
         // layout.vt: 4
         // layout.vs: 4
-        // layout.flags: 6
+        // layout.flags: 8
         hash_combine(hash, ((uint64_t) layout.size_index << 32) |
                                ((uint64_t) layout.flags << 8) |
                                ((uint64_t) layout.vs << 4) |
