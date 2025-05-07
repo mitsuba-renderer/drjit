@@ -208,52 +208,12 @@ uint32_t FlatVariables::add_jit_index(uint32_t index) {
  * consists of changes in literal values.
  */
 bool compatible_auto_opaque(FlatVariables &cur, FlatVariables &prev){
+    // NOTE: We only test the size of the layout, as a full test is somewhat
+    // expensive, and the worst case is that we make too many variables opaque,
+    // which does not impact correctness. If this causes problems, more
+    // extensive tests might have to be reintroduced.
     if (cur.layout.size() != prev.layout.size()) {
         return false;
-    }
-    for (uint32_t i = 0; i < cur.layout.size(); i++) {
-        Layout &cur_layout  = cur.layout[i];
-        Layout &prev_layout = prev.layout[i];
-
-        if (((bool) cur_layout.type != (bool) prev_layout.type) ||
-            !(cur_layout.type.equal(prev_layout.type))){
-            // jit_log(LogLevel::Warn, "type");
-            return false;
-        }
-
-        if (cur_layout.num != prev_layout.num){
-            // jit_log(LogLevel::Warn, "num");
-            return false;
-        }
-
-        if (cur_layout.fields.size() != prev_layout.fields.size()){
-            // jit_log(LogLevel::Warn, "fields.size()");
-            return false;
-        }
-
-        for (uint32_t i = 0; i < cur_layout.fields.size(); ++i) {
-            if (!(cur_layout.fields[i].equal(prev_layout.fields[i]))){
-                // jit_log(LogLevel::Warn, "fields[%u]", i);
-                return false;
-            }
-        }
-
-        // if (cur_layout.index != prev_layout.index)
-        //     return false;
-
-        // if (cur_layout.flags != prev_layout.flags)
-        //     return false;
-
-        if (cur_layout.vt != prev_layout.vt){
-            // jit_log(LogLevel::Warn, "vt");
-            return false;
-        }
-
-        if (((bool) cur_layout.py_object != (bool) prev_layout.py_object) ||
-            !cur_layout.py_object.equal(prev_layout.py_object)){
-            // jit_log(LogLevel::Warn, "py_object");
-            return false;
-        }
     }
     return true;
 }
@@ -1457,17 +1417,17 @@ bool log_diff(LogLevel level, const FlatVariables &curr,
                 prev.flags, curr.flags);
         return false;
     }
-    if(curr.layout.size() != prev.layout.size()){
+    if (curr.layout.size() != prev.layout.size()) {
         jit_log(level,
                 "The number of elements in the input changed from %u to %u.",
                 prev.layout.size(), curr.layout.size());
         return false;
     }
-    if(curr.var_layout.size() != prev.var_layout.size()){
+    if (curr.var_layout.size() != prev.var_layout.size()) {
         jit_log(level,
                 "The number of opaque variables in the input changed from %u "
                 "to %u.",
-                prev.layout.size(), curr.layout.size());
+                prev.var_layout.size(), curr.var_layout.size());
         return false;
     }
 
@@ -1477,12 +1437,12 @@ bool log_diff(LogLevel level, const FlatVariables &curr,
 
     return true;
 }
-inline void hash_combine(size_t &seed, size_t value) {
+inline void hash_combine(uint64_t &seed, uint64_t value) {
     /// From CityHash (https://github.com/google/cityhash)
-    const size_t mult = 0x9ddfea08eb382d69ull;
-    size_t a          = (value ^ seed) * mult;
+    const uint64_t mult = 0x9ddfea08eb382d69ull;
+    uint64_t a          = (value ^ seed) * mult;
     a ^= (a >> 47);
-    size_t b = (seed ^ a) * mult;
+    uint64_t b = (seed ^ a) * mult;
     b ^= (b >> 47);
     seed = b * mult;
 }
@@ -1491,20 +1451,29 @@ size_t
 FlatVariablesHasher::operator()(const std::shared_ptr<FlatVariables> &key) const {
     ProfilerPhase profiler("hash");
     // Hash the layout
-    // NOTE: string hashing seems to be less efficient
-    size_t hash = key->layout.size();
+
+    // TODO: Maybe we can use xxh by first collecting in vector<uint64_t>?
+
+    uint64_t hash = (uint64_t) (key->layout.size() << 32) |
+                    (uint64_t) (key->var_layout.size() << 2);
+
     for (const Layout &layout : key->layout) {
-        hash_combine(hash, layout.num);
-        hash_combine(hash, layout.fields.size());
-        hash_combine(hash, (size_t) layout.flags);
-        hash_combine(hash, (size_t) layout.index);
-        hash_combine(hash, (size_t) layout.literal);
-        hash_combine(hash, (size_t) layout.vt);
+        // if layout.fields is not 0 then layout.num == layout.fields.size()
+        // therefore we can omit layout.fields.size().
+        hash_combine(hash,
+                     ((uint64_t) layout.num << 32) | ((uint64_t) layout.index));
+        hash_combine(hash,
+                     ((uint64_t) layout.flags << 32) | ((uint64_t) layout.vt));
+        if (layout.flags & (uint32_t) LayoutFlag::JitIndex)
+            hash_combine(hash, layout.literal);
+
+        uint32_t type_hash = 0;
         if (layout.type)
-            hash_combine(hash, nb::hash(layout.type));
-        if (layout.py_object){
+            type_hash = nb::hash(layout.type);
+
+        uint32_t object_hash = 0;
+        if (layout.py_object) {
             PyObject *ptr = layout.py_object.ptr();
-            uint32_t object_hash;
             Py_hash_t rv = PyObject_Hash(ptr);
 
             // Try to hash the object, and otherwise fallback to ``id()``
@@ -1514,22 +1483,23 @@ FlatVariablesHasher::operator()(const std::shared_ptr<FlatVariables> &key) const
             } else {
                 object_hash = rv;
             }
-
-            hash_combine(hash, object_hash);
         }
-        for (auto &field : layout.fields) {
-            hash_combine(hash, nb::hash(field));
-        }
+        if (type_hash && object_hash)
+            hash_combine(hash, ((uint64_t) type_hash << 32) |
+                                   ((uint64_t) (uint32_t) object_hash));
+        for (auto &field : layout.fields)
+             hash_combine(hash, nb::hash(field.ptr()));
     }
 
     for (const VarLayout &layout : key->var_layout) {
-        hash_combine(hash, (size_t) layout.vt);
-        hash_combine(hash, (size_t) layout.vs);
-        hash_combine(hash, (size_t) layout.flags);
-        hash_combine(hash, (size_t) layout.size_index);
+        // layout.vt: 4
+        // layout.vs: 4
+        // layout.flags: 6
+        hash_combine(hash, ((uint64_t) layout.size_index << 32) |
+                               ((uint64_t) layout.flags << 8) |
+                               ((uint64_t) layout.vs << 4) |
+                               ((uint64_t) layout.vt));
     }
-
-    hash_combine(hash, (size_t) key->flags);
 
     return hash;
 }

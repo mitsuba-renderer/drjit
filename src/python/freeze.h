@@ -62,6 +62,8 @@ struct Layout {
     uint64_t literal = 0;
     /// Optional drjit type of the variable
     VarType vt = VarType::Void;
+    /// Variable index of literal. Instead of constructing a literal every time,
+    /// we keep a reference to it.
     uint32_t literal_index = 0;
 
     /// If a non drjit type is passed as function arguments or result, we simply
