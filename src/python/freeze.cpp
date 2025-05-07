@@ -23,6 +23,9 @@
 #include <sstream>
 #include <vector>
 
+#define likely(x)   DRJIT_LIKELY(x)
+#define unlikely(x) DRJIT_UNLIKELY(x)
+
 /**
  * \brief Helper struct to profile and log frozen functions.
  */
@@ -223,26 +226,26 @@ bool FlatVariables::fill_opaque_mask(FlatVariables &prev,
     // If we notice that only a literal has changed, we can set the
     // corresponding bit in the mask, indicating that this literal should be
     // made opaque next time.
-    uint32_t opaque_cunter = 0;
+    uint32_t opaque_counter = 0;
     bool new_opaques = false;
     for (uint32_t i = 0; i < this->layout.size(); i++) {
         Layout &layout      = this->layout[i];
         Layout &prev_layout = prev.layout[i];
 
-        if (layout.flags & (uint32_t) LayoutFlag::Literal &&
+        bool requires_opaque =
+            layout.flags & (uint32_t) LayoutFlag::Literal &&
             prev_layout.flags & (uint32_t) LayoutFlag::Literal &&
             (layout.literal != prev_layout.literal ||
-             layout.index != prev_layout.index)) {
-            opaque_mask[i] = true;
-            new_opaques = true;
-        }
-        if (opaque_mask[i])
-            opaque_cunter++;
+             layout.index != prev_layout.index);
+
+        opaque_mask[i] |= requires_opaque;
+        new_opaques |= requires_opaque;
+        opaque_counter += requires_opaque;
     }
 
     jit_log(LogLevel::Debug,
             "compare_opaque(): %u variables will be made opaque",
-            opaque_cunter);
+            opaque_counter);
 
     return new_opaques;
 }
@@ -288,14 +291,14 @@ void FlatVariables::schedule_jit_variables(bool schedule_force,
             // is nice to have a fallback.
             layout.literal = info.literal;
             // Store size in index variable, as this is not used for literals
-            layout.index = info.size;
-            layout.vt    = info.type;
+            layout.index         = info.size;
+            layout.vt            = (uint32_t) info.type;
             layout.literal_index = index;
 
             layout.flags |= (uint32_t) LayoutFlag::Literal;
         } else {
             layout.index = this->add_jit_index(index);
-            layout.vt    = info.type;
+            layout.vt    = (uint32_t) info.type;
             jit_var_dec_ref(index);
         }
     }
@@ -389,7 +392,7 @@ void FlatVariables::traverse_jit_index(uint32_t index, TraverseContext &ctx,
 
     layout.flags |= (uint32_t) LayoutFlag::JitIndex;
     layout.index = index;
-    layout.vt = jit_var_type(index);
+    layout.vt    = (uint32_t) jit_var_type(index);
 }
 
 /**
@@ -408,7 +411,7 @@ uint32_t FlatVariables::construct_jit_index(uint32_t prev_index) {
     if (layout.flags & (uint32_t) LayoutFlag::Literal) {
         index = layout.literal_index;
         jit_var_inc_ref(index);
-        vt    = layout.vt;
+        vt = (VarType) layout.vt;
     } else {
         VarLayout &var_layout = this->var_layout[layout.index];
         index = this->variables[layout.index];
@@ -1706,6 +1709,7 @@ nb::object FunctionRecording::replay(nb::callable func,
 }
 
 nb::object FrozenFunction::operator()(nb::args args, nb::kwargs kwargs) {
+    ProfilerPhase profiler("frozen function");
     nb::object result;
     {
         // Enter Isolate grad scope, so that gradients are not propagated

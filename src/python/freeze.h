@@ -45,23 +45,27 @@ enum class LayoutFlag : uint32_t {
 /// sub-elements or their field keys. This can be used to reconstruct a PyTree
 /// from a flattened variable array.
 struct Layout {
-    /// Number of members in this container.
-    /// Can be used to traverse the layout without knowing the type.
-    uint32_t num = 0;
+
+    /// The literal data
+    uint64_t literal = 0;
+
     /// Optional field identifiers of the container
     /// for example: keys in dictionary
     drjit::vector<nb::object> fields;
+
+    /// Number of members in this container.
+    /// Can be used to traverse the layout without knowing the type.
+    uint32_t num = 0;
     /// The index in the flat_variables array of this variable.
     /// This can be used to determine aliasing.
     uint32_t index = 0;
 
     /// Flags, storing information about variables and literals.
-    uint32_t flags = 0;
+    uint32_t flags : 6; // LayoutFlag
 
-    /// The literal data
-    uint64_t literal = 0;
     /// Optional drjit type of the variable
-    VarType vt = VarType::Void;
+    uint32_t vt: 4; // VarType
+
     /// Variable index of literal. Instead of constructing a literal every time,
     /// we keep a reference to it.
     uint32_t literal_index = 0;
@@ -77,7 +81,9 @@ struct Layout {
     bool operator==(const Layout &rhs) const;
     bool operator!=(const Layout &rhs) const { return !(*this == rhs); }
 
-    Layout() = default;
+    Layout()
+        : literal(0), fields(), num(0), index(0), flags(0), vt(0),
+          literal_index(0), py_object(), type() {};
 
     Layout(const Layout &)            = delete;
     Layout &operator=(const Layout &) = delete;
