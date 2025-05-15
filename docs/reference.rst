@@ -354,6 +354,7 @@ _____
 .. autofunction:: lgamma
 .. autofunction:: rad2deg
 .. autofunction:: deg2rad
+.. autofunction:: freeze
 
 Safe mathematical functions
 ---------------------------

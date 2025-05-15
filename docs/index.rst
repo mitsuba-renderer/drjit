@@ -46,6 +46,7 @@ public API.
    bench
    cpp
    textures
+   freeze
    faq
 
 .. toctree::
