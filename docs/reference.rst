@@ -146,6 +146,7 @@ Miscellaneous operations
 .. autofunction:: binary_search
 .. autofunction:: make_opaque
 .. autofunction:: copy
+.. autofunction:: reorder_threads
 
 Just-in-time compilation
 ------------------------

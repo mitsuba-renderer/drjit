@@ -83,6 +83,7 @@ nanobind_add_module(
   tracker.h     tracker.cpp
   local.h       local.cpp
   resample.h    resample.cpp
+  reorder.h     reorder.cpp
 
   # Backends
   scalar.h      scalar.cpp
@@ -139,6 +140,10 @@ endif()
 
 if (DRJIT_ENABLE_CUDA)
   target_compile_definitions(drjit-python PRIVATE -DDRJIT_ENABLE_CUDA)
+endif()
+
+if (DRJIT_ENABLE_OPTIX)
+    target_compile_definitions(drjit-python PRIVATE -DDRJIT_ENABLE_OPTIX)
 endif()
 
 # Disable leak warnings by default in PyPI release builds

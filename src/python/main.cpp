@@ -40,6 +40,7 @@
 #include "tracker.h"
 #include "local.h"
 #include "resample.h"
+#include "reorder.h"
 
 static int active_backend = -1;
 
@@ -106,6 +107,7 @@ NB_MODULE(_drjit_ext, m_) {
         .value("ScatterReduceLocal", JitFlag::ScatterReduceLocal, doc_JitFlag_ScatterReduceLocal)
         .value("SymbolicConditionals", JitFlag::SymbolicConditionals, doc_JitFlag_SymbolicConditionals)
         .value("SymbolicScope", JitFlag::SymbolicScope, doc_JitFlag_SymbolicScope)
+        .value("ShaderExecutionReordering", JitFlag::ShaderExecutionReordering, doc_JitFlag_ShaderExecutionReordering)
         .value("Default", JitFlag::Default, doc_JitFlag_Default)
 
         // Deprecated aliases
@@ -250,6 +252,7 @@ NB_MODULE(_drjit_ext, m_) {
     export_tracker(detail);
     export_local(m);
     export_resample(m);
+    export_reorder(m);
 
     export_scalar(scalar);
 
