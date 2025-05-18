@@ -511,14 +511,10 @@ nb::object mean(nb::handle value, nb::handle axis, nb::handle mode) {
 
     if (jit_flag(JitFlag::FreezingScope) && width(out) == 1 &&
         width(value) > 1) {
-        auto num_input  = prod(shape(value)[nb::slice(0, -1, 1)], nb::none());
-        auto num_output = prod(shape(out)[nb::slice(0, -1, 1)], nb::none());
+        auto num_input = opaque_n_elements(value);
+        auto num_output = prod(shape(out), nb::none());
 
-        nb::object input_width = opaque_width(value);
-
-        num_input *= input_width;
-
-        return out * num_output / num_input;
+        return (out * num_output) / num_input;
     }
 
     // mean = sum / (num_input/num_output)

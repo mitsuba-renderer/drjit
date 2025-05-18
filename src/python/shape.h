@@ -24,7 +24,13 @@ extern size_t ndim(nb::handle_t<ArrayBase> h) noexcept;
 /// Return the vectorization width of the given input array or PyTree
 extern size_t width(nb::handle h);
 
+/// Same as ``width``, but returns the width as an opaque array, allowing this
+/// relationship to be recorded as part of a frozen function. Used in \c dr::mean.
 extern nb::object opaque_width(nb::handle h);
+/// Recursively traverses the PyTree of this object to compute the number of
+/// elements. If a leaf object is a JIT array, the result will be an opaque
+/// array.
+extern nb::object opaque_n_elements(nb::handle h);
 
 /// Convert vector<size_t> into a python tuple
 extern nb::tuple cast_shape(const vector<size_t> &shape);

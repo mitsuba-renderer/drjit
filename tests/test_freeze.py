@@ -3070,3 +3070,31 @@ def test79_empty(t, auto_opaque):
 
         assert res[i] == ref[i]
 
+
+@pytest.test_arrays("float32, jit, shape=(*)")
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test80_tensor_mean(t, auto_opaque):
+    """
+    Tests that the mean of a tensor inside a frozen funciton is computed correctly
+    when changing the last tensor dimension.
+    """
+    mod = sys.modules[t.__module__]
+    Float32 = mod.Float32
+    TensorXf = mod.TensorXf
+
+    def func(x):
+        return dr.mean(x)
+
+    frozen = dr.freeze(func)
+
+    for i in range(3):
+        shape = ((i + 3), 10)
+        x = TensorXf(dr.arange(Float32, dr.prod(shape)), shape=shape)
+
+        res = frozen(x)
+        ref = func(x)
+
+        assert dr.allclose(res, ref)
+
+    assert frozen.n_recordings == 1
+
