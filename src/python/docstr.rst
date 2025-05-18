@@ -6049,6 +6049,13 @@
     Note that this information can also be queried in a more fine-grained
     manner (per variable) using the :py:attr:`drjit.ArrayBase.state` field.
 
+.. topic:: JitFlag_ShaderExecutionReordering
+
+    Enable OptiX's SER feature in ray tracing functions and in
+    :py:func:`reorder_threads`. This flag only applies to the CUDA backend.
+
+    This flag is *enabled* by default.
+
 .. topic:: JitFlag_Default
 
     The default set of optimization flags consisting of
@@ -6065,6 +6072,7 @@
     - :py:attr:`drjit.JitFlag.ReuseIndices`, and
     - :py:attr:`drjit.JitFlag.ScatterReduceLocal`.
     - :py:attr:`drjit.JitFlag.PacketOps`.
+    - :py:attr:`drjit.JitFlag.ShaderExecutionReordering`.
 
 .. topic:: JitFlag_LoopRecord
 
@@ -8328,3 +8336,52 @@
 .. topic:: nn_cast
 
    Cast the numeric type underlying a cooperative vector
+
+.. topic:: reorder_threads
+
+    Trigger a call to the Shader Execution Reordering (SER) feature of the GPU.
+
+    This function performs a hardware-assisted shuffle of the GPU threads to
+    improve the kernel occupancy by reducing warp-level divergence in certain
+    workloads. In order to perorm this shuffle, it requires a sorting key to
+    indicate which threads should be grouped into coherent warps.
+
+    An extra ``value`` argument must be passed to the function. This argument
+    will be returned as is but internally Dr.Jit will add some tracking to it to
+    guarantee that, on any subsequent use of it, a reordering operation will be
+    inserted in the kernel.
+
+    Example usage:
+
+    .. code-block:: python
+
+       arg = dr.cuda.Array3f(...)
+       key = dr.cuda.UInt32(...) % 4
+
+       # Reorder threads before `dr.switch()` to reduce divergence
+       # Only do it if `arg` is used
+       arg = dr.reorder_threads(key, 2, arg)
+
+       callables = [...]
+       callable_idx = dr.cuda.UInt32(...)
+       out = dr.switch(callable_idx, callables, arg)
+
+    When :py:attr:`drjit.JitFlag.ShaderExecutionReordering` is **not** set, or
+    when using the LLVM backend, this operation is a no-op.
+
+    Args:
+        key (drjit.ArrayBase): A 1D unsigned integer 32-bit array that serves as
+          a sorting key for the shuffle operation. Only the lower ``num_bits``
+          are used.
+
+        num_bits (int): Number of bits from the key to use (starting from the
+          least signifcant bit). It is recommended to use as few as possible. At
+          most, 16 bits can be used.
+
+        value (object): An arbitrary Dr.Jit array, tensor, or :ref:`PyTree <pytrees>`.
+          This argument is returned without modification. The reordering will
+          only happen if the returned version of this arugment is used.
+
+    Returns:
+        object: The updated ``value`` variable that will trigger the reordering
+        if used.
