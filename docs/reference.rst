@@ -148,6 +148,7 @@ Miscellaneous operations
 .. autofunction:: copy
 .. autofunction:: linear_to_srgb
 .. autofunction:: srgb_to_linear
+.. autofunction:: reorder_threads
 
 Just-in-time compilation
 ------------------------
