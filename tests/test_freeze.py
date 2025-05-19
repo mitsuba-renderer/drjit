@@ -3085,7 +3085,7 @@ def test80_tensor_mean(t, auto_opaque):
     def func(x):
         return dr.mean(x)
 
-    frozen = dr.freeze(func)
+    frozen = dr.freeze(func, auto_opaque=auto_opaque)
 
     for i in range(3):
         shape = ((i + 3), 10)
@@ -3097,4 +3097,77 @@ def test80_tensor_mean(t, auto_opaque):
         assert dr.allclose(res, ref)
 
     assert frozen.n_recordings == 1
+
+
+@pytest.test_arrays("float32, jit, shape=(*)")
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test81_changing_closures(t, auto_opaque):
+
+    y = 1
+
+    def func(x):
+        return x + y
+
+    frozen  = dr.freeze(func, auto_opaque = auto_opaque)
+
+    for i in range(3):
+        x = dr.arange(t, i + 3)
+
+        res = frozen(x)
+        ref = func(x)
+
+        assert dr.allclose(res, ref)
+
+    assert frozen.n_recordings == 1
+
+    for i in range(3):
+        x = dr.arange(t, i + 3)
+
+        y += 1
+
+        res = frozen(x)
+        ref = func(x)
+
+        assert dr.allclose(res, ref)
+
+    assert frozen.n_recordings == 4
+
+
+@pytest.test_arrays("float32, jit, shape=(*)")
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test82_changing_closures_methods(t, auto_opaque):
+
+    y = 1
+
+    class Test:
+        def func(self, x):
+            return x + y
+
+        @dr.freeze
+        def frozen(self, x):
+            return x + y
+
+    test = Test()
+
+    for i in range(3):
+        x = dr.arange(t, i + 3)
+
+        res = test.frozen(x)
+        ref = test.func(x)
+
+        assert dr.allclose(res, ref)
+
+    assert test.frozen.n_recordings == 1
+
+    for i in range(3):
+        x = dr.arange(t, i + 3)
+
+        y += 1
+
+        res = test.frozen(x)
+        ref = test.func(x)
+
+        assert dr.allclose(res, ref)
+
+    assert test.frozen.n_recordings == 4
 

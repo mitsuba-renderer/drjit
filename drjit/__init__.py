@@ -2681,15 +2681,15 @@ def freeze(
 
         class FrozenFunction:
             def __init__(self, f) -> None:
-                closure = inspect.getclosurevars(f)
-                self.closure = (closure.nonlocals, closure.globals)
+                self.f = f
                 self.frozen = detail.FrozenFunction(
                     inner, limit, warn_after, backend, auto_opaque
                 )
 
             def __call__(self, *args, **kwargs):
                 _state = state_fn(*args, **kwargs) if state_fn is not None else None
-                return self.frozen([self.closure, _state], *args, **kwargs)
+                closure = inspect.getclosurevars(f)
+                return self.frozen([closure.nonlocals, closure.globals, _state], *args, **kwargs)
 
             @property
             def n_recordings(self):
@@ -2725,7 +2725,7 @@ def freeze(
                 if obj is None:
                     return self
                 else:
-                    return FrozenMethod(self.frozen, self.closure, obj)
+                    return FrozenMethod(self.f, self.frozen, obj)
 
         class FrozenMethod(FrozenFunction):
             """
@@ -2738,14 +2738,15 @@ def freeze(
             The ``__call__`` method of the ``FrozenMethod`` then supplies the object
             in addition to the arguments to the internal function.
             """
-            def __init__(self, frozen, closure, obj) -> None:
+            def __init__(self, f, frozen, obj) -> None:
+                self.f = f
                 self.obj = obj
                 self.frozen = frozen
-                self.closure = closure
 
             def __call__(self, *args, **kwargs):
                 _state = state_fn(self.obj, *args, **kwargs) if state_fn is not None else None
-                return self.frozen([self.closure, _state], self.obj, *args, **kwargs)
+                closure = inspect.getclosurevars(self.f)
+                return self.frozen([closure.nonlocals, closure.globals, _state], self.obj, *args, **kwargs)
 
         return functools.wraps(f)(FrozenFunction(f))
 
