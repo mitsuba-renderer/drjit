@@ -3143,7 +3143,7 @@ def test82_changing_closures_methods(t, auto_opaque):
         def func(self, x):
             return x + y
 
-        @dr.freeze
+        @dr.freeze(auto_opaque = auto_opaque)
         def frozen(self, x):
             return x + y
 
@@ -3171,3 +3171,22 @@ def test82_changing_closures_methods(t, auto_opaque):
 
     assert test.frozen.n_recordings == 4
 
+@pytest.test_arrays("float32, jit, shape=(*)")
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test83_any(t, auto_opaque):
+    mod = sys.modules[t.__module__]
+
+    def func(x):
+        return dr.any(x)
+
+    frozen = dr.freeze(func, auto_opaque=auto_opaque)
+
+    for i in range(4):
+        x = dr.zeros(mod.Bool, i + 3)
+        if i % 2:
+            x[2] = True
+
+        res = frozen(x)
+        ref = func(x)
+
+        dr.all(res == ref)
