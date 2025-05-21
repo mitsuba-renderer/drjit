@@ -3197,7 +3197,6 @@ def test84_block_sum(t, auto_opaque):
     """
     Tests a dry-run, resulting from a block sum.
     """
-    dr.set_log_level(dr.LogLevel.Trace)
     mod = sys.modules[t.__module__]
 
     def func(x):
@@ -3215,4 +3214,33 @@ def test84_block_sum(t, auto_opaque):
 
     assert frozen.n_recordings == 4
     assert frozen.n_cached_recordings == 1
+
+
+@pytest.test_arrays("float32, jit, shape=(*)")
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test85_dry_run_failure(t, auto_opaque):
+    """
+    Test the dry-run block_sum + compress failure case
+    """
+    n = 4
+
+    mod = sys.modules[t.__module__]
+
+    def func(x):
+        y = dr.block_sum(x, 2)
+        return dr.compress(y > 3)
+
+    frozen = dr.freeze(func, auto_opaque=auto_opaque)
+
+    for i in range(n):
+        x = dr.arange(t, i + 4)
+
+        res = frozen(x)
+        ref = func(x)
+
+        assert dr.allclose(res, ref)
+
+    assert frozen.n_recordings == n
+    assert frozen.n_cached_recordings == 1
+
 
