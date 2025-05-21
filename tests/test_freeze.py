@@ -3244,3 +3244,40 @@ def test85_dry_run_failure(t, auto_opaque):
     assert frozen.n_cached_recordings == 1
 
 
+@pytest.test_arrays("float32, jit, diff, shape=(*)")
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test86_nested_vcalls(t, auto_opaque):
+    """
+    Test that nested vcalls are in principle possible.
+    """
+    mod = sys.modules[t.__module__]
+
+    pkg = get_pkg(t)
+    mod = sys.modules[t.__module__]
+
+    A, B, Base, BasePtr = pkg.A, pkg.B, pkg.Base, pkg.BasePtr
+    a, b = A(), B()
+    a.value = dr.ones(t, 16)
+
+    c = BasePtr(a, a, None, None, b, b)
+    s = BasePtr(a, b, None, b, b, a)
+    s = dr.reinterpret_array(mod.UInt32, s)
+
+    def func(c, x, s):
+        return c.nested(x, s)
+
+    frozen = dr.freeze(func, auto_opaque = auto_opaque)
+
+    for i in range(3):
+
+        x = dr.arange(t, 6)
+
+        res = frozen(c, x, s)
+        ref = func(c, x, s)
+
+        print(f"{res=}")
+
+        assert dr.allclose(res, ref)
+
+    assert frozen.n_recordings == 1
+
