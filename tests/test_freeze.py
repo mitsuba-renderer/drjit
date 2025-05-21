@@ -3190,3 +3190,29 @@ def test83_any(t, auto_opaque):
         ref = func(x)
 
         dr.all(res == ref)
+
+@pytest.test_arrays("float32, jit, shape=(*)")
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test84_block_sum(t, auto_opaque):
+    """
+    Tests a dry-run, resulting from a block sum.
+    """
+    dr.set_log_level(dr.LogLevel.Trace)
+    mod = sys.modules[t.__module__]
+
+    def func(x):
+        return dr.block_sum(x, 2)
+
+    frozen = dr.freeze(func, auto_opaque=auto_opaque)
+
+    for i in range(7):
+        x = dr.arange(t, i + 4)
+
+        res = frozen(x)
+        ref = func(x)
+
+        assert dr.allclose(res, ref)
+
+    assert frozen.n_recordings == 4
+    assert frozen.n_cached_recordings == 1
+
