@@ -6245,6 +6245,14 @@
     Two overloads of this function exist: the masked variant does not advance
     the PRNG state of entries ``i`` where ``mask[i] == False``.
 
+.. topic:: PCG32_prev_uint32
+
+    Generate the previous uniformly distributed unsigned 32-bit random number
+    by stepping the PCG32 state backwards.
+
+    Two overloads of this function exist: the masked variant does not
+    regress the PRNG state of entries ``i`` where ``mask[i] == False``.
+
 .. topic:: PCG32_next_uint64
 
     Generate a uniformly distributed unsigned 64-bit random number
@@ -6252,6 +6260,16 @@
     Internally, the function calls :py:func:`next_uint32` twice.
 
     Two overloads of this function exist: the masked variant does not advance
+    the PRNG state of entries ``i`` where ``mask[i] == False``.
+
+.. topic:: PCG32_prev_uint64
+
+    Generate the previous uniformly distributed unsigned 64-bit random number
+    by stepping the PCG32 state backwards.
+
+    Internally, the function calls :py:func:`prev_uint32` twice.
+
+    Two overloads of this function exist: the masked variant does not regress
     the PRNG state of entries ``i`` where ``mask[i] == False``.
 
 .. topic:: PCG32_next_float
@@ -6266,12 +6284,32 @@
 
     A mask can be optionally provided. Masked entries do not advance the PRNG state.
 
+.. topic:: PCG32_prev_float
+
+    Generate the previous uniformly distributed precision floating point number 
+    on the interval :math:`[0, 1)` by stepping the PCG32 state backwards.
+
+    The function analyzes the provided target ``dtype`` and either invokes
+    :py:func:`prev_float16`, :py:func:`prev_float32` or :py:func:`prev_float64`
+    depending on the
+    requested precision.
+
+    A mask can be optionally provided. Masked entries do not regress the PRNG state.
+
 .. topic:: PCG32_next_float16
 
     Generate a uniformly distributed half precision floating point number on the
     interval :math:`[0, 1)`.
 
     Two overloads of this function exist: the masked variant does not advance
+    the PRNG state of entries ``i`` where ``mask[i] == False``.
+
+.. topic:: PCG32_prev_float16
+
+    Generate the previous uniformly distributed half precision floating point number 
+    on the interval :math:`[0, 1)` by stepping the PCG32 state backwards.
+
+    Two overloads of this function exist: the masked variant does not regress
     the PRNG state of entries ``i`` where ``mask[i] == False``.
 
 .. topic:: PCG32_next_float32
@@ -6282,12 +6320,28 @@
     Two overloads of this function exist: the masked variant does not advance
     the PRNG state of entries ``i`` where ``mask[i] == False``.
 
+.. topic:: PCG32_prev_float32
+
+    Generate the previous uniformly distributed single precision floating point number 
+    on the interval :math:`[0, 1)` by stepping the PCG32 state backwards.
+
+    Two overloads of this function exist: the masked variant does not regress
+    the PRNG state of entries ``i`` where ``mask[i] == False``.
+
 .. topic:: PCG32_next_float64
 
     Generate a uniformly distributed double precision floating point number on the
     interval :math:`[0, 1)`.
 
     Two overloads of this function exist: the masked variant does not advance
+    the PRNG state of entries ``i`` where ``mask[i] == False``.
+
+.. topic:: PCG32_prev_float64
+
+    Generate the previous uniformly distributed double precision floating point number 
+    on the interval :math:`[0, 1)` by stepping the PCG32 state backwards.
+
+    Two overloads of this function exist: the masked variant does not regress
     the PRNG state of entries ``i`` where ``mask[i] == False``.
 
 .. topic:: PCG32_next_float_normal
@@ -6300,11 +6354,30 @@
 
     A mask can be optionally provided. Masked entries do not advance the PRNG state.
 
+.. topic:: PCG32_prev_float_normal
+
+    Generate the previous (standard) normally distributed precision floating point number
+    by stepping the PCG32 state backwards.
+
+    The function analyzes the provided target ``dtype`` and either invokes
+    :py:func:`prev_float16_normal`, :py:func:`prev_float32_normal` or
+    :py:func:`prev_float64_normal` depending on the requested precision.
+
+    A mask can be optionally provided. Masked entries do not regress the PRNG state.
+
 .. topic:: PCG32_next_float16_normal
 
     Generate a (standard) normally distributed half precision floating point number.
 
     Two overloads of this function exist: the masked variant does not advance
+    the PRNG state of entries ``i`` where ``mask[i] == False``.
+
+.. topic:: PCG32_prev_float16_normal
+
+    Generate the previous (standard) normally distributed half precision floating 
+    point number by stepping the PCG32 state backwards.
+
+    Two overloads of this function exist: the masked variant does not regress
     the PRNG state of entries ``i`` where ``mask[i] == False``.
 
 .. topic:: PCG32_next_float32_normal
@@ -6314,11 +6387,27 @@
     Two overloads of this function exist: the masked variant does not advance
     the PRNG state of entries ``i`` where ``mask[i] == False``.
 
+.. topic:: PCG32_prev_float32_normal
+
+    Generate the previous (standard) normally distributed single precision floating 
+    point number by stepping the PCG32 state backwards.
+
+    Two overloads of this function exist: the masked variant does not regress
+    the PRNG state of entries ``i`` where ``mask[i] == False``.
+
 .. topic:: PCG32_next_float64_normal
 
-    Generate a (standard) normally distributed single precision floating point number.
+    Generate a (standard) normally distributed double precision floating point number.
 
     Two overloads of this function exist: the masked variant does not advance
+    the PRNG state of entries ``i`` where ``mask[i] == False``.
+
+.. topic:: PCG32_prev_float64_normal
+
+    Generate the previous (standard) normally distributed double precision floating 
+    point number by stepping the PCG32 state backwards.
+
+    Two overloads of this function exist: the masked variant does not regress
     the PRNG state of entries ``i`` where ``mask[i] == False``.
 
 .. topic:: PCG32_next_uint32_bounded
