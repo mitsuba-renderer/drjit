@@ -69,6 +69,29 @@ void bind_pcg32(nb::module_ &m) {
                  auto &&fn = self.attr(key);
                  return !mask.is(Py_True) ? fn(mask) : fn();
              }, "dtype"_a, "mask"_a = true, doc_PCG32_next_float)
+        .def("prev_float",
+             [](nb::handle self, nb::type_object dtype, nb::handle mask) {
+                 const char *key = nullptr;
+                 if constexpr (dr::is_jit_v<Guide>) {
+                     if (is_drjit_type(dtype)) {
+                         const ArraySupplement &s = supp(dtype);
+                         if ((VarType) s.type == VarType::Float16)
+                             key = "prev_float16";
+                         else if ((VarType) s.type == VarType::Float32)
+                             key = "prev_float32";
+                         else if ((VarType) s.type == VarType::Float64)
+                             key = "prev_float64";
+                     }
+                 } else if (dtype.is(&PyFloat_Type)) {
+                     key = "prev_float64";
+                 }
+
+                 if (!key)
+                     nb::raise_type_error("Invalid 'dtype'");
+
+                 auto &&fn = self.attr(key);
+                 return !mask.is(Py_True) ? fn(mask) : fn();
+             }, "dtype"_a, "mask"_a = true, doc_PCG32_prev_float)
         .def("next_float16",
              nb::overload_cast<>(&PCG32::next_float16),
              doc_PCG32_next_float16)
@@ -122,6 +145,29 @@ void bind_pcg32(nb::module_ &m) {
                  auto &&fn = self.attr(key);
                  return !mask.is(Py_True) ? fn(mask) : fn();
              }, "dtype"_a, "mask"_a = true, doc_PCG32_next_float_normal)
+         .def("prev_float_normal",
+             [](nb::handle self, nb::type_object dtype, nb::handle mask) {
+                 const char *key = nullptr;
+                 if constexpr (dr::is_jit_v<Guide>) {
+                     if (is_drjit_type(dtype)) {
+                         const ArraySupplement &s = supp(dtype);
+                         if ((VarType) s.type == VarType::Float16)
+                             key = "prev_float16_normal";
+                         else if ((VarType) s.type == VarType::Float32)
+                             key = "prev_float32_normal";
+                         else if ((VarType) s.type == VarType::Float64)
+                             key = "prev_float64_normal";
+                     }
+                 } else if (dtype.is(&PyFloat_Type)) {
+                     key = "prev_float64_normal";
+                 }
+
+                 if (!key)
+                     nb::raise_type_error("Invalid 'dtype'");
+
+                 auto &&fn = self.attr(key);
+                 return !mask.is(Py_True) ? fn(mask) : fn();
+             }, "dtype"_a, "mask"_a = true, doc_PCG32_prev_float_normal)
         .def("next_float16_normal",
              nb::overload_cast<>(&PCG32::next_float16_normal),
              doc_PCG32_next_float16_normal)
