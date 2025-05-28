@@ -556,6 +556,7 @@ template <typename T> void bind_arithmetic(ArrayBinding &b) {
 
 
 template <typename T> void bind_cast(ArrayBinding &b) {
+    using Bool    = bool_array_t<T>;
     using UInt32  = uint32_array_t<T>;
     using Int32   = int32_array_t<T>;
     using UInt64  = uint64_array_t<T>;
@@ -568,6 +569,7 @@ template <typename T> void bind_cast(ArrayBinding &b) {
         b.cast = (ArrayBinding::Cast) +[](const ArrayBase *a, VarType vt, bool reinterpret, T *b) {
             if (!reinterpret) {
                 switch (vt) {
+                    case VarType::Bool:    new (b) T(*(const Bool *)   a); break;
                     case VarType::Int32:   new (b) T(*(const Int32 *)   a); break;
                     case VarType::UInt32:  new (b) T(*(const UInt32 *)  a); break;
                     case VarType::Int64:   new (b) T(*(const Int64 *)   a); break;
@@ -579,6 +581,7 @@ template <typename T> void bind_cast(ArrayBinding &b) {
                 }
             } else {
                 switch (vt) {
+                    case VarType::Bool:    new (b) T(reinterpret_array<T>(*(const Bool *)   a)); break;
                     case VarType::Int32:   new (b) T(reinterpret_array<T>(*(const Int32 *)   a)); break;
                     case VarType::UInt32:  new (b) T(reinterpret_array<T>(*(const UInt32 *)  a)); break;
                     case VarType::Int64:   new (b) T(reinterpret_array<T>(*(const Int64 *)   a)); break;
@@ -885,7 +888,7 @@ nanobind::object bind_array(ArrayBinding &b, nanobind::handle scope = {},
     } else {
         bind_base<T>(b);
 
-        if constexpr ((T::IsArithmetic || T::IsClass) && T::Depth == 1 && !is_special_v<T>)
+        if constexpr ((T::IsArithmetic || T::IsClass || T::IsMask) && T::Depth == 1 && !is_special_v<T>)
             bind_cast<T>(b);
 
         if constexpr (T::Depth == 1 && T::IsDynamic) {
@@ -930,7 +933,7 @@ nanobind::object bind_array(ArrayBinding &b, nanobind::handle scope = {},
     if constexpr (!T::IsArithmetic)
         disable_arithmetic(b);
 
-    if constexpr (!T::IsArithmetic && !T::IsClass)
+    if constexpr (!T::IsArithmetic && !T::IsClass && !T::IsMask)
         disable_cast(b);
 
     if constexpr (!T::IsIntegral)
