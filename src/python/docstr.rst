@@ -5607,6 +5607,11 @@
        RuntimeWarning: drjit.gather(): out-of-bounds read from position 100 in an array↵
        of size 3. (<stdin>:2)
 
+    Third, for kernels launched with OptiX, additional validation and
+    debug layers will be enabled. For this functionality to be fully enabled,
+    it is recommended to set the :py:attr:`drjit.JitFlag.Debug` flag at the very
+    beginning of your Python process.
+
     Finally, Dr.Jit also installs a `python tracing hook
     <https://docs.python.org/3/library/sys.html#sys.settrace>`__ that
     associates all Jit variables with their Python source code location, and
