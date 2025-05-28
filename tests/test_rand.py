@@ -134,3 +134,20 @@ def test04_prev_sample(t):
     f64_n_masked = pcg.next_float64_normal(mask)
     f64_n_masked_prev = pcg.prev_float64_normal(mask)
     assert dr.all(f64_n_masked == f64_n_masked_prev)
+
+    if dr.is_jit_v(t):
+        f = pcg.next_float(t)
+        f_prev = pcg.prev_float(t)
+        assert dr.all(f == f_prev)
+
+        f_n = pcg.next_float_normal(t)
+        f_n_prev = pcg.prev_float_normal(t)
+        assert dr.all(f_n == f_n_prev)
+    else:
+        f = pcg.next_float(float)
+        f_prev = pcg.prev_float(float)
+        assert f == f_prev
+
+        f_n = pcg.next_float_normal(float)
+        f_n_prev = pcg.prev_float_normal(float)
+        assert dr.all(f_n == f_n_prev)
