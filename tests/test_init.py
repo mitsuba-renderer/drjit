@@ -632,3 +632,11 @@ def test28_width(t):
     assert dr.width([t(1, 2), t(1)]) == 2
     with pytest.raises(RuntimeError, match='ragged'):
         dr.width([t(1, 2), t(2, 3, 3)])
+
+
+@pytest.test_arrays('uint32, jit, shape=(*)')
+def test29_bool_casts(t):
+    Mask = dr.mask_t(t)
+
+    assert dr.all(Mask(t([0, 1, 0, 3])) == [False, True, False, True])
+    assert dr.all(t(Mask([False, True, False, True])) == [0, 1, 0, 1])
