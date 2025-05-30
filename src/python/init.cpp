@@ -21,6 +21,9 @@
 #include "init.h"
 #include "coop_vec.h"
 #include <algorithm>
+#include <vector>
+#include <mutex>
+#include <utility>
 
 /// Forward declaration
 static bool array_init_from_seq(PyObject *self, const ArraySupplement &s, PyObject *seq);
@@ -612,13 +615,35 @@ nb::object import_ndarray(ArrayMeta m, PyObject *arg, vector<size_t> *shape_out,
 
 extern int disable_gc_scope;
 
+using CleanupCallback = int(*)(void*);
+static std::mutex python_cleanup_queue_mutex;
+static std::vector<std::pair<CleanupCallback, void*>> python_cleanup_queue;
+
+// Enqueues a callback function and a data pointer for later execution in a
+// dedicated Python thread.
+void enqueue_python_cleanup_call(CleanupCallback callback, void* data_ptr) {
+    std::scoped_lock lock(python_cleanup_queue_mutex);
+    python_cleanup_queue.emplace_back(callback, data_ptr);
+}
+
+// Executes all pending cleanup calls in the queue.
+void execute_pending_python_calls() {
+    std::vector<std::pair<CleanupCallback, void*>> calls_to_execute;
+    {
+        // Swap queue to minimize lock duration.
+        std::scoped_lock lock(python_cleanup_queue_mutex);
+        calls_to_execute.swap(python_cleanup_queue);
+    }
+    for (const auto& item : calls_to_execute) item.first(item.second);
+}
+
 static int ndarray_free_cb_3(void *p) {
     if (disable_gc_scope) {
         // Don't service pending calls while in the logger critical section.
         // That's because we can have arbitrary Dr.Jit/Dr.Jit-Extra functions
         // on the call stack. Re-entering Python to then free nd-arrays,
         // which can call code in Dr.Jit/Dr.Jit-extra, is a recipe for deadlocks.
-        Py_AddPendingCall(ndarray_free_cb_3, p);
+        enqueue_python_cleanup_call(ndarray_free_cb_3, p);
     } else {
         nb::detail::ndarray_dec_ref((nb::detail::ndarray_handle *) p);
     }
@@ -629,7 +654,7 @@ int drjit_py_is_alive = 1;
 
 static void ndarray_free_cb_2(void *p) {
     if (nb::is_alive() && drjit_py_is_alive)
-        Py_AddPendingCall(ndarray_free_cb_3, p);
+        enqueue_python_cleanup_call(ndarray_free_cb_3, p);
 }
 
 static void ndarray_free_cb(uint32_t, int free, void *p) {
