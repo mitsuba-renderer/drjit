@@ -640,3 +640,41 @@ def test29_bool_casts(t):
 
     assert dr.all(Mask(t([0, 1, 0, 3])) == [False, True, False, True])
     assert dr.all(t(Mask([False, True, False, True])) == [0, 1, 0, 1])
+
+
+@pytest.test_arrays('tensor, float32')
+def test30_tensor_memory_cleanup(t):
+    """This test tries to check for possible memory leaks
+    when using Dr.Jit on another thread."""
+
+    import tracemalloc
+    import threading
+    import gc
+    import time
+
+    np = pytest.importorskip("numpy")
+
+    tracemalloc.start()
+
+    snapshot1 = tracemalloc.take_snapshot()
+    def f():
+        for _ in range(5):
+            dr.llvm.TensorXf(np.ones((512, 512)))
+        gc.collect()
+        gc.collect()
+
+        # Allow for the cleanup thread to catch with its work.
+        time.sleep(0.1)
+
+    thread = threading.Thread(target=f)
+    thread.start()
+    thread.join()
+
+    # Ensures the memory increase is significantly below the
+    # size of an individual tensor we created.
+    snapshot2 = tracemalloc.take_snapshot()
+    top_stats = snapshot2.compare_to(snapshot1, 'lineno')
+    allocated_bytes = sum(stat.size_diff for stat in top_stats)
+    assert allocated_bytes < 16000
+
+    tracemalloc.stop()
