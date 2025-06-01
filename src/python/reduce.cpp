@@ -309,6 +309,12 @@ nb::object reduce(uint32_t op, nb::handle h, nb::handle axis_, nb::handle mode) 
                 // Directly process the underlying 1D array
                 nb::object value = nb::steal(s.tensor_array(h.ptr()));
                 value = reduce(op, value, axis, mode);
+                if (op == (uint32_t) ReduceOpExt::Count) {
+                    ArrayMeta m = s;
+                    m.type = (uint16_t) VarType::UInt32;
+                    tp = meta_get_type(m);
+                }
+
                 return tp(value, nb::tuple());
             } else {
                 if (op >= (uint32_t) ReduceOp::Count) {
