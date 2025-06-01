@@ -358,6 +358,7 @@ def test10_sum_avg_mixed_size(t):
 @pytest.test_arrays('shape=(*), bool')
 def test11_count(t):
     i = dr.uint32_array_t(t)
+    m = sys.modules[t.__module__]
 
     assert dr.count(t(True, False)) == i(1)
     assert dr.count(t(True, False, True, True, False, False, False)) == i(3)
@@ -365,6 +366,8 @@ def test11_count(t):
     assert dr.count(False) == 0
     assert dr.count(True) == 1
     assert dr.count((True, False)) == 1
+    assert dr.count(m.TensorXb([True, False, True])) == 2
+    assert dr.count(m.Array3b([True, False, True])) == 2
 
 
 @pytest.mark.parametrize('op', [dr.ReduceOp.Add, dr.ReduceOp.Max, dr.ReduceOp.Min])
