@@ -2676,12 +2676,15 @@ def freeze(
         import functools
         import inspect
 
-        def inner(closure, *args, **kwargs):
+        def inner(input: dict):
             """
-            This inner function is the one that gets actually frozen. It receives
-            any additional state such as closures or state specified with the
-            ``state`` lambda, and allows for traversal of it.
+            This inner function is the one that gets actually frozen, and it calls
+            the wrapped function. It receives the input such as args, kwargs and
+            any additional input such as closures or state specified with the ``state``
+            lambda, and allows for traversal of it.
             """
+            args = input["args"]
+            kwargs = input["kwargs"]
             return f(*args, **kwargs)
 
         class FrozenFunction:
@@ -2694,7 +2697,13 @@ def freeze(
             def __call__(self, *args, **kwargs):
                 _state = state_fn(*args, **kwargs) if state_fn is not None else None
                 closure = inspect.getclosurevars(f)
-                return self.frozen([closure.nonlocals, closure.globals, _state], *args, **kwargs)
+                return self.frozen(
+                    {
+                        "closure": [closure.nonlocals, closure.globals, _state],
+                        "args": args,
+                        "kwargs": kwargs,
+                    }
+                )
 
             @property
             def n_recordings(self):
@@ -2751,7 +2760,13 @@ def freeze(
             def __call__(self, *args, **kwargs):
                 _state = state_fn(self.obj, *args, **kwargs) if state_fn is not None else None
                 closure = inspect.getclosurevars(self.f)
-                return self.frozen([closure.nonlocals, closure.globals, _state], self.obj, *args, **kwargs)
+                return self.frozen(
+                    {
+                        "closure": [closure.nonlocals, closure.globals, _state],
+                        "args": args,
+                        "kwargs": kwargs,
+                    }
+                )
 
         return functools.wraps(f)(FrozenFunction(f))
 

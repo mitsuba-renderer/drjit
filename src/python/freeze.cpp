@@ -714,23 +714,29 @@ void FlatVariables::assign_cb(drjit::TraversableBase *traversable) {
  * Used to provide helpful logs and error messages.
  */
 struct scoped_path {
-    Buffer &path;
+    TraverseContext &m_ctx;
 
-    uint32_t size;
+    uint32_t m_size;
     scoped_path(TraverseContext &ctx, const char *suffix, bool dict = false)
-        : path(ctx.path), size(path.size()) {
+        : m_ctx(ctx), m_size(ctx.path.size()) {
         if (dict) {
-            path.fmt("[\"%s\"]", suffix);
+            if (ctx.recursion_level == 0)
+                ctx.path.fmt("%s", suffix);
+            else
+                ctx.path.fmt("[\"%s\"]", suffix);
         } else {
-            path.fmt(".%s", suffix);
+            ctx.path.fmt(".%s", suffix);
         }
+        ctx.recursion_level++;
     }
     scoped_path(TraverseContext &ctx, uint32_t suffix)
-        : path(ctx.path), size(path.size()) {
-        path.fmt("[%u]", suffix);
+        : m_ctx(ctx), m_size(ctx.path.size()) {
+        ctx.path.fmt("[%u]", suffix);
+        ctx.recursion_level++;
     }
     ~scoped_path() {
-        path.rewind(path.size() - size);
+        m_ctx.path.rewind(m_ctx.path.size() - m_size);
+        m_ctx.recursion_level--;
     }
 };
 
@@ -1558,7 +1564,7 @@ size_t FlatVariablesHasher::operator()(
  */
 nb::object FunctionRecording::record(nb::callable func,
                                      FrozenFunction *frozen_func,
-                                     nb::list input,
+                                     nb::dict input,
                                      const FlatVariables &in_variables) {
     ProfilerPhase profiler("record");
     JitBackend backend = in_variables.backend;
@@ -1602,7 +1608,7 @@ nb::object FunctionRecording::record(nb::callable func,
     {
         ProfilerPhase profiler("function");
         state_unlock_guard guard;
-        output = func(*input[0], **input[1]);
+        output = func(input);
     }
 
     // Collect nodes, that have been postponed by the `Isolate` scope in a
@@ -1714,7 +1720,7 @@ nb::object FunctionRecording::record(nb::callable func,
  */
 nb::object FunctionRecording::replay(nb::callable func,
                                      FrozenFunction *frozen_func,
-                                     nb::list input,
+                                     nb::dict input,
                                      const FlatVariables &in_variables) {
     ProfilerPhase profiler("replay");
 
@@ -1775,7 +1781,7 @@ nb::object FunctionRecording::replay(nb::callable func,
     return output;
 }
 
-nb::object FrozenFunction::operator()(nb::args args, nb::kwargs kwargs) {
+nb::object FrozenFunction::operator()(nb::dict input) {
     ProfilerPhase profiler("frozen function");
     state_lock_guard guard;
     nb::object result;
@@ -1791,14 +1797,10 @@ nb::object FrozenFunction::operator()(nb::args args, nb::kwargs kwargs) {
             jit_flag(JitFlag::FreezingScope) || max_cache_size == 0) {
             ProfilerPhase profiler("function");
             state_unlock_guard guard;
-            return func(*args, **kwargs);
+            return func(input);
         }
 
         call_counter++;
-
-        nb::list input;
-        input.append(args);
-        input.append(kwargs);
 
         auto in_variables =
             std::make_shared<FlatVariables>(FlatVariables(in_heuristics));

@@ -531,18 +531,14 @@ The above code will print the following message, when the function is called the
    opaque, and the input will be traversed again. This will incur some
    overhead. To prevent this, make those variables opaque in beforehand. Below,
    a list of variables that changed will be shown.
-   [0][2][0]: The literal value of this variable changed from 0x0 to 0x3f800000
-   [0][3][1][0]: The literal value of this variable changed from 0x0 to 0x3f800000
-   [1]["c"].z[0]: The literal value of this variable changed from 0x0 to 0x3f800000
+   args[1][0]: The literal value of this variable changed from 0x0 to 0x3f800000
+   args[2][1][0]: The literal value of this variable changed from 0x0 to 0x3f800000
+   kwargs["c"].z[0]: The literal value of this variable changed from 0x0 to 0x3f800000
 
 This output can be used to determine which literal where made opaque.
 As stated above, it can be beneficial to make these literals opaque beforehand.
-
-**TODO**: remove this offset so that users don't have to know about this (+ update the code example).
-An implicit closure is always provided to the function as its first argument,
-offsetting all other arguments by one. In this case, the second argument of the
-function, the second argument of the list and the member ``z`` of the class
-have been detected as changing literals.
+In this case, the second argument of the function, the second argument of the
+list and the member ``z`` of the class have been detected as changing literals.
 
 
 Dry-run replay
@@ -686,13 +682,19 @@ This side-effect can be unexpected.
    func(base, x)
 
 Nested virtual function calls are supported when the inner base class pointer
-is passed as an argument to the outer function. However, nested calls are not
-supported when the outer function retrieves the callee pointer from class
-member variables
+is passed as an argument to the outer function. However, due to implementation
+details nested calls are not supported when the outer function retrieves the
+callee pointer from class member variables
 
 .. code-block:: python
 
+   # Even though `A` is traversable, a frozen function with a call to
+   # ``nested_member`` will fail.
    class A(Base):
+      DRJIT_STRUCT = {
+         "s": BasePtr,
+      }
+
       s: BasePtr
 
       def nested(self, s, x):
@@ -710,9 +712,10 @@ member variables
       return base.nested(nested_base, x)
 
    a.s = BasePtr(b)
+   dr.make_opaque(a.s)
 
-   # This nested vcall is unsupported because the nested base pointer is a
-   # member of the class `A`.
+   # This nested vcall is unsupported because the nested base pointer is an
+   # opaque member of the class `A`.
    @dr.freeze
    def unsupported(base: BasePtr, x: Float):
       return base.nested_member(x)

@@ -3547,3 +3547,4 @@ def test94_vcall_exception(t, auto_opaque):
 
     with pytest.raises(RuntimeError):
         frozen(x)
+

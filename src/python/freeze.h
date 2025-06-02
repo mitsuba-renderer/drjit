@@ -154,6 +154,7 @@ struct TraverseContext {
     /// during traversal. Refcycles will still be prevented, but some objects
     /// might be traversed multiple times.
     bool deduplicate_pytree = true;
+    uint32_t recursion_level = 0;
     Buffer path;
 
     TraverseContext() : path(1024) {}
@@ -544,14 +545,14 @@ struct FunctionRecording {
      * Record a function, given it's python input and flattened input.
      */
     nb::object record(nb::callable func, FrozenFunction *frozen_func,
-                      nb::list input, const FlatVariables &in_variables);
+                      nb::dict input, const FlatVariables &in_variables);
     /*
      * Replays the recording.
      *
      * This constructs the output and re-assigns the input.
      */
     nb::object replay(nb::callable func, FrozenFunction *frozen_func,
-                      nb::list input, const FlatVariables &in_variables);
+                      nb::dict input, const FlatVariables &in_variables);
 };
 
 using RecordingMap = tsl::robin_map<std::shared_ptr<FlatVariables>,
@@ -594,7 +595,7 @@ struct FrozenFunction {
 
     void clear();
 
-    nb::object operator()(nb::args args, nb::kwargs kwargs);
+    nb::object operator()(nb::dict input);
 };
 
 extern void export_freeze(nb::module_ &);
