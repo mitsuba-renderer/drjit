@@ -103,7 +103,7 @@ Previous recordings, made while the flag was set, will still be available and
 can be used when replaying the function.
 
 Additional arguments can be specified when using the decorator. These are
-documented in the API level documentation :py:func:`drjit.freeze`.
+documented in the API-level documentation :py:func:`drjit.freeze`.
 
 More implementation details are given :ref:`below <freezing_implementation_details>`.
 
@@ -113,7 +113,7 @@ Unsupported operations
 ----------------------
 
 Frozen functions can only contain operations that can be replayed seamlessly
-with new inputs. We describe the main unsupported operations below.
+with new inputs. We describe the main **unsupported** operations below.
 
 
 Array access
@@ -149,6 +149,7 @@ the contents from such variables is prohibited inside of a frozen function.
 
    func(x, y)
 
+.. _non_recordable_operations:
 
 Non-recordable operations
 ~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -158,7 +159,7 @@ has to be made aware of it. Kernel launches and other common operations such as
 reductions, are supported by hooking into a low-level abstraction in the core
 library.
 
-However, applying any operation not known to Dr.Jit, on the memory underlying a
+However, applying any operation not known to Dr.Jit on the memory underlying a
 variable is not supported and might result in incorrect outputs or exceptions.
 As an example, such operations are used in the initialization of CUDA textures
 or acceleration structure building in Mitsuba 3.
@@ -168,7 +169,7 @@ or acceleration structure building in Mitsuba 3.
    @dr.freeze
    def func(data, pos):
       # On CUDA backends, this will call ``cuMemcpy2DAsync`` on the texture
-      # memory, without notifying the frozen function, and therefore fail.
+      # memory, without notifying the frozen function mechanism, and therefore fail.
       tex = Texture1f([dr.width(data)], 1
       tex.set_value(data)
       return tex.eval(pos)
@@ -298,7 +299,7 @@ Implicit inputs
 
 A class can hold JIT arrays as members, and its methods can use them. Likewise,
 a function can access variables of the outer scope (closures). These types of
-implicit inputs to a frozen function are not supported:
+implicit inputs to a frozen function are generally not supported:
 
 .. code-block:: python
 
@@ -332,7 +333,7 @@ visible to the freezing mechanism. There are two recommended ways to do so:
 
 1. Turn the class into a valid :ref:`PyTree <pytrees>`, e.g. a dataclass
    (:py:class:`@dataclass`) or a  ``DRJIT_STRUCT``.
-2. Using the ``state_fn`` argument of the :py:func:`drjit.freeze` decorator to
+2. Or, use the ``state_fn`` argument of the :py:func:`drjit.freeze` decorator to
    manually specify the implicit inputs. ``state_fn`` will be called as a
    function with the same arguments as the annotated function, and should return
    a tuple of all extra inputs to be considered when recording and replaying.
@@ -364,7 +365,7 @@ The following snippet illustrates correct usage:
 
    # The ``state_fn`` argument can be used to make implicit inputs visible
    # without modifying the class.
-   @dr.freeze(state_fn=(lambda obj, **__: obj.x))
+   @dr.freeze(state_fn=(lambda obj, **_: obj.x))
    def func(obj: OpaqueClass):
       return obj.x + 1
 
@@ -375,7 +376,8 @@ Kernel size inference
 
 As explained above, frozen functions can in general be called many times with
 JIT inputs of varying sizes (number of elements) without requiring re-tracing.
-Within the function, the size of an input may be used to determine the size of
+
+In some situations, the size of an input may be used to determine the size of
 another variable:
 
 .. code-block:: python
@@ -404,10 +406,10 @@ is a direct multiple or fraction of the input size.
    y2 = func(x)
    assert dr.width(y2) == 8
 
-Unfortunately, if this heuristic does not apply (e.g. creating a variable with 3
-more entries than the input), the size of the new variable will be incorrectly
-considered to be a constant, and will be fixed to the size observed during the
-first recording, even in subsequent calls.
+Unfortunately, if this heuristic does not succeed (e.g. creating a variable with 3
+more entries than the input), the size of the new variable will be assumed to be
+a constant, and will always be set to the size observed during the first recording,
+even in subsequent calls.
 
 .. warning::
 
@@ -486,8 +488,8 @@ in a single recording, but all literal inputs will be made opaque regardless of
 whether they would later remain constant or not. This will lead to higher memory
 usage and may also worsen performance of the kernel itself.
 
-When possible, it is recommended to use opaque JIT variables for inputs that
-are known to change across calls.
+When possible, it is therefore recommended to **use opaque JIT variables for
+inputs that are known to change across calls**.
 
 To help track changing inputs, Dr.Jit can provide a list of such changing
 literals and their "paths" in the input arguments if they are detected:
@@ -507,7 +509,7 @@ literals and their "paths" in the input arguments if they are detected:
    class MyClass:
       z: Float
 
-   # We call the function twice. The first call will treat all literals as is.
+   # We call the function twice. The first call will leave all literals untouched.
    # In the second call, changing literals will be detected and their paths will
    # be printed.
    for i in range(2):
@@ -516,7 +518,7 @@ literals and their "paths" in the input arguments if they are detected:
       l = [Float(1), Float(i)]
       c = MyClass(Float(i))
 
-      # The function can be called with arguments and key-word arguments. They will
+      # The function can be called with arguments and keyword arguments. They will
       # show up as a tuple in the path.
       frozen(x, y, l, c = c)
 
@@ -533,8 +535,11 @@ The above code will print the following message, when the function is called the
    [0][3][1][0]: The literal value of this variable changed from 0x0 to 0x3f800000
    [1]["c"].z[0]: The literal value of this variable changed from 0x0 to 0x3f800000
 
-This output can be used to determine which literal where made opaque. An
-implicit closure is always provided to the function as its first argument,
+This output can be used to determine which literal where made opaque.
+As stated above, it can be beneficial to make these literals opaque beforehand.
+
+**TODO**: remove this offset so that users don't have to know about this (+ update the code example).
+An implicit closure is always provided to the function as its first argument,
 offsetting all other arguments by one. In this case, the second argument of the
 function, the second argument of the list and the member ``z`` of the class
 have been detected as changing literals.
@@ -620,6 +625,7 @@ Textures
 as well as for gradient calculations. However because they require special
 memory operations on the CUDA backend, it is not possible to update or
 initialize CUDA textures inside of frozen functions.
+This is a special case of :ref:`non-recordable operation <non_recordable_operations>`.
 
 .. code-block:: python
 
@@ -660,7 +666,8 @@ When a frozen function is called with a variable that can point to a virtual
 base class, Dr.Jit's pointer registry is traversed to find all variables used
 in the frozen function call. Since some objects can be registered, but not
 referenced by the pointer, member JIT variables of these objects are traversed
-and evaluated, even though they are not used in the function.
+**and evaluated**, even though they are not used in the function.
+This side-effect can be unexpected.
 
 .. code-block:: python
 
@@ -710,7 +717,7 @@ member variables
    def unsupported(base: BasePtr, x: Float):
       return base.nested_member(x)
 
-Runaway Recursion
+Runaway recursion
 ~~~~~~~~~~~~~~~~~
 
 Passing inputs to a frozen function that contain basic reference cycles is
@@ -730,7 +737,7 @@ runaway recursion when traversing the function inputs, and raise an exception.
    # Passing an object with a simple reference cycle is supported.
    frozen(l)
 
-This more complex example shows an unsupported case of reference cycles that
+However, this more complex example shows an *unsupported* case of reference cycles that
 can occur when using custom BSDFs in Mitsuba 3.
 
 .. code-block:: python
@@ -760,10 +767,10 @@ can occur when using custom BSDFs in Mitsuba 3.
 Implementation details
 ----------------------
 
-Every time the function is called, its inputs are analyzed. All JIT variables
-are extracted into a flattened and de-duplicated array. Additionally, a key
-describing the "layout" of the inputs is generated. This key will be used to
-distinguish between different recordings of the same frozen function, in case
+Every time the annotated function is called, its inputs are analyzed. All JIT
+variables are extracted into a flattened and de-duplicated array. Additionally,
+a key describing the "layout" of the inputs is generated. This key will be used
+to distinguish between different recordings of the same frozen function, in case
 some of its inputs qualitatively change in subsequent calls.
 
 If no recording is found for the current key, Dr.Jit enters a "kernel recording"
@@ -772,7 +779,7 @@ executed. In this mode, all device level operations, such as kernel launches are
 recorded as well as executed normally.
 
 The next time the function is called, the newly-provided inputs are traversed,
-and the layout is used to lookup compatible recordings. If such a recording is
+and the layout is used to look up compatible recordings. If such a recording is
 found, any tracing is skipped: the various recorded operations and kernels are
 directly replayed.
 
@@ -795,7 +802,7 @@ visible to the traversal algorithm.
    class MyClass:
       x: Float
 
-Classes can be annotated with a static *DRJIT_STRUCT* field to make classes
+Classes can be annotated with a static ``DRJIT_STRUCT`` field to make classes
 traversable.
 
 .. code-block:: python
@@ -838,7 +845,7 @@ traversable types can be returned from frozen functions. This includes:
 - Dataclasses,
 - ``DRJIT_STRUCT`` annotated classes with a default constructor.
 
-The following example shows an unsupported return type: because the constructor
+The following example shows an *unsupported* return type: because the constructor
 of ``MyClass`` expects a variable, an object of type ``MyClass`` cannot be
 created at replay time.
 
@@ -851,6 +858,7 @@ created at replay time.
          "x": Float,
       }
 
+      # Non-default constructor (requires argument `x`)
       def __init__(self, x: Float):
          self.x = x
 
