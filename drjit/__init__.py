@@ -2699,7 +2699,9 @@ def freeze(
                 closure = inspect.getclosurevars(f)
                 return self.frozen(
                     {
-                        "closure": [closure.nonlocals, closure.globals, _state],
+                        "globals": closure.globals,
+                        "nonlocals": closure.nonlocals,
+                        "state_fn": _state,
                         "args": args,
                         "kwargs": kwargs,
                     }
@@ -2762,7 +2764,9 @@ def freeze(
                 closure = inspect.getclosurevars(self.f)
                 return self.frozen(
                     {
-                        "closure": [closure.nonlocals, closure.globals, _state],
+                        "globals": closure.globals,
+                        "nonlocals": closure.nonlocals,
+                        "state_fn": _state,
                         "args": args,
                         "kwargs": kwargs,
                     }
