@@ -9,6 +9,13 @@
     BSD-style license that can be found in the LICENSE.txt file.
 */
 
+#include <algorithm>
+#include <condition_variable>
+#include <mutex>
+#include <thread>
+#include <utility>
+#include <vector>
+
 #include <drjit-core/half.h>
 #include <nanobind/ndarray.h>
 #include "../ext/nanobind/src/buffer.h"
@@ -20,11 +27,6 @@
 #include "dlpack.h"
 #include "init.h"
 #include "coop_vec.h"
-#include <algorithm>
-#include <vector>
-#include <mutex>
-#include <utility>
-#include <thread>
 
 /// Forward declaration
 static bool array_init_from_seq(PyObject *self, const ArraySupplement &s, PyObject *seq);
