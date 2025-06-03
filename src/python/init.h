@@ -34,4 +34,6 @@ extern nb::object import_ndarray(ArrayMeta m, PyObject *arg,
 // Helper function to extract the type of constructs such as typing.Optional[T]
 extern nb::object extract_type(nb::object tp);
 
-extern void execute_pending_python_calls();
+extern void python_cleanup_thread_static_initialization();
+
+extern void python_cleanup_thread_static_shutdown();

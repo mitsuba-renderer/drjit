@@ -343,9 +343,7 @@ void export_detail(nb::module_ &) {
 
      .def("new_scope", &jit_new_scope, "backend"_a, doc_detail_new_scope)
      .def("scope", &jit_scope, "backend"_a, doc_detail_scope)
-     .def("set_scope", &jit_set_scope, "backend"_a, "scope"_a, doc_detail_set_scope)
-     .def("execute_pending_python_calls", &execute_pending_python_calls,
-          doc_detail_execute_pending_python_calls);
+     .def("set_scope", &jit_set_scope, "backend"_a, "scope"_a, doc_detail_set_scope);
 
 #if defined(DRJIT_DISABLE_LEAK_WARNINGS)
     set_leak_warnings(false);
