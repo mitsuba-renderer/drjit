@@ -39,7 +39,7 @@ def test01_slice_index(t):
     check(shape=(10,), indices=(t(0, 2, 4),),
           shape_out=(3,), index_out=t(0, 2, 4))
     check(shape=(10,), indices=(None, t(0, 2, 4), None),
-          shape_out=(1, 3, 1), index_out=t(0, 2, 4))
+          shape_out=(3, 1, 1), index_out=t(0, 2, 4))
     check(shape=(10,), indices=(),
           shape_out=(10,), index_out=dr.arange(t, 10))
     check(shape=(10,), indices=(Ellipsis,),
@@ -63,15 +63,15 @@ def test01_slice_index(t):
     check(shape=(3, 7), indices=(t(0), slice(0, 7, 3)),
           shape_out=(1, 3), index_out=t(0, 3, 6))
     check(shape=(3, 7), indices=(t(0), t(0, 3, 6)),
-          shape_out=(1, 3), index_out=t(0, 3, 6))
+          shape_out=(3,), index_out=t(0, 3, 6))
     check(shape=(3, 7), indices=(2, slice(None, None, None)),
           shape_out=(7,), index_out=t(14, 15, 16, 17, 18, 19, 20))
     check(shape=(3, 7), indices=(slice(None, None, None), 2),
           shape_out=(3,), index_out=t(2, 9, 16))
     check(shape=(3, 7), indices=(slice(None, None, None), t(2)),
-          shape_out=(3, 1), index_out=t(2, 9, 16))
+          shape_out=(1, 3), index_out=t(2, 9, 16))
     check(shape=(3, 7), indices=(slice(0, 0, 1), t(2)),
-          shape_out=(0, 1), index_out=t())
+          shape_out=(1, 0), index_out=t())
     check(shape=(3, 7), indices=(),
           shape_out=(3, 7), index_out=dr.arange(t, 7*3))
     check(shape=(3, 7), indices=(1,),

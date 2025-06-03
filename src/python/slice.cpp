@@ -23,14 +23,16 @@
 struct Component {
     Py_ssize_t start, step, slice_size, size;
     nb::object object;
+    bool is_array = false;
 
     Component(Py_ssize_t start, Py_ssize_t step, Py_ssize_t slice_size,
               Py_ssize_t size)
         : start(start), step(step), slice_size(slice_size), size(size) { }
 
-    Component(nb::handle h, Py_ssize_t slice_size, Py_ssize_t size)
+    Component(nb::handle h, Py_ssize_t slice_size, Py_ssize_t size,
+              bool is_array = false)
         : start(0), step(1), slice_size(slice_size), size(size),
-          object(nb::borrow(h)) { }
+          object(nb::borrow(h)), is_array(is_array) {}
 };
 
 inline bool is_signed_int (VarType vt) {
@@ -73,6 +75,8 @@ slice_index(const nb::type_object_t<ArrayBase> &dtype,
 
     std::vector<Component> components;
     components.reserve(shape_len);
+
+    size_t indexing_size = 0;
 
     for (nb::handle h : indices) {
         if (h.is_none()) {
@@ -138,9 +142,15 @@ slice_index(const nb::type_object_t<ArrayBase> &dtype,
                 if (!o.type().is(dtype))
                     o = dtype(o);
 
-                components.emplace_back(o, slice_size, size);
-                shape_out.append(slice_size);
-                size_out *= slice_size;
+                if (indexing_size <= 1)
+                    indexing_size = slice_size;
+
+                if (slice_size > 1 && indexing_size != slice_size)
+                    jit_raise("Index size missmatch!");
+
+                components.emplace_back(o, slice_size, size, true);
+                // shape_out.append(slice_size);
+                // size_out *= slice_size;
                 continue;
             }
         } else if (tp.is(&PyEllipsis_Type)) {
@@ -172,8 +182,17 @@ slice_index(const nb::type_object_t<ArrayBase> &dtype,
         size_out *= size;
     }
 
+    size_t slicing_size = size_out;
+    if (indexing_size) {
+        size_out *= indexing_size;
+        shape_out.insert(0, indexing_size);
+    }
+
+    jit_log(LogLevel::Warn, "size_out=%u", size_out);
+
     nb::object index = arange(dtype, 0, size_out, 1),
                index_out;
+    nb::object index_i = arange(dtype, 0, size_out, 1);
 
     nb::object active = nb::borrow(Py_True);
     if (size_out) {
@@ -184,25 +203,40 @@ slice_index(const nb::type_object_t<ArrayBase> &dtype,
             const Component &c = *it;
             nb::object index_next, index_rem;
 
-            if (it + 1 != components.rend()) {
-                index_next = index.floor_div(dtype(c.slice_size));
-                index_rem = fma(index_next, dtype(uint32_t(-c.slice_size)), index);
-            } else {
-                index_rem = index;
-            }
-
             nb::object index_val;
-            if (!c.object.is_valid())
-                index_val = fma(index_rem, dtype(uint32_t(c.step * size_out)),
-                                dtype(uint32_t(c.start * size_out)));
-            else
+            if (c.is_array) {
+                index_next = index_i.floor_div(dtype(c.slice_size));
+                index_rem =
+                    fma(index_next, dtype(uint32_t(-c.slice_size)), index_i);
+
                 index_val = gather(dtype, c.object, index_rem, active,
                                    ReduceMode::Auto) *
                             dtype(uint32_t(size_out));
+            } else {
+                if (it + 1 != components.rend()) {
+                    index_next = index.floor_div(dtype(c.slice_size));
+                    index_rem =
+                        fma(index_next, dtype(uint32_t(-c.slice_size)), index);
+                } else {
+                    index_rem = index;
+                }
+
+                if (!c.object.is_valid())
+                    index_val =
+                        fma(index_rem, dtype(uint32_t(c.step * size_out)),
+                            dtype(uint32_t(c.start * size_out)));
+                else
+                    index_val = gather(dtype, c.object, index_rem, active,
+                                       ReduceMode::Auto) *
+                                dtype(uint32_t(size_out));
+
+                index_val = fma(index_rem, dtype(uint32_t(c.step * size_out)),
+                                dtype(uint32_t(c.start * size_out)));
+                index     = std::move(index_next);
+            }
 
             index_out += index_val;
 
-            index = std::move(index_next);
             size_out *= c.size;
         }
     } else {
