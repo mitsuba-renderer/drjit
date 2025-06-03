@@ -632,3 +632,40 @@ def test28_width(t):
     assert dr.width([t(1, 2), t(1)]) == 2
     with pytest.raises(RuntimeError, match='ragged'):
         dr.width([t(1, 2), t(2, 3, 3)])
+
+@pytest.test_arrays('tensor, float32')
+def test29_tensor_memory_cleanup(t):
+    """This test tries to check for possible memory leaks
+    when using Dr.Jit on another thread."""
+
+    import tracemalloc
+    import threading
+    import gc
+    import time
+
+    np = pytest.importorskip("numpy")
+
+    tracemalloc.start()
+
+    snapshot1 = tracemalloc.take_snapshot()
+    def f():
+        for _ in range(5):
+            dr.llvm.TensorXf(np.ones((512, 512)))
+        gc.collect()
+        gc.collect()
+
+        # Allow for the cleanup thread to catch with its work.
+        time.sleep(0.1)
+
+    thread = threading.Thread(target=f)
+    thread.start()
+    thread.join()
+
+    # Ensures the memory increase is significantly below the 
+    # size of an individual tensor we created.
+    snapshot2 = tracemalloc.take_snapshot()
+    top_stats = snapshot2.compare_to(snapshot1, 'lineno')
+    allocated_bytes = sum(stat.size_diff for stat in top_stats)
+    assert allocated_bytes < 16000
+
+    tracemalloc.stop()
