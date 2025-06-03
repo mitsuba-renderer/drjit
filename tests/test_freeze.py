@@ -3389,6 +3389,24 @@ def test88_tensor_indexing(t, auto_opaque):
 
 @pytest.test_arrays("float32, jit, diff, shape=(*)")
 @pytest.mark.parametrize("auto_opaque", [False, True])
+def test89_tensor_indexing(t, auto_opaque):
+    """
+    Tests that changes in the first dimension of a tensor do not cause re-tracing.
+    """
+    # dr.set_log_level(dr.LogLevel.Trace)
+    mod = sys.modules[t.__module__]
+
+    shape = (10, 10)
+
+    x = mod.TensorXf(dr.arange(mod.Float, dr.prod(shape)), shape=shape)
+
+    row = mod.UInt32(1, 2, 3)
+    col = mod.UInt32(1, 2, 3)
+
+    print(f"dr.slice_index()=\n{dr.slice_index(dtype=mod.UInt32, shape=shape, indices=(row, col))}")
+
+@pytest.test_arrays("float32, jit, diff, shape=(*)")
+@pytest.mark.parametrize("auto_opaque", [False, True])
 def test89_tensor_slicing(t, auto_opaque):
     """
     Tests that changes in the first dimension of a tensor do not cause re-tracing,
@@ -3547,4 +3565,3 @@ def test94_vcall_exception(t, auto_opaque):
 
     with pytest.raises(RuntimeError):
         frozen(x)
-

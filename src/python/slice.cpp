@@ -76,9 +76,12 @@ slice_index(const nb::type_object_t<ArrayBase> &dtype,
     std::vector<Component> components;
     components.reserve(shape_len);
 
-    size_t indexing_size = 0;
+    size_t array_size = 0;
+    int array_dim = 0;
+    int array_dim_i = -1;
 
-    for (nb::handle h : indices) {
+    for (uint32_t i = 0; i < indices.size(); ++i) {
+        nb::handle h = indices[i];
         if (h.is_none()) {
             shape_out.append(1);
             continue;
@@ -142,11 +145,21 @@ slice_index(const nb::type_object_t<ArrayBase> &dtype,
                 if (!o.type().is(dtype))
                     o = dtype(o);
 
-                if (indexing_size <= 1)
-                    indexing_size = slice_size;
+                if (array_size <= 1)
+                    array_size = slice_size;
 
-                if (slice_size > 1 && indexing_size != slice_size)
+                if (slice_size > 1 && array_size != slice_size)
                     jit_raise("Index size missmatch!");
+
+                if (array_dim_i == ((int) i) - 1)
+                    array_dim_i = i;
+                else
+                    array_dim = 0;
+
+                if (array_dim_i < 0) {
+                    array_dim_i = i;
+                    array_dim = i;
+                }
 
                 components.emplace_back(o, slice_size, size, true);
                 // shape_out.append(slice_size);
@@ -183,12 +196,10 @@ slice_index(const nb::type_object_t<ArrayBase> &dtype,
     }
 
     size_t slicing_size = size_out;
-    if (indexing_size) {
-        size_out *= indexing_size;
-        shape_out.insert(0, indexing_size);
+    if (array_size) {
+        size_out *= array_size;
+        shape_out.insert(array_dim, array_size);
     }
-
-    jit_log(LogLevel::Warn, "size_out=%u", size_out);
 
     nb::object index = arange(dtype, 0, size_out, 1),
                index_out;
@@ -205,13 +216,16 @@ slice_index(const nb::type_object_t<ArrayBase> &dtype,
 
             nb::object index_val;
             if (c.is_array) {
+                jit_log(LogLevel::Warn, "is_array");
                 index_next = index_i.floor_div(dtype(c.slice_size));
                 index_rem =
                     fma(index_next, dtype(uint32_t(-c.slice_size)), index_i);
+                jit_log(LogLevel::Warn, "index_rem=%s", nb::str(index_rem).c_str());
 
                 index_val = gather(dtype, c.object, index_rem, active,
                                    ReduceMode::Auto) *
                             dtype(uint32_t(size_out));
+                jit_log(LogLevel::Warn, "index_val=%s", nb::str(index_val).c_str());
             } else {
                 if (it + 1 != components.rend()) {
                     index_next = index.floor_div(dtype(c.slice_size));
@@ -220,6 +234,7 @@ slice_index(const nb::type_object_t<ArrayBase> &dtype,
                 } else {
                     index_rem = index;
                 }
+                jit_log(LogLevel::Warn, "index_rem=%s", nb::str(index_rem).c_str());
 
                 if (!c.object.is_valid())
                     index_val =
@@ -229,13 +244,17 @@ slice_index(const nb::type_object_t<ArrayBase> &dtype,
                     index_val = gather(dtype, c.object, index_rem, active,
                                        ReduceMode::Auto) *
                                 dtype(uint32_t(size_out));
+                jit_log(LogLevel::Warn, "index_val=%s", nb::str(index_val).c_str());
 
                 index_val = fma(index_rem, dtype(uint32_t(c.step * size_out)),
                                 dtype(uint32_t(c.start * size_out)));
-                index     = std::move(index_next);
             }
 
+            index = std::move(index_next);
+
             index_out += index_val;
+
+            jit_log(LogLevel::Warn, "index_out=%s", nb::str(index_out).c_str());
 
             size_out *= c.size;
         }

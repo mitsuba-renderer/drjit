@@ -39,7 +39,7 @@ def test01_slice_index(t):
     check(shape=(10,), indices=(t(0, 2, 4),),
           shape_out=(3,), index_out=t(0, 2, 4))
     check(shape=(10,), indices=(None, t(0, 2, 4), None),
-          shape_out=(3, 1, 1), index_out=t(0, 2, 4))
+          shape_out=(1, 3, 1), index_out=t(0, 2, 4))
     check(shape=(10,), indices=(),
           shape_out=(10,), index_out=dr.arange(t, 10))
     check(shape=(10,), indices=(Ellipsis,),
@@ -69,9 +69,9 @@ def test01_slice_index(t):
     check(shape=(3, 7), indices=(slice(None, None, None), 2),
           shape_out=(3,), index_out=t(2, 9, 16))
     check(shape=(3, 7), indices=(slice(None, None, None), t(2)),
-          shape_out=(1, 3), index_out=t(2, 9, 16))
+          shape_out=(3, 1), index_out=t(2, 9, 16))
     check(shape=(3, 7), indices=(slice(0, 0, 1), t(2)),
-          shape_out=(1, 0), index_out=t())
+          shape_out=(0, 1), index_out=t())
     check(shape=(3, 7), indices=(),
           shape_out=(3, 7), index_out=dr.arange(t, 7*3))
     check(shape=(3, 7), indices=(1,),
@@ -656,3 +656,30 @@ def test21_tensor_index_with_tensor(t):
     x = t([1, 2, 3], shape=(1, 3))
     idx = t([2, 0])
     assert dr.all(x[:, idx] == t([3, 1]))
+
+@pytest.mark.parametrize("indices_fn", [
+    lambda t: (slice(None), t([1, 2, 3]), slice(None)),
+    lambda t: (slice(None), t([1, 2, 3]), slice(None), t([1, 2, 3])),
+])
+@pytest.test_arrays('uint32, shape=(*)')
+def test22_numpy_indexing(t, indices_fn):
+    import numpy as np
+    if not np.__version__.startswith("2."):
+        pytest.skip(
+            f"The installed version of NumPy ({np.__version__}) is lower"
+            "or larger than 2.*.*. We test indexing against this version of numpy."
+        )
+
+    shape = (4, 4, 4, 4)
+
+    x = np.arange(np.prod(shape)).reshape(shape)
+
+    ref = x[*indices_fn(np.array)]
+
+    res_shape, res_flat = dr.slice_index(dtype = t, shape = shape, indices = indices_fn(t))
+
+    res = res_flat.numpy().reshape(res_shape)
+
+    assert res.shape == ref.shape
+    assert np.all(res == ref)
+
