@@ -2767,7 +2767,7 @@ def freeze(
                         "globals": closure.globals,
                         "nonlocals": closure.nonlocals,
                         "state_fn": _state,
-                        "args": args,
+                        "args": [self.obj, *args],
                         "kwargs": kwargs,
                     }
                 )
