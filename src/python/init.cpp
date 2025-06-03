@@ -24,6 +24,7 @@
 #include <vector>
 #include <mutex>
 #include <utility>
+#include <thread>
 
 /// Forward declaration
 static bool array_init_from_seq(PyObject *self, const ArraySupplement &s, PyObject *seq);
@@ -607,34 +608,56 @@ nb::object import_ndarray(ArrayMeta m, PyObject *arg, vector<size_t> *shape_out,
 // DLPack reference count might involve CPython API calls that require holding
 // the GIL, which is not a nice requirement for things running in the
 // CUDA-internal message queue thread or nanothread worker due to a danger of
-// deadlocks. So we enqueue an asynchronous request via Py_AddPendingCall
-// asking Python to *eventually* decrease the reference count of the array.
-// Hopefully that won't come back to bite us. There are some known cases where
-// code that never releases the GIL doesn't service the Py_AddPendingCall
-// callbacks, see https://github.com/python/cpython/issues/95820.
+// deadlocks. We therefore manage the array cleanup calls in a separate thread.
+// This thread will *eventually* decrease the reference count of the array.
+// This is similar to Py_AddPendingCall, but avoids the issue where
+// Py_AddPendingCall is not always serviced, see also
+// https://github.com/python/cpython/issues/95820.
 
 extern int disable_gc_scope;
 
 using CleanupCallback = int(*)(void*);
 static std::mutex python_cleanup_queue_mutex;
+static std::condition_variable python_cleanup_queue_cond;
+static bool python_cleanup_thread_stop = false;
 static std::vector<std::pair<CleanupCallback, void*>> python_cleanup_queue;
+static std::thread python_cleanup_thread;
 
-// Enqueues a callback function and a data pointer for later execution in a
-// dedicated Python thread.
+void python_cleanup_thread_main() {
+    while (true) {
+        std::unique_lock lock(python_cleanup_queue_mutex);
+        python_cleanup_queue_cond.wait(lock, [] {
+            return !python_cleanup_queue.empty() || python_cleanup_thread_stop;
+        });
+
+        std::vector<std::pair<CleanupCallback, void*>> calls_to_execute;
+        calls_to_execute.swap(python_cleanup_queue);
+        lock.unlock();
+
+        nanobind::gil_scoped_acquire guard;
+        for (const auto& item : calls_to_execute) item.first(item.second);
+        if (python_cleanup_thread_stop) break;
+    }
+}
+
+void python_cleanup_thread_static_initialization() {
+    python_cleanup_thread = std::thread(&python_cleanup_thread_main);
+}
+
+void python_cleanup_thread_static_shutdown() {
+    {
+        std::scoped_lock lock(python_cleanup_queue_mutex);
+        python_cleanup_thread_stop = true;
+    }
+    nanobind::gil_scoped_release guard;
+    python_cleanup_queue_cond.notify_one();
+    python_cleanup_thread.join();
+}
+
 void enqueue_python_cleanup_call(CleanupCallback callback, void* data_ptr) {
     std::scoped_lock lock(python_cleanup_queue_mutex);
     python_cleanup_queue.emplace_back(callback, data_ptr);
-}
-
-// Executes all pending cleanup calls in the queue.
-void execute_pending_python_calls() {
-    std::vector<std::pair<CleanupCallback, void*>> calls_to_execute;
-    {
-        // Swap queue to minimize lock duration.
-        std::scoped_lock lock(python_cleanup_queue_mutex);
-        calls_to_execute.swap(python_cleanup_queue);
-    }
-    for (const auto& item : calls_to_execute) item.first(item.second);
+    python_cleanup_queue_cond.notify_one();
 }
 
 static int ndarray_free_cb_3(void *p) {

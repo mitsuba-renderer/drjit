@@ -37,22 +37,6 @@ def get_cmake_dir() -> str:
     return os.path.join(os.path.abspath(os.path.dirname(__file__)), "cmake", "drjit")
 
 
-# Start a daemon thread to handle delayed Python cleanup calls
-def _drjit_cleanup_worker():
-    import time
-    while True:
-        detail.execute_pending_python_calls()
-        time.sleep(0.1)
-
-import threading
-
-_drjit_cleanup_thread = threading.Thread(target=_drjit_cleanup_worker,
-                                         daemon=True)
-_drjit_cleanup_thread.start()
-
-del threading
-
-
 # -------------------------------------------------------------------
 #  Predicates and comparison operations for floating point arrays
 # -------------------------------------------------------------------

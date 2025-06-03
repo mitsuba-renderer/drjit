@@ -5550,12 +5550,6 @@
 
     Manually sets a scope identifier (see :py:func:`drjit.detail.new_scope())
 
-.. topic:: detail_execute_pending_python_calls
-
-    Execute all pending Python cleanup calls. This is an implementation detail
-    to handle intricate cleanup logic for DLPack-backed tensors. See `init.cpp`
-    for details.
-
 .. topic:: JitFlag
 
     Flags that control how Dr.Jit compiles and optimizes programs.
