@@ -1264,7 +1264,13 @@ void FlatVariables::assign_with_registry(nb::handle dst, TraverseContext &ctx) {
                                       &registry_pointers[offset]);
         }
 
-        if (registry_pointers.size() != layout.num)
+        uint32_t num_fields = 0;
+
+        for (void *ptr : registry_pointers)
+            if (ptr)
+                num_fields++;
+
+        if (num_fields != layout.num)
             jit_raise("assign_with_registry(): The number of registry "
                       "entries (%zu) did not match the number of registry "
                       "entries recorded (%u)!",
