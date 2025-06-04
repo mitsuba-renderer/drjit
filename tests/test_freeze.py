@@ -4,6 +4,10 @@ from math import ceil
 from dataclasses import dataclass
 import sys
 
+def skip_if_coopvec_not_supported(t):
+    if dr.backend_v(t) == dr.JitBackend.CUDA:
+        if dr.detail.cuda_version() < (12, 8):
+            pytest.skip("CUDA driver does not support cooperative vectors (Driver R570) or later is required")
 
 def get_single_entry(x):
     tp = type(x)
@@ -3584,6 +3588,7 @@ def test96_coop_vec(t, auto_opaque, layout):
     """
     Tests that it is possible to evaluate a neural network inside a frozen function.
     """
+    skip_if_coopvec_not_supported(t)
     mod = sys.modules[t.__module__]
     Float16 = mod.Float16
     ArrayXf = mod.ArrayXf
@@ -3624,6 +3629,7 @@ def test97_coop_vec_bwd(t, auto_opaque):
     Tests that it is possible to evaluate a neural network inside a frozen function,
     and calculate gradients w.r.t. some loss.
     """
+    skip_if_coopvec_not_supported(t)
     mod = sys.modules[t.__module__]
     Float16 = mod.Float16
     ArrayXf = mod.ArrayXf
