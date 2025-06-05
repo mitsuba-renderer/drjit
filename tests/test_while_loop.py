@@ -731,8 +731,45 @@ def test31_tensor_loop_preserve_shape(t, mode):
     a = dr.zeros(t, (10, 11))
 
     i = Int(0)
-    while i < 2:
+    while dr.hint(i < 2, mode=mode):
         i += 1
         assert a.shape == (10, 11)
 
     assert a.shape == (10, 11)
+
+
+@pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
+@pytest.test_arrays('uint32,is_jit,shape=(*)')
+@dr.syntax
+def test31_rotate_state(t, mode):
+    UInt32 = t
+
+    one = UInt32(1)
+    two = UInt32(2)
+    three = UInt32(3)
+    four = UInt32(4)
+    five = UInt32(5)
+    inc = UInt32(32)
+
+    dr.set_flag(dr.JitFlag.PrintIR, True)
+
+    i = UInt32(0)
+    while dr.hint(i < 1, mode=mode):
+        tmp = one
+        one = two
+        two = three
+        three = four
+        four = five
+        five = tmp
+        inc += 1
+
+        i += 1
+
+    dr.eval(one, two, three, four, five, inc)
+
+    assert one == 2
+    assert two == 3
+    assert three == 4
+    assert four == 5
+    assert five == 1
+    assert inc == 33
