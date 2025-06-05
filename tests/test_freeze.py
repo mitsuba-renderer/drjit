@@ -3581,7 +3581,7 @@ def test95_vcall_exception(t, auto_opaque):
 
 
 
-@pytest.test_arrays("float32, cuda, jit, diff, shape=(*)")
+@pytest.test_arrays("float32, jit, diff, shape=(*)")
 @pytest.mark.parametrize("auto_opaque", [False, True])
 @pytest.mark.parametrize("layout", ["training", "inference"])
 def test96_coop_vec(t, auto_opaque, layout):
@@ -3622,7 +3622,7 @@ def test96_coop_vec(t, auto_opaque, layout):
 
         assert dr.allclose(res, ref)
 
-@pytest.test_arrays("float32, cuda, jit, diff, shape=(*)")
+@pytest.test_arrays("float32, jit, diff, shape=(*)")
 @pytest.mark.parametrize("auto_opaque", [False, True])
 def test97_coop_vec_bwd(t, auto_opaque):
     """
@@ -3681,7 +3681,7 @@ def test97_coop_vec_bwd(t, auto_opaque):
         assert dr.allclose(grad_res, grad_ref)
 
 
-@pytest.test_arrays("float32, cuda, jit, diff, shape=(*)")
+@pytest.test_arrays("float32, jit, diff, shape=(*)")
 @pytest.mark.parametrize("auto_opaque", [False, True])
 def test98_changing_list(t, auto_opaque):
     """
@@ -3700,7 +3700,7 @@ def test98_changing_list(t, auto_opaque):
     with pytest.raises(RuntimeError):
         frozen(x)
 
-@pytest.test_arrays("float32, cuda, jit, diff, shape=(*)")
+@pytest.test_arrays("float32, jit, diff, shape=(*)")
 @pytest.mark.parametrize("auto_opaque", [False, True])
 def test99_construction_failure(t, auto_opaque):
     """
