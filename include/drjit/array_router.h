@@ -526,9 +526,15 @@ DRJIT_ROUTE_BINARY_FALLBACK(dot, dot, (E) a1 * (E) a2)
 
 template <typename Array>
 DRJIT_INLINE auto mean(const Array &a) {
-    if constexpr (is_array_v<Array>)
-        return sum(a) * (1.f / a.derived().size());
-    else
+    if constexpr (is_array_v<Array>){
+        if (jit_flag(JitFlag::FreezingScope)) {
+            // Inside of frozen functions, we have to avoid baking the size of
+            // the array into the kernel as a literal.
+            return sum(a) * (1.f / a.derived().opaque_size_());
+        } else {
+            return sum(a) * (1.f / a.derived().size());
+        }
+    } else
         return a;
 }
 
