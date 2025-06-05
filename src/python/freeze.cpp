@@ -1576,7 +1576,7 @@ nb::object FunctionRecording::record(nb::callable func,
     frozen_func->recording_counter++;
     if (frozen_func->recording_counter > frozen_func->warn_recording_count &&
         frozen_func->recordings.size() >= 1) {
-        if (frozen_func->recordings.size() < frozen_func->recording_counter){
+        if (frozen_func->recordings.size() < frozen_func->recording_counter) {
             jit_log(LogLevel::Warn,
                     "The frozen function has been recorded %u times, this "
                     "indicates a problem with how the frozen function is being "
