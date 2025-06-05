@@ -1709,11 +1709,19 @@ nb::object FunctionRecording::record(nb::callable func,
 
         out_variables.layout_index = 0;
         jit_log(LogLevel::Debug, "Construct:");
-        output = nb::borrow<nb::object>(out_variables.construct());
+        try{
+            output = nb::borrow<nb::object>(out_variables.construct());
+        } catch (std::exception &e) {
+            out_variables.release();
+            throw;
+        }
         // NOTE: temporarily disable this to not enqueue twice
-        {
+        try {
             TraverseContext ctx;
             out_variables.assign(input, ctx);
+        } catch (std::exception &e) {
+            out_variables.release();
+            throw;
         }
         out_variables.layout_index = 0;
     }
@@ -1772,14 +1780,20 @@ nb::object FunctionRecording::replay(nb::callable func,
         // Enter Resume scope, so we can track gradients
         ADScopeContext ad_scope(drjit::ADScope::Resume, 0, nullptr, -1, false);
         out_variables.layout_index = 0;
-        {
+        try {
             ProfilerPhase profiler("construct output");
             output = nb::borrow<nb::object>(out_variables.construct());
+        } catch (std::exception &e) {
+            out_variables.release();
+            throw;
         }
-        {
+        try {
             ProfilerPhase profiler("assign input");
             TraverseContext ctx;
             out_variables.assign_with_registry(input, ctx);
+        } catch (std::exception &e) {
+            out_variables.release();
+            throw;
         }
     }
 
@@ -1954,8 +1968,11 @@ nb::object FrozenFunction::operator()(nb::dict input) {
 
             recording->last_used = call_counter - 1;
 
-            {
+            try {
                 result = recording->replay(func, this, input, *in_variables);
+            } catch (std::exception &e) {
+                in_variables->release();
+                throw;
             }
 
             // Drop references to variables
