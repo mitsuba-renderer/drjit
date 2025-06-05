@@ -3669,3 +3669,54 @@ def test97_coop_vec_bwd(t, auto_opaque):
         assert dr.allclose(loss_res, loss_ref)
         assert dr.allclose(grad_res, grad_ref)
 
+
+@pytest.test_arrays("float32, cuda, jit, diff, shape=(*)")
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test98_changing_list(t, auto_opaque):
+    """
+    Tests that changing the number of elements in a list fails gracefully.
+    """
+    mod = sys.modules[t.__module__]
+
+    @dr.freeze
+    def frozen(x: list):
+        x.append(x[0] + 1)
+
+    x = [t(1, 2, 3)]
+    frozen(x)
+
+    x = [t(1, 2, 3, 4)]
+    with pytest.raises(RuntimeError):
+        frozen(x)
+
+@pytest.test_arrays("float32, cuda, jit, diff, shape=(*)")
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test99_construction_failure(t, auto_opaque):
+    """
+    Tests that trying to return a variable that cannot be constructed from a frozen
+    function fails gracefully.
+    """
+    mod = sys.modules[t.__module__]
+
+    class NonConstructable:
+        DRJIT_STRUCT = {
+            "x": t,
+        }
+
+        x: t
+
+        def __init__(self, x: t):
+            self.x = x
+
+    @dr.freeze
+    def frozen(x: t):
+        return NonConstructable(x)
+
+    x = t(1, 2, 3)
+    with pytest.raises(RuntimeError):
+        frozen(x)
+
+    x = t(1, 2, 3, 4)
+    with pytest.raises(RuntimeError):
+        frozen(x)
+
