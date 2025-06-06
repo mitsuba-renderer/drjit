@@ -27,6 +27,7 @@
 #define PCG32_DEFAULT_STATE  0x853c49e6748fea9bULL
 #define PCG32_DEFAULT_STREAM 0xda3e39cb94b95bdbULL
 #define PCG32_MULT           0x5851f42d4c957f2dULL
+#define PCG32_MULT_REV       0xc097ef87329e28a5ULL
 
 NAMESPACE_BEGIN(drjit)
 
@@ -77,6 +78,16 @@ template <typename T> struct PCG32 {
         return (xorshifted >> rot) | (xorshifted << ((-Int32(rot)) & 31));
     }
 
+    /// Generate previous uniformly distributed unsigned 32-bit random number
+    DRJIT_INLINE UInt32 prev_uint32() {
+        state = uint64_t(PCG32_MULT_REV) * (state - inc);
+
+        UInt32 xorshifted = UInt32(sr<27>(sr<18>(state) ^ state)),
+               rot = UInt32(sr<59>(state));
+
+        return (xorshifted >> rot) | (xorshifted << ((-Int32(rot)) & 31));
+    }
+
     /// Masked version of \ref next_uint32
     DRJIT_INLINE UInt32 next_uint32(const Mask &mask) {
         UInt64 oldstate = state;
@@ -85,6 +96,16 @@ template <typename T> struct PCG32 {
 
         UInt32 xorshifted = UInt32(sr<27>(sr<18>(oldstate) ^ oldstate)),
                rot = UInt32(sr<59>(oldstate));
+
+        return (xorshifted >> rot) | (xorshifted << ((-Int32(rot)) & 31));
+    }
+
+    /// Masked version of \ref prev_uint32
+    DRJIT_INLINE UInt32 prev_uint32(const Mask &mask) {
+        masked(state, mask) = uint64_t(PCG32_MULT_REV) * (state - inc);
+
+        UInt32 xorshifted = UInt32(sr<27>(sr<18>(state) ^ state)),
+               rot = UInt32(sr<59>(state));
 
         return (xorshifted >> rot) | (xorshifted << ((-Int32(rot)) & 31));
     }
@@ -99,10 +120,28 @@ template <typename T> struct PCG32 {
         return UInt64(v0) | sl<32>(UInt64(v1));
     }
 
+    /// Generate previous uniformly distributed unsigned 64-bit random number
+    DRJIT_INLINE UInt64 prev_uint64() {
+        /* v0, v1 computed as separate statements to ensure a consistent
+           evaluation order across compilers */
+        UInt32 v1 = prev_uint32();
+        UInt32 v0 = prev_uint32();
+
+        return UInt64(v0) | sl<32>(UInt64(v1));
+    }
+
     /// Masked version of \ref next_uint64
     DRJIT_INLINE UInt64 next_uint64(const Mask &mask) {
         UInt32 v0 = next_uint32(mask);
         UInt32 v1 = next_uint32(mask);
+
+        return UInt64(v0) | sl<32>(UInt64(v1));
+    }
+    
+    /// Masked version of \ref prev_uint64
+    DRJIT_INLINE UInt64 prev_uint64(const Mask &mask) {
+        UInt32 v1 = prev_uint32(mask);
+        UInt32 v0 = prev_uint32(mask);
 
         return UInt64(v0) | sl<32>(UInt64(v1));
     }
@@ -118,6 +157,16 @@ template <typename T> struct PCG32 {
             return next_uint32();
     }
 
+    template <typename Value,
+              enable_if_t<std::is_same_v<scalar_t<Value>, uint32_t> ||
+                          std::is_same_v<scalar_t<Value>, uint64_t>> = 0>
+    DRJIT_INLINE Value prev_uint() {
+        if constexpr (std::is_same_v<scalar_t<Value>, uint64_t>)
+            return prev_uint64();
+        else
+            return prev_uint32();
+    }
+
     /// Forward \ref next_uint call to the correct method based given type size (masked version)
     template <typename Value,
               enable_if_t<std::is_same_v<scalar_t<Value>, uint32_t> ||
@@ -129,9 +178,24 @@ template <typename T> struct PCG32 {
             return next_uint32(mask);
     }
 
+    template <typename Value,
+              enable_if_t<std::is_same_v<scalar_t<Value>, uint32_t> ||
+                          std::is_same_v<scalar_t<Value>, uint64_t>> = 0>
+    DRJIT_INLINE Value prev_uint(const Mask &mask) {
+        if constexpr (std::is_same_v<scalar_t<Value>, uint64_t>)
+            return prev_uint64(mask);
+        else
+            return prev_uint32(mask);
+    }
+
     /// Generate a half precision floating point value on the interval [0, 1)
     DRJIT_INLINE Float16 next_float16() {
         return Float16(next_float32());
+    }
+
+    /// Generate a half precision floating point value on the interval [0, 1)
+    DRJIT_INLINE Float16 prev_float16() {
+        return Float16(prev_float32());
     }
 
     /// Masked version of \ref next_float16
@@ -139,14 +203,29 @@ template <typename T> struct PCG32 {
         return Float16(next_float32(mask));
     }
 
+    /// Masked version of \ref prev_float16
+    DRJIT_INLINE Float16 prev_float16(const Mask &mask) {
+        return Float16(prev_float32(mask));
+    }
+
     /// Generate a single precision floating point value on the interval [0, 1)
     DRJIT_INLINE Float32 next_float32() {
         return reinterpret_array<Float32>(sr<9>(next_uint32()) | 0x3f800000u) - 1.f;
     }
 
+    /// Generate previous precision floating point value on the interval [0, 1)
+    DRJIT_INLINE Float32 prev_float32() {
+        return reinterpret_array<Float32>(sr<9>(prev_uint32()) | 0x3f800000u) - 1.f;
+    }
+
     /// Masked version of \ref next_float32
     DRJIT_INLINE Float32 next_float32(const Mask &mask) {
         return reinterpret_array<Float32>(sr<9>(next_uint32(mask)) | 0x3f800000u) - 1.f;
+    }
+
+    /// Masked version of \ref prev_float32
+    DRJIT_INLINE Float32 prev_float32(const Mask &mask) {
+        return reinterpret_array<Float32>(sr<9>(prev_uint32(mask)) | 0x3f800000u) - 1.f;
     }
 
     /**
@@ -163,9 +242,21 @@ template <typename T> struct PCG32 {
                                           0x3ff0000000000000ull) - 1.0;
     }
 
+    DRJIT_INLINE Float64 prev_float64() {
+        /* Trick from MTGP: generate an uniformly distributed
+           double precision number in [1,2) and subtract 1. */
+        return reinterpret_array<Float64>(sl<20>(UInt64(prev_uint32())) |
+                                          0x3ff0000000000000ull) - 1.0;
+    }
+
     /// Masked version of next_float64
     DRJIT_INLINE Float64 next_float64(const Mask &mask) {
         return reinterpret_array<Float64>(sl<20>(UInt64(next_uint32(mask))) |
+                                          0x3ff0000000000000ull) - 1.0;
+    }
+
+    DRJIT_INLINE Float64 prev_float64(const Mask &mask) {
+        return reinterpret_array<Float64>(sl<20>(UInt64(prev_uint32(mask))) |
                                           0x3ff0000000000000ull) - 1.0;
     }
 
@@ -185,6 +276,22 @@ template <typename T> struct PCG32 {
             return next_float64();
     }
 
+    /// Forward \ref prev_float call to the correct method based given type size
+    template <typename Value>
+    DRJIT_INLINE Value prev_float() {
+        using Scalar = scalar_t<Value>;
+        constexpr size_t Size = sizeof(Scalar);
+        static_assert((Size == 2 || Size == 4 || Size == 8) &&
+                      std::is_floating_point_v<Scalar>);
+
+        if constexpr (Size == 2)
+            return prev_float16();
+        else if constexpr (Size == 4)
+            return prev_float32();
+        else
+            return prev_float64();
+    }
+
     /// Forward \ref next_float call to the correct method based given type size (masked version)
     template <typename Value>
     DRJIT_INLINE Value next_float(const Mask &mask) {
@@ -201,10 +308,34 @@ template <typename T> struct PCG32 {
             return next_float64(mask);
     }
 
+    /// Forward \ref prev_float call to the correct method based given type size (masked version)
+    template <typename Value>
+    DRJIT_INLINE Value prev_float(const Mask &mask) {
+        using Scalar = scalar_t<Value>;
+        constexpr size_t Size = sizeof(Scalar);
+        static_assert((Size == 2 || Size == 4 || Size == 8) &&
+                      std::is_floating_point_v<Scalar>);
+
+        if constexpr (Size == 2)
+            return prev_float16(mask);
+        else if constexpr (Size == 4)
+            return prev_float32(mask);
+        else
+            return prev_float64(mask);
+    }
+
     /// Generate a normally distributed single precision floating point value
     template <typename T2, typename...Args>
     DRJIT_INLINE T2 next_float_normal(const Args&... args) {
         T2 value = next_float<T2>(args...);
+        value = clip(value, Epsilon<T2>, OneMinusEpsilon<T2>);
+        return -SqrtTwo<T2> * erfinv(fmadd(value, -2.f, 1.f));
+    }
+
+    /// Generate a previously generated normally distributed single precision floating point value
+    template <typename T2, typename...Args>
+    DRJIT_INLINE T2 prev_float_normal(const Args&... args) {
+        T2 value = prev_float<T2>(args...);
         value = clip(value, Epsilon<T2>, OneMinusEpsilon<T2>);
         return -SqrtTwo<T2> * erfinv(fmadd(value, -2.f, 1.f));
     }
@@ -215,6 +346,13 @@ template <typename T> struct PCG32 {
     DRJIT_INLINE Float16 next_float16_normal(const Mask &mask) { return Float16(next_float_normal<Float32>(mask)); }
     DRJIT_INLINE Float32 next_float32_normal(const Mask &mask) { return next_float_normal<Float32>(mask); }
     DRJIT_INLINE Float64 next_float64_normal(const Mask &mask) { return next_float_normal<Float64>(mask); }
+
+    DRJIT_INLINE Float16 prev_float16_normal() { return Float16(prev_float_normal<Float32>()); }
+    DRJIT_INLINE Float32 prev_float32_normal() { return prev_float_normal<Float32>(); }
+    DRJIT_INLINE Float64 prev_float64_normal() { return prev_float_normal<Float64>(); }
+    DRJIT_INLINE Float16 prev_float16_normal(const Mask &mask) { return Float16(prev_float_normal<Float32>(mask)); }
+    DRJIT_INLINE Float32 prev_float32_normal(const Mask &mask) { return prev_float_normal<Float32>(mask); }
+    DRJIT_INLINE Float64 prev_float64_normal(const Mask &mask) { return prev_float_normal<Float64>(mask); }
 
     /// Generate a uniformly distributed integer r, where 0 <= r < bound
     UInt32 next_uint32_bounded(uint32_t bound, Mask mask = true) {
