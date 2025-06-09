@@ -636,9 +636,11 @@ void python_cleanup_thread_main() {
         calls_to_execute.swap(python_cleanup_queue);
         lock.unlock();
 
-        nanobind::gil_scoped_acquire guard;
-        for (const auto& item : calls_to_execute) item.first(item.second);
-        if (python_cleanup_thread_stop) break;
+        nb::gil_scoped_acquire guard;
+        for (const auto& item : calls_to_execute)
+            item.first(item.second);
+        if (python_cleanup_thread_stop)
+            break;
     }
 }
 
@@ -651,7 +653,7 @@ void python_cleanup_thread_static_shutdown() {
         std::scoped_lock lock(python_cleanup_queue_mutex);
         python_cleanup_thread_stop = true;
     }
-    nanobind::gil_scoped_release guard;
+    nb::gil_scoped_release guard;
     python_cleanup_queue_cond.notify_one();
     python_cleanup_thread.join();
 }
