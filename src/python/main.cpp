@@ -232,6 +232,7 @@ NB_MODULE(_drjit_ext, m_) {
 
     python_cleanup_thread_static_initialization();
     nb::module_::import_("atexit").attr("register")(nb::cpp_function([]() {
+        dr::sync_thread(); // Finish any ongoing Dr.Jit computations.
         python_cleanup_thread_static_shutdown();
     }));
 
