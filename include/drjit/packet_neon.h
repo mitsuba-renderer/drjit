@@ -13,7 +13,12 @@
 #pragma once
 
 NAMESPACE_BEGIN(drjit)
-DRJIT_PACKET_DECLARE(16)
+DRJIT_PACKET_DECLARE_COND(16, enable_if_t<(std::is_same_v<Type, float>)>)
+DRJIT_PACKET_DECLARE_COND(16, enable_if_int32_t<Type>)
+#if defined(DRJIT_ARM_64)
+DRJIT_PACKET_DECLARE_COND(16, enable_if_t<(std::is_same_v<Type, double>)>)
+DRJIT_PACKET_DECLARE_COND(16, enable_if_int64_t<Type>)
+#endif
 DRJIT_PACKET_DECLARE(12)
 
 NAMESPACE_BEGIN(detail)
