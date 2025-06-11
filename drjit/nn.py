@@ -556,7 +556,7 @@ class HashEncodingConfig:
 
 class HashEncoding(Module):
     """
-    Interface, representing a hash encoding.
+    This class serves as the interface for Hash based encodings.
     """
     DRJIT_STRUCT = {
         "data": drjit.ArrayBase,
@@ -618,30 +618,55 @@ class HashEncoding(Module):
 
     @property
     def dimension(self) -> int:
+        """
+        The dimensionality of this hash encoding.
+        """
         return self._config.dimension
 
     @property
     def hashmap_size(self) -> int:
+        """
+        The hashmap size provided when constructing this encoding.
+        """
         return self._config.hashmap_size
 
     @property
     def n_levels(self) -> int:
+        """
+        The number of levels in this hash encoding.
+        The actual number of output features of this encoding is determined by
+        ``n_level * n_features_per_level``.
+        """
         return self._config.n_levels
 
     @property
     def base_resolution(self) -> int:
+        """
+        The resolution of the 0th level.
+        """
         return self._config.base_resolution
 
     @property
     def per_level_scale(self) -> float:
+        """
+        The per level scale factor, with which the scale of each level grows.
+        """
         return self._config.per_level_scale
 
     @property
     def n_features_per_level(self) -> int:
+        """
+        The number of features per level.
+        The actual number of output features of this encoding is determined by
+        ``n_level * n_features_per_level``.
+        """
         return self._config.n_features_per_level
 
     @property
     def align_corners(self) -> bool:
+        """
+        If the corners of the hashgrid should be aligned to the edges of its domain.
+        """
         return self._config.align_corners
 
     @property
@@ -980,8 +1005,6 @@ class PermutohedralEncoding(HashEncoding):
 
         if isinstance(p, list) or isinstance(p, CoopVec):
             p = self.PositionFloatXf(p)
-
-        invalid = active & drjit.any((p < 0) | (p >= 1))
 
         result = []
 
