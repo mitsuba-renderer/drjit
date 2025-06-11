@@ -1484,8 +1484,9 @@ size_t FlatVariablesHasher::operator()(
     // TODO: Maybe we can use xxh by first collecting in vector<uint64_t>?
 
     drjit::vector<uint64_t> data;
-    data.reserve(1 + key->layout.size() * 4 + key->var_layout.size());
+    data.reserve(2 + key->layout.size() * 4 + key->var_layout.size());
 
+    data.push_back(key->flags);
     data.push_back((uint64_t) (key->layout.size() << 32) |
                    (uint64_t) (key->var_layout.size() << 2));
 
@@ -1822,8 +1823,9 @@ nb::object FrozenFunction::operator()(nb::dict input) {
 
         auto in_variables =
             std::make_shared<FlatVariables>(FlatVariables(in_heuristics));
+        uint32_t flags = jit_flags();
+        in_variables->flags = flags;
         in_variables->backend = this->default_backend;
-        in_variables->flags = jit_flags();
         // Evaluate and traverse input variables (args and kwargs)
         // Repeat this a max of 2 times if the number of variables that should
         // be made opaque changed.
@@ -1889,6 +1891,7 @@ nb::object FrozenFunction::operator()(nb::dict input) {
                 in_variables->release();
                 in_variables = std::make_shared<FlatVariables>(
                     FlatVariables(in_heuristics));
+                in_variables->flags = flags;
             } else {
                 break;
             }
