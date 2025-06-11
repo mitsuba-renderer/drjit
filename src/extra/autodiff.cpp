@@ -1847,9 +1847,8 @@ void ad_scope_postponed(drjit::vector<uint32_t> *dst) {
         ad_raise("ad_scope_leave(): scope underflow!");
     Scope &scope = scopes.back();
 
-    for (auto &er : scope.postponed) {
+    for (auto &er : scope.postponed)
         dst->push_back(er.target);
-    }
 }
 
 /// Check if gradient tracking is enabled for the given variable

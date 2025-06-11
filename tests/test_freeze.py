@@ -1188,10 +1188,6 @@ def test32_gather_only_pointer_as_input(t, relative_size):
 @pytest.test_arrays("float32, jit, shape=(*)")
 def test33_multiple_kernels(t):
     def fn(x: dr.ArrayBase, y: dr.ArrayBase, flag: bool):
-        # TODO: test with gathers and scatters, which is a really important use-case.
-        # TODO: test with launches of different sizes (including the auto-sizing logic)
-        # TODO: test with an intermediate output of literal type
-        # TODO: test multiple kernels that scatter_add to a newly allocated kernel in sequence.
 
         # First kernel uses only `x`
         quantity = 0.5 if flag else -0.5
@@ -1221,22 +1217,15 @@ def test33_multiple_kernels(t):
         assert dr.allclose(results[2], y)
         assert dr.allclose(results[3], ref_results[3])
 
-    # TODO:
-    # We don't yet make a difference between check and no-check
-
-    # for i in range(4):
-    #     new_y = y + float(i)
-    #     # Note: we did not enabled `check` mode, so changing this Python
-    #     # value will not throw an exception. The new value has no influence
-    #     # on the result even though without freezing, it would.
-    #     # TODO: support "signature" detection and create separate frozen
-    #     #       function instances.
-    #     new_flag = (i % 2) == 0
-    #     results = fn_frozen(x, new_y, flag=new_flag)
-    #     assert dr.allclose(results[0], ref_results[0])
-    #     assert results[1] is None
-    #     assert dr.allclose(results[2], new_y)
-    #     assert dr.allclose(results[3], x * 0.5 + new_y)
+    for i in range(4):
+        new_y = y + float(i)
+        new_flag = (i % 2) == 0
+        results = fn_frozen(x, new_y, flag=new_flag)
+        ref_results = fn(x, new_y, flag = new_flag)
+        assert dr.allclose(results[0], ref_results[0])
+        assert results[1] is None
+        assert dr.allclose(results[2], new_y)
+        assert dr.allclose(results[3], ref_results[3])
 
 
 @pytest.test_arrays("float32, jit, shape=(*)")

@@ -12,15 +12,14 @@ NAMESPACE_BEGIN(drjit)
 
 NAMESPACE_BEGIN(detail)
 /**
- * \brief The callback used to traverse all jit arrays of a C++ object such as a
- *     Mitsuba scene.
+ * \brief The callback used to traverse all JIT arrays of a C++ object.
  *
  * \param payload:
  *     To wrap closures, a payload can be provided to the ``traverse_1_cb_ro``
  *     function, that is passed to the callback.
  *
  * \param index:
- *     A non-owning index of the traversed jit array.
+ *     A non-owning index of the traversed JIT array.
  *
  * \param variant:
  *     If a ``JitArray`` has the attribute ``IsClass`` it is referring to a
@@ -34,15 +33,14 @@ NAMESPACE_BEGIN(detail)
 using traverse_callback_ro = void (*)(void *payload, uint64_t index,
                                       const char *variant, const char *domain);
 /**
- * \brief The callback used to traverse and modify all jit arrays of a C++
- *     object such as a Mitsuba scene.
+ * \brief The callback used to traverse and modify all JIT arrays of a C++ object.
  *
  * \param payload:
  *     To wrap closures, a payload can be provided to the ``traverse_1_cb_ro``
  *     function, that is passed to the callback.
  *
  * \param index:
- *     A non-owning index of the traversed jit array.
+ *     A non-owning index of the traversed JIT array.
  *
  * \param variant:
  *     If a ``JitArray`` has the attribute ``IsClass`` it is referring to a
@@ -62,10 +60,18 @@ using traverse_callback_rw = uint64_t (*)(void *payload, uint64_t index,
                                           const char *domain);
 
 inline void log_member_open(bool rw, const char *member) {
+    DRJIT_MARK_USED(rw);
+    DRJIT_MARK_USED(member);
+#ifndef NDEBUG
     jit_log(LogLevel::Debug, "%s%s{", rw ? "rw " : "ro ", member);
+#endif
 }
 
-inline void log_member_close() { jit_log(LogLevel::Debug, "}"); }
+inline void log_member_close() {
+#ifndef NDEBUG
+    jit_log(LogLevel::Debug, "}");
+#endif
+}
 
 NAMESPACE_END(detail)
 
@@ -79,7 +85,7 @@ NAMESPACE_END(detail)
  */
 struct DRJIT_EXTRA_EXPORT TraversableBase : public nanobind::intrusive_base {
     /**
-     * \brief Traverse all jit arrays in this c++ object. For every jit
+     * \brief Traverse all JIT arrays in this c++ object. For every jit
      *     variable, the callback should be called, with the provided payload
      *     pointer.
      *
@@ -96,7 +102,7 @@ struct DRJIT_EXTRA_EXPORT TraversableBase : public nanobind::intrusive_base {
                                   detail::traverse_callback_ro cb) const = 0;
 
     /**
-     * \brief Traverse all jit arrays in this c++ object, and assign the output of the
+     * \brief Traverse all JIT arrays in this c++ object, and assign the output of the
      *     callback to them. For every jit variable, the callback should be called,
      *     with the provided payload pointer.
      *

@@ -6082,8 +6082,8 @@
     inputs and outputs of a frozen function. The flag is automatically managed
     and should not be updated by application code.
 
-    When enabled, traversal of objects such as the ``Scene`` or ``BSDFs`` in
-    mitsuba is enabled.
+    When enabled, traversal of complex objects, that usually are opaque to
+    loops and conditionals, is enabled.
 
 .. topic:: JitFlag_Default
 

@@ -140,7 +140,7 @@ bool VarLayout::operator==(const VarLayout &rhs) const {
  * such as a BSDF or Shape in Mitsuba, we have to traverse all objects
  * registered with that variant-domain pair in the registry. This function
  * adds the variant-domain pair, deduplicating the domain. Whether a
- * variable references a class is represented by it's ``IsClass`` const
+ * variable references a class is represented by its ``IsClass`` const
  * attribute. If the domain is an empty string (""), this function skips
  * adding the variant-domain pair.
  */
@@ -152,13 +152,12 @@ void FlatVariables::add_domain(const char *variant, const char *domain) {
     if (domain && variant && strcmp(domain, "") != 0) {
         jit_log(LogLevel::Debug, "variant=%s, domain=%s", variant, domain);
 
-        if (domains.empty()){
+        if (domains.empty())
             this->variant = variant;
-        }
         else if (this->variant != variant)
-            jit_raise("traverse(): Variant missmatch! All arguments to a "
+            jit_raise("traverse(): Variant mismatch! All arguments to a "
                       "frozen function have to have the same variant. "
-                      "Variant %s of a previos argument does not match "
+                      "Variant %s of a previous argument does not match "
                       "variant %s of this argument.",
                       this->variant.c_str(), variant);
 
@@ -218,7 +217,7 @@ void FlatVariables::record_jit_variables() {
         if (backend == info.backend || this->backend == JitBackend::None) {
             backend = info.backend;
         } else {
-            jit_raise("freeze(): backend missmatch error (backend of this "
+            jit_raise("freeze(): backend mismatch error (backend of this "
                       "variable %s does not match backend of others %s)!",
                       info.backend == JitBackend::CUDA ? "CUDA" : "LLVM",
                       backend == JitBackend::CUDA ? "CUDA" : "LLVM");
@@ -319,7 +318,7 @@ void FlatVariables::traverse_jit_index(uint32_t index, TraverseContext &ctx,
 }
 
 /**
- * Construct a variable, given it's layout.
+ * Construct a variable, given its layout.
  * This is the counterpart to `traverse_jit_index`.
  *
  * Optionally, the index of a variable can be provided that will be
@@ -347,7 +346,7 @@ uint32_t FlatVariables::construct_jit_index(uint32_t prev_index) {
 
     if (prev_index) {
         if (vt != (VarType) jit_var_type(prev_index))
-            jit_fail("VarType missmatch %u != %u while assigning (r%u) "
+            jit_fail("VarType mismatch %u != %u while assigning (r%u) "
                      "-> (r%u)!",
                      (uint32_t) vt, (uint32_t) jit_var_type(prev_index),
                      (uint32_t) prev_index, (uint32_t) index);
@@ -356,7 +355,7 @@ uint32_t FlatVariables::construct_jit_index(uint32_t prev_index) {
 }
 
 /**
- * Add an ad variable by it's index. Both the value and gradient are added
+ * Add an ad variable by its index. Both the value and gradient are added
  * to the flattened variables. If the ad index has been marked as postponed
  * in the \c TraverseContext.postponed field, we mark the resulting layout
  * with that flag. This will cause the gradient edges to be propagated when
@@ -378,11 +377,10 @@ void FlatVariables::traverse_ad_index(uint64_t index, TraverseContext &ctx,
         if (tp)
             layout.type = nb::borrow<nb::type_object>(tp);
         layout.num = 2;
-        // layout.vt  = jit_var_type(index);
 
         // Set flags
         layout.flags |= (uint32_t) LayoutFlag::GradEnabled;
-        // If the edge with this node as it's target has been postponed by
+        // If the edge with this node as its target has been postponed by
         // the isolate gradient scope, it has been enqueued and we mark the
         // ad variable as such.
         if (ctx.postponed && ctx.postponed->contains(ad_index)) {
@@ -402,15 +400,14 @@ void FlatVariables::traverse_ad_index(uint64_t index, TraverseContext &ctx,
  * Construct/assign the variable index given a layout.
  * This corresponds to `traverse_ad_index`.
  *
- * This function is also used for assignment to ad-variables.
- * If a `prev_index` is provided, and it is an ad-variable the gradient and
+ * This function is also used for assignment to AD variables.
+ * If a `prev_index` is provided, and it is an AD variable the gradient and
  * value of the flat variables will be applied to the ad variable,
- * preserving the ad_idnex.
+ * preserving the `ad_index`.
  *
  * It returns an owning reference.
  */
-uint64_t FlatVariables::construct_ad_index(uint32_t shrink,
-                                           uint64_t prev_index) {
+uint64_t FlatVariables::construct_ad_index(uint64_t prev_index) {
     Layout &layout = this->layout[this->layout_index];
 
     uint64_t index;
@@ -456,9 +453,6 @@ uint64_t FlatVariables::construct_ad_index(uint32_t shrink,
         index = construct_jit_index(prev_index);
     }
 
-    if (shrink > 0)
-        index = ad_var_shrink(index, shrink);
-
     return index;
 }
 
@@ -483,12 +477,11 @@ void FlatVariables::traverse_ad_var(nb::handle h, TraverseContext &ctx) {
 }
 
 /**
- * Construct an ad variable given it's layout.
+ * Construct an ad variable given its layout.
  * This corresponds to `traverse_ad_var`
  */
-nb::object FlatVariables::construct_ad_var(const Layout &layout,
-                                           uint32_t shrink) {
-    uint64_t index = construct_ad_index(shrink);
+nb::object FlatVariables::construct_ad_var(const Layout &layout) {
+    uint64_t index = construct_ad_index();
 
     auto result              = nb::inst_alloc_zero(layout.type);
     const ArraySupplement &s = supp(result.type());
@@ -514,7 +507,7 @@ void FlatVariables::assign_ad_var(Layout &layout, nb::handle dst) {
     uint64_t index;
     if (s.index) {
         // ``construct_ad_index`` is used for assignment
-        index = construct_ad_index(0, s.index(inst_ptr(dst)));
+        index = construct_ad_index(s.index(inst_ptr(dst)));
     } else
         index = construct_ad_index();
 
@@ -528,7 +521,7 @@ void FlatVariables::assign_ad_var(Layout &layout, nb::handle dst) {
 }
 
 /**
- * Traverse a c++ tree using it's `traverse_1_cb_ro` callback.
+ * Traverse a c++ tree using its `traverse_1_cb_ro` callback.
  */
 void FlatVariables::traverse_cb(const drjit::TraversableBase *traversable,
                                 TraverseContext &ctx, nb::object type) {
@@ -573,14 +566,14 @@ uint64_t FlatVariables::assign_cb_internal(uint64_t index,
     if (!index)
         return index;
 
-    uint64_t new_index = this->construct_ad_index(0, index);
+    uint64_t new_index = this->construct_ad_index(index);
 
     tmp.push_back_steal(new_index);
     return new_index;
 }
 
 /**
- * Assigns variables using it's `traverse_cb_rw` callback.
+ * Assigns variables using its `traverse_cb_rw` callback.
  * This corresponds to `traverse_cb`.
  */
 void FlatVariables::assign_cb(drjit::TraversableBase *traversable) {
@@ -616,7 +609,7 @@ void FlatVariables::assign_cb(drjit::TraversableBase *traversable) {
 }
 
 /**
- * Traverses a PyTree in DFS order, and records it's layout in the
+ * Traverses a PyTree in DFS order, and records its layout in the
  * `layout` vector.
  *
  * When hitting a drjit primitive type, it calls the
@@ -899,7 +892,7 @@ void FlatVariables::assign(nb::handle dst) {
 
     if (!layout.type.equal(tp))
         jit_fail(
-            "Type missmatch! Type of the object when recording (%s) does not "
+            "Type mismatch! Type of the object when recording (%s) does not "
             "match type of object that is assigned (%s).",
             nb::type_name(tp).c_str(), nb::type_name(layout.type).c_str());
 
@@ -1165,7 +1158,7 @@ FlatVariablesHasher::operator()(const std::shared_ptr<FlatVariables> &key) const
 }
 
 /*
- * Record a function, given it's python input and flattened input.
+ * Record a function, given its python input and flattened input.
  */
 nb::object FunctionRecording::record(nb::callable func,
                                      FrozenFunction *frozen_func,
@@ -1240,7 +1233,7 @@ nb::object FunctionRecording::record(nb::callable func,
         jit_freeze_destroy(recording);
 
         nb::raise(
-            "freeze(): backend missmatch error (backend %u of "
+            "freeze(): backend mismatch error (backend %u of "
             "output variables did not match backend %u of input variables)",
             (uint32_t) out_variables.backend, (uint32_t) backend);
     }
@@ -1376,6 +1369,7 @@ nb::object FrozenFunction::operator()(nb::args args, nb::kwargs kwargs) {
         auto in_variables =
             std::make_shared<FlatVariables>(FlatVariables(in_heuristics));
         in_variables->backend = this->default_backend;
+        in_variables->flags = jit_flags();
         // Evaluate and traverse input variables (args and kwargs)
         {
             // Enter Resume scope, so we can track gradients

@@ -1598,8 +1598,9 @@ public:
     void
     traverse_1_cb_ro(void *payload,
                      drjit ::detail ::traverse_callback_ro fn) const override {
-        // Only traverse the texture for frozen functions, since accidentally
-        // traversing the scene in loops or vcalls can cause issues.
+        // Traverse the function to react to changes when freezing code via
+        // @dr.freeze. In all other contexts, the texture is read-only and does
+        // not require traversal
         if (!jit_flag(JitFlag::EnableObjectTraversal))
             return;
 
@@ -1609,9 +1610,8 @@ public:
             uint32_t n_textures = 1 + ((m_channels - 1) / 4);
             std::vector<uint32_t> indices(n_textures);
             jit_cuda_tex_get_indices(m_handle, indices.data());
-            for (uint32_t i = 0; i < n_textures; i++) {
+            for (uint32_t i = 0; i < n_textures; i++)
                 fn(payload, indices[i], "", "");
-            }
         }
     }
     void traverse_1_cb_rw(void *payload,

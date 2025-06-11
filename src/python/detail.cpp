@@ -304,8 +304,8 @@ struct recursion_guard {
  * \brief Traverses all variables of a python object.
  *
  * This function is used to traverse variables of python objects, inheriting
- * from trampoline classes. This allows the user to freeze for example custom
- * BSDFs, without having to declare its variables.
+ * from trampoline classes. This allows the user to freeze a custom python
+ * version of a C++ class, without having to declare its variables.
  */
 void traverse_py_cb_ro_impl(nb::handle self, nb::callable c) {
     recursion_guard guard;
@@ -316,13 +316,12 @@ void traverse_py_cb_ro_impl(nb::handle self, nb::callable c) {
             auto index_fn = s.index;
             if (index_fn){
                 if (s.is_class){
-                    auto variant =
+                    nb::str variant =
                         nb::borrow<nb::str>(nb::getattr(h, "Variant"));
-                    auto domain =
+                    nb::str domain =
                         nb::borrow<nb::str>(nb::getattr(h, "Domain"));
-                    operator()(index_fn(inst_ptr(h)),
-                               variant.is_valid() ? variant.c_str() : "",
-                               domain.is_valid() ? domain.c_str() : "");
+                    operator()(index_fn(inst_ptr(h)), variant.c_str(),
+                               domain.c_str());
                 }
                 else
                     operator()(index_fn(inst_ptr(h)), "", "");
@@ -351,8 +350,8 @@ void traverse_py_cb_ro_impl(nb::handle self, nb::callable c) {
  * \brief Traverses all variables of a python object.
  *
  * This function is used to traverse variables of python objects, inheriting
- * from trampoline classes. This allows the user to freeze for example custom
- * BSDFs, without having to declare its variables.
+ * from trampoline classes. This allows the user to freeze a custom python
+ * version of a C++ class, without having to declare its variables.
  */
 void traverse_py_cb_rw_impl(nb::handle self, nb::callable c) {
     recursion_guard guard;
@@ -364,13 +363,11 @@ void traverse_py_cb_rw_impl(nb::handle self, nb::callable c) {
             if (index_fn){
                 uint64_t new_index;
                 if (s.is_class) {
-                    auto variant =
+                    nb::str variant =
                         nb::borrow<nb::str>(nb::getattr(h, "Variant"));
-                    auto domain = nb::borrow<nb::str>(nb::getattr(h, "Domain"));
-                    new_index   = operator()(
-                        index_fn(inst_ptr(h)),
-                        variant.is_valid() ? variant.c_str() : "",
-                        domain.is_valid() ? domain.c_str() : "");
+                    nb::str domain = nb::borrow<nb::str>(nb::getattr(h, "Domain"));
+                    new_index   = operator()(index_fn(inst_ptr(h)),
+                                           variant.c_str(), domain.c_str());
                 } else
                     new_index = operator()(index_fn(inst_ptr(h)), "", "");
                 s.reset_index(new_index, inst_ptr(h));

@@ -24,13 +24,15 @@ namespace detail {
 
 using index64_vector = drjit::detail::index64_vector;
 
+// This enum defines flags used in the input layout nodes, representing the
+// PyTree.
 enum class LayoutFlag : uint32_t {
     /// Whether this variable has size 1
     SingletonArray = (1 << 0),
     /// Whether this variable is unaligned in memory
     Unaligned = (1 << 1),
     /// Whether this layout represents a literal variable
-    Literal   = (1 << 2),
+    Literal = (1 << 2),
     /// Whether this variable has gradients enabled
     GradEnabled = (1 << 3),
     /// Did this variable have gradient edges attached when recording, that
@@ -62,7 +64,6 @@ struct Layout {
 
     /// If a non drjit type is passed as function arguments or result, we simply
     /// cache it here.
-    /// TODO: possibly do the same for literals?
     nb::object py_object;
 
     /// Nanobind type of the container/variable
@@ -89,16 +90,20 @@ struct Layout {
  * ``FlatVariables::record_jit_variables``. This struct stores that information
  * per deduplicated variable.
  */
-struct VarLayout{
+struct VarLayout {
     /// Optional drjit type of the variable
     VarType vt = VarType::Void;
     /// Optional evaluation state of the variable
     VarState vs = VarState::Invalid;
-    /// Flags, storing information about variables
+    /// Flags, storing information about variables (see `LayoutFlag` enum above)
     uint32_t flags = 0;
     /// We have to track the condition, where two variables have the same size
-    /// during recording but don't when replaying.
-    /// Therefore we de-duplicate the size.
+    /// during recording but don't when replaying, however we do not want to
+    /// bake the size into the recording key.Therefore we construct equivalence
+    /// classes of sizes using a hashmap. When a variable with a new size is
+    /// traversed, this size is added to the `size_to_slot` map in
+    /// `FlatVariables`, and a unique index representing this size is assigned
+    /// to this field.
     uint32_t size_index = 0;
 
     VarLayout() = default;
@@ -112,10 +117,9 @@ struct VarLayout{
     bool operator==(const VarLayout &rhs) const;
 };
 
-
 // Additional context required when traversing the inputs
 struct TraverseContext {
-    /// Set of postponed ad nodes, used to mark inputs to functions.
+    /// Set of postponed AD nodes, used to mark inputs to functions.
     const tsl::robin_set<uint32_t, UInt32Hasher> *postponed = nullptr;
     bool schedule_force                                     = false;
 };
@@ -132,7 +136,7 @@ struct TraverseContext {
  * tree is represented by a ``Layout`` element in the ``layout`` vector.
  */
 struct FlatVariables {
-
+    // Stores the JIT flags (see `jit_flags`), set when traversing the inputs.
     uint32_t flags = 0;
 
     // Index, used to iterate over the variables/layouts when constructing
@@ -142,7 +146,7 @@ struct FlatVariables {
     /// The flattened and de-duplicated variable indices of the input/output to
     /// a frozen function
     std::vector<uint32_t> variables;
-    /// Mapping from drjit jit index to index in flat variables. Used to
+    /// Mapping from drjit JIT index to index in flat variables. Used to
     /// deduplicate jit indices.
     tsl::robin_map<uint32_t, uint32_t, UInt32Hasher> index_to_slot;
 
@@ -186,8 +190,7 @@ struct FlatVariables {
             }
         }
         ~recursion_guard() { flat_variables->recursion_level--; }
-};
-
+    };
 
     /**
      * Describes how many elements have to be pre-allocated for the ``layout``,
@@ -198,7 +201,7 @@ struct FlatVariables {
         size_t index_to_slot = 0;
         size_t size_to_slot  = 0;
 
-        Heuristic max(Heuristic rhs){
+        Heuristic max(Heuristic rhs) {
             return Heuristic{
                 std::max(layout, rhs.layout),
                 std::max(index_to_slot, rhs.index_to_slot),
@@ -221,25 +224,25 @@ struct FlatVariables {
     FlatVariables &operator=(FlatVariables &&) = default;
 
     void clear() {
-        this->layout_index = 0;
-        this->variables.clear();
-        this->index_to_slot.clear();
-        this->layout.clear();
-        this->backend = JitBackend::None;
+        layout_index = 0;
+        variables.clear();
+        index_to_slot.clear();
+        layout.clear();
+        backend = JitBackend::None;
     }
     /// Borrow all variables held by this struct.
     void borrow() {
-        for (uint32_t &index : this->variables)
+        for (uint32_t &index : variables)
             jit_var_inc_ref(index);
     }
     /// Release all variables held by this struct.
     void release() {
-        for (uint32_t &index : this->variables)
+        for (uint32_t &index : variables)
             jit_var_dec_ref(index);
     }
 
     /**
-     * \brief Records information about jit variables, that have been traversed.
+     * \brief Records information about JIT variables that have been traversed.
      *
      * After traversing the PyTree, collecting non-literal indices in
      * ``variables`` and evaluating the collected indices, we can collect
@@ -252,7 +255,8 @@ struct FlatVariables {
 
     /**
      * Returns a struct representing heuristics to pre-allocate memory for the
-     * layout, of the flat variables.
+     * layout, of the flat variables. This accelerates subsequent traversals and
+     * replays.
      */
     Heuristic heuristic() {
         return Heuristic{
@@ -269,14 +273,14 @@ struct FlatVariables {
      * such as a BSDF or Shape in Mitsuba, we have to traverse all objects
      * registered with that variant-domain pair in the registry. This function
      * adds the variant-domain pair, deduplicating the domain. Whether a
-     * variable references a class is represented by it's ``IsClass`` const
+     * variable references a class is represented by its ``IsClass`` const
      * attribute. If the domain is an empty string (""), this function skips
      * adding the variant-domain pair.
      */
     void add_domain(const char *variant, const char *domain);
 
     /**
-     * Adds a jit index to the flattened array, deduplicating it.
+     * Adds a JIT index to the flattened array, deduplicating it.
      * This allows to check for aliasing conditions, where two variables
      * actually refer to the same index. The function should only be called for
      * scheduled non-literal variable indices.
@@ -297,7 +301,7 @@ struct FlatVariables {
     uint32_t add_size(uint32_t size);
 
     /**
-     * Traverse the variable referenced by a jit index and add it to the flat
+     * Traverse the variable referenced by a JIT index and add it to the flat
      * variables. An optional type python type can be supplied if it is known.
      * Depending on the ``TraverseContext::schedule_force`` the underlying
      * variable is either scheduled (``jit_var_schedule``) or force scheduled
@@ -307,9 +311,9 @@ struct FlatVariables {
      * recording the frozen function.
      */
     void traverse_jit_index(uint32_t index, TraverseContext &ctx,
-                            nb::handle tp = nullptr);
+                            nb::handle tp = {});
     /**
-     * Add an ad variable by it's index. Both the value and gradient are added
+     * Add an ad variable by its index. Both the value and gradient are added
      * to the flattened variables. If the ad index has been marked as postponed
      * in the \c TraverseContext.postponed field, we mark the resulting layout
      * with that flag. This will cause the gradient edges to be propagated when
@@ -317,7 +321,7 @@ struct FlatVariables {
      * it is known.
      */
     void traverse_ad_index(uint64_t index, TraverseContext &ctx,
-                           nb::handle tp = nullptr);
+                           nb::handle tp = {});
 
     /**
      * Wrapper aground traverse_ad_index for a python handle.
@@ -325,13 +329,13 @@ struct FlatVariables {
     void traverse_ad_var(nb::handle h, TraverseContext &ctx);
 
     /**
-     * Traverse a c++ tree using it's `traverse_1_cb_ro` callback.
+     * Traverse a c++ tree using its `traverse_1_cb_ro` callback.
      */
     void traverse_cb(const drjit::TraversableBase *traversable,
                      TraverseContext &ctx, nb::object type = nb::none());
 
     /**
-     * Traverses a PyTree in DFS order, and records it's layout in the
+     * Traverses a PyTree in DFS order, and records its layout in the
      * `layout` vector.
      *
      * When hitting a drjit primitive type, it calls the
@@ -349,7 +353,7 @@ struct FlatVariables {
     void traverse_with_registry(nb::handle h, TraverseContext &ctx);
 
     /**
-     * Construct a variable, given it's layout.
+     * Construct a variable, given its layout.
      * This is the counterpart to `traverse_jit_index`.
      *
      * Optionally, the index of a variable can be provided that will be
@@ -360,23 +364,22 @@ struct FlatVariables {
 
     /**
      * Construct/assign the variable index given a layout.
-     * This corresponds to `traverse_ad_index`>
+     * This corresponds to `traverse_ad_index`.
      *
-     * This function is also used for assignment to ad-variables.
-     * If a `prev_index` is provided, and it is an ad-variable the gradient and
+     * This function is also used for assignment to AD variables.
+     * If a `prev_index` is provided, and it is an AD variable the gradient and
      * value of the flat variables will be applied to the ad variable,
-     * preserving the ad_idnex.
+     * preserving the `ad_index`.
      *
      * It returns an owning reference.
      */
-    uint64_t construct_ad_index(uint32_t shrink = 0,
-                                uint64_t prev_index = 0);
+    uint64_t construct_ad_index(uint64_t prev_index = 0);
 
     /**
-     * Construct an ad variable given it's layout.
+     * Construct an ad variable given its layout.
      * This corresponds to `traverse_ad_var`
      */
-    nb::object construct_ad_var(const Layout &layout, uint32_t shrink = 0);
+    nb::object construct_ad_var(const Layout &layout);
 
     /**
      * This is the counterpart to the traverse method, used to construct the
@@ -405,7 +408,7 @@ struct FlatVariables {
     uint64_t assign_cb_internal(uint64_t index, index64_vector &tmp);
 
     /**
-     * Assigns variables using it's `traverse_cb_rw` callback.
+     * Assigns variables using its `traverse_cb_rw` callback.
      * This corresponds to `traverse_cb`.
      */
     void assign_cb(drjit::TraversableBase *traversable);
@@ -434,7 +437,7 @@ struct FlatVariablesHasher {
 };
 
 /// Helper struct to compare input variables
-struct FlatVariablesEqual{
+struct FlatVariablesEqual {
     using is_transparent = void;
     bool operator()(const std::shared_ptr<FlatVariables> &lhs,
                     const std::shared_ptr<FlatVariables> &rhs) const {
@@ -447,7 +450,7 @@ struct FlatVariablesEqual{
  * input variables.
  */
 struct FunctionRecording {
-    uint32_t last_used = 0;
+    uint32_t last_used   = 0;
     Recording *recording = nullptr;
     FlatVariables out_variables;
 
@@ -458,22 +461,22 @@ struct FunctionRecording {
     FunctionRecording &operator=(FunctionRecording &&)      = default;
 
     ~FunctionRecording() {
-        if (this->recording) {
+        if (this->recording)
             jit_freeze_destroy(this->recording);
-        }
+
         this->recording = nullptr;
     }
 
     void clear() {
-        if (this->recording) {
+        if (this->recording)
             jit_freeze_destroy(this->recording);
-        }
+
         this->recording     = nullptr;
         this->out_variables = FlatVariables();
     }
 
     /*
-     * Record a function, given it's python input and flattened input.
+     * Record a function, given its python input and flattened input.
      */
     nb::object record(nb::callable func, FrozenFunction *frozen_func,
                       nb::list input, const FlatVariables &in_variables);

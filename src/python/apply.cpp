@@ -608,8 +608,7 @@ uint64_t TraverseCallback::operator()(uint64_t, const char *, const char *) { re
 void TraverseCallback::traverse_unknown(nb::handle) { }
 
 /// Invoke the given callback on leaf elements of the pytree 'h'
-void traverse(const char *op, TraverseCallback &tc, nb::handle h,
-              bool rw) {
+void traverse(const char *op, TraverseCallback &tc, nb::handle h, bool rw) {
     nb::handle tp = h.type();
     recursion_guard guard;
 

@@ -1091,6 +1091,13 @@ template <typename T, typename... Args> auto &bind_traverse(nanobind::class_<T, 
     return cls;
 }
 
+/**
+ * \brief This function traverses a python object, that inherits from a
+ * trampoline class.
+ *
+ * Internally, this function calls the ``traverse_py_cb_ro_impl`` function,
+ * exposed through ``drjit.detail``, with the object and the callback.
+ */
 inline void traverse_py_cb_ro(const TraversableBase *base, void *payload,
                               void (*fn)(void *, uint64_t, const char *variant,
                                          const char *domain)) {
@@ -1110,6 +1117,13 @@ inline void traverse_py_cb_ro(const TraversableBase *base, void *payload,
         }));
 }
 
+/**
+ * \brief This function traverses a python object, that inherits from a
+ * trampoline class.
+ *
+ * Internally, this function calls the ``traverse_py_cb_rw_impl`` function,
+ * exposed through ``drjit.detail``, with the object and the callback.
+ */
 inline void traverse_py_cb_rw(TraversableBase *base, void *payload,
                               uint64_t (*fn)(void *, uint64_t, const char *,
                                              const char *)) {
