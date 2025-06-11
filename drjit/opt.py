@@ -126,6 +126,11 @@ class Optimizer(Generic[Extra], MutableMapping[str, dr.ArrayBase]):
     # - an arbitrary sequence of additional optimizer-dependent state values
     state: Dict[str, Tuple[dr.ArrayBase, Optional[LearningRate], Extra]]
 
+    DRJIT_STRUCT = {
+        "lr": LearningRate,
+        "state": dict,
+    }
+
     def __init__(
         self,
         lr: LearningRate,
@@ -960,10 +965,15 @@ class Adam(Optimizer[Tuple[int, dr.ArrayBase, dr.ArrayBase]]):
         # Compute the step size scale, which is a product of
         # - EMA debiasing factor
         # - Adaptive/parameter-specific scaling
+        Float32 = dr.float32_array_t(dr.leaf_t(grad))
+        Float64 = dr.float64_array_t(dr.leaf_t(grad))
+        ema_factor = Float32(
+            -dr.sqrt(1 - Float64(self.beta_2) ** t) / (1 - Float64(self.beta_1) ** t)
+        )
         scale = cache.product(
             dr.leaf_t(grad),  # Desired type
             lr,
-            -dr.sqrt(1 - self.beta_2**t) / (1 - self.beta_1**t),
+            ema_factor,
         )
 
         # Optional: use maximum of second order term
@@ -981,9 +991,11 @@ class Adam(Optimizer[Tuple[int, dr.ArrayBase, dr.ArrayBase]]):
     def _reset(self, key: str, value: dr.ArrayBase, /) -> None:
         valarr = value.array
         tp = type(valarr)
+        UInt = dr.uint32_array_t(dr.leaf_t(tp))
+        t = UInt(0)
         m_t = dr.opaque(tp, 0, valarr.shape)
         v_t = dr.opaque(tp, 0, valarr.shape)
-        self.state[key] = value, None, (0, m_t, v_t)
+        self.state[key] = value, None, (t, m_t, v_t)
 
     # Blend between the old and new versions of the optimizer extra state
     def _select(
