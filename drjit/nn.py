@@ -1120,7 +1120,8 @@ class SimplifiedPermutohedralEncoding(HashEncoding):
 
             # ---- Apply scaling factor
 
-            x = p * scale
+            p_offset: float = 0.0 if self.align_corners else 0.5
+            x = drjit.fma(p, scale, p_offset)
 
             base = self.ArrayXi(drjit.floor(x))
             fract = x - base
