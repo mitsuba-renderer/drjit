@@ -738,7 +738,7 @@ class HashEncoding(Module):
 
         self.PositionFloatXf = mod.ArrayXf16 if drjit.is_half_v(self.PositionFloat) else mod.ArrayXf
 
-    def _acc_features(self, weight, index, values: list, active):
+    def _acc_features(self, level_i, weight, index, values: list, active):
         """
         Accumulates the ``self.num_features`` features at the given index.
         This function tries to use packet gather operations if possible, to improve
@@ -769,7 +769,9 @@ class HashEncoding(Module):
         )
 
         for k in range(0, self.n_features_per_level):
-            values[k] = drjit.fma(v[k], weight, values[k])
+            values[level_i * self.n_features_per_level + k] = drjit.fma(
+                v[k], weight, values[level_i * self.n_features_per_level + k]
+            )
 
     def indexing_function(self, key, level_i):
         raise NotImplementedError()
@@ -877,7 +879,7 @@ class HashGridEncoding(HashEncoding):
         if isinstance(p, list) or isinstance(p, CoopVec):
             p = self.PositionFloatXf(p)
 
-        result = []
+        values = [self.StorageFloat(0.0)] * self.n_features_per_level * self.n_levels
 
         for level_i in range(self.n_levels):
             scale = self._grid_scale(level_i)
@@ -890,8 +892,6 @@ class HashGridEncoding(HashEncoding):
             w1 = pos - pos0
             w0 = 1.0 - w1
 
-            values = [self.StorageFloat(0.0)] * self.n_features_per_level
-
             def acc(offset: self.ArrayXu):
                 """
                 Given one of the ``2**self.dimensionality()`` vertices, this function
@@ -903,17 +903,14 @@ class HashGridEncoding(HashEncoding):
                 weight = drjit.prod(weight, axis=0)
 
                 index = self.indexing_function(pos_grid, level_i)
-                self._acc_features(weight, index, values, active)
+                self._acc_features(level_i, weight, index, values, active)
 
             for offset in self._grid_offsets:
                 acc(self.ArrayXu(offset))
 
-            for v in values:
-                v = v & active
+        values = [v & active for v in values]
 
-                result.append(v)
-
-        return CoopVec(*result)
+        return CoopVec(*values)
 
     def indexing_function(self, key, level_i):
         """
@@ -1115,14 +1112,10 @@ class SimplifiedPermutohedralEncoding(HashEncoding):
         if isinstance(p, list) or isinstance(p, CoopVec):
             p = self.PositionFloatXf(p)
 
-        # invalid = active & drjit.any((p < 0) | (p > 1))
-
-        result = []
+        values = [self.StorageFloat(0.0)] * self.n_features_per_level * self.n_levels
 
         for level_i in range(self.n_levels):
             scale = self._level_scale(level_i)
-
-            values = [self.StorageFloat(0.0)] * self.n_features_per_level
 
             # ---- Apply scaling factor
 
@@ -1178,14 +1171,11 @@ class SimplifiedPermutohedralEncoding(HashEncoding):
                 weight = weights[rank]
 
                 index = self.indexing_function(pos_grid, level_i)
-                self._acc_features(weight, index, values, active)
+                self._acc_features(level_i, weight, index, values, active)
 
-            for v in values:
-                v = v & active
+        values = [v & active for v in values]
 
-                result.append(v)
-
-        return CoopVec(*result)
+        return CoopVec(*values)
 
     def _alloc_internal(self, dtype: Type[drjit.ArrayBase]):
         self.dtype = drjit.leaf_t(dtype)
