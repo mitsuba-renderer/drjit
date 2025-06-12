@@ -776,6 +776,37 @@ class HashEncoding(Module):
 
 
 class HashGridEncoding(HashEncoding):
+    """
+
+    This encoding implements a Multiresolution Hash Grid. For every resolution level,
+    this encoding looks up the :math:`2^D` vertices of the cell in which the input point is
+    located, performs multilinear interpolation, and concatenates the features accross
+    all resolution levels.
+
+    Args:
+        dimension: The dimensionality of the hash encoding. This corresponds to
+            the number of input features the encoding can take.
+        n_levels: Hash encodings generally make use of multiple levels of the same
+            encoding with different scales. This parameter specifies the number of
+            levels used by this encoding.
+        n_features_per_level: More than one feature can be stored in a vertex per
+            level. This value specifies how many, and the number of output features
+            of the hash encoding layer is given by ``n_levels * n_features_per_level``.
+            This value should always be a multiple of two, in order to ensure efficient
+            gradient backpropagation.
+        hashmap_size: Specifies the maximal number of parameters per level of the
+            hash encoding. HashGrids will use a dense grid lookup for layers with
+            a low enough scale, and use less than ``hashmap_size`` number of parameters
+            per level.
+        base_resolution: The scale factor of the 0th layer in the hash encoding.
+        per_level_scale: To calculate the scale of a layer, the scale of the previous
+            layer is multiplied by this value.
+        align_corners: If this value is ``True``, the simplex vertices are aligned
+            with the domain of the encoding [0, 1].
+        smooth_weight_gradients: whether to smooth the gradients of the weights
+            by using a straight-through estimator.
+        smooth_weight_lambda: the value of lambda used for the straight-through estimator.
+    """
     DRJIT_STRUCT = {
         "data": drjit.ArrayBase,
         "dtype": type,
@@ -1012,9 +1043,6 @@ class HashGridEncoding(HashEncoding):
 
 class SimplifiedPermutohedralEncoding(HashEncoding):
     """
-    Permutohedral Encoding
-    ----------------------
-
     This encoding is based on the encoding presented in :cite:`rosu2023permutosdf`.
     Whereas hash grid encodings use a grid lattice, this uses a permutohedral lattice,
     where the simplexes are consist of triangles, tetrahedrons etc. The main advantage
@@ -1023,6 +1051,30 @@ class SimplifiedPermutohedralEncoding(HashEncoding):
     In this implementation we make a few simplification, and skip the elevation to a
     hyperplane in d + 1 dimensional space. It instead performs the sorting and interpolation
     steps in d-dimensional space.
+
+    Args:
+        dimension: The dimensionality of the hash encoding. This corresponds to
+            the number of input features the encoding can take.
+        n_levels: Hash encodings generally make use of multiple levels of the same
+            encoding with different scales. This parameter specifies the number of
+            levels used by this encoding.
+        n_features_per_level: More than one feature can be stored in a vertex per
+            level. This value specifies how many, and the number of output features
+            of the hash encoding layer is given by ``n_levels * n_features_per_level``.
+            This value should always be a multiple of two, in order to ensure efficient
+            gradient backpropagation.
+        hashmap_size: Specifies the maximal number of parameters per level of the
+            hash encoding. HashGrids will use a dense grid lookup for layers with
+            a low enough scale, and use less than ``hashmap_size`` number of parameters
+            per level.
+        base_resolution: The scale factor of the 0th layer in the hash encoding.
+        per_level_scale: To calculate the scale of a layer, the scale of the previous
+            layer is multiplied by this value.
+        align_corners: If this value is ``True``, the simplex vertices are aligned
+            with the domain of the encoding [0, 1].
+        smooth_weight_gradients: whether to smooth the gradients of the weights
+            by using a straight-through estimator.
+        smooth_weight_lambda: the value of lambda used for the straight-through estimator.
     """
 
     DRJIT_STRUCT = {
@@ -1050,31 +1102,6 @@ class SimplifiedPermutohedralEncoding(HashEncoding):
     def __init__(self) -> None: ...
 
     def __init__(self, *args, **kwargs) -> None:
-        """
-        Args:
-            dimension: The dimensionality of the hash encoding. This corresponds to
-                the number of input features the encoding can take.
-            n_levels: Hash encodings generally make use of multiple levels of the same
-                encoding with different scales. This parameter specifies the number of
-                levels used by this encoding.
-            n_features_per_level: More than one feature can be stored in a vertex per
-                level. This value specifies how many, and the number of output features
-                of the hash encoding layer is given by ``n_levels * n_features_per_level``.
-                This value should always be a multiple of two, in order to ensure efficient
-                gradient backpropagation.
-            hashmap_size: Specifies the maximal number of parameters per level of the
-                hash encoding. HashGrids will use a dense grid lookup for layers with
-                a low enough scale, and use less than ``hashmap_size`` number of parameters
-                per level.
-            base_resolution: The scale factor of the 0th layer in the hash encoding.
-            per_level_scale: To calculate the scale of a layer, the scale of the previous
-                layer is multiplied by this value.
-            align_corners: If this value is ``True``, the simplex vertices are aligned
-                with the domain of the encoding [0, 1].
-            smooth_weight_gradients: whether to smooth the gradients of the weights
-                by using a straight-through estimator.
-            smooth_weight_lambda: the value of lambda used for the straight-through estimator.
-        """
         if len(args) == 0:
             self._config = HashEncodingConfig()
         else:
