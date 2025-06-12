@@ -879,6 +879,11 @@ class HashGridEncoding(HashEncoding):
         if isinstance(p, list) or isinstance(p, CoopVec):
             p = self.PositionFloatXf(p)
 
+        assert drjit.shape(p)[0] == self.dimension, (
+            f"This hash grid expected an input of feature dimension {self.dimension}"
+            f" but got {drjit.shape(p)[0]}."
+        )
+
         values = [self.StorageFloat(0.0)] * self.n_features_per_level * self.n_levels
 
         for level_i in range(self.n_levels):
@@ -1111,6 +1116,11 @@ class SimplifiedPermutohedralEncoding(HashEncoding):
 
         if isinstance(p, list) or isinstance(p, CoopVec):
             p = self.PositionFloatXf(p)
+
+        assert drjit.shape(p)[0] == self.dimension, (
+            f"This permutohedral grid expected an input of feature dimension {self.dimension}"
+            f" but got {drjit.shape(p)[0]}."
+        )
 
         values = [self.StorageFloat(0.0)] * self.n_features_per_level * self.n_levels
 
