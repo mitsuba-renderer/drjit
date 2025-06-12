@@ -523,6 +523,12 @@ DRJIT_INLINE void ad_var_dec_ref(uint64_t index) JIT_NOEXCEPT {
 // Return the AD reference count of a variable (for debugging)
 extern DRJIT_EXTRA_EXPORT uint32_t ad_var_ref(uint64_t index);
 
+/// --------------------- Thread reordering API ---------------------
+
+extern DRJIT_EXTRA_EXPORT void ad_reorder(uint64_t key, uint32_t num_bits,
+                                          uint32_t n, uint64_t *in,
+                                          uint64_t *out);
+
 /// --------------------- Cooperative vector API ---------------------
 
 /// Pack a set of regular Dr.Jit variables to form a cooperative vector

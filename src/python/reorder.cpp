@@ -11,7 +11,6 @@
 #include "reorder.h"
 #include "detail.h"
 #include <drjit/autodiff.h>
-#include <drjit-core/optix.h>
 
 nb::object reorder_threads(nb::handle_t<dr::ArrayBase> key, int num_bits,
                            nb::handle value) {
@@ -28,7 +27,6 @@ nb::object reorder_threads(nb::handle_t<dr::ArrayBase> key, int num_bits,
         nb::raise("drjit.reorder_threads(): 'value' must be a valid PyTree "
                   "containing at least one JIT-compiled type");
 
-#if defined(DRJIT_ENABLE_OPTIX)
     uint32_t n_values = (uint32_t) value_indices.size();
 
     // Extract JIT indices
@@ -38,8 +36,8 @@ nb::object reorder_threads(nb::handle_t<dr::ArrayBase> key, int num_bits,
 
     // Create updated values with reordering
     dr::detail::index32_vector out_indices(n_values);
-    jit_optix_reorder(s_key.index(inst_ptr(key)), num_bits, n_values,
-                      jit_indices.data(), out_indices.data());
+    jit_reorder(s_key.index(inst_ptr(key)), num_bits, n_values,
+                jit_indices.data(), out_indices.data());
 
     // Re-combine with AD indices
     dr::vector<uint64_t> new_value_indices(n_values);
@@ -49,9 +47,6 @@ nb::object reorder_threads(nb::handle_t<dr::ArrayBase> key, int num_bits,
     }
 
     return ::update_indices(value, new_value_indices);
-#endif
-
-    return nb::borrow(value);
 }
 
 void export_reorder(nb::module_ &m) {

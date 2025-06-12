@@ -760,5 +760,63 @@ struct index32_vector : drjit::vector<uint32_t> {
     }
 };
 
+template <typename T> size_t count_indices(const T &value) {
+    if constexpr (is_traversable_v<T>) {
+        size_t r = 0;
+        traverse_1(fields(value),
+                   [&](const auto &x) { r += count_indices(x); });
+        return r;
+    } else {
+        return is_jit_v<T> ? 1 : 0;
+    }
+}
+
+template <typename T, typename Index> void store_indices(const T &value, Index *out, uint32_t &offset) {
+    if constexpr (is_traversable_v<T>)
+        traverse_1(fields(value), [&](const auto &x) { store_indices(x, out, offset); });
+    else if constexpr (is_jit_v<T>)
+        out[offset++] = value.index_combined();
+}
+
+template <typename T, typename Index> void load_indices(T &value, const Index *in, uint32_t &offset) {
+    if constexpr (is_traversable_v<T>)
+        traverse_1(fields(value), [&](auto &x) { load_indices(x, in, offset); });
+    else if constexpr (is_jit_v<T>)
+        value = T::steal(in[offset++]);
+}
+
+
 NAMESPACE_END(detail)
+
+template <typename Key, typename State>
+State reorder_threads(const Key &key, uint32_t num_bits, const State &state) {
+    if constexpr (is_cuda_v<Key>) {
+        static_assert(std::is_integral_v<value_t<Key>>);
+
+        using Index = std::conditional_t<is_diff_v<Key>, uint64_t, uint32_t>;
+
+        uint32_t n_indices = (uint32_t) detail::count_indices(state),
+                 offset = 0;
+
+        Index *indices_in = (Index *) alloca(sizeof(Index) * n_indices),
+              *indices_out = (Index *) alloca(sizeof(Index) * n_indices);
+
+        detail::store_indices(state, indices_in, offset);
+
+        if constexpr (is_diff_v<Key>)
+            ad_reorder(key.index(), num_bits, n_indices, indices_in, indices_out);
+        else
+            jit_reorder(key.index(), num_bits, n_indices, indices_in, indices_out);
+
+        offset = 0;
+        State state_out;
+        detail::load_indices(state_out, indices_out, offset);
+
+        return state_out;
+    } else {
+        (void) key; (void) num_bits; (void) state;
+        return state;
+    }
+}
+
 NAMESPACE_END(drjit)

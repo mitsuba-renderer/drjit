@@ -4316,6 +4316,28 @@ uint64_t ad_coop_vec_matvec(uint64_t A_index, const MatrixDescr *A_descr,
 }
 
 // ==========================================================================
+// Thread reordering functionality
+// ==========================================================================
+
+void ad_reorder(Index key, uint32_t num_bits, uint32_t n, Index *in, Index *out) {
+    JitIndex *tmp_in = (JitIndex *) alloca(sizeof(JitIndex) * n),
+             *tmp_out = (JitIndex *) alloca(sizeof(JitIndex) * n);
+
+    for (uint32_t i = 0; i < n; ++i)
+        tmp_in[i] = jit_index(in[i]);
+
+    jit_reorder(jit_index(key), num_bits, n, tmp_in, tmp_out);
+
+    std::lock_guard<Lock> guard(state.lock);
+    for (uint32_t i = 0; i < n; ++i) {
+        ADIndex ad = ad_index(in[i]);
+        if (ad)
+            ad_var_inc_ref_int(ad, state[ad]);
+        out[i] = combine(ad, tmp_out[i]);
+    }
+}
+
+// ==========================================================================
 // Custom operations
 // ==========================================================================
 
