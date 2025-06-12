@@ -779,7 +779,6 @@ class HashEncoding(Module):
 
 class HashGridEncoding(HashEncoding):
     """
-
     This encoding implements a Multiresolution Hash Grid. For every resolution level,
     this encoding looks up the :math:`2^D` vertices of the cell in which the input point is
     located, performs multilinear interpolation, and concatenates the features accross
@@ -897,21 +896,13 @@ class HashGridEncoding(HashEncoding):
             w1 = pos - pos0
             w0 = 1.0 - w1
 
-            def acc(offset: self.ArrayXu):
-                """
-                Given one of the ``2**self.dimensionality()`` vertices, this function
-                calculates the grid position and interpolation weight and accumulates
-                the features into the ``values`` field.
-                """
+            for offset in self._grid_offsets:
                 pos_grid = pos0 + self.ArrayXu(offset)
                 weight = drjit.select(self.ArrayXu(offset) == 0, w0, w1)
                 weight = drjit.prod(weight, axis=0)
 
                 index = self.indexing_function(pos_grid, level_i)
                 self._acc_features(level_i, weight, index, values, active)
-
-            for offset in self._grid_offsets:
-                acc(self.ArrayXu(offset))
 
         values = [v & active for v in values]
 
