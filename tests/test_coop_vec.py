@@ -699,7 +699,6 @@ def test23_hash_grid_encoding(t):
     }
 
     hg_ref = tcnn.Encoding(3, config, )
-    print(f"{dir(hg_ref)=}")
     data = hg_ref.params.data
 
     hg.set_params(Float16(data.to(dtype = torch.float16)))
@@ -717,7 +716,6 @@ def test23_hash_grid_encoding(t):
     execution_time = 0
     for kernel in kernels:
         execution_time += kernel["execution_time"]
-    print(f"Dr.Jit: {execution_time=}ms")
 
     start = torch.cuda.Event(enable_timing = True)
     end = torch.cuda.Event(enable_timing = True)
@@ -727,7 +725,6 @@ def test23_hash_grid_encoding(t):
     end.record()
 
     torch.cuda.synchronize()
-    print(f"PyTorch: execution_time={start.elapsed_time(end)}ms")
 
     assert torch.allclose(res, ref, atol=0.00001)
 

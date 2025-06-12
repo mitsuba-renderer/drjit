@@ -517,6 +517,34 @@ def next_multiple(num: int, multiple: int) -> int:
 
 @dataclass
 class HashEncodingConfig:
+    """
+    This class holds information about a hash based encoding, such as hash grids
+    or permutohedral encodings.
+
+    Args:
+        dimension: The dimensionality of the hash encoding. This corresponds to
+            the number of input features the encoding can take.
+        n_levels: Hash encodings generally make use of multiple levels of the same
+            encoding with different scales. This parameter specifies the number of
+            levels used by this encoding.
+        n_features_per_level: More than one feature can be stored in a vertex per
+            level. This value specifies how many, and the number of output features
+            of the hash encoding layer is given by ``n_levels * n_features_per_level``.
+            This value should always be a multiple of two, in order to ensure efficient
+            gradient backpropagation.
+        hashmap_size: Specifies the maximal number of parameters per level of the
+            hash encoding. HashGrids will use a dense grid lookup for layers with
+            a low enough scale, and use less than ``hashmap_size`` number of parameters
+            per level.
+        base_resolution: The scale factor of the 0th layer in the hash encoding.
+        per_level_scale: To calculate the scale of a layer, the scale of the previous
+            layer is multiplied by this value.
+        align_corners: If this value is ``True``, the simplex vertices are aligned
+            with the domain of the encoding [0, 1].
+        smooth_weight_gradients: whether to smooth the gradients of the weights
+            by using a straight-through estimator.
+        smooth_weight_lambda: the value of lambda used for the straight-through estimator.
+    """
     dimension: int
     n_levels: int
     n_features_per_level: int
@@ -777,6 +805,34 @@ class HashGridEncoding(HashEncoding):
     def __init__(self) -> None: ...
 
     def __init__(self, *args, **kwargs) -> None:
+        """
+        This encoding is based on the Multiresolution Hash Grid encoding introduced
+        in :cite:`mueller2022instant`.
+
+        Args:
+            dimension: The dimensionality of the hash encoding. This corresponds to
+                the number of input features the encoding can take.
+            n_levels: Hash encodings generally make use of multiple levels of the same
+                encoding with different scales. This parameter specifies the number of
+                levels used by this encoding.
+            n_features_per_level: More than one feature can be stored in a vertex per
+                level. This value specifies how many, and the number of output features
+                of the hash encoding layer is given by ``n_levels * n_features_per_level``.
+                This value should always be a multiple of two, in order to ensure efficient
+                gradient backpropagation.
+            hashmap_size: Specifies the maximal number of parameters per level of the
+                hash encoding. HashGrids will use a dense grid lookup for layers with
+                a low enough scale, and use less than ``hashmap_size`` number of parameters
+                per level.
+            base_resolution: The scale factor of the 0th layer in the hash encoding.
+            per_level_scale: To calculate the scale of a layer, the scale of the previous
+                layer is multiplied by this value.
+            align_corners: If this value is ``True``, the simplex vertices are aligned
+                with the domain of the encoding [0, 1].
+            smooth_weight_gradients: whether to smooth the gradients of the weights
+                by using a straight-through estimator.
+            smooth_weight_lambda: the value of lambda used for the straight-through estimator.
+        """
         if len(args) == 0:
             self._config = HashEncodingConfig()
         else:
@@ -789,8 +845,6 @@ class HashGridEncoding(HashEncoding):
 
         if isinstance(p, list) or isinstance(p, CoopVec):
             p = self.PositionFloatXf(p)
-
-        invalid = active & drjit.any((p < 0) | (p > 1))
 
         result = []
 
@@ -966,11 +1020,9 @@ class SimplifiedPermutohedralEncoding(HashEncoding):
     where the simplexes are consist of triangles, tetrahedrons etc. The main advantage
     is that the number of vertices per simplex and therefore the number of memory
     lookups per sample per layer grow linear with the number of dimensions.
-
-    In contrast to the default ``PermutohedralEncoding`` this encoding foregoes the
-    elevation to a hyperplane in d + 1 dimensional space. It instead performs the
-    sorting and interpolation steps in the d dimensional space.
-
+    In this implementation we make a few simplification, and skip the elevation to a
+    hyperplane in d + 1 dimensional space. It instead performs the sorting and interpolation
+    steps in d-dimensional space.
     """
 
     DRJIT_STRUCT = {
@@ -998,6 +1050,31 @@ class SimplifiedPermutohedralEncoding(HashEncoding):
     def __init__(self) -> None: ...
 
     def __init__(self, *args, **kwargs) -> None:
+        """
+        Args:
+            dimension: The dimensionality of the hash encoding. This corresponds to
+                the number of input features the encoding can take.
+            n_levels: Hash encodings generally make use of multiple levels of the same
+                encoding with different scales. This parameter specifies the number of
+                levels used by this encoding.
+            n_features_per_level: More than one feature can be stored in a vertex per
+                level. This value specifies how many, and the number of output features
+                of the hash encoding layer is given by ``n_levels * n_features_per_level``.
+                This value should always be a multiple of two, in order to ensure efficient
+                gradient backpropagation.
+            hashmap_size: Specifies the maximal number of parameters per level of the
+                hash encoding. HashGrids will use a dense grid lookup for layers with
+                a low enough scale, and use less than ``hashmap_size`` number of parameters
+                per level.
+            base_resolution: The scale factor of the 0th layer in the hash encoding.
+            per_level_scale: To calculate the scale of a layer, the scale of the previous
+                layer is multiplied by this value.
+            align_corners: If this value is ``True``, the simplex vertices are aligned
+                with the domain of the encoding [0, 1].
+            smooth_weight_gradients: whether to smooth the gradients of the weights
+                by using a straight-through estimator.
+            smooth_weight_lambda: the value of lambda used for the straight-through estimator.
+        """
         if len(args) == 0:
             self._config = HashEncodingConfig()
         else:
@@ -1020,22 +1097,8 @@ class SimplifiedPermutohedralEncoding(HashEncoding):
 
             values = [self.StorageFloat(0.0)] * self.n_features_per_level
 
-            # ---- Per dimension scaling factor & random shift
+            # ---- Apply scaling factor
 
-            rng = self.PCG32(drjit.width(p))
-            rng.seed(level_i * self.dimension)
-
-            # TODO: check if we need the same random shift for the
-            # simplified permutohedral encoding?
-            #
-            # x = drjit.zeros_like(p)
-            #
-            # for dim in range(self.dimension):
-            #     scale_dim = scale * drjit.rsqrt(
-            #         (self.dimension + 1) * (self.dimension + 2)
-            #     )
-            #     shift_dim = drjit.fma(rng.next_float32(), 10.0, -5.0) # [-5, 5)
-            #     x[dim] = (p[dim] + shift_dim) * scale_dim
             x = p * scale
 
             base = self.ArrayXi(drjit.floor(x))
