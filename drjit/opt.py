@@ -840,7 +840,7 @@ class Adam(Optimizer[Tuple[int, dr.ArrayBase, dr.ArrayBase]]):
        \\begin{align*}
            \\mathbf{m}_{i+1} &= \\beta_1 \\cdot \\mathbf{m}_i + (1-\\beta_1)\\cdot\\mathbf{g}_{i+1}\\\\
            \\mathbf{v}_{i+1} &= \\beta_2 \\cdot \\mathbf{v}_i + (1-\\beta_2)\\cdot\\mathbf{g}_{i+1}^2\\\\
-           \\mathbf{p}_{i+1} &= \\mathbf{p}_i - \\eta \\frac{1-\\beta_2^{i+1}}{1-\\beta_1^{i+1}} \\frac{\\mathbf{v}_{i+1}}{\\sqrt{\\mathbf{m}_{i+1}+\\varepsilon}},
+           \\mathbf{p}_{i+1} &= \\mathbf{p}_i - \\eta \\frac{\\sqrt{1-\\beta_2^{i+1}}}{1-\\beta_1^{i+1}} \\frac{\\mathbf{m}_{i+1}}{\\sqrt{\\mathbf{v}_{i+1}}+\\varepsilon},
        \\end{align*}
 
     where :math:`\\mathbf{p}_i` is the parameter value at iteration :math:`i`,
@@ -849,7 +849,7 @@ class Adam(Optimizer[Tuple[int, dr.ArrayBase, dr.ArrayBase]]):
     by zero.
 
 
-    The scale factor :math:`\\frac{1-\\beta_2^{i+1}}{1-\\beta_1^{i+1}}`
+    The scale factor :math:`\\frac{\\sqrt{1-\\beta_2^{i+1}}}{1-\\beta_1^{i+1}}`
     corrects for the zero-valued initialization of the
     moment accumulators :math:`\\mathbf{m}_i`
     and :math:`\\mathbf{v}_i` at :math:`i=0`.
