@@ -4,9 +4,9 @@ import sys
 from dataclasses import dataclass, field
 
 if sys.version_info < (3, 11):
-    from typing_extensions import Tuple, Sequence, Union, Type, TypeAlias, Optional, Any, overload
+    from typing_extensions import Tuple, Sequence, Union, Type, TypeAlias, Optional, Any, overload, Iterable
 else:
-    from typing import Tuple, Sequence, Union, Type, TypeAlias, Optional, Any, overload
+    from typing import Tuple, Sequence, Union, Type, TypeAlias, Optional, Any, overload, Iterable
 
 # Import classes/functions from C++ extension
 MatrixView = drjit.detail.nn.MatrixView
@@ -760,6 +760,7 @@ class HashEncoding(Module):
             weight_smooth = cosine_ramp(weight)
             weight = weight + self.smooth_weight_lambda * (weight_smooth - drjit.detach(weight_smooth))
 
+        # TODO: warning for 3 features
         v = gather(
             self.StorageFloatXf,
             self.data,
@@ -871,12 +872,11 @@ class HashGridEncoding(HashEncoding):
             self._config = HashEncodingConfig(*args, **kwargs)
 
     def __call__(
-        self, p: drjit.ArrayBase | list[drjit.ArrayBase] | CoopVec, active=True
+        self, p: Iterable[drjit.ArrayBase], active=True
     ) -> CoopVec:
         self._init_types(p)
 
-        if isinstance(p, list) or isinstance(p, CoopVec):
-            p = self.PositionFloatXf(p)
+        p = self.PositionFloatXf(p)
 
         assert drjit.shape(p)[0] == self.dimension, (
             f"This hash grid expected an input of feature dimension {self.dimension}"
@@ -1101,12 +1101,11 @@ class SimplifiedPermutohedralEncoding(HashEncoding):
             self._config = HashEncodingConfig(*args, **kwargs)
 
     def __call__(
-        self, p: drjit.ArrayBase | list[drjit.ArrayBase] | CoopVec, active=True
+        self, p: Iterable[drjit.ArrayBase], active=True
     ) -> Any:
         self._init_types(p)
 
-        if isinstance(p, list) or isinstance(p, CoopVec):
-            p = self.PositionFloatXf(p)
+        p = self.PositionFloatXf(p)
 
         assert drjit.shape(p)[0] == self.dimension, (
             f"This permutohedral grid expected an input of feature dimension {self.dimension}"
