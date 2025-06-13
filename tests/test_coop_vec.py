@@ -1,5 +1,6 @@
 import drjit as dr
 import drjit.nn as nn
+import drjit.hgrid as hgrid
 import pytest
 import sys
 
@@ -669,7 +670,7 @@ def test23_hash_grid_encoding(t):
         pytest.skip("This test requires PyTorch to be installed.")
 
     try:
-        import tinycudann as tcnn
+        import torch
     except ImportError:
         pytest.skip("This test requires tinycudann to be installed.")
 
@@ -677,7 +678,6 @@ def test23_hash_grid_encoding(t):
 
     m = sys.modules[t.__module__]
     Float16 = t
-    Float32 = m.Float32
 
     config = {
         "hashmap_size": 2**19,
@@ -687,7 +687,7 @@ def test23_hash_grid_encoding(t):
         "n_features_per_level": 2,
     }
 
-    hg = nn.HashGridEncoding(
+    hg = hgrid.HashGridEncoding(
         3,
         **config,
         align_corners=False,
