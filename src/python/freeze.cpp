@@ -1,34 +1,37 @@
 /**
  * This file implements the frontend for the frozen function feature.
  * The `FrozenFunction` class represents a function that has been annotated with
- * the `@dr.freeze` decorator. When calling the `operator()` of this object
- * first time, the wrapped callable is recorded. On subsequent calls, the input
- * is checked, and if compatible, the previously recorded function is replayed.
- * The `FrozenFunction` class should not be used directly, and is wrapped in a
- * higher level class in `__init__.py`.
+ * the `@dr.freeze` decorator. When calling the `operator()` of this object for
+ * the first time, the wrapped callable is recorded. On subsequent calls, the
+ * input is checked, and if compatible, the previously recorded function is
+ * replayed. The `FrozenFunction` class should not be used directly, and is
+ * wrapped in a higher level class in `__init__.py`.
  *
  * When calling the `operator()` operator of a `FrozenFunction` object, the
  * inputs of the function have to be traversed. This collects the JIT variables
- * in the inputs and information about the layout of the input PyTree. We store
- * both in a `FlatVariables` struct. Not all JIT variables in the input are
- * evaluated, and some can represent literal values. Only evaluated variables
- * can change between calls to the function without re-tracing it. Therefore, we
- * need to make changing literals opaque. Therefore, the auto_opaque feature is
- * introduced. It detects changes in literal variables from one call of the
- * function to another. For this reason traversal of the input is split up into
- * six steps.
+ * in the input and information about the layout of the PyTree. We store
+ * both in a `FlatVariables` struct. To evaluate all side effects, and so that
+ * the freezing backend can handle these JIT variables, they are evaluated.
+ * Only evaluated variables can change between calls to the function
+ * without re-tracing it. Therefore, we need to make changing literals opaque.
+ * The auto opaque feature detects changes in literal variables from one call of
+ * the function to another. For this reason traversal of the input is split up
+ * into six steps. These steps are performed every time the frozen function is
+ * called. Depending on the result, a previous recording can be replayed or a
+ * new recording has to be made.
  *
  * 1. The input is traversed using the `FlatVariables::traverse_with_registry`
  *    function. It traverses the PyTree, including a subset of the registry when
- *    class variables are present in the input. Information about the layout of
- *    the PyTree is stored in the `Layout` structs of the `layout` vector of the
+ *    class variables are present in the input (i.e. pointers to classes with
+ *    Dr.Jit virtual function calls). Information about the layout of the PyTree
+ *    is stored in the `Layout` structs of the `layout` vector of the
  *    `FlatVariables` class. If a JIT variable is encountered during this
  *    traversal step, its index will be stored in the `index` field of the
  *    corresponding `Layout` entry.
- * 2. If the `auto_opaque` feature is enabled, key of the previous iteration is
- *    checked, if it is compatible with the currently recorded key. If this is
- *    the case, the `opaque_mask` of the last iteration will be used in the next
- *    step, otherwise it will be cleared.
+ * 2. If the `auto_opaque` feature is enabled, the key of the previous iteration
+ *    is checked, if it is compatible with the currently recorded key. If this
+ *    is the case, the `opaque_mask` of the last iteration will be used in the
+ *    next step, otherwise it will be cleared.
  * 3. The flattened input variables are traversed by
  *    `FlatVariables::schedule_jit_variables`, and all JIT variables are either
  *    scheduled or force scheduled, depending on the `opaque_mask` value for
@@ -58,13 +61,13 @@
  * `FlatVariables::operator==` function to see which changes to the input can
  * cause the function to be re-traced.
  *
- * If no matching recording was found in the hashtable, the following steps will
+ * If no matching recording was found in the hashmap, the following steps will
  * be executed to record the function. Steps 2 to 6 are located in the
  * `FunctionRecording::record` function, and can be invoked from the
  * `FunctionRecording::replay` function as well, if a dry-run failed.
  *
  * 1. The flattened version of the input is assigned back to the input PyTree.
- *    This is required, so that evaluated variables are updated in the PyTree.
+ *    This is required, so that evaluating variables is reflected in the PyTree.
  * 2. Kernel recording is started with the `jit_freeze_start` function, by
  *    providing it with the flattened evaluated variables of the input.
  * 3. The inner function is executed, while recording all launched kernels.
@@ -74,8 +77,8 @@
  *    handle these new inputs in a similar manner to outputs of the function.
  *    Analogous to the above section, the outputs and new inputs are traversed,
  *    scheduled, evaluated and recorded.
- * 5. Using the newly collected outputs, the kernel freezing is stopped with the
- *    `jit_freeze_stop` function.
+ * 5. Using the deduplicated JIT indices collected by traversing teh outputs,
+ *    kernel freezing is stopped with the `jit_freeze_stop` function.
  * 6. Finally, we catch any potential errors when assigning variables or
  *    constructing outputs early (i.e. after recording a function rather than
  *    after replaying it later). Therefore, we assign the flattened inputs to
@@ -91,14 +94,15 @@
  * inputs, this recording will be replayed. The following steps outline
  * replaying a function recording:
  *
- * 1. A Dry-run of the recording is launched if this is required by it, using
+ * 1. A Dry-run of the recording is launched if this is required, using
  *    `jit_freeze_dry_run`.
  * 2. If the dry-run failed, the current recording will be overwritten by
  *    calling `FunctionRecording::record` on this recording, executing steps 2
  *    to 6 of the above section.
  * 3. If the dry-run succeeded, the recording will be replayed by calling
  *    `jit_freeze_replay` with the flattened evaluated variables of the input
- *    PyTree.
+ *    PyTree. The `variables` field of the output flat variables will be used to
+ *    store the output variables from the replay.
  * 4. The output from replaying the recording as well as the stored layout is
  *    used to both construct the output PyTree, as well as to assign the JIT
  *    variables to the input PyTree.
