@@ -48,6 +48,7 @@ public API.
    textures
    coop_vec
    nn
+   freeze
    faq
 
 .. toctree::

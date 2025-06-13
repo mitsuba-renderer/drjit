@@ -4,6 +4,11 @@ from math import ceil
 from dataclasses import dataclass
 import sys
 
+def skip_if_coopvec_not_supported(t):
+    if dr.backend_v(t) == dr.JitBackend.CUDA:
+        if dr.detail.cuda_version() < (12, 8):
+            pytest.skip("CUDA driver does not support cooperative vectors (Driver R570) or later is required")
+
 def get_single_entry(x):
     tp = type(x)
     result = x
@@ -16,12 +21,13 @@ def get_single_entry(x):
 
 
 @pytest.test_arrays("uint32, jit, shape=(*)")
-def test01_basic(t):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test01_basic(t, auto_opaque):
     """
     Tests a very basic frozen function, adding two integers x, y.
     """
 
-    @dr.freeze
+    @dr.freeze(auto_opaque=auto_opaque)
     def func(x, y):
         return x + y
 
@@ -39,7 +45,8 @@ def test01_basic(t):
 
 
 @pytest.test_arrays("uint32, jit, shape=(*)")
-def test02_flush_kernel_cache(t):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test02_flush_kernel_cache(t, auto_opaque):
     """
     Tests that flushing the kernel between recording and replaying a frozen
     function causes the function to be re-traced.
@@ -48,7 +55,7 @@ def test02_flush_kernel_cache(t):
     def func(x, y):
         return x + y
 
-    frozen = dr.freeze(func)
+    frozen = dr.freeze(func, auto_opaque=auto_opaque)
 
     x = t(0, 1, 2)
     y = t(2, 1, 0)
@@ -70,12 +77,13 @@ def test02_flush_kernel_cache(t):
 
 
 @pytest.test_arrays("uint32, jit, shape=(*)")
-def test03_output_tuple(t):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test03_output_tuple(t, auto_opaque):
     """
     Tests that returning tuples from frozen functions is possible.
     """
 
-    @dr.freeze
+    @dr.freeze(auto_opaque=auto_opaque)
     def func(x, y):
         return (x + y, x * y)
 
@@ -95,12 +103,13 @@ def test03_output_tuple(t):
 
 
 @pytest.test_arrays("uint32, jit, shape=(*)")
-def test04_output_list(t):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test04_output_list(t, auto_opaque):
     """
     Tests that returning lists from forzen functions is possible.
     """
 
-    @dr.freeze
+    @dr.freeze(auto_opaque=auto_opaque)
     def func(x, y):
         return [x + y, x * y]
 
@@ -120,12 +129,13 @@ def test04_output_list(t):
 
 
 @pytest.test_arrays("uint32, jit, shape=(*)")
-def test05_output_dict(t):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test05_output_dict(t, auto_opaque):
     """
     Tests that returning dictionaries from forzen functions is possible.
     """
 
-    @dr.freeze
+    @dr.freeze(auto_opaque=auto_opaque)
     def func(x, y):
         return {"add": x + y, "mul": x * y}
 
@@ -149,12 +159,13 @@ def test05_output_dict(t):
 
 
 @pytest.test_arrays("uint32, jit, shape=(*)")
-def test06_nested_tuple(t):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test06_nested_tuple(t, auto_opaque):
     """
     Tests that returning nested tuples from forzen functions is possible.
     """
 
-    @dr.freeze
+    @dr.freeze(auto_opaque=auto_opaque)
     def func(x):
         return (x + 1, x + 2, (x + 3, x + 4))
 
@@ -170,7 +181,8 @@ def test06_nested_tuple(t):
 
 
 @pytest.test_arrays("uint32, jit, shape=(*)")
-def test07_drjit_struct(t):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test07_drjit_struct(t, auto_opaque):
     """
     Tests that returning custom classes, annotated with ``DRJIT_STRUCT`` from
     forzen functions is possible.
@@ -181,7 +193,7 @@ def test07_drjit_struct(t):
         y: t
         DRJIT_STRUCT = {"x": t, "y": t}
 
-    @dr.freeze
+    @dr.freeze(auto_opaque=auto_opaque)
     def func(x):
         p = Point()
         p.x = x + 1
@@ -206,7 +218,8 @@ def test07_drjit_struct(t):
 
 
 @pytest.test_arrays("uint32, jit, shape=(*)")
-def test08_dataclass(t):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test08_dataclass(t, auto_opaque):
     """
     Tests that returning custom dataclasses from forzen functions is possible.
     """
@@ -216,7 +229,7 @@ def test08_dataclass(t):
         x: t
         y: t
 
-    @dr.freeze
+    @dr.freeze(auto_opaque=auto_opaque)
     def func(x):
         p = Point(x + 1, x + 2)
         return p
@@ -239,7 +252,8 @@ def test08_dataclass(t):
 
 
 @pytest.test_arrays("float32, jit, shape=(*)")
-def test09_traverse_cb(t):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test09_traverse_cb(t, auto_opaque):
     """
     Tests that passing opaque C++ objects to frozen functions is possible.
     It should not be possible to return these from frozen functions.
@@ -250,7 +264,7 @@ def test09_traverse_cb(t):
     def func(sampler):
         return sampler.next()
 
-    frozen = dr.freeze(func)
+    frozen = dr.freeze(func, auto_opaque=auto_opaque)
 
     sampler_frozen = Sampler(10)
     sampler_func = Sampler(10)
@@ -276,13 +290,14 @@ def test09_traverse_cb(t):
 
 
 @pytest.test_arrays("uint32, jit, shape=(*)")
-def test10_scatter(t):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test10_scatter(t, auto_opaque):
     """
     Tests that it is possible to scatter to the input of a frozen function,
     while leaving variables depending on the input the same (scattering problem).
     """
 
-    @dr.freeze
+    @dr.freeze(auto_opaque=auto_opaque)
     def func(x):
         dr.scatter(x, 0, dr.arange(t, 3))
 
@@ -303,14 +318,15 @@ def test10_scatter(t):
 
 
 @pytest.test_arrays("float32, jit, is_diff, shape=(*)")
-def test11_optimization(t):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test11_optimization(t, auto_opaque):
     """
     Implements a simple gradient descent optimization of a variable in a
     frozen function. This verifies that gradient descent kernels are evaluated
     correctly.
     """
 
-    @dr.freeze
+    @dr.freeze(auto_opaque=auto_opaque)
     def func(state, ref):
         for k, x in state.items():
             dr.enable_grad(x)
@@ -336,13 +352,14 @@ def test11_optimization(t):
 
 
 @pytest.test_arrays("uint32, jit, shape=(*)")
-def test12_resized(t):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test12_resized(t, auto_opaque):
     """
     Tests that it is possible to call a frozen function with inputs of different
     size compared to the recording without having to re-trace the function.
     """
 
-    @dr.freeze
+    @dr.freeze(auto_opaque=auto_opaque)
     def func(x, y):
         return x + y
 
@@ -363,14 +380,15 @@ def test12_resized(t):
 
 
 @pytest.test_arrays("uint32, jit, shape=(*)")
-def test13_changed_input_dict(t):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test13_changed_input_dict(t, auto_opaque):
     """
     Test that it is possible to pass a dictionary to a frozen function, that is
     inserting the result at a new key in said dictionary. This ensures that the
     input is evaluated correctly, and the dictionary is back-assigned to the input.
     """
 
-    @dr.freeze
+    @dr.freeze(auto_opaque=auto_opaque)
     def func(d: dict):
         d["y"] = d["x"] + 1
 
@@ -388,7 +406,8 @@ def test13_changed_input_dict(t):
 
 
 @pytest.test_arrays("uint32, jit, shape=(*)")
-def test14_changed_input_dataclass(t):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test14_changed_input_dataclass(t, auto_opaque):
     """
     Tests that it is possible to asing to the input of a dataclass inside a
     frozen function. This also relies on correct back-assignment of the input.
@@ -398,7 +417,7 @@ def test14_changed_input_dataclass(t):
     class Point:
         x: t
 
-    @dr.freeze
+    @dr.freeze(auto_opaque=auto_opaque)
     def func(p: Point):
         p.x = p.x + 1
 
@@ -414,13 +433,14 @@ def test14_changed_input_dataclass(t):
 
 
 @pytest.test_arrays("uint32, jit, shape=(*)")
-def test15_kwargs(t):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test15_kwargs(t, auto_opaque):
     """
     Tests that it is possible to pass keyword arguments to a frozen function
     that modifies them.
     """
 
-    @dr.freeze
+    @dr.freeze(auto_opaque=auto_opaque)
     def func(x=t(0, 1, 2)):
         return x + 1
 
@@ -432,14 +452,15 @@ def test15_kwargs(t):
 
 
 @pytest.test_arrays("uint32, jit, shape=(*)")
-def test16_opaque(t):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test16_opaque(t, auto_opaque):
     """
     Tests that changing from an opaque (1-sized array) to an array of size
     larger than 1 causes the funcion to be re-traced. This is necessary, because
     different kernels are compiled for the two cases.
     """
 
-    @dr.freeze
+    @dr.freeze(auto_opaque=auto_opaque)
     def func(x, y):
         return x + y
 
@@ -459,7 +480,8 @@ def test16_opaque(t):
 
 
 @pytest.test_arrays("float32, jit, -is_diff, shape=(*)")
-def test17_performance(t):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test17_performance(t, auto_opaque):
     """
     Tests the performance of a frozen function versus a non-frozen function.
     """
@@ -476,7 +498,7 @@ def test17_performance(t):
         result = dr.log(1 + result)
         return result
 
-    frozen = dr.freeze(func)
+    frozen = dr.freeze(func, auto_opaque=auto_opaque)
 
     for name, fn in [("normal", func), ("frozen", frozen)]:
         x = dr.arange(t, n)  # + dr.opaque(t, i)
@@ -495,13 +517,14 @@ def test17_performance(t):
 
 
 @pytest.test_arrays("uint32, jit, shape=(*)")
-def test18_aliasing(t):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test18_aliasing(t, auto_opaque):
     """
     Tests that changing the inputs from being the same variable to two different
     variables causes the function to be re-traced.
     """
 
-    @dr.freeze
+    @dr.freeze(auto_opaque=auto_opaque)
     def func(x, y):
         return x + y
 
@@ -523,7 +546,8 @@ def test18_aliasing(t):
 
 
 @pytest.test_arrays("uint32, jit, shape=(*)")
-def test19_non_jit_types(t):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test19_non_jit_types(t, auto_opaque):
     """
     Tests that it is possible to pass non-jit types such as integers to frozen
     functions.
@@ -532,7 +556,7 @@ def test19_non_jit_types(t):
     def func(x, y):
         return x + y
 
-    frozen = dr.freeze(func)
+    frozen = dr.freeze(func, auto_opaque=auto_opaque)
 
     for i in range(3):
         x = t(1, 2, 3)
@@ -546,14 +570,15 @@ def test19_non_jit_types(t):
 
 
 @pytest.test_arrays("uint32, jit, shape=(*)")
-def test20_literal(t):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test20_literal(t, auto_opaque):
     """
     Test that drjit literals, passed to frozen functions do not cause the
     function to be re-traced if they change. This is enabled by making the input
     opaque.
     """
 
-    @dr.freeze
+    @dr.freeze(auto_opaque=auto_opaque)
     def func(x, y):
         z = x + y
         w = t(1)
@@ -579,11 +604,16 @@ def test20_literal(t):
     x = t(0, 1, 2)
     y = t(2)
     z = func(x, y)
-    assert func.n_recordings == 1
+
+    if auto_opaque:
+        assert func.n_recordings == 2
+    else:
+        assert func.n_recordings == 1
 
 
 @pytest.test_arrays("uint32, jit, shape=(*)")
-def test21_pointers(t):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test21_pointers(t, auto_opaque):
     """
     Test that it is possible to gather from a same-sized variable. This tests
     the kernel size inference algorithm as well as having two kernels in a
@@ -591,7 +621,7 @@ def test21_pointers(t):
     """
     UInt32 = dr.uint32_array_t(t)
 
-    @dr.freeze
+    @dr.freeze(auto_opaque=auto_opaque)
     def func(x):
         idx = dr.arange(UInt32, 0, dr.width(x), 3)
 
@@ -601,7 +631,8 @@ def test21_pointers(t):
 
 
 @pytest.test_arrays("uint32, jit, shape=(*)")
-def test22_gather_memcpy(t):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test22_gather_memcpy(t, auto_opaque):
     """
     The gather operation might be elided in favor of a memcpy
     if the index is a literal of size 1.
@@ -613,7 +644,7 @@ def test22_gather_memcpy(t):
         idx = t(idx)
         return dr.gather(t, x, idx)
 
-    frozen = dr.freeze(func)
+    frozen = dr.freeze(func, auto_opaque=auto_opaque)
 
     for i in range(3):
         x = dr.arange(t, i, 3 + i)
@@ -638,7 +669,8 @@ def get_pkg(t):
 
 @pytest.mark.parametrize("symbolic", [True])
 @pytest.test_arrays("float32, jit, -is_diff, shape=(*)")
-def test23_vcall(t, symbolic):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test23_vcall(t, auto_opaque, symbolic):
     """
     Tests a basic symbolic vcall being called inside a frozen function.
     """
@@ -653,7 +685,7 @@ def test23_vcall(t, symbolic):
     xi = t(1, 2, 8, 3, 4)
     yi = t(5, 6, 8, 7, 8)
 
-    @dr.freeze
+    @dr.freeze(auto_opaque=auto_opaque)
     def func(c, xi, yi):
         return c.f(xi, yi)
 
@@ -678,7 +710,8 @@ def test23_vcall(t, symbolic):
 @pytest.mark.parametrize("optimize", [True, False])
 @pytest.mark.parametrize("opaque", [True, False])
 @pytest.test_arrays("float32, -is_diff, jit, shape=(*)")
-def test24_vcall_optimize(t, symbolic, optimize, opaque):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test24_vcall_optimize(t, auto_opaque, symbolic, optimize, opaque):
     """
     Test a basic vcall being called inside a frozen function, with the
     "OptimizeCalls" flag either being set or not set. As well as opaque and
@@ -708,7 +741,7 @@ def test24_vcall_optimize(t, symbolic, optimize, opaque):
     def func(c, xi):
         return c.g(xi)
 
-    frozen = dr.freeze(func)
+    frozen = dr.freeze(func, auto_opaque=auto_opaque)
 
     with dr.scoped_set_flag(dr.JitFlag.SymbolicCalls, symbolic):
         with dr.scoped_set_flag(dr.JitFlag.OptimizeCalls, optimize):
@@ -729,7 +762,8 @@ def test24_vcall_optimize(t, symbolic, optimize, opaque):
         with dr.scoped_set_flag(dr.JitFlag.OptimizeCalls, optimize):
             xo = frozen(c, x)
 
-    assert frozen.n_recordings == 1
+    if not auto_opaque:
+        assert frozen.n_recordings == 1
     assert dr.all(xo == func(c, x))
 
 
@@ -737,7 +771,8 @@ def test24_vcall_optimize(t, symbolic, optimize, opaque):
 @pytest.mark.parametrize("optimize", [True, False])
 @pytest.mark.parametrize("opaque", [True, False])
 @pytest.test_arrays("float32, -is_diff, jit, shape=(*)")
-def test25_multiple_vcalls(t, symbolic, optimize, opaque):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test25_multiple_vcalls(t, auto_opaque, symbolic, optimize, opaque):
     """
     Test calling multiple vcalls in a frozen function, where the result of the
     first is used as the input to the second.
@@ -768,7 +803,7 @@ def test25_multiple_vcalls(t, symbolic, optimize, opaque):
         dr.make_opaque(x)
         return c.g(x)
 
-    frozen = dr.freeze(func)
+    frozen = dr.freeze(func, auto_opaque=auto_opaque)
 
     with dr.scoped_set_flag(dr.JitFlag.SymbolicCalls, symbolic):
         with dr.scoped_set_flag(dr.JitFlag.OptimizeCalls, optimize):
@@ -789,20 +824,22 @@ def test25_multiple_vcalls(t, symbolic, optimize, opaque):
         with dr.scoped_set_flag(dr.JitFlag.OptimizeCalls, optimize):
             xo = frozen(c, x)
 
-    assert frozen.n_recordings == 1
+    if not auto_opaque:
+        assert frozen.n_recordings == 1
 
     assert dr.all(xo == func(c, x))
 
 
 @pytest.test_arrays("float32, jit, shape=(*)")
-def test26_freeze(t):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test26_freeze(t, auto_opaque):
     """
     Test freezing a simple frozen function.
     """
     UInt32 = dr.uint32_array_t(t)
     Float = dr.float32_array_t(t)
 
-    @dr.freeze
+    @dr.freeze(auto_opaque=auto_opaque)
     def my_kernel(x):
         x_int = UInt32(x)
         result = x * x
@@ -822,7 +859,8 @@ def test26_freeze(t):
 
 @pytest.mark.parametrize("freeze_first", (True, False))
 @pytest.test_arrays("float32, jit, shape=(*)")
-def test27_calling_frozen_from_frozen(t, freeze_first):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test27_calling_frozen_from_frozen(t, auto_opaque, freeze_first):
     """
     Test calling a frozen function from within another frozen function.
     The inner frozen function should behave as a normal function.
@@ -835,11 +873,11 @@ def test27_calling_frozen_from_frozen(t, freeze_first):
     y = dr.full(Float, 0.5, n) + dr.opaque(Float, 10)
     dr.eval(x, y)
 
-    @dr.freeze
+    @dr.freeze(auto_opaque=auto_opaque)
     def fun1(x):
         return dr.square(x)
 
-    @dr.freeze
+    @dr.freeze(auto_opaque=auto_opaque)
     def fun2(x, y):
         return fun1(x) + fun1(y)
 
@@ -868,7 +906,8 @@ def test27_calling_frozen_from_frozen(t, freeze_first):
 
 
 @pytest.test_arrays("float32, jit, shape=(*)")
-def test28_recorded_size(t):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test28_recorded_size(t, auto_opaque):
     """
     Tests that a frozen function, producing a variable with a constant size,
     can be replayed and produces an output of the same size.
@@ -877,7 +916,7 @@ def test28_recorded_size(t):
     UInt32 = mod.UInt32
     Float = mod.Float
 
-    @dr.freeze
+    @dr.freeze(auto_opaque=auto_opaque)
     def fun(a):
         x = t(dr.linspace(Float, -1, 1, 10)) + a
         source = x + 2 * x
@@ -897,7 +936,8 @@ def test28_recorded_size(t):
 
 
 @pytest.test_arrays("float32, jit, shape=(*)")
-def test29_with_gathers(t):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test29_with_gathers(t, auto_opaque):
     """
     Test gathering from an array at every second index in a frozen function.
     """
@@ -915,7 +955,7 @@ def test29_with_gathers(t):
         source = get_single_entry(x)
         return dr.gather(type(source), source, idx, active=active)
 
-    fun_frozen = dr.freeze(fun)
+    fun_frozen = dr.freeze(fun, auto_opaque=auto_opaque)
 
     # 1. Recording call
     x1 = t(rng.uniform(low=-1, high=1, size=shape))
@@ -941,7 +981,8 @@ def test29_with_gathers(t):
 
 
 @pytest.test_arrays("float32, jit, shape=(*)")
-def test30_scatter_with_op(t):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test30_scatter_with_op(t, auto_opaque):
     """
     Tests scattering into the input of a frozen function.
     """
@@ -960,7 +1001,7 @@ def test30_scatter_with_op(t):
         dr.scatter(x, result, idx, active=active)
         return result
 
-    func_frozen = dr.freeze(func)
+    func_frozen = dr.freeze(func, auto_opaque=auto_opaque)
 
     # 1. Recording call
     x1 = t(rng.uniform(low=-1, high=1, size=[n]))
@@ -1000,7 +1041,8 @@ def test30_scatter_with_op(t):
 
 
 @pytest.test_arrays("float32, jit, shape=(*)")
-def test31_with_gather_and_scatter(t):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test31_with_gather_and_scatter(t, auto_opaque):
     """
     Tests a combination of scatters and gathers in a frozen function.
     """
@@ -1023,7 +1065,7 @@ def test31_with_gather_and_scatter(t):
         dr.scatter(dest, values, idx, active=active)
         return dest, values
 
-    fun_frozen = dr.freeze(fun)
+    fun_frozen = dr.freeze(fun, auto_opaque=auto_opaque)
 
     # 1. Recording call
     x1 = t(rng.uniform(low=-1, high=1, size=shape))
@@ -1059,7 +1101,8 @@ def test31_with_gather_and_scatter(t):
 
 @pytest.mark.parametrize("relative_size", ["<", "=", ">"])
 @pytest.test_arrays("float32, jit, shape=(*)")
-def test32_gather_only_pointer_as_input(t, relative_size):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test32_gather_only_pointer_as_input(t, auto_opaque, relative_size):
     """
     Tests that it is possible to infer the launch size of kernels, if the width
     of the resulting variable is a multiple/fraction of the variables from which
@@ -1107,7 +1150,7 @@ def test32_gather_only_pointer_as_input(t, relative_size):
                 dr.gather(Float, v, idx + 2, active=active),
             )
 
-    fun_freeze = dr.freeze(fun)
+    fun_freeze = dr.freeze(fun, auto_opaque=auto_opaque)
 
     def check_results(v, result):
         size = v.size
@@ -1186,7 +1229,8 @@ def test32_gather_only_pointer_as_input(t, relative_size):
 
 
 @pytest.test_arrays("float32, jit, shape=(*)")
-def test33_multiple_kernels(t):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test33_multiple_kernels(t, auto_opaque):
     def fn(x: dr.ArrayBase, y: dr.ArrayBase, flag: bool):
 
         # First kernel uses only `x`
@@ -1209,7 +1253,7 @@ def test33_multiple_kernels(t):
     ref_results = fn(x, y, flag=True)
     dr.eval(ref_results)
 
-    fn_frozen = dr.freeze(fn)
+    fn_frozen = dr.freeze(fn, auto_opaque=auto_opaque)
     for _ in range(2):
         results = fn_frozen(x, y, flag=True)
         assert dr.allclose(results[0], ref_results[0])
@@ -1229,10 +1273,11 @@ def test33_multiple_kernels(t):
 
 
 @pytest.test_arrays("float32, jit, shape=(*)")
-def test34_global_flag(t):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test34_global_flag(t, auto_opaque):
     Float = t
 
-    @dr.freeze
+    @dr.freeze(auto_opaque=auto_opaque)
     def my_fn(a, b, c=0.5):
         return a + b + c
 
@@ -1258,7 +1303,8 @@ def test34_global_flag(t):
 @pytest.mark.parametrize("struct_style", ["drjit", "dataclass"])
 # @pytest.test_arrays("float32, llvm, jit, -is_diff, shape=(*)")
 @pytest.test_arrays("float32, jit, shape=(*)")
-def test35_return_types(t, struct_style):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test35_return_types(t, auto_opaque, struct_style):
     # WARN: only working on CUDA!
     mod = sys.modules[t.__module__]
     Float = t
@@ -1287,7 +1333,7 @@ def test35_return_types(t, struct_style):
             b: Float
 
     # 1. Many different types
-    @dr.freeze
+    @dr.freeze(auto_opaque=auto_opaque)
     def toy1(x: Float) -> Float:
         y = x**2 + dr.sin(x)
         z = x**2 + dr.cos(x)
@@ -1311,7 +1357,7 @@ def test35_return_types(t, struct_style):
         assert isinstance(result[5][0][0][0], list)
 
     # 2. Many different types
-    @dr.freeze
+    @dr.freeze(auto_opaque=auto_opaque)
     def toy2(x: Float, target: Float) -> Float:
         dr.scatter(target, 0.5 + x, dr.arange(UInt32, dr.width(x)))
         return None
@@ -1327,7 +1373,7 @@ def test35_return_types(t, struct_style):
         assert result is None
 
     # 3. DRJIT_STRUCT as input and returning nested dictionaries
-    @dr.freeze
+    @dr.freeze(auto_opaque=auto_opaque)
     def toy3(x: Float, y: ToyDataclass) -> Float:
         x_d = dr.detach(x, preserve_type=False)
         return {
@@ -1373,7 +1419,8 @@ def test35_return_types(t, struct_style):
 
 
 @pytest.test_arrays("float32, jit, shape=(*)")
-def test36_drjit_struct_and_matrix(t):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test36_drjit_struct_and_matrix(t, auto_opaque):
     package = sys.modules[t.__module__]
     Float = package.Float
     Array4f = package.Array4f
@@ -1411,7 +1458,7 @@ def test36_drjit_struct_and_matrix(t):
         res4 = Result(value=batch.value)
         return res1, res2, res3, res4
 
-    fun_frozen = dr.freeze(fun)
+    fun_frozen = dr.freeze(fun, auto_opaque=auto_opaque)
 
     n = 7
     for i in range(4):
@@ -1449,7 +1496,8 @@ def test36_drjit_struct_and_matrix(t):
 
 
 @pytest.test_arrays("float32, jit, shape=(*)")
-def test37_with_dataclass_in_out(t):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test37_with_dataclass_in_out(t, auto_opaque):
     mod = sys.modules[t.__module__]
     Int32 = mod.Int32
     UInt32 = mod.UInt32
@@ -1474,7 +1522,7 @@ def test37_with_dataclass_in_out(t):
     )
 
     # Create frozen kernel that contains another function
-    frozen_acc_fn = dr.freeze(acc_fn)
+    frozen_acc_fn = dr.freeze(acc_fn, auto_opaque=auto_opaque)
 
     accumulation = dr.zeros(UInt32, n_rays)
     n_iter = 12
@@ -1488,7 +1536,8 @@ def test37_with_dataclass_in_out(t):
 
 
 @pytest.test_arrays("float32, jit, shape=(*)")
-def test38_allocated_scratch_buffer(t):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test38_allocated_scratch_buffer(t, auto_opaque):
     """
     Frozen functions may want to allocate some scratch space, scatter to it
     in a first kernel, and read / use the values later on. As long as the
@@ -1518,7 +1567,7 @@ def test38_allocated_scratch_buffer(t):
             self.forgotten_target_buffer = self.some_state + 1
             dr.eval(self.some_state, self.forgotten_target_buffer)
 
-        @dr.freeze
+        @dr.freeze(auto_opaque=auto_opaque)
         def fn1(self, x):
             # Note: assuming here that the width of `forgotten_target_buffer` doesn't change
             index = dr.arange(UInt32, dr.width(x)) % dr.width(
@@ -1528,7 +1577,7 @@ def test38_allocated_scratch_buffer(t):
 
             return 2 * x
 
-        @dr.freeze
+        @dr.freeze(auto_opaque=auto_opaque)
         def fn2(self, x):
             # Scratch buffer with width equal to a state variable
             scratch = dr.zeros(UInt32, dr.width(self.some_state))
@@ -1540,7 +1589,7 @@ def test38_allocated_scratch_buffer(t):
             # We don't actually return `scratch`, its lifetime is limited to the frozen function.
             return result
 
-        @dr.freeze
+        @dr.freeze(auto_opaque=auto_opaque)
         def fn3(self, x):
             # Scratch buffer with width equal to a state variable
             scratch = dr.zeros(UInt32, dr.width(self.some_state))
@@ -1590,34 +1639,35 @@ def test38_allocated_scratch_buffer(t):
 
 
 @pytest.test_arrays("float32, jit, shape=(*)")
-def test39_simple_reductions(t):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test39_simple_reductions(t, auto_opaque):
     import numpy as np
 
     mod = sys.modules[t.__module__]
     Float = mod.Float32
     n = 37
 
-    @dr.freeze
+    @dr.freeze(auto_opaque=auto_opaque)
     def simple_sum(x):
         return dr.sum(x)
 
-    @dr.freeze
+    @dr.freeze(auto_opaque=auto_opaque)
     def simple_product(x):
         return dr.prod(x)
 
-    @dr.freeze
+    @dr.freeze(auto_opaque=auto_opaque)
     def simple_min(x):
         return dr.min(x)
 
-    @dr.freeze
+    @dr.freeze(auto_opaque=auto_opaque)
     def simple_max(x):
         return dr.max(x)
 
-    @dr.freeze
+    @dr.freeze(auto_opaque=auto_opaque)
     def sum_not_returned_wide(x):
         return dr.sum(x) + x
 
-    @dr.freeze
+    @dr.freeze(auto_opaque=auto_opaque)
     def sum_not_returned_single(x):
         return dr.sum(x) + 4
 
@@ -1642,14 +1692,15 @@ def test39_simple_reductions(t):
 
 
 @pytest.test_arrays("float32, jit, shape=(*)")
-def test40_prefix_reductions(t):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test40_prefix_reductions(t, auto_opaque):
     import numpy as np
 
     mod = sys.modules[t.__module__]
     Float = mod.Float32
     n = 37
 
-    @dr.freeze
+    @dr.freeze(auto_opaque=auto_opaque)
     def prefix_sum(x):
         return dr.prefix_reduce(dr.ReduceOp.Add, x, exclusive=False)
 
@@ -1668,11 +1719,12 @@ def test40_prefix_reductions(t):
 
 
 @pytest.test_arrays("float32, jit, is_diff, shape=(*)")
-def test41_reductions_with_ad(t):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test41_reductions_with_ad(t, auto_opaque):
     Float = t
     n = 37
 
-    @dr.freeze
+    @dr.freeze(auto_opaque=auto_opaque)
     def sum_with_ad(x, width_opaque):
         intermediate = 2 * x + 1
         dr.enable_grad(intermediate)
@@ -1687,7 +1739,7 @@ def test41_reductions_with_ad(t):
 
         return result, intermediate
 
-    @dr.freeze
+    @dr.freeze(auto_opaque=auto_opaque)
     def product_with_ad(x):
         dr.enable_grad(x)
         loss = dr.prod(x)
@@ -1721,28 +1773,13 @@ def test41_reductions_with_ad(t):
         assert dr.allclose(dr.grad(x), expected_grad)
 
 
-# @pytest.test_arrays("float32, jit, shape=(*)")
-# def test35_mean(t):
-#     def func(x):
-#         return dr.mean(x)
-#
-#     frozen_func = dr.freeze(func)
-#
-#     n = 10
-#
-#     for i in range(3):
-#         x = dr.linspace(t, 0, 1, n + i) + dr.opaque(t, i)
-#
-#         result = frozen_func(x)
-#         assert dr.allclose(result, func(x))
-
-
 @pytest.test_arrays("float32, jit, shape=(*)")
-def test42_size_aliasing(t):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test42_size_aliasing(t, auto_opaque):
     def func(x, y):
         return x + 1, y + 2
 
-    frozen_func = dr.freeze(func)
+    frozen_func = dr.freeze(func, auto_opaque=auto_opaque)
 
     n = 3
 
@@ -1762,7 +1799,8 @@ def test42_size_aliasing(t):
 
 
 @pytest.test_arrays("float32, jit, -is_diff, shape=(*)")
-def test43_pointer_aliasing(t):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test43_pointer_aliasing(t, auto_opaque):
     """
     Dr.Jit employs a memory cache, which means that two variables
     get allocated the same memory region, if one is destroyed
@@ -1782,7 +1820,7 @@ def test43_pointer_aliasing(t):
         return y
 
     for i in range(10):
-        frozen_func = dr.freeze(func)
+        frozen_func = dr.freeze(func, auto_opaque=auto_opaque)
 
         x = dr.linspace(t, 0, 1, n) + dr.opaque(t, i)
         assert dr.allclose(frozen_func(x), func(x))
@@ -1792,7 +1830,8 @@ def test43_pointer_aliasing(t):
 
 
 @pytest.test_arrays("float32, jit, is_diff, shape=(*)")
-def test44_simple_ad_fully_inside(t):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test44_simple_ad_fully_inside(t, auto_opaque):
     mod = sys.modules[t.__module__]
     Float = mod.Float
 
@@ -1806,7 +1845,7 @@ def test44_simple_ad_fully_inside(t):
 
     for start_enabled in (True, False):
         # Re-freeze
-        my_kernel_frozen = dr.freeze(my_kernel)
+        my_kernel_frozen = dr.freeze(my_kernel, auto_opaque=auto_opaque)
 
         for i in range(3):
             x = Float([1.0, 2.0, 3.0]) + dr.opaque(Float, i)
@@ -1833,8 +1872,10 @@ def test44_simple_ad_fully_inside(t):
 @pytest.mark.parametrize("params_start_enabled", (True,))
 @pytest.mark.parametrize("freeze", (True,))
 @pytest.test_arrays("float32, jit, is_diff, shape=(*)")
+@pytest.mark.parametrize("auto_opaque", [False, True])
 def test45_suspend_resume(
     t,
+    auto_opaque,
     params_start_enabled,
     params_end_enabled,
     inputs_start_enabled,
@@ -1856,7 +1897,11 @@ def test45_suspend_resume(
 
         def __init__(self, params):
             self.params = params
-            self.frozen_eval = dr.freeze(type(self).eval) if freeze else type(self).eval
+            self.frozen_eval = (
+                dr.freeze(type(self).eval, auto_opaque=auto_opaque)
+                if freeze
+                else type(self).eval
+            )
 
         def eval(
             self,
@@ -1913,13 +1958,15 @@ def test45_suspend_resume(
         else:
             assert dr.all(grads == 0)
 
+    if not auto_opaque:
         assert model.frozen_eval.n_recordings == 1
 
 
 @pytest.test_arrays("float32, jit, is_diff, shape=(*)")
 @pytest.mark.parametrize("freeze", (True,))
 @pytest.mark.parametrize("change_params_width", (False,))
-def test46_with_grad_scatter(t, freeze: bool, change_params_width):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test46_with_grad_scatter(t, auto_opaque, freeze: bool, change_params_width):
     mod = sys.modules[t.__module__]
     Float = mod.Float32
     UInt32 = mod.UInt32
@@ -1948,7 +1995,9 @@ def test46_with_grad_scatter(t, freeze: bool, change_params_width):
             return dr.detach(contrib)
 
     model = Model(5)
-    my_kernel_frozen = dr.freeze(my_kernel) if freeze else my_kernel
+    my_kernel_frozen = (
+        dr.freeze(my_kernel, auto_opaque=auto_opaque) if freeze else my_kernel
+    )
 
     for i in range(6):
         # Different width at each iteration
@@ -1983,12 +2032,13 @@ def test46_with_grad_scatter(t, freeze: bool, change_params_width):
 
 
 @pytest.test_arrays("float32, jit, is_diff, shape=(*)")
-def test47_tutorial_example(t):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test47_tutorial_example(t, auto_opaque):
     mod = sys.modules[t.__module__]
     Float = mod.Float32
     UInt32 = mod.UInt32
 
-    @dr.freeze
+    @dr.freeze(auto_opaque=auto_opaque)
     def frozen_eval(inputs, idx, params, target_value, grad_factor):
         intermediate = dr.gather(Float, params, idx)
         result = 0.5 * dr.square(intermediate) * inputs
@@ -2027,7 +2077,8 @@ def test47_tutorial_example(t):
 
 
 @pytest.test_arrays("uint32, jit, shape=(*)")
-def test48_compress(t):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test48_compress(t, auto_opaque):
 
     mod = sys.modules[t.__module__]
     Float = mod.Float32
@@ -2040,7 +2091,7 @@ def test48_compress(t):
         indices = dr.compress(sampler.next() < 0.5)
         return indices
 
-    frozen = dr.freeze(func)
+    frozen = dr.freeze(func, auto_opaque=auto_opaque)
 
     sampler_func = Sampler(10)
     sampler_frozen = Sampler(10)
@@ -2056,12 +2107,13 @@ def test48_compress(t):
 
 
 @pytest.test_arrays("uint32, llvm, -is_diff, jit, shape=(*)")
-def test49_scatter_reduce_expanded(t):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test49_scatter_reduce_expanded(t, auto_opaque):
 
     def func(target: t, src: t):
         dr.scatter_reduce(dr.ReduceOp.Add, target, src, dr.arange(t, dr.width(src)) % 2)
 
-    frozen = dr.freeze(func)
+    frozen = dr.freeze(func, auto_opaque=auto_opaque)
 
     for i in range(4):
         src = dr.full(t, 1, 10 + i)
@@ -2082,14 +2134,15 @@ def test49_scatter_reduce_expanded(t):
 
 
 @pytest.test_arrays("uint32, llvm, -is_diff, jit, shape=(*)")
-def test50_scatter_reduce_expanded_identity(t):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test50_scatter_reduce_expanded_identity(t, auto_opaque):
 
     def func(src: t):
         target = dr.zeros(t, 5)
         dr.scatter_reduce(dr.ReduceOp.Add, target, src, dr.arange(t, dr.width(src)) % 2)
         return target
 
-    frozen = dr.freeze(func)
+    frozen = dr.freeze(func, auto_opaque=auto_opaque)
 
     for i in range(4):
         src = dr.full(t, 1, 10 + i)
@@ -2105,14 +2158,15 @@ def test50_scatter_reduce_expanded_identity(t):
 
 
 @pytest.test_arrays("uint32, llvm, -is_diff, jit, shape=(*)")
-def test51_scatter_reduce_expanded_no_memset(t):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test51_scatter_reduce_expanded_no_memset(t, auto_opaque):
 
     def func(src: t):
         target = dr.full(t, 5)
         dr.scatter_reduce(dr.ReduceOp.Add, target, src, dr.arange(t, dr.width(src)) % 2)
         return target
 
-    frozen = dr.freeze(func)
+    frozen = dr.freeze(func, auto_opaque=auto_opaque)
 
     for i in range(4):
         src = dr.full(t, 1, 10 + i)
@@ -2129,7 +2183,8 @@ def test51_scatter_reduce_expanded_no_memset(t):
 
 
 @pytest.test_arrays("uint32, jit, shape=(*)")
-def test52_python_inputs(t):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test52_python_inputs(t, auto_opaque):
 
     def func(x: t, neg: bool):
         if neg:
@@ -2137,7 +2192,7 @@ def test52_python_inputs(t):
         else:
             return x + 1
 
-    frozen = dr.freeze(func)
+    frozen = dr.freeze(func, auto_opaque=auto_opaque)
 
     for i in range(3):
         for neg in [False, True]:
@@ -2151,7 +2206,8 @@ def test52_python_inputs(t):
 
 
 @pytest.test_arrays("uint32, jit, shape=(*)")
-def test53_scatter_inc(t):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test53_scatter_inc(t, auto_opaque):
 
     mod = sys.modules[t.__module__]
     Float = mod.Float32
@@ -2186,7 +2242,7 @@ def test53_scatter_inc(t):
     def func(i):
         return test(i, acc_with_scatter_inc)
 
-    acc_with_scatter_inc = dr.freeze(acc_with_scatter_inc)
+    acc_with_scatter_inc = dr.freeze(acc_with_scatter_inc, auto_opaque=auto_opaque)
 
     def frozen(i):
         return test(i, acc_with_scatter_inc)
@@ -2203,14 +2259,15 @@ def test53_scatter_inc(t):
 
 
 @pytest.test_arrays("uint32, jit, shape=(*)")
-def test54_read_while_frozen(t):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test54_read_while_frozen(t, auto_opaque):
     # dr.set_flag(dr.JitFlag.KernelFreezing, True)
     assert dr.flag(dr.JitFlag.KernelFreezing)
 
     def func(x):
         return x[1]
 
-    frozen = dr.freeze(func)
+    frozen = dr.freeze(func, auto_opaque=auto_opaque)
 
     x = t(1, 2, 3)
     with pytest.raises(RuntimeError):
@@ -2218,7 +2275,8 @@ def test54_read_while_frozen(t):
 
 
 @pytest.test_arrays("float32, jit, diff, shape=(*)")
-def test55_var_upload(t):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test55_var_upload(t, auto_opaque):
     def func(x):
 
         arrays = []
@@ -2233,7 +2291,7 @@ def test55_var_upload(t):
 
         return x / t(10, 10, 10)
 
-    frozen = dr.freeze(func)
+    frozen = dr.freeze(func, auto_opaque=auto_opaque)
 
     for i in range(3):
         x = dr.arange(t, 3)
@@ -2247,7 +2305,8 @@ def test55_var_upload(t):
 
 
 @pytest.test_arrays("float32, jit, diff, shape=(*)")
-def test56_grad_isolate(t):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test56_grad_isolate(t, auto_opaque):
     dr.set_flag(dr.JitFlag.ReuseIndices, False)
 
     def f(x):
@@ -2260,7 +2319,7 @@ def test56_grad_isolate(t):
         z = g(y)
         dr.backward(z)
 
-    frozen = dr.freeze(func)
+    frozen = dr.freeze(func, auto_opaque=auto_opaque)
 
     for i in range(3):
 
@@ -2288,7 +2347,8 @@ def test56_grad_isolate(t):
 
 
 @pytest.test_arrays("float32, jit, diff, shape=(*)")
-def test57_isolate_grad_fwd(t):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test57_isolate_grad_fwd(t, auto_opaque):
 
     def f(x):
         return x * x
@@ -2307,7 +2367,7 @@ def test57_isolate_grad_fwd(t):
         dr.forward(x)
         return y
 
-    frozen = dr.freeze(frozen)
+    frozen = dr.freeze(frozen, auto_opaque=auto_opaque)
 
     for i in range(3):
         x = t(i)
@@ -2332,7 +2392,8 @@ def test57_isolate_grad_fwd(t):
 
 
 @pytest.test_arrays("float32, jit, diff, shape=(*)")
-def test58_grad_postponed_part(t):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test58_grad_postponed_part(t, auto_opaque):
     dr.set_flag(dr.JitFlag.ReuseIndices, False)
 
     def f(x):
@@ -2346,7 +2407,7 @@ def test58_grad_postponed_part(t):
         z2 = g(y2)
         dr.backward(z1)
 
-    frozen = dr.freeze(func)
+    frozen = dr.freeze(func, auto_opaque=auto_opaque)
 
     def run(i, name, func):
         x1 = dr.arange(t, 3) + i
@@ -2385,7 +2446,8 @@ def test58_grad_postponed_part(t):
 
 
 @pytest.test_arrays("float32, jit, diff, shape=(*)")
-def test59_nested(t):
+@pytest.mark.parametrize("auto_opaque", (False, True))
+def test59_nested(t, auto_opaque):
 
     pkg = get_pkg(t)
     mod = sys.modules[t.__module__]
@@ -2405,7 +2467,7 @@ def test59_nested(t):
     def func(c, xi, yi):
         return dr.dispatch(c, nested, xi, yi)
 
-    frozen = dr.freeze(func)
+    frozen = dr.freeze(func, auto_opaque=auto_opaque)
 
     for i in range(3):
         c = BasePtr(a, a, a, b, b)
@@ -2428,7 +2490,8 @@ def test59_nested(t):
 
 
 @pytest.test_arrays("float32, jit, diff, shape=(*)")
-def test60_call_raise(t):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test60_call_raise(t, auto_opaque):
 
     mod = sys.modules[t.__module__]
     pkg = get_pkg(t)
@@ -2453,11 +2516,12 @@ def test60_call_raise(t):
 
 
 @pytest.test_arrays("float32, jit, diff, shape=(*)")
-def test61_reduce_dot(t):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test61_reduce_dot(t, auto_opaque):
     def func(x, y):
         return dr.dot(x, y)
 
-    frozen = dr.freeze(func)
+    frozen = dr.freeze(func, auto_opaque=auto_opaque)
 
     for i in range(3):
         x = dr.arange(t, 10 + i)
@@ -2472,8 +2536,9 @@ def test61_reduce_dot(t):
 
 
 @pytest.test_arrays("float32, jit, shape=(*)")
-def test62_clear(t):
-    @dr.freeze
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test62_clear(t, auto_opaque):
+    @dr.freeze(auto_opaque=auto_opaque)
     def func(x):
         return x + 1
 
@@ -2490,7 +2555,8 @@ def test62_clear(t):
 
 
 @pytest.test_arrays("uint32, jit, shape=(*)")
-def test63_method_decorator(t):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test63_method_decorator(t, auto_opaque):
     mod = sys.modules[t.__module__]
 
     class Custom:
@@ -2499,7 +2565,7 @@ def test63_method_decorator(t):
         def __init__(self) -> None:
             self.state = t([1, 2, 3])
 
-        @dr.freeze
+        @dr.freeze(auto_opaque=auto_opaque)
         def frozen(self, x):
             return x + self.state
 
@@ -2517,7 +2583,8 @@ def test63_method_decorator(t):
 
 
 @pytest.test_arrays("float32, jit, shape=(*)")
-def test64_tensor(t):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test64_tensor(t, auto_opaque):
     """
     Tests that constructing tensors in frozen functions is possible, and does
     not cause leaks.
@@ -2529,7 +2596,7 @@ def test64_tensor(t):
     def func(x):
         return TensorXf(x + 1)
 
-    frozen = dr.freeze(func)
+    frozen = dr.freeze(func, auto_opaque=auto_opaque)
 
     for i in range(3):
         x = dr.arange(Float32, 100)
@@ -2539,7 +2606,8 @@ def test64_tensor(t):
 
 
 @pytest.test_arrays("float32, jit, shape=(*)")
-def test65_assign_tensor(t):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test65_assign_tensor(t, auto_opaque):
     """
     Tests that assigning tensors to the input of frozen functions is possible,
     and does not cause leaks.
@@ -2551,7 +2619,7 @@ def test65_assign_tensor(t):
     def func(x):
         x += 1
 
-    frozen = dr.freeze(func)
+    frozen = dr.freeze(func, auto_opaque=auto_opaque)
 
     for i in range(3):
         x = TensorXf(dr.arange(Float32, 100))
@@ -2565,7 +2633,8 @@ def test65_assign_tensor(t):
 
 
 @pytest.test_arrays("float32, jit, shape=(*)")
-def test66_closure(t):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test66_closure(t, auto_opaque):
 
     c1 = 1
     c2 = t(2)
@@ -2573,7 +2642,7 @@ def test66_closure(t):
     def func(x):
         return x + c1 + c2
 
-    frozen = dr.freeze(func)
+    frozen = dr.freeze(func, auto_opaque=auto_opaque)
 
     for i in range(3):
         x = dr.arange(t, i + 2)
@@ -2588,7 +2657,8 @@ def test66_closure(t):
 
 
 @pytest.test_arrays("float32, jit, shape=(*)")
-def test67_mutable_closure(t):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test67_mutable_closure(t, auto_opaque):
     """
     Test that it is possible to use and modify closures in frozen functions.
     """
@@ -2599,7 +2669,7 @@ def test67_mutable_closure(t):
         nonlocal y1
         y1 += x
 
-    @dr.freeze
+    @dr.freeze(auto_opaque=auto_opaque)
     def frozen(x):
         nonlocal y2
         y2 += x
@@ -2615,7 +2685,8 @@ def test67_mutable_closure(t):
 
 
 @pytest.test_arrays("float32, jit, shape=(*)")
-def test68_state_decorator(t):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test68_state_decorator(t, auto_opaque):
     mod = sys.modules[t.__module__]
     Float = mod.Float32
     UInt32 = mod.UInt32
@@ -2626,7 +2697,9 @@ def test68_state_decorator(t):
             self.something1 = 4.5
             self.something2 = Float([1, 2, 3, 4, 5])
 
-        @dr.freeze(state_fn=lambda self, *_, **__: (self.something2))
+        @dr.freeze(
+            auto_opaque=auto_opaque, state_fn=lambda self, *_, **__: (self.something2)
+        )
         def frozen(self, x: Float, idx: UInt32) -> Float:
             return x * self.something1 * dr.gather(Float, self.something2, idx)
 
@@ -2648,7 +2721,8 @@ def test68_state_decorator(t):
 
 @pytest.test_arrays("float32, jit, shape=(*)")
 @pytest.mark.parametrize("limit", (-1, None, 0, 1, 2))
-def test69_max_cache_size(t, limit):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test69_max_cache_size(t, auto_opaque, limit):
     """
     Tests different cache size limitations for the frozen function.
     """
@@ -2656,12 +2730,12 @@ def test69_max_cache_size(t, limit):
     def func(x, p):
         return x + p
 
-    frozen = dr.freeze(func, limit=limit)
+    frozen = dr.freeze(func, auto_opaque=auto_opaque, limit=limit)
 
     n = 3
     for i in range(n):
 
-        x = t(i, i+1, i+2)
+        x = t(i, i + 1, i + 2)
 
         res = frozen(x, i)
         ref = func(x, i)
@@ -2680,7 +2754,8 @@ def test69_max_cache_size(t, limit):
 
 
 @pytest.test_arrays("float32, jit, shape=(*)")
-def test69_lru_eviction(t):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test69_lru_eviction(t, auto_opaque):
     """
     Tests that the least recently used cache entry is evicted from the frozen
     function if the cache size is limited.
@@ -2689,7 +2764,7 @@ def test69_lru_eviction(t):
     def func(x, p):
         return x + p
 
-    frozen = dr.freeze(func, limit=2)
+    frozen = dr.freeze(func, auto_opaque=auto_opaque, limit=2)
 
     x = t(0, 1, 2)
 
@@ -2715,7 +2790,8 @@ def test69_lru_eviction(t):
 
 
 @pytest.test_arrays("float32, jit, shape=(*)")
-def test70_warn_recordings(t):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test70_warn_recordings(t, auto_opaque):
     """
     This test simply calls the frozen function with incompattible inputs, and
     should print two warnings.
@@ -2724,15 +2800,17 @@ def test70_warn_recordings(t):
     def func(x, i):
         return x + i
 
-    frozen = dr.freeze(func, warn_after=2)
+    frozen = dr.freeze(func, auto_opaque=auto_opaque, warn_after=2)
 
     for i in range(4):
         x = t(1, 2, 3)
         frozen(x, i)
 
+
 @pytest.test_arrays("float32, jit, shape=(*)")
 @pytest.mark.parametrize("force_optix", [True, False])
-def test71_texture(t, force_optix):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test71_texture(t, auto_opaque, force_optix):
     mod = sys.modules[t.__module__]
     Texture1f = mod.Texture1f
     Float = mod.Float32
@@ -2740,7 +2818,7 @@ def test71_texture(t, force_optix):
     def func(tex: Texture1f, pos: Float):
         return tex.eval(pos)
 
-    frozen = dr.freeze(func)
+    frozen = dr.freeze(func, auto_opaque=auto_opaque)
 
     with dr.scoped_set_flag(dr.JitFlag.ForceOptiX, force_optix):
         n = 4
@@ -2748,7 +2826,7 @@ def test71_texture(t, force_optix):
             tex = Texture1f([2], 1, True, dr.FilterMode.Linear, dr.WrapMode.Repeat)
             tex.set_value(t(0, 1))
 
-            pos = dr.arange(Float, i+2) / n
+            pos = dr.arange(Float, i + 2) / n
 
             res = frozen(tex, pos)
             ref = func(tex, pos)
@@ -2756,6 +2834,7 @@ def test71_texture(t, force_optix):
             assert dr.allclose(res, ref)
 
     assert frozen.n_recordings < n
+
 
 @pytest.test_arrays("float32, jit, shape=(*)")
 def test72_no_input(t):
@@ -2766,7 +2845,7 @@ def test72_no_input(t):
     def func():
         return dr.arange(t, 10)
 
-    frozen = dr.freeze(func, backend = backend)
+    frozen = dr.freeze(func, backend=backend)
 
     for i in range(3):
         res = frozen()
@@ -2786,22 +2865,113 @@ def test72_no_input(t):
 
 
 @pytest.test_arrays("float32, jit, shape=(*)")
-def test76_changing_literal_width_holder(t):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test73_opaque_width(t, auto_opaque):
+    def func(x: t):
+        return dr.mean(x)
 
+    frozen = dr.freeze(func, auto_opaque=auto_opaque)
+
+    n = 3
+    for i in range(n):
+        x = dr.arange(t, 3 + i)
+
+        res = frozen(x)
+        ref = func(x)
+
+        assert dr.allclose(ref, res)
+
+    assert frozen.n_recordings < n
+
+
+@pytest.test_arrays("float32, jit, shape=(*)")
+def test74_auto_opaque_retraverse(t):
+    """
+    Tests that the auto_oaque feature correctly evaluates the changing literal.
+    """
+
+    def func(x: t):
+        return x + 1
+
+    frozen = dr.freeze(func, auto_opaque=True)
+
+    n = 3
+    for i in range(n):
+        x = t(i)  # Create as literal
+
+        res = frozen(x)
+        ref = func(x)
+
+        assert dr.allclose(ref, res)
+
+        # The literal is made opaque by the auto_opaque feature before re-tracing
+        # the function in the second iteration (i = 1).
+        if i >= 1:
+            assert x.state == dr.VarState.Evaluated
+        else:
+            assert x.state == dr.VarState.Literal
+
+    assert frozen.n_recordings == 2
+
+
+@pytest.test_arrays("float32, jit, shape=(*)")
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test75_changing_literal_width(t, auto_opaque):
+    """
+    Tests that the auot opaque feature correctly forces evaluation of literals,
+    if the literal size changes between calls to the frozen function.
+    """
+
+    def func(x: t, lit: t):
+        return x + 1
+
+    frozen = dr.freeze(func, warn_after=3, auto_opaque=auto_opaque)
+
+    n = 10
+    for i in range(n):
+        lit = dr.zeros(t, (i + 1) * 10)
+        x = lit + 0.5
+        dr.make_opaque(x)
+
+        res = frozen(x, lit)
+        ref = func(x, lit)
+
+        assert dr.allclose(ref, res)
+
+        if auto_opaque:
+            # The literal is made opaque by the auto_opaque feature before re-tracing
+            # the function in the second iteration (i = 1).
+            if i >= 1:
+                assert lit.state == dr.VarState.Evaluated
+            else:
+                assert lit.state == dr.VarState.Literal
+        else:
+            # Otherwise, all literals are made opaque.
+            assert lit.state == dr.VarState.Evaluated
+
+    if auto_opaque:
+        assert frozen.n_recordings == 2
+    else:
+        assert frozen.n_recordings == 1
+
+
+@pytest.test_arrays("float32, jit, shape=(*)")
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test76_changing_literal_width_holder(t, auto_opaque):
     class MyHolder:
         DRJIT_STRUCT = {"lit": t}
+
         def __init__(self, lit):
             self.lit = lit
 
     def func(x: t, lit: MyHolder):
         return x + 1
 
-    # Note: only fails with auto_opaque=True
-    frozen = dr.freeze(func, warn_after=3)
+    frozen = dr.freeze(func, warn_after=3, auto_opaque=auto_opaque)
 
     n = 10
     for i in range(n):
-        holder = MyHolder(dr.zeros(dr.tensor_t(t), (i+1) * 10))
+        holder = MyHolder(dr.zeros(dr.tensor_t(t), (i + 1) * 10))
         x = holder.lit + 0.5
         dr.make_opaque(x)
 
@@ -2810,29 +2980,34 @@ def test76_changing_literal_width_holder(t):
 
         assert dr.allclose(ref, res)
 
-    assert frozen.n_recordings == 1
+    if auto_opaque:
+        assert frozen.n_recordings == 2
+    else:
+        assert frozen.n_recordings == 1
+
 
 @pytest.test_arrays("float32, jit, diff, shape=(*)")
 @pytest.mark.parametrize("optimizer", ["sdg", "rmsprop", "adam"])
-def test77_optimizers(t, optimizer):
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test77_optimizers(t, optimizer, auto_opaque):
     n = 10
 
-    def func(y, opt):
-        loss = dr.mean(dr.square(opt["x"] - y))
+    def func(target, opt):
+        loss = dr.mean(dr.square(opt["x"] - target))
 
         dr.backward(loss)
 
         opt.step()
 
-        return opt["x"], loss
+        return [opt["x"], opt["y"]], loss
 
     def init_optimizer():
         if optimizer == "sdg":
-            opt = dr.opt.SGD(lr = 0.001, momentum = 0.9)
+            opt = dr.opt.SGD(lr=0.001, momentum=0.9)
         elif optimizer == "rmsprop":
-            opt = dr.opt.RMSProp(lr = 0.001)
+            opt = dr.opt.RMSProp(lr=0.001)
         elif optimizer == "adam":
-            opt = dr.opt.Adam(lr = 0.001)
+            opt = dr.opt.Adam(lr=0.001)
         return opt
 
     frozen = dr.freeze(func)
@@ -2842,13 +3017,706 @@ def test77_optimizers(t, optimizer):
 
     for i in range(n):
         x = dr.full(t, 1, 10)
-        y = dr.full(t, 0, 10)
+        y = dr.full(t, -1, 10)
+        target = dr.full(t, 0, 10)
 
         opt_func["x"] = x
         opt_frozen["x"] = x
 
-        res_x, res_loss = frozen(y, opt_frozen)
-        ref_x, ref_loss = func(y, opt_func)
+        opt_func["y"] = y
+        opt_frozen["y"] = y
 
-        assert dr.allclose(res_x, ref_x)
+        opt_func.set_learning_rate({"x": 1e-4, "y": 1e-3})
+        opt_frozen.set_learning_rate({"x": 1e-4, "y": 1e-3})
+
+        res_params, res_loss = frozen(target, opt_frozen)
+        ref_params, ref_loss = func(target, opt_func)
+
+        assert dr.allclose(res_params, ref_params)
         assert dr.allclose(res_loss, ref_loss)
+
+    if optimizer == "adam":
+        assert frozen.n_recordings == 2
+    else:
+        assert frozen.n_recordings == 1
+
+
+@pytest.test_arrays("float32, jit, shape=(*)")
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test78_hash_id_fallback(t, auto_opaque):
+    """
+    Test the hash to id fallback for object hashing if the object is not
+    traversible nor hashable.
+    """
+
+    n = 3
+
+    class Test:
+        x = 0
+
+        def __init__(self, x) -> None:
+            self.x = x
+
+        __hash__ = None
+
+    def func(x, test):
+        return x + test.x
+
+    frozen = dr.freeze(func)
+
+    for i in range(n):
+        x = dr.arange(t, 3)
+        y = Test(i)
+
+        res = frozen(x, y)
+        ref = func(x, y)
+
+        assert dr.allclose(res, ref)
+
+    assert frozen.n_recordings == 3
+
+
+@pytest.test_arrays("float32, jit, shape=(*)")
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test79_empty(t, auto_opaque):
+
+    n = 5
+
+    mod = sys.modules[t.__module__]
+
+    def func(x, i, v):
+        dr.scatter(x, v, i)
+
+    frozen = dr.freeze(func, auto_opaque=auto_opaque)
+
+    for i in range(n):
+        i = mod.UInt32(i)
+
+        res = dr.empty(t, n)
+        frozen(res, i, 1)
+
+        ref = dr.empty(t, n)
+        func(ref, i, 1)
+
+        assert res[i] == ref[i]
+
+
+@pytest.test_arrays("float32, jit, shape=(*)")
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test80_tensor_mean(t, auto_opaque):
+    """
+    Tests that the mean of a tensor inside a frozen function is computed correctly
+    when changing the last tensor dimension.
+    """
+    mod = sys.modules[t.__module__]
+    Float32 = mod.Float32
+    TensorXf = mod.TensorXf
+
+    def func(x):
+        return dr.mean(x)
+
+    frozen = dr.freeze(func, auto_opaque=auto_opaque)
+
+    for i in range(3):
+        shape = ((i + 3), 10, 5)
+        x = TensorXf(dr.arange(Float32, dr.prod(shape)), shape=shape)
+
+        res = frozen(x)
+        ref = func(x)
+
+        assert dr.allclose(res, ref)
+
+    assert frozen.n_recordings == 1
+
+    # Changing the trailing dimensions should cause the function to be re-traced
+    for i in range(3):
+        shape = (10, (i + 3), 5)
+        x = TensorXf(dr.arange(Float32, dr.prod(shape)), shape=shape)
+
+        res = frozen(x)
+        ref = func(x)
+
+        assert dr.allclose(res, ref)
+
+    assert frozen.n_recordings == 4
+
+
+@pytest.test_arrays("float32, jit, shape=(*)")
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test81_changing_closures(t, auto_opaque):
+
+    y = 1
+
+    def func(x):
+        return x + y
+
+    frozen = dr.freeze(func, auto_opaque=auto_opaque)
+
+    for i in range(3):
+        x = dr.arange(t, i + 3)
+
+        res = frozen(x)
+        ref = func(x)
+
+        assert dr.allclose(res, ref)
+
+    assert frozen.n_recordings == 1
+
+    for i in range(3):
+        x = dr.arange(t, i + 3)
+
+        y += 1
+
+        res = frozen(x)
+        ref = func(x)
+
+        assert dr.allclose(res, ref)
+
+    assert frozen.n_recordings == 4
+
+
+@pytest.test_arrays("float32, jit, shape=(*)")
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test82_changing_closures_methods(t, auto_opaque):
+
+    y = 1
+
+    class Test:
+        def func(self, x):
+            return x + y
+
+        @dr.freeze(auto_opaque=auto_opaque)
+        def frozen(self, x):
+            return x + y
+
+    test = Test()
+
+    for i in range(3):
+        x = dr.arange(t, i + 3)
+
+        res = test.frozen(x)
+        ref = test.func(x)
+
+        assert dr.allclose(res, ref)
+
+    assert test.frozen.n_recordings == 1
+
+    for i in range(3):
+        x = dr.arange(t, i + 3)
+
+        y += 1
+
+        res = test.frozen(x)
+        ref = test.func(x)
+
+        assert dr.allclose(res, ref)
+
+    assert test.frozen.n_recordings == 4
+
+
+@pytest.test_arrays("float32, jit, shape=(*)")
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test83_any(t, auto_opaque):
+    mod = sys.modules[t.__module__]
+
+    def func(x):
+        return dr.any(x)
+
+    frozen = dr.freeze(func, auto_opaque=auto_opaque)
+
+    for i in range(4):
+        x = dr.zeros(mod.Bool, i + 3)
+        if i % 2:
+            x[2] = True
+
+        res = frozen(x)
+        ref = func(x)
+
+        dr.all(res == ref)
+
+
+@pytest.test_arrays("float32, jit, shape=(*)")
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test84_block_sum(t, auto_opaque):
+    """
+    Tests a dry-run, resulting from a block sum.
+    """
+    mod = sys.modules[t.__module__]
+
+    def func(x):
+        return dr.block_sum(x, 2)
+
+    frozen = dr.freeze(func, auto_opaque=auto_opaque)
+
+    for i in range(7):
+        x = dr.arange(t, i + 4)
+
+        res = frozen(x)
+        ref = func(x)
+
+        assert dr.allclose(res, ref)
+
+    assert frozen.n_recordings == 4
+    assert frozen.n_cached_recordings == 1
+
+
+@pytest.test_arrays("float32, jit, shape=(*)")
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test85_dry_run_failure(t, auto_opaque):
+    """
+    Test the dry-run block_sum + compress failure case
+    """
+    n = 4
+
+    mod = sys.modules[t.__module__]
+
+    def func(x):
+        y = dr.block_sum(x, 2)
+        return dr.compress(y > 3)
+
+    frozen = dr.freeze(func, auto_opaque=auto_opaque, warn_after=0)
+
+    for i in range(n):
+        x = dr.arange(t, i + 4)
+
+        res = frozen(x)
+        ref = func(x)
+
+        assert dr.allclose(res, ref)
+
+    assert frozen.n_recordings == n
+    assert frozen.n_cached_recordings == 1
+
+
+@pytest.test_arrays("float32, jit, diff, shape=(*)")
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test86_nested_vcalls(t, auto_opaque):
+    """
+    Test that nested vcalls are in principle possible.
+    """
+    mod = sys.modules[t.__module__]
+
+    pkg = get_pkg(t)
+    mod = sys.modules[t.__module__]
+
+    A, B, Base, BasePtr = pkg.A, pkg.B, pkg.Base, pkg.BasePtr
+    a, b = A(), B()
+    a.value = dr.ones(t, 16)
+
+    c = BasePtr(a, a, None, None, b, b)
+    s = BasePtr(a, b, None, b, b, a)
+    s = dr.reinterpret_array(mod.UInt32, s)
+
+    def func(c, x, s):
+        return c.nested(x, s)
+
+    frozen = dr.freeze(func, auto_opaque=auto_opaque)
+
+    for i in range(3):
+
+        x = dr.arange(t, 6)
+
+        res = frozen(c, x, s)
+        ref = func(c, x, s)
+
+        assert dr.allclose(res, ref)
+
+    assert frozen.n_recordings == 1
+
+
+@pytest.test_arrays("float32, jit, diff, shape=(*)")
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test87_nested_vcalls_member(t, auto_opaque):
+    """
+    Tests that a vcall, using an opaque member as the pointer fails correctly.
+    """
+    pkg = get_pkg(t)
+    mod = sys.modules[t.__module__]
+
+    A, B, Base, BasePtr = pkg.A, pkg.B, pkg.Base, pkg.BasePtr
+    a, b = A(), B()
+    a.value = dr.ones(t, 16)
+
+    c = BasePtr(a, a, None, None, b, b)
+
+    b.s = dr.reinterpret_array(mod.UInt32, BasePtr(a))
+    dr.make_opaque(b.s)
+
+    def func(c, x):
+        return c.nested_self(x)
+
+    frozen = dr.freeze(func, auto_opaque=auto_opaque)
+
+    x = dr.arange(t, 6)
+
+    with pytest.raises(RuntimeError):
+        frozen(c, x)
+
+
+@pytest.test_arrays("float32, jit, diff, shape=(*)")
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test88_tensor_indexing(t, auto_opaque):
+    """
+    Tests that changes in the first dimension of a tensor do not cause re-tracing.
+    """
+    mod = sys.modules[t.__module__]
+
+    def func(x: mod.TensorXf, row: mod.UInt32, col: mod.UInt32):
+        return dr.gather(mod.Float, x.array, row * dr.shape(x)[1] + col)
+
+    frozen = dr.freeze(func, auto_opaque=auto_opaque)
+
+    for i in range(3):
+        shape = ((i + 4), 10)
+        x = mod.TensorXf(dr.arange(mod.Float, dr.prod(shape)), shape=shape)
+        row = dr.arange(mod.UInt32, i + 3)
+        col = dr.arange(mod.UInt32, i + 3) + 1
+
+        res = frozen(x, row, col)
+        ref = func(x, row, col)
+
+        assert dr.allclose(res, ref)
+
+    assert frozen.n_recordings == 1
+
+
+@pytest.test_arrays("float32, jit, diff, shape=(*)")
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test89_tensor_slicing(t, auto_opaque):
+    """
+    Tests that changes in the first dimension of a tensor do not cause re-tracing,
+    and slicing works inside of frozen functions.
+    """
+    mod = sys.modules[t.__module__]
+
+    def func(x: mod.TensorXf):
+        return x[:, 3, 1]
+
+    frozen = dr.freeze(func, auto_opaque=auto_opaque)
+
+    for i in range(3):
+        shape = ((i + 4), 10, 3)
+        x = mod.TensorXf(dr.arange(mod.Float, dr.prod(shape)), shape=shape)
+
+        res = frozen(x)
+        ref = func(x)
+
+        assert dr.allclose(res, ref)
+
+    assert frozen.n_recordings == 1
+
+@pytest.test_arrays("float32, jit, diff, shape=(*)")
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test90_tensor_slicing(t, auto_opaque):
+    """
+    Tests dynamic indexing of tensors using the Dr.Jit's slicing implementation
+    inside of frozen functions.
+    """
+    mod = sys.modules[t.__module__]
+
+    def func(x: mod.TensorXf, row: mod.UInt32, col: mod.UInt32):
+        res = x[row, col]
+        return res
+
+    frozen = dr.freeze(func, auto_opaque=auto_opaque)
+
+    for i in range(3):
+        shape = ((i + 5), 10)
+        x = mod.TensorXf(dr.arange(mod.Float, dr.prod(shape)), shape=shape)
+        row = dr.arange(mod.UInt32, i + 4)
+        col = dr.arange(mod.UInt32, 3) + 1
+
+        res = frozen(x, row, col)
+        ref = func(x, row, col)
+
+        assert dr.allclose(res, ref)
+
+    assert frozen.n_recordings == 1
+
+@pytest.test_arrays("float32, jit, diff, shape=(*)")
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test91_grad_doc(t, auto_opaque):
+    """
+    Tests the code snippet from the docs section on gradients.
+    """
+
+    @dr.freeze
+    def func(y):
+        # Some differentiable operation...
+        z = dr.mean(y)
+        # Propagate the gradients to the input of the function...
+        dr.backward(z)
+
+    x = dr.arange(t, 3)
+    dr.enable_grad(x)
+
+    y = dr.square(x)
+
+    # The first time the function is called, it will be recorded and the correct
+    # gradients will be accumulated into x.
+    func(y)
+
+    # Compare against manually calculated gradient
+    assert dr.allclose(dr.grad(x), 2 * 1 / dr.width(x) * x)
+
+    dr.clear_grad(x)
+
+    y = x * 2
+
+    # On subsequent calls the the function will be replayed, and gradients will
+    # be accumulated in x.
+    func(y)
+
+    # Compare against manually calculated gradient
+    assert dr.allclose(dr.grad(x), [2 * 1 / dr.width(x)] * dr.width(x))
+
+
+@pytest.test_arrays("float32, jit, diff, shape=(*)")
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test92_refcycle(t, auto_opaque):
+    """
+    Tests that traversing PyTrees with direct ref cycles is possible.
+    """
+
+    def func(l: list):
+        l[0] += 1
+
+    frozen = dr.freeze(func, auto_opaque=auto_opaque)
+
+    for i in range(3):
+        res = [dr.arange(t, i + 3)]
+        res.append(res)
+        frozen(res)
+
+        ref = [dr.arange(t, i + 3)]
+        ref.append(ref)
+        func(ref)
+
+        assert dr.allclose(ref[0], res[0])
+
+
+@pytest.test_arrays("float32, jit, diff, shape=(*)")
+def test93_auto_opaque_list(t):
+    """
+    Tests that traversing PyTrees with direct ref cycles is possible.
+    """
+
+    @dr.freeze
+    def frozen(x, y, l, c):
+        return x + 1
+        ...
+
+    @dataclass
+    class MyClass:
+        z: t
+
+    for i in range(3):
+        x = dr.arange(t, i + 2)
+        y = t(i)
+        l = [t(1), t(i)]
+        c = MyClass(t(i))
+
+        frozen(x, y, l, c=c)
+
+
+@pytest.test_arrays("float32, jit, diff, shape=(*)")
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test94_exception(t, auto_opaque):
+    """
+    Tests that raising an exception inside a frozen function does not cause memory
+    leaks.
+    """
+
+    @dr.freeze
+    def frozen(x):
+        raise RuntimeError("test")
+        return x + 1
+
+    x = dr.arange(t, 3)
+
+    with pytest.raises(RuntimeError):
+        frozen(x)
+
+
+@pytest.test_arrays("float32, jit, diff, shape=(*)")
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test95_vcall_exception(t, auto_opaque):
+    """
+    Tests that raising an exception inside a frozen function does not cause memory
+    leaks, even if the function uses a vcall.
+    """
+    pkg = get_pkg(t)
+    mod = sys.modules[t.__module__]
+
+    A, B, Base, BasePtr = pkg.A, pkg.B, pkg.Base, pkg.BasePtr
+
+    a, b = A(), B()
+    a.value = dr.ones(t, 16)
+
+    b.s = dr.reinterpret_array(mod.UInt32, BasePtr(a))
+    dr.make_opaque(b.s)
+
+    c = BasePtr(a, a, None, None, b, b)
+
+    @dr.freeze
+    def frozen(c, x):
+        c.nested_self(x)
+        raise RuntimeError("test")
+
+    x = dr.arange(t, 3)
+
+    with pytest.raises(RuntimeError):
+        frozen(x)
+
+
+
+@pytest.test_arrays("float32, jit, diff, shape=(*)")
+@pytest.mark.parametrize("auto_opaque", [False, True])
+@pytest.mark.parametrize("layout", ["training", "inference"])
+def test96_coop_vec(t, auto_opaque, layout):
+    """
+    Tests that it is possible to evaluate a neural network inside a frozen function.
+    """
+    skip_if_coopvec_not_supported(t)
+    mod = sys.modules[t.__module__]
+    Float16 = mod.Float16
+    ArrayXf = mod.ArrayXf
+    TensorXf16 = mod.TensorXf16
+
+    import drjit.nn as nn
+    from drjit.opt import Adam
+
+    def func(net, x: ArrayXf):
+        return ArrayXf(net(nn.CoopVec(x)))
+
+    frozen = dr.freeze(func, auto_opaque=auto_opaque)
+
+    net = nn.Sequential(
+        nn.Cast(Float16),
+        nn.Linear(2, 32, bias=False),
+        nn.LeakyReLU(),
+        nn.Linear(-1, 3, bias=False),
+        nn.Exp(),
+    )
+
+    net = net.alloc(TensorXf16, 2)
+
+    weights, net = nn.pack(net, layout=layout)
+
+    for i in range(3):
+        x = dr.rand(ArrayXf, (2, 2 * i + 4))
+
+        res = frozen(net=net, x=x)
+        ref = func(net = net, x = x)
+
+        assert dr.allclose(res, ref)
+
+@pytest.test_arrays("float32, jit, diff, shape=(*)")
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test97_coop_vec_bwd(t, auto_opaque):
+    """
+    Tests that it is possible to evaluate a neural network inside a frozen function,
+    and calculate gradients w.r.t. some loss.
+    """
+    skip_if_coopvec_not_supported(t)
+    mod = sys.modules[t.__module__]
+    Float16 = mod.Float16
+    ArrayXf = mod.ArrayXf
+    TensorXf16 = mod.TensorXf16
+
+    import drjit.nn as nn
+    from drjit.opt import Adam
+
+    def func(net, x: ArrayXf):
+        y = ArrayXf(net(nn.CoopVec(x)))
+
+        loss = dr.squared_norm(y - 1)
+
+        dr.backward(loss)
+
+        return loss
+
+    frozen = dr.freeze(func, auto_opaque=auto_opaque)
+
+    net = nn.Sequential(
+        nn.Cast(Float16),
+        nn.Linear(2, 32, bias=False),
+        nn.LeakyReLU(),
+        nn.Linear(-1, 3, bias=False),
+        nn.Exp(),
+    )
+
+    net = net.alloc(TensorXf16, 2)
+
+    weights, net = nn.pack(net, layout="training")
+
+    x = dr.rand(ArrayXf, (2, 2))
+
+    for i in range(3):
+        dr.enable_grad(weights)
+        dr.clear_grad(weights)
+
+        x = dr.rand(ArrayXf, (2, i * 2 + 4))
+
+        loss_res = frozen(net, x)
+        grad_res = dr.grad(weights)
+
+        dr.clear_grad(weights)
+
+        loss_ref = frozen(net, x)
+        grad_ref = dr.grad(weights)
+
+        assert dr.allclose(loss_res, loss_ref)
+        assert dr.allclose(grad_res, grad_ref)
+
+
+@pytest.test_arrays("float32, jit, diff, shape=(*)")
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test98_changing_list(t, auto_opaque):
+    """
+    Tests that changing the number of elements in a list fails gracefully.
+    """
+    mod = sys.modules[t.__module__]
+
+    @dr.freeze
+    def frozen(x: list):
+        x.append(x[0] + 1)
+
+    x = [t(1, 2, 3)]
+    frozen(x)
+
+    x = [t(1, 2, 3, 4)]
+    with pytest.raises(RuntimeError):
+        frozen(x)
+
+@pytest.test_arrays("float32, jit, diff, shape=(*)")
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test99_construction_failure(t, auto_opaque):
+    """
+    Tests that trying to return a variable that cannot be constructed from a frozen
+    function fails gracefully.
+    """
+    mod = sys.modules[t.__module__]
+
+    class NonConstructable:
+        DRJIT_STRUCT = {
+            "x": t,
+        }
+
+        x: t
+
+        def __init__(self, x: t):
+            self.x = x
+
+    @dr.freeze
+    def frozen(x: t):
+        return NonConstructable(x)
+
+    x = t(1, 2, 3)
+    with pytest.raises(RuntimeError):
+        frozen(x)
+
+    x = t(1, 2, 3, 4)
+    with pytest.raises(RuntimeError):
+        frozen(x)
+

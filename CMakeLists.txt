@@ -63,6 +63,7 @@ target_include_directories(drjit
   INTERFACE
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/ext/drjit-core/include>
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/ext/drjit-core/ext/lz4>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/ext/drjit-core/ext/nanothread/include>
   $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )

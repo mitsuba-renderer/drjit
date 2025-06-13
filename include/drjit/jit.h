@@ -596,6 +596,10 @@ struct DRJIT_TRIVIAL_ABI JitArray
 
     bool valid() const { return m_index != 0; }
     size_t size() const { return jit_var_size(m_index); }
+    auto opaque_size_() const {
+        using UInt32 = JitArray<Backend, uint32_t>;
+        return UInt32::steal(jit_var_opaque_width(m_index));
+    }
     uint32_t index() const { return m_index; }
     uint32_t index_ad() const { return 0; }
     uint64_t index_combined() const { return m_index; }
