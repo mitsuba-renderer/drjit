@@ -68,6 +68,7 @@ struct Layout {
     /// Number of members in this container.
     /// Can be used to traverse the layout without knowing the type.
     uint32_t num = 0;
+
     /// Either store the index if this is an opaque variable or the size of
     /// the variable if this is a Literal or Undefined variable. This will be
     /// hashed as part of the key.
@@ -124,10 +125,13 @@ struct Layout {
 struct VarLayout {
     /// Optional drjit type of the variable
     VarType vt = VarType::Void;
+
     /// Optional evaluation state of the variable
     VarState vs = VarState::Invalid;
+
     /// Flags, storing information about variables (see `LayoutFlag` enum above)
     uint32_t flags = 0;
+
     /// We have to track the condition, where two variables have the same size
     /// during recording but don't when replaying, however we do not want to
     /// bake the size into the recording key.Therefore we construct equivalence
@@ -183,6 +187,7 @@ struct FlatVariables {
     /// The flattened and de-duplicated variable indices of the input/output to
     /// a frozen function
     drjit::vector<uint32_t> variables;
+
     /// Mapping from drjit jit index to index in flat variables. Used to
     /// deduplicate jit indices.
     tsl::robin_map<uint32_t, uint32_t, UInt32Hasher> index_to_slot;
@@ -194,6 +199,7 @@ struct FlatVariables {
     /// traversal. The algorithm used to "add" a size is the same as for adding
     /// a variable index.
     drjit::vector<uint32_t> sizes;
+
     /// Mapping from the size to its index in the ``sizes`` vector. This is used
     /// to construct size equivalence classes (i.e. deduplicating sizes).
     tsl::robin_map<uint32_t, uint32_t, UInt32Hasher> size_to_slot;
@@ -201,13 +207,17 @@ struct FlatVariables {
     /// This saves information about the type, size and fields of pytree
     /// objects. The information is stored in DFS order.
     drjit::vector<Layout> layout;
+
     /// Stores information about non-literal jit variables.
     drjit::vector<VarLayout> var_layout;
+
     /// The collective backend for all input variables. It can be used to ensure
     /// that all variables have the same backend.
     JitBackend backend = JitBackend::None;
+
     /// The variant, if any, used to traverse the registry.
     std::string variant;
+
     /// All domains (deduplicated), encountered while traversing the PyTree and
     /// its C++ objects. This can be used to traverse the registry. We use a
     /// vector instead of a hash set, since we expect the number of domains not
@@ -522,8 +532,18 @@ struct FlatVariablesEqual {
  * input variables.
  */
 struct FunctionRecording {
+    /// The index of the \c call_counter when this recording was last used
+    /// (recorded or replayed). If the \c max_cache_size variable is set, this
+    /// will be used to evict the least recently used recording.
     uint32_t last_used   = 0;
+
+    /// The opaque JIT recording, that has been recorded with \c
+    /// jit_freeze_start and \c jit_freeze_stop, and is held by this wrapper.
     Recording *recording = nullptr;
+
+    /// The layout of the output variables of this version of the function
+    /// recording. The JIT variables of this object have to be released after
+    /// use in \c record and \c replay.
     FlatVariables out_variables;
 
     FunctionRecording() : out_variables() {}
@@ -539,6 +559,7 @@ struct FunctionRecording {
         this->recording = nullptr;
     }
 
+    /// Clears the recording.
     void clear() {
         if (this->recording)
             jit_freeze_destroy(this->recording);
@@ -568,19 +589,52 @@ using RecordingMap = tsl::robin_map<std::shared_ptr<FlatVariables>,
 } // namespace detail
 
 struct FrozenFunction {
+    /// The inner function, that is wrapped by this frozen function.
     nb::callable func;
 
+    /// Previously taken recordings, referenced by the layout of the input
+    /// variables.
     detail::RecordingMap recordings;
+
+    /// The layout of the previous recording, used for taking diffs and auto
+    /// opaque masks.
     std::shared_ptr<detail::FlatVariables> prev_key;
+
+    /// This is used by the auto opaque feature to tag variables that should be
+    /// made opaque before calling the function.
     drjit::vector<bool> opaque_mask;
 
+    /// The number of times this function has been recorded. Note, this can
+    /// differ from the number of recordings actually cached in \c recordings,
+    /// when dry running recordings failed.
     uint32_t recording_counter    = 0;
-    uint32_t call_counter         = 0;
-    int max_cache_size            = -1;
-    uint32_t warn_recording_count = 10;
-    JitBackend default_backend    = JitBackend::None;
-    bool auto_opaque              = true;
 
+    /// A counter, incremented whenever this function is called. It is used to
+    /// determine the least recently used recording in order to evict it if the
+    /// \c max_cache_size is set.
+    uint32_t call_counter         = 0;
+
+    /// Maximum number of recordings that should be made before evicting the
+    /// least recently used one. If this value is -1, recordings can be made
+    /// without limit.
+    int max_cache_size            = -1;
+
+    /// The number of recordings after which a warning message will be
+    /// displayed. This is useful to detect cases in which changing Python
+    /// values prevents replay.
+    uint32_t warn_recording_count = 10;
+
+    /// If no JIT variable inputs are given to the function, this can indicate a
+    /// default backend, on which the function is recorded and replayed.
+    JitBackend default_backend    = JitBackend::None;
+
+    /// Whether the auto opaque feature is enabled. It allows us find literal
+    /// values that change between calls to the frozen function, and selectively
+    /// make those opaque.
+    bool auto_opaque = true;
+
+    /// The maximum sizes previously seen for the vectors in \c FlatVariables.
+    /// Pre-allocating these vectors helps with performance.
     detail::FlatVariables::Heuristic in_heuristics;
 
     FrozenFunction(nb::callable func, int max_cache_size = -1,
@@ -597,10 +651,15 @@ struct FrozenFunction {
     FrozenFunction(FrozenFunction &&)                 = default;
     FrozenFunction &operator=(FrozenFunction &&)      = default;
 
+    /// Returns the number of recordings currently cached.
     uint32_t n_cached_recordings() { return this->recordings.size(); }
 
+    /// Clears the frozen function recordings and resets the counters.
     void clear();
 
+    /// Operator to call the frozen function and either record a new version or
+    /// replay an old one. It expects a dictionary input, containing the args,
+    /// kwargs and closure of the Python function.
     nb::object operator()(nb::dict input);
 };
 
