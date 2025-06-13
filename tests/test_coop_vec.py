@@ -663,9 +663,17 @@ def test22_optimize_in_loop_bwd_v2(t, mode):
 def test23_hash_grid_encoding(t):
     skip_if_coopvec_not_supported(t)
 
+    try:
+        import tinycudann as tcnn
+    except ImportError:
+        pytest.skip("This test requires PyTorch to be installed.")
+
+    try:
+        import tinycudann as tcnn
+    except ImportError:
+        pytest.skip("This test requires tinycudann to be installed.")
+
     dr.set_flag(dr.JitFlag.KernelHistory, True)
-    import tinycudann as tcnn
-    import torch
 
     m = sys.modules[t.__module__]
     Float16 = t
