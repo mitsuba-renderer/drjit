@@ -3,9 +3,9 @@ import drjit
 import sys
 
 if sys.version_info < (3, 11):
-    from typing_extensions import Tuple, Sequence, Union, Type, TypeAlias, Optional, Any
+    from typing_extensions import Tuple, Sequence, Union, Type, TypeAlias, Optional
 else:
-    from typing import Tuple, Sequence, Union, Type, TypeAlias, Optional, Any
+    from typing import Tuple, Sequence, Union, Type, TypeAlias, Optional
 
 # Import classes/functions from C++ extension
 MatrixView = drjit.detail.nn.MatrixView
@@ -501,5 +501,4 @@ class SinEncode(Module):
                            drjit.fma(c, cs, -s*ss)
 
         return CoopVec(r)
-
 
