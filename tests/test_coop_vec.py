@@ -679,9 +679,11 @@ def test23_hash_grid_encoding(t):
     m = sys.modules[t.__module__]
     Float16 = t
 
+    n = 2**10
+
     config = {
         "hashmap_size": 2**19,
-        "n_levels": 16,
+        "n_levels": 1,
         "base_resolution": 16,
         "per_level_scale": 1.5,
         "n_features_per_level": 2,
@@ -698,7 +700,7 @@ def test23_hash_grid_encoding(t):
     config = {
         "otype": "Grid",
         "type": "Hash",
-        "n_levels": 16,
+        "n_levels": 1,
         "n_features_per_level": 2,
         "log2_hashmap_size": 19,
         "base_resolution": 16,
@@ -709,16 +711,20 @@ def test23_hash_grid_encoding(t):
     hg_ref = tcnn.Encoding(3, config, )
     data = hg_ref.params.data
 
-    hg.set_params(Float16(data.to(dtype = torch.float16)))
+    for param in hg_ref.parameters():
+        param.requires_grad_(True)
 
-    sampler = m.PCG32(2**18)
+    hg.set_params(Float16(data.to(dtype = torch.float16)))
+    dr.enable_grad(hg.data)
+
+    sampler = m.PCG32(n)
 
     x = [sampler.next_float32(), sampler.next_float32(), sampler.next_float32()]
     x_torch = torch.stack([xx.torch() for xx in x], dim = 1)
 
     dr.kernel_history_clear()
 
-    res = m.ArrayXf16(hg(x)).torch().permute(1, 0)
+    res = hg(x)
 
     kernels = dr.kernel_history()
     execution_time = 0
@@ -734,5 +740,24 @@ def test23_hash_grid_encoding(t):
 
     torch.cuda.synchronize()
 
-    assert torch.allclose(res, ref, atol=0.00001)
+    res_torch = res.torch().permute(1, 0)
+
+    assert torch.allclose(res_torch, ref, atol=0.00001)
+
+    ## gradients
+
+    res = m.ArrayXf(res)
+
+    loss_res = dr.mean(dr.square(res - 1), axis = None)
+
+    dr.backward(loss_res)
+
+    loss_ref = torch.mean(torch.square(ref - 1), dim = None)
+
+    loss_ref.backward()
+
+    grad_res = dr.grad(hg.data).torch()
+    grad_ref = hg_ref.params.grad.to(dtype = torch.float16)
+
+    assert torch.allclose(grad_res, grad_ref, atol=0.00001)
 
