@@ -150,7 +150,7 @@ def test07_gather_pytree(t):
     assert type(r) is MyStruct
     assert dr.all(r.a == t([2, 1]))
 
-    @dataclass 
+    @dataclass
     class MyDataclass:
         a : t
 
@@ -189,7 +189,7 @@ def test08_scatter_pytree(t):
     )
     assert dr.all(s.a == [0, 1, 0, 0])
 
-    @dataclass 
+    @dataclass
     class MyDataclass:
         a : t
 
@@ -436,7 +436,7 @@ def test18_scatter_reduce(t, op):
         size = 100
 
     if not dr.detail.can_scatter_reduce(t, op):
-        return
+        pytest.skip(f"Unsupported scatter combination: backend={dr.backend_v(t)}, type={dr.type_v(t)}, op={op}")
     identity = dr.detail.reduce_identity(t, op)
 
     for k in range(0, 10):
