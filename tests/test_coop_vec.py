@@ -658,3 +658,4 @@ def test22_optimize_in_loop_bwd_v2(t, mode):
     b = TensorXf16(b_view)
     assert dr.all(A == TensorXf16([[3, 3], [0, 0]]))
     assert dr.all(b == TensorXf16([[6], [0]]))
+
