@@ -574,3 +574,254 @@ class HashGridEncoding(HashEncoding):
         offset entries.
         """
         return self._level_offsets[level_i]
+
+
+class PermutoEncoding(HashEncoding):
+    """
+    Permutohedral lattice-based encoding inspired by :cite:`rosu2023permutosdf`.
+
+    Unlike hash grid encodings that use regular grid lattices, this encoding employs
+    a permutohedral lattice structure where simplices consist of triangles, tetrahedra,
+    and higher-dimensional analogs. The key advantage is linear scaling: the number of
+    vertices per simplex (and thus memory lookups per sample per level) grows linearly
+    with dimensionality, compared to exponential growth in grid-based approaches.
+
+    This implementation simplifies the original method by performing sorting and
+    interpolation directly in d-dimensional space, avoiding the elevation to a
+    hyperplane in (d+1)-dimensional space used in the reference implementation.
+
+    Args:
+        dimension: The dimensionality of the hash encoding. This corresponds to
+            the number of input features the encoding can take.
+        n_levels: Hash encodings generally make use of multiple levels of the same
+            encoding with different scales. This parameter specifies the number of
+            levels used by this encoding.
+        n_features_per_level: More than one feature can be stored in a vertex per
+            level. This value specifies how many, and the number of output features
+            of the hash encoding layer is given by ``n_levels * n_features_per_level``.
+            This value should always be a multiple of two, in order to ensure efficient
+            gradient backpropagation.
+        hashmap_size: Specifies the maximal number of parameters per level of the
+            hash encoding. HashGrids will use a dense grid lookup for layers with
+            a low enough scale, and use less than ``hashmap_size`` number of parameters
+            per level.
+        base_resolution: The scale factor of the 0th layer in the hash encoding.
+        per_level_scale: To calculate the scale of a layer, the scale of the previous
+            layer is multiplied by this value.
+        align_corners: If this value is ``True``, the simplex vertices are aligned
+            with the domain of the encoding [0, 1].
+        smooth_weight_gradients: whether to smooth the gradients of the weights
+            by using a straight-through estimator.
+        smooth_weight_lambda: the value of lambda used for the straight-through estimator.
+    """
+
+    DRJIT_STRUCT = {
+        "data": drjit.ArrayBase,
+        "dtype": type,
+        "_config": HashEncodingConfig,
+        "_level_offsets": list,
+    }
+
+    _level_offsets: list[int]
+
+    @overload
+    def __init__(
+        self,
+        dimension: int,
+        n_levels: int,
+        n_features_per_level: int,
+        *,
+        hashmap_size: int = 2**19,
+        base_resolution: int = 16,
+        per_level_scale: float = 2,
+        align_corners: bool = False,
+        smooth_weight_gradients: bool = False,
+        smooth_weight_lambda: float = 1.0,
+    ) -> None: ...
+
+    @overload
+    def __init__(self) -> None: ...
+
+    def __init__(self, *args, **kwargs) -> None:
+        if len(args) == 0 and len(kwargs) == 0:
+            self._config = HashEncodingConfig()
+        else:
+            self._config = HashEncodingConfig(*args, **kwargs)
+
+    def __call__(
+        self, p: Iterable[drjit.ArrayBase], active: bool | drjit.ArrayBase = True
+    ) -> Iterable[drjit.ArrayBase]:
+        self._init_types(p)
+
+        p = self.PositionFloatXf(p)
+
+        assert drjit.shape(p)[0] == self.dimension, (
+            f"This permutohedral grid expected an input of feature dimension {self.dimension}"
+            f" but got {drjit.shape(p)[0]}."
+        )
+
+        values = [self.StorageFloat(0.0)] * self.n_features_per_level * self.n_levels
+
+        for level_i in range(self.n_levels):
+            scale = self._level_scale(level_i)
+
+            # ---- Apply scaling factor
+
+            p_offset: float = 0.0 if self.align_corners else 0.5
+            x = drjit.fma(p, scale, p_offset)
+
+            base = self.ArrayXi(drjit.floor(x))
+            fract = x - base
+
+            # ---- Insertion sort fract into xk and indices xki
+            xk = self.PositionFloatXf(fract)
+            xki = self.ArrayXi([i for i in range(self.dimension)])
+
+            for i in range(self.dimension):
+                for j in range(i, self.dimension):
+                    xk_i = self.PositionFloat(xk[i])
+                    xk_j = self.PositionFloat(xk[j])
+                    swap = xk_i > xk_j
+                    xk[i] = drjit.select(swap, xk_j, xk_i)
+                    xk[j] = drjit.select(swap, xk_i, xk_j)
+
+                    xki_i = self.Int32(xki[i])
+                    xki_j = self.Int32(xki[j])
+                    xki[i] = drjit.select(swap, xki_j, xki_i)
+                    xki[j] = drjit.select(swap, xki_i, xki_j)
+
+            # ---- Calculate Barycentric coordinates and grid offset vectors
+            grid_offsets = [None] * (self.dimension + 1)
+            weights = drjit.zeros(
+                self.PositionFloatXf, shape=(self.dimension + 1, drjit.width(p))
+            )
+
+            for rank in range(self.dimension):
+                weights[rank] = xk[rank] - (xk[rank - 1] if rank > 0 else 0)
+                grid_offset = drjit.select(
+                    (fract > xk[rank])
+                    | (fract == xk[rank])
+                    & (self.ArrayXi([i for i in range(self.dimension)]) >= xki[rank]),
+                    1,
+                    0,
+                )
+                grid_offsets[rank] = grid_offset
+
+            weights[self.dimension] = 1 - xk[self.dimension - 1]
+            grid_offsets[self.dimension] = drjit.zeros(
+                self.ArrayXi, shape=(self.dimension, drjit.width(p))
+            )
+
+            # ---- Accumulate features for each offset vector
+            for rank in range(self.dimension + 1):
+                offset = grid_offsets[rank]
+
+                pos_grid = base + self.ArrayXu(offset)
+                weight = weights[rank]
+
+                index = self.indexing_function(pos_grid, level_i)
+                self._acc_features(level_i, weight, index, values, active)
+
+        values = [v & active for v in values]
+
+        return self.StorageFloatXf(*values)
+
+    def _alloc(self, dtype: Type[drjit.ArrayBase]) -> None:
+        """
+        Initialize data storage for permutohedral encoding.
+
+        This function:
+        1. Sets up DrJit array types based on the requested dtype
+        2. Computes parameter counts per level, using dense grids for small scales
+           and hash tables (limited by hashmap_size) for larger scales
+        3. Calculates memory offsets for each level in the flattened data array
+        4. Allocates the main data storage array
+        5. Precomputes grid offset patterns for voxel corner indexing
+        """
+        self.dtype = drjit.leaf_t(dtype)
+        self._init_types()
+
+        # TODO: warning for n_features == 3
+
+        assert (
+            self.hashmap_size % 8
+        ) == 0, f"Invalid hashmap size {self.hashmap_size}, must be a multiple of 8."
+
+        self._level_offsets = [None] * (self.n_levels + 1)
+        max_params = drjit.scalar.UInt32(0xFFFFFFFF) // 2
+        offset = 0
+
+        for level_i in range(self.n_levels):
+            res = self._resolution(self._level_scale(level_i))
+            stride = drjit.power(float(res), self.dimension)
+
+            params_in_level = (
+                int(max_params) if (stride > max_params) else (res**self.dimension)
+            )
+            params_in_level = next_multiple(params_in_level, 8)
+            params_in_level = min(params_in_level, self.hashmap_size)
+
+            self._level_offsets[level_i] = offset
+            offset += params_in_level
+
+        self._level_offsets[-1] = offset
+
+        params_size = self._level_offsets[-1] * self.n_features_per_level
+        self.data = drjit.zeros(dtype, params_size)
+
+    def indexing_function(self, key: drjit.ArrayBase, level_i: int) -> drjit.ArrayBase:
+        """
+        This function is used to index the underlying data array of the
+        hash grid given a grid position.
+        """
+
+        def base_convert_hash(key: drjit.ArrayBase) -> drjit.ArrayBase:
+            """Polynomial rolling hash for mapping lattice coordinates to hash table indices.
+
+            Uses a simple multiplicative hash with prime number 2531011 to distribute
+            lattice coordinates uniformly across the hash table space.
+            """
+            k = self.UInt32(0)
+            for dim in range(self.dimension):
+                k += key[dim]
+                k *= 2531011
+            return k
+
+        scale = self._level_scale(level_i)
+        res = self._resolution(scale)
+        level_offset = self._level_offsets[level_i]
+        this_level_size = self._level_offsets[level_i + 1] - level_offset
+
+        # First try to use dense indexing.
+        stride = 1
+        index = self.UInt32(0)
+        for d in range(self.dimension):
+            index += key[d] * stride
+            stride *= res
+
+            if stride > this_level_size:
+                break
+
+        # If the stride for dense indexing is too large, fallback to hash based indexing.
+        if this_level_size < stride:
+            index = base_convert_hash(key)
+
+        sub_grid_index = level_offset + (index % self.UInt32(this_level_size))
+        return sub_grid_index
+
+    def __repr__(self) -> str:
+        return (
+            f"SimplifiedPermutohedral(\n"
+            f"    dtype={self.dtype},\n"
+            f"    dimension={self.dimension},\n"
+            f"    hashmap_size={self.hashmap_size},\n"
+            f"    n_levels={self.n_levels},\n"
+            f"    n_features_per_level={self.n_features_per_level},\n"
+            f"    base_resolution={self.base_resolution},\n"
+            f"    per_level_scale={self.per_level_scale},\n"
+            f"    align_corners={self.align_corners},\n"
+            f"    smooth_weight_gradients={self.smooth_weight_gradients},\n"
+            f"    smooth_weight_lambda={self.smooth_weight_lambda}\n"
+            ")"
+        )
+
