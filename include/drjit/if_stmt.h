@@ -67,14 +67,14 @@ auto if_stmt_impl(std::index_sequence<Is...>, Args &&args, const Mask &cond,
                                   vector<uint64_t> &rv_i) {
             IfStmtData *isd = (IfStmtData *) p;
 
-            detail::update_indices(isd->args, args_i);
+            update_indices(isd->args, args_i);
 
             if (value)
                 isd->rv = isd->true_fn(get<Is>(isd->args)...);
             else
                 isd->rv = isd->false_fn(get<Is>(isd->args)...);
 
-            detail::collect_indices<true>(isd->rv, rv_i);
+            collect_indices<true>(isd->rv, rv_i);
         };
 
         ad_cond_delete delete_cb = [](void *p) { delete (IfStmtData *) p; };

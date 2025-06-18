@@ -1,4 +1,4 @@
-import sys as _sys
+import sys as _sys, os as _os
 from .config import CXX_COMPILER as _CXX_COMPILER
 from .config import PYTHON_VERSION as _PYTHON_VERSION
 import drjit
@@ -25,6 +25,10 @@ if _sys.version_info < (3, 8):
 # in a couple of years.
 
 _use_deepbind = _sys.platform == "linux" and "Clang" in _CXX_COMPILER
+
+# Check for environment variable to disable RTLD_DEEPBIND
+if _use_deepbind and _os.environ.get("DRJIT_NO_RTLD_DEEPBIND"):
+    _use_deepbind = False
 
 class scoped_rtld_deepbind:
     '''Python context manager to import extensions with RTLD_DEEPBIND if needed'''
