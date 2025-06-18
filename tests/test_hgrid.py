@@ -112,3 +112,32 @@ def test01_hash_grid_tcnn(t):
 
     assert torch.allclose(grad_res, grad_ref, atol=0.001)
 
+
+@pytest.test_arrays("jit,shape=(*),float16,diff")
+def test02_permutohedral(t):
+    """
+    Tests that it is possible to run the permutohedral encodings.
+    """
+    n = 16
+    d = 3
+
+    encoding = hgrid.PermutoEncoding(
+        dimension=d,
+        n_levels=16,
+        n_features_per_level=2,
+    )
+
+    m = sys.modules[t.__module__]
+    Float16 = m.Float16
+    Float32 = m.Float32
+
+    encoding = encoding.alloc(Float16)
+
+    encoding.set_params(dr.rand(Float16, (dr.width(encoding.data))))
+
+    x = [dr.rand(Float32, n) for i in range(d)]
+
+    res = encoding(x)
+
+    # TODO: validate results
+
