@@ -856,3 +856,65 @@ def test34_ravel_builtin(t, order):
 
     assert type(x) is type(y)
     assert x == y
+
+@pytest.mark.parametrize("packet_size", [1, 2, 3, 4, 5])
+@pytest.mark.parametrize("reduce_op", ["Add", "Mul", "Max", "Min"])
+@pytest.skip_on(RuntimeError, "backend does not support the requested type of atomic reduction")
+@pytest.test_arrays("is_jit, float, shape=(*)")
+def test35_scatter_packet_reduce(t, reduce_op, packet_size):
+    """
+    Tests that packeted scatter reduce operations behave correctly.
+    """
+
+    tp = dr.type_v(t)
+
+    if (
+        dr.backend_v(t) == dr.JitBackend.LLVM
+        and dr.detail.llvm_version()[0] < 16
+        and tp == dr.VarType.Float16
+    ):
+        pytest.skip("Half precision atomics too spotty on LLVM before v16.0.0")
+
+    mod = sys.modules[t.__module__]
+
+    if tp == dr.VarType.Float16:
+        ArrayXf = mod.ArrayXf16
+    elif tp == dr.VarType.Float32:
+        ArrayXf = mod.ArrayXf
+    elif tp == dr.VarType.Float64:
+        ArrayXf = mod.ArrayXf64
+
+    n = 3
+
+    target = dr.zeros(t, n * packet_size)
+
+    index = mod.UInt32(0, 1, 1, 2)
+
+    src = dr.ones(ArrayXf, (packet_size, dr.width(index)))
+
+    op = getattr(dr.ReduceOp, reduce_op)
+
+    dr.scatter_reduce(op, target, src, index)
+
+    ref = dr.zeros(t, n * packet_size)
+    for i in range(dr.width(index)):
+        for j in range(packet_size):
+            if reduce_op == "Add":
+                def op(x, y):
+                    return x + y
+            if reduce_op == "Mul":
+                def op(x, y):
+                    return x * y
+            if reduce_op == "Max":
+                def op(x, y):
+                    return max(x, y)
+            if reduce_op == "Min":
+                def op(x, y):
+                    return min(x, y)
+
+            ref[index[i] * packet_size + j] = op(
+                ref[index[i] * packet_size + j], src[j][i]
+            )
+
+    assert dr.allclose(target, ref)
+
