@@ -9,8 +9,10 @@
 */
 
 #include "shape.h"
-#include "base.h"
 #include "apply.h"
+#include "base.h"
+#include "meta.h"
+#include <drjit-core/jit.h>
 
 Py_ssize_t sq_length(PyObject *o) noexcept {
     const ArraySupplement &s = supp(Py_TYPE(o));
@@ -178,12 +180,118 @@ size_t width(nb::handle h) {
     return to.width;
 }
 
-
 /// Return the vectorization width of the given input array or PyTree
 extern size_t width(nb::handle h);
+
+
+nb::object opaque_width(nb::handle h) {
+    struct TraverseOp : TraverseCallback {
+        bool ragged = false;
+        size_t width = 0, items = 0;
+        ArrayMeta meta;
+        uint64_t index;
+
+        void operator()(nb::handle h) override {
+            nb::handle tp = h.type();
+            const ArraySupplement &s = supp(tp);
+
+            if (s.index) {
+                index = s.index(inst_ptr(h));
+                meta  = supp(tp);
+            }
+
+            size_t value = s.len(inst_ptr(h));
+            if (items++ == 0)
+                width = value;
+            else if (width != 1 && value != 1 && width != value)
+                ragged = true;
+            if (value > width)
+                width = value;
+        }
+
+        void traverse_unknown(nb::handle) override {
+            if (width == 0)
+                width = 1;
+            items++;
+        }
+    };
+
+    TraverseOp to;
+    traverse("drjit.opaque_width", to, h);
+    if (to.ragged)
+        nb::raise("drjit.opaque_width(): the input is ragged (i.e., it does not have a consistent size).");
+
+    uint32_t opaque_width = jit_var_opaque_width(to.index);
+
+    ArrayMeta meta = to.meta;
+    meta.type      = (uint16_t) VarType::UInt32;
+
+    nb::handle width_tp = meta_get_type(meta);
+    const ArraySupplement width_s = supp(width_tp);
+
+    if (!width_s.init_index)
+        nb::raise("drjit.opaque_width(): unsupported dtype.");
+
+    nb::object width = nb::inst_alloc(width_tp);
+    width_s.init_index(opaque_width, inst_ptr(width));
+    nb::inst_mark_ready(width);
+
+    jit_var_dec_ref(opaque_width);
+
+    return width;
+}
+
+/// Same as \c width, but returns the width as an opaque array, allowing this
+/// relationship to be recorded as part of a frozen function. Used in \c dr::mean.
+extern nb::object opaque_width(nb::handle h);
+
+
+/// Recursively traverses the PyTree of this object to compute the number of
+/// elements. If a leaf object is a JIT array, the result will be an opaque
+/// array.
+nb::object opaque_n_elements(nb::handle h) {
+    nb::handle tp = h.type();
+
+    // We use dr::shape() to test for ragged arrays
+    auto s = shape(h);
+
+    if (is_drjit_type(tp)) {
+
+        const ArraySupplement &s = supp(tp);
+
+        if (s.is_tensor)
+            return opaque_n_elements(nb::steal(s.tensor_array(h.ptr())));
+
+        if (!s.index)
+            jit_raise("opaque_n_lements(): Could not find indexing function");
+
+        uint32_t index = s.index(inst_ptr(h));
+
+        // Construct the opaque_width python object
+        uint32_t opaque_width = jit_var_opaque_width(index);
+
+        ArrayMeta meta = supp(tp);
+        meta.type = (uint16_t) VarType::UInt32;
+        nb::handle width_tp = meta_get_type(meta);
+        const ArraySupplement width_s = supp(width_tp);
+
+        nb::object width = nb::inst_alloc(width_tp);
+        width_s.init_index(opaque_width, inst_ptr(width));
+        nb::inst_mark_ready(width);
+
+        jit_var_dec_ref(opaque_width);
+
+        return width;
+    } else {
+        Py_ssize_t rv = PyObject_Length(h.ptr());
+
+        return opaque_n_elements(h[0]) * nb::int_(rv);
+    }
+}
 
 void export_shape(nb::module_ &m) {
     m.def("shape", &shape, doc_shape, nb::sig("def shape(arg: object) -> tuple[int, ...]"));
     m.def("width", &width, doc_width)
      .def("width", [](nb::args args) { return width(args); });
+    m.def("opaque_width", &opaque_width);
 }
