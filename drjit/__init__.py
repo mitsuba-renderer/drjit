@@ -2978,6 +2978,23 @@ def linear_to_srgb(x: ArrayT, clip: bool = True) -> ArrayT:
     )
 
 
+def unit_angle(a, b):
+    """
+    Numerically well-behaved routine for computing the angle between two
+    normalized 3D direction vectors
+
+    This should be used wherever one is tempted to compute the angle via
+    ``acos(dot(a, b))``. It yields significantly more accurate results when the
+    angle is close to zero.
+
+    By `Don Hatch <http://www.plunk.org/~hatch/rightway.php>`__.
+    """
+
+    dot_uv = dot(a, b)
+    temp = 2 * asin(.5 * norm(b - mulsign(a, dot_uv)))
+    return select(dot_uv >= 0, temp, pi - temp)
+
+
 newaxis = None
 
 del overload, Optional

@@ -51,7 +51,7 @@ Array<Value, 3> sphdir(const Value &theta, const Value &phi) {
  */
 template <typename Vector>
 value_t<Vector> unit_angle(const Vector &a, const Vector &b) {
-    static_assert(Vector::Size == 3, "unit_angle_z(): input is not a 3D vector");
+    static_assert(Vector::Size == 3, "unit_angle(): input is not a 3D vector");
     using Value = value_t<Vector>;
 
     Value dot_uv = dot(a, b),

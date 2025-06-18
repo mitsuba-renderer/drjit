@@ -333,11 +333,6 @@ on a Dr.Jit instance arrays. Below is an overview of the available macros:
    Note this feature is only safe to use with polymorphic types, where C++ can
    use RTTI to determine if a particular instance is of type ``Name``.
 
-.. c:macro:: DRJIT_CALL_INHERITED_END()
-
-   Demarcates the end of an interface block that started with
-   ``DRJIT_CALL_TEMPLATE_INHERITED_BEGIN``.
-
 .. c:macro:: DRJIT_CALL_METHOD(Name)
 
    Indicates to Dr.Jit that `Name` is the name of a method provided by
