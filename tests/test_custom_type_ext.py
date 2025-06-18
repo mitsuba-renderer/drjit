@@ -161,3 +161,42 @@ def test07_nested_traversal(t):
     indices_nested = dr.detail.collect_indices(nested)
 
     assert indices_nested == indices_a + indices_b
+
+@pytest.test_arrays("float32,-diff,shape=(*),jit")
+def test08_custom_type_refcycle(t):
+    """
+    Tests that it is possible to collect indices from PyTrees with refcycles,
+    without throwing runaway recursion errors, if ``EnableObjectTraversal`` is
+    set to ``True``.
+    """
+    pkg = get_pkg(t)
+    Float = t
+
+    value = dr.opaque(Float, 0, 3)
+    base_value = dr.opaque(Float, 1, 3)
+
+    class B(pkg.CustomBase):
+        def __init__(self, value, base_value) -> None:
+            super().__init__(base_value)
+            self._value = value
+
+        def value(self):
+            return self._value
+
+    class C(pkg.CustomBase):
+        def __init__(self, value, base_value, ref) -> None:
+            super().__init__(base_value)
+            self._value = value
+            self._ref = ref
+
+        def value(self):
+            return self._value
+
+    # Construct a reference cycle
+    b = B(value, base_value)
+    c = C(value, base_value, b)
+    b.child = c
+
+    with pytest.raises(RuntimeError):
+        indices = dr.detail.collect_indices(b)
+
