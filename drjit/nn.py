@@ -1,11 +1,13 @@
 from __future__ import annotations
 import drjit
 import sys
+from .hashgrid import HashGridEncoding, PermutoEncoding
+from . import hashgrid
 
 if sys.version_info < (3, 11):
-    from typing_extensions import Tuple, Sequence, Union, Type, TypeAlias, Optional, Any
+    from typing_extensions import Tuple, Sequence, Union, Type, TypeAlias, Optional, Any, overload
 else:
-    from typing import Tuple, Sequence, Union, Type, TypeAlias, Optional, Any
+    from typing import Tuple, Sequence, Union, Type, TypeAlias, Optional, Any, overload
 
 # Import classes/functions from C++ extension
 MatrixView = drjit.detail.nn.MatrixView
@@ -517,4 +519,35 @@ class SinEncode(Module):
 
         return CoopVec(r)
 
+class HashEncodingLayer(Module):
+    """
+    Simple layer wrapping a hash encoding like :py:class:`drjit.nn.HashGridEncoding`
+    or :py:class:`drjit.nn.PermutoEncoding`.
+
+    Note that the parameters of the encoding will not be included when packing the
+    network, as the data representations are generally incompatible. You must initialize
+    the encoding parameters separately.
+    """
+
+    def __init__(
+        self,
+        encoding: hashgrid.HashEncoding,
+    ) -> None:
+        self.encoding = encoding
+
+    def _alloc(self, dtype: Type[drjit.ArrayBase], size: int, rng: drjit.random.Generator, /) -> Tuple[Module, int]:
+        layer = HashEncodingLayer(self.encoding)
+        size = self.encoding.n_features_per_level  * self.encoding.n_levels
+        return layer, size
+
+    def __call__(self, arg: CoopVec, /) -> CoopVec:
+        arg = list(arg)
+        return CoopVec(self.encoding(arg))
+
+    @property
+    def data(self):
+        self.encoding.data
+
+    def __repr__(self) -> str:
+        return self.encoding.__repr__()
 
