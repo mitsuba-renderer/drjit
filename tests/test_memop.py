@@ -858,14 +858,29 @@ def test34_ravel_builtin(t, order):
     assert x == y
 
 @pytest.mark.parametrize("packet_size", [1, 2, 3, 4, 5])
-@pytest.test_arrays("is_jit, float16, shape=(*)")
+@pytest.test_arrays("is_jit, float, shape=(*)")
 def test35_scatter_packet_reduce(t, packet_size):
     """
     Tests that packeted scatter reduce operations behave correctly.
     """
 
+    tp = dr.type_v(t)
+
+    if (
+        dr.backend_v(t) == dr.JitBackend.LLVM
+        and dr.detail.llvm_version()[0] < 16
+        and tp == dr.VarType.Float16
+    ):
+        pytest.skip("Half precision atomics too spotty on LLVM before v16.0.0")
+
     mod = sys.modules[t.__module__]
-    ArrayXf16 = mod.ArrayXf16
+
+    if tp == dr.VarType.Float16:
+        ArrayXf = mod.ArrayXf16
+    elif tp == dr.VarType.Float32:
+        ArrayXf = mod.ArrayXf
+    elif tp == dr.VarType.Float64:
+        ArrayXf = mod.ArrayXf64
 
     n = 3
 
@@ -873,7 +888,7 @@ def test35_scatter_packet_reduce(t, packet_size):
 
     index = mod.UInt32(0, 1, 1, 2)
 
-    src = dr.ones(ArrayXf16, (packet_size, dr.width(index)))
+    src = dr.ones(ArrayXf, (packet_size, dr.width(index)))
 
     dr.scatter_reduce(dr.ReduceOp.Add, target, src, index)
 
