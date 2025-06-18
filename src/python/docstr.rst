@@ -8165,7 +8165,7 @@
     tensor, or iterable along the specified axis/axes.
 
     The function returns an output array of the same shape as the input. The
-    ``op`` paramater selects the operation to be performed.
+    ``op`` parameter selects the operation to be performed.
 
     For example, when reducing a 1D array using ``exclusive=True`` (the
     default), this produces the following output
