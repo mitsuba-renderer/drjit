@@ -856,3 +856,31 @@ def test34_ravel_builtin(t, order):
 
     assert type(x) is type(y)
     assert x == y
+
+@pytest.mark.parametrize("packet_size", [1, 2, 3, 4, 5])
+@pytest.test_arrays("is_jit, float16, shape=(*)")
+def test35_scatter_packet_reduce(t, packet_size):
+    """
+    Tests that packeted scatter reduce operations behave correctly.
+    """
+
+    mod = sys.modules[t.__module__]
+    ArrayXf16 = mod.ArrayXf16
+
+    n = 3
+
+    target = dr.zeros(t, n * packet_size)
+
+    index = mod.UInt32(0, 1, 1, 2)
+
+    src = dr.ones(ArrayXf16, (packet_size, dr.width(index)))
+
+    dr.scatter_reduce(dr.ReduceOp.Add, target, src, index)
+
+    ref = dr.zeros(t, n * packet_size)
+    for i in range(dr.width(index)):
+        for j in range(packet_size):
+            ref[index[i] * packet_size + j] += src[j][i]
+
+    assert dr.allclose(target, ref)
+
