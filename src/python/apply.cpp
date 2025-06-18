@@ -591,26 +591,33 @@ nb::object apply_ret_pair(ArrayOp op, const char *name, nb::handle_t<dr::ArrayBa
     return nb::object();
 }
 
+namespace {
 static int recursion_level = 0;
 
 // PyTrees could theoretically include cycles. Catch infinite recursion below
 struct recursion_guard {
     recursion_guard() {
-        if (++recursion_level >= 50) {
+        if (recursion_level >= 50) {
             PyErr_SetString(PyExc_RecursionError, "runaway recursion detected");
             nb::raise_python_error();
         }
+        // NOTE: the recursion_level has to be incremented after potentially
+        // throwing an exception, as throwing an exception in the constructor
+        // prevents the destructor from being called.
+        recursion_level++;
     }
     ~recursion_guard() { recursion_level--; }
 };
+} // namespace
 
 uint64_t TraverseCallback::operator()(uint64_t, const char *, const char *) { return 0; }
 void TraverseCallback::traverse_unknown(nb::handle) { }
 
 /// Invoke the given callback on leaf elements of the pytree 'h'
 void traverse(const char *op, TraverseCallback &tc, nb::handle h, bool rw) {
-    nb::handle tp = h.type();
     recursion_guard guard;
+
+    nb::handle tp = h.type();
 
     try {
         if (is_drjit_type(tp)) {
