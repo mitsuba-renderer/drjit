@@ -123,6 +123,7 @@ struct DynamicArray
     }
 
     DRJIT_INLINE size_t size() const { return m_size; }
+    DRJIT_INLINE size_t opaque_size_() const { return m_size; }
     DRJIT_INLINE DynamicArray copy() { return DynamicArray(*this); }
 
     DRJIT_INLINE Value &entry(size_t i) {
