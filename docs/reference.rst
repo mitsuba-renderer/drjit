@@ -305,6 +305,7 @@ Operations for vectors and matrices
 .. autofunction:: quat_to_matrix
 .. autofunction:: transform_decompose
 .. autofunction:: transform_compose
+.. autofunction:: unit_angle
 
 Operations for complex values and quaternions
 ---------------------------------------------

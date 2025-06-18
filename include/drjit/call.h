@@ -17,78 +17,65 @@
 #include <drjit/autodiff.h>
 
 NAMESPACE_BEGIN(drjit)
-
 NAMESPACE_BEGIN(detail)
+/// Helper templates to extract ::Domain and ::Variant constexpr strings from a type
+template <typename T, typename = void> struct domain { static constexpr const char* value = nullptr; };
+template <typename T, typename = void> struct variant { static constexpr const char* value = nullptr; };
 
-template <typename T>
-using has_variant_override = decltype(T::variant_());
+template <typename T> struct domain<T, std::void_t<decltype(T::Domain)>> {
+    static constexpr const char* value = T::Domain;
+};
 
-template <typename CallSupport>
-constexpr const char *get_variant(const char *fallback) {
-    if constexpr (is_detected_v<has_variant_override, CallSupport>) {
-        return CallSupport::variant_();
-    } else {
-        return fallback;
-    }
-}
+template <typename T> struct variant<T, std::void_t<decltype(T::Variant)>> {
+    static constexpr const char* value = T::Variant;
+};
 
-NAMESPACE_END(detail)
+#define DRJIT_CALL_COMMON(Name)                                                \
+    using Mask_                              = mask_t<Self>;                   \
+    using CallSupport_                       = call_support<Class_, Self>;     \
+    static constexpr const char *VariantBase = detail::variant<Class_>::value; \
+    static constexpr const char *DomainBase  = detail::domain<Class_>::value;  \
+    static constexpr const char *Variant =                                     \
+        VariantBase == nullptr ? "" : VariantBase;                             \
+    static constexpr const char *Domain =                                      \
+        DomainBase == nullptr ? #Name : DomainBase;                            \
+    const call_support *operator->() const { return this; }
 
 #define DRJIT_CALL_BEGIN(Name)                                                 \
     namespace drjit {                                                          \
-        template <typename Self>                                               \
-        struct call_support<Name, Self> {                                      \
-            using Base_ = void;                                                \
-            using Class_ = Name;                                               \
-            using Mask_ = mask_t<Self>;                                        \
-            using CallSupport_ = call_support<Name, Self>;                     \
-            call_support(const Self &self) : self(self) { }                    \
-            const call_support *operator->() const {                           \
-                return this;                                                   \
-            }
+    template <typename Self> struct call_support<Name, Self> {                 \
+    protected:                                                                 \
+        const Self &self;                                                      \
+    public:                                                                    \
+        using Class_ = Name;                                                   \
+        using Base_  = void;                                                   \
+        call_support(const Self &self) : self(self) {}                         \
+        DRJIT_CALL_COMMON(Name)
 
 #define DRJIT_CALL_TEMPLATE_BEGIN(Name)                                        \
     namespace drjit {                                                          \
-        template <typename Self, typename... Ts>                               \
-        struct call_support<Name<Ts...>, Self> {                               \
-            using Base_ = void;                                                \
-            using Class_ = Name<Ts...>;                                        \
-            using Mask_ = mask_t<Self>;                                        \
-            using CallSupport_ = call_support<Name<Ts...>, Self>;              \
-            call_support(const Self &self) : self(self) { }                    \
-            const call_support *operator->() const {                           \
-                return this;                                                   \
-            }
+    template <typename Self, typename... Ts>                                   \
+    struct call_support<Name<Ts...>, Self> {                                   \
+    protected:                                                                 \
+        const Self &self;                                                      \
+    public:                                                                    \
+        using Base_  = void;                                                   \
+        using Class_ = Name<Ts...>;                                            \
+        call_support(const Self &self) : self(self) {}                         \
+        DRJIT_CALL_COMMON(Name)
 
 #define DRJIT_CALL_TEMPLATE_INHERITED_BEGIN(Name, Parent)                      \
     namespace drjit {                                                          \
-        template <typename Self, typename... Ts>                               \
-        struct call_support<Name<Ts...>, Self>                                 \
-                : call_support<Parent<Ts...>, Self> {                          \
-            using Base_ = call_support<Parent<Ts...>, Self>;                   \
-            using Base_::self;                                                 \
-            using Base_::Variant;                                              \
-            using Base_::Domain;                                               \
-            using Class_ = Name<Ts...>;                                        \
-            using Mask_ = mask_t<Self>;                                        \
-            call_support(const Self &self) : Base_(self) { }                   \
-            const call_support *operator->() const {                           \
-                return this;                                                   \
-            }
+    template <typename Self, typename... Ts>                                   \
+    struct call_support<Name<Ts...>, Self>                                     \
+        : call_support<Parent<Ts...>, Self> {                                  \
+        using Base_ = call_support<Parent<Ts...>, Self>;                       \
+        using Base_::self;                                                     \
+        using Class_ = Name<Ts...>;                                            \
+        call_support(const Self &self) : Base_(self) {}                        \
+        DRJIT_CALL_COMMON(Name)
 
-#define DRJIT_CALL_INHERITED_END(Name)                                         \
-        };                                                                     \
-    }
-
-#define DRJIT_CALL_END(Name)                                                   \
-        public:                                                                \
-            static constexpr const char *Domain = #Name;                       \
-            /* Define `Variant` at the end so that the optional `variant_()`*/ \
-            /* method provided by the user can be detected (if given).      */ \
-            static constexpr const char *Variant =                             \
-                detail::get_variant<CallSupport_>("");                         \
-        protected:                                                             \
-            const Self &self;                                                  \
+#define DRJIT_CALL_END()                                                       \
         };                                                                     \
     }
 
@@ -151,6 +138,9 @@ public:                                                                        \
         return detail::call<Self, Ret, Ret, Mask_>(                            \
             self, Variant, Domain, #Name "()", true, callback, mask);          \
     }
+
+NAMESPACE_END(detail)
+
 template <typename Guide, typename T>
 using vectorize_rv_t =
     std::conditional_t<std::is_scalar_v<T>, replace_scalar_t<Guide, T>, T>;
@@ -165,11 +155,10 @@ NAMESPACE_BEGIN(detail)
  */
 template <typename ChildClass, typename Parent>
 bool is_valid_call_ptr(void *ptr) {
-    if constexpr (std::is_same_v<Parent, void>) {
+    if constexpr (std::is_same_v<Parent, void>)
         return ptr != nullptr;
-    } else {
+    else
         return dynamic_cast<ChildClass *>((typename Parent::Class_ *) ptr);
-    }
 }
 
 template <typename Mask, typename ... Args>

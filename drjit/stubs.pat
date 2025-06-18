@@ -90,7 +90,7 @@ drjit.(all|any|none)$:
     @overload
     def \1(value: bool, axis: Axis = 0, mode: Literal['symbolic', 'evaluated', None] = None) -> bool: ...
 
-drjit.(dot|abs_dot)$:
+drjit.(dot|abs_dot|unit_angle)$:
     @overload
     def \1(arg0: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], arg1: SelfCpT, /) -> RedT:
         \doc

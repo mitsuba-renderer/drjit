@@ -220,7 +220,7 @@ DRJIT_CALL_END(Base)
 DRJIT_CALL_TEMPLATE_INHERITED_BEGIN(A, Base)
     DRJIT_CALL_METHOD(a_gather_extra_value)
     DRJIT_CALL_GETTER(a_get_property)
-DRJIT_CALL_INHERITED_END(Base)
+DRJIT_CALL_END(Base)
 
 
 template <JitBackend Backend>
