@@ -67,30 +67,20 @@ class HashEncodingConfig:
     smooth_weight_gradients: bool
     smooth_weight_lambda: float
 
-    def __init__(
-        self,
-        dimension: int = -1,
-        n_levels: int = -1,
-        n_features_per_level: int = -1,
-        hashmap_size: int = 2**19,
-        base_resolution: int = 16,
-        per_level_scale: float = 2,
-        align_corners: bool = False,
-        torchngp_compat: bool = False,
-        smooth_weight_gradients: bool = False,
-        smooth_weight_lambda: float = 1.0,
-    ) -> None:
-        self.dimension = dimension
-        self.n_levels = n_levels
-        self.n_features_per_level = n_features_per_level
-        self.hashmap_size = hashmap_size
-        self.base_resolution = base_resolution
-        self.per_level_scale = per_level_scale
-        self.log2_per_level_scale = drjit.log2(per_level_scale)
-        self.align_corners = align_corners
-        self.torchngp_compat = torchngp_compat
-        self.smooth_weight_gradients = smooth_weight_gradients
-        self.smooth_weight_lambda = smooth_weight_lambda
+    def __post_init__(self):
+        assert self.n_levels >= 1, (
+            "The number of levels (`n_levels`) has to be larger or equal to 1, "
+            f"it is {self.n_levels}."
+        )
+        assert self.n_features_per_level >= 1, (
+            "The number of features per level (`n_features_per_level`) has to be "
+            f"larger or equal to 1, it is {self.n_features_per_level}."
+        )
+        assert self.dimension >= 1, (
+            f"The number of dimensions has to be larger or equal to 1, it is {self.dimension}"
+        )
+
+        self.log2_per_level_scale = drjit.log2(self.per_level_scale)
 
 
 class HashEncoding:
@@ -811,7 +801,7 @@ class PermutoEncoding(HashEncoding):
 
     def __repr__(self) -> str:
         return (
-            f"SimplifiedPermutohedral(\n"
+            f"PermutoEncoding(\n"
             f"    dtype={self.dtype},\n"
             f"    dimension={self.dimension},\n"
             f"    hashmap_size={self.hashmap_size},\n"
