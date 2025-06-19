@@ -1,5 +1,5 @@
 import drjit as dr
-import drjit.hgrid as hgrid
+import drjit.hashgrid as hg
 import pytest
 import sys
 
@@ -38,7 +38,7 @@ def test01_hash_grid_tcnn(t):
         "n_features_per_level": 2,
     }
 
-    hg = hgrid.HashGridEncoding(
+    hg = hg.HashGridEncoding(
         3,
         **config,
         align_corners=False,
@@ -121,7 +121,7 @@ def test02_permutohedral(t):
     n = 16
     d = 3
 
-    encoding = hgrid.PermutoEncoding(
+    encoding = hg.PermutoEncoding(
         dimension=d,
         n_levels=16,
         n_features_per_level=2,
