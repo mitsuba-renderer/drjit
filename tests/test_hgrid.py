@@ -93,7 +93,7 @@ def test01_hash_grid_tcnn(t):
 
     res_torch = res.torch().permute(1, 0)
 
-    assert torch.allclose(res_torch, ref, atol=0.00001)
+    assert torch.allclose(res_torch, ref)
 
     ## gradients
 
@@ -110,7 +110,7 @@ def test01_hash_grid_tcnn(t):
     grad_res = dr.grad(hg.data).torch()
     grad_ref = hg_ref.params.grad.to(device=device)
 
-    assert torch.allclose(grad_res, grad_ref, atol=0.001)
+    assert torch.allclose(grad_res, grad_ref)
 
 
 @pytest.test_arrays("jit,shape=(*),float16,diff")
