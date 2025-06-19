@@ -5,51 +5,43 @@
 Function Freezing
 =================
 
-.. warning::
-   This feature is still experimental, and we list a number of unsupported cases
-   in the :ref:`pitfalls` section. This feature also only supports a subset of the
-   operations that can be performed with Dr.Jit, we list them in the
-   :ref:`unsupported_operations` section.
-   If you encounter any issues please feel free to open an issue
-   `here <https://github.com/mitsuba-renderer/drjit/issues>`__
-   (make sure to include a minimal reproducing example).
-
+.. warning:: This feature is still considered experimental, please refer to the
+   sections on :ref:`pitfalls <pitfalls>` and :ref:`unsupported operations
+   <unsupported_operations>` section. If you encounter any issues please open
+   an issue `here <https://github.com/mitsuba-renderer/drjit/issues>`__ with
+   a minimal reproducer.
 
 Introduction
 ------------
 
-When working with Dr.Jit, your code typically is first traced, to obtain a
-computation graph of the operations you intended to perform. When calling
-:py:func:`drjit.eval`, this graph is assembled into an intermediate
-representation, either LLVM IR or CUDA PTX. Finally, this assembly is compiled
-into actual binary code that can be run on the specified hardware. This last
-step can be very expensive, since the underlying compilers perform a lot of
-optimization on the intermediate code. Dr.Jit therefore caches this step by
-default using a hash of the assembled IR code.
+Dr.Jit traces code to obtain a computation graph that and subsequently compiles
+it into actual machine code. Compilation can be very expensive, as the
+underlying compilers backends (LLVM/CUDA) perform sophisticated optimizations.
+Fortunately, the compilation step is often avoidable thanks to a cache of
+previously compiled kernels, which leaves tracing as the main source of
+overheads.
 
-However, the first two steps of tracing the Python code and generating the
-intermediate representation can still be expensive on their own. When a lot of
-Python code has to be traced, such as custom Python functions, the GIL has to be
-locked multiple times. Similarly, when tracing virtual function calls of many
-instances of custom plugins, these functions can cause a large performance
-overhead.
+While tracing costs are often negligible, there are situations where this part
+actually ends up dominating. This can happen when the program evaluates complex
+expressions with relatively little data so that tracing takes longer than the
+actual kernel runtime. This can be especially problematic when the code runs
+repeatedly, e.g., as part of an optimization loop.
 
-This feature addresses this performance bottleneck, by introducing a
-:py:func:`drjit.freeze` decorator. If a function is annotated with this
-decorator, Dr.Jit will attempt to cache not only the compiled kernel as before,
-but also the tracing and assembly steps. When a frozen function is called the
-first time, Dr.Jit will analyze the inputs, and then trace the function once,
-taking note of all kernels launched within that function. On subsequent calls to
-the function, Dr.Jit will check that the new inputs are still compatible with
-the previously-recorded kernels. If so, all tracing and assembly is skipped and
-the kernels are launched directly.
-
+The _function freezing_ feature addresses this performance bottleneck by
+introducing a :py:func:`@dr.freeze <freeze>` decorator. If a function is
+annotated with this decorator, Dr.Jit will query a cache and potentially avoid
+tracing altogether. When a frozen function is called the first time, Dr.Jit
+will analyze the inputs, and then trace the function once, taking note of all
+kernels launched within that function. On subsequent calls to the function,
+Dr.Jit will check that the new inputs are still compatible with the
+previously-recorded kernels. If so, all tracing and assembly is skipped and the
+kernels are launched directly.
 
 Usage
 -----
 
 In supported cases, using this feature is as simple as annotating the function
-with the :py:func:`drjit.freeze` decorator:
+with the :py:func:`@dr.freeze <freeze>` decorator:
 
 .. code-block:: python
 
@@ -58,28 +50,24 @@ with the :py:func:`drjit.freeze` decorator:
 
    # Without freezing - traces every time
    def func(x):
-       # Complex operations...
-       y = x + 1
-       dr.eval(y)
-       z = x * 2
-       return z
+       y = seriously_complicated_code(x)
+       dr.eval(y) # ..intermediate evaluations..
+       return huge_function(y, x)
 
    # With freezing - traces only once
    @dr.freeze
    def frozen(x):
-       # Same complex operations...
-       y = x + 1
-       dr.eval(y)
-       z = x * 2
-       return z
+       y = seriously_complicated_code(x)
+       dr.eval(y) # ..intermediate evaluations..
+       return huge_function(y, x)
 
+A call to a function still involves small overheads related to examining the
+inputs, mapping them to function outputs, and performing checks to ensure
+correctness. However, these costs are proportional to the number of function
+inputs/outputs rather than the complexity of the computation.
 
-Note that the overhead is not fully eliminated, since analyzing the inputs,
-mapping the kernel's outputs to function outputs, and performing various checks
-to ensure correctness, still takes some time.
-
-For debugging purposes, this feature can easily be disabled by setting the
-:py:attr:`drjit.JitFlag.KernelFreezing` to ``False``.
+For debugging purposes, the freezing feature can easily be disabled by setting
+the :py:attr:`drjit.JitFlag.KernelFreezing` to ``False``.
 
 .. code-block:: python
 
@@ -101,51 +89,52 @@ Previous recordings, made while the flag was set, will still be available and
 can be used when replaying the function.
 
 Additional arguments can be specified when using the decorator. These are
-documented in the API-level documentation :py:func:`drjit.freeze`.
+documented in the API-level documentation :py:func:`@dr.freeze <freeze>`.
 
-More implementation details are given :ref:`below <freezing_implementation_details>`.
+More implementation details are given :ref:`below
+<freezing_implementation_details>`.
 
 .. _unsupported_operations:
 
 Unsupported operations
 ----------------------
 
-Frozen functions can only contain operations that can be replayed seamlessly
-with new inputs. We describe the main **unsupported** operations below.
-
+Frozen functions only support operations that can be replayed seamlessly
+with new inputs. We describe **unsupported** operations below.
 
 Array access
 ~~~~~~~~~~~~
 
-The input of a frozen function can consist of two kinds of variables:
+Frozen functions can accept arbitrary :ref:`PyTrees <pytrees>` as input, which
+ultimately consist of the following leaf elements:
 
-- Plain Python variables (integers, strings, etc), which are simply cached.
-  Because changes to these values can affect the generated kernel, e.g. via a
-  Python `if` statement, any change in the value of a Python input triggers a
-  re-recording.
-- DrJit variables. Opaque JIT variables are allowed to change from one call to
-  another without requiring re-tracing of the function.
+- Scalar Python variables (`int`, `str`, etc.). The freezing feature makes a
+  note of their value and detects changes in subsequent calls. Because they can
+  influence the generated kernel code, any changes here trigger re-tracing of
+  the function body.
 
-Since JIT variables' values can change from one call to another without
-retracing, the function's behavior (and therefore the generated code) is **not**
-allowed to change based on these values. To prevent incorrect behavior, reading
-the contents from such variables is prohibited inside of a frozen function.
+- Dr.Jit arrays. The contents of evaluated JIT array arguments may change
+  between calls without requiring re-tracing.
+
+The contents of Dr.Jit array variables will generally change when a frozen
+function is later replayed. Operations that extract scalar array elements,
+(e.g, to influence control flow) are not legal, since the freezing will bake
+the observed constants and decisions into the generated program rather than
+responding to changes in subsequent replays. Dr.Jit detects such attempts and
+raises an exception.
 
 .. code-block:: python
 
    @dr.freeze
-   def func(x, y):
-      # Depending on the content of x, one or the other kernel would be generated.
-      # This cannot be replayed and accessing x is therefore prohibited.
+   def func(x: Float, y: Float):
+      # Depending on the content of x, one of two possible kernels could be generated.
+      # This cannot be replayed. Accessing elements of x is therefore prohibited.
       if x[1] > 0:
          return y + 1
       else:
          return y - 1
 
-   x = Float(0, 1)
-   y = Float(0, 1, 2)
-
-   func(x, y)
+   func(Float(0, 1), Float(0, 1, 2))
 
 .. _non_recordable_operations:
 
@@ -182,7 +171,7 @@ Gradient propagation
 
 Very often, tracing the backward pass of an AD-attached computation is at least
 as complex as the forward pass. Caching both the tracing and assembly steps is
-therefore desirable. The :py:func:`drjit.freeze` decorator supports propagating
+therefore desirable. The :py:func:`@dr.freeze <freeze>` decorator supports propagating
 gradients within the function and can propagate gradients to variables that the
 function's inputs depend on.
 
@@ -214,11 +203,11 @@ isolated gradient scope.
 
    y = x * 2
 
-   # On subsequent calls the the function will be replayed, and gradients will
+   # On subsequent calls the function will be replayed, and gradients will
    # be accumulated in x.
    func(y)
 
-The :py:func:`drjit.freeze` decorator adds an implicit
+The :py:func:`@dr.freeze <freeze>` decorator adds an implicit
 :py:func:`drjit.isolate_grad` context to the function. The above function is
 then equivalent to the following function.
 
@@ -236,10 +225,10 @@ then equivalent to the following function.
 Compress
 ~~~~~~~~
 
-A compress operation (:py:func:`drjit.compress`) will generate results whose
-size (number of entries) is dependent on the content of the input. Therefore the
-output size cannot be determined ahead of time. Using :py:func:`drjit.compress`
-with any other function that needs to know array sizes in advance will cause the
+Compress operations (:py:func:`drjit.compress`) generate results, whose size
+(number of entries) depends on the content of the input. Therefore the output
+size cannot be determined ahead of time. Using :py:func:`drjit.compress` with
+any other function that needs to know array sizes in advance will cause the
 function to be re-traced on every call, effectively rendering the freezing
 mechanism useless.
 
@@ -264,14 +253,16 @@ using the LLVM backend.
    func(x)
 
 
-Offset pointers
-~~~~~~~~~~~~~~~
+Pointers with offsets
+~~~~~~~~~~~~~~~~~~~~~
+
+The following comment mainly applies to custom C++ code using Dr.Jit.
 
 Internally, new inputs to pre-recorded kernels are passed using the variables'
 data pointer. This is also how variables are identified and disambiguated
 in the function freezing implementation.
 
-However, this identification mechanism will not work for pointers pointing
+However, this identification mechanism will not work for addresses pointing
 *inside* of a memory region. Therefore, such pointers are not supported inside
 of frozen functions.
 
@@ -289,8 +280,7 @@ of the frozen function, which would result in an exception.
 Pitfalls
 --------
 
-When using the :py:func:`drjit.freeze` decorator, certain caveats have to be
-considered. The following section will explain the most common pitfalls.
+Watch out for following pitfalls when using :py:func:`@dr.freeze <freeze>` decorator.
 
 Implicit inputs
 ~~~~~~~~~~~~~~~
@@ -329,9 +319,10 @@ implicit inputs to a frozen function are generally not supported:
 When freezing such a method or function, these implicit inputs need to be made
 visible to the freezing mechanism. There are two recommended ways to do so:
 
-1. Turn the class into a valid :ref:`PyTree <pytrees>`, e.g. a dataclass
+1. Turn the class into a valid :ref:`PyTree <pytrees>`, e.g., a dataclass
    (:py:class:`@dataclass`) or a  ``DRJIT_STRUCT``.
-2. Or, use the ``state_fn`` argument of the :py:func:`drjit.freeze` decorator to
+
+2. Or, use the ``state_fn`` argument of the :py:func:`@dr.freeze <freeze>` decorator to
    manually specify the implicit inputs. ``state_fn`` will be called as a
    function with the same arguments as the annotated function, and should return
    a tuple of all extra inputs to be considered when recording and replaying.
@@ -404,7 +395,7 @@ is a direct multiple or fraction of the input size.
    y2 = func(x)
    assert dr.width(y2) == 8
 
-Unfortunately, if this heuristic does not succeed (e.g. creating a variable with 3
+Unfortunately, if this heuristic does not succeed (e.g., creating a variable with 3
 more entries than the input), the size of the new variable will be assumed to be
 a constant, and will always be set to the size observed during the first recording,
 even in subsequent calls.
@@ -469,7 +460,7 @@ Excessive recordings
 ~~~~~~~~~~~~~~~~~~~~
 
 A common pattern when rendering scenes or running an optimization loop is to use
-the iteration index, e.g. as a seed to initialize a random number generator.
+the iteration index, e.g., as a seed to initialize a random number generator.
 This is also supported in a frozen function, however passing the iteration count
 as a plain Python integer will cause the function to be re-recorded each time,
 resulting in lower performance than not using frozen functions.
