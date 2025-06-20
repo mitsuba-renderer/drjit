@@ -251,9 +251,9 @@ class HashEncoding:
         active: bool | drjit.ArrayBase,
     ):
         """
-        Accumulates the ``self.num_features`` features at the given index.
-        This function tries to use packet gather operations if possible, to improve
-        the performance of the backward pass, as atomic packet scatters
+        Accumulates the ``self.num_features`` features into ``values`` at the given
+        index. This function tries to use packet gather operations if possible,
+        to improve the performance of the backward pass, as atomic packet scatters
         perform better than their non packeted counterparts for float16 types.
         """
 
@@ -355,10 +355,10 @@ class HashGridEncoding(HashEncoding):
     @overload
     def __init__(
         self,
-        dimension: int = -1,
-        n_levels: int = -1,
-        n_features_per_level: int = -1,
+        dimension: int,
         *,
+        n_levels: int = 16,
+        n_features_per_level: int = 2,
         hashmap_size: int = 2**19,
         base_resolution: int = 16,
         per_level_scale: float = 2,
@@ -367,9 +367,6 @@ class HashGridEncoding(HashEncoding):
         smooth_weight_gradients: bool = False,
         smooth_weight_lambda: float = 1.0,
     ) -> None: ...
-
-    @overload
-    def __init__(self) -> None: ...
 
     def __init__(self, *args, **kwargs) -> None:
         """
@@ -419,7 +416,7 @@ class HashGridEncoding(HashEncoding):
             f" but got {drjit.shape(p)[0]}."
         )
 
-        values = [self.StorageFloat(0.0)] * self.n_features_per_level * self.n_levels
+        out_values = [self.StorageFloat(0.0)] * (self.n_features_per_level * self.n_levels)
 
         for level_i in range(self.n_levels):
             scale = self._level_scale(level_i)
@@ -428,7 +425,6 @@ class HashGridEncoding(HashEncoding):
                 0.5 if not self.align_corners or self.torchngp_compat else 0.0
             )
             pos = drjit.fma(p, scale, p_offset)
-
             pos0 = self.ArrayXu(drjit.floor(pos))
 
             w1 = pos - pos0
@@ -440,11 +436,9 @@ class HashGridEncoding(HashEncoding):
                 weight = drjit.prod(weight, axis=0)
 
                 index = self.indexing_function(pos_grid, level_i)
-                self._acc_features(level_i, weight, index, values, active)
+                self._acc_features(level_i, weight, index, out_values, active)
 
-        values = [v & active for v in values]
-
-        return self.StorageFloatXf(*values)
+        return self.StorageFloatXf(*out_values) & active
 
     def indexing_function(self, key: drjit.ArrayBase, level_i: int) -> drjit.ArrayBase:
         """
@@ -559,9 +553,9 @@ class HashGridEncoding(HashEncoding):
         Helpful to build e.g. debug visualizations by splitting params per level.
         Must be called with an index up to and including `n_levels`.
 
-        Warning: the level offset returned does *not* account for the feature count.
-        Each level contains `n_features_per_level` times the difference between the next
-        offset entries.
+        Warning: the level offset is expressed in number of vertices, i.e. it
+        does *not* account for the feature count in each vertex. Each level contains
+        `n_features_per_level` times the difference between the next offset entries.
         """
         return self._level_offsets[level_i]
 
@@ -618,9 +612,9 @@ class PermutoEncoding(HashEncoding):
     def __init__(
         self,
         dimension: int,
-        n_levels: int,
-        n_features_per_level: int,
         *,
+        n_levels: int = 16,
+        n_features_per_level: int = 2,
         hashmap_size: int = 2**19,
         base_resolution: int = 16,
         per_level_scale: float = 2,
@@ -628,9 +622,6 @@ class PermutoEncoding(HashEncoding):
         smooth_weight_gradients: bool = False,
         smooth_weight_lambda: float = 1.0,
     ) -> None: ...
-
-    @overload
-    def __init__(self) -> None: ...
 
     def __init__(self, *args, **kwargs) -> None:
         if len(args) == 0 and len(kwargs) == 0:
@@ -650,7 +641,7 @@ class PermutoEncoding(HashEncoding):
             f" but got {drjit.shape(p)[0]}."
         )
 
-        values = [self.StorageFloat(0.0)] * self.n_features_per_level * self.n_levels
+        out_values = [self.StorageFloat(0.0)] * (self.n_features_per_level * self.n_levels)
 
         for level_i in range(self.n_levels):
             scale = self._level_scale(level_i)
@@ -710,11 +701,9 @@ class PermutoEncoding(HashEncoding):
                 weight = weights[rank]
 
                 index = self.indexing_function(pos_grid, level_i)
-                self._acc_features(level_i, weight, index, values, active)
+                self._acc_features(level_i, weight, index, out_values, active)
 
-        values = [v & active for v in values]
-
-        return self.StorageFloatXf(*values)
+        return self.StorageFloatXf(*out_values) & active
 
     def _alloc(self, dtype: Type[drjit.ArrayBase]) -> None:
         """
@@ -733,9 +722,8 @@ class PermutoEncoding(HashEncoding):
 
         # TODO: warning for n_features == 3
 
-        assert (
-            self.hashmap_size % 8
-        ) == 0, f"Invalid hashmap size {self.hashmap_size}, must be a multiple of 8."
+        assert (self.hashmap_size % 8) == 0,\
+            f"Invalid hashmap size {self.hashmap_size}, must be a multiple of 8."
 
         self._level_offsets = [None] * (self.n_levels + 1)
         max_params = drjit.scalar.UInt32(0xFFFFFFFF) // 2
