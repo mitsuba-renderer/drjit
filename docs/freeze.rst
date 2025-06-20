@@ -14,12 +14,11 @@ Function Freezing
 Introduction
 ------------
 
-Dr.Jit traces code to obtain a computation graph that and subsequently compiles
-it into actual machine code. Compilation can be very expensive, as the
-underlying compilers backends (LLVM/CUDA) perform sophisticated optimizations.
-Fortunately, the compilation step is often avoidable thanks to a cache of
-previously compiled kernels, which leaves tracing as the main source of
-overheads.
+Dr.Jit traces code to obtain computation graphs that are later compiled into
+into executable machine code. Compilation can be very costly due to a number of
+sophisticated optimizations performed by LLVM/CUDA backends. Fortunately,
+compilation is often avoidable thanks to a cache of previously compiled
+kernels, which leaves tracing as the main source of overheads.
 
 While tracing costs are often negligible, there are situations where this part
 actually ends up dominating. This can happen when the program evaluates complex
@@ -27,23 +26,23 @@ expressions with relatively little data so that tracing takes longer than the
 actual kernel runtime. This can be especially problematic when the code runs
 repeatedly, e.g., as part of an optimization loop.
 
-The _function freezing_ feature addresses this performance bottleneck by
-introducing a :py:func:`@dr.freeze <freeze>` decorator. If a function is
-annotated with this decorator, Dr.Jit will query a cache and potentially avoid
-tracing altogether. When a frozen function is called the first time, Dr.Jit
-will analyze the inputs, and then trace the function once, taking note of all
-kernels launched within that function. On subsequent calls to the function,
-Dr.Jit will check that the new inputs are still compatible with the
-previously-recorded kernels. If so, all tracing and assembly is skipped and the
-kernels are launched directly.
+Dr.Jit's *function freezing* feature addresses this performance bottleneck
+using the :py:func:`@dr.freeze <freeze>` decorator. Calls to functions using
+this decorator query a cache and potentially avoid tracing altogether. The
+first time such a function is called, Dr.Jit will analyze the inputs and then
+trace its body, taking note of all kernel launches. On subsequent calls, Dr.Jit
+only checks that the new inputs are still compatible with the previously
+recorded kernels. In that case, it skips tracing and assembly and launches the
+kernels directly.
 
 Usage
 -----
 
-In supported cases, using this feature is as simple as annotating the function
-with the :py:func:`@dr.freeze <freeze>` decorator:
+Using this feature is as simple as annotating the function with the
+:py:func:`@dr.freeze <freeze>` decorator:
 
 .. code-block:: python
+   :emphasize-lines: 11
 
    import drjit as dr
    from drjit.cuda import Float, UInt32
@@ -61,10 +60,11 @@ with the :py:func:`@dr.freeze <freeze>` decorator:
        dr.eval(y) # ..intermediate evaluations..
        return huge_function(y, x)
 
-A call to a function still involves small overheads related to examining the
-inputs, mapping them to function outputs, and performing checks to ensure
-correctness. However, these costs are proportional to the number of function
-inputs/outputs rather than the complexity of the computation.
+Calls to :py:func:`@dr.freeze <freeze>`-decorated functions still involves
+small overheads related to examining their inputs, mapping them to function
+outputs, and performing checks to ensure correctness. However, these costs are
+proportional to the number of function inputs/outputs rather than the
+complexity of the computation.
 
 For debugging purposes, the freezing feature can easily be disabled by setting
 the :py:attr:`drjit.JitFlag.KernelFreezing` to ``False``.
@@ -85,7 +85,7 @@ the :py:attr:`drjit.JitFlag.KernelFreezing` to ``False``.
    func(x)
 
 To re-enable function freezing, the flag can simply be set to ``True`` again.
-Previous recordings, made while the flag was set, will still be available and
+Previous recordings made while the flag was set will still be available and
 can be used when replaying the function.
 
 Additional arguments can be specified when using the decorator. These are
@@ -100,7 +100,7 @@ Unsupported operations
 ----------------------
 
 Frozen functions only support operations that can be replayed seamlessly
-with new inputs. We describe **unsupported** operations below.
+with new inputs. We describe *unsupported* operations below.
 
 Array access
 ~~~~~~~~~~~~
@@ -108,7 +108,7 @@ Array access
 Frozen functions can accept arbitrary :ref:`PyTrees <pytrees>` as input, which
 ultimately consist of the following leaf elements:
 
-- Scalar Python variables (`int`, `str`, etc.). The freezing feature makes a
+- Scalar Python variables (``int``, ``str``, etc.). The freezing feature makes a
   note of their value and detects changes in subsequent calls. Because they can
   influence the generated kernel code, any changes here trigger re-tracing of
   the function body.
@@ -118,8 +118,8 @@ ultimately consist of the following leaf elements:
 
 The contents of Dr.Jit array variables will generally change when a frozen
 function is later replayed. Operations that extract scalar array elements,
-(e.g, to influence control flow) are not legal, since the freezing will bake
-the observed constants and decisions into the generated program rather than
+(e.g, to influence control flow) are not legal, since the freezing would bake
+the observed constants and decisions into the generated kernels instead of
 responding to changes in subsequent replays. Dr.Jit detects such attempts and
 raises an exception.
 
@@ -138,42 +138,41 @@ raises an exception.
 
 .. _non_recordable_operations:
 
-Non-recordable operations
-~~~~~~~~~~~~~~~~~~~~~~~~~
+Unsupported low-level operations
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Whenever a device-level operation is called inside a frozen function, Dr.Jit
-has to be made aware of it. Kernel launches and other common operations such as
-reductions, are supported by hooking into a low-level abstraction in the core
-library.
+The freezing feature captures regular Dr.Jit kernel launches, reductions, and
+various data movement operations. It does not track operations that fall
+outside of this pattern, such as custom CUDA kernel launches.
 
-However, applying any operation not known to Dr.Jit on the memory underlying a
-variable is not supported and might result in incorrect outputs or exceptions.
-As an example, such operations are used in the initialization of CUDA textures
-or acceleration structure building in Mitsuba 3.
+Some parts of Dr.Jit itself currently remain unsupported. For example,
+constructing a new texture as in
 
 .. code-block:: python
 
    @dr.freeze
    def func(data, pos):
-      # On CUDA backends, this will call ``cuMemcpy2DAsync`` on the texture
-      # memory, without notifying the frozen function mechanism, and therefore fail.
-      tex = Texture1f([dr.width(data)], 1
-      tex.set_value(data)
+      tex = Texture1f([dr.width(data)], 1)
+      tex.set_value(data)  # <--- unsupported!
       return tex.eval(pos)
 
-   data = Float(0, 1)
-   pos = Float(0.3, 0.6)
-   func(data, pos)
+does not produce correct results. This is because initialization of device
+textures requires a call to a CUDA texture-specific operation
+(``cuMemcpy2DAsync``), which is essentially a custom (non-Dr.Jit) kernel.
+Another unsupported case is building acceleration data structures for GPU ray
+tracing. Such steps must be performed outside of the frozen function.
 
+Note: Dr.Jit provides basic abstractions to capture even such steps in principle,
+so it possible that these limitations will be lifted in the future.
 
 Gradient propagation
 ~~~~~~~~~~~~~~~~~~~~
 
-Very often, tracing the backward pass of an AD-attached computation is at least
-as complex as the forward pass. Caching both the tracing and assembly steps is
-therefore desirable. The :py:func:`@dr.freeze <freeze>` decorator supports propagating
-gradients within the function and can propagate gradients to variables that the
-function's inputs depend on.
+Tracing the backward pass of differentiable computation is often at least as
+complex as the forward pass. Freezing derivatives is therefore desirable. The
+:py:func:`@dr.freeze <freeze>` decorator supports propagating gradients within
+the function and can propagate gradients to variables that the function's
+inputs depend on.
 
 However, propagating gradients from the result of a frozen function *through*
 the function is not supported. All gradient backpropagation has to start
@@ -693,12 +692,12 @@ This is a special case of :ref:`non-recordable operation <non_recordable_operati
    func(tex, pos)
 
 
-Virtual function calls
-~~~~~~~~~~~~~~~~~~~~~~
+Indirect function calls
+~~~~~~~~~~~~~~~~~~~~~~~
 
-As symbolic virtual function calls are generally supported by frozen functions.
+As symbolic indirect function calls are generally supported by frozen functions.
 However, some limitations apply. The following example shows a supported use of
-virtual function calls in frozen functions.
+indirect function calls in frozen functions.
 
 .. code-block:: python
 
@@ -736,7 +735,7 @@ This side-effect can be unexpected.
    x = Float(1, 2, 3, 4, 5)
    func(base, x)
 
-Nested virtual function calls are supported when the inner base class pointer
+Nested indirect function calls are supported when the inner base class pointer
 is passed as an argument to the outer function. However, due to implementation
 details nested calls are not supported when the outer function retrieves the
 callee pointer from class member variables
@@ -877,7 +876,7 @@ traversable.
 Finally, C++ classes may additionally implement the ``TraversableBase`` class
 to make them traversable. Python classes, inheriting from these classes through
 trampolines are automatically traversed. This is useful when implementing your
-own subclasses with virtual function calls.
+own subclasses with indirect function calls.
 
 .. code-block:: python
 
