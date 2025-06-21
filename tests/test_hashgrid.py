@@ -1,10 +1,10 @@
 import drjit as dr
-import drjit.hashgrid as hg
+from drjit import hashgrid
 import pytest
 import sys
 
 
-@pytest.test_arrays("jit,shape=(*),float16,diff")
+@pytest.test_arrays("jit,shape=(*),float32,diff")
 def test01_hash_grid_tcnn(t):
     """
     Tests that the hashgrid implementation produces the same results and gradients
@@ -21,7 +21,6 @@ def test01_hash_grid_tcnn(t):
         pytest.skip("This test requires PyTorch to be installed.")
 
     m = sys.modules[t.__module__]
-    Float16 = m.Float16
     Float32 = m.Float32
     ArrayXf = m.ArrayXf
     PCG32 = m.PCG32
@@ -38,7 +37,7 @@ def test01_hash_grid_tcnn(t):
         "n_features_per_level": 2,
     }
 
-    hg = hg.HashGridEncoding(
+    hg = hashgrid.HashGridEncoding(
         3,
         **config,
         align_corners=False,
@@ -115,7 +114,7 @@ def test02_permutohedral(t):
     n = 16
     d = 3
 
-    encoding = hg.PermutoEncoding(
+    encoding = hashgrid.PermutoEncoding(
         dimension=d,
         n_levels=16,
         n_features_per_level=2,
