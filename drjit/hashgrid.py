@@ -140,7 +140,7 @@ class HashEncoding:
         self._level_offsets[-1] = offset
 
         params_size = self._level_offsets[-1] * self.n_features_per_level
-        self.data = drjit.zeros(dtype, params_size)
+        self.data = drjit.zeros(self.dtype, params_size)
 
     def n_params(self) -> int:
         """
