@@ -226,6 +226,13 @@ if (NOT (DRJIT_SANITIZE_ASAN OR DRJIT_SANITIZE_UBSAN))
   )
 
   nanobind_add_stub(
+    drjit-stub-hashgrid
+    MODULE drjit.hashgrid
+    OUTPUT ${DRJIT_PYTHON_DST_DIR}/hashgrid.pyi
+    ${STUB_ARGS}
+  )
+
+  nanobind_add_stub(
     drjit-stub-scalar
     MODULE drjit.scalar
     OUTPUT ${DRJIT_PYTHON_DST_DIR}/scalar/__init__.pyi
