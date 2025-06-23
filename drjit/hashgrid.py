@@ -49,7 +49,7 @@ class HashEncoding:
 
     DRJIT_STRUCT = {
         "data": drjit.ArrayBase,
-        "dtype": type,
+        "dtype": Type[drjit.ArrayBase],
         "_level_offsets": List[int],
         "_dimension": int,
         "_n_levels": int,
@@ -265,7 +265,7 @@ class HashEncoding:
 
     def _position_types(
         self, p: drjit.ArrayBase
-    ) -> Tuple[Type[drjit.BaseArray], Type[drjit.BaseArray]]:
+    ) -> Tuple[Type[drjit.ArrayBase], Type[drjit.ArrayBase]]:
         """
         Returns a tuple of the PositionFloat and PositionFloatXf types, given the
         position value given to the encoding.
@@ -274,10 +274,7 @@ class HashEncoding:
 
         p = list(p)
 
-        if isinstance(p, list):
-            PositionFloat = drjit.leaf_t(p[0])
-        else:
-            PositionFloat = drjit.leaf_t(p)
+        PositionFloat = drjit.leaf_t(p[0])
 
         PositionFloatXf = (
             mod.ArrayXf16 if drjit.is_half_v(PositionFloat) else mod.ArrayXf
@@ -352,7 +349,7 @@ class HashEncoding:
         sub_grid_index = level_offset + (index % self.UInt32(this_level_size))
         return sub_grid_index
 
-    def hashing_function(self, key)->drjit.BaseArray:
+    def hashing_function(self, key)->drjit.ArrayBase:
         """
         Hashes the D-dimensional key to compute a 1-dimensional index. This function
         is called when dense indexing is not possible.
@@ -433,36 +430,6 @@ class HashGridEncoding(HashEncoding):
     ) -> None: ...
 
     def __init__(self, *args, **kwargs) -> None:
-        """
-        This encoding is based on the Multiresolution Hash Grid encoding introduced
-        in :cite:`mueller2022instant`.
-
-        Args:
-            dimension: The dimensionality of the hash encoding. This corresponds to
-                the number of input features the encoding can take.
-            n_levels: Hash encodings generally make use of multiple levels of the same
-                encoding with different scales. This parameter specifies the number of
-                levels used by this encoding.
-            n_features_per_level: More than one feature can be stored in a vertex per
-                level. This value specifies how many, and the number of output features
-                of the hash encoding layer is given by ``n_levels * n_features_per_level``.
-                This value should always be a multiple of two, in order to ensure efficient
-                gradient backpropagation.
-            hashmap_size: Specifies the maximal number of parameters per level of the
-                hash encoding. HashGrids will use a dense grid lookup for layers with
-                a low enough scale, and use less than ``hashmap_size`` number of parameters
-                per level.
-            base_resolution: The scale factor of the 0th layer in the hash encoding.
-            per_level_scale: To calculate the scale of a layer, the scale of the previous
-                layer is multiplied by this value.
-            align_corners: If this value is ``True``, the simplex vertices are aligned
-                with the domain of the encoding [0, 1].
-            torchngp_compat: If this value is ``True``, the encoding will use the
-                same indexing and offset functions compared to tiny-cuda-nn.
-            smooth_weight_gradients: whether to smooth the gradients of the weights
-                by using a straight-through estimator.
-            smooth_weight_lambda: the value of lambda used for the straight-through estimator.
-        """
         super().__init__(*args, **kwargs)
 
     def __call__(
@@ -478,7 +445,7 @@ class HashGridEncoding(HashEncoding):
         )
 
         grid_offsets = [
-            [(i >> j) & 1 for j in range(self.dimension)]
+            self.ArrayXu([(i >> j) & 1 for j in range(self.dimension)])
             for i in range(2**self.dimension)
         ]
 
@@ -499,8 +466,8 @@ class HashGridEncoding(HashEncoding):
             w0 = 1.0 - w1
 
             for offset in grid_offsets:
-                pos_grid = pos0 + self.ArrayXu(offset)
-                weight = drjit.select(self.ArrayXu(offset) == 0, w0, w1)
+                pos_grid = pos0 + offset
+                weight = drjit.select(offset == 0, w0, w1)
                 weight = drjit.prod(weight, axis=0)
 
                 index = self.indexing_function(pos_grid, level_i)
@@ -701,7 +668,7 @@ class PermutoEncoding(HashEncoding):
 
         return self.StorageFloatXf(*out_values) & active
 
-    def hashing_function(self, key) -> drjit.BaseArray:
+    def hashing_function(self, key) -> drjit.ArrayBase:
         """Polynomial rolling hash for mapping lattice coordinates to hash table indices.
 
         Uses a simple multiplicative hash with prime number 2531011 to distribute
