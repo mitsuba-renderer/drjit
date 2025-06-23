@@ -336,7 +336,7 @@ class HashEncoding:
         stride = self.UInt32(1) if self.torchngp_compat else 1
         index = self.UInt32(0)
         for d in range(self.dimension):
-            index += key[d] * self.UInt32(stride)
+            index += key[d] * stride
             stride *= res
 
             if stride > this_level_size:
@@ -437,6 +437,8 @@ class HashGridEncoding(HashEncoding):
     ) -> Iterable[drjit.ArrayBase]:
         _, PositionFloatXf = self._position_types(p)
 
+        # Keep the position and interpolation weights in higher precision, to
+        # avoid rounding artifacts.
         p = PositionFloatXf(p)
 
         assert drjit.shape(p)[0] == self.dimension, (
@@ -444,6 +446,7 @@ class HashGridEncoding(HashEncoding):
             f" but got {drjit.shape(p)[0]}."
         )
 
+        # Stores the pattern of offsets used to index the 2**n corners of a voxel
         grid_offsets = [
             self.ArrayXu([(i >> j) & 1 for j in range(self.dimension)])
             for i in range(2**self.dimension)
@@ -532,9 +535,10 @@ class PermutoEncoding(HashEncoding):
     vertices per simplex (and thus memory lookups per sample per level) grows linearly
     with dimensionality, compared to exponential growth in grid-based approaches.
 
-    This implementation simplifies the original method by performing sorting and
-    interpolation directly in d-dimensional space, avoiding the elevation to a
-    hyperplane in (d+1)-dimensional space used in the reference implementation.
+    This implementation, by Tobias Zirr (https://github.com/tszirr), simplifies
+    the original method by performing sorting and interpolation directly in d-dimensional
+    space, avoiding the elevation to a hyperplane in (d+1)-dimensional space used
+    in the reference implementation.
 
     Args:
         dimension: The dimensionality of the hash encoding. This corresponds to
@@ -584,6 +588,8 @@ class PermutoEncoding(HashEncoding):
     ) -> Iterable[drjit.ArrayBase]:
         PositionFloat, PositionFloatXf = self._position_types(p)
 
+        # Keep the position and interpolation weights in higher precision, to
+        # avoid rounding artifacts.
         p = PositionFloatXf(p)
 
         assert drjit.shape(p)[0] == self.dimension, (
@@ -660,7 +666,7 @@ class PermutoEncoding(HashEncoding):
             for rank in range(self.dimension + 1):
                 offset = grid_offsets[rank]
 
-                pos_grid = base + self.ArrayXu(offset)
+                pos_grid = base + offset
                 weight = weights[rank]
 
                 index = self.indexing_function(pos_grid, level_i)
