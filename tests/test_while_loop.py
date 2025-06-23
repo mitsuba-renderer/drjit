@@ -279,30 +279,39 @@ def test14_scatter_v2(t, mode, optimize, drjit_verbose, capsys):
             assert transcript.count('[direct]') == 1
 
 
+@pytest.mark.parametrize("optimize", [True, False])
 @pytest.mark.parametrize('mode1', ['evaluated', 'symbolic'])
 @pytest.mark.parametrize('mode2', ['evaluated', 'symbolic'])
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
 @dr.syntax
-def test15_nested_loop(mode1, mode2, t):
+def test15_nested_loop(mode1, mode2, t, optimize):
     n = dr.arange(t, 17)
     i, accum = t(0), t(0)
+    dr.set_flag(dr.JitFlag.PrintIR, True)
 
-    try:
-        while dr.hint(i < n, mode=mode1, label='outer'):
-            j = t(0)
-            while dr.hint(j < i, mode=mode2, label='inner'):
-                j += 1
-                accum += 1
-            i += 1
-        err = None
-    except Exception as e:
-        err = e
+    with dr.scoped_set_flag(dr.JitFlag.OptimizeLoops, optimize):
+        try:
+            while dr.hint(i < n, mode=mode1, label='outer'):
+                j = t(0)
+                while dr.hint(j < i, mode=mode2, label='inner'):
+                    j += 1
+                    accum += 1
+                i += 1
+            err = None
+        except Exception as e:
+            err = e
 
     if dr.hint(mode1 == 'symbolic' and mode2 == 'evaluated', mode='scalar'):
         # That combination is not allowed
         assert 'cannot execute a loop in *evaluated mode*' in str(err.__cause__)
     else:
+        print(err)
+        if err is None:
+            pass
+        else:
+            print('got err')
         assert err is None
+        print(accum)
         assert dr.all(accum == (n*(n-1)) // 2)
 
 
