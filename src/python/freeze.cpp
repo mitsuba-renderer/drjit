@@ -132,6 +132,12 @@
 
 #include "../ext/nanobind/src/buffer.h"
 
+#if defined(_MSC_VER)
+// Methods in this file will frequently use local variables, whose name matches class attributes.
+// This is intentional. The latter are prefixed with this->name. Tell MSVC not to warn about this.
+#  pragma warning(disable : 4458) /* disable: C4458: declaration of 'layout' hides class member */
+#endif
+
 using Buffer = nanobind::detail::Buffer;
 
 /**
@@ -297,7 +303,7 @@ void FlatVariables::add_domain(const char *variant, const char *domain) {
  * scheduled non-literal variable indices.
  */
 uint32_t FlatVariables::add_jit_index(uint32_t index) {
-    uint32_t next_slot = this->variables.size();
+    uint32_t next_slot = (uint32_t) this->variables.size();
     auto result        = this->index_to_slot.try_emplace(index, next_slot);
     auto it            = result.first;
     bool inserted      = result.second;
@@ -407,7 +413,7 @@ void FlatVariables::schedule_jit_variables(
             // Special case, where the variable is a literal.
             layout.literal = info.literal;
             // Store size in index variable, as this is not used for literals.
-            layout.literal_size  = info.size;
+            layout.literal_size  = (uint32_t) info.size;
             layout.vt            = (uint32_t) info.type;
             layout.literal_index = index;
 
@@ -415,7 +421,7 @@ void FlatVariables::schedule_jit_variables(
         } else if (info.state == VarState::Undefined) {
             // Special case, where the variable is a literal.
             // Store size in index variable, as this is not used for literals.
-            layout.literal_size  = info.size;
+            layout.literal_size  = (uint32_t) info.size;
             layout.vt            = (uint32_t) info.type;
             layout.literal_index = index;
 
@@ -426,7 +432,7 @@ void FlatVariables::schedule_jit_variables(
             jit_var_dec_ref(index);
         }
     }
-    layout_index = layout.size();
+    layout_index = (uint32_t) layout.size();
 }
 
 /**
@@ -455,7 +461,7 @@ void FlatVariables::record_jit_variables() {
 
         layout.vs         = info.state;
         layout.vt         = info.type;
-        layout.size_index = this->add_size(info.size);
+        layout.size_index = this->add_size((uint32_t) info.size);
 
         if (info.state == VarState::Evaluated) {
             // Special case, handling evaluated/opaque variables.
@@ -484,7 +490,7 @@ void FlatVariables::record_jit_variables() {
  * now differently sized variables cannot be evaluated by the same kernel.
  */
 uint32_t FlatVariables::add_size(uint32_t size) {
-    uint32_t next_slot = this->sizes.size();
+    uint32_t next_slot = (uint32_t) this->sizes.size();
     auto result        = this->size_to_slot.try_emplace(size, next_slot);
     auto it            = result.first;
     bool inserted      = result.second;
@@ -731,7 +737,7 @@ void FlatVariables::traverse_cb(const drjit::TraversableBase *traversable,
                                 TraverseContext &ctx, nb::object type) {
     // ProfilerPhase profiler(traversable);
 
-    uint32_t layout_index = this->layout.size();
+    uint32_t layout_index = (uint32_t) this->layout.size();
     Layout &layout        = this->layout.emplace_back();
     layout.type           = nb::borrow<nb::type_object>(type);
 
@@ -822,7 +828,7 @@ struct scoped_path {
 
     uint32_t m_size;
     scoped_path(TraverseContext &ctx, const char *suffix, bool dict = false)
-        : m_ctx(ctx), m_size(ctx.path.size()) {
+        : m_ctx(ctx), m_size((uint32_t) ctx.path.size()) {
         if (dict) {
             if (ctx.recursion_level == 0)
                 ctx.path.fmt("%s", suffix);
@@ -834,7 +840,7 @@ struct scoped_path {
         ctx.recursion_level++;
     }
     scoped_path(TraverseContext &ctx, uint32_t suffix)
-        : m_ctx(ctx), m_size(ctx.path.size()) {
+        : m_ctx(ctx), m_size((uint32_t) ctx.path.size()) {
         ctx.path.fmt("[%u]", suffix);
         ctx.recursion_level++;
     }
@@ -865,7 +871,7 @@ void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
     auto tp_name = nb::type_name(tp).c_str();
     jit_log(LogLevel::Debug, "FlatVariables::traverse(): %s {", tp_name);
 
-    uint32_t layout_index = this->layout.size();
+    uint32_t layout_index = (uint32_t) this->layout.size();
     Layout &layout        = this->layout.emplace_back();
 
     const void *key     = h.ptr();
@@ -904,10 +910,10 @@ void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
                 if (len == DRJIT_DYNAMIC)
                     len = s.len(inst_ptr(h));
 
-                layout.num = len;
+                layout.num = (uint32_t) len;
 
                 for (Py_ssize_t i = 0; i < len; ++i) {
-                    scoped_path ps(ctx, i);
+                    scoped_path ps(ctx, (uint32_t) i);
                     traverse(nb::steal(s.item(h.ptr(), i)), ctx);
                 }
             } else {
@@ -917,27 +923,27 @@ void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
         } else if (tp.is(&PyTuple_Type)) {
             nb::tuple tuple = nb::borrow<nb::tuple>(h);
 
-            layout.num = tuple.size();
+            layout.num = (uint32_t) tuple.size();
 
             for (uint32_t i = 0; i < tuple.size(); i++) {
-                scoped_path ps(ctx, i);
+                scoped_path ps(ctx, (uint32_t) i);
                 auto h2 = tuple[i];
                 traverse(h2, ctx);
             }
         } else if (tp.is(&PyList_Type)) {
             nb::list list = nb::borrow<nb::list>(h);
 
-            layout.num = list.size();
+            layout.num = (uint32_t) list.size();
 
             for (uint32_t i = 0; i < list.size(); i++) {
-                scoped_path ps(ctx, i);
+                scoped_path ps(ctx, (uint32_t) i);
                 auto h2 = list[i];
                 traverse(h2, ctx);
             }
         } else if (tp.is(&PyDict_Type)) {
             nb::dict dict = nb::borrow<nb::dict>(h);
 
-            layout.num = dict.size();
+            layout.num = (uint32_t) dict.size();
             layout.fields.reserve(layout.num);
             for (auto k : dict.keys()) {
                 layout.fields.push_back(nb::borrow(k));
@@ -949,7 +955,7 @@ void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
             }
         } else if (nb::dict ds = get_drjit_struct(tp); ds.is_valid()) {
 
-            layout.num = ds.size();
+            layout.num = (uint32_t) ds.size();
             layout.fields.reserve(layout.num);
             for (auto k : ds.keys()) {
                 layout.fields.push_back(nb::borrow(k));
@@ -965,7 +971,7 @@ void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
                 nb::object k = field.attr(DR_STR(name));
                 layout.fields.push_back(nb::borrow(k));
             }
-            layout.num = layout.fields.size();
+            layout.num = (uint32_t) layout.fields.size();
 
             for (nb::handle field : df) {
                 nb::object k = field.attr(DR_STR(name));
@@ -1174,7 +1180,7 @@ void FlatVariables::assign(nb::handle dst, TraverseContext &ctx) {
                     len = s.len(inst_ptr(dst));
 
                 for (Py_ssize_t i = 0; i < len; ++i) {
-                    scoped_path ps(ctx, i);
+                    scoped_path ps(ctx, (uint32_t) i);
                     assign(dst[i], ctx);
                 }
             } else {
@@ -1189,7 +1195,7 @@ void FlatVariables::assign(nb::handle dst, TraverseContext &ctx) {
                 layout.num, (uint32_t) tuple.size());
 
             for (uint32_t i = 0; i < tuple.size(); i++) {
-                scoped_path ps(ctx, i);
+                scoped_path ps(ctx, (uint32_t) i);
                 auto h2 = tuple[i];
                 assign(h2, ctx);
             }
@@ -1202,7 +1208,7 @@ void FlatVariables::assign(nb::handle dst, TraverseContext &ctx) {
                 ctx.path.get(), layout.num, (uint32_t) list.size());
 
             for (uint32_t i = 0; i < list.size(); i++) {
-                scoped_path ps(ctx, i);
+                scoped_path ps(ctx, (uint32_t) i);
                 auto h2 = list[i];
                 assign(h2, ctx);
             }
@@ -1295,7 +1301,7 @@ void FlatVariables::traverse_with_registry(nb::handle h, TraverseContext &ctx) {
     // Traverse the registry (if a class variable was traversed)
     if (!domains.empty()) {
         ProfilerPhase profiler("traverse_registry");
-        uint32_t layout_index = this->layout.size();
+        uint32_t layout_index = (uint32_t) this->layout.size();
         Layout &layout        = this->layout.emplace_back();
         layout.type           = nb::borrow<nb::type_object>(nb::none());
 
@@ -1307,7 +1313,7 @@ void FlatVariables::traverse_with_registry(nb::handle h, TraverseContext &ctx) {
         for (std::string &domain : domains) {
             uint32_t registry_bound =
                 jit_registry_id_bound(variant.c_str(), domain.c_str());
-            uint32_t offset = registry_pointers.size();
+            uint32_t offset = (uint32_t) registry_pointers.size();
             registry_pointers.resize(registry_pointers.size() + registry_bound,
                                      nullptr);
             jit_registry_get_pointers(variant.c_str(), domain.c_str(),
@@ -1361,7 +1367,7 @@ void FlatVariables::assign_with_registry(nb::handle dst, TraverseContext &ctx) {
         for (std::string &domain : domains) {
             uint32_t registry_bound =
                 jit_registry_id_bound(variant.c_str(), domain.c_str());
-            uint32_t offset = registry_pointers.size();
+            uint32_t offset = (uint32_t) registry_pointers.size();
             registry_pointers.resize(registry_pointers.size() + registry_bound,
                                      nullptr);
             jit_registry_get_pointers(variant.c_str(), domain.c_str(),
@@ -1543,7 +1549,7 @@ bool log_diff(LogLevel level, const FlatVariables &curr,
         }
     } else {
         for (uint32_t i = 0; i < curr_l.num; i++) {
-            scoped_path ps(ctx, i);
+            scoped_path ps(ctx, (uint32_t) i);
 
             log_diff(level, curr, prev, index, ctx);
         }
@@ -1640,7 +1646,7 @@ size_t FlatVariablesHasher::operator()(
 
         uint32_t type_hash = 0;
         if (layout.type)
-            type_hash = nb::hash(layout.type);
+            type_hash = (uint32_t) nb::hash(layout.type);
 
         uint32_t object_hash = 0;
         if (layout.py_object) {
@@ -1650,9 +1656,9 @@ size_t FlatVariablesHasher::operator()(
             // Try to hash the object, and otherwise fallback to ``id()``
             if (rv == -1 && PyErr_Occurred()) {
                 PyErr_Clear();
-                object_hash = (uintptr_t) ptr;
+                object_hash = (uint32_t) (uintptr_t) ptr;
             } else {
-                object_hash = rv;
+                object_hash = (uint32_t) rv;
             }
         }
         if (type_hash && object_hash)
@@ -1718,7 +1724,7 @@ nb::object FunctionRecording::record(nb::callable func,
     jit_log(LogLevel::Debug,
             "Recording (n_inputs=%u):", in_variables.variables.size());
     jit_freeze_start(backend, in_variables.variables.data(),
-                     in_variables.variables.size());
+                     (uint32_t) in_variables.variables.size());
 
     // Record the function
     nb::object output;
@@ -1792,7 +1798,7 @@ nb::object FunctionRecording::record(nb::callable func,
     // exceptions.
     try {
         recording = jit_freeze_stop(backend, out_variables.variables.data(),
-                                    out_variables.variables.size());
+                                    (uint32_t) out_variables.variables.size());
     } catch (nb::python_error &e) {
         out_variables.release();
         nb::raise_from(e, PyExc_RuntimeError,
