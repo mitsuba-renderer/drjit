@@ -3732,7 +3732,8 @@ def test100_kernel_history(t, auto_opaque):
 
     frozen = dr.freeze(func, auto_opaque=auto_opaque)
 
-    x = t(1, 2, 3)
+    x = dr.arange(t, 128)
+    dr.make_opaque(x)
 
     with dr.scoped_set_flag(dr.JitFlag.KernelHistory, True):
         frozen(x)
@@ -3742,9 +3743,6 @@ def test100_kernel_history(t, auto_opaque):
         frozen(x)
 
         history_replay = dr.kernel_history()
-
-        print(f"{history_record}")
-        print(f"{history_replay}")
 
         assert len(history_record) == len(history_replay)
         for i in range(len(history_record)):
@@ -3756,6 +3754,7 @@ def test100_kernel_history(t, auto_opaque):
             assert k1["hash"] == k2["hash"]
             assert k1["size"] == k2["size"]
             assert k1["uses_optix"] == k2["uses_optix"]
-            assert k1["uses_optix"] == k2["uses_optix"]
+            assert k1["input_count"] == k2["input_count"]
+            assert k1["output_count"] == k2["output_count"]
             assert k2["execution_time"] > 0
 
