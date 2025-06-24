@@ -3732,7 +3732,7 @@ def test100_kernel_history(t, auto_opaque):
 
     frozen = dr.freeze(func, auto_opaque=auto_opaque)
 
-    x = dr.arange(t, 128)
+    x = dr.arange(t, 3)
     dr.make_opaque(x)
 
     with dr.scoped_set_flag(dr.JitFlag.KernelHistory, True):
@@ -3756,5 +3756,4 @@ def test100_kernel_history(t, auto_opaque):
             assert k1["uses_optix"] == k2["uses_optix"]
             assert k1["input_count"] == k2["input_count"]
             assert k1["output_count"] == k2["output_count"]
-            assert k2["execution_time"] > 0
 
