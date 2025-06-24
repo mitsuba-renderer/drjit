@@ -5,7 +5,7 @@ import sys
 
 
 @pytest.test_arrays("jit,shape=(*),float32,diff")
-def test01_hash_grid_tcnn(t):
+def test01_hashgrid_tcnn(t):
     """
     Tests that the hashgrid implementation produces the same results and gradients
     as the one in tinycudann.
@@ -104,6 +104,89 @@ def test01_hash_grid_tcnn(t):
     grad_ref = hg_ref.params.grad.to(device=device)
 
     assert torch.allclose(grad_res, grad_ref)
+
+
+@pytest.test_arrays("jit,shape=(*),float32,diff")
+def test02_hashgrid_ref(t):
+    """
+    Tests that the hashgrid implementation produces the same results and gradients,
+    as tinycudann, with saved reference data.
+    """
+
+    m = sys.modules[t.__module__]
+    Float32 = m.Float32
+    ArrayXf = m.ArrayXf
+    PCG32 = m.PCG32
+
+    n = 4
+
+    config = {
+        "hashmap_size": 2**16,
+        "n_levels": 16,
+        "base_resolution": 16,
+        "per_level_scale": 2,
+        "n_features_per_level": 2,
+    }
+
+    hg = hashgrid.HashGridEncoding(
+        3,
+        **config,
+        align_corners=False,
+        torchngp_compat=True,
+    )
+
+    hg = hg.alloc(Float32)
+    data = hg.data
+    data = dr.linspace(Float32, 0, 1_000, data.shape[0])
+    hg.set_params(data)
+    dr.enable_grad(hg.data)
+
+    sampler = PCG32(n)
+
+    x = [sampler.next_float32(), sampler.next_float32(), sampler.next_float32()]
+    dr.make_opaque(x)
+
+    res = hg(x)
+
+    # Baked in reference data
+    ref = ArrayXf(
+        [
+            [2.0091782, 3.3853433, 2.1349537, 1.5373236],
+            [2.009702, 3.385867, 2.1354773, 1.5378475],
+            [19.319187, 31.258121, 20.813356, 15.602333],
+            [19.319712, 31.258648, 20.813877, 15.602858],
+            [82.210266, 91.74675, 82.839745, 78.82015],
+            [82.21078, 91.74728, 82.84027, 78.82066],
+            [153.39827, 154.80888, 152.27963, 118.10999],
+            [153.39879, 154.8094, 152.28017, 118.11051],
+            [224.21854, 200.20016, 220.80148, 213.58574],
+            [224.21907, 200.20071, 220.80202, 213.58624],
+            [279.48984, 273.01324, 268.23297, 286.47266],
+            [279.49036, 273.01376, 268.2335, 286.47318],
+            [346.69785, 351.10532, 353.82407, 346.19147],
+            [346.69836, 351.10583, 353.82462, 346.192],
+            [402.95966, 424.1198, 425.00317, 430.22342],
+            [402.96017, 424.1203, 425.00372, 430.22394],
+            [472.5495, 481.44485, 485.95703, 479.4993],
+            [472.55002, 481.44534, 485.95755, 479.49982],
+            [549.6837, 573.11414, 549.44934, 563.9181],
+            [549.6842, 573.1146, 549.4498, 563.9187],
+            [630.8403, 627.67163, 601.86285, 611.5191],
+            [630.84076, 627.67224, 601.8634, 611.51965],
+            [676.8451, 693.41394, 693.47345, 706.95087],
+            [676.84564, 693.4145, 693.474, 706.95135],
+            [732.765, 761.9854, 725.7928, 768.14325],
+            [732.7655, 761.986, 725.7934, 768.1438],
+            [838.08276, 834.42194, 829.39764, 818.9452],
+            [838.08325, 834.4224, 829.3982, 818.94574],
+            [899.3081, 894.0666, 890.1944, 895.054],
+            [899.30865, 894.06714, 890.195, 895.05457],
+            [960.4274, 959.1223, 964.1252, 960.06976],
+            [960.428, 959.12286, 964.1257, 960.0703],
+        ]
+    )
+
+    assert dr.allclose(res, ref)
 
 
 @pytest.test_arrays("jit,shape=(*),float16,diff")
