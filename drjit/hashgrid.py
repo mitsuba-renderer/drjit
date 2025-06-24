@@ -141,6 +141,9 @@ class HashEncoding:
 
         params_size = self._level_offsets[-1] * self.n_features_per_level
         self.data = drjit.zeros(self.dtype, params_size)
+        # lower = -1e-4
+        # upper = 1e-4
+        # self.data = drjit.rand(self.dtype, params_size) * (upper - lower) + lower
 
     def n_params(self) -> int:
         """
@@ -329,10 +332,7 @@ class HashEncoding:
         level_offset = self._level_offsets[level_i]
         this_level_size = self._level_offsets[level_i + 1] - level_offset
 
-        # tiny-cuda-nn uses a uint32 here, which can lead to an integer overflow,
-        # and the hash condition not being detected. For compatibility, we use
-        # Dr.Jit's UInt32.
-        stride = self.UInt32(1) if self.torchngp_compat else 1
+        stride = 1
         index = self.UInt32(0)
         for d in range(self.dimension):
             index += key[d] * stride
