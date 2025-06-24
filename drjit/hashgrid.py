@@ -46,6 +46,7 @@ class HashEncoding:
     _torchngp_compat: bool
     _smooth_weight_gradients: bool
     _smooth_weight_lambda: float
+    _init_scale: float
 
     DRJIT_STRUCT = {
         "data": drjit.ArrayBase,
@@ -61,6 +62,7 @@ class HashEncoding:
         "_torchngp_compat": bool,
         "_smooth_weight_gradients": bool,
         "_smooth_weight_lambda": float,
+        "_init_scale": float,
     }
 
     def __init__(
@@ -76,6 +78,7 @@ class HashEncoding:
         torchngp_compat: bool = False,
         smooth_weight_gradients: bool = False,
         smooth_weight_lambda: float = 1.0,
+        init_scale: float = 1e-4,
     ) -> None:
         self._dimension = dimension
         self._n_levels = n_levels
@@ -88,6 +91,7 @@ class HashEncoding:
         self._torchngp_compat = torchngp_compat
         self._smooth_weight_gradients = smooth_weight_gradients
         self._smooth_weight_lambda = smooth_weight_lambda
+        self._init_scale = init_scale
 
     def alloc(self, dtype: Type[drjit.ArrayBase], /) -> HashEncoding:
         """
@@ -140,10 +144,11 @@ class HashEncoding:
         self._level_offsets[-1] = offset
 
         params_size = self._level_offsets[-1] * self.n_features_per_level
-        self.data = drjit.zeros(self.dtype, params_size)
-        # lower = -1e-4
-        # upper = 1e-4
-        # self.data = drjit.rand(self.dtype, params_size) * (upper - lower) + lower
+
+        lower = -self._init_scale
+        upper = self._init_scale
+        self.data = drjit.rand(self.dtype, params_size) * (upper - lower) + lower
+        drjit.schedule(self.data)
 
     def n_params(self) -> int:
         """
@@ -239,6 +244,16 @@ class HashEncoding:
         while 0.0 disables smoothing entirely.
         """
         return self._smooth_weight_lambda
+
+    @property
+    def init_scale(self) -> float:
+        """Scale for uniform random initialization of parameters.
+
+        When allocating a hash encoding, the parameters are initialized using a
+        uniform random distribution. This value is used to scale this distribution,
+        ranging from -init_scale to +init_scale.
+        """
+        return self._init_scale
 
     @property
     def out_features(self) -> int:
@@ -409,6 +424,8 @@ class HashGridEncoding(HashEncoding):
         smooth_weight_gradients: whether to smooth the gradients of the weights
             by using a straight-through estimator.
         smooth_weight_lambda: the value of lambda used for the straight-through estimator.
+        init_scale: The parameters of the hashgrid are initialized with a uniform
+            distribution, ranging from -init_scale to +init_scale.
     """
 
     @overload
@@ -425,6 +442,7 @@ class HashGridEncoding(HashEncoding):
         torchngp_compat: bool = False,
         smooth_weight_gradients: bool = False,
         smooth_weight_lambda: float = 1.0,
+        init_scale: float = 1e-4,
     ) -> None: ...
 
     def __init__(self, *args, **kwargs) -> None:
@@ -560,6 +578,8 @@ class PermutoEncoding(HashEncoding):
         smooth_weight_gradients: whether to smooth the gradients of the weights
             by using a straight-through estimator.
         smooth_weight_lambda: the value of lambda used for the straight-through estimator.
+        init_scale: The parameters of the hashgrid are initialized with a uniform
+            distribution, ranging from -init_scale to +init_scale.
     """
 
     @overload
@@ -575,6 +595,7 @@ class PermutoEncoding(HashEncoding):
         align_corners: bool = False,
         smooth_weight_gradients: bool = False,
         smooth_weight_lambda: float = 1.0,
+        init_scale: float = 1e-4,
     ) -> None: ...
 
     def __init__(self, *args, **kwargs) -> None:
