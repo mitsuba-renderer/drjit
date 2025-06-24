@@ -190,7 +190,7 @@ def test02_hashgrid_ref(t):
 
 
 @pytest.test_arrays("jit,shape=(*),float16,diff")
-def test02_permutohedral(t):
+def test03_permutohedral(t):
     """
     Tests that it is possible to run the permutohedral encodings.
     """

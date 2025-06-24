@@ -150,14 +150,13 @@ class HashEncoding:
 
     def set_params(self, values: drjit.ArrayBase, copy=False) -> None:
         """
-        Should pass `values` as a DrJit array (float32 only for now).
+        Should pass `values` as a DrJit array.
         """
         assert drjit.width(values) == drjit.width(self.data)
         assert type(values) is type(self.data)
         if copy:
             self.data = type(self.data)(values)
         else:
-            assert isinstance(values, type(self.data))
             self.data = values
 
     @property
@@ -394,11 +393,10 @@ class HashGridEncoding(HashEncoding):
         n_levels: Hash encodings generally make use of multiple levels of the same
             encoding with different scales. This parameter specifies the number of
             levels used by this encoding.
-        n_features_per_level: More than one feature can be stored in a vertex per
-            level. This value specifies how many, and the number of output features
-            of the hash encoding layer is given by ``n_levels * n_features_per_level``.
-            This value should always be a multiple of two, in order to ensure efficient
-            gradient backpropagation.
+        n_features_per_level: Specifies how many features are stored at each vertex
+            and at each level. The number of output features of the hash encoding
+            is given by ``n_levels * n_features_per_level``. In order to ensure efficient
+            gradient backpropagation, this value should be a multiple of two.
         hashmap_size: Specifies the maximal number of parameters per level of the
             hash encoding. HashGrids will use a dense grid lookup for layers with
             a low enough scale, and use less than ``hashmap_size`` number of parameters
@@ -441,9 +439,9 @@ class HashGridEncoding(HashEncoding):
         # avoid rounding artifacts.
         p = PositionFloatXf(p)
 
-        assert drjit.shape(p)[0] == self.dimension, (
+        assert len(p) == self.dimension, (
             f"This hash grid expected an input of feature dimension {self.dimension}"
-            f" but got {drjit.shape(p)[0]}."
+            f" but got {len(p)}."
         )
 
         # Stores the pattern of offsets used to index the 2**n corners of a voxel
@@ -546,11 +544,10 @@ class PermutoEncoding(HashEncoding):
         n_levels: Hash encodings generally make use of multiple levels of the same
             encoding with different scales. This parameter specifies the number of
             levels used by this encoding.
-        n_features_per_level: More than one feature can be stored in a vertex per
-            level. This value specifies how many, and the number of output features
-            of the hash encoding layer is given by ``n_levels * n_features_per_level``.
-            This value should always be a multiple of two, in order to ensure efficient
-            gradient backpropagation.
+        n_features_per_level: Specifies how many features are stored at each vertex
+            and at each level. The number of output features of the hash encoding
+            is given by ``n_levels * n_features_per_level``. In order to ensure efficient
+            gradient backpropagation, this value should be a multiple of two.
         hashmap_size: Specifies the maximal number of parameters per level of the
             hash encoding. HashGrids will use a dense grid lookup for layers with
             a low enough scale, and use less than ``hashmap_size`` number of parameters
@@ -592,9 +589,9 @@ class PermutoEncoding(HashEncoding):
         # avoid rounding artifacts.
         p = PositionFloatXf(p)
 
-        assert drjit.shape(p)[0] == self.dimension, (
+        assert len(p) == self.dimension, (
             f"This permutohedral grid expected an input of feature dimension {self.dimension}"
-            f" but got {drjit.shape(p)[0]}."
+            f" but got {len(p)}."
         )
 
         out_values = [self.StorageFloat(0.0)] * (
