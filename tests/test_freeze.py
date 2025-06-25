@@ -3720,3 +3720,40 @@ def test99_construction_failure(t, auto_opaque):
     with pytest.raises(RuntimeError):
         frozen(x)
 
+@pytest.test_arrays("float32, jit, diff, shape=(*)")
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test100_kernel_history(t, auto_opaque):
+    """
+    Tests that the kernel history is reproduced when replaying a frozen function.
+    """
+
+    def func(x):
+        return x + 1
+
+    frozen = dr.freeze(func, auto_opaque=auto_opaque)
+
+    x = dr.arange(t, 3)
+    dr.make_opaque(x)
+
+    with dr.scoped_set_flag(dr.JitFlag.KernelHistory, True):
+        frozen(x)
+
+        history_record = dr.kernel_history()
+
+        frozen(x)
+
+        history_replay = dr.kernel_history()
+
+        assert len(history_record) == len(history_replay)
+        for i in range(len(history_record)):
+            k1 = history_record[i]
+            k2 = history_replay[i]
+
+            assert k1["backend"] == k2["backend"]
+            assert k1["type"] == k2["type"]
+            assert k1["hash"] == k2["hash"]
+            assert k1["size"] == k2["size"]
+            assert k1["uses_optix"] == k2["uses_optix"]
+            assert k1["input_count"] == k2["input_count"]
+            assert k1["output_count"] == k2["output_count"]
+
