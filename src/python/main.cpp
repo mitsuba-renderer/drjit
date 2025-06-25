@@ -61,7 +61,7 @@ NB_MODULE(_drjit_ext, m_) {
     nb::module_ m = nb::module_::import_("drjit");
     m.doc() = "A Just-In-Time-Compiler for Differentiable Rendering";
 
-    export_log(m, nanobind_module_def__drjit_ext);
+    export_log(m, nanobind__drjit_ext_module);
 
     uint32_t backends = 0;
 
