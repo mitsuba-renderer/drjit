@@ -3722,17 +3722,25 @@ def test99_construction_failure(t, auto_opaque):
 
 @pytest.test_arrays("float32, jit, diff, shape=(*)")
 @pytest.mark.parametrize("auto_opaque", [False, True])
-def test100_kernel_history(t, auto_opaque):
+@pytest.mark.parametrize("recorded_func", ["kernel", "compress", "block_sum"])
+def test100_kernel_history(t, auto_opaque, recorded_func):
     """
     Tests that the kernel history is reproduced when replaying a frozen function.
     """
 
-    def func(x):
-        return x + 1
+    if recorded_func == "kernel":
+        def func(x):
+            return x + 1
+    elif recorded_func == "compress":
+        def func(x):
+            return dr.compress(x > 2)
+    elif recorded_func == "block_sum":
+        def func(x):
+            return dr.block_sum(x, 2)
 
     frozen = dr.freeze(func, auto_opaque=auto_opaque)
 
-    x = dr.arange(t, 3)
+    x = dr.arange(t, 4)
     dr.make_opaque(x)
 
     with dr.scoped_set_flag(dr.JitFlag.KernelHistory, True):
@@ -3751,9 +3759,10 @@ def test100_kernel_history(t, auto_opaque):
 
             assert k1["backend"] == k2["backend"]
             assert k1["type"] == k2["type"]
-            assert k1["hash"] == k2["hash"]
+            if recorded_func == "kernel":
+                assert k1["hash"] == k2["hash"]
+                assert k1["uses_optix"] == k2["uses_optix"]
             assert k1["size"] == k2["size"]
-            assert k1["uses_optix"] == k2["uses_optix"]
             assert k1["input_count"] == k2["input_count"]
             assert k1["output_count"] == k2["output_count"]
 
