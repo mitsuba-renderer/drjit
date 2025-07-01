@@ -503,3 +503,30 @@ class SinEncode(Module):
         return CoopVec(r)
 
 
+class SphericalHarmonicsEncode(Module):
+
+    DRJIT_STRUCT = {
+        "order": int,
+    }
+
+    def __init__(self, order: int = 0) -> None:
+        self.order = order
+        self.channels = -1
+
+    def _alloc(
+        self, dtype: Type[drjit.ArrayBase], size: int = -1, /
+    ) -> Tuple[Module, int]:
+        r = SphericalHarmonicsEncode(order=self.order)
+
+        assert size % 3 == 0
+        r.channels = size // 3
+
+        return r, r.channels * (r.order + 1) ** 2
+
+    def __call__(self, arg: CoopVec, /) -> CoopVec:
+        arg, r = list(arg), list()
+        for i in range(0, len(arg), 3):
+            r.extend(drjit.sh_eval(arg[i : i + 3], self.order))
+
+        return CoopVec(r)
+
