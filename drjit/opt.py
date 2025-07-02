@@ -965,13 +965,13 @@ class Adam(Optimizer[Tuple[int, dr.ArrayBase, dr.ArrayBase]]):
         # Compute the step size scale, which is a product of
         # - EMA debiasing factor
         # - Adaptive/parameter-specific scaling
-        Float32 = dr.float32_array_t(dr.leaf_t(grad))
+        grad_type = dr.leaf_t(grad)
         Float64 = dr.float64_array_t(dr.leaf_t(grad))
-        ema_factor = Float32(
+        ema_factor = grad_type(
             -dr.sqrt(1 - Float64(self.beta_2) ** t) / (1 - Float64(self.beta_1) ** t)
         )
         scale = cache.product(
-            dr.leaf_t(grad),  # Desired type
+            grad_type,
             lr,
             ema_factor,
         )
