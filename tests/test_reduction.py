@@ -467,3 +467,10 @@ def test13_test_prefix_reduction(t, reverse, exclusive):
 @pytest.test_arrays('jit, uint32, shape=(*)')
 def test20_concat_array(t):
     assert dr.all(dr.concat((t(1,2,3), t(4,5,6))) == t(1,2,3,4,5,6))
+
+@pytest.test_arrays('shape=(*), float, jit')
+def test21_clip(t):
+    assert dr.allclose(dr.clip(3, 4.0, 6.0), 4.0)
+
+    a = dr.clip(t([1, 2, 3]), 0, 2)
+    assert dr.allclose(a, [1, 2, 2])
