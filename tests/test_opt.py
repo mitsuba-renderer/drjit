@@ -301,6 +301,7 @@ def test08_amp(t):
     assert dr.shape(opt["x"] == (2, 2))
     assert dr.allclose(opt["x"], 2.00245)
 
+
 @pytest.test_arrays("is_diff,float,shape=(3, *),float32")
 def test09_optimize_nested(t):
     # Test that nested arrays are correctly handled
