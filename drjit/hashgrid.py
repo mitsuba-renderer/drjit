@@ -160,7 +160,10 @@ class HashEncoding:
         """
         Should pass `values` as a DrJit array.
         """
-        assert drjit.width(values) == drjit.width(self.data)
+        assert drjit.width(values) == drjit.width(self.data), (
+            f"The number of parameters ({drjit.width(values)}) does not match "
+            f"the number of expected parameters ({drjit.width(self.data)})"
+        )
         assert type(values) is type(self.data)
         if copy:
             self.data = type(self.data)(values)
@@ -385,14 +388,9 @@ class HashEncoding:
 
     def _resolution(self, scale: float) -> int:
         """
-        Convert scale factor to discrete grid resolution (number of grid vertices).
-
-        Adds 1 extra vertex when align_corners is False or torchngp_compat is True
-        to account for different grid vertex alignment conventions.
+        Convert scale factor to discrete grid resolution (number of grid vertices per dimension).
         """
-        return int(drjit.ceil(scale)) + (
-            1 if not self.align_corners or self.torchngp_compat else 0
-        )
+        return int(drjit.ceil(scale)) + 1
 
 
 class HashGridEncoding(HashEncoding):

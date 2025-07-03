@@ -193,24 +193,25 @@ def test03_permutohedral(t):
     """
     Tests that it is possible to run the permutohedral encodings.
     """
-    n = 16
-    d = 3
-
     encoding = hashgrid.PermutoEncoding(
-        dimension=d,
-        n_levels=16,
-        n_features_per_level=2,
+        dimension=2,
+        n_levels=1,
+        n_features_per_level=1,
+        base_resolution=2,
+        align_corners=True,
     )
 
     m = sys.modules[t.__module__]
-    Float16 = m.Float16
     Float32 = m.Float32
+    ArrayXf = m.ArrayXf
 
-    encoding = encoding.alloc(Float16)
-    encoding.set_params(dr.rand(Float16, (dr.width(encoding.data))))
+    encoding = encoding.alloc(Float32)
+    encoding.set_params(dr.arange(Float32, 8))
 
-    x = [dr.rand(Float32, n) for i in range(d)]
+    x = [Float32(0, 0, 1, 1/3), Float32(0, 1, 1, 2/3)]
     res = encoding(x)
 
-    # TODO: validate results
+    ref = ArrayXf([Float32(0, 2, 3, (0 + 2 + 3) / 3)])
+
+    assert dr.allclose(res, ref)
 
