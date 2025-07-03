@@ -47,17 +47,17 @@ template <typename Float> struct Base : drjit::TraversableBase {
     virtual void scatter_packet(UInt32, dr::Array<Float, 4>) = 0;
     virtual void scatter_add_packet(UInt32, dr::Array<Float, 4>) = 0;
 
-    static constexpr const char *variant_() {
-        return Float::Backend == JitBackend::CUDA ? "cuda" : "llvm";
-    }
-
     Base() {
         if constexpr (dr::is_jit_v<Float>){
-            drjit::registry_put(Base::variant_(), "Base", this);
+            drjit::registry_put(Variant, Domain, this);
         }
     }
 
     virtual ~Base() { jit_registry_remove(this); }
+
+    static constexpr const char *Variant =
+        Float::Backend == JitBackend::CUDA ? "cuda" : "llvm";
+    static constexpr const char *Domain = "Base";
 
     DR_TRAVERSE_CB(drjit::TraversableBase)
 };
@@ -214,13 +214,13 @@ DRJIT_CALL_TEMPLATE_BEGIN(Base)
     DRJIT_CALL_METHOD(get_self)
 public:
     static constexpr const char *variant_() { return get_variant<Ts...>(); }
-DRJIT_CALL_END(Base)
+DRJIT_CALL_END()
 
 
 DRJIT_CALL_TEMPLATE_INHERITED_BEGIN(A, Base)
     DRJIT_CALL_METHOD(a_gather_extra_value)
     DRJIT_CALL_GETTER(a_get_property)
-DRJIT_CALL_END(Base)
+DRJIT_CALL_END()
 
 
 template <JitBackend Backend>
