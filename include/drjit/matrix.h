@@ -510,12 +510,13 @@ template <typename T, size_t Size> Matrix<T, Size> rcp(const Matrix<T, Size> &m)
 template <typename T, size_t Size> std::pair<Matrix<T, Size>, Matrix<T, Size>>
 polar_decomp(const Matrix<T, Size> &A, size_t it = 10) {
     using PlainArrayType = plain_t<Matrix<T, Size>>;
+    using Scalar = scalar_t<T>;
     Matrix<T, Size> Q = A;
     for (size_t i = 0; i < it; ++i) {
         Matrix<T, Size> Qi = inverse_transpose(Q);
         T gamma = sqrt(frob(Qi) / frob(Q));
-        Q = fmadd(PlainArrayType(Q), gamma * 0.5f,
-                  PlainArrayType(Qi) * (rcp(gamma) * 0.5f));
+        Q = fmadd(PlainArrayType(Q), gamma * Scalar(.5f),
+                  PlainArrayType(Qi) * (rcp(gamma) * Scalar(.5f)));
     }
     return { Q, transpose(Q) * A };
 }
