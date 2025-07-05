@@ -656,3 +656,33 @@ def test21_tensor_index_with_tensor(t):
     x = t([1, 2, 3], shape=(1, 3))
     idx = t([2, 0])
     assert dr.all(x[:, idx] == t([3, 1]))
+
+
+@pytest.test_arrays('is_tensor, -bool')
+def test22_item(t):
+    assert dr.sum(t([42])).item() == 42
+    assert t([42]).item() == 42
+    assert t([42], shape=(1, 1)).item() == 42
+
+    with pytest.raises(RuntimeError, match='can only convert arrays of length 1'):
+        t([1, 2, 3]).item()
+
+    with pytest.raises(RuntimeError, match='can only convert arrays of length 1'):
+        t([[1], [3]]).item()
+
+    # Test error case: empty tensor
+    with pytest.raises(RuntimeError, match='can only convert arrays of length 1'):
+        t([]).item()
+
+
+@pytest.test_arrays('-is_tensor, -bool, shape=(*)')
+def test23_item_array(t):
+    # Test .item() on single element array
+    x = t([42])
+    assert x.item() == 42
+
+    with pytest.raises(RuntimeError, match='can only convert arrays of length 1'):
+        t([1, 2, 3]).item()
+
+    with pytest.raises(RuntimeError, match='can only convert arrays of length 1'):
+        t([]).item()

@@ -2151,6 +2151,15 @@
         tuple[int, ...]: A tuple describing the dimension and shape of the
         provided Dr.Jit input array or tensor.
 
+.. topic:: ArrayBase_item
+
+    Return the content of the array/tensor as Python scalar
+
+    This operation is only permitted when the array/tensor has exactly a single
+    element, otherwise it raises an exception.
+
+    :type: :py:func:`value_t(self) <value_t>`
+
 .. topic:: ArrayBase_x
 
     If ``self`` is a static Dr.Jit array of size 1 (or larger), the property

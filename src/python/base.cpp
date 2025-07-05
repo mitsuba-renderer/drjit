@@ -1173,6 +1173,25 @@ void export_base(nb::module_ &m) {
         },
         doc_ArrayBase_index_ad);
 
+    ab.def(
+        "item",
+        [](nb::handle_t<dr::ArrayBase> h) -> nb::object {
+            const ArraySupplement &s = supp(h.type());
+
+            if (s.is_tensor)
+                return nb::steal(s.tensor_array(h.ptr())).attr("item")();
+
+            Py_ssize_t length = s.shape[0];
+            if (length == DRJIT_DYNAMIC)
+                length = (Py_ssize_t) s.len(inst_ptr(h));
+
+            if (length != 1 || s.ndim != 1)
+                nb::raise("ArrayBase.item(): can only convert arrays of length 1 to Python scalars");
+
+            return h[0];
+        },
+        doc_ArrayBase_item);
+
     m.def("abs",
           [](nb::handle_t<ArrayBase> h0) {
               return nb::steal(nb_absolute(h0.ptr()));
