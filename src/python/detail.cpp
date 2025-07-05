@@ -462,5 +462,16 @@ void export_detail(nb::module_ &) {
     d.def("traverse_py_cb_ro", &traverse_py_cb_ro_impl);
     d.def("traverse_py_cb_rw", traverse_py_cb_rw_impl);
 
+    nb::enum_<AllocType>(d, "AllocType")
+        .value("Host", AllocType::Host)
+        .value("HostAsync", AllocType::HostAsync)
+        .value("HostPinned", AllocType::HostPinned)
+        .value("Device", AllocType::Device);
+
+    d.def("malloc_watermark", &jit_malloc_watermark,
+          "Return the peak memory usage (watermark) for a given allocation type");
+    d.def("malloc_clear_statistics", &jit_malloc_clear_statistics,
+          "Clear memory allocation statistics");
+
     trace_func_handle = d.attr("trace_func");
 }
