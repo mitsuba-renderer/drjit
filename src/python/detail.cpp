@@ -472,6 +472,11 @@ void export_detail(nb::module_ &) {
           "Return the peak memory usage (watermark) for a given allocation type");
     d.def("malloc_clear_statistics", &jit_malloc_clear_statistics,
           "Clear memory allocation statistics");
+    d.def("launch_stats", []() {
+        size_t launches, soft_misses, hard_misses;
+        jit_launch_stats(&launches, &soft_misses, &hard_misses);
+        return nb::make_tuple(launches, soft_misses, hard_misses);
+    }, "Return kernel launch statistics (launches, soft_misses, hard_misses)");
 
     trace_func_handle = d.attr("trace_func");
 }
