@@ -172,7 +172,7 @@ DRJIT_INLINE JitVar scalar(Index index, double value) {
 /// As above, but for cooperative vectors
 DRJIT_INLINE JitVar scalar_coop_vec(Index index, double value) {
     VarInfo info = jit_set_backend(jit_index(index));
-    return scalar_coop_vec(info.backend, info.type, value, jit_coop_vec_length(index));
+    return scalar_coop_vec(info.backend, info.type, value, (uint32_t) jit_coop_vec_length(index));
 }
 
 // ==========================================================================
@@ -3954,7 +3954,7 @@ public:
             return;
 
         JitIndex *tmp = (JitIndex *) alloca(sizeof(JitIndex) * n);
-        jit_coop_vec_unpack(v->grad.index(), n, tmp);
+        jit_coop_vec_unpack(v->grad.index(), (uint32_t) n, tmp);
 
         for (size_t i = 0; i < n; ++i) {
             Variable *vo = state[m_output_indices[i]];
@@ -3980,7 +3980,7 @@ public:
             tmp[i] = index;
         }
 
-        JitVar packed = JitVar::steal(jit_coop_vec_pack(n, tmp));
+        JitVar packed = JitVar::steal(jit_coop_vec_pack((uint32_t) n, tmp));
         for (size_t i = 0; i < m_output_indices.size(); ++i)
             jit_var_dec_ref(tmp[i]);
 
@@ -4001,7 +4001,7 @@ public:
 /// Unpack a cooperative vector into its components
 void ad_coop_vec_unpack(uint64_t index, uint32_t n, uint64_t *out) {
     uint32_t *tmp = (uint32_t *) alloca(sizeof(uint32_t) * n);
-    jit_coop_vec_unpack(index, n, tmp);
+    jit_coop_vec_unpack((uint32_t) index, n, tmp);
 
     ADIndex ad_index = ::ad_index(index);
     const std::vector<Scope> &scopes = local_state.scopes;
@@ -4053,6 +4053,7 @@ uint64_t ad_coop_vec_unary_op(JitOp op, uint64_t i0) {
 
             default:
                 ad_raise("ad_coop_vec_unary_op(): differentiable version not implemented.");
+                return 0; // Unreachable, but silences MSVC warning
         }
     }
 }
@@ -4107,6 +4108,7 @@ uint64_t ad_coop_vec_binary_op(JitOp op, uint64_t i0, uint64_t i1) {
 
             default:
                 ad_raise("ad_coop_vec_binary_op(): differentiable version not implemented.");
+                return 0; // Unreachable, but silences MSVC warning
         }
     }
 }
@@ -4128,6 +4130,7 @@ uint64_t ad_coop_vec_ternary_op(JitOp op, uint64_t i0, uint64_t i1, uint64_t i2)
 
             default:
                 ad_raise("ad_coop_vec_ternary_op(): differentiable version not implemented.");
+                return 0; // Unreachable, but silences MSVC warning
         }
     }
 }
@@ -4244,13 +4247,13 @@ public:
                 std::swap(vec_a, vec_b);
 
             A_v->grad = JitVar::steal(jit_coop_vec_outer_product_accum(
-                A_v->grad.index(), jit_var_size(jit_index(m_A)), &m_A_descr,
+                A_v->grad.index(), (uint32_t) jit_var_size(jit_index(m_A)), &m_A_descr,
                 vec_b, vec_a));
         }
 
         if (b_v) {
             b_v->grad = JitVar::steal(jit_coop_vec_accum(
-                b_v->grad.index(), jit_var_size(jit_index(m_b)), m_b_descr.offset,
+                b_v->grad.index(), (uint32_t) jit_var_size(jit_index(m_b)), m_b_descr.offset,
                 grad.index()));
         }
     }

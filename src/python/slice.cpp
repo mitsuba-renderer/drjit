@@ -107,26 +107,26 @@ slice_index(const nb::type_object_t<ArrayBase> &dtype,
             size_out *= slice_length;
             continue;
         } else if (is_drjit_type(tp)) {
-            const ArraySupplement *s = &supp(tp);
+            const ArraySupplement *s2 = &supp(tp);
             nb::object tmp;
 
-            if (s->is_tensor) {
-                const dr::vector<size_t> &shape = s->tensor_shape(inst_ptr(h));
+            if (s2->is_tensor) {
+                const dr::vector<size_t> &tensor_shape = s2->tensor_shape(inst_ptr(h));
 
-                if (shape.size() != 1) {
+                if (tensor_shape.size() != 1) {
                     nb::raise("drjit.slice_index(): encountered a %zu-D tensor "
                               "of type '%s' in slice expression. However, only "
                               "1D tensors are permitted.",
-                              shape.size(), nb::inst_name(h).c_str());
+                              tensor_shape.size(), nb::inst_name(h).c_str());
                 }
 
-                tmp = nb::steal(s->tensor_array(h.ptr()));
-                s = &supp(tmp.type());
+                tmp = nb::steal(s2->tensor_array(h.ptr()));
+                s2 = &supp(tmp.type());
                 h = tmp;
             }
 
-            if (s->ndim == 1 && s->shape[0] == DRJIT_DYNAMIC) {
-                VarType vt = (VarType) s->type;
+            if (s2->ndim == 1 && s2->shape[0] == DRJIT_DYNAMIC) {
+                VarType vt = (VarType) s2->type;
                 nb::object o = nb::borrow(h);
 
                 size_t slice_size = nb::len(h);
@@ -436,7 +436,6 @@ int mp_ass_subscript(PyObject *self, PyObject *key, PyObject *value) noexcept {
             return 0;
         }
 
-        bool complex_case = false;
         if (key_tp.is(&PyLong_Type)) {
             Py_ssize_t index = PyLong_AsSsize_t(key);
             if (index < 0) {
@@ -480,8 +479,8 @@ int mp_ass_subscript(PyObject *self, PyObject *key, PyObject *value) noexcept {
             // backwards and propagate the changes.
 
             for (auto it = trail.rbegin(); it != trail.rend(); ++it) {
-                auto [orig, k, o] = *it;
-                if (PyObject_SetItem(orig.ptr(), k.ptr(), o.ptr()))
+                auto [orig, k, o2] = *it;
+                if (PyObject_SetItem(orig.ptr(), k.ptr(), o2.ptr()))
                     nb::raise_python_error();
             }
 

@@ -75,6 +75,11 @@ inline void log_member_close() {
 
 NAMESPACE_END(detail)
 
+#if defined(_MSC_VER)
+#  pragma warning(push)
+#  pragma warning(disable: 4275) // non dll-interface class 'nanobind::intrusive_base' used as base
+#endif
+
 /**
  * \brief Interface for traversing C++ objects.
  *
@@ -121,6 +126,10 @@ struct DRJIT_EXTRA_EXPORT TraversableBase : public nanobind::intrusive_base {
     virtual void traverse_1_cb_rw(void *payload,
                                   detail::traverse_callback_rw cb) = 0;
 };
+
+#if defined(_MSC_VER)
+#  pragma warning(pop)
+#endif
 
 /**
  * \brief Macro for generating call to \c traverse_1_fn_ro for a class member.

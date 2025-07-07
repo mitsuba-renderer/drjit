@@ -798,7 +798,7 @@ template <typename T> T block_prefix_sum(const T &value, uint32_t block_size, bo
 }
 
 template <typename T> T prefix_sum(const T &value, bool exclusive = true, bool reverse = false) {
-    return block_prefix_reduce(ReduceOp::Add, value, value.size(), exclusive, reverse);
+    return block_prefix_reduce(ReduceOp::Add, value, uint32_t(value.size()), exclusive, reverse);
 }
 
 //! @}

@@ -296,11 +296,11 @@ Array Resampler::resample_fwd(const Array &source, uint32_t stride) const {
     UInt32 idx = arange<UInt32>(target_size),
            i   = idx / (d->target_res * stride);
 
-    idx = fmadd(i, -d->target_res * stride, idx);
+    idx = fmadd(i, (uint32_t)(-(int32_t)(d->target_res * stride)), idx);
 
     // Get index in output axis ('i') and channel ('k')
     UInt32 j = idx / stride,
-           k = fmadd(j, -stride, idx),
+           k = fmadd(j, (uint32_t)(-(int32_t)stride), idx),
            l = zeros<UInt32>(target_size);
 
     UInt32 offset_j = gather<UInt32>(offset, j),
@@ -344,11 +344,11 @@ Array Resampler::resample_bwd(const Array &target, uint32_t stride) const {
     UInt32 idx = arange<UInt32>(target_size),
            i   = idx / (d->target_res * stride);
 
-    idx = fmadd(i, -d->target_res * stride, idx);
+    idx = fmadd(i, (uint32_t)(-(int32_t)(d->target_res * stride)), idx);
 
     // Get index in output axis ('i') and channel ('k')
     UInt32 j = idx / stride,
-           k = fmadd(j, -stride, idx),
+           k = fmadd(j, (uint32_t)(-(int32_t)stride), idx),
            l = zeros<UInt32>(target_size);
 
     UInt32 offset_j = gather<UInt32>(offset, j),

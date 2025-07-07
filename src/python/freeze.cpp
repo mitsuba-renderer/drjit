@@ -108,6 +108,14 @@
  *    used to both construct the output PyTree and assign the JIT
  *    variables to the input PyTree.
  */
+
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable: 4456) // declaration hides previous local declaration
+#pragma warning(disable: 4457) // declaration hides function parameter
+#pragma warning(disable: 4458) // declaration hides class member
+#endif
+
 #include "freeze.h"
 
 #include <drjit-core/hash.h>
@@ -1824,7 +1832,7 @@ nb::object FunctionRecording::record(nb::callable func,
         jit_log(LogLevel::Debug, "Construct:");
         try {
             output = nb::borrow<nb::object>(out_variables.construct());
-        } catch (std::exception &e) {
+        } catch (std::exception &) {
             out_variables.release();
             throw;
         }
@@ -1832,7 +1840,7 @@ nb::object FunctionRecording::record(nb::callable func,
         try {
             TraverseContext ctx;
             out_variables.assign(input, ctx);
-        } catch (std::exception &e) {
+        } catch (std::exception &) {
             out_variables.release();
             throw;
         }
@@ -1896,7 +1904,7 @@ nb::object FunctionRecording::replay(nb::callable func,
         try {
             ProfilerPhase profiler("construct output");
             output = nb::borrow<nb::object>(out_variables.construct());
-        } catch (std::exception &e) {
+        } catch (std::exception &) {
             out_variables.release();
             throw;
         }
@@ -1904,7 +1912,7 @@ nb::object FunctionRecording::replay(nb::callable func,
             ProfilerPhase profiler("assign input");
             TraverseContext ctx;
             out_variables.assign_with_registry(input, ctx);
-        } catch (std::exception &e) {
+        } catch (std::exception &) {
             out_variables.release();
             throw;
         }
@@ -2086,7 +2094,7 @@ nb::object FrozenFunction::operator()(nb::dict input) {
 
             try {
                 result = recording->replay(func, this, input, *in_variables);
-            } catch (std::exception &e) {
+            } catch (std::exception &) {
                 in_variables->release();
                 throw;
             }
@@ -2171,3 +2179,7 @@ void export_freeze(nb::module_ & /*m*/) {
         .def("clear", &FrozenFunction::clear)
         .def("__call__", &FrozenFunction::operator());
 }
+
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif

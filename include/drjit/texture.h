@@ -1607,7 +1607,7 @@ public:
         DRJIT_MAP(DR_TRAVERSE_MEMBER_RO, m_value, m_unpadded_value,
                   m_resolution_opaque, m_inv_resolution);
         if constexpr (HasCudaTexture) {
-            uint32_t n_textures = 1 + ((m_channels - 1) / 4);
+            uint32_t n_textures = 1 + ((uint32_t(m_channels) - 1) / 4);
             std::vector<uint32_t> indices(n_textures);
             jit_cuda_tex_get_indices(m_handle, indices.data());
             for (uint32_t i = 0; i < n_textures; i++)
@@ -1624,7 +1624,7 @@ public:
         DRJIT_MAP(DR_TRAVERSE_MEMBER_RW, m_value, m_unpadded_value,
                   m_resolution_opaque, m_inv_resolution);
         if constexpr (HasCudaTexture) {
-            uint32_t n_textures = 1 + ((m_channels - 1) / 4);
+            uint32_t n_textures = 1 + ((uint32_t(m_channels) - 1) / 4);
             std::vector<uint32_t> indices(n_textures);
             jit_cuda_tex_get_indices(m_handle, indices.data());
             for (uint32_t i = 0; i < n_textures; i++) {
