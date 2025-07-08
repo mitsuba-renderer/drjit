@@ -80,6 +80,13 @@ nb::object expr_t(nb::handle h0, nb::handle h1) {
             "drjit.expr_t(): incompatible types \"%s\" and \"%s\"",
             nb::type_name(tp0).c_str(), nb::type_name(tp1).c_str());
 
+    // Check if either input type is already compatible with the promoted type
+    // This preserves custom array types when possible
+    if (m == m0 && m0.talign && is_drjit_type(tp0))
+        return nb::borrow(tp0);
+    if (m == m1 && m1.talign && is_drjit_type(tp1))
+        return nb::borrow(tp1);
+
     return nb::borrow(meta_get_type(m));
 }
 
