@@ -120,11 +120,15 @@ class Optimizer(Generic[Extra], MutableMapping[str, dr.ArrayBase]):
     # Mask updates of parameters that did not receive a gradient?
     mask_updates: bool
 
+    # Promote half-precision variables to use single precision internal storage?
+    promote_fp16: bool
+
     # Maps the parameter name to a tuple containing
     # - the current parameter value
+    # - whether the parameter was promoted to single precision
     # - an parameter-specific learning rate (or None)
     # - an arbitrary sequence of additional optimizer-dependent state values
-    state: Dict[str, Tuple[dr.ArrayBase, Optional[LearningRate], Extra]]
+    state: Dict[str, Tuple[dr.ArrayBase, bool, Optional[LearningRate], Extra]]
 
     DRJIT_STRUCT = {
         "lr": LearningRate,
@@ -137,6 +141,7 @@ class Optimizer(Generic[Extra], MutableMapping[str, dr.ArrayBase]):
         params: Optional[Mapping[str, dr.ArrayBase]] = None,
         *,
         mask_updates: bool = False,
+        promote_fp16: bool = True,
     ):
         """
         Create an empty Optimizer object with the learning rate ``lr`` and initial
@@ -171,6 +176,13 @@ class Optimizer(Generic[Extra], MutableMapping[str, dr.ArrayBase]):
                 of the above steps, similar to PyTorch's `SparseAdam optimizer
                 <https://pytorch.org/docs/1.9.0/generated/torch.optim.SparseAdam.html>`_.
                 Dr.Jit supports this feature for all optimizers.
+
+            promote_fp16 (bool):
+                If set to ``True`` (the default), the optimizer internally
+                promotes half precision parameters to single precision to
+                prevent issues, where rounding inteferes with the optimization.
+                Accessing the current state via ``optimizer["parameter_name"]``
+                will cast back to half precision.
         """
 
         if isinstance(lr, float) and lr < 0:
@@ -178,6 +190,7 @@ class Optimizer(Generic[Extra], MutableMapping[str, dr.ArrayBase]):
 
         self.lr = lr
         self.mask_updates = mask_updates
+        self.promote_fp16 = promote_fp16
         self.state = {}
 
         if params:
@@ -189,7 +202,14 @@ class Optimizer(Generic[Extra], MutableMapping[str, dr.ArrayBase]):
 
     def __getitem__(self, key: str, /) -> dr.ArrayBase:
         """Retrieve a parameter value from the optimizer."""
-        return self.state[key][0]
+        entry = self.state[key]
+        value = entry[0]
+
+        # If previously promoted from FP16 -> FP32, cast back
+        if entry[1]:
+            value = dr.float16_array_t(value)(value)
+
+        return value
 
     def __setitem__(self, key: str, value: dr.ArrayBase, /):
         """
@@ -245,10 +265,14 @@ class Optimizer(Generic[Extra], MutableMapping[str, dr.ArrayBase]):
         # Reattach the copy to the AD graph
         dr.enable_grad(value)
 
+        promoted = self.promote_fp16 and dr.type_v(value) == dr.VarType.Float16
+        if promoted:
+            value = dr.float32_array_t(value)(value)
+
         if prev is not None and prev[0].shape == value.shape:
-            self.state[key] = value, *prev[1:]
+            self.state[key] = value, promoted, *prev[2:]
         else:
-            self._reset(key, value)
+            self._reset(key, value, promoted)
 
     def __len__(self) -> int:
         """Return the number of registered parameters."""
@@ -271,7 +295,7 @@ class Optimizer(Generic[Extra], MutableMapping[str, dr.ArrayBase]):
         if key is None:
             return self.lr
         else:
-            return self.state[key][1]
+            return self.state[key][2]
 
     def set_learning_rate(
         self,
@@ -318,7 +342,7 @@ class Optimizer(Generic[Extra], MutableMapping[str, dr.ArrayBase]):
         elif isinstance(value, Mapping):
             for k, lr in value.items():
                 state = self.state[k]
-                self.state[k] = (state[0], lr, *state[2:])
+                self.state[k] = (*state[:2], lr, *state[3:])
         if kwargs:
             self.set_learning_rate(kwargs)
 
@@ -368,10 +392,11 @@ class Optimizer(Generic[Extra], MutableMapping[str, dr.ArrayBase]):
         """
 
         if key is not None:
-            self._reset(key, self[key])
+            value, promoted, lr, extra = self.state[key]
+            self._reset(key, value, promoted)
         else:
-            for k in self.state.keys():
-                self._reset(k, self[k])
+            for key, (value, promoted, lr, extra) in self.state.items():
+                self._reset(key, value, promoted)
 
     # --------------------------------------------------------------------
     #    Functionality that must be provided by subclasses
@@ -414,7 +439,7 @@ class Optimizer(Generic[Extra], MutableMapping[str, dr.ArrayBase]):
         with dr.profile_range('Optimizer.step()'):
             cache = _LRCache()
 
-            for key, (value, lr, extra) in self.state.items():
+            for key, (value, promoted, lr, extra) in self.state.items():
                 # Fetch the parameter gradient and convert special array types
                 # (e.g. complex numbers) into ones with element-wise semantics
                 grad = value.grad.array
@@ -451,7 +476,7 @@ class Optimizer(Generic[Extra], MutableMapping[str, dr.ArrayBase]):
                 dr.enable_grad(new_value)
 
                 # Update the optimizer state and schedule it for evaluation
-                new_state = new_value, lr, new_extra
+                new_state = new_value, promoted, lr, new_extra
 
                 dr.schedule(new_state)
                 self.state[key] = new_state
@@ -475,8 +500,8 @@ class Optimizer(Generic[Extra], MutableMapping[str, dr.ArrayBase]):
         )
 
     # To be provided by subclasses
-    def _reset(self, key: str, value: dr.ArrayBase, /) -> None:
-        raise Exception(f"Optimizer._reset({key}, {value}): missing implementation!")
+    def _reset(self, key: str, value: dr.ArrayBase, promoted: bool, /) -> None:
+        raise Exception(f"Optimizer._reset({key}, {value}, {promoted}): missing implementation!")
 
     # Blend between the old and new versions of the optimizer extra state
     def _select(self, mask: dr.ArrayBase, extra: Extra, new_extra: Extra, /) -> Extra:
@@ -592,6 +617,7 @@ class SGD(Optimizer[Optional[dr.ArrayBase]]):
         momentum: float = 0.0,
         nesterov: bool = False,
         mask_updates: bool = False,
+        promote_fp16: bool = True,
     ):
         """
         Args:
@@ -607,6 +633,11 @@ class SGD(Optimizer[Optional[dr.ArrayBase]]):
                 cause past gradients to persist for a longer amount of time.
 
             mask_updates (bool):
+                Mask updates to zero-valued gradient components?
+                See :py:func:`Optimizer.__init__()` for details on this parameter.
+
+            promote_fp16 (bool):
+                promoted half-precision variables to single precision internal storage?
                 See :py:func:`Optimizer.__init__()` for details on this parameter.
 
             params (Mapping[str, drjit.ArrayBase] | None):
@@ -623,7 +654,12 @@ class SGD(Optimizer[Optional[dr.ArrayBase]]):
         self.momentum = momentum
         self.nesterov = nesterov
 
-        super().__init__(lr, params, mask_updates=mask_updates)
+        super().__init__(
+            lr,
+            params,
+            mask_updates=mask_updates,
+            promote_fp16=promote_fp16
+        )
 
     # To be provided by subclasses
     def _step(
@@ -656,21 +692,21 @@ class SGD(Optimizer[Optional[dr.ArrayBase]]):
 
         return dr.fma(step, scale, value), v_next
 
-    def _reset(self, key: str, value: dr.ArrayBase, /) -> None:
+    def _reset(self, key: str, value: dr.ArrayBase, promoted: bool, /) -> None:
         valarr = value.array
         tp = type(valarr)
         if self.momentum == 0:
             m = None
         else:
             m = dr.opaque(tp, 0, valarr.shape)
-        self.state[key] = value, None, m
+        self.state[key] = value, promoted, None, m
 
     def __repr__(self):
         """Return a human-readable string representation"""
         lr_dict: Dict[str, LearningRate] = dict(default=self.lr)
         total_count = 0
         for k, state in self.state.items():
-            lr = state[1]
+            lr = state[2]
             total_count += dr.prod(state[0].shape)
             if lr is not None:
                 lr_dict[k] = lr
@@ -728,6 +764,7 @@ class RMSProp(Optimizer[dr.ArrayBase]):
         alpha: float = 0.99,
         epsilon: float = 1e-8,
         mask_updates: bool = False,
+        promote_fp16: bool = True,
     ):
         """
         Construct a RMSProp optimizer instance.
@@ -746,6 +783,11 @@ class RMSProp(Optimizer[dr.ArrayBase]):
                 persist for a longer amount of time.
 
             mask_updates (bool):
+                Mask updates to zero-valued gradient components?
+                See :py:func:`Optimizer.__init__()` for details on this parameter.
+
+            promote_fp16 (bool):
+                promoted half-precision variables to single precision internal storage?
                 See :py:func:`Optimizer.__init__()` for details on this parameter.
 
             params (Mapping[str, drjit.ArrayBase] | None):
@@ -753,7 +795,12 @@ class RMSProp(Optimizer[dr.ArrayBase]):
                 parameters.
         """
 
-        super().__init__(lr, params, mask_updates=mask_updates)
+        super().__init__(
+            lr,
+            params,
+            mask_updates=mask_updates,
+            promote_fp16=promote_fp16
+        )
 
         if alpha < 0 or alpha >= 1:
             raise RuntimeError("'alpha' must be on the interval [0, 1)")
@@ -792,18 +839,18 @@ class RMSProp(Optimizer[dr.ArrayBase]):
         return dr.fma(step, scale, value), m_t
 
     # Implementation detail of Optimizer.reset()
-    def _reset(self, key: str, value: dr.ArrayBase, /) -> None:
+    def _reset(self, key: str, value: dr.ArrayBase, promoted: bool, /) -> None:
         valarr = value.array
         tp = type(valarr)
         m_t = dr.opaque(tp, 0, valarr.shape)
-        self.state[key] = value, None, m_t
+        self.state[key] = value, promoted, None, m_t
 
     def __repr__(self):
         """Return a human-readable string representation"""
         lr_dict: Dict[str, LearningRate] = dict(default=self.lr)
         total_count = 0
         for k, state in self.state.items():
-            lr = state[1]
+            lr = state[2]
             total_count += dr.prod(state[0].shape)
             if lr is not None:
                 lr_dict[k] = lr
@@ -887,6 +934,7 @@ class Adam(Optimizer[Tuple[int, dr.ArrayBase, dr.ArrayBase]]):
         beta_2: float = 0.999,
         epsilon: float = 1e-8,
         mask_updates: bool = False,
+        promote_fp16: bool = True,
         uniform: bool = False,
     ):
         """
@@ -918,6 +966,11 @@ class Adam(Optimizer[Tuple[int, dr.ArrayBase, dr.ArrayBase]]):
                 instead of the per-element second moments.
 
             mask_updates (bool):
+                Mask updates to zero-valued gradient components?
+                See :py:func:`Optimizer.__init__()` for details on this parameter.
+
+            promote_fp16 (bool):
+                promoted half-precision variables to single precision internal storage?
                 See :py:func:`Optimizer.__init__()` for details on this parameter.
 
             params (Mapping[str, drjit.ArrayBase] | None):
@@ -925,7 +978,12 @@ class Adam(Optimizer[Tuple[int, dr.ArrayBase, dr.ArrayBase]]):
                 parameters.
         """
 
-        super().__init__(lr, params, mask_updates=mask_updates)
+        super().__init__(
+            lr,
+            params,
+            mask_updates=mask_updates,
+            promote_fp16=promote_fp16
+        )
 
         if beta_1 < 0 or beta_1 >= 1:
             raise RuntimeError("'beta_1' must be on the interval [0, 1)")
@@ -965,10 +1023,11 @@ class Adam(Optimizer[Tuple[int, dr.ArrayBase, dr.ArrayBase]]):
         # Compute the step size scale, which is a product of
         # - EMA debiasing factor
         # - Adaptive/parameter-specific scaling
-        Float32 = dr.float32_array_t(dr.leaf_t(grad))
+        Base = dr.leaf_t(grad)
         Float64 = dr.float64_array_t(dr.leaf_t(grad))
-        ema_factor = Float32(
-            -dr.sqrt(1 - Float64(self.beta_2) ** t) / (1 - Float64(self.beta_1) ** t)
+        ema_factor = Base(
+            -dr.sqrt(1 - Float64(self.beta_2) ** t) /
+                    (1 - Float64(self.beta_1) ** t)
         )
         scale = cache.product(
             dr.leaf_t(grad),  # Desired type
@@ -988,14 +1047,14 @@ class Adam(Optimizer[Tuple[int, dr.ArrayBase, dr.ArrayBase]]):
         return dr.fma(step, scale, value), (t, m_t, v_t)
 
     # Implementation detail of Optimizer.reset()
-    def _reset(self, key: str, value: dr.ArrayBase, /) -> None:
+    def _reset(self, key: str, value: dr.ArrayBase, promoted: bool, /) -> None:
         valarr = value.array
         tp = type(valarr)
         UInt = dr.uint32_array_t(dr.leaf_t(tp))
         t = UInt(0)
         m_t = dr.opaque(tp, 0, valarr.shape)
         v_t = dr.opaque(tp, 0, valarr.shape)
-        self.state[key] = value, None, (t, m_t, v_t)
+        self.state[key] = value, promoted, None, (t, m_t, v_t)
 
     # Blend between the old and new versions of the optimizer extra state
     def _select(
@@ -1020,7 +1079,7 @@ class Adam(Optimizer[Tuple[int, dr.ArrayBase, dr.ArrayBase]]):
         total_count = 0
         for k, state in self.state.items():
             total_count += dr.prod(state[0].shape)
-            lr = state[1]
+            lr = state[2]
             if lr is not None:
                 lr_dict[k] = lr
 

@@ -310,5 +310,38 @@ def test09_optimize_nested(t):
     opt.step()
     opt["x"].grad = t(-1, -1, -1)
     opt.step()
-    print(opt["x"])
     assert dr.width(opt["x"]) == 1
+
+
+@pytest.mark.parametrize("optimizer_class", [SGD, RMSProp, Adam])
+@pytest.mark.parametrize("promote_fp16", [False, True])
+@pytest.test_arrays("is_diff,float,shape=(*),float32")
+def test10_promote_fp16(optimizer_class, promote_fp16, t):
+    """Demosntrate that without FP16->FP32 promotion, rounding error can break optimizations"""
+    t16 = dr.float16_array_t(t)
+
+
+    # Starting point and target
+    x = t16(100)
+    target = 101
+
+    opt = optimizer_class(lr=1e-2, promote_fp16=promote_fp16)
+    opt["x"] = x
+    n_steps = 200
+
+    for _ in range(n_steps):
+        loss = (opt["x"] - target) ** 2 # Simple quadratic loss
+        dr.backward(loss)
+        opt.step()
+
+    # Check internal representation
+    assert dr.type_v(opt.state["x"][0]) == (dr.VarType.Float32 if promote_fp16 else dr.VarType.Float16)
+
+    # Check returned result
+    final_value = opt["x"]
+    assert dr.type_v(final_value) == dr.VarType.Float16
+
+    success = (abs(final_value[0]-target) < 0.1) == promote_fp16
+    if not success:
+        print(f"  Target: {target}, Final: {final_value[0]:.8f}")
+    assert success
