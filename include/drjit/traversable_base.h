@@ -219,17 +219,13 @@ public:                                                                        \
     void traverse_1_cb_ro(void *payload,                                       \
                           drjit::detail::traverse_callback_ro fn)              \
         const override {                                                       \
-        DRJIT_MARK_USED(payload);                                              \
-        DRJIT_MARK_USED(fn);                                                   \
-        if constexpr (!std ::is_same_v<Base, drjit ::TraversableBase>)         \
+        if constexpr (!std::is_same_v<Base, drjit::TraversableBase>)           \
             Base::traverse_1_cb_ro(payload, fn);                               \
         drjit::traverse_py_cb_ro(this, payload, fn);                           \
     }                                                                          \
     void traverse_1_cb_rw(void *payload,                                       \
                           drjit::detail::traverse_callback_rw fn) override {   \
-        DRJIT_MARK_USED(payload);                                              \
-        DRJIT_MARK_USED(fn);                                                   \
-        if constexpr (!std ::is_same_v<Base, drjit ::TraversableBase>)         \
+        if constexpr (!std::is_same_v<Base, drjit::TraversableBase>)           \
             Base::traverse_1_cb_rw(payload, fn);                               \
         drjit::traverse_py_cb_rw(this, payload, fn);                           \
     }
