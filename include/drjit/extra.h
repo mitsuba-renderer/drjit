@@ -14,10 +14,6 @@
 
 #include <drjit-core/jit.h>
 
-#if defined(__cplusplus)
-extern "C" {
-#endif
-
 #if defined(_MSC_VER)
 #  if defined(DRJIT_EXTRA_BUILD)
 #    define DRJIT_EXTRA_EXPORT    __declspec(dllexport)
@@ -561,7 +557,3 @@ extern DRJIT_EXTRA_EXPORT uint64_t ad_coop_vec_matvec(uint64_t A_index,
 
 /// Cast a cooperative vector to a different precision
 extern DRJIT_EXTRA_EXPORT uint64_t ad_coop_vec_cast(uint64_t index, VarType vt);
-
-#if defined(__cplusplus)
-}
-#endif
