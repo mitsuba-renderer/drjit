@@ -1102,6 +1102,8 @@ inline void traverse_py_cb_ro(const TraversableBase *base, void *payload,
                               void (*fn)(void *, uint64_t, const char *variant,
                                          const char *domain)) {
     namespace nb    = nanobind;
+    nb::gil_scoped_acquire guard;
+
     nb::handle self = base->self_py();
     if (!self)
         return;
@@ -1127,8 +1129,9 @@ inline void traverse_py_cb_ro(const TraversableBase *base, void *payload,
 inline void traverse_py_cb_rw(TraversableBase *base, void *payload,
                               uint64_t (*fn)(void *, uint64_t, const char *,
                                              const char *)) {
-
     namespace nb    = nanobind;
+    nb::gil_scoped_acquire guard;
+
     nb::handle self = base->self_py();
     if (!self)
         return;
