@@ -321,7 +321,7 @@ ArrayMeta meta_get_general(nb::handle h) noexcept {
  *    first operand will be promoted to a mask array
  */
 void promote(nb::object *o, size_t n, bool select) {
-    ArrayMeta m, mi[3];
+    ArrayMeta m{}, mi[3];
 
     if (n > 3)
         nb::raise("promote(): too many arguments!");

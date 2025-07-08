@@ -652,7 +652,7 @@ struct FrozenFunction {
     FrozenFunction &operator=(FrozenFunction &&)      = default;
 
     /// Returns the number of recordings currently cached.
-    uint32_t n_cached_recordings() { return this->recordings.size(); }
+    uint32_t n_cached_recordings() { return (uint32_t) this->recordings.size(); }
 
     /// Clears the frozen function recordings and resets the counters.
     void clear();

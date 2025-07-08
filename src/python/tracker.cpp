@@ -525,7 +525,7 @@ bool VariableTracker::Impl::traverse(Context &ctx, nb::handle h) {
         }
     } else if (tp.is(coop_vector_type)) {
         CoopVec *vec = nb::cast<CoopVec *>(h, false);
-        uint32_t idx = vec->m_index;
+        uint32_t idx = (uint32_t) vec->m_index;
         size_t size = size_valid(v, ctx.label, h, vec->m_size);
 
         if (new_variable) {

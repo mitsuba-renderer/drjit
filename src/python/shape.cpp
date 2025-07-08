@@ -221,7 +221,7 @@ nb::object opaque_width(nb::handle h) {
     if (to.ragged)
         nb::raise("drjit.opaque_width(): the input is ragged (i.e., it does not have a consistent size).");
 
-    uint32_t opaque_width = jit_var_opaque_width(to.index);
+    uint32_t opaque_width = (uint32_t) jit_var_opaque_width(to.index);
 
     ArrayMeta meta = to.meta;
     meta.type      = (uint16_t) VarType::UInt32;
@@ -253,7 +253,7 @@ nb::object opaque_n_elements(nb::handle h) {
     nb::handle tp = h.type();
 
     // We use dr::shape() to test for ragged arrays
-    auto s = shape(h);
+    auto sh = shape(h);
 
     if (is_drjit_type(tp)) {
 
@@ -265,12 +265,12 @@ nb::object opaque_n_elements(nb::handle h) {
         if (!s.index)
             jit_raise("opaque_n_lements(): Could not find indexing function");
 
-        uint32_t index = s.index(inst_ptr(h));
+        uint32_t index = (uint32_t) s.index(inst_ptr(h));
 
         // Construct the opaque_width python object
         uint32_t opaque_width = jit_var_opaque_width(index);
 
-        ArrayMeta meta = supp(tp);
+        ArrayMeta meta = s;
         meta.type = (uint16_t) VarType::UInt32;
         nb::handle width_tp = meta_get_type(meta);
         const ArraySupplement width_s = supp(width_tp);

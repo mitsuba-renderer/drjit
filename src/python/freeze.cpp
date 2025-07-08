@@ -610,7 +610,7 @@ void FlatVariables::traverse_ad_index(uint64_t index, TraverseContext &ctx,
         traverse_jit_index(grad, ctx, tp);
         ctx.free_list.push_back_steal(grad);
     } else {
-        traverse_jit_index(index, ctx, tp);
+        traverse_jit_index((uint32_t) index, ctx, tp);
     }
 }
 
@@ -633,8 +633,8 @@ uint64_t FlatVariables::construct_ad_index(uint64_t prev_index) {
         Layout &layout = this->layout[this->layout_index++];
         bool postponed = (layout.flags & (uint32_t) LayoutFlag::Postponed);
 
-        uint32_t val  = construct_jit_index(prev_index);
-        uint32_t grad = construct_jit_index(prev_index);
+        uint32_t val  = construct_jit_index((uint32_t) prev_index);
+        uint32_t grad = construct_jit_index((uint32_t) prev_index);
 
         // Resize the gradient if it is a literal
         if ((VarState) jit_var_state(grad) == VarState::Literal) {
@@ -668,7 +668,7 @@ uint64_t FlatVariables::construct_ad_index(uint64_t prev_index) {
             ad_enqueue(drjit::ADMode::Backward, index);
         }
     } else {
-        index = construct_jit_index(prev_index);
+        index = construct_jit_index((uint32_t) prev_index);
     }
 
     return index;

@@ -110,7 +110,7 @@ bool grad_enabled(nb::handle h) {
 
         void traverse_unknown(nb::handle h) override {
             if (CoopVec *v = nullptr; nb::try_cast(h, v, false), v != nullptr)
-                result |= ad_grad_enabled(v->m_index);
+                result |= ad_grad_enabled(v->m_index) != 0;
         }
     };
 

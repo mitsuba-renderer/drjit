@@ -36,7 +36,7 @@ nb::object reorder_threads(nb::handle_t<dr::ArrayBase> key, int num_bits,
 
     // Create updated values with reordering
     dr::detail::index32_vector out_indices(n_values);
-    jit_reorder(s_key.index(inst_ptr(key)), num_bits, n_values,
+    jit_reorder((uint32_t) s_key.index(inst_ptr(key)), num_bits, n_values,
                 jit_indices.data(), out_indices.data());
 
     // Re-combine with AD indices

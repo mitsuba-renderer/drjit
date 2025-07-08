@@ -172,7 +172,7 @@ DRJIT_INLINE JitVar scalar(Index index, double value) {
 /// As above, but for cooperative vectors
 DRJIT_INLINE JitVar scalar_coop_vec(Index index, double value) {
     VarInfo info = jit_set_backend(jit_index(index));
-    return scalar_coop_vec(info.backend, info.type, value, (uint32_t) jit_coop_vec_length(index));
+    return scalar_coop_vec(info.backend, info.type, value, jit_coop_vec_length((uint32_t) index));
 }
 
 // ==========================================================================

@@ -355,13 +355,13 @@ MatrixView MatrixView::getitem(nb::object arg) const {
         nb::raise("drjit.MatrixView.__getitem__(): input array may not be empty!");
 
     MatrixView result;
-    result.descr.rows = len[0];
-    result.descr.cols = len[1];
-    result.descr.offset = descr.offset + start[0] * descr.stride + start[1];
+    result.descr.rows = (uint32_t) len[0];
+    result.descr.cols = (uint32_t) len[1];
+    result.descr.offset = (uint32_t) (descr.offset + start[0] * descr.stride + start[1]);
     result.descr.dtype = descr.dtype;
     result.descr.layout = descr.layout;
-    result.descr.stride = descr.stride * step[0];
-    result.descr.size = (len[0] - 1) * result.descr.stride + len[1];
+    result.descr.stride = (uint32_t) (descr.stride * step[0]);
+    result.descr.size = (uint32_t) ((len[0] - 1) * result.descr.stride + len[1]);
     result.buffer = buffer;
     return result;
 }
@@ -379,12 +379,12 @@ static MatrixView view(nb::handle_t<dr::ArrayBase> arg) {
         const dr::vector<size_t> &shape = s.tensor_shape(inst_ptr(arg));
         if (shape.size() != 1 && shape.size() != 2)
             nb::raise("drjit.view(): tensor must have 1 or 2 dimensions!");
-        d.rows = shape[0];
-        d.cols = shape.size() > 1 ? shape[1] : 1;
+        d.rows = (uint32_t) shape[0];
+        d.cols = (uint32_t) (shape.size() > 1 ? shape[1] : 1);
         result.buffer = nb::steal(s.tensor_array(arg.ptr()));
     } else if (s.ndim == 1 && s.shape[0] == DRJIT_DYNAMIC) {
-        d.rows = nb::len(arg);
-        d.cols = 1;
+        d.rows = (uint32_t) nb::len(arg);
+        d.cols = 1u;
         result.buffer = nb::borrow(arg);
     } else {
         nb::raise("Unsupported input type!");
@@ -430,7 +430,7 @@ static nb::object repack_impl(const char *name, MatrixLayout layout,
         MatrixView *in_view = nb::cast<MatrixView *>(arg, false);
         uint64_t in_index = supp(in_view->buffer.type()).index(inst_ptr(in_view->buffer));
         MatrixDescr out_descr =
-            jit_coop_vec_compute_layout(in_index, &in_view->descr, layout, offset);
+            jit_coop_vec_compute_layout((uint32_t) in_index, &in_view->descr, layout, offset);
         MatrixView *out_view = new MatrixView{out_descr, nb::none()};
         nb::object result = nb::cast(out_view, nb::rv_policy::take_ownership);
         items.emplace_back(arg, result, in_view, out_view);
@@ -504,9 +504,9 @@ static std::pair<nb::object, nb::object> repack(const char *name, const char *la
         auto submit = [&] {
             jit_coop_vec_pack_matrices(
                 (uint32_t) in.size(),
-                s.index(inst_ptr(buf_cur)),
+                (uint32_t) s.index(inst_ptr(buf_cur)),
                 in.data(),
-                s.index(inst_ptr(buffer)),
+                (uint32_t) s.index(inst_ptr(buffer)),
                 out.data()
             );
         };
@@ -584,7 +584,7 @@ void export_coop_vec(nb::module_ &m) {
              [](const CoopVec &v) {
                  return nb::str("drjit.nn.CoopVec[{}, shape=({}, {})]")
                      .format(nb::type_name(v.m_type), v.m_size,
-                             jit_var_size(v.m_index));
+                             jit_var_size((uint32_t) v.m_index));
              });
 
     view_type = nb::class_<MatrixView>(nn, "MatrixView", doc_nn_MatrixView)
