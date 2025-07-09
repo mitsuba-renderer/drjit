@@ -2695,17 +2695,19 @@ def freeze(
                 )
 
             def __call__(self, *args, **kwargs):
-                _state = state_fn(*args, **kwargs) if state_fn is not None else None
                 # Capture closure variables to detect when nonlocal symbols change.
                 closure = inspect.getclosurevars(f)
+                input = {
+                    "globals": closure.globals,
+                    "nonlocals": closure.nonlocals,
+                    "args": args,
+                    "kwargs": kwargs,
+                }
+                if state_fn is not None:
+                    input["state_fn"] = state_fn(*args, **kwargs)
+
                 return self.frozen(
-                    {
-                        "globals": closure.globals,
-                        "nonlocals": closure.nonlocals,
-                        "state_fn": _state,
-                        "args": args,
-                        "kwargs": kwargs,
-                    }
+                    input
                 )
 
             @property
@@ -2761,18 +2763,17 @@ def freeze(
                 self.frozen = frozen
 
             def __call__(self, *args, **kwargs):
-                _state = state_fn(self.obj, *args, **kwargs) if state_fn is not None else None
                 # Capture closure variables to detect when nonlocal symbols change.
                 closure = inspect.getclosurevars(self.f)
-                return self.frozen(
-                    {
+                input = {
                         "globals": closure.globals,
                         "nonlocals": closure.nonlocals,
-                        "state_fn": _state,
                         "args": [self.obj, *args],
                         "kwargs": kwargs,
                     }
-                )
+                if state_fn is not None:
+                    input["state_fn"] = state_fn(self.obj, *args, **kwargs)
+                return self.frozen(input)
 
         return functools.wraps(f)(FrozenFunction(f))
 

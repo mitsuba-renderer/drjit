@@ -38,9 +38,10 @@ void export_history(nb::module_ &m) {
                         dict["cache_hit"]  = entry->cache_hit;
                         dict["cache_disk"] = entry->cache_disk;
                     }
-                    dict["size"]         = entry->size;
-                    dict["input_count"]  = entry->input_count;
-                    dict["output_count"] = entry->output_count;
+                    dict["recording_mode"] = entry->recording_mode;
+                    dict["size"]            = entry->size;
+                    dict["input_count"]     = entry->input_count;
+                    dict["output_count"]    = entry->output_count;
                     if (entry->type == KernelType::JIT) {
                         dict["operation_count"] = entry->operation_count;
                         dict["codegen_time"]   = entry->codegen_time;
@@ -67,4 +68,9 @@ void export_history(nb::module_ &m) {
         .value("Reduce", KernelType::Reduce)
         .value("CallReduce", KernelType::CallReduce)
         .value("Other", KernelType::Other);
+
+    nb::enum_<KernelRecordingMode>(m, "KernelRecordingMode")
+        .value("None", KernelRecordingMode::None)
+        .value("Recorded", KernelRecordingMode::Recorded)
+        .value("Replayed", KernelRecordingMode::Replayed);
 }
