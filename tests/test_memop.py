@@ -857,7 +857,7 @@ def test34_ravel_builtin(t, order):
     assert type(x) is type(y)
     assert x == y
 
-@pytest.mark.parametrize("packet_size", [1, 2, 3, 4, 5])
+@pytest.mark.parametrize("packet_size", [1, 2, 3, 4, 5, 6])
 @pytest.mark.parametrize("reduce_op", ["Add", "Mul", "Max", "Min"])
 @pytest.skip_on(RuntimeError, "backend does not support the requested type of atomic reduction")
 @pytest.test_arrays("is_jit, float, shape=(*)")
@@ -886,15 +886,46 @@ def test35_scatter_packet_reduce(t, reduce_op, packet_size):
 
     n = 3
 
-    target = dr.zeros(t, n * packet_size)
+    with dr.scoped_set_flag(dr.JitFlag.KernelHistory, True):
 
-    index = mod.UInt32(0, 1, 1, 2)
+        target = dr.zeros(t, n * packet_size)
+        index = mod.UInt32(0, 1, 1, 2)
+        src = dr.ones(ArrayXf, (packet_size, dr.width(index)))
 
-    src = dr.ones(ArrayXf, (packet_size, dr.width(index)))
+        op = getattr(dr.ReduceOp, reduce_op)
 
-    op = getattr(dr.ReduceOp, reduce_op)
+        dr.scatter_reduce(op, target, src, index)
 
-    dr.scatter_reduce(op, target, src, index)
+        dr.kernel_history_clear()
+        dr.eval(target)
+        history = dr.kernel_history((dr.KernelType.JIT,))
+
+    # Test that we are actually using vector instructions on CUDA and LLVM
+    ir = history[0]["ir"].getvalue()
+    if dr.backend_v(t) is dr.JitBackend.CUDA:
+        compute_capability = dr.detail.cuda_compute_capability()
+        if compute_capability >= 90:
+            if tp == dr.VarType.Float16:
+                n_regs = [None, None, 2, None, 4, None, 2][packet_size]
+                n_inst = [None, 0, 1, 0, 1, 0, 3][packet_size]
+                assert ir.count(f"red.global.v{n_regs}") == n_inst
+            if tp == dr.VarType.Float32:
+                n_regs = [None, None, 2, None, 4, None, 2][packet_size]
+                n_inst = [None, 0, 1, 0, 1, 0, 3][packet_size]
+                assert ir.count("red.global.v") == n_inst
+        else:
+            if tp == dr.VarType.Float16:
+                n_inst = [None, 1, 1, 3, 2, 5, 3][packet_size]
+                assert ir.count("red.global.add.noftz.f16x2") == n_inst
+    elif dr.backend_v(t) is dr.JitBackend.LLVM and reduce_op == "Add":
+        if tp == dr.VarType.Float16:
+            n_regs = [None, None, 2, None, 4, None, 2][packet_size]
+            n_inst = [None, 0, 1, 0, 1, 0, 3][packet_size]
+            assert ir.count(f"call fastcc void @scatter_add_{n_regs}xf16") == n_inst
+        if tp == dr.VarType.Float32:
+            n_regs = [None, None, 2, None, 4, None, 2][packet_size]
+            n_inst = [None, 0, 1, 0, 1, 0, 3][packet_size]
+            assert ir.count(f"call fastcc void @scatter_add_{n_regs}xf32") == n_inst
 
     ref = dr.zeros(t, n * packet_size)
     for i in range(dr.width(index)):
