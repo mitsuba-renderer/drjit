@@ -857,7 +857,7 @@ def test34_ravel_builtin(t, order):
     assert type(x) is type(y)
     assert x == y
 
-@pytest.mark.parametrize("packet_size", [1, 2, 3, 4, 5, 6])
+@pytest.mark.parametrize("packet_size", [1, 2, 3, 4, 5, 6, 12, 16])
 @pytest.mark.parametrize("reduce_op", ["Add", "Mul", "Max", "Min"])
 @pytest.skip_on(RuntimeError, "backend does not support the requested type of atomic reduction")
 @pytest.test_arrays("is_jit, float, shape=(*)")
@@ -906,25 +906,25 @@ def test35_scatter_packet_reduce(t, reduce_op, packet_size):
         compute_capability = dr.detail.cuda_compute_capability()
         if compute_capability >= 90:
             if tp == dr.VarType.Float16:
-                n_regs = [None, None, 2, None, 4, None, 2][packet_size]
-                n_inst = [None, 0, 1, 0, 1, 0, 3][packet_size]
+                n_regs = {1: 0, 2: 1, 3: 0, 4: 2, 5: 0, 6: 2, 12: 4, 16: 8}[packet_size]
+                n_inst = {1: 0, 2: 1, 3: 0, 4: 1, 6: 3, 12: 3, 16: 2}[packet_size]
                 assert ir.count(f"red.global.v{n_regs}") == n_inst
             if tp == dr.VarType.Float32:
-                n_regs = [None, None, 2, None, 4, None, 2][packet_size]
-                n_inst = [None, 0, 1, 0, 1, 0, 3][packet_size]
+                n_regs = {1: 0, 2: 2, 3: 0, 4: 4, 5: 0, 6: 2, 12: 4, 16: 4}[packet_size]
+                n_inst = {1: 0, 2: 1, 3: 0, 4: 1, 5: 0, 6: 3, 12: 3, 16: 4}[packet_size]
                 assert ir.count("red.global.v") == n_inst
         else:
             if tp == dr.VarType.Float16:
-                n_inst = [None, 1, 1, 3, 2, 5, 3][packet_size]
+                n_inst = {1: 1, 2: 1, 3: 3, 4: 2, 5: 5, 6: 3, 12: 6, 16: 8}[packet_size]
                 assert ir.count("red.global.add.noftz.f16x2") == n_inst
     elif dr.backend_v(t) is dr.JitBackend.LLVM and reduce_op == "Add":
         if tp == dr.VarType.Float16:
-            n_regs = [None, None, 2, None, 4, None, 2][packet_size]
-            n_inst = [None, 0, 1, 0, 1, 0, 3][packet_size]
+            n_regs = {1: 0, 2: 2, 3: 0, 4: 4, 5: 0, 6: 2, 12: 4, 16: 8}[packet_size]
+            n_inst = {1: 0, 2: 1, 3: 0, 4: 1, 5: 0, 6: 3, 12: 3, 16: 2}[packet_size]
             assert ir.count(f"call fastcc void @scatter_add_{n_regs}xf16") == n_inst
         if tp == dr.VarType.Float32:
-            n_regs = [None, None, 2, None, 4, None, 2][packet_size]
-            n_inst = [None, 0, 1, 0, 1, 0, 3][packet_size]
+            n_regs = {1: 0, 2: 2, 3: 0, 4: 4, 5: 0, 6: 2, 12: 4, 16: 8}[packet_size]
+            n_inst = {1: 0, 2: 1, 3: 0, 4: 1, 5: 0, 6: 3, 12: 3, 16: 2}[packet_size]
             assert ir.count(f"call fastcc void @scatter_add_{n_regs}xf32") == n_inst
 
     ref = dr.zeros(t, n * packet_size)
