@@ -363,7 +363,7 @@ static void scatter_generic(const char *name, ReduceOp op, nb::object target,
 
         // Potentially perform a packet scatter
         if ((JitBackend) m.backend != JitBackend::None && m.ndim == 2 &&
-            size != 1 && (size & (size - 1)) == 0 &&
+            size != 1 && (size % 2) == 0 &&
             (op == ReduceOp::Identity || op == ReduceOp::Add)) {
             const ArraySupplement &sub_s = supp(value_supp.value);
             uint64_t target_index = target_supp.index(inst_ptr(target));
