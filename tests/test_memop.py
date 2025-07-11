@@ -2,6 +2,7 @@ import drjit as dr
 import pytest
 import sys
 from dataclasses import dataclass
+import re
 
 @pytest.test_arrays('-bool,shape=(*)')
 def test01_gather_simple(t):
@@ -900,33 +901,7 @@ def test35_scatter_packet_reduce(t, reduce_op, packet_size):
         dr.eval(target)
         history = dr.kernel_history((dr.KernelType.JIT,))
 
-    # Test that we are actually using vector instructions on CUDA and LLVM
-    ir = history[0]["ir"].getvalue()
-    if dr.backend_v(t) is dr.JitBackend.CUDA:
-        compute_capability = dr.detail.cuda_compute_capability()
-        if compute_capability >= 90:
-            if tp == dr.VarType.Float16:
-                n_regs = {1: 0, 2: 1, 3: 0, 4: 2, 5: 0, 6: 2, 12: 4, 16: 8}[packet_size]
-                n_inst = {1: 0, 2: 1, 3: 0, 4: 1, 6: 3, 12: 3, 16: 2}[packet_size]
-                assert ir.count(f"red.global.v{n_regs}") == n_inst
-            if tp == dr.VarType.Float32:
-                n_regs = {1: 0, 2: 2, 3: 0, 4: 4, 5: 0, 6: 2, 12: 4, 16: 4}[packet_size]
-                n_inst = {1: 0, 2: 1, 3: 0, 4: 1, 5: 0, 6: 3, 12: 3, 16: 4}[packet_size]
-                assert ir.count("red.global.v") == n_inst
-        else:
-            if tp == dr.VarType.Float16:
-                n_inst = {1: 1, 2: 1, 3: 3, 4: 2, 5: 5, 6: 3, 12: 6, 16: 8}[packet_size]
-                assert ir.count("red.global.add.noftz.f16x2") == n_inst
-    elif dr.backend_v(t) is dr.JitBackend.LLVM and reduce_op == "Add":
-        if tp == dr.VarType.Float16:
-            n_regs = {1: 0, 2: 2, 3: 0, 4: 4, 5: 0, 6: 2, 12: 4, 16: 8}[packet_size]
-            n_inst = {1: 0, 2: 1, 3: 0, 4: 1, 5: 0, 6: 3, 12: 3, 16: 2}[packet_size]
-            assert ir.count(f"call fastcc void @scatter_add_{n_regs}xf16") == n_inst
-        if tp == dr.VarType.Float32:
-            n_regs = {1: 0, 2: 2, 3: 0, 4: 4, 5: 0, 6: 2, 12: 4, 16: 8}[packet_size]
-            n_inst = {1: 0, 2: 1, 3: 0, 4: 1, 5: 0, 6: 3, 12: 3, 16: 2}[packet_size]
-            assert ir.count(f"call fastcc void @scatter_add_{n_regs}xf32") == n_inst
-
+    # Manually construct a reference, by scattering into a python list.
     ref = dr.zeros(t, n * packet_size)
     for i in range(dr.width(index)):
         for j in range(packet_size):
@@ -948,4 +923,48 @@ def test35_scatter_packet_reduce(t, reduce_op, packet_size):
             )
 
     assert dr.allclose(target, ref)
+
+    # Test that we are actually using vector instructions on CUDA and LLVM
+    ir = history[0]["ir"].getvalue()
+    if dr.backend_v(t) is dr.JitBackend.CUDA:
+        compute_capability = dr.detail.cuda_compute_capability()
+        if compute_capability >= 90:
+            if tp == dr.VarType.Float16:
+                n_regs = {1: 0, 2: 1, 3: 0, 4: 2, 5: 0, 6: 2, 12: 4, 16: 8}[packet_size]
+                n_inst = {1: 0, 2: 1, 3: 0, 4: 1, 6: 3, 12: 3, 16: 2}[packet_size]
+                assert ir.count(f"red.global.v{n_regs}") == n_inst
+            if tp == dr.VarType.Float32:
+                n_regs = {1: 0, 2: 2, 3: 0, 4: 4, 5: 0, 6: 2, 12: 4, 16: 4}[packet_size]
+                n_inst = {1: 0, 2: 1, 3: 0, 4: 1, 5: 0, 6: 3, 12: 3, 16: 4}[packet_size]
+                assert ir.count("red.global.v") == n_inst
+        else:
+            if tp == dr.VarType.Float16:
+                n_inst = {1: 1, 2: 1, 3: 3, 4: 2, 5: 5, 6: 3, 12: 6, 16: 8}[packet_size]
+                assert ir.count("red.global.add.noftz.f16x2") == n_inst
+    elif dr.backend_v(t) is dr.JitBackend.LLVM and reduce_op == "Add":
+        # Compute maximum supported vector width for this architecture
+        target_features = re.search('"target-features"=".*"', ir).string
+        if "+see4.2" in target_features:
+            llvm_vector_width = 4
+        if "+avx" in target_features:
+            llvm_vector_width = 8
+        if "+avx512vl" in target_features:
+            llvm_vector_width = 16
+        if "+neon" in target_features:
+            llvm_vector_width = 4
+
+        if llvm_vector_width == 4:
+            n_regs = {1: 0, 2: 2, 3: 0, 4: 4, 5: 0, 6: 2, 12: 4, 16: 4}[packet_size]
+            n_inst = {1: 0, 2: 1, 3: 0, 4: 1, 5: 0, 6: 3, 12: 3, 16: 4}[packet_size]
+        elif llvm_vector_width == 8:
+            n_regs = {1: 0, 2: 2, 3: 0, 4: 4, 5: 0, 6: 2, 12: 4, 16: 8}[packet_size]
+            n_inst = {1: 0, 2: 1, 3: 0, 4: 1, 5: 0, 6: 3, 12: 3, 16: 2}[packet_size]
+        elif llvm_vector_width == 16:
+            n_regs = {1: 0, 2: 2, 3: 0, 4: 4, 5: 0, 6: 2, 12: 4, 16: 8}[packet_size]
+            n_inst = {1: 0, 2: 1, 3: 0, 4: 1, 5: 0, 6: 3, 12: 3, 16: 2}[packet_size]
+
+        type_str = {dr.VarType.Float16: "f16", dr.VarType.Float32: "f32"}[tp]
+
+        if tp == dr.VarType.Float16 or tp == dr.VarType.Float32:
+            assert ir.count(f"call fastcc void @scatter_add_{n_regs}x{type_str}") == n_inst
 
