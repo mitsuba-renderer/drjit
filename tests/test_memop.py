@@ -963,8 +963,11 @@ def test35_scatter_packet_reduce(t, reduce_op, packet_size):
             n_regs = {1: 0, 2: 2, 3: 0, 4: 4, 5: 0, 6: 2, 12: 4, 16: 8}[packet_size]
             n_inst = {1: 0, 2: 1, 3: 0, 4: 1, 5: 0, 6: 3, 12: 3, 16: 2}[packet_size]
 
-        type_str = {dr.VarType.Float16: "f16", dr.VarType.Float32: "f32"}[tp]
+        type_str = {
+            dr.VarType.Float16: "f16",
+            dr.VarType.Float32: "f32",
+            dr.VarType.Float64: "f64",
+        }[tp]
 
-        if tp == dr.VarType.Float16 or tp == dr.VarType.Float32:
-            assert ir.count(f"call fastcc void @scatter_add_{n_regs}x{type_str}") == n_inst
+        assert ir.count(f"call fastcc void @scatter_add_{n_regs}x{type_str}") == n_inst
 
