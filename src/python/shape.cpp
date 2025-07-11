@@ -221,7 +221,7 @@ nb::object opaque_width(nb::handle h) {
     if (to.ragged)
         nb::raise("drjit.opaque_width(): the input is ragged (i.e., it does not have a consistent size).");
 
-    uint32_t opaque_width = (uint32_t) jit_var_opaque_width(to.index);
+    uint32_t opaque_width = jit_var_opaque_width((uint32_t) to.index);
 
     ArrayMeta meta = to.meta;
     meta.type      = (uint16_t) VarType::UInt32;
