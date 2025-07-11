@@ -930,13 +930,13 @@ def test35_scatter_packet_reduce(t, reduce_op, packet_size):
         compute_capability = dr.detail.cuda_compute_capability()
         if compute_capability >= 90:
             if tp == dr.VarType.Float16:
-                n_regs = {1: 0, 2: 1, 3: 0, 4: 2, 5: 0, 6: 2, 12: 4, 16: 8}[packet_size]
-                n_inst = {1: 0, 2: 1, 3: 0, 4: 1, 6: 3, 12: 3, 16: 2}[packet_size]
-                assert ir.count(f"red.global.v{n_regs}") == n_inst
+                n_regs = {1: 0, 2: 2, 3: 0, 4: 4, 5: 0, 6: 2, 12: 4, 16: 8}[packet_size]
+                n_inst = {1: 0, 2: 1, 3: 0, 4: 1, 5: 0, 6: 3, 12: 3, 16: 2}[packet_size]
+                assert ir.count(f"red.global.v{n_regs}.f16.add.noftz") == n_inst
             if tp == dr.VarType.Float32:
                 n_regs = {1: 0, 2: 2, 3: 0, 4: 4, 5: 0, 6: 2, 12: 4, 16: 4}[packet_size]
                 n_inst = {1: 0, 2: 1, 3: 0, 4: 1, 5: 0, 6: 3, 12: 3, 16: 4}[packet_size]
-                assert ir.count("red.global.v") == n_inst
+                assert ir.count(f"red.global.v{n_regs}.f32.add") == n_inst
         else:
             if tp == dr.VarType.Float16:
                 n_inst = {1: 1, 2: 1, 3: 3, 4: 2, 5: 5, 6: 3, 12: 6, 16: 8}[packet_size]
