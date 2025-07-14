@@ -2,7 +2,7 @@ import pytest
 import drjit as dr
 
 def test00_sh_eval():
-    sph_harm = pytest.importorskip("scipy.special").sph_harm
+    sph_harm_y = pytest.importorskip("scipy.special").sph_harm_y
     np = pytest.importorskip("numpy")
     from drjit.scalar import Array3f
 
@@ -13,7 +13,7 @@ def test00_sh_eval():
     r2 = []
     for l in range(10):
         for m in range(-l, l + 1):
-            Y = sph_harm(abs(m), l, phi, theta)
+            Y = sph_harm_y(l, abs(m), theta, phi)
             if m > 0:
                 Y = np.sqrt(2) * Y.real
             elif m < 0:
