@@ -3766,6 +3766,8 @@ def test100_kernel_history(t, auto_opaque, recorded_func):
             assert k1["size"] == k2["size"]
             assert k1["input_count"] == k2["input_count"]
             assert k1["output_count"] == k2["output_count"]
+            if (k1["type"] == dr.KernelType.JIT):
+                assert k1["operation_count"] == k2["operation_count"]
             assert k1["recording_mode"] == dr.KernelRecordingMode.Recorded
             assert k2["recording_mode"] == dr.KernelRecordingMode.Replayed
 
