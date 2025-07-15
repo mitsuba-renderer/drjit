@@ -48,14 +48,14 @@ struct Matrix : StaticArrayImpl<Array<Value_, Size_>, Size_, false,
     DRJIT_INLINE Matrix(T&& m) {
         constexpr size_t ArgSize = size_v<T>;
         if constexpr (ArgSize >= Size) {
-            /// Other matrix is equal or bigger -- retain the top left part
+            // Other matrix is equal or bigger -- retain the top left part
             for (size_t i = 0; i < Size; ++i)
                 entry(i) = head<Size>(m.entry(i));
         } else {
-            /// Other matrix is smaller -- copy the top left part and set remainder to identity
-            using Remainder = Array<Value_, Size - ArgSize>;
+            // Other matrix is smaller -- copy the top left part and set remainder to identity
+            using Remainder = Array<typename std::decay_t<T>::Entry, Size - ArgSize>;
             for (size_t i = 0; i < ArgSize; ++i)
-                entry(i) = concat(m.entry(i), zeros<Remainder>());
+                entry(i) = Row(concat(m.entry(i), zeros<Remainder>()));
             for (size_t i = ArgSize; i < Size; ++i) {
                 Row col = zeros<Row>();
                 col.entry(i) = 1;
