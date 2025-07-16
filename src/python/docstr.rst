@@ -7383,6 +7383,10 @@
         `NVIDIA OptiX <https://developer.nvidia.com/rtx/ray-tracing/optix>`__
         ray tracing engine?
 
+    - ``recording_mode``: Indicates if this kernel was executed in the context of
+      a frozen function (see :py:func:`@dr.freeze <freeze>`) and if so, if it
+      was recorded or replayed by one.
+
     Note that :py:func:`drjit.kernel_history()` clears the history while extracting
     this information. A related operation :py:func:`drjit.kernel_history_clear()`
     *only* clears the history without returning any information.
