@@ -188,7 +188,7 @@ def test02_hashgrid_ref(t):
     assert dr.allclose(res, ref)
 
 
-@pytest.test_arrays("jit,shape=(*),float16,diff")
+@pytest.test_arrays("jit,shape=(*),float32,diff")
 def test03_permutohedral(t):
     """
     Tests that it is possible to run the permutohedral encodings.
@@ -215,3 +215,21 @@ def test03_permutohedral(t):
 
     assert dr.allclose(res, ref)
 
+
+@pytest.test_arrays("jit,shape=(*),float16,diff")
+def test04_initialization(t):
+    """
+    Tests that the correct number of parameters are computed.
+    """
+    hg = hashgrid.HashGridEncoding(
+        3,
+        hashmap_size= 2**16,
+        n_levels= 16,
+        base_resolution= 16,
+        per_level_scale= 2,
+        n_features_per_level= 2,
+        align_corners=False,
+        torchngp_compat=True,
+    )
+
+    hg.n_params == 1908736

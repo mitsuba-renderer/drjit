@@ -63,6 +63,7 @@ class HashEncoding:
         "_smooth_weight_gradients": bool,
         "_smooth_weight_lambda": float,
         "_init_scale": float,
+        "_n_params": int,
     }
 
     def __init__(
@@ -93,30 +94,9 @@ class HashEncoding:
         self._smooth_weight_lambda = smooth_weight_lambda
         self._init_scale = init_scale
 
-    def alloc(self, dtype: Type[drjit.ArrayBase], /) -> HashEncoding:
-        """
-        Allocates an Encoding with the specified type.
-        Returns the new recording as a separate object instance.
-        """
-
-        result = copy.deepcopy(self)
-        result._alloc(dtype)
-
-        return result
-
-    def _alloc(self, dtype: Type[drjit.ArrayBase]) -> None:
-        """Initialize data storage and compute memory layout for hash grid levels.
-
-        This function:
-        1. Sets up DrJit array types based on the requested dtype
-        2. Computes parameter counts per level, using dense grids for small scales
-           and hash tables (limited by hashmap_size) for larger scales
-        3. Calculates memory offsets for each level in the flattened data array
-        4. Allocates the main data storage array
-        5. Precomputes grid offset patterns for voxel corner indexing
-        """
-        self.dtype = drjit.leaf_t(dtype)
-        self._init_types()
+        # Compute parameter counts per level as well as level offsets, using
+        # dense grids for small scales and hash tables (limited by hashmap_size)
+        # for larger scales.
 
         # TODO: n_features should be a multiple of 2, and if we add a logging mechanism
         # for drjit python, we should warn the user here.
@@ -144,18 +124,49 @@ class HashEncoding:
 
         self._level_offsets[-1] = offset
 
-        params_size = self._level_offsets[-1] * self.n_features_per_level
+        self._n_params = self._level_offsets[-1] * self.n_features_per_level
+
+        self.data = None
+
+    def alloc(
+        self, dtype: Type[drjit.ArrayBase], /, seed: int | drjit.AnyArray | None = None
+    ) -> HashEncoding:
+        """
+        Allocates an Encoding with the specified type.
+        Returns the new recording as a separate object instance.
+        """
+
+        result = copy.deepcopy(self)
+        result._alloc(dtype, seed)
+
+        return result
+
+    def _alloc(
+        self, dtype: Type[drjit.ArrayBase], seed: int | drjit.AnyArray | None = None
+    ) -> None:
+        """Initialize data storage and compute memory layout for hash grid levels.
+
+        This function:
+        1. Sets up DrJit array types based on the requested dtype
+        4. Allocates the main data storage array
+        """
+
+        self.dtype = drjit.leaf_t(dtype)
+        self._init_types()
 
         lower = -self._init_scale
         upper = self._init_scale
-        self.data = drjit.rand(self.dtype, params_size) * (upper - lower) + lower
+        self.data = (
+            drjit.rand(self.dtype, self.n_params, seed=seed) * (upper - lower) + lower
+        )
         drjit.schedule(self.data)
 
+    @property
     def n_params(self) -> int:
         """
         The number of parameters, held by this encoding.
         """
-        return drjit.width(self.data)
+        return self._n_params
 
     def set_params(self, values: drjit.ArrayBase, copy=False) -> None:
         """
@@ -271,8 +282,7 @@ class HashEncoding:
 
     def _init_types(self):
         """
-        Initializes the type aliases used for this hash encoding computation, given a
-        position value ``p``.
+        Initializes the type aliases used by this hashgrid.
         """
         dtype = self.dtype
         mod = sys.modules[dtype.__module__]
@@ -289,18 +299,15 @@ class HashEncoding:
     ) -> Tuple[Type[drjit.ArrayBase], Type[drjit.ArrayBase]]:
         """
         Returns a tuple of the PositionFloat and PositionFloatXf types, given the
-        position value given to the encoding.
+        position value passed to the encoding.
         """
         mod = sys.modules[self.dtype.__module__]
 
         p = list(p)
-
         PositionFloat = drjit.leaf_t(p[0])
-
         PositionFloatXf = (
             mod.ArrayXf16 if drjit.is_half_v(PositionFloat) else mod.ArrayXf
         )
-
         return PositionFloat, PositionFloatXf
 
     def _acc_features(
