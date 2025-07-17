@@ -2364,6 +2364,46 @@
     Returns:
         type: Result of the conversion as described above.
 
+.. topic:: uint8_array_t
+
+    Converts the provided Dr.Jit array/tensor type into a *unsigned 8 bit*
+    version.
+
+    This function implements the following set of behaviors:
+
+    1. When invoked with a Dr.Jit array *type* (e.g. :py:class:`drjit.cuda.Array3f`), it
+       returns an *unsigned 8 bit* version (e.g. :py:class:`drjit.cuda.Array3u8`).
+
+    2. When the input is not a type, it returns ``uint8_array_t(type(arg))``.
+
+    3. When the input is not a Dr.Jit array or type, the function returns ``int``.
+
+    Args:
+        arg (object): An arbitrary Python object
+
+    Returns:
+        type: Result of the conversion as described above.
+
+.. topic:: int8_array_t
+
+    Converts the provided Dr.Jit array/tensor type into a *signed 8 bit*
+    version.
+
+    This function implements the following set of behaviors:
+
+    1. When invoked with a Dr.Jit array *type* (e.g. :py:class:`drjit.cuda.Array3f`), it
+       returns an *signed 8 bit* version (e.g. :py:class:`drjit.cuda.Array3i8`).
+
+    2. When the input is not a type, it returns ``int8_array_t(type(arg))``.
+
+    3. When the input is not a Dr.Jit array or type, the function returns ``int``.
+
+    Args:
+        arg (object): An arbitrary Python object
+
+    Returns:
+        type: Result of the conversion as described above.
+
 .. topic:: uint32_array_t
 
     Converts the provided Dr.Jit array/tensor type into a *unsigned 32 bit*

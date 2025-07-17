@@ -561,6 +561,8 @@ template <typename T> void bind_arithmetic(ArrayBinding &b) {
 
 template <typename T> void bind_cast(ArrayBinding &b) {
     using Bool    = bool_array_t<T>;
+    using UInt8   = uint8_array_t<T>;
+    using Int8    = int8_array_t<T>;
     using UInt32  = uint32_array_t<T>;
     using Int32   = int32_array_t<T>;
     using UInt64  = uint64_array_t<T>;
@@ -573,7 +575,9 @@ template <typename T> void bind_cast(ArrayBinding &b) {
         b.cast = (ArrayBinding::Cast) +[](const ArrayBase *a, VarType vt, bool reinterpret, T *b) {
             if (!reinterpret) {
                 switch (vt) {
-                    case VarType::Bool:    new (b) T(*(const Bool *)   a); break;
+                    case VarType::Bool:    new (b) T(*(const Bool *)    a); break;
+                    case VarType::Int8:    new (b) T(*(const Int8 *)    a); break;
+                    case VarType::UInt8:   new (b) T(*(const UInt8 *)   a); break;
                     case VarType::Int32:   new (b) T(*(const Int32 *)   a); break;
                     case VarType::UInt32:  new (b) T(*(const UInt32 *)  a); break;
                     case VarType::Int64:   new (b) T(*(const Int64 *)   a); break;
@@ -585,7 +589,9 @@ template <typename T> void bind_cast(ArrayBinding &b) {
                 }
             } else {
                 switch (vt) {
-                    case VarType::Bool:    new (b) T(reinterpret_array<T>(*(const Bool *)   a)); break;
+                    case VarType::Bool:    new (b) T(reinterpret_array<T>(*(const Bool *)    a)); break;
+                    case VarType::Int8:    new (b) T(reinterpret_array<T>(*(const Int8 *)    a)); break;
+                    case VarType::UInt8:   new (b) T(reinterpret_array<T>(*(const UInt8 *)   a)); break;
                     case VarType::Int32:   new (b) T(reinterpret_array<T>(*(const Int32 *)   a)); break;
                     case VarType::UInt32:  new (b) T(reinterpret_array<T>(*(const UInt32 *)  a)); break;
                     case VarType::Int64:   new (b) T(reinterpret_array<T>(*(const Int64 *)   a)); break;
@@ -987,6 +993,8 @@ nanobind::class_<T> bind_array_t(ArrayBinding &b, nanobind::handle scope = {},
 /// Run bind_array() for many different plain array types
 template <typename T> void bind_array_types(ArrayBinding &b) {
     bind_array<mask_t<T>>(b);
+    bind_array<int8_array_t<T>>(b);
+    bind_array<uint8_array_t<T>>(b);
     bind_array<int32_array_t<T>>(b);
     bind_array<uint32_array_t<T>>(b);
     bind_array<int64_array_t<T>>(b);
@@ -1062,8 +1070,10 @@ template <typename T> void bind_all(ArrayBinding &b) {
 
     using T2 = std::conditional_t<drjit::detail::is_scalar_v<T>, DynamicArray<T>, T>;
     bind_array<Tensor<mask_t<T2>>>(b);
+    bind_array<Tensor<int8_array_t<T2>>>(b);
     bind_array<Tensor<int32_array_t<T2>>>(b);
     bind_array<Tensor<int64_array_t<T2>>>(b);
+    bind_array<Tensor<uint8_array_t<T2>>>(b);
     bind_array<Tensor<uint32_array_t<T2>>>(b);
     bind_array<Tensor<uint64_array_t<T2>>>(b);
     bind_array<Tensor<float16_array_t<T2>>>(b);

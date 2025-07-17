@@ -383,6 +383,14 @@ void export_traits(nb::module_ &m) {
           [](nb::handle h, VarType vt) { return reinterpret_array_t(h, vt); },
           doc_reinterpret_array_t);
 
+    m.def("uint8_array_t",
+          [](nb::handle h) { return reinterpret_array_t(h, VarType::UInt8); },
+          doc_uint8_array_t);
+
+    m.def("int8_array_t",
+          [](nb::handle h) { return reinterpret_array_t(h, VarType::Int8); },
+          doc_int8_array_t);
+
     m.def("uint32_array_t",
           [](nb::handle h) { return reinterpret_array_t(h, VarType::UInt32); },
           doc_uint32_array_t);
