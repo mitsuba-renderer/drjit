@@ -297,6 +297,12 @@ Performance considerations
 
 - **CUDA/OptiX** backend:
 
+  - When calling :py:func:`nn.matvec() <drjit.nn.matvec>`, expect significantly
+    reduced performance when only a subset of threads participate in the
+    operation. When neural networks are evaluated in loops or conditional
+    expressions, it may be advisable to incorporate reordering (via
+    :py:func:`dr.reorder() <drjit.reorder>`) to obtain coherent groups of threads.
+
   - :py:func:`nn.matvec() <drjit.nn.matvec>` currently requires 16-bit
     floating point arguments. FP8 formats may be added in the future.
 
@@ -308,6 +314,11 @@ Performance considerations
     them in their opaque layout whenever possible.
 
 - **LLVM** backend:
+
+  - The LLVM code path is mainly provided as an alternative implementation
+    for testing. The cooperative vector computation model is unfortuantely not
+    very efficient on x86_64 CPUs due to the limited number of available
+    registers.
 
   - There is no difference between row-major and training/inference-optimal
     layouts on the CPU. However, using :py:func:`nn.pack()
