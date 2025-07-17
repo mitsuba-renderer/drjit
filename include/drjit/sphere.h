@@ -54,9 +54,11 @@ value_t<Vector> unit_angle(const Vector &a, const Vector &b) {
     static_assert(Vector::Size == 3, "unit_angle(): input is not a 3D vector");
     using Value = value_t<Vector>;
 
-    Value dot_uv = dot(a, b),
-          temp   = 2.f * asin(.5f * norm(b - mulsign(a, dot_uv)));
-    return select(dot_uv >= 0, temp, Pi<Value> - temp);
+    Value dot_uv = dot(a, b);
+    mask_t<Value> is_pos = dot_uv >= 0;
+
+    Value temp = 2.f * asin(.5f * norm(fmadd(a, select(is_pos, -1.f, 1.f), b)));
+    return select(is_pos, temp, Pi<Value> - temp);
 }
 
 
@@ -75,10 +77,12 @@ template <typename Vector> value_t<Vector> unit_angle_z(const Vector &v) {
 
     using Value = value_t<Vector>;
 
-    Value temp = asin(.5f * norm(Vector(v.x(), v.y(),
-                                        v.z() - mulsign(Value(1.f), v.z())))) * 2.f;
+    mask_t<Value> is_pos = v.z() >= 0;
 
-    return select(v.z() >= 0, temp, Pi<Value> - temp);
+    Value temp = asin(.5f * norm(Vector(v.x(), v.y(),
+                                        v.z() - select(is_pos, 1.f, -1.f)))) * 2.f;
+
+    return select(is_pos, temp, Pi<Value> - temp);
 }
 
 NAMESPACE_END(drjit)
