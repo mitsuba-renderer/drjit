@@ -1,8 +1,6 @@
 import drjit as dr
-from drjit import hashgrid
 import pytest
 import sys
-
 
 @pytest.mark.parametrize("dimension", [2, 3, 4])
 @pytest.test_arrays("jit,shape=(*),float32,diff")
@@ -38,7 +36,7 @@ def test01_hashgrid_tcnn(t, dimension):
         "n_features_per_level": 2,
     }
 
-    hg = hashgrid.HashGridEncoding(
+    hg = dr.nn.HashGridEncoding(
         dimension,
         **config,
         align_corners=False,
@@ -129,7 +127,7 @@ def test02_hashgrid_ref(t):
         "n_features_per_level": 2,
     }
 
-    hg = hashgrid.HashGridEncoding(
+    hg = dr.nn.HashGridEncoding(
         3,
         **config,
         align_corners=False,
@@ -193,7 +191,7 @@ def test03_permutohedral(t):
     """
     Tests that it is possible to run the permutohedral encodings.
     """
-    encoding = hashgrid.PermutoEncoding(
+    encoding = dr.nn.PermutoEncoding(
         dimension=2,
         n_levels=1,
         n_features_per_level=1,
@@ -221,7 +219,7 @@ def test04_initialization(t):
     """
     Tests that the correct number of parameters are computed.
     """
-    hg = hashgrid.HashGridEncoding(
+    hg = dr.nn.HashGridEncoding(
         3,
         hashmap_size= 2**16,
         n_levels= 16,

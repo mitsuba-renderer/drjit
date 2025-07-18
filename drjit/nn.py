@@ -1,6 +1,7 @@
 from __future__ import annotations
 import drjit
 import sys
+from .hashgrid import HashGridEncoding, PermutoEncoding
 
 if sys.version_info < (3, 11):
     from typing_extensions import Tuple, Sequence, Union, Type, TypeAlias, Optional, Any
