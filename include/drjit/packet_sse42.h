@@ -736,7 +736,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(16)
         return _mm_shuffle_epi32(m, _MM_SHUFFLE(I3, I2, I1, I0));
     }
 
-    DRJIT_INLINE Derived mulhi_(Ref a) const {
+    DRJIT_INLINE Derived mul_hi_(Ref a) const {
         Derived even, odd;
 
         if constexpr (std::is_signed_v<Value>) {

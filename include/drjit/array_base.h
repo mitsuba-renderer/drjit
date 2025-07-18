@@ -452,12 +452,12 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT {
             }                                                                \
         }
 
-    DRJIT_IMPLEMENT_BINARY(add,   a + b,       IsArithmetic)
-    DRJIT_IMPLEMENT_BINARY(sub,   a - b,       IsArithmetic)
-    DRJIT_IMPLEMENT_BINARY(mul,   a * b,       IsArithmetic)
-    DRJIT_IMPLEMENT_BINARY(mulhi, mulhi(a, b), IsIntegral)
-    DRJIT_IMPLEMENT_BINARY(div,   a / b,       IsArithmetic)
-    DRJIT_IMPLEMENT_BINARY(mod,   a % b,       IsIntegral)
+    DRJIT_IMPLEMENT_BINARY(add,      a + b,          IsArithmetic)
+    DRJIT_IMPLEMENT_BINARY(sub,      a - b,          IsArithmetic)
+    DRJIT_IMPLEMENT_BINARY(mul,      a * b,          IsArithmetic)
+    DRJIT_IMPLEMENT_BINARY(mul_hi,   mul_hi(a, b),   IsIntegral)
+    DRJIT_IMPLEMENT_BINARY(div,      a / b,          IsArithmetic)
+    DRJIT_IMPLEMENT_BINARY(mod,      a % b,          IsIntegral)
 
     DRJIT_IMPLEMENT_BINARY_BITOP(or,     detail::or_(a, b))
     DRJIT_IMPLEMENT_BINARY_BITOP(and,    detail::and_(a, b))
@@ -575,6 +575,38 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT {
         }
 
         return result;
+    }
+
+    auto mul_wide_(const Derived &v) const {
+        DRJIT_CHKSCALAR("mul_wide_");
+
+        if constexpr (IsIntegral) {
+            size_t sa = derived().size(), sb = v.size(),
+                   sr = sa > sb ? sa : sb;
+
+            static_assert(sizeof(Value_) == 4);
+            using Result = std::conditional_t<std::is_signed_v<Scalar>,
+                                              int64_array_t<Derived>,
+                                              uint64_array_t<Derived>>;
+
+            Result result;
+            if constexpr (Result::Size == Dynamic) {
+                if ((sa != sr && sa != 1) || (sb != sr && sb != 1))
+                    drjit_fail("mul_wide_() : incompatible input sizes "
+                               "(%zu and %zu)", sa, sb);
+                result = drjit::empty<Result>(sr);
+            }
+
+            for (size_t i = 0; i < sr; ++i) {
+                const Value &a = derived().entry(i);
+                const Value &b = v.entry(i);
+                result.set_entry(i, mul_wide(a, b));
+            }
+
+            return result;
+        } else {
+            drjit_fail("mul_wide_(): invalid operand type!");
+        }
     }
 
     //! @}

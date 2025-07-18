@@ -323,7 +323,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(32)
             _mm256_setr_epi32(I0, I1, I2, I3, I4, I5, I6, I7));
     }
 
-    DRJIT_INLINE Derived mulhi_(Ref b) const {
+    DRJIT_INLINE Derived mul_hi_(Ref b) const {
         Derived even, odd;
 
         if constexpr (std::is_signed_v<Value>) {
@@ -552,7 +552,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(32)
         #endif
     }
 
-    DRJIT_INLINE Derived mulhi_(Ref b) const {
+    DRJIT_INLINE Derived mul_hi_(Ref b) const {
         if constexpr (std::is_unsigned_v<Value>) {
             const __m256i low_bits = _mm256_set1_epi64x(0xffffffffu);
             __m256i al = m, bl = b.m;
