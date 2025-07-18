@@ -2509,6 +2509,7 @@ def freeze(
     warn_after: int = 10,
     backend: Optional[JitBackend] = None,
     auto_opaque: bool = True,
+    enabled: bool = True,
 ) -> Callable[[F], F]:
     ...
 
@@ -2522,6 +2523,7 @@ def freeze(
     warn_after: int = 10,
     backend: Optional[JitBackend] = None,
     auto_opaque: bool = True,
+    enabled: bool = True,
 ) -> F:
     ...
 
@@ -2534,6 +2536,7 @@ def freeze(
     warn_after: int = 10,
     backend: Optional[JitBackend] = None,
     auto_opaque: bool = True,
+    enabled: bool = True,
 ) -> Union[F, Callable[[F2], F2]]:
     """
     Decorator to "freeze" functions, which improves efficiency by removing
@@ -2659,11 +2662,14 @@ def freeze(
           frozen function, the backend used has to be specified using this argument.
           It must match the backend used for computation within the function.
 
-        auto_opaque: (bool): If this flag is set true and only literal values
+        auto_opaque (bool): If this flag is set true and only literal values
           or their size changes between calls to the function, these variables
           will be marked and made opaque. This reduces the memory usage, traversal
           overhead, and can improve the performance of generated kernels.
           If the flag is set to false, all input variables will be made opaque.
+
+        enabled (bool): If this flag is set to false, the function will not be
+          frozen, and the call will be forwarded to the inner function.
     """
 
     limit = limit if limit is not None else -1
@@ -2688,13 +2694,21 @@ def freeze(
             return f(*args, **kwargs)
 
         class FrozenFunction:
+            # If this bool is true, the function will be frozen, otherwise the
+            # call will be forwarded to the inner function.
+            enabled: bool
+
             def __init__(self, f) -> None:
                 self.f = f
                 self.frozen = detail.FrozenFunction(
                     inner, limit, warn_after, backend, auto_opaque
                 )
+                self.enabled = enabled
 
             def __call__(self, *args, **kwargs):
+                if not self.enabled:
+                    return self.f(*args, **kwargs)
+
                 # Capture closure variables to detect when nonlocal symbols change.
                 closure = inspect.getclosurevars(f)
                 input = {
@@ -2706,9 +2720,7 @@ def freeze(
                 if state_fn is not None:
                     input["state_fn"] = state_fn(*args, **kwargs)
 
-                return self.frozen(
-                    input
-                )
+                return self.frozen(input)
 
             @property
             def n_recordings(self):
@@ -2761,8 +2773,12 @@ def freeze(
                 self.f = f
                 self.obj = obj
                 self.frozen = frozen
+                self.enabled = enabled
 
             def __call__(self, *args, **kwargs):
+                if not self.enabled:
+                    return self.f(self.obj, *args, **kwargs)
+
                 # Capture closure variables to detect when nonlocal symbols change.
                 closure = inspect.getclosurevars(self.f)
                 input = {
