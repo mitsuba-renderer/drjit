@@ -282,7 +282,7 @@ template <typename T> DRJIT_INLINE T brev_(T value_) {
 }
 
 template <typename T>
-DRJIT_INLINE T mulhi_(T x, T y) {
+DRJIT_INLINE T mul_hi_(T x, T y) {
     if constexpr (sizeof(T) == 4) {
         using Wide = std::conditional_t<std::is_signed_v<T>, int64_t, uint64_t>;
         return T(((Wide) x * (Wide) y) >> 32);
@@ -304,7 +304,7 @@ DRJIT_INLINE T mulhi_(T x, T y) {
         if constexpr (std::is_signed_v<T>) {
             int32_t x1 = (int32_t) (x >> 32);
             int32_t y1 = (int32_t) (y >> 32);
-            uint32_t x0y0_hi = mulhi_(x0, y0);
+            uint32_t x0y0_hi = mul_hi_(x0, y0);
             int64_t t = x1 * (int64_t) y0 + x0y0_hi;
             int64_t w1 = x0 * (int64_t) y1 + (t & mask);
 
@@ -312,7 +312,7 @@ DRJIT_INLINE T mulhi_(T x, T y) {
         } else {
             uint32_t x1 = (uint32_t) (x >> 32);
             uint32_t y1 = (uint32_t) (y >> 32);
-            uint32_t x0y0_hi = mulhi_(x0, y0);
+            uint32_t x0y0_hi = mul_hi_(x0, y0);
 
             uint64_t x0y1 = x0 * (uint64_t) y1;
             uint64_t x1y0 = x1 * (uint64_t) y0;
@@ -325,6 +325,13 @@ DRJIT_INLINE T mulhi_(T x, T y) {
         }
 #endif
     }
+}
+
+template <typename T>
+DRJIT_INLINE auto mul_wide_(T x, T y) {
+    static_assert(sizeof(T) == 4);
+    using Wide = std::conditional_t<std::is_signed_v<T>, int64_t, uint64_t>;
+    return (Wide) x * (Wide) y;
 }
 
 NAMESPACE_END(detail)

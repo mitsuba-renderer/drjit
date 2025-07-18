@@ -154,8 +154,14 @@ struct DRJIT_TRIVIAL_ABI JitArray
         return steal(jit_var_mul(m_index, v.m_index));
     }
 
-    JitArray mulhi_(const JitArray &v) const {
-        return steal(jit_var_mulhi(m_index, v.m_index));
+    JitArray mul_hi_(const JitArray &v) const {
+        return steal(jit_var_mul_hi(m_index, v.m_index));
+    }
+
+    auto mul_wide_(const JitArray &v) const {
+        static_assert(sizeof(Value_) == 4);
+        using Result = JitArray<Backend, std::conditional_t<std::is_signed_v<Value_>, int64_t, uint64_t>>;
+        return Result::steal(jit_var_mul_wide(m_index, v.m_index));
     }
 
     JitArray div_(const JitArray &v) const {

@@ -452,3 +452,38 @@ def test23_rsqrt(t):
 
     assert dr.isinf(y[0]) == dr.isinf(z[0])
     assert y[1] == z[1]
+
+
+@pytest.mark.parametrize("opaque", [True, False])
+@pytest.test_arrays('int32, shape=(*)','int32, shape=(2, *)')
+def test24_mul_hi_wide(t, opaque):
+    np = pytest.importorskip("numpy")
+    if dr.is_unsigned_v(t):
+        a_s = 0xcafe9876
+        b_s = 0xfafecafe
+        with pytest.warns(RuntimeWarning):
+            c_s = np.uint32(a_s)*np.uint32(b_s)
+    else:
+        # Identical bit representation
+        a_s = -889284490
+        b_s = -83965186
+        with pytest.warns(RuntimeWarning):
+            c_s = np.int32(a_s)*np.int32(b_s)
+
+    a, b = t(a_s), t(b_s)
+
+    if opaque:
+        dr.make_opaque(a)
+        dr.make_opaque(b)
+
+    c = a*b
+    d   = dr.mul_hi(a, b)
+    d_s = dr.mul_hi(a_s, b_s)
+
+    assert dr.all(c == c_s)
+    assert dr.all(d == d_s)
+
+    e   = dr.mul_wide(a, b)
+    e_s = dr.mul_wide(a_s, b_s)
+
+    assert dr.all(e == e_s)

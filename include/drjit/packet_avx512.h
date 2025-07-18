@@ -741,7 +741,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(64)
         return _mm512_permutexvar_epi32(idx, m);
     }
 
-    DRJIT_INLINE Derived mulhi_(Ref a) const {
+    DRJIT_INLINE Derived mul_hi_(Ref a) const {
         auto blend = mask_t<Derived>::from_k(0b0101010101010101);
         Derived even, odd;
 
@@ -991,7 +991,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(64)
         return _mm512_permutexvar_epi64(idx, m);
     }
 
-    DRJIT_INLINE Derived mulhi_(Ref b) const {
+    DRJIT_INLINE Derived mul_hi_(Ref b) const {
         if (std::is_unsigned_v<Value>) {
             const __m512i low_bits = _mm512_set1_epi64(0xffffffffu);
             __m512i al = m, bl = b.m;
