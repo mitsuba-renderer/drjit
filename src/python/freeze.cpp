@@ -1007,7 +1007,7 @@ void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
             // Update layout number of fields
             this->layout[layout_index].num = num_fields;
         } else {
-            jit_log(LogLevel::Info,
+            jit_log(LogLevel::Debug,
                     "traverse(): You passed a value of type %s to a frozen "
                     "function, it could not be converted to a Dr.Jit type. "
                     "Changing this value in future calls to the frozen "

@@ -1,4 +1,5 @@
 import drjit as dr
+from drjit.opt import Adam, SGD, RMSProp
 import pytest
 from math import ceil
 from dataclasses import dataclass
@@ -3003,11 +3004,11 @@ def test77_optimizers(t, optimizer, auto_opaque):
 
     def init_optimizer():
         if optimizer == "sdg":
-            opt = dr.opt.SGD(lr=0.001, momentum=0.9)
+            opt = SGD(lr=0.001, momentum=0.9)
         elif optimizer == "rmsprop":
-            opt = dr.opt.RMSProp(lr=0.001)
+            opt = RMSProp(lr=0.001)
         elif optimizer == "adam":
-            opt = dr.opt.Adam(lr=0.001)
+            opt = Adam(lr=0.001)
         return opt
 
     frozen = dr.freeze(func)
@@ -3719,4 +3720,54 @@ def test99_construction_failure(t, auto_opaque):
     x = t(1, 2, 3, 4)
     with pytest.raises(RuntimeError):
         frozen(x)
+
+@pytest.test_arrays("float32, jit, diff, shape=(*)")
+@pytest.mark.parametrize("auto_opaque", [False, True])
+@pytest.mark.parametrize("recorded_func", ["kernel", "compress", "block_sum"])
+def test100_kernel_history(t, auto_opaque, recorded_func):
+    """
+    Tests that the kernel history is reproduced when replaying a frozen function.
+    """
+
+    if recorded_func == "kernel":
+        def func(x):
+            return x + 1
+    elif recorded_func == "compress":
+        def func(x):
+            return dr.compress(x > 2)
+    elif recorded_func == "block_sum":
+        def func(x):
+            return dr.block_sum(x, 2)
+
+    frozen = dr.freeze(func, auto_opaque=auto_opaque)
+
+    x = dr.arange(t, 4)
+    dr.make_opaque(x)
+
+    with dr.scoped_set_flag(dr.JitFlag.KernelHistory, True):
+        frozen(x)
+
+        history_record = dr.kernel_history()
+
+        frozen(x)
+
+        history_replay = dr.kernel_history()
+
+        assert len(history_record) == len(history_replay)
+        for i in range(len(history_record)):
+            k1 = history_record[i]
+            k2 = history_replay[i]
+
+            assert k1["backend"] == k2["backend"]
+            assert k1["type"] == k2["type"]
+            if recorded_func == "kernel":
+                assert k1["hash"] == k2["hash"]
+                assert k1["uses_optix"] == k2["uses_optix"]
+            assert k1["size"] == k2["size"]
+            assert k1["input_count"] == k2["input_count"]
+            assert k1["output_count"] == k2["output_count"]
+            if (k1["type"] == dr.KernelType.JIT):
+                assert k1["operation_count"] == k2["operation_count"]
+            assert k1["recording_mode"] == dr.KernelRecordingMode.Recorded
+            assert k2["recording_mode"] == dr.KernelRecordingMode.Replayed
 
