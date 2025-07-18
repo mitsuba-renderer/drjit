@@ -11,8 +11,8 @@
 #include "dlpack.h"
 #include "base.h"
 #include "memop.h"
-#include <nanobind/ndarray.h>
 #include <drjit-core/half.h>
+#include <nanobind/ndarray.h>
 
 nb::dlpack::dtype drjit_type_to_dlpack(VarType vt) {
     using half = drjit::half;
