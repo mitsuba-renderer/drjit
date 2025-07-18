@@ -862,7 +862,8 @@ def test34_ravel_builtin(t, order):
 @pytest.mark.parametrize("reduce_op", ["Add", "Mul", "Max", "Min"])
 @pytest.skip_on(RuntimeError, "backend does not support the requested type of atomic reduction")
 @pytest.test_arrays("is_jit, float, shape=(*)")
-def test35_scatter_packet_reduce(t, reduce_op, packet_size):
+@pytest.mark.parametrize("force_optix", [True, False])
+def test35_scatter_packet_reduce(t, reduce_op, packet_size, force_optix):
     """
     Tests that packeted scatter reduce operations behave correctly.
     """
@@ -887,18 +888,19 @@ def test35_scatter_packet_reduce(t, reduce_op, packet_size):
     n = 3
 
     with dr.scoped_set_flag(dr.JitFlag.KernelHistory, True):
+        with dr.scoped_set_flag(dr.JitFlag.ForceOptiX, force_optix):
 
-        target = dr.zeros(t, n * packet_size)
-        index = mod.UInt32(0, 1, 1, 2)
-        src = dr.ones(ArrayXf, (packet_size, dr.width(index)))
+            target = dr.zeros(t, n * packet_size)
+            index = mod.UInt32(0, 1, 1, 2)
+            src = dr.ones(ArrayXf, (packet_size, dr.width(index)))
 
-        op = getattr(dr.ReduceOp, reduce_op)
+            op = getattr(dr.ReduceOp, reduce_op)
 
-        dr.scatter_reduce(op, target, src, index)
+            dr.scatter_reduce(op, target, src, index)
 
-        dr.kernel_history_clear()
-        dr.eval(target)
-        history = dr.kernel_history((dr.KernelType.JIT,))
+            dr.kernel_history_clear()
+            dr.eval(target)
+            history = dr.kernel_history((dr.KernelType.JIT,))
 
     # Manually construct a reference, by scattering into a python list.
     ref = dr.zeros(t, n * packet_size)
@@ -973,10 +975,12 @@ def test35_scatter_packet_reduce(t, reduce_op, packet_size):
 
 @pytest.mark.parametrize("packet_size", [1, 2, 3, 4, 5, 6, 12, 16])
 @pytest.test_arrays("is_jit, float, shape=(*)")
-def test36_gather_packet(t, packet_size):
+@pytest.mark.parametrize("force_optix", [True, False])
+def test36_gather_packet(t, packet_size, force_optix):
     """
     Tests that packeted gather operations behave correctly and use vector instructions.
     """
+    dr.set_log_level(dr.LogLevel.Trace)
     tp = dr.type_v(t)
     if (
         dr.backend_v(t) == dr.JitBackend.LLVM
@@ -997,22 +1001,23 @@ def test36_gather_packet(t, packet_size):
     n = 16 * 16  # 256 - divisible by all packet sizes
 
     with dr.scoped_set_flag(dr.JitFlag.KernelHistory, True):
-        # Create source data, large enough for the largest packet size
-        source = dr.arange(t, n)
+        with dr.scoped_set_flag(dr.JitFlag.ForceOptiX, force_optix):
+            # Create source data, large enough for the largest packet size
+            source = dr.arange(t, n)
 
-        # Create indices for gathering - ensure they don't go out of bounds
-        max_index = n // packet_size - 1
-        index = mod.UInt32(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
-        index = index % max(1, max_index)  # Ensure indices are within bounds
+            # Create indices for gathering - ensure they don't go out of bounds
+            max_index = n // packet_size - 1
+            index = mod.UInt32(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
+            index = index % max(1, max_index)  # Ensure indices are within bounds
 
-        # Perform packeted gather
-        result = dr.gather(
-            ArrayXf, source=source, index=index, shape=(packet_size, dr.width(index))
-        )
+            # Perform packeted gather
+            result = dr.gather(
+                ArrayXf, source=source, index=index, shape=(packet_size, dr.width(index))
+            )
 
-        dr.kernel_history_clear()
-        dr.eval(result)
-        history = dr.kernel_history((dr.KernelType.JIT,))
+            dr.kernel_history_clear()
+            dr.eval(result)
+            history = dr.kernel_history((dr.KernelType.JIT,))
 
     # Manual verification - gather the same values using regular indexing
     ref = dr.zeros(ArrayXf, (packet_size, dr.width(index)))
