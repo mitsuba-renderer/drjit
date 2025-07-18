@@ -1,7 +1,8 @@
 from __future__ import annotations
 import sys
-import drjit
+import drjit as dr
 import copy
+import warnings
 
 if sys.version_info < (3, 11):
     from typing_extensions import Tuple, Type, overload, Iterable, List
@@ -9,9 +10,9 @@ else:
     from typing import Tuple, Type, overload, Iterable, List
 
 
-def cosine_ramp(x: drjit.ArrayBase) -> drjit.ArrayBase:
+def cosine_ramp(x: dr.ArrayBase) -> dr.ArrayBase:
     """ "Smoothed" ramp to help features blend-in without instabilities"""
-    return 0.5 * (1.0 - drjit.cos(drjit.pi * x))
+    return 0.5 * (1.0 - dr.cos(dr.pi * x))
 
 
 def div_round_up(num: int, divisor: int) -> int:
@@ -26,48 +27,51 @@ def next_multiple(num: int, multiple: int) -> int:
 
 class HashEncoding:
     """
-    This class serves as the interface for Hash based encodings.
+    This class serves as the interface for Hash based encodings. It is the base
+    class for both the ``HashGridEncoding``, as well as the
+    ``PermutoEncoding``, and stores various fields that are used by both of
+    them.
     """
 
-    # Fields, initialized by the ``alloc`` method.
-    data: None | drjit.ArrayBase
-    dtype: None | Type
+    # The parameters stored by this encoding.
+    data: None | dr.ArrayBase
+    # The Dr.Jit type of the parameters used by this encoding.
+    _dtype: None | Type
+    # The offsets into ``data``, for each level.
     _level_offsets: None | List[int]
-
-    # Fields, defining the hash encoding layout.
+    # The dimensionality of the hash encoding.
     _dimension: int
+    # The number of levels. Each level has a different scale.
     _n_levels: int
+    # Number of features per level. Should be a power of 2.
     _n_features_per_level: int
+    # The maximum number of parameters per level specified in the constructor.
     _hashmap_size: int
+    # The resolution of the 0th level
     _base_resolution: int
+    # Scaling factor of each level relative to the previous one.
     _per_level_scale: float
+    # log2 of the previous value, used to more efficiently compute the scale.
     _log2_per_level_scale: float
+    # Whether the vertices of the layers should be aligned.
     _align_corners: bool
+    # If this boolean is set to true, the HashGrid should return the same
+    # values as tiny-cuda-nn.
     _torchngp_compat: bool
+    # Whether to apply gradient smoothing to weights.
     _smooth_weight_gradients: bool
+    # Blending factor for gradient smoothing using straight-through estimator.
     _smooth_weight_lambda: float
+    # Scale for uniform random initialization of parameters.
     _init_scale: float
 
     DRJIT_STRUCT = {
-        "data": drjit.ArrayBase,
-        "dtype": Type[drjit.ArrayBase],
-        "_level_offsets": List[int],
-        "_dimension": int,
-        "_n_levels": int,
-        "_n_features_per_level": int,
-        "_hashmap_size": int,
-        "_base_resolution": int,
-        "_per_level_scale": float,
-        "_align_corners": bool,
-        "_torchngp_compat": bool,
-        "_smooth_weight_gradients": bool,
-        "_smooth_weight_lambda": float,
-        "_init_scale": float,
-        "_n_params": int,
+        "data": dr.ArrayBase,
     }
 
     def __init__(
         self,
+        dtype: Type[dr.ArrayBase],
         dimension: int,
         *,
         n_levels: int = 16,
@@ -80,43 +84,91 @@ class HashEncoding:
         smooth_weight_gradients: bool = False,
         smooth_weight_lambda: float = 1.0,
         init_scale: float = 1e-4,
+        seed: int | dr.AnyArray | None = None,
     ) -> None:
+        """
+        Initialize a hash encoding. This computes fields used by both HashGrid
+        and Permutohedral encodings, as well as defining types used throughout
+        the encodings.
+
+        Args:
+            dimension: The dimensionality of the hash encoding. This corresponds to
+                the number of input features the encoding can take.
+            n_levels: Hash encodings generally make use of multiple levels of the same
+                encoding with different scales. This parameter specifies the number of
+                levels used by this encoding.
+            n_features_per_level: Specifies how many features are stored at each vertex
+                and at each level. The number of output features of the hash encoding
+                is given by ``n_levels * n_features_per_level``. In order to ensure efficient
+                gradient backpropagation, this value should be a multiple of two.
+            hashmap_size: Specifies the maximal number of parameters per level of the
+                hash encoding. HashGrids will use a dense grid lookup for layers with
+                a low enough scale, and use less than ``hashmap_size`` number of parameters
+                per level.
+            base_resolution: The scale factor of the 0th layer in the hash encoding.
+            per_level_scale: To calculate the scale of a layer, the scale of the previous
+                layer is multiplied by this value.
+            align_corners: If this value is ``True``, the simplex vertices are aligned
+                with the domain of the encoding [0, 1].
+            smooth_weight_gradients: whether to smooth the gradients of the weights
+                by using a straight-through estimator.
+            smooth_weight_lambda: the value of lambda used for the straight-through estimator.
+            init_scale: The parameters of the hashgrid are initialized with a uniform
+                distribution, ranging from -init_scale to +init_scale.
+        """
         self._dimension = dimension
         self._n_levels = n_levels
         self._n_features_per_level = n_features_per_level
         self._hashmap_size = hashmap_size
         self._per_level_scale = per_level_scale
         self._base_resolution = base_resolution
-        self._log2_per_level_scale = drjit.log2(per_level_scale)
+        self._log2_per_level_scale = dr.log2(per_level_scale)
         self._align_corners = align_corners
         self._torchngp_compat = torchngp_compat
         self._smooth_weight_gradients = smooth_weight_gradients
         self._smooth_weight_lambda = smooth_weight_lambda
         self._init_scale = init_scale
+        dtype = dr.leaf_t(dtype)
+        self._dtype = dtype
+
+        # Initialize the type aliases used by this hashgrid.
+        mod = sys.modules[dtype.__module__]
+        self.PCG32 = mod.PCG32
+        self.StorageFloat = dtype
+        self.UInt32 = dr.uint32_array_t(dtype)
+        self.Int32 = dr.int32_array_t(dtype)
+        self.ArrayXu = mod.ArrayXu
+        self.ArrayXi = mod.ArrayXi
+        self.StorageFloatXf = mod.ArrayXf16 if dr.is_half_v(dtype) else mod.ArrayXf
 
         # Compute parameter counts per level as well as level offsets, using
-        # dense grids for small scales and hash tables (limited by hashmap_size)
-        # for larger scales.
+        # dense grids for small scales and hash tables (limited by
+        # hashmap_size) for larger scales.
 
-        # TODO: n_features should be a multiple of 2, and if we add a logging mechanism
-        # for drjit python, we should warn the user here.
+        if self.n_features_per_level % 2:
+            warnings.warn(
+                "The number of features per level should be a multiple of 2, but it "
+                f"was {self.n_features_per_level}.",
+                RuntimeWarning,
+            )
 
-        assert (
-            self.hashmap_size % 8
-        ) == 0, f"Invalid hashmap size {self.hashmap_size}, must be a multiple of 8."
+        assert (self.hashmap_size % self.n_features_per_level) == 0, (
+            f"Invalid hashmap size {self.hashmap_size}, must be a multiple of the "
+            f"number of features {self.n_features_per_level}."
+        )
 
         self._level_offsets = [None] * (self.n_levels + 1)
-        max_params = drjit.scalar.UInt32(0xFFFFFFFF) // 2
+        max_params = dr.scalar.UInt32(0xFFFFFFFF) // 2
         offset = 0
 
         for level_i in range(self.n_levels):
             res = self._resolution(self._level_scale(level_i))
-            stride = drjit.power(float(res), self.dimension)
+            stride = res**self.dimension
 
             params_in_level = (
                 int(max_params) if (stride > max_params) else (res**self.dimension)
             )
-            params_in_level = next_multiple(params_in_level, 8)
+            params_in_level = next_multiple(params_in_level, self.n_features_per_level)
             params_in_level = min(params_in_level, self.hashmap_size)
 
             self._level_offsets[level_i] = offset
@@ -126,61 +178,40 @@ class HashEncoding:
 
         self._n_params = self._level_offsets[-1] * self.n_features_per_level
 
-        self.data = None
-
-    def alloc(
-        self, dtype: Type[drjit.ArrayBase], /, seed: int | drjit.AnyArray | None = None
-    ) -> HashEncoding:
-        """
-        Allocates an Encoding with the specified type.
-        Returns the new recording as a separate object instance.
-        """
-
-        result = copy.deepcopy(self)
-        result._alloc(dtype, seed)
-
-        return result
-
-    def _alloc(
-        self, dtype: Type[drjit.ArrayBase], seed: int | drjit.AnyArray | None = None
-    ) -> None:
-        """Initialize data storage and compute memory layout for hash grid levels.
-
-        This function:
-        1. Sets up DrJit array types based on the requested dtype
-        4. Allocates the main data storage array
-        """
-
-        self.dtype = drjit.leaf_t(dtype)
-        self._init_types()
-
         lower = -self._init_scale
         upper = self._init_scale
         self.data = (
-            drjit.rand(self.dtype, self.n_params, seed=seed) * (upper - lower) + lower
+            dr.rand(self.dtype, self.n_params, seed=seed) * (upper - lower) + lower
         )
-        drjit.schedule(self.data)
+        dr.schedule(self.data)
 
     @property
     def n_params(self) -> int:
         """
-        The number of parameters, held by this encoding.
+        The number of parameters held by this encoding.
         """
         return self._n_params
 
-    def set_params(self, values: drjit.ArrayBase, copy=False) -> None:
+    def set_params(self, values: dr.ArrayBase) -> None:
         """
-        Should pass `values` as a DrJit array.
+        This function can be used to set the parameters of the hashgrid. It can
+        be used to update parameters from the optimizer.
         """
-        assert drjit.width(values) == drjit.width(self.data), (
-            f"The number of parameters ({drjit.width(values)}) does not match "
-            f"the number of expected parameters ({drjit.width(self.data)})"
+        assert dr.width(values) == dr.width(self.data), (
+            f"The number of parameters ({dr.width(values)}) does not match "
+            f"the number of expected parameters ({dr.width(self.data)})"
         )
-        assert type(values) is type(self.data)
-        if copy:
-            self.data = type(self.data)(values)
-        else:
-            self.data = values
+        assert type(values) is type(
+            self.data
+        ), f"Expected parameters of type {type(self.data)}, but got {type(values)}"
+        self.data[:] = values
+
+    @property
+    def dtype(self) -> int:
+        """
+        The Dr.Jit type of the parameters used by this hashgrid.
+        """
+        return self._dtype
 
     @property
     def dimension(self) -> int:
@@ -280,23 +311,9 @@ class HashEncoding:
         """
         return self._n_features_per_level * self.n_levels
 
-    def _init_types(self):
-        """
-        Initializes the type aliases used by this hashgrid.
-        """
-        dtype = self.dtype
-        mod = sys.modules[dtype.__module__]
-        self.PCG32 = mod.PCG32
-        self.StorageFloat = dtype
-        self.UInt32 = drjit.uint32_array_t(dtype)
-        self.Int32 = drjit.int32_array_t(dtype)
-        self.ArrayXu = mod.ArrayXu
-        self.ArrayXi = mod.ArrayXi
-        self.StorageFloatXf = mod.ArrayXf16 if drjit.is_half_v(dtype) else mod.ArrayXf
-
     def _position_types(
-        self, p: drjit.ArrayBase
-    ) -> Tuple[Type[drjit.ArrayBase], Type[drjit.ArrayBase]]:
+        self, p: dr.ArrayBase
+    ) -> Tuple[Type[dr.ArrayBase], Type[dr.ArrayBase]]:
         """
         Returns a tuple of the PositionFloat and PositionFloatXf types, given the
         position value passed to the encoding.
@@ -304,19 +321,17 @@ class HashEncoding:
         mod = sys.modules[self.dtype.__module__]
 
         p = list(p)
-        PositionFloat = drjit.leaf_t(p[0])
-        PositionFloatXf = (
-            mod.ArrayXf16 if drjit.is_half_v(PositionFloat) else mod.ArrayXf
-        )
+        PositionFloat = dr.leaf_t(p[0])
+        PositionFloatXf = mod.ArrayXf16 if dr.is_half_v(PositionFloat) else mod.ArrayXf
         return PositionFloat, PositionFloatXf
 
     def _acc_features(
         self,
         level_i: int,
-        weight: drjit.ArrayBase,
-        index: drjit.ArrayBase,
-        values: List[drjit.ArrayBase],
-        active: bool | drjit.ArrayBase,
+        weight: dr.ArrayBase,
+        index: dr.ArrayBase,
+        values: List[dr.ArrayBase],
+        active: bool | dr.ArrayBase,
     ):
         """
         Accumulates the ``self.num_features`` features into ``values`` at the given
@@ -328,27 +343,27 @@ class HashEncoding:
         if self.smooth_weight_gradients:
             weight_smooth = cosine_ramp(weight)
             weight = weight + self.smooth_weight_lambda * (
-                weight_smooth - drjit.detach(weight_smooth)
+                weight_smooth - dr.detach(weight_smooth)
             )
 
-        v = drjit.gather(
+        v = dr.gather(
             self.StorageFloatXf,
             self.data,
             index,
             active,
-            shape=(self.n_features_per_level, drjit.width(index)),
+            shape=(self.n_features_per_level, dr.width(index)),
         )
 
         for k in range(0, self.n_features_per_level):
-            values[level_i * self.n_features_per_level + k] = drjit.fma(
+            values[level_i * self.n_features_per_level + k] = dr.fma(
                 v[k],
                 self.StorageFloat(weight),
                 values[level_i * self.n_features_per_level + k],
             )
 
-    def indexing_function(self, key: drjit.ArrayBase, level_i: int) -> drjit.ArrayBase:
+    def indexing_function(self, key: dr.ArrayBase, level_i: int) -> dr.ArrayBase:
         """
-        Given a key i.e. a D-dimensional integer vector, identifying a vertex
+        Given a key i.e. a D-dimensional integer vector identifying a vertex
         of a simplex, this function calculates the index of the feature tuple,
         which is associated with that vertex.
         """
@@ -369,12 +384,12 @@ class HashEncoding:
 
         # If the stride for dense indexing is too large, fallback to hash based indexing.
         if this_level_size < stride:
-            index = self.hashing_function(key)
+            index = self.hash(key)
 
         sub_grid_index = level_offset + (index % self.UInt32(this_level_size))
         return sub_grid_index
 
-    def hashing_function(self, key)->drjit.ArrayBase:
+    def hash(self, key) -> dr.ArrayBase:
         """
         Hashes the D-dimensional key to compute a 1-dimensional index. This function
         is called when dense indexing is not possible.
@@ -389,16 +404,13 @@ class HashEncoding:
         than the number of cells. This is slightly different from the notation in the paper,
         but results in nice, power-of-2-scaled parameter grids that fit better into cache lines.
         """
-        return (
-            drjit.exp2(level * self._log2_per_level_scale) * self.base_resolution
-            - 1.0
-        )
+        return dr.exp2(level * self._log2_per_level_scale) * self.base_resolution - 1.0
 
     def _resolution(self, scale: float) -> int:
         """
         Convert scale factor to discrete grid resolution (number of grid vertices per dimension).
         """
-        return int(drjit.ceil(scale)) + 1
+        return int(dr.ceil(scale)) + 1
 
 
 class HashGridEncoding(HashEncoding):
@@ -437,6 +449,7 @@ class HashGridEncoding(HashEncoding):
     @overload
     def __init__(
         self,
+        dtype: Type[dr.ArrayBase],
         dimension: int,
         *,
         n_levels: int = 16,
@@ -449,14 +462,15 @@ class HashGridEncoding(HashEncoding):
         smooth_weight_gradients: bool = False,
         smooth_weight_lambda: float = 1.0,
         init_scale: float = 1e-4,
+        seed: int | dr.AnyArray | None = None,
     ) -> None: ...
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
 
     def __call__(
-        self, p: Iterable[drjit.ArrayBase], active: bool | drjit.ArrayBase = True
-    ) -> Iterable[drjit.ArrayBase]:
+        self, p: Iterable[dr.ArrayBase], active: bool | dr.ArrayBase = True
+    ) -> Iterable[dr.ArrayBase]:
         _, PositionFloatXf = self._position_types(p)
 
         # Keep the position and interpolation weights in higher precision, to
@@ -484,23 +498,23 @@ class HashGridEncoding(HashEncoding):
             p_offset: float = (
                 0.5 if not self.align_corners or self.torchngp_compat else 0.0
             )
-            pos = drjit.fma(p, scale, p_offset)
-            pos0 = self.ArrayXu(drjit.floor(pos))
+            pos = dr.fma(p, scale, p_offset)
+            pos0 = self.ArrayXu(dr.floor(pos))
 
             w1 = pos - pos0
             w0 = 1.0 - w1
 
             for offset in grid_offsets:
                 pos_grid = pos0 + offset
-                weight = drjit.select(offset == 0, w0, w1)
-                weight = drjit.prod(weight, axis=0)
+                weight = dr.select(offset == 0, w0, w1)
+                weight = dr.prod(weight, axis=0)
 
                 index = self.indexing_function(pos_grid, level_i)
                 self._acc_features(level_i, weight, index, out_values, active)
 
         return self.StorageFloatXf(*out_values) & active
 
-    def hashing_function(self, key):
+    def hash(self, key):
         # Prime numbers used to hash the simplex vertices and calculate the lookup
         # index. These are equivalent to ones used for coherent hashing in tiny-cuda-nn.
         indexing_primes = [
@@ -591,6 +605,7 @@ class PermutoEncoding(HashEncoding):
     @overload
     def __init__(
         self,
+        dtype: Type[dr.ArrayBase],
         dimension: int,
         *,
         n_levels: int = 16,
@@ -602,14 +617,15 @@ class PermutoEncoding(HashEncoding):
         smooth_weight_gradients: bool = False,
         smooth_weight_lambda: float = 1.0,
         init_scale: float = 1e-4,
+        seed: int | dr.AnyArray | None = None,
     ) -> None: ...
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
 
     def __call__(
-        self, p: Iterable[drjit.ArrayBase], active: bool | drjit.ArrayBase = True
-    ) -> Iterable[drjit.ArrayBase]:
+        self, p: Iterable[dr.ArrayBase], active: bool | dr.ArrayBase = True
+    ) -> Iterable[dr.ArrayBase]:
         PositionFloat, PositionFloatXf = self._position_types(p)
 
         # Keep the position and interpolation weights in higher precision, to
@@ -631,9 +647,9 @@ class PermutoEncoding(HashEncoding):
             # ---- Apply scaling factor
 
             p_offset: float = 0.0 if self.align_corners else 0.5
-            x = drjit.fma(p, scale, p_offset)
+            x = dr.fma(p, scale, p_offset)
 
-            base = self.ArrayXi(drjit.floor(x))
+            base = self.ArrayXi(dr.floor(x))
             fract = x - base
 
             # ---- Insertion sort fract into xk and indices xki in ascending order
@@ -645,19 +661,17 @@ class PermutoEncoding(HashEncoding):
                     xk_i = PositionFloat(xk[i])
                     xk_j = PositionFloat(xk[j])
                     swap = xk_i > xk_j
-                    xk[i] = drjit.select(swap, xk_j, xk_i)
-                    xk[j] = drjit.select(swap, xk_i, xk_j)
+                    xk[i] = dr.select(swap, xk_j, xk_i)
+                    xk[j] = dr.select(swap, xk_i, xk_j)
 
                     xki_i = self.Int32(xki[i])
                     xki_j = self.Int32(xki[j])
-                    xki[i] = drjit.select(swap, xki_j, xki_i)
-                    xki[j] = drjit.select(swap, xki_i, xki_j)
+                    xki[i] = dr.select(swap, xki_j, xki_i)
+                    xki[j] = dr.select(swap, xki_i, xki_j)
 
             # ---- Calculate Barycentric coordinates and grid offset vectors
             grid_offsets = [None] * (self.dimension + 1)
-            weights = drjit.zeros(
-                PositionFloatXf, shape=(self.dimension + 1, drjit.width(p))
-            )
+            weights = dr.zeros(PositionFloatXf, shape=(self.dimension + 1, dr.width(p)))
 
             for rank in range(self.dimension):
                 weights[rank] = xk[rank] - (xk[rank - 1] if rank > 0 else 0)
@@ -672,7 +686,7 @@ class PermutoEncoding(HashEncoding):
                 # for one of them. We use the fact, that one of the equal components
                 # is sorted before the other.
 
-                grid_offset = drjit.select(
+                grid_offset = dr.select(
                     (fract > xk[rank])
                     | (fract == xk[rank])
                     & (self.ArrayXi([i for i in range(self.dimension)]) >= xki[rank]),
@@ -682,8 +696,8 @@ class PermutoEncoding(HashEncoding):
                 grid_offsets[rank] = grid_offset
 
             weights[self.dimension] = 1 - xk[self.dimension - 1]
-            grid_offsets[self.dimension] = drjit.zeros(
-                self.ArrayXi, shape=(self.dimension, drjit.width(p))
+            grid_offsets[self.dimension] = dr.zeros(
+                self.ArrayXi, shape=(self.dimension, dr.width(p))
             )
 
             # ---- Accumulate features for each offset vector
@@ -698,7 +712,7 @@ class PermutoEncoding(HashEncoding):
 
         return self.StorageFloatXf(*out_values) & active
 
-    def hashing_function(self, key) -> drjit.ArrayBase:
+    def hash(self, key) -> dr.ArrayBase:
         """Polynomial rolling hash for mapping lattice coordinates to hash table indices.
 
         Uses a simple multiplicative hash with prime number 2531011 to distribute
@@ -725,4 +739,3 @@ class PermutoEncoding(HashEncoding):
             f"    smooth_weight_lambda={self.smooth_weight_lambda}\n"
             ")"
         )
-

@@ -37,12 +37,12 @@ def test01_hashgrid_tcnn(t, dimension):
     }
 
     hg = dr.nn.HashGridEncoding(
+        Float32,
         dimension,
         **config,
         align_corners=False,
         torchngp_compat=True,
     )
-    hg = hg.alloc(Float32)
 
     config = {
         "otype": "Grid",
@@ -128,13 +128,13 @@ def test02_hashgrid_ref(t):
     }
 
     hg = dr.nn.HashGridEncoding(
+        Float32,
         3,
         **config,
         align_corners=False,
         torchngp_compat=True,
     )
 
-    hg = hg.alloc(Float32)
     data = hg.data
     data = dr.linspace(Float32, 0, 1_000, data.shape[0])
     hg.set_params(data)
@@ -191,23 +191,33 @@ def test03_permutohedral(t):
     """
     Tests that it is possible to run the permutohedral encodings.
     """
-    encoding = dr.nn.PermutoEncoding(
-        dimension=2,
-        n_levels=1,
-        n_features_per_level=1,
-        base_resolution=2,
-        align_corners=True,
-    )
+    import warnings
+    with warnings.catch_warnings(record = True) as w:
+        encoding = dr.nn.PermutoEncoding(
+            t,
+            dimension=2,
+            n_levels=1,
+            n_features_per_level=1,
+            base_resolution=2,
+            align_corners=True,
+        )
+        assert len(w) == 1
+        assert all(issubclass(warning.category, RuntimeWarning) for warning in w)
+        assert (
+            "The number of features per level should be a multiple of 2, but it was 1."
+            in str(w[0].message)
+        )
 
     m = sys.modules[t.__module__]
     Float32 = m.Float32
     ArrayXf = m.ArrayXf
 
-    encoding = encoding.alloc(Float32)
-    encoding.set_params(dr.arange(Float32, 8))
+    encoding.set_params(dr.arange(Float32, 4))
 
     x = [Float32(0, 0, 1, 1/3), Float32(0, 1, 1, 2/3)]
+
     res = encoding(x)
+
 
     ref = ArrayXf([Float32(0, 2, 3, (0 + 2 + 3) / 3)])
 
@@ -220,6 +230,7 @@ def test04_initialization(t):
     Tests that the correct number of parameters are computed.
     """
     hg = dr.nn.HashGridEncoding(
+        t,
         3,
         hashmap_size= 2**16,
         n_levels= 16,
