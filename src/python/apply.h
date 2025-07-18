@@ -24,8 +24,11 @@ enum ApplyMode {
     /// Rich comparison, a binary operation mapping T, T -> mask_t<T>
     RichCompare,
 
-    ///  Select, a ternary operation mapping mask_t<T>, T, T -> T
-    Select
+    /// Select, a ternary operation mapping mask_t<T>, T, T -> T
+    Select,
+
+    /// mul_wide(), which maps [u]int32 x [u]int32 to [u]int64
+    MulWide
 };
 
 /**

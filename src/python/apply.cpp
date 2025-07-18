@@ -73,6 +73,9 @@ static const char *op_names[] = {
     "__lshift__",
     "__rshift__",
 
+    "mul_hi",
+    "mul_wide",
+
     "minimum",
     "maximum",
     "atan2",
@@ -211,6 +214,17 @@ PyObject *apply(ArrayOp op, Slot slot, std::index_sequence<Is...> is,
             set_item = s.set_item;
             item_mask = supp(o[0].type()).item;
             init = s.init;
+        } else if constexpr (Mode == MulWide) {
+            ArrayMeta m2 = s;
+            switch ((VarType) s.type) {
+                case VarType::Int32: m2.type = (uint16_t) VarType::Int64; break;
+                case VarType::UInt32: m2.type = (uint16_t) VarType::UInt64; break;
+                default: nb::raise("only signed/unsigned 32 bit integer types are supported.");
+            }
+            result_type = meta_get_type(m2);
+            const ArraySupplement &s2 = supp(result_type);
+            set_item = s2.set_item;
+            init = s2.init;
         } else {
             result_type = tp;
             set_item = s.set_item;
@@ -1122,4 +1136,6 @@ template PyObject *apply<Select>(ArrayOp, const char *, std::index_sequence<0, 1
 template PyObject *apply<RichCompare>(ArrayOp, int, std::index_sequence<0, 1>,
                                       PyObject *, PyObject *) noexcept;
 template PyObject *apply<InPlace>(ArrayOp, int, std::index_sequence<0, 1>,
+                                  PyObject *, PyObject *) noexcept;
+template PyObject *apply<MulWide>(ArrayOp, const char *, std::index_sequence<0, 1>,
                                   PyObject *, PyObject *) noexcept;

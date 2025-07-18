@@ -1218,6 +1218,24 @@ void export_base(nb::module_ &m) {
     DR_MATH_UNOP_UINT32(tzcnt, ArrayOp::Tzcnt);
     DR_MATH_UNOP_UINT32(brev, ArrayOp::Brev);
 
+    m.def("mul_hi", [](nb::handle h0, nb::handle h1) {
+        if (NB_UNLIKELY(!is_drjit_array(h0) && !is_drjit_array(h1)))
+            return nb::steal(NB_NEXT_OVERLOAD);
+        return nb::steal(apply<Normal>(
+            ArrayOp::MulHi, "mul_hi", std::make_index_sequence<2>(), h0.ptr(), h1.ptr()));
+    }, doc_mul_hi);
+    m.def("mul_hi", [](int32_t a, int32_t b) { return dr::mul_hi(a, b); });
+    m.def("mul_hi", [](uint32_t a, uint32_t b) { return dr::mul_hi(a, b); });
+
+    m.def("mul_wide", [](nb::handle h0, nb::handle h1) {
+        if (NB_UNLIKELY(!is_drjit_array(h0) && !is_drjit_array(h1)))
+            return nb::steal(NB_NEXT_OVERLOAD);
+        return nb::steal(apply<MulWide>(
+            ArrayOp::MulWide, "mul_wide", std::make_index_sequence<2>(), h0.ptr(), h1.ptr()));
+    }, doc_mul_wide);
+    m.def("mul_wide", [](int32_t a, int32_t b) { return dr::mul_wide(a, b); });
+    m.def("mul_wide", [](uint32_t a, uint32_t b) { return dr::mul_wide(a, b); });
+
     DR_MATH_UNOP(exp, ArrayOp::Exp);
     DR_MATH_UNOP(exp2, ArrayOp::Exp2);
     DR_MATH_UNOP(log, ArrayOp::Log);

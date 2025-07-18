@@ -193,8 +193,8 @@ DRJIT_ROUTE_UNARY_FALLBACK(rsqrt, rsqrt, detail::rsqrt_(a))
 
 DRJIT_ROUTE_BINARY_FALLBACK(maximum, maximum, detail::maximum_((E) a1, (E) a2))
 DRJIT_ROUTE_BINARY_FALLBACK(minimum, minimum, detail::minimum_((E) a1, (E) a2))
-
-DRJIT_ROUTE_BINARY_FALLBACK(mulhi, mulhi, detail::mulhi_((E) a1, (E) a2))
+DRJIT_ROUTE_BINARY_FALLBACK(mul_hi, mul_hi,     detail::mul_hi_((E) a1, (E) a2))
+DRJIT_ROUTE_BINARY_FALLBACK(mul_wide, mul_wide, detail::mul_wide_((E) a1, (E) a2))
 DRJIT_ROUTE_UNARY_FALLBACK(lzcnt, lzcnt, detail::lzcnt_(a))
 DRJIT_ROUTE_UNARY_FALLBACK(tzcnt, tzcnt, detail::tzcnt_(a))
 DRJIT_ROUTE_UNARY_FALLBACK(popcnt, popcnt, detail::popcnt_(a))

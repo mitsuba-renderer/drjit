@@ -206,9 +206,15 @@ struct DRJIT_TRIVIAL_ABI DiffArray
             return steal(jit_var_mul(m_index, a.m_index));
     }
 
-    DiffArray mulhi_(const DiffArray &a) const {
-        return steal(jit_var_mulhi((uint32_t) m_index,
-                                   (uint32_t) a.m_index));
+    DiffArray mul_hi_(const DiffArray &a) const {
+        return steal(jit_var_mul_hi((uint32_t) m_index,
+                                    (uint32_t) a.m_index));
+    }
+
+    auto mul_wide_(const DiffArray &v) const {
+        static_assert(sizeof(Value_) == 4);
+        using Result = DiffArray<Backend, std::conditional_t<std::is_signed_v<Value_>, int64_t, uint64_t>>;
+        return Result::steal(jit_var_mul_wide((uint32_t) m_index, (uint32_t) v.m_index));
     }
 
     DiffArray div_(const DiffArray &a) const {

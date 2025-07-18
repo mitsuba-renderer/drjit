@@ -285,6 +285,8 @@ Standard mathematical functions
 .. autofunction:: copysign
 .. autofunction:: mulsign
 .. autofunction:: step
+.. autofunction:: mul_hi
+.. autofunction:: mul_wide
 
 Operations for vectors and matrices
 -----------------------------------
