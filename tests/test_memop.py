@@ -940,7 +940,7 @@ def test35_scatter_packet_reduce(t, reduce_op, packet_size, force_optix):
                 assert ir.count(f"red.global.v{n_regs}.f32.{reduce_op.lower()}") == n_inst
         else:
             if tp == dr.VarType.Float16:
-                n_inst = {1: 1, 2: 1, 3: 3, 4: 2, 5: 5, 6: 3, 12: 6, 16: 8}[packet_size]
+                n_inst = {1: 1, 2: 1, 3: 2, 4: 2, 5: 3, 6: 3, 12: 6, 16: 8}[packet_size]
                 assert ir.count("red.global.add.noftz.f16x2") == n_inst
     elif dr.backend_v(t) is dr.JitBackend.LLVM and reduce_op == "Add":
         # Compute maximum supported vector width for this architecture
@@ -980,7 +980,6 @@ def test36_gather_packet(t, packet_size, force_optix):
     """
     Tests that packeted gather operations behave correctly and use vector instructions.
     """
-    dr.set_log_level(dr.LogLevel.Trace)
     tp = dr.type_v(t)
     if (
         dr.backend_v(t) == dr.JitBackend.LLVM
