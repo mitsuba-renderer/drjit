@@ -2,7 +2,7 @@ import pytest
 import drjit as dr
 
 def test00_sh_eval():
-    special = pytest.importorskip("scipy.special").special
+    special = pytest.importorskip("scipy.special")
     np = pytest.importorskip("numpy")
     from drjit.scalar import Array3f
 
