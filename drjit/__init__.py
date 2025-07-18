@@ -1589,12 +1589,12 @@ def sh_eval(d: ArrayBase, order: int) -> list:
     .. code-block:: python
 
        def sh_eval(d, order: int):
-           from scipy.special import sph_harm
+           from scipy.special import sph_harm_y
            theta, phi = np.arccos(d.z), np.arctan2(d.y, d.x)
            r = []
            for l in range(order + 1):
                for m in range(-l, l + 1):
-                   Y = sph_harm(abs(m), l, phi, theta)
+                   Y = sph_harm(l, abs(m), theta, phi)
                    if m > 0:
                        Y = np.sqrt(2) * Y.real
                    elif m < 0:
