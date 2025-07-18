@@ -3771,3 +3771,33 @@ def test100_kernel_history(t, auto_opaque, recorded_func):
             assert k1["recording_mode"] == dr.KernelRecordingMode.Recorded
             assert k2["recording_mode"] == dr.KernelRecordingMode.Replayed
 
+@pytest.mark.parametrize("auto_opaque", [False, True])
+@pytest.test_arrays("float32, jit, diff, shape=(*)")
+def test101_enabled(t, auto_opaque):
+    """
+    Tests that the enabled keyword argument works, and can be changed afterwards.
+    """
+
+    def func(x):
+        return x + 1
+
+    frozen = dr.freeze(func, auto_opaque=auto_opaque, enabled=False)
+
+    assert not frozen.enabled
+
+    x = dr.arange(t, 10)
+    assert dr.allclose(func(x), frozen(x))
+
+    assert frozen.n_recordings == 0
+
+    frozen.enabled = True
+
+    x = dr.arange(t, 11)
+    assert dr.allclose(func(x), frozen(x))
+
+    assert frozen.n_recordings == 1
+
+    x = dr.arange(t, 12)
+    assert dr.allclose(func(x), frozen(x))
+
+    assert frozen.n_recordings == 1
