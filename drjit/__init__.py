@@ -672,7 +672,7 @@ def rotate(dtype, axis, angle):
         raise Exception("drjit.rotate(): unsupported input type!")
 
     s, c = sincos(angle * .5)
-    q = dtype(c, *(axis * s))
+    q = dtype(*(axis * s), c)
     return q
 
 
