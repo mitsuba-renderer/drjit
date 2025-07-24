@@ -60,7 +60,7 @@ class Module:
         """
         raise NotImplementedError(f"{type(self).__name__}.__call__() implementation is missing.")
 
-    def _alloc(self, dtype: Type[drjit.ArrayBase], size: int, /) -> Tuple[Module, int]:
+    def _alloc(self, dtype: Type[drjit.ArrayBase], size: int, rng: drjit.random.Generator, /) -> Tuple[Module, int]:
         """
         Internal method used to propagate argument sizes and allocate weight
         storage of all NN modules.
@@ -73,7 +73,7 @@ class Module:
         """
         return self, size
 
-    def alloc(self, dtype: Type[drjit.ArrayBase], size: int = -1) -> Module:
+    def alloc(self, dtype: Type[drjit.ArrayBase], size: int = -1, rng: Optional[drjit.random.Generator] = None) -> Module:
         """
         Returns a new instance of the model with allocated weights.
 
@@ -87,8 +87,26 @@ class Module:
         network configuration may ambiguous and an exception will be raised.
         Specify the optional ``size`` parameter in such cases to inform the
         allocation about the size of the input cooperative vector.
+
+        Layer weights are initialized using pseudorandom values obtained from
+        the specified generator object ``rng``.
+
+        Specifying a newly seeded random number generator with the same seed
+        ensures that weights will be consistent across runs (i.e., calling
+        ``alloc()`` twice will produce the same initialization).
+
+        If ``rng=None`` (the default), a generator is constructed on the fly
+        via ``dr.rng(seed=0x100000000)``. This particular seed value is used to
+        de-correlate the network weights with respect to any potential future
+        network evaluations that might be produced by a random number generator
+        with the default seed (``0``). (Please ignore this paragraph if it
+        is unclear, it explains a protection against a subtle/niche issue.)
         """
-        return self._alloc(dtype, size)[0]
+
+        if rng is None:
+            rng = drjit.rng(seed=0x100000000)
+
+        return self._alloc(dtype, size, rng)[0]
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}()"
@@ -109,10 +127,10 @@ class Sequential(Module, Sequence[Module]):
             arg = l(arg)
         return arg
 
-    def _alloc(self, dtype: Type[drjit.ArrayBase], size: int = -1, /) -> Tuple[Module, int]:
+    def _alloc(self, dtype: Type[drjit.ArrayBase], size: int, rng: drjit.random.Generator, /) -> Tuple[Module, int]:
         result = []
         for l in self.layers:
-            l_new, size = l._alloc(dtype, size)
+            l_new, size = l._alloc(dtype, size, rng)
             result.append(l_new)
         return Sequential(*result), size
 
@@ -268,10 +286,7 @@ class Linear(Module):
     The method :py:func:`Module.alloc` initializes the underlying coefficient
     storage with random weights following a uniform Xavier initialization,
     i.e., uniform variates on the interval :math:`[-k,k]` where
-    :math:`k=1/\sqrt{\texttt{out\_features}}`. Call :py:func:`drjit.seed()` prior
-    to this step to ensure that weights are always initialized with the same
-    values, which can be helpful for hyperpararameter tuning and
-    reproducibility.
+    :math:`k=1/\sqrt{\texttt{out\_features}}`.
     """
     config: Tuple[int, int, bool]
     weights: TensorOrViewOrNone
@@ -310,7 +325,7 @@ class Linear(Module):
             )
         return matvec(self.weights, arg, self.bias)
 
-    def _alloc(self, dtype: Type[drjit.ArrayBase], size : int = -1, /) -> Tuple[Module, int]:
+    def _alloc(self, dtype: Type[drjit.ArrayBase], size : int, rng: drjit.random.Generator, /) -> Tuple[Module, int]:
         in_features, out_features, bias = self.config
         if in_features < 0:
             in_features = size
@@ -324,7 +339,7 @@ class Linear(Module):
         # Xavier (uniform) initialization, matches PyTorch
         scale = drjit.sqrt(1 / out_features)
         Float32 = drjit.float32_array_t(dtype)
-        samples = drjit.rand(Float32, (out_features, in_features))
+        samples = rng.random(Float32, (out_features, in_features))
         result.weights = dtype(drjit.fma(samples, 2, -1) * scale)
         if bias:
             result.bias = drjit.zeros(dtype, out_features)
@@ -400,7 +415,7 @@ class TriEncode(Module):
         self.shift = shift
         self.channels = -1
 
-    def _alloc(self, dtype: Type[drjit.ArrayBase], size : int = -1, /) -> Tuple[Module, int]:
+    def _alloc(self, dtype: Type[drjit.ArrayBase], size : int, rng: drjit.random.Generator, /) -> Tuple[Module, int]:
         r = TriEncode(self.octaves, self.shift)
         r.channels = size
         return r, size * self.octaves * 2
@@ -472,7 +487,7 @@ class SinEncode(Module):
             self.shift = (drjit.sin(shift * 2 * drjit.pi),
                           drjit.cos(shift * 2 * drjit.pi))
 
-    def _alloc(self, dtype: Type[drjit.ArrayBase], size : int = -1, /) -> Tuple[Module, int]:
+    def _alloc(self, dtype: Type[drjit.ArrayBase], size : int, rng: drjit.random.Generator, /) -> Tuple[Module, int]:
         r = SinEncode(self.octaves)
         r.channels = size
         r.shift = self.shift

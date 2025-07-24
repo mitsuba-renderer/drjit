@@ -18,7 +18,7 @@ void export_cuda(nb::module_ &m) {
 
     ArrayBinding b;
     dr::bind_all<Guide>(b);
-    bind_pcg32<Guide>(m);
+    bind_rng<Guide>(m);
     bind_texture_all<Guide>(m);
 
     m.attr("Float32") = m.attr("Float");

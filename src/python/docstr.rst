@@ -6202,28 +6202,55 @@
 
 .. topic:: PCG32
 
-    Implementation of PCG32, a member of the PCG family of random number generators
-    proposed by Melissa O'Neill.
+    Implementation of PCG32, a member of the PCG family of random number
+    generators proposed by Melissa O'Neill.
 
-    PCG combines a Linear Congruential Generator (LCG) with a permutation function
-    that yields high-quality pseudorandom variates while at the same time requiring
-    very low computational cost and internal state (only 128 bit in the case of
-    PCG32).
-
-    More detail on the PCG family of pseudorandom number generators can be found
+    PCG32 is a stateful pseudorandom number generator that combines a linear
+    congruential generator (LCG) with a permutation function. It provides high
+    statistical quality with a remarkably fast and compact implementation.
+    Details on the PCG family of pseudorandom number generators can be found
     `here <https://www.pcg-random.org/index.html>`__.
 
-    The :py:class:`PCG32` class is implemented as a :ref:`PyTree <pytrees>`, which
-    means that it is compatible with symbolic function calls, loops, etc.
+    To create random tensors of different sizes in Python, prefer the
+    higher-level :py:func:`dr.rng() <drjit.rng>` interface, which internally
+    uses the :py:class:`Philox4x32` generator. The properties of PCG32 makes it
+    most suitable for Monte Carlo applications requiring long sequences of
+    random variates.
+
+    Key properties of the PCG variant implemented here include:
+
+    * **Compact**: 128 bits total state (64-bit state + 64-bit increment)
+
+    * **Output**: 32-bit output with a period of 2^64 per stream
+
+    * **Streams**: Multiple independent streams via the increment parameter
+      (with caveats, see below)
+
+    * **Low-cost sample generation**: a single 64 bit integer multiply-add plus
+      a bit permutation applied to the output.
+
+    * **Extra features**: provides fast multi-step advance/rewind functionality.
+
+    **Caveats**: PCG32 produces random high-quality variates within each random
+    number stream. For a given initial state, PCG32 can also produce multiple
+    output streams by specifying a different sequence increment (``initseq``) to the
+    constructor. However, the level of statistical independence *across streams*
+    is generally insufficient when doing so. To obtain a series of high-quality
+    independent parallel streams, it is recommended to use another method (e.g.,
+    the Tiny Encryption Algorithm) to seed the `state` and `inc` parameters. This
+    ensures independence both within and across streams.
+
+    In Python, the :py:class:`PCG32` class is implemented as a :ref:`PyTree
+    <pytrees>`, which means that it is compatible with symbolic function calls,
+    loops, etc.
 
     .. note::
 
        Please watch out for the following pitfall when using the PCG32 class in
        long-running Dr.Jit calculations (e.g., steps of a gradient-based optimizer).
-
        Consuming random variates (e.g., through :py:func:`next_float`) changes
-       the internal RNG state. If this state is never explicitly evaluated, the
-       computation graph describing the state transformation keeps growing
+       the internal RNG state. If this state is never explicitly evaluated,
+       the computation graph describing the state transformation keeps growing
        without bound, causing kernel compilation of increasingly large programs
        to eventually become a bottleneck. To evaluate the RNG, simply run
 
@@ -6236,19 +6263,20 @@
        bytes per entry) can be prohibitive. In this case, it is better to keep
        the RNG in symbolic form and re-seed it at every optimization iteration.
 
-       .. code-block:: python
-
-          rng = PCG32(size, dr.opaque(UIn64, iteration_index))
-
-       Finally, the functions :py:func:`drjit.rand` and :py:func:`drjit.normal`
-       provide a higher-level wrapper around the PCG32 class. These are
-       equivalent to constructing a newly seeded PCG32 instance and drawing a
-       single sample.
-
        In cases where a sampler is repeatedly used in a symbolic loop, it is
        more efficient to use the PCG32 API directly to seed once and reuse the
        random number generator throughout the loop.
 
+       The :py:func:`drjit.rng <rng>` API avoids these pitfalls by eagerly
+       evaluating the RNG state.
+
+    Comparison with \ref Philox4x32:
+
+    * :py:class:`PCG32 <drjit.auto.PCG32>`: State-based, better for sequential generation,
+      low per-sample cost.
+
+    * :py:class:`Philox4x32 <drjit.auto.Philox4x32>`: Counter-based, better for
+      parallel generation, higher per-sample cost.
 
 .. topic:: PCG32_PCG32
 
@@ -6324,8 +6352,8 @@
 
 .. topic:: PCG32_prev_float
 
-    Generate the previous uniformly distributed precision floating point number 
-    on the interval :math:`[0, 1)` by stepping the PCG32 state backwards.
+    Generate the previous uniformly distributed precision floating point number
+    on the half-open interval :math:`[0, 1)` by stepping the PCG32 state backwards.
 
     The function analyzes the provided target ``dtype`` and either invokes
     :py:func:`prev_float16`, :py:func:`prev_float32` or :py:func:`prev_float64`
@@ -6344,8 +6372,8 @@
 
 .. topic:: PCG32_prev_float16
 
-    Generate the previous uniformly distributed half precision floating point number 
-    on the interval :math:`[0, 1)` by stepping the PCG32 state backwards.
+    Generate the previous uniformly distributed half precision floating point number
+    on the half-open interval :math:`[0, 1)` by stepping the PCG32 state backwards.
 
     Two overloads of this function exist: the masked variant does not regress
     the PRNG state of entries ``i`` where ``mask[i] == False``.
@@ -6360,8 +6388,8 @@
 
 .. topic:: PCG32_prev_float32
 
-    Generate the previous uniformly distributed single precision floating point number 
-    on the interval :math:`[0, 1)` by stepping the PCG32 state backwards.
+    Generate the previous uniformly distributed single precision floating point number
+    on the half-open interval :math:`[0, 1)` by stepping the PCG32 state backwards.
 
     Two overloads of this function exist: the masked variant does not regress
     the PRNG state of entries ``i`` where ``mask[i] == False``.
@@ -6376,8 +6404,8 @@
 
 .. topic:: PCG32_prev_float64
 
-    Generate the previous uniformly distributed double precision floating point number 
-    on the interval :math:`[0, 1)` by stepping the PCG32 state backwards.
+    Generate the previous uniformly distributed double precision floating point number
+    on the half-open interval :math:`[0, 1)` by stepping the PCG32 state backwards.
 
     Two overloads of this function exist: the masked variant does not regress
     the PRNG state of entries ``i`` where ``mask[i] == False``.
@@ -6412,7 +6440,7 @@
 
 .. topic:: PCG32_prev_float16_normal
 
-    Generate the previous (standard) normally distributed half precision floating 
+    Generate the previous (standard) normally distributed half precision floating
     point number by stepping the PCG32 state backwards.
 
     Two overloads of this function exist: the masked variant does not regress
@@ -6427,7 +6455,7 @@
 
 .. topic:: PCG32_prev_float32_normal
 
-    Generate the previous (standard) normally distributed single precision floating 
+    Generate the previous (standard) normally distributed single precision floating
     point number by stepping the PCG32 state backwards.
 
     Two overloads of this function exist: the masked variant does not regress
@@ -6442,7 +6470,7 @@
 
 .. topic:: PCG32_prev_float64_normal
 
-    Generate the previous (standard) normally distributed double precision floating 
+    Generate the previous (standard) normally distributed double precision floating
     point number by stepping the PCG32 state backwards.
 
     Two overloads of this function exist: the masked variant does not regress
@@ -6498,6 +6526,210 @@
 .. topic:: PCG32_state
 
     Sequence state of the PCG32 PRNG (an unsigned 64-bit integer or integer array). Please see the original paper for details on this field.
+
+.. topic:: Philox4x32
+
+    Philox4x32 counter-based PRNG
+
+    This class implements the Philox 4x32 counter-based pseudo-random number
+    generator based on the paper `Parallel Random Numbers: As Easy as 1, 2, 3
+    <https://www.thesalmons.org/john/random123/papers/random123sc11.pdf>`__ by
+    Salmon et al. [2011]. It uses strength-reduced cryptographic
+    primitives to realize a complex transition function that turns a seed and
+    set of counter values onto 4 pseudorandom outputs. Incrementing any of the
+    counters or choosing a different seed produces statistically independent
+    samples.
+
+    The implementation here uses a reduced number of bits (32) for the
+    arithmetic and sets the default number of rounds to 7. However, even with
+    these simplifications it passes the `Test01
+    <https://en.wikipedia.org/wiki/TestU01>`__ stringent ``BigCrush`` tests (a
+    battery of statistical tests for non-uniformity and correlations). Please
+    see the paper `Random number generators for massively parallel simulations
+    on GPU <https://arxiv.org/abs/1204.6193>`__ by Manssen et al. [2012] for
+    details.
+
+    Functions like :py:func:`next_uint32x4()` or :py:func:`next_float32x4()`
+    advance the PRNG state by incrementing the counter ``ctr[3]``.
+
+    Key properties include:
+
+    * Counter-based design: generation from counter + key
+
+    * 192-bit bit state: 4x32-bit counters, 64-bit key
+
+    * Trivial jump-ahead capability through counter manipulation
+
+    The :py:class:`Philox4x32` class is implemented as a :ref:`PyTree <pytrees>`,
+    making it compatible with symbolic function calls, loops, etc.
+
+    .. note::
+
+       :py:class:`Philox4x32` naturally produces 4 samples at a time, which may
+       be awkward for applications that need individual random values.
+
+    .. note::
+
+       For a comparison of use cases between :py:class:`Philox4x32` and
+       :py:class:`PCG32`, see the :py:class:`PCG32` class documentation. In
+       brief: use :py:class:`PCG32` for sequential generation with lowest cost
+       per sample; use :py:class:`Philox4x32` for parallel generation where
+       independent streams are critical.
+
+    .. note::
+
+       Please watch out for the following pitfall when using the Philox4x32 class in
+       long-running Dr.Jit calculations (e.g., steps of a gradient-based optimizer).
+       Consuming random variates (e.g., through :py:func:`next_float_4x32`) changes
+       the internal RNG counter value. If this state is never explicitly evaluated,
+       the computation graph describing this cahnge keeps growing
+       causing kernel compilation of increasingly large programs
+       to eventually become a bottleneck.
+       The :py:func:`drjit.rng <rng>` API avoids this pitfall by eagerly
+       evaluating the RNG counter when needed.
+
+       In cases where a sampler is repeatedly used in a symbolic loop, it is
+       more efficient to use the PCG32 PRNG with its lower per-sample cost. You
+       can seed this method once and reuse the random number generator
+       throughout the loop.
+
+.. topic:: Philox4x32_Philox4x32
+
+    Initialize a Philox4x32 random number generator.
+
+    The function takes a ``seed`` and three of four ``counter`` component.
+    The last component is zero-initialized and incremented by calls to the
+    ``sample_*`` methods.
+
+    Args:
+        seed: The 64-bit seed value used as the key for the mapping
+        ctr_0: The first 32-bit counter value (least significant)
+        ctr_1: The second 32-bit counter value (default: 0)
+        ctr_2: The third 32-bit counter value (default: 0)
+        iterations: Number of rounds to apply (default: 7, range: 4-10)
+
+    For parallel stream generation, simply use different counter values - each
+    combination of counter values produces an independent random stream.
+
+.. topic:: Philox4x32_next_uint32x4
+
+    Generate 4 random 32-bit unsigned integers.
+
+    Advances the internal counter and applies the Philox mapping to
+    produce 4 independent 32-bit random values.
+
+    Args:
+        mask: Optional mask to control which lanes are updated
+
+    Returns:
+        Array of 4 random 32-bit unsigned integers
+
+.. topic:: Philox4x32_next_uint64x2
+
+    Generate 2 random 64-bit unsigned integers.
+
+    Advances the internal counter and applies the Philox mapping to
+    produce 4 independent 64-bit random values.
+
+    Args:
+        mask: Optional mask to control which lanes are updated
+
+    Returns:
+        Array of 2 random 64-bit unsigned integers
+
+.. topic:: Philox4x32_next_float16x4
+
+    Generate 4 random half-precision floats in :math:`[0, 1)`.
+
+    Generates 4 random 32-bit unsigned integers and converts them to half
+    precision floats that are uniformly distributed on the half-open interval
+    :math:`[0, 1)`.
+
+    Args:
+        mask: Optional mask to control which lanes are updated
+
+    Returns:
+        Array of 4 random floats on the half-open interval :math:`[0, 1)`
+
+
+.. topic:: Philox4x32_next_float32x4
+
+    Generate 4 random single-precision floats in :math:`[0, 1)`.
+
+    Generates 4 random 32-bit unsigned integers and converts them to single
+    precision floats that are uniformly distributed on the half-open interval
+    :math:`[0, 1)`.
+
+    Args:
+        mask: Optional mask to control which lanes are updated
+
+    Returns:
+        Array of 4 random floats on the half-open interval :math:`[0, 1)`
+
+.. topic:: Philox4x32_next_float64x2
+
+    Generate 2 random double-precision floats in :math:`[0, 1)`.
+
+    Generates 2 random 64-bit unsigned integers and converts them to
+    floats uniformly distributed on the half-open interval :math:`[0, 1)`.
+
+    Args:
+        mask: Optional mask to control which lanes are updated
+
+    Returns:
+        Array of 2 random floats on the half-open interval :math:`[0, 1)`
+
+.. topic:: Philox4x32_next_float64x2
+
+    Generate 2 random double-precision floats in :math:`[0, 1)`.
+
+    Generates 2 random 64-bit unsigned integers and converts them to
+    floats uniformly distributed on the half-open interval :math:`[0, 1)`.
+
+    Args:
+        mask: Optional mask to control which lanes are updated
+
+    Returns:
+        Array of 2 random floats on the half-open interval :math:`[0, 1)`
+
+.. topic:: Philox4x32_next_float16x4_normal
+
+    Generate 4 normally distributed single-precision floats
+
+    Advances the internal counter and applies the Philox mapping to produce 4
+    single precision floats following a standard normal distribution.
+
+    Args:
+        mask: Optional mask to control which lanes are updated
+
+    Returns:
+        Array of 4 random floats from a standard normal distribution
+
+.. topic:: Philox4x32_next_float32x4_normal
+
+    Generate 4 normally distributed single-precision floats
+
+    Advances the internal counter and applies the Philox mapping to produce 4
+    single precision floats following a standard normal distribution.
+
+    Args:
+        mask: Optional mask to control which lanes are updated
+
+    Returns:
+        Array of 4 random floats from a standard normal distribution
+
+.. topic:: Philox4x32_next_float64x2_normal
+
+    Generate 2 normally distributed double-precision floats
+
+    Advances the internal counter and applies the Philox mapping to
+    produce 2 double precision floats following a standard normal distribution.
+
+    Args:
+        mask: Optional mask to control which lanes are updated
+
+    Returns:
+        Array of 2 random floats from a standard normal distribution
 
 .. topic:: Texture_init
 
