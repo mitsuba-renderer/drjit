@@ -3601,12 +3601,14 @@ def test96_coop_vec(t, auto_opaque, layout):
         nn.Exp(),
     )
 
-    net = net.alloc(TensorXf16, 2)
+    rng = dr.rng(seed=0)
+    net = net.alloc(TensorXf16, size=2, rng=rng)
 
     weights, net = nn.pack(net, layout=layout)
 
+    rng = dr.rng()
     for i in range(3):
-        x = dr.rand(ArrayXf, (2, 2 * i + 4))
+        x = rng.random(ArrayXf, (2, 2 * i + 4))
 
         res = frozen(net=net, x=x)
         ref = func(net = net, x = x)
@@ -3652,13 +3654,14 @@ def test97_coop_vec_bwd(t, auto_opaque):
 
     weights, net = nn.pack(net, layout="training")
 
-    x = dr.rand(ArrayXf, (2, 2))
+    rng = dr.rng()
+    x = rng.random(ArrayXf, (2, 2))
 
     for i in range(3):
         dr.enable_grad(weights)
         dr.clear_grad(weights)
 
-        x = dr.rand(ArrayXf, (2, i * 2 + 4))
+        x = rng.random(ArrayXf, (2, i * 2 + 4))
 
         loss_res = frozen(net, x)
         grad_res = dr.grad(weights)

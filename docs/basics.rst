@@ -262,21 +262,44 @@ accumulates values into an array.
 Random number generation
 ------------------------
 
-Dr.Jit was originally developed for Monte Carlo simulation, and programs in
-that domain require a source of (pseudo-) randomness. For this, the system
-provides a member of the `PCG Family
-<https://www.pcg-random.org/index.html>`__ of random number generators by
-`Melissa O'Neill <https://www.cs.hmc.edu/~oneill/index.html>`__. To try it,
-import the class :py:class:`drjit.*.PCG32 <drjit.auto.PCG32>` from your backend
-of choice and initialize with the desired output array size.
+The function :py:func:`dr.rng() <rng>` returns a :py:class:`Generator
+<drjit.random.Generator>` object, which acts as a high-quality source of
+independent random variates suitable for most applications.
 
 .. code-block:: pycon
 
-   >>> from drjit.auto import PCG32
-   >>> rng = PCG32(10000)
-   >>> rng.next_float32()
-   [0.108379, 0.533909, 0.00684452, .. 9994 skipped .., 0.511698, 0.600626, 0.219648]
-   >>> rng.next_uint32_bounded(4)
-   [1, 0, 0, .. 9994 skipped .., 0, 3, 3]
+   >>> rng = dr.rng(seed=0)  # Create generator with seed
+   >>> rng.random(Float, 5)  # Generate 5 uniform floats in [0, 1)
+   [0.310349, 0.575526, 0.781459, 0.37085, 0.548153]
+   >>> rng.normal(Float, 5)  # Generate 5 standard normal variates
+   [-1.28345, -0.906184, 0.109155, 0.238633, 0.293812]
+   >>> from drjit.cuda import TensorXf16
+   >>> rng.random(TensorXf16, shape=(100, 100)) # 100x100 float16 tensor
+   [[0.624512, 0.884766, 0.411133, .. 94 skipped .., 0.700684, 0.211426, 0.592773],
+    [0.536621, 0.760254, 0.393799, .. 94 skipped .., 0.595215, 0.237183, 0.0898438],
+    [0.370117, 0.933594, 0.485352, .. 94 skipped .., 0.901367, 0.0207825, 0.723145],
+    .. 94 skipped ..,
+    [0.186523, 0.722656, 0.59082, .. 94 skipped .., 0.678711, 0.379639, 0.88623],
+    [0.203125, 0.540039, 0.36084, .. 94 skipped .., 0.4375, 0.402832, 0.18103],
+    [0.256836, 0.0705566, 0.307617, .. 94 skipped .., 0.711914, 0.958496, 0.603027]]
 
-Please see the documentation of this class for a review of its features.
+In addition to this high-level interface, Dr.Jit also provides direct access to
+two random number generators, specifically:
+
+- :py:class:`drjit.*.Philox4x32 <drjit.auto.Philox4x32>`, a counter-based
+  random number generator with `cryptographic origins
+  <https://www.thesalmons.org/john/random123/papers/random123sc11.pdf>`__ . It
+  uses a combination of wide multiplication and XOR operations to transform a
+  seed and counter into high-quality pseudorandom outputs. The
+  :py:func:`drjit.rng()` abstraction is based on this generator.
+
+- :py:class:`drjit.*.PCG32 <drjit.auto.PCG32>`, a a stateful pseudorandom number
+  generator from the `PCG family <https://www.pcg-random.org/index.html>`__
+  that combines a linear congruential generator (LCG) with a permutation
+  function.
+
+These classes offer a lower-level interface to generate individual 1D samples.
+They may be simpler to use, e.g., when repeatedly drawing samples in a loop. Of
+these two, ``PCG32`` has a low per-sample cost but requires careful seeding if
+statistically independent parallel streams are desired. ``Philox4x32`` is more
+expensive but also less fragile from a statistical point of view.

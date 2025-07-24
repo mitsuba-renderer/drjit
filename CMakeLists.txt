@@ -213,9 +213,12 @@ if (DRJIT_MASTER_PROJECT)
       ${CMAKE_CURRENT_BINARY_DIR}/drjit/interop.py
       ${CMAKE_CURRENT_BINARY_DIR}/drjit/ast.pyi
       ${CMAKE_CURRENT_BINARY_DIR}/drjit/ast.py
+      ${CMAKE_CURRENT_BINARY_DIR}/drjit/dda.py
+      ${CMAKE_CURRENT_BINARY_DIR}/drjit/nn.py
       ${CMAKE_CURRENT_BINARY_DIR}/drjit/detail.pyi
       ${CMAKE_CURRENT_BINARY_DIR}/drjit/detail.py
       ${CMAKE_CURRENT_BINARY_DIR}/drjit/opt.py
+      ${CMAKE_CURRENT_BINARY_DIR}/drjit/random.py
       ${CMAKE_CURRENT_BINARY_DIR}/drjit/py.typed
       DESTINATION drjit
     )

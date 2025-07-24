@@ -5,8 +5,9 @@
 #include "base.h"
 
 template <typename Guide>
-void bind_pcg32(nb::module_ &m) {
+void bind_rng(nb::module_ &m) {
     using UInt64 = dr::uint64_array_t<Guide>;
+    using UInt32 = dr::uint32_array_t<Guide>;
     using Int64 = dr::int64_array_t<Guide>;
     using PCG32 = dr::PCG32<UInt64>;
     using Mask = dr::mask_t<UInt64>;
@@ -14,12 +15,12 @@ void bind_pcg32(nb::module_ &m) {
     auto pcg32 = nb::class_<PCG32>(m, "PCG32", doc_PCG32)
         .def(nb::init<size_t, const UInt64 &, const UInt64 &>(),
              "size"_a = 1,
-             "initstate"_a.sig("UInt64(0x853c49e6748fea9b)") = PCG32_DEFAULT_STATE,
-             "initseq"_a.sig("UInt64(0xda3e39cb94b95bdb)") = PCG32_DEFAULT_STREAM, doc_PCG32_PCG32)
+             "initstate"_a.sig("UInt64(0x853c49e6748fea9b)") = PCG32::PCG32_DEFAULT_STATE,
+             "initseq"_a.sig("UInt64(0xda3e39cb94b95bdb)") = PCG32::PCG32_DEFAULT_STREAM, doc_PCG32_PCG32)
         .def(nb::init<const PCG32 &>(), doc_PCG32_PCG32_2)
         .def("seed", &PCG32::seed,
-             "initstate"_a.sig("UInt64(0x853c49e6748fea9b)")  = PCG32_DEFAULT_STATE,
-             "initseq"_a.sig("UInt64(0xda3e39cb94b95bdb)") = PCG32_DEFAULT_STREAM, doc_PCG32_seed)
+             "initstate"_a.sig("UInt64(0x853c49e6748fea9b)")  = PCG32::PCG32_DEFAULT_STATE,
+             "initseq"_a.sig("UInt64(0xda3e39cb94b95bdb)") = PCG32::PCG32_DEFAULT_STREAM, doc_PCG32_seed)
         .def("next_uint32",
              nb::overload_cast<>(&PCG32::next_uint32),
              doc_PCG32_next_uint32)
@@ -216,4 +217,31 @@ void bind_pcg32(nb::module_ &m) {
     fields["state"] = u64;
     fields["inc"] = u64;
     pcg32.attr("DRJIT_STRUCT") = fields;
+
+    using Philox4x32 = dr::Philox4x32<UInt32>;
+
+    auto philox = nb::class_<Philox4x32>(m, "Philox4x32", doc_Philox4x32)
+        .def(nb::init<const UInt64 &, const UInt32 &, const UInt32 &, const UInt32 &, uint32_t>(),
+             "seed"_a, "counter_0"_a , "counter_1"_a = 0, "counter_2"_a = 0, "iterations"_a = 7,
+             doc_Philox4x32_Philox4x32)
+        .def(nb::init<const Philox4x32 &>(), "Copy constructor")
+        .def("next_uint32x4", &Philox4x32::next_uint32x4, "mask"_a = true,
+             doc_Philox4x32_next_uint32x4)
+        .def("next_uint64x2", &Philox4x32::next_uint64x2, "mask"_a = true,
+             doc_Philox4x32_next_uint64x2)
+        .def("next_float16x4", &Philox4x32::next_float16x4, "mask"_a = true,
+             doc_Philox4x32_next_float16x4)
+        .def("next_float32x4", &Philox4x32::next_float32x4, "mask"_a = true,
+             doc_Philox4x32_next_float32x4)
+        .def("next_float64x2", &Philox4x32::next_float64x2, "mask"_a = true,
+             doc_Philox4x32_next_float64x2)
+        .def("next_float16x4_normal", &Philox4x32::next_float16x4_normal, "mask"_a = true,
+             doc_Philox4x32_next_float16x4_normal)
+        .def("next_float32x4_normal", &Philox4x32::next_float32x4_normal, "mask"_a = true,
+             doc_Philox4x32_next_float32x4_normal)
+        .def("next_float64x2_normal", &Philox4x32::next_float64x2_normal, "mask"_a = true,
+             doc_Philox4x32_next_float64x2_normal)
+        .def_rw("seed", &Philox4x32::seed)
+        .def_rw("counter", &Philox4x32::counter)
+        .def_rw("iterations", &Philox4x32::iterations);
 }

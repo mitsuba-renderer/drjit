@@ -19,7 +19,7 @@ def traverse(o):
             array_packages.append(o)
 
         for o2 in o.__dict__.values():
-            if isinstance(o2, type) and issubclass(o2, dr.ArrayBase):
+            if isinstance(o2, type) and issubclass(o2, dr.ArrayBase) and o2 is not dr.ArrayBase:
                 array_types.append(o2)
 
         traverse(getattr(o, 'ad', None))
