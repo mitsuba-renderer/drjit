@@ -732,7 +732,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(16)
     }
 
 #if defined(DRJIT_ARM_64)
-    DRJIT_INLINE Derived mulhi_(Ref a) const {
+    DRJIT_INLINE Derived mul_hi_(Ref a) const {
     uint32x4_t ll, hh;
         if constexpr (std::is_signed_v<Value>) {
             int64x2_t l = vmull_s32(vreinterpret_s32_u32(vget_low_u32(m)),
