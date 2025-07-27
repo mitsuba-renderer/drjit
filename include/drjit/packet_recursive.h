@@ -88,7 +88,7 @@ struct StaticArrayImpl<Value_, Size_, IsMask_, Derived_,
     DRJIT_INLINE Derived div_(Ref a) const { return Derived(a1 / a.a1, a2 / a.a2); }
     DRJIT_INLINE Derived mod_(Ref a) const { return Derived(a1 % a.a1, a2 % a.a2); }
 
-    DRJIT_INLINE Derived mulhi_(Ref a) const { return Derived(mulhi(a1, a.a1), mulhi(a2, a.a2)); }
+    DRJIT_INLINE Derived mul_hi_(Ref a) const { return Derived(mul_hi(a1, a.a1), mul_hi(a2, a.a2)); }
 
     DRJIT_INLINE auto lt_ (Ref a) const { return mask_t<Derived>(a1 <  a.a1, a2 <  a.a2); }
     DRJIT_INLINE auto gt_ (Ref a) const { return mask_t<Derived>(a1 >  a.a1, a2 >  a.a2); }

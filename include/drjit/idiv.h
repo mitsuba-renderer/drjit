@@ -162,7 +162,7 @@ template <typename T> struct divisor<T, enable_if_t<std::is_unsigned_v<T>>> {
         }
 
         // ubsan must be locally turned off for this line (overflows)
-        Value q = mulhi(multiplier, value);
+        Value q = mul_hi(multiplier, value);
         Value t = sr<1>(value - q) + q;
         return t >> shift;
     }
@@ -204,7 +204,7 @@ struct divisor<T, enable_if_t<std::is_signed_v<T>>> {
             return value;
 
         // ubsan must be locally turned off for this line (overflows)
-        Value q = mulhi(multiplier, value) + value;
+        Value q = mul_hi(multiplier, value) + value;
         Value q_sign = sr<sizeof(T) * 8 - 1>(q);
         q = q + (q_sign & ((T(1) << shift) - (multiplier == 0 ? 1 : 0)));
         Value sign = div < 0 ? -1 : 0;

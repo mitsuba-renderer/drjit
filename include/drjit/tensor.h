@@ -210,10 +210,10 @@ struct Tensor
         return Tensor(t0.m_array * t1.m_array, std::move(shape));
     }
 
-    Tensor mulhi_(const Tensor &b) const {
+    Tensor mul_hi_(const Tensor &b) const {
         Tensor t0 = *this, t1 = b;
-        Shape shape = detail::tensor_broadcast("mulhi_", t0, t1);
-        return Tensor(mulhi(t0.m_array, t1.m_array), std::move(shape));
+        Shape shape = detail::tensor_broadcast("mul_hi_", t0, t1);
+        return Tensor(mul_hi(t0.m_array, t1.m_array), std::move(shape));
     }
 
     Tensor div_(const Tensor &b) const {

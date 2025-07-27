@@ -7204,6 +7204,34 @@
     Returns:
         int | drjit.ArrayBase: the bit-reversed version of ``arg``.
 
+.. topic:: mul_hi
+
+    Return the high part of an integer product
+
+    This function multiplies two signed or unsigned 32 bit operands and returns
+    the upper 32 bit of the result.
+
+    Args:
+        arg0 (int | drjit.ArrayBase): A Python or Dr.Jit array
+        arg1 (int | drjit.ArrayBase): A Python or Dr.Jit array
+
+    Returns:
+        int | drjit.ArrayBase: High part of the multiplication result
+
+.. topic:: mul_wide
+
+    Return all bits of an integer product
+
+    This function multiplies two signed or unsigned 32 bit operands and returns
+    the full 64 bit result.
+
+    Args:
+        arg0 (int | drjit.ArrayBase): A Python or Dr.Jit array
+        arg1 (int | drjit.ArrayBase): A Python or Dr.Jit array
+
+    Returns:
+        int | drjit.ArrayBase: High part of the multiplication result
+
 .. topic:: compress
 
     Compress a mask into an array of nonzero indices.

@@ -97,7 +97,7 @@ struct ArrayMeta {
     uint16_t is_diff       : 1;
     uint16_t is_class      : 1;
     uint16_t is_valid      : 1;
-    uint16_t tsize_rel     : 7;  // type size as multiple of 'talign'
+    uint16_t tsize_rel     : 7; // type size as multiple of 'talign'
     uint16_t talign        : 7; // type alignment
     uint8_t shape[4];
 };
@@ -161,6 +161,9 @@ enum class ArrayOp {
     Mod,
     LShift,
     RShift,
+
+    MulHi,
+    MulWide,
 
     Minimum,
     Maximum,
@@ -629,12 +632,22 @@ template <typename T> void bind_int_arithmetic(ArrayBinding &b) {
     b[ArrayOp::Lzcnt] = (void *) +[](const T *a, T *b) { new (b) T(lzcnt(*a)); };
     b[ArrayOp::Tzcnt] = (void *) +[](const T *a, T *b) { new (b) T(tzcnt(*a)); };
     b[ArrayOp::Brev] = (void *) +[](const T *a, T *b) { new (b) T(brev(*a)); };
+
+    using Scalar = scalar_t<T>;
+    if constexpr (sizeof(Scalar) == 4) {
+        using Target = std::conditional_t<std::is_signed_v<Scalar>, int64_array_t<T>, uint64_array_t<T>>;
+        b[ArrayOp::MulHi] = (void *) +[](const T *a, const T *b, T *c) { new (c) T(mul_hi(*a, *b)); };
+        b[ArrayOp::MulWide] = (void *) +[](const T *a, const T *b, Target *c) { new (c) Target(mul_wide(*a, *b)); };
+    } else {
+        b[ArrayOp::MulHi] = b[ArrayOp::MulWide] = DRJIT_OP_NOT_IMPLEMENTED;
+    }
 }
 
 inline void disable_int_arithmetic(ArrayBinding &b) {
     b[ArrayOp::FloorDiv] = b[ArrayOp::LShift] = b[ArrayOp::RShift] =
         b[ArrayOp::Mod] = b[ArrayOp::Popcnt] = b[ArrayOp::Lzcnt] =
-        b[ArrayOp::Tzcnt] = b[ArrayOp::Brev] = DRJIT_OP_NOT_IMPLEMENTED;
+        b[ArrayOp::Tzcnt] = b[ArrayOp::Brev] = b[ArrayOp::MulHi] =
+        b[ArrayOp::MulWide] = DRJIT_OP_NOT_IMPLEMENTED;
 }
 
 template <typename T> void bind_float_arithmetic(ArrayBinding &b) {
