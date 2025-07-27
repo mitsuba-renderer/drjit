@@ -892,7 +892,7 @@ def test35_scatter_packet_reduce(t, reduce_op, packet_size, force_optix):
 
             target = dr.zeros(t, n * packet_size)
             index = mod.UInt32(0, 1, 1, 2)
-            src = dr.ones(ArrayXf, (packet_size, dr.width(index)))
+            src = dr.rand(ArrayXf, (packet_size, dr.width(index)))
 
             op = getattr(dr.ReduceOp, reduce_op)
 
