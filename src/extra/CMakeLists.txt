@@ -11,10 +11,9 @@ add_library(
   resample.cpp
 )
 
-set_source_files_properties(resample.cpp PROPERTIES COMPILE_FLAGS -ffp-contract=off)
-
 if (NOT MSVC)
   target_compile_options(drjit-extra PRIVATE $<$<OR:$<CONFIG:Release>,$<CONFIG:MinSizeRel>>:-fno-stack-protector>)
+  set_source_files_properties(resample.cpp PROPERTIES COMPILE_FLAGS -ffp-contract=off)
 else()
   # C24127 conditional expression is constant (a few in robin_hash.h)
   # C24324 structure was padded due to alignment specifier

@@ -103,13 +103,14 @@ mixed-precision training.
 
     res = 256
 
+    rng = dr.rng()
     for i in tqdm(range(40000)):
         # Update network state from optimizer
         weights[:] = Float16(opt['weights'])
 
         # Generate jittered positions on [0, 1]^2
         t = dr.arange(Float32, res)
-        p = (Array2f(dr.meshgrid(t, t)) + dr.rand(Array2f, (2, res * res))) / res
+        p = (Array2f(dr.meshgrid(t, t)) + rng.random(Array2f, (2, res * res))) / res
 
         # Evaluate neural net + L2 loss
         img = Array3f(net(nn.CoopVec(p)))

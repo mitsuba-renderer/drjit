@@ -407,8 +407,9 @@ def test15_matvec_in_vcall(t, transpose):
     Float = dr.array_t(t)
     UInt32 = dr.uint32_array_t(Float)
     size = 64
-    A = dr.normal(t, (size, size))
-    b = dr.normal(t, size)
+    rng = dr.rng()
+    A = rng.normal(t, (size, size))
+    b = rng.normal(t, size)
     _, A, b = nn.pack(A, b)
 
     def mult_it():

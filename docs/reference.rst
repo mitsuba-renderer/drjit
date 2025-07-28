@@ -121,9 +121,16 @@ Rearranging array contents
 Random number generation
 ------------------------
 
-.. autofunction:: rand
-.. autofunction:: normal
-.. autofunction:: seed
+.. autofunction:: rng
+
+.. py:module:: drjit.random
+
+.. autoclass:: Generator
+
+   .. automethod:: random
+   .. automethod:: normal
+
+.. py:module:: drjit
 
 Mask operations
 ---------------
