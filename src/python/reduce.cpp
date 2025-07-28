@@ -501,6 +501,13 @@ nb::object reduce_py(ReduceOp op, nb::handle value, nb::handle axis, nb::handle 
 
 nb::object none(nb::handle h, nb::handle axis) {
     nb::object result = any(h, axis);
+
+    if (!result.ptr()) {
+        nb::chain_error(PyExc_RuntimeError,
+            "dr.none(): encountered an exception (see above).");
+        return result;
+    }
+
     if (result.type().is(&PyBool_Type))
         return nb::borrow(result.is(Py_True) ? Py_False : Py_True);
     else
