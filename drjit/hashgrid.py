@@ -84,7 +84,7 @@ class HashEncoding:
         smooth_weight_gradients: bool = False,
         smooth_weight_lambda: float = 1.0,
         init_scale: float = 1e-4,
-        seed: int | dr.AnyArray | None = None,
+        rng: dr.random.Generator | None = None,
     ) -> None:
         """
         Initialize a hash encoding. This computes fields used by both HashGrid
@@ -115,6 +115,7 @@ class HashEncoding:
             smooth_weight_lambda: the value of lambda used for the straight-through estimator.
             init_scale: The parameters of the hashgrid are initialized with a uniform
                 distribution, ranging from -init_scale to +init_scale.
+            rng: Random number generator, used to initialize the parameters.
         """
         self._dimension = dimension
         self._n_levels = n_levels
@@ -133,7 +134,6 @@ class HashEncoding:
 
         # Initialize the type aliases used by this hashgrid.
         mod = sys.modules[dtype.__module__]
-        self.PCG32 = mod.PCG32
         self.StorageFloat = dtype
         self.UInt32 = dr.uint32_array_t(dtype)
         self.Int32 = dr.int32_array_t(dtype)
@@ -178,10 +178,13 @@ class HashEncoding:
 
         self._n_params = self._level_offsets[-1] * self.n_features_per_level
 
+        if rng is None:
+            rng = dr.rng()
+
         lower = -self._init_scale
         upper = self._init_scale
         self.data = (
-            dr.rand(self.dtype, self.n_params, seed=seed) * (upper - lower) + lower
+            rng.random(self.dtype, self.n_params) * (upper - lower) + lower
         )
         dr.schedule(self.data)
 
@@ -444,6 +447,7 @@ class HashGridEncoding(HashEncoding):
         smooth_weight_lambda: the value of lambda used for the straight-through estimator.
         init_scale: The parameters of the hashgrid are initialized with a uniform
             distribution, ranging from -init_scale to +init_scale.
+        rng: Random number generator, used to initialize the parameters.
     """
 
     @overload
@@ -462,7 +466,7 @@ class HashGridEncoding(HashEncoding):
         smooth_weight_gradients: bool = False,
         smooth_weight_lambda: float = 1.0,
         init_scale: float = 1e-4,
-        seed: int | dr.AnyArray | None = None,
+        rng: dr.random.Generator | None = None,
     ) -> None: ...
 
     def __init__(self, *args, **kwargs) -> None:
@@ -600,6 +604,7 @@ class PermutoEncoding(HashEncoding):
         smooth_weight_lambda: the value of lambda used for the straight-through estimator.
         init_scale: The parameters of the hashgrid are initialized with a uniform
             distribution, ranging from -init_scale to +init_scale.
+        rng: Random number generator, used to initialize the parameters.
     """
 
     @overload
@@ -617,7 +622,7 @@ class PermutoEncoding(HashEncoding):
         smooth_weight_gradients: bool = False,
         smooth_weight_lambda: float = 1.0,
         init_scale: float = 1e-4,
-        seed: int | dr.AnyArray | None = None,
+        rng: dr.random.Generator | None = None,
     ) -> None: ...
 
     def __init__(self, *args, **kwargs) -> None:
