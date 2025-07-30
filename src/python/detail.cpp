@@ -232,9 +232,15 @@ static nb::handle trace_func_handle;
 
 /// Python debug tracing callback that informs Dr.Jit about the currently executing line of code
 nb::object trace_func(nb::handle frame, nb::handle, nb::handle) {
-    const size_t lineno = nb::cast<size_t>(frame.attr("f_lineno"));
-    const char *filename = nb::cast<const char *>(frame.attr("f_code").attr("co_filename"));
-    jit_set_source_location(filename, lineno);
+    const auto f_lineno = frame.attr("f_lineno");
+    if (f_lineno.is_none()) {
+        // No valid source location available.
+        jit_set_source_location(nullptr, (size_t) -1);
+    } else {
+        const size_t lineno = nb::cast<size_t>(f_lineno);
+        const char *filename = nb::cast<const char *>(frame.attr("f_code").attr("co_filename"));
+        jit_set_source_location(filename, lineno);
+    }
     return nb::borrow(trace_func_handle);
 }
 
