@@ -1,3 +1,5 @@
+import os
+
 import drjit as dr
 import pytest
 
@@ -116,3 +118,13 @@ def test04_assert_false_loop(t, mode, capsys):
             dr.eval(i)
             captured = capsys.readouterr()
             assert "Assertion failure!" in str(captured.err)
+
+
+def test05_debug_trace_func():
+    """
+    This could lead to `std::bad_cast` or a PyTest internal error
+    when DrJit's `trace_func()` did not correctly handle `frame.f_lineno == None`.
+    """
+    with dr.scoped_set_flag(dr.JitFlag.Debug, True):
+        for _ in os.walk("."):
+            pass
