@@ -305,8 +305,9 @@ class HashEncoding:
         return self._init_scale
 
     @property
-    def out_features(self) -> int:
-        """Total dimensionality of the encoding's output feature vector.
+    def n_output_features(self) -> int:
+        """The total number of output features ``n_levels * n_features_per_level``
+        for this encoding.
 
         This is computed as n_levels * n_features_per_level, representing
         the concatenation of features from all resolution levels. For example,
