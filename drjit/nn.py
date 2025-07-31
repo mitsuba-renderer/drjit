@@ -516,8 +516,8 @@ class SinEncode(Module):
 
 class HashEncodingLayer(Module):
     """
-    Simple layer wrapping a hash encoding like ``HashGridEncoding`` or
-    ``PermutoEncoding``.
+    Simple layer wrapping a hash encoding like :py:class:`drjit.nn.HashGridEncoding`
+    or :py:class:`drjit.nn.PermutoEncoding`.
 
     Note that the parameters of the encoding will not be included when packing the
     network, as the data representations are generally incompatible. You must initialize
