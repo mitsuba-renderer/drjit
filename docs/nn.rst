@@ -30,7 +30,7 @@ The set of neural network module currently includes:
 
 - Linear and affine layers: :py:class:`nn.Linear <Linear>`.
 
-- Encoding layers: :py:class:`nn.SinEncode <SinEncode>`, :py:class:`nn.TriEncode <TriEncode>`.
+- Encoding layers: :py:class:`nn.SinEncode <SinEncode>`, :py:class:`nn.TriEncode <TriEncode>`, :py:class:`nn.HashEncodingLayer <HashEncodingLayer>`.
 
 - Activation functions and other nonlinear transformations: :py:class:`nn.ReLU <ReLU>`, :py:class:`nn.LeakyReLU <LeakyReLU>`,
   :py:class:`nn.Exp <nn.Exp>`, :py:class:`nn.Exp2 <Exp2>`, :py:class:`nn.Tanh <Tanh>`.
