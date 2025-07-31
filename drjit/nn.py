@@ -519,10 +519,9 @@ class HashEncodingLayer(Module):
     Simple layer wrapping a hash encoding like ``HashGridEncoding`` or
     ``PermutoEncoding``.
 
-    The parameters of the encoding can not be part of weights when packing the
-    network, because the layout of a network might differ from that of the hash
-    encoding. Initializing the parameters of the encoding should therefore be
-    handled separately.
+    Note that the parameters of the encoding will not be included when packing the
+    network, as the data representations are generally incompatible. You must initialize
+    the encoding parameters separately.
     """
 
     def __init__(
@@ -532,7 +531,6 @@ class HashEncodingLayer(Module):
         self.encoding = encoding
 
     def _alloc(self, dtype: Type[drjit.ArrayBase], size: int, /) -> Tuple[Module, int]:
-
         layer = HashEncodingLayer(self.encoding)
         size = self.encoding.n_features_per_level  * self.encoding.n_levels
         return layer, size
