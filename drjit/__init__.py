@@ -2119,6 +2119,139 @@ def moveaxis(arg: ArrayBase, /, source: Union[int, Tuple[int, ...]], destination
     return type(arg)(gather(type(arr), arr, index_in, mode=ReduceMode.Permute), shape_out)
 
 
+def take(value: ArrayT, index: Union[int, ArrayBase], axis: int = 0) -> ArrayT:
+    """
+    Select values from a tensor along a specified axis using an index or index array.
+
+    This function evaluates ``value[..., index, ...]`` where ``index`` is
+    applied at position ``axis``. The output tensor has one fewer dimension
+    than the input.
+
+    Args:
+        value (drjit.ArrayBase): Input tensor
+
+        index (Union[int, drjit.ArrayBase]): Integer or 1D integer array.
+
+        axis (int): Axis along which to select values. Negative values count
+            from the end. The default is 0.
+
+    Returns:
+        drjit.ArrayBase: Output tensor with shape equal to the input shape
+        minus the indexed axis dimension. The dtype matches the input tensor.
+    """
+
+    shape = value.shape
+    ndim = len(shape)
+
+    # Handle negative axis
+    if axis < 0:
+        axis += ndim
+
+    if not is_tensor_v(value):
+        raise TypeError("drjit.take_interp(): expects a tensor instance as input!")
+
+    if axis < 0 or axis >= ndim:
+        raise RuntimeError(f"drjit.take(): tensor axis {axis} is out of bounds for tensor with {ndim} dimensions!")
+
+    # Compute new shape (without the indexed axis)
+    new_shape = shape[:axis] + shape[axis+1:]
+
+    # Compute total size and stride after the axis
+    total = prod(new_shape) if new_shape else 1
+    stride_after = prod(shape[axis+1:]) if axis < ndim - 1 else 1
+
+    # Get array and index type
+    array = value.array if is_tensor_v(value) else value
+    Array = type(array)
+    Index = uint32_array_t(Array)
+
+    result_idx = arange(Index, total)
+    flat_idx = (result_idx % stride_after) + index * stride_after
+
+    # Compute flat index for gathering
+    if axis > 0:
+        full_stride = shape[axis] * stride_after
+        before_axis_idx = result_idx // stride_after
+        flat_idx += before_axis_idx * full_stride
+
+    return type(value)(gather(Array, array, flat_idx), new_shape)
+
+
+def take_interp(value: ArrayT, pos: Union[float, ArrayBase], axis: int = 0) -> ArrayT:
+    """
+    Select and interpolate values from a tensor along a specified axis using
+    fractional indices.
+
+    Similar to :py:func:`drjit.take`, but accepts fractional positions and
+    performs linear interpolation between adjacent values along the specified
+    axis. This is useful for smooth sampling from discrete data.
+
+    Args:
+        value (drjit.ArrayBase): Input tensor
+
+        pos (Union[float, drjit.ArrayBase]): Python ``float`` or 1D float array.
+
+        axis (int): Axis along which to interpolate values. Negative values
+            count from the end. Default is 0.
+
+    Returns:
+        drjit.ArrayBase: Output tensor with shape equal to the input shape
+        minus the indexed axis dimension. Values are linearly interpolated
+        based on the fractional indices. The dtype matches the input tensor.
+    """
+    shape = value.shape
+    ndim = len(shape)
+
+    # Handle negative axis
+    if axis < 0:
+        axis += ndim
+
+    if not is_tensor_v(value):
+        raise TypeError("drjit.take_interp(): expects a tensor instance as input!")
+
+    if axis < 0 or axis >= ndim:
+        raise RuntimeError(f"drjit.take_interp(): tensor axis {axis} is out of bounds for tensor with {ndim} dimensions!")
+
+    if shape[axis] < 2:
+        raise RuntimeError(f"drjit.take_interp(): tensor axis {axis} has size {shape[axis]}, but must have at least 2 elements for interpolation!")
+
+    # Compute new shape (without the indexed axis)
+    new_shape = shape[:axis] + shape[axis+1:]
+
+    # Compute total size and stride after the axis
+    total = prod(new_shape) if new_shape else 1
+    stride_after = prod(shape[axis+1:]) if axis < ndim - 1 else 1
+
+    # Get array and types
+    array = value.array if is_tensor_v(value) else value
+    Array = type(array)
+    Index = uint32_array_t(Array)
+    Float = float_array_t(Array)
+
+    # Create result index
+    result_idx = arange(Index, total)
+
+    # Clamp fractional index and compute integer part
+    index = clip(Index(pos), 0, shape[axis] - 2)
+    flat_idx = (result_idx % stride_after) + index * stride_after
+
+    # Compute interpolation weights
+    w1 = Float(pos) - Float(index)
+    w0 = 1.0 - w1
+
+    # Compute flat index for gathering
+    if axis > 0:
+        full_stride = shape[axis] * stride_after
+        before_axis_idx = result_idx // stride_after
+        flat_idx += before_axis_idx * full_stride
+
+    # Gather adjacent values and interpolate
+    v0 = gather(Array, array, flat_idx)
+    v1 = gather(Array, array, flat_idx + stride_after)
+
+    return type(value)(fma(v0, w0, v1 * w1), new_shape)
+
+
 def upsample(t, shape=None, scale_factor=None):
     '''
     upsample(source, shape=None, scale_factor=None)

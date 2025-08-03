@@ -385,4 +385,108 @@ protected:
     Shape m_shape;
 };
 
+/// Evaluate ``value[..., index, ...]`` (where index is at position 'axis')
+template <typename T>
+Tensor<T> take(const Tensor<T> &value, const typename Tensor<T>::Index &index, int axis = 0) {
+    using Array = typename Tensor<T>::Array;
+    using Index = typename Tensor<T>::Index;
+    using Shape = typename Tensor<T>::Shape;
+
+    const Shape &shape = value.shape();
+
+    if (axis < 0)
+        axis += value.ndim();
+    if (axis < 0 || axis >= (int) value.ndim())
+        drjit_fail("drjit::take(): tensor axis is out of bounds!");
+
+    Shape new_shape;
+    new_shape.reserve(shape.size() - 1);
+
+    size_t total = 1;
+    uint32_t stride_after = 1;
+    for (int d = 0; d < (int) shape.size(); ++d) {
+        size_t s = shape[d];
+
+        if (d == axis)
+            continue;
+        else if (d > axis)
+            stride_after *= s;
+
+        new_shape.push_back(s);
+        total *= s;
+    }
+
+    Index result_idx = arange<Index>(total),
+          flat_idx = result_idx % stride_after + index*stride_after;
+
+    if (axis > 0) {
+        uint32_t full_stride = shape[axis] * stride_after;
+        Index before_axis_idx = result_idx / stride_after;
+        flat_idx += before_axis_idx * full_stride;
+    }
+
+    return Tensor<T>(
+        gather<Array>(value.array(), flat_idx),
+        std::move(new_shape)
+    );
+}
+
+/// Like ``drjit::take()``, but accept fractional positions and use bilinear interpolation
+template <typename T, typename Arg>
+Tensor<T> take_interp(const Tensor<T> &value, const Arg &pos, int axis = 0) {
+    using Array = typename Tensor<T>::Array;
+    using Index = typename Tensor<T>::Index;
+    using Shape = typename Tensor<T>::Shape;
+    using Float = float_array_t<Array>;
+
+    const Shape &shape = value.shape();
+
+    if (axis < 0)
+        axis += value.ndim();
+    if (axis < 0 || axis >= (int) value.ndim())
+        drjit_fail("drjit::take_interp(): tensor axis is out of bounds!");
+    if (shape[axis] < 2)
+        drjit_fail("drjit::take_interp(): tensor axis is too small!");
+
+    Shape new_shape;
+    new_shape.reserve(shape.size() - 1);
+
+    size_t total = 1;
+    uint32_t stride_after = 1;
+    for (int d = 0; d < (int) shape.size(); ++d) {
+        size_t s = shape[d];
+
+        if (d == axis)
+            continue;
+        else if (d > axis)
+            stride_after *= s;
+
+        new_shape.push_back(s);
+        total *= s;
+    }
+
+    Index index = clip(Index(pos), 0u, (uint32_t) (shape[axis]-2));
+
+    Index result_idx = arange<Index>(total),
+          flat_idx = result_idx % stride_after + index*stride_after;
+
+    if (axis > 0) {
+        uint32_t full_stride = shape[axis] * stride_after;
+        Index before_axis_idx = result_idx / stride_after;
+        flat_idx += before_axis_idx * full_stride;
+    }
+
+
+    Float w1 = pos - Float(index),
+          w0 = 1-w1;
+
+    Array v0 = gather<Array>(value.array(), flat_idx),
+          v1 = gather<Array>(value.array(), flat_idx + stride_after);
+
+    return Tensor<T>(
+        fmadd(v0, w0, v1*w1),
+        std::move(new_shape)
+    );
+}
+
 NAMESPACE_END(drjit)

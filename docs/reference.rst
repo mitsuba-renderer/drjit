@@ -109,6 +109,8 @@ Rearranging array contents
 .. autofunction:: concat
 .. autofunction:: reverse
 .. autofunction:: moveaxis
+.. autofunction:: take
+.. autofunction:: take_interp
 .. autofunction:: compress
 .. autofunction:: ravel
 .. autofunction:: unravel

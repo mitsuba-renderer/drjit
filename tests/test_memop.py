@@ -856,3 +856,48 @@ def test34_ravel_builtin(t, order):
 
     assert type(x) is type(y)
     assert x == y
+
+
+@pytest.test_arrays("is_tensor, float32")
+def test35_take(t):
+    np = pytest.importorskip("numpy")
+    np.random.seed(0)
+    for ndim in range(1, 5):
+        shape = tuple(np.random.randint(2, 6, size=ndim))
+        arr = np.float32(np.random.randn(*shape))
+        arr2 = t(arr)
+
+        for axis in range(ndim):
+            axis_size = shape[axis]
+            # Beginning, middle, end
+            test_indices = (0, axis_size // 2, axis_size - 1)
+
+            for index in test_indices:
+                test1 = np.take(arr, index, axis)
+                test2 = dr.take(arr2, int(index), axis)
+
+                assert np.all(test2.numpy() == test1)
+
+
+@pytest.test_arrays("is_tensor, float32")
+def test36_take_interp(t):
+    np = pytest.importorskip("numpy")
+    np.random.seed(0)
+    for ndim in range(1, 5):
+        shape = tuple(np.random.randint(2, 6, size=ndim))
+        arr = np.float32(np.random.randn(*shape))
+        arr2 = t(arr)
+
+        for axis in range(ndim):
+            axis_size = shape[axis]
+            np.random.rand()
+
+            for pos in np.float32(np.random.rand(3)*(axis_size-1)):
+                v0 = np.take(arr, int(pos), axis)
+                v1 = np.take(arr, int(pos)+1, axis)
+                w1 = pos - int(pos)
+                w0 = 1-w1
+                test1 = v0*w0 + v1*w1
+                test2 = dr.take_interp(arr2, float(pos), axis)
+
+                assert np.allclose(test2.numpy(), test1)
