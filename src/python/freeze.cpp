@@ -1821,31 +1821,31 @@ nb::object FunctionRecording::record(nb::callable func,
     jit_log(LogLevel::Debug, "Recording done (n_outputs=%u)",
             out_variables.variables.size());
 
-    // For catching input assignment mismatches, we assign the input and
-    // output
-    {
-        state_lock_guard guard;
-        // Enter Resume scope, so we can track gradients
-        ADScopeContext ad_scope(drjit::ADScope::Resume, 0, nullptr, -1, false);
-
-        out_variables.layout_index = 0;
-        jit_log(LogLevel::Debug, "Construct:");
-        try {
-            output = nb::borrow<nb::object>(out_variables.construct());
-        } catch (std::exception &) {
-            out_variables.release();
-            throw;
-        }
-        // NOTE: temporarily disable this to not enqueue twice
-        try {
-            TraverseContext ctx;
-            out_variables.assign(input, ctx);
-        } catch (std::exception &) {
-            out_variables.release();
-            throw;
-        }
-        out_variables.layout_index = 0;
-    }
+    // // For catching input assignment mismatches, we assign the input and
+    // // output
+    // {
+    //     state_lock_guard guard;
+    //     // Enter Resume scope, so we can track gradients
+    //     ADScopeContext ad_scope(drjit::ADScope::Resume, 0, nullptr, -1, false);
+    //
+    //     out_variables.layout_index = 0;
+    //     jit_log(LogLevel::Debug, "Construct:");
+    //     try {
+    //         output = nb::borrow<nb::object>(out_variables.construct());
+    //     } catch (std::exception &) {
+    //         out_variables.release();
+    //         throw;
+    //     }
+    //     // NOTE: temporarily disable this to not enqueue twice
+    //     try {
+    //         TraverseContext ctx;
+    //         out_variables.assign(input, ctx);
+    //     } catch (std::exception &) {
+    //         out_variables.release();
+    //         throw;
+    //     }
+    //     out_variables.layout_index = 0;
+    // }
 
     // Traversal takes owning references, so here we need to release them.
     out_variables.release();
@@ -1899,7 +1899,7 @@ nb::object FunctionRecording::replay(nb::callable func,
     {
         state_lock_guard guard;
         // Enter Resume scope, so we can track gradients
-        ADScopeContext ad_scope(drjit::ADScope::Resume, 0, nullptr, -1, false);
+        ADScopeContext ad_scope(drjit::ADScope::Resume, 0, nullptr, -1, true);
         out_variables.layout_index = 0;
         try {
             ProfilerPhase profiler("construct output");
