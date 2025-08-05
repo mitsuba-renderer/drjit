@@ -1825,6 +1825,8 @@ nb::object FunctionRecording::record(nb::callable func,
     // output
     {
         state_lock_guard guard;
+        // Enter Resume scope, so we can track gradients
+        // ADScopeContext ad_scope(drjit::ADScope::Resume, 0, nullptr, -1, false);
 
         out_variables.layout_index = 0;
         jit_log(LogLevel::Debug, "Construct:");
@@ -1896,7 +1898,7 @@ nb::object FunctionRecording::replay(nb::callable func,
     {
         state_lock_guard guard;
         // Enter Resume scope, so we can track gradients
-        ADScopeContext ad_scope(drjit::ADScope::Resume, 0, nullptr, -1, true);
+        // ADScopeContext ad_scope(drjit::ADScope::Resume, 0, nullptr, -1, true);
         out_variables.layout_index = 0;
         try {
             ProfilerPhase profiler("construct output");
