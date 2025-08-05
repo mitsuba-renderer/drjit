@@ -32,7 +32,7 @@ struct Resampler::Impl {
          const void *payload, double radius, double radius_scale)
         : source_res(source_res), target_res(target_res) {
         if (source_res == 0 || target_res == 0)
-            throw std::runtime_error("drjit.Resampler(): source/target resolution cannot be zero!");
+            drjit_raise("drjit.Resampler(): source/target resolution cannot be zero!");
 
         // Low-pass filter: scale reconstruction filters when downsampling
         double scale = (double) source_res / (double) target_res;
@@ -75,7 +75,7 @@ struct Resampler::Impl {
             }
 
             if (sum == 0)
-                throw std::runtime_error(
+                drjit_raise(
                     "drjit.Resampler(): the filter footprint is too small; the "
                     "support of some output samples does not contain any input "
                     "samples!");
@@ -187,8 +187,8 @@ Resampler::Resampler(uint32_t source_res, uint32_t target_res, const char *filte
         };
         radius = 2.f;
     } else {
-        throw std::runtime_error("'filter': unknown value ('box', 'linear', "
-                                 "'hamming', 'cubic', and 'lanczos' are supported).");
+        drjit_raise("'filter': unknown value ('box', 'linear', "
+                    "'hamming', 'cubic', and 'lanczos' are supported).");
     }
 
     d = new Impl(source_res, target_res, filter_cb, nullptr, radius, radius_scale);
