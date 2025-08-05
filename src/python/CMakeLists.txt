@@ -22,7 +22,7 @@ configure_file(
 
 set(PY_FILES
   config.py __init__.py ast.py detail.py interop.py dda.py opt.py nn.py
-  random.py _sh_eval.py _reduce.py scalar/__init__.py llvm/__init__.py
+  random.py hashgrid.py _sh_eval.py _reduce.py scalar/__init__.py llvm/__init__.py
   llvm/ad.py cuda/__init__.py cuda/ad.py)
 
 set(PY_FILES_OUT "")
@@ -222,6 +222,13 @@ if (NOT (DRJIT_SANITIZE_ASAN OR DRJIT_SANITIZE_UBSAN))
     drjit-stub-nn
     MODULE drjit.nn
     OUTPUT ${DRJIT_PYTHON_DST_DIR}/nn.pyi
+    ${STUB_ARGS}
+  )
+
+  nanobind_add_stub(
+    drjit-stub-hashgrid
+    MODULE drjit.hashgrid
+    OUTPUT ${DRJIT_PYTHON_DST_DIR}/hashgrid.pyi
     ${STUB_ARGS}
   )
 

@@ -841,7 +841,7 @@ Besides :ref:`cooperative vector classes <coop_vec_ref>`, the
 evaluate, and train networks. Please see the separate :ref:`documentation
 section <neural_nets>` for an introduction.
 
-.. autoclass:: Model
+.. autoclass:: Module
 
    .. automethod:: __call__
    .. automethod:: alloc
@@ -861,3 +861,6 @@ section <neural_nets>` for an introduction.
 .. autoclass:: Tanh
 .. autoclass:: Cast
 .. autoclass:: ScaleAdd
+.. autoclass:: HashEncodingLayer
+.. autoclass:: HashGridEncoding
+.. autoclass:: PermutoEncoding
