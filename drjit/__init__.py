@@ -331,7 +331,7 @@ def lerp(a, b, t):
         float | drjit.ArrayBase: Interpolated result
     '''
 
-    return fma(b, t, fma(a, -t, a));
+    return fma(b, t, fma(a, -t, a))
 
 
 # -------------------------------------------------------------------
@@ -1618,7 +1618,7 @@ def sh_eval(d: ArrayBase, order: int) -> list:
     """
 
     if order < 0 or order > 9:
-        raise RuntimeError("sh_eval(): order must be in [0, 9]");
+        raise RuntimeError("sh_eval(): order must be in [0, 9]")
     r = [None]*(order+1)*(order + 1)
     from . import _sh_eval as _sh_eval
     getattr(_sh_eval, f'sh_eval_{order}')(d, r)
@@ -2089,7 +2089,7 @@ def moveaxis(arg: ArrayBase, /, source: Union[int, Tuple[int, ...]], destination
 
     if len(source_l) != len(destination_l):
         raise ValueError("'source' and 'destination` must have the "
-                         "same number of elements");
+                         "same number of elements")
 
     # Determine the final axis order (based on NumPy)
     order = [n for n in range(ndim) if n not in source_l]
@@ -2148,30 +2148,44 @@ def take(value: ArrayT, index: Union[int, ArrayBase], axis: int = 0) -> ArrayT:
         axis += ndim
 
     if not is_tensor_v(value):
-        raise TypeError("drjit.take_interp(): expects a tensor instance as input!")
+        raise TypeError("drjit.take(): expects a tensor instance as input!")
 
     if axis < 0 or axis >= ndim:
         raise RuntimeError(f"drjit.take(): tensor axis {axis} is out of bounds for tensor with {ndim} dimensions!")
 
-    # Compute new shape (without the indexed axis)
-    new_shape = shape[:axis] + shape[axis+1:]
+    # Get array types
+    array = value.array if is_tensor_v(value) else value
+    Array = type(array)
+    Index = uint32_array_t(Array)
+
+    # Compute new shape
+    if is_array_v(index) and len(index) > 1:
+        index = Index(index)
+        index_dim = index.shape
+        index_len = index_dim[0]
+    else:
+        index_dim = ()
+        index_len = 1
+
+    new_shape = shape[:axis] + index_dim + shape[axis+1:]
 
     # Compute total size and stride after the axis
     total = prod(new_shape) if new_shape else 1
     stride_after = prod(shape[axis+1:]) if axis < ndim - 1 else 1
 
-    # Get array and index type
-    array = value.array if is_tensor_v(value) else value
-    Array = type(array)
-    Index = uint32_array_t(Array)
-
     result_idx = arange(Index, total)
-    flat_idx = (result_idx % stride_after) + index * stride_after
+
+    if index_len != 1:
+        selected_index = index[(result_idx // stride_after) % index_len]
+    else:
+        selected_index = Index(index)
+
+    flat_idx = (result_idx % stride_after) + selected_index * stride_after
 
     # Compute flat index for gathering
     if axis > 0:
         full_stride = shape[axis] * stride_after
-        before_axis_idx = result_idx // stride_after
+        before_axis_idx = result_idx // (stride_after * index_len)
         flat_idx += before_axis_idx * full_stride
 
     return type(value)(gather(Array, array, flat_idx), new_shape)
@@ -2215,25 +2229,37 @@ def take_interp(value: ArrayT, pos: Union[float, ArrayBase], axis: int = 0) -> A
     if shape[axis] < 2:
         raise RuntimeError(f"drjit.take_interp(): tensor axis {axis} has size {shape[axis]}, but must have at least 2 elements for interpolation!")
 
-    # Compute new shape (without the indexed axis)
-    new_shape = shape[:axis] + shape[axis+1:]
-
-    # Compute total size and stride after the axis
-    total = prod(new_shape) if new_shape else 1
-    stride_after = prod(shape[axis+1:]) if axis < ndim - 1 else 1
-
-    # Get array and types
+    # Get array types
     array = value.array if is_tensor_v(value) else value
     Array = type(array)
     Index = uint32_array_t(Array)
     Float = float_array_t(Array)
 
-    # Create result index
+    index = clip(Index(pos), 0, shape[axis] - 2)
+
+    # Compute new shape
+    if is_array_v(index) and len(index) > 1:
+        index = Index(index)
+        index_dim = index.shape
+        index_len = index_dim[0]
+    else:
+        index_dim = ()
+        index_len = 1
+
+    new_shape = shape[:axis] + index_dim + shape[axis+1:]
+
+    # Compute total size and stride after the axis
+    total = prod(new_shape) if new_shape else 1
+    stride_after = prod(shape[axis+1:]) if axis < ndim - 1 else 1
+
     result_idx = arange(Index, total)
 
-    # Clamp fractional index and compute integer part
-    index = clip(Index(pos), 0, shape[axis] - 2)
-    flat_idx = (result_idx % stride_after) + index * stride_after
+    if index_len != 1:
+        selected_index = index[(result_idx // stride_after) % index_len]
+    else:
+        selected_index = Index(index)
+
+    flat_idx = (result_idx % stride_after) + selected_index * stride_after
 
     # Compute interpolation weights
     w1 = Float(pos) - Float(index)
@@ -2242,7 +2268,7 @@ def take_interp(value: ArrayT, pos: Union[float, ArrayBase], axis: int = 0) -> A
     # Compute flat index for gathering
     if axis > 0:
         full_stride = shape[axis] * stride_after
-        before_axis_idx = result_idx // stride_after
+        before_axis_idx = result_idx // (stride_after * index_len)
         flat_idx += before_axis_idx * full_stride
 
     # Gather adjacent values and interpolate

@@ -901,3 +901,14 @@ def test36_take_interp(t):
                 test2 = dr.take_interp(arr2, float(pos), axis)
 
                 assert np.allclose(test2.numpy(), test1)
+
+@pytest.test_arrays("is_tensor, float32")
+def test37_take_multiple(t):
+    np = pytest.importorskip("numpy")
+    Index = dr.uint32_array_t(dr.array_t(t))
+    arr = np.float32(np.random.randn(3, 4, 5))
+    arr2 = t(arr)
+
+    test1 = np.take(arr, (2, 1), 1)
+    test2 = dr.take(arr2, Index(2, 1), 1)
+    assert np.all(test1 == test2.numpy(), axis=None)
