@@ -16,11 +16,20 @@
 
 #pragma once
 
-#if defined(_MSC_VER)
-#  include <stdio.h>
-#  define drjit_fail(fmt, ...) do { printf(fmt "\n", ##__VA_ARGS__); abort(); } while(0)
+#if defined(DRJIT_NO_CORE_LIB)
+#  include <stdexcept>
+#  include <cstdio>
+#  if defined(_MSC_VER)
+#     define drjit_raise(fmt, ...) do { char buf[256]; snprintf(buf, sizeof(buf), fmt "\n", ##__VA_ARGS__); throw std::runtime_error(buf); } while(0)
+#     define drjit_fail(fmt, ...) do { printf(fmt "\n", ##__VA_ARGS__); abort(); } while(0)
+#  else
+#     define drjit_raise(fmt, ...) do { char buf[256]; __builtin_snprintf(buf, sizeof(buf), fmt "\n", ##__VA_ARGS__); throw std::runtime_error(buf); } while(0)
+#     define drjit_fail(fmt, ...) do { __builtin_printf(fmt "\n", ##__VA_ARGS__); abort(); } while(0)
+#  endif
 #else
-#  define drjit_fail(fmt, ...) do { __builtin_printf(fmt "\n", ##__VA_ARGS__); abort(); } while(0)
+// Raise exceptions via Dr.Jit-Core, which already has convenient entry points
+#  define drjit_raise jit_raise
+#  define drjit_fail  jit_fail
 #endif
 
 NAMESPACE_BEGIN(drjit)

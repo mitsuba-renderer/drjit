@@ -46,7 +46,7 @@ vector<size_t> tensor_broadcast(const char *op, T0 &t0, T1 &t1) {
            ndim = drjit::maximum(t0d, t1d);
 
     if ((t0d != ndim && t0d != 0) || (t1d != ndim && t1d != 0))
-        drjit_fail("drjit::Tensor::%s(): incompatible tensor rank "
+        drjit_raise("drjit::Tensor::%s(): incompatible tensor rank "
                     "(%zu and %zu)!", op, t0d, t1d);
 
     vector<size_t> shape(ndim, 0);
@@ -56,7 +56,7 @@ vector<size_t> tensor_broadcast(const char *op, T0 &t0, T1 &t1) {
                value = drjit::maximum(t0_i, t1_i);
 
         if ((t0_i != value && t0_i != 1) || (t1_i != value && t1_i != 1))
-            drjit_fail("drjit::Tensor::%s(): incompatible tensor shapes "
+            drjit_raise("drjit::Tensor::%s(): incompatible tensor shapes "
                         "on axis %zu (%zu and %zu)!", op, i, t0_i, t1_i);
 
         shape[i] = value;
@@ -76,7 +76,7 @@ vector<size_t> tensor_broadcast(const char *op, T0 &t0, T1 &t1, T2 &t2) {
 
     if ((t0d != ndim && t0d != 0) || (t1d != ndim && t1d != 0) ||
         (t2d != ndim && t2d != 0))
-        drjit_fail("drjit::Tensor::%s(): incompatible tensor rank "
+        drjit_raise("drjit::Tensor::%s(): incompatible tensor rank "
                     "(%zu, %zu, and %zu)!", op, t0d, t1d, t2d);
 
     vector<size_t> shape(ndim, 0);
@@ -88,7 +88,7 @@ vector<size_t> tensor_broadcast(const char *op, T0 &t0, T1 &t1, T2 &t2) {
 
         if ((t0_i != value && t0_i != 1) || (t1_i != value && t1_i != 1) ||
             (t2_i != value && t2_i != 1))
-            drjit_fail("drjit::Tensor::%s(): incompatible tensor shapes "
+            drjit_raise("drjit::Tensor::%s(): incompatible tensor shapes "
                         "on axis %zu (%zu, %zu, and %zu)!",
                         op, i, t0_i, t1_i, t2_i);
 
@@ -146,7 +146,7 @@ struct Tensor
     Tensor(const Array &data) : m_array(data) {
         size_t size = m_array.size();
         if (size != 0 && size != 1)
-            drjit_fail("Tensor(): initialization with a non-trivial array "
+            drjit_raise("Tensor(): initialization with a non-trivial array "
                         "(size %u) requires specifying the 'shape' parameter.", size);
     }
 
@@ -156,8 +156,8 @@ struct Tensor
         for (size_t i = 0; i < ndim; ++i)
             size *= shape[i];
         if (size != m_array.size()) {
-            drjit_fail("Tensor(): invalid size specified (%zu vs %zu)!",
-                size, m_array.size());
+            drjit_raise("Tensor(): invalid size specified (%zu vs %zu)!",
+                        size, m_array.size());
         }
     }
 
@@ -167,8 +167,8 @@ struct Tensor
         for (size_t i = 0; i < ndim; ++i)
             size *= shape[i];
         if (size != m_array.size()) {
-            drjit_fail("Tensor(): invalid size specified (%zu vs %zu)!",
-                size, m_array.size());
+            drjit_raise("Tensor(): invalid size specified (%zu vs %zu)!",
+                        size, m_array.size());
         }
     }
 
@@ -397,7 +397,7 @@ Tensor<T> take(const Tensor<T> &value, const typename Tensor<T>::Index &index, i
     if (axis < 0)
         axis += value.ndim();
     if (axis < 0 || axis >= (int) value.ndim())
-        drjit_fail("drjit::take(): tensor axis is out of bounds!");
+        drjit_raise("drjit::take(): tensor axis is out of bounds!");
 
     Shape new_shape;
     new_shape.reserve(shape.size() - 1);
@@ -444,9 +444,9 @@ Tensor<T> take_interp(const Tensor<T> &value, const Arg &pos, int axis = 0) {
     if (axis < 0)
         axis += value.ndim();
     if (axis < 0 || axis >= (int) value.ndim())
-        drjit_fail("drjit::take_interp(): tensor axis is out of bounds!");
+        drjit_raise("drjit::take_interp(): tensor axis is out of bounds!");
     if (shape[axis] < 2)
-        drjit_fail("drjit::take_interp(): tensor axis is too small!");
+        drjit_raise("drjit::take_interp(): tensor axis is too small!");
 
     Shape new_shape;
     new_shape.reserve(shape.size() - 1);

@@ -177,7 +177,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT {
     DRJIT_INLINE decltype(auto) operator[](size_t i) {
         #if !defined(NDEBUG) && !defined(DRJIT_DISABLE_RANGE_CHECK)
         if (i >= derived().size())
-            drjit_fail("ArrayBase: out of range access (tried to "
+            drjit_raise("ArrayBase: out of range access (tried to "
                         "access index %zu in an array of size %zu)",
                         i, derived().size());
         #endif
@@ -188,7 +188,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT {
     DRJIT_INLINE decltype(auto) operator[](size_t i) const {
         #if !defined(NDEBUG) && !defined(DRJIT_DISABLE_RANGE_CHECK)
         if (i >= derived().size())
-            drjit_fail("ArrayBase: out of range access (tried to "
+            drjit_raise("ArrayBase: out of range access (tried to "
                         "access index %zu in an array of size %zu)",
                         i, derived().size());
         #endif
@@ -350,8 +350,8 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT {
                 Derived result;                                              \
                 if constexpr (Derived::Size == Dynamic) {                    \
                     if ((sa != sr && sa != 1) || (sb != sr && sb != 1))      \
-                        drjit_fail(#name "_() : incompatible input sizes "   \
-                                   "(%zu and %zu)", sa, sb);                 \
+                        drjit_raise(#name "_() : incompatible input sizes "  \
+                                    "(%zu and %zu)", sa, sb);                \
                     result = drjit::empty<Derived>(sr);                      \
                 }                                                            \
                                                                              \
@@ -382,7 +382,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT {
             Derived result;                                                  \
             if constexpr (Derived::Size == Dynamic) {                        \
                 if ((sa != sr && sa != 1) || (sb != sr && sb != 1))          \
-                    drjit_fail(#name "_() : incompatible input sizes "       \
+                    drjit_raise(#name "_() : incompatible input sizes "      \
                                "(%zu and %zu)", sa, sb);                     \
                 result = drjit::empty<Derived>(sr);                          \
             }                                                                \
@@ -406,8 +406,8 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT {
             mask_t<Derived> result;                                          \
             if constexpr (Derived::Size == Dynamic) {                        \
                 if ((sa != sr && sa != 1) || (sb != sr && sb != 1))          \
-                    drjit_fail(#name "_() : incompatible input sizes "       \
-                               "(%zu and %zu)", sa, sb);                     \
+                    drjit_raise(#name "_() : incompatible input sizes "      \
+                                "(%zu and %zu)", sa, sb);                    \
                 result = drjit::empty<mask_t<Derived>>(sr);                  \
             }                                                                \
                                                                              \
@@ -434,7 +434,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT {
                 if constexpr (Derived::Size == Dynamic) {                    \
                     if ((sa != sr && sa != 1) || (sb != sr && sb != 1) ||    \
                         (sc != sr && sc != 1))                               \
-                        drjit_fail(#name "_() : incompatible input sizes "   \
+                        drjit_raise(#name "_() : incompatible input sizes "  \
                                    "(%zu, %zu, and %zu)", sa, sb, sc);       \
                     result = drjit::empty<Derived>(sr);                      \
                 }                                                            \
@@ -562,7 +562,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT {
         if constexpr (Derived::Size == Dynamic) {
             if ((sm != sr && sm != 1) || (st != sr && st != 1) ||
                 (sf != sr && sf != 1))
-                drjit_fail("select_() : incompatible input sizes "
+                drjit_raise("select_() : incompatible input sizes "
                            "(%zu, %zu, and %zu)", sm, st, sf);
             result = drjit::empty<Derived>(sr);
         }
@@ -592,8 +592,8 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT {
             Result result;
             if constexpr (Result::Size == Dynamic) {
                 if ((sa != sr && sa != 1) || (sb != sr && sb != 1))
-                    drjit_fail("mul_wide_() : incompatible input sizes "
-                               "(%zu and %zu)", sa, sb);
+                    drjit_raise("mul_wide_() : incompatible input sizes "
+                                "(%zu and %zu)", sa, sb);
                 result = drjit::empty<Result>(sr);
             }
 
@@ -634,7 +634,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT {
 
                 if constexpr (Derived::Size == Dynamic) {
                     if ((sa != sr && sa != 1) || (sb != sr && sb != 1))
-                        drjit_fail("dot_() : incompatible input sizes "
+                        drjit_raise("dot_() : incompatible input sizes "
                                     "(%zu and %zu)", sa, sb);
                     else if (sr == 0)
                         return Value(0);
@@ -824,7 +824,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT {
             if (sa == 0 && sb == 1)
                 sr = 0;
             else if ((sa != sr && sa != 1) || (sb != sr && sb != 1))
-                drjit_fail("gather_() : incompatible input sizes "
+                drjit_raise("gather_() : incompatible input sizes "
                             "(%zu and %zu)", sa, sb);
             result = drjit::empty<Derived>(sr);
         }
@@ -864,7 +864,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT {
         if constexpr (Derived::Size == Dynamic) {
             if ((sa != sr && sa != 1) || (sb != sr && sb != 1) ||
                 (sc != sr && sc != 1))
-                drjit_fail(
+                drjit_raise(
                     "scatter_() : incompatible input sizes (%zu, %zu, and %zu)",
                     sa, sb, sc);
         }
@@ -888,7 +888,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT {
         if constexpr (Derived::Size == Dynamic) {
             if ((sa != sr && sa != 1) || (sb != sr && sb != 1) ||
                 (sc != sr && sc != 1))
-                drjit_fail(
+                drjit_raise(
                     "scatter_reduce_() : incompatible input sizes (%zu, %zu, and %zu)",
                     sa, sb, sc);
         }

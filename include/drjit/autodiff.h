@@ -15,7 +15,6 @@
 
 #include <drjit/jit.h>
 #include <drjit/extra.h>
-#include <stdexcept>
 
 NAMESPACE_BEGIN(drjit)
 
@@ -911,7 +910,7 @@ namespace detail {
     template <typename T>
     void check_grad_enabled(const char *name, const T &value) {
         if (!grad_enabled(value))
-            drjit_fail(
+            drjit_raise(
                 "drjit::%s(): the argument does not depend on the input "
                 "variable(s) being differentiated. Throwing an exception since "
                 "this is usually indicative of a bug (for example, you may "
