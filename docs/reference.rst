@@ -863,4 +863,11 @@ section <neural_nets>` for an introduction.
 .. autoclass:: ScaleAdd
 .. autoclass:: HashEncodingLayer
 .. autoclass:: HashGridEncoding
+
+    .. autoproperty:: params
+    .. automethod:: __call__
+
 .. autoclass:: PermutoEncoding
+
+    .. autoproperty:: params
+    .. automethod:: __call__

@@ -33,7 +33,7 @@ The set of neural network module currently includes:
 - Encoding layers: :py:class:`nn.SinEncode <SinEncode>`, :py:class:`nn.TriEncode <TriEncode>`, :py:class:`nn.HashEncodingLayer <HashEncodingLayer>`.
 
 - Activation functions and other nonlinear transformations: :py:class:`nn.ReLU <ReLU>`, :py:class:`nn.LeakyReLU <LeakyReLU>`,
-  :py:class:`nn.Exp <nn.Exp>`, :py:class:`nn.Exp2 <Exp2>`, :py:class:`nn.Tanh <Tanh>`.
+  :py:class:`nn.Exp <Exp>`, :py:class:`nn.Exp2 <Exp2>`, :py:class:`nn.Tanh <Tanh>`.
 
 - Miscellaneous: :py:class:`nn.Cast <Cast>`, :py:class:`nn.ScaleAdd <ScaleAdd>`.
 
@@ -138,32 +138,45 @@ mixed-precision training.
     fig.tight_layout()
     plt.show()
 
-Hasgrid encodings
------------------
+Hash grid encodings
+-------------------
 
-In the above example, we use a neural network with 64 activations per layer.
-Such small networks are usually not able to represent complex signals, and we
-rely on the :py:class:`nn.TriEncode <TriEncode>` encoding, to improve the
-quality of the learned signal. Dr.Jit also provides a hash grid encoding
-(:py:class:`nn.HashGridEncoding <HashGridEncoding>`), proposed in `Instant NGP
-<https://nvlabs.github.io/instant-ngp>`__. This encoding stores trainable
-features in a multi-level grid. When evaluating the encoding, this grid is
-indexed with a hashing funciton, features are interpolated between the
-adjacient vertices. Dr.Jit also supports permotohedral encodings (:py:class:`nn.PermutoEncoding
-<PermutoEncoding>`). They have been introduced in `PermutoSDF
-<https://radualexandru.github.io/permuto_sdf>`__, and use triangles,
-tetrahedrons and their higher dimensional equivalents. This improves their
-performance compared to hash grid encodings for high dimensional inputs,
-because the number of memory lookups scales linearly in dimension instead of
-exponentially.
+The above example used a neural network with layer width 64, using the
+:py:class:`nn.TriEncode <TriEncode>` encoding layer to accelerate convergence.
+Such small networks are, however, quite limited in their ability to represent
+complex signals.
 
-Because the features of the hashgrid can be stored in a different precision or
-layout, than the weights of the network, we cannot simply pack them together
-into the same weight layout. Using a hashgrid as a encoding layer in a
-sequential network is therefore not directly possible. Instead, Dr.Jit provides
-a :py:class:`nn.HashEncodingLayer <HashEncodingLayer>`, wrapping a hashgrid,
-while not traversing its features. The following snippet shows a working
-example learning the same image, but with a hashgrid encoding.
+To help with this, Dr.Jit also provides a hash grid encoding
+(:py:class:`nn.HashGridEncoding <HashGridEncoding>`), which was first
+introduced in `Instant NGP <https://nvlabs.github.io/instant-ngp>`__. This
+data structure increases the model's effective parameter count, providing
+additional memory to represent complex features while maintaining efficient
+network evaluations. The encoding conceptually represents trainable features
+on a multi-level grid, but physically stores them in a hash table for memory
+efficiency. During evaluation, a hash function maps grid coordinates to table
+entries, and the system interpolates features between adjacent grid vertices.
+
+While hash grids work well for low-dimensional inputs, regular grid-based
+schemes suffer from exponential scaling: the number of memory lookups grows
+exponentially with the number of dimensions. To address this limitation, Dr.Jit
+also supports *permutohedral* encodings (:py:class:`nn.PermutoEncoding
+<PermutoEncoding>`), introduced in the `PermutoSDF
+<https://radualexandru.github.io/permuto_sdf>`__ paper. These encodings use
+triangles, tetrahedrons and their higher dimensional equivalents, requiring
+only a linear number of memory lookups with respect to dimension. This makes
+them particularly effective for high-dimensional inputs where regular grids
+become prohibitively expensive.
+
+All previous uses of cooperative vectors and neural network modules in this
+documentation rely on the :py:func:`nn.pack() <pack>` function to assemble
+coefficients into an efficient memory layout. However, hash grid weights
+cannot participate in this packing process since they use a different memory
+layout and potentially incompatible type representations. To incorporate a hash
+grid into a :py:class:`nn.Module <Module>`, we must use an indirection via
+:py:class:`nn.HashEncodingLayer <HashEncodingLayer>`, which wraps the hash grid
+while keeping its parameters separate. These parameters must then be optimized
+independently, as shown in the following example that learns the same image
+using a hash grid encoding.
 
 .. code-block:: python
 

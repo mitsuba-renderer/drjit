@@ -1,5 +1,6 @@
 from __future__ import annotations
 import sys
+import drjit
 import drjit as dr
 import copy
 import warnings
@@ -468,7 +469,7 @@ class HashGridEncoding(HashEncoding):
     @overload
     def __init__(
         self,
-        dtype: Type[dr.ArrayBase],
+        dtype: Type[drjit.ArrayBase],
         dimension: int,
         *,
         n_levels: int = 16,
@@ -481,15 +482,15 @@ class HashGridEncoding(HashEncoding):
         smooth_weight_gradients: bool = False,
         smooth_weight_lambda: float = 1.0,
         init_scale: float = 1e-4,
-        rng: dr.random.Generator | None = None,
+        rng: drjit.random.Generator | None = None,
     ) -> None: ...
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
 
     def __call__(
-        self, p: Iterable[dr.ArrayBase], active: bool | dr.ArrayBase = True
-    ) -> Iterable[dr.ArrayBase]:
+        self, p: Iterable[drjit.ArrayBase], active: bool | drjit.ArrayBase = True
+    ) -> Iterable[drjit.ArrayBase]:
         _, PositionFloatXf = self._position_types(p)
 
         # Keep the position and interpolation weights in higher precision, to
@@ -582,7 +583,9 @@ class HashGridEncoding(HashEncoding):
 
 class PermutoEncoding(HashEncoding):
     """
-    Permutohedral lattice-based encoding inspired by :cite:`rosu2023permutosdf`.
+    Permutohedral lattice-based encoding inspired by the paper `PermutoSDF Fast
+    Multi-View Reconstruction with Implicit Surfaces using Permutohedral
+    Lattices <https://radualexandru.github.io/permuto_sdf>`__.
 
     Unlike hash grid encodings that use regular grid lattices, this encoding employs
     a permutohedral lattice structure where simplices consist of triangles, tetrahedra,
@@ -590,10 +593,10 @@ class PermutoEncoding(HashEncoding):
     vertices per simplex (and thus memory lookups per sample per level) grows linearly
     with dimensionality, compared to exponential growth in grid-based approaches.
 
-    This implementation, by Tobias Zirr (https://github.com/tszirr), simplifies
-    the original method by performing sorting and interpolation directly in d-dimensional
-    space, avoiding the elevation to a hyperplane in (d+1)-dimensional space used
-    in the reference implementation.
+    This implementation by `Tobias Zirr <https://github.com/tszirr>`__
+    simplifies the original method by performing sorting and interpolation
+    directly in :math:`d`-dimensional space, avoiding the elevation to a hyperplane in
+    :math:`(d+1)`-dimensional space used in the reference implementation.
 
     Args:
         dimension: The dimensionality of the hash encoding. This corresponds to
@@ -625,7 +628,7 @@ class PermutoEncoding(HashEncoding):
     @overload
     def __init__(
         self,
-        dtype: Type[dr.ArrayBase],
+        dtype: Type[drjit.ArrayBase],
         dimension: int,
         *,
         n_levels: int = 16,
@@ -644,8 +647,8 @@ class PermutoEncoding(HashEncoding):
         super().__init__(*args, **kwargs)
 
     def __call__(
-        self, p: Iterable[dr.ArrayBase], active: bool | dr.ArrayBase = True
-    ) -> Iterable[dr.ArrayBase]:
+        self, p: Iterable[drjit.ArrayBase], active: bool | drjit.ArrayBase = True
+    ) -> Iterable[drjit.ArrayBase]:
         PositionFloat, PositionFloatXf = self._position_types(p)
 
         # Keep the position and interpolation weights in higher precision, to

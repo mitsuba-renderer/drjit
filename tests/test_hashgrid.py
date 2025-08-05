@@ -1,4 +1,5 @@
 import drjit as dr
+import drjit.nn
 import pytest
 import sys
 
