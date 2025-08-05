@@ -596,6 +596,21 @@ Random number generators
    .. autoproperty:: inc
    .. autoproperty:: state
 
+.. autoclass:: Philox4x32
+
+   .. automethod:: __init__
+   .. automethod:: next_uint32x4
+   .. automethod:: next_uint64x2
+   .. automethod:: next_float16x4
+   .. automethod:: next_float32x4
+   .. automethod:: next_float64x2
+   .. automethod:: next_float16x4_normal
+   .. automethod:: next_float32x4_normal
+   .. automethod:: next_float64x2_normal
+   .. autoproperty:: seed
+   .. autoproperty:: counter
+   .. autoproperty:: iterations
+
 
 LLVM array namespace (``drjit.llvm``)
 _______________________________________
@@ -1170,6 +1185,22 @@ Random number generators
    .. autoproperty:: inc
    .. autoproperty:: state
 
+.. autoclass:: Philox4x32
+
+   .. automethod:: __init__
+   .. automethod:: next_uint32x4
+   .. automethod:: next_uint64x2
+   .. automethod:: next_float16x4
+   .. automethod:: next_float32x4
+   .. automethod:: next_float64x2
+   .. automethod:: next_float16x4_normal
+   .. automethod:: next_float32x4_normal
+   .. automethod:: next_float64x2_normal
+   .. autoproperty:: seed
+   .. autoproperty:: counter
+   .. autoproperty:: iterations
+
+
 LLVM array namespace with automatic differentiation (``drjit.llvm.ad``)
 _______________________________________________________________________
 
@@ -1737,6 +1768,22 @@ Random number generators
    .. autoproperty:: inc
    .. autoproperty:: state
 
+.. autoclass:: Philox4x32
+
+   .. automethod:: __init__
+   .. automethod:: next_uint32x4
+   .. automethod:: next_uint64x2
+   .. automethod:: next_float16x4
+   .. automethod:: next_float32x4
+   .. automethod:: next_float64x2
+   .. automethod:: next_float16x4_normal
+   .. automethod:: next_float32x4_normal
+   .. automethod:: next_float64x2_normal
+   .. autoproperty:: seed
+   .. autoproperty:: counter
+   .. autoproperty:: iterations
+
+
 CUDA array namespace (``drjit.cuda``)
 _______________________________________
 
@@ -2143,6 +2190,22 @@ Random number generators
    .. autoproperty:: inc
    .. autoproperty:: state
 
+.. autoclass:: Philox4x32
+
+   .. automethod:: __init__
+   .. automethod:: next_uint32x4
+   .. automethod:: next_uint64x2
+   .. automethod:: next_float16x4
+   .. automethod:: next_float32x4
+   .. automethod:: next_float64x2
+   .. automethod:: next_float16x4_normal
+   .. automethod:: next_float32x4_normal
+   .. automethod:: next_float64x2_normal
+   .. autoproperty:: seed
+   .. autoproperty:: counter
+   .. autoproperty:: iterations
+
+
 CUDA array namespace with automatic differentiation (``drjit.cuda.ad``)
 _______________________________________________________________________
 
@@ -2548,6 +2611,22 @@ Random number generators
    .. automethod:: __isub__
    .. autoproperty:: inc
    .. autoproperty:: state
+
+.. autoclass:: Philox4x32
+
+   .. automethod:: __init__
+   .. automethod:: next_uint32x4
+   .. automethod:: next_uint64x2
+   .. automethod:: next_float16x4
+   .. automethod:: next_float32x4
+   .. automethod:: next_float64x2
+   .. automethod:: next_float16x4_normal
+   .. automethod:: next_float32x4_normal
+   .. automethod:: next_float64x2_normal
+   .. autoproperty:: seed
+   .. autoproperty:: counter
+   .. autoproperty:: iterations
+
 
 Automatic array namespace (``drjit.cuda``)
 __________________________________________
@@ -3132,6 +3211,22 @@ Random number generators
    .. autoproperty:: inc
    .. autoproperty:: state
 
+.. autoclass:: Philox4x32
+
+   .. automethod:: __init__
+   .. automethod:: next_uint32x4
+   .. automethod:: next_uint64x2
+   .. automethod:: next_float16x4
+   .. automethod:: next_float32x4
+   .. automethod:: next_float64x2
+   .. automethod:: next_float16x4_normal
+   .. automethod:: next_float32x4_normal
+   .. automethod:: next_float64x2_normal
+   .. autoproperty:: seed
+   .. autoproperty:: counter
+   .. autoproperty:: iterations
+
+
 Automatic array namespace with automatic differentiation (``drjit.auto.ad``)
 ____________________________________________________________________________
 
@@ -3714,3 +3809,19 @@ Random number generators
    .. automethod:: __isub__
    .. autoproperty:: inc
    .. autoproperty:: state
+
+.. autoclass:: Philox4x32
+
+   .. automethod:: __init__
+   .. automethod:: next_uint32x4
+   .. automethod:: next_uint64x2
+   .. automethod:: next_float16x4
+   .. automethod:: next_float32x4
+   .. automethod:: next_float64x2
+   .. automethod:: next_float16x4_normal
+   .. automethod:: next_float32x4_normal
+   .. automethod:: next_float64x2_normal
+   .. autoproperty:: seed
+   .. autoproperty:: counter
+   .. autoproperty:: iterations
+

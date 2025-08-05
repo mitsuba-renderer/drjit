@@ -69,9 +69,6 @@ mixed-precision training.
     ref = TensorXf(iio.imread("https://rgl.s3.eu-central-1.amazonaws.com/media/uploads/wjakob/2024/06/wave-128.png") / 256)
     tex = Texture2f(ref)
 
-     # Ensure consistent results when re-running the following
-    dr.seed(0)
-
     # Establish the network structure
     net = nn.Sequential(
         nn.TriEncode(16, 0.2),
@@ -86,8 +83,15 @@ mixed-precision training.
         nn.Exp()
     )
 
+    # Instantiate a random number generator to initialize the network weights
+    rng = dr.rng(seed=0)
+
     # Instantiate the network for a specific backend + input size
-    net = net.alloc(TensorXf16, 2)
+    net = net.alloc(
+        dtype=TensorXf16,
+        size=2,
+        rng=rng
+    )
 
     # Convert to training-optimal layout
     weights, net = nn.pack(net, layout='training')
@@ -109,7 +113,7 @@ mixed-precision training.
 
         # Generate jittered positions on [0, 1]^2
         t = dr.arange(Float32, res)
-        p = (Array2f(dr.meshgrid(t, t)) + dr.rand(Array2f, (2, res * res))) / res
+        p = (Array2f(dr.meshgrid(t, t)) + rng.random(Array2f, (2, res * res))) / res
 
         # Evaluate neural net + L2 loss
         img = Array3f(net(nn.CoopVec(p)))

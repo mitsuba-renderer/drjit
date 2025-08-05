@@ -15,7 +15,7 @@
 void export_scalar(nb::module_& m) {
     ArrayBinding b;
     dr::bind_all<float>(b);
-    bind_pcg32<float>(m);
+    bind_rng<float>(m);
     bind_texture_all<float>(m);
 
     m.attr("Bool") = nb::borrow(&PyBool_Type);

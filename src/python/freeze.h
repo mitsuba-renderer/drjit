@@ -15,8 +15,15 @@
 #include <drjit-core/jit.h>
 #include <drjit/autodiff.h>
 #include <string>
+#ifdef _MSC_VER
+#  pragma warning(push)
+#  pragma warning(disable: 4324) // structure was padded due to alignment specifier
+#endif
 #include <tsl/robin_map.h>
 #include <tsl/robin_set.h>
+#ifdef _MSC_VER
+#  pragma warning(pop)
+#endif
 #include <drjit/fwd.h>
 
 #include "../ext/nanobind/src/buffer.h"

@@ -168,6 +168,8 @@ struct DRJIT_EXTRA_EXPORT TraversableBase : public nanobind::intrusive_base {
         static_assert(                                                         \
             std::is_base_of<drjit::TraversableBase,                            \
                             std::remove_pointer_t<decltype(this)>>::value);    \
+        DRJIT_MARK_USED(payload);                                              \
+        DRJIT_MARK_USED(fn);                                                   \
         if constexpr (!std::is_same_v<Base, drjit::TraversableBase>)           \
             Base::traverse_1_cb_ro(payload, fn);                               \
         DRJIT_MAP(DR_TRAVERSE_MEMBER_RO, __VA_ARGS__)                          \
@@ -187,6 +189,8 @@ struct DRJIT_EXTRA_EXPORT TraversableBase : public nanobind::intrusive_base {
         static_assert(                                                         \
             std::is_base_of<drjit::TraversableBase,                            \
                             std::remove_pointer_t<decltype(this)>>::value);    \
+        DRJIT_MARK_USED(payload);                                              \
+        DRJIT_MARK_USED(fn);                                                   \
         if constexpr (!std::is_same_v<Base, drjit::TraversableBase>)           \
             Base::traverse_1_cb_rw(payload, fn);                               \
         DRJIT_MAP(DR_TRAVERSE_MEMBER_RW, __VA_ARGS__)                          \

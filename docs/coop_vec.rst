@@ -55,8 +55,9 @@ multiplication.
    m, n = 3, 16
 
    # Create a random matrix + offset
-   A = dr.normal(TensorXf, (m, n))
-   b = dr.rand(TensorXf, m)
+   rng = dr.rng(seed=0)
+   A = rng.normal(TensorXf, (m, n))
+   b = rng.random(TensorXf, m)
 
    # Pack 'A' and 'b' into a buffer with an optimal layout
    buffer, A_view, b_view = nn.pack(A, b)

@@ -28,6 +28,7 @@ else:
 
 from .ast import syntax, hint
 from .interop import wrap
+import drjit.random
 import warnings as _warnings
 
 
@@ -2426,180 +2427,30 @@ def upsample(t, shape=None, scale_factor=None):
         return type(t)(gather(type(t.array), t.array, index), tuple(shape))
 
 
-_rand_seed : int = 0
+def rng(seed: Union[ArrayBase, int] = 0, method='philox4x32') -> random.Generator:
+    '''
+    Return a seeded random number generator.
 
-def seed(value: int) -> None:
-    """
-    Reset the seed value that is used for pseudorandom number generation.
+    This function returns a :py:class:`drjit.random.Generator` object. Note the
+    following:
 
-    Every successive call to :py:func:`rand` and :py:func:`normal` (without
-    manually specified ``seed``) increments an internal counter that is used to
-    initialize the random number generator to ensure independent output.
+    - Differently seeded random number generators produce statistically
+      independent streams of random variates.
 
-    This function can be used to reset this counter to a specific value.
-    """
-    global _rand_seed
-    _rand_seed = value
+    - ``seed`` can be a Python `int` or Dr.Jit :py:class:`UInt64
+      <drjit.auto.UInt64>`-typed array. The default value ``0`` is used when no
+      seed is specified, making the generator's behavior deterministic across runs.
 
-def rand(dtype: Type[ArrayT],
-         shape: Union[int, Tuple[int, ...]],
-         *,
-         seed: Union[int, AnyArray, None] = None,
-         version: int = 1,
-         _func_name='next_float') -> ArrayT:
-    """
-    Return a Dr.Jit array or tensor containing uniformly distributed
-    pseudorandom variates.
+    - Only ``method=philox4x32`` is supported at the moment. This returns a
+      generator object wrapping the :py:class:`Philox4x32
+      <drjit.auto.Philox4x32>` counter-based PRNG.
+    '''
 
-    This function supports floating point arrays/tensors of various
-    configurations and precisions, e.g.:
-
-    .. code-block:: python
-
-       from drjit.cuda import Float, TensorXf, Array3f, Matrix4f
-
-       # Example usage
-       rand_array = dr.rand(Float, 128)
-       rand_tensor = dr.rand(TensorXf16, (128, 128))
-       rand_vec = dr.rand(Array3f, (3, 128))
-       rand_mat = dr.rand(Matrix4f64, (4, 4, 128))
-
-    The output is uniformly distributed the interval :math:`[0, 1)`. Integer
-    arrays are not supported.
-
-    Successive calls to :py:func:`drjit.rand()` produce independent random
-    variates. You can manually specify a 64-bit integer via the ``seed``
-    parameter to avoid this. Use the :py:func:`drjit.seed()` function to reset
-    the global default seed value.
-
-    .. warning::
-
-       This function is still considered experimental, and the algorithm used
-       to generate random variates may change in future versions of Dr.Jit.
-       Specify ``version=1`` to ensure that your program remains unaffected
-       by such future changes.
-
-    .. note::
-
-       When this function is used within a symbolic operation (e.g.
-       :py:func:`drjit.while_loop()`), you *must* provide the ``seed``
-       parameter.
-
-       In the non-symbolic case, the seed parameter is internally made opaque
-       via :py:func:`drjit.make_opaque` so that the use of this function does
-       not interfere with kernel caching.
-
-       In applications that require repeated generation of random variates
-       (e.g., in a symbolic loop), is more efficient to directly work with the
-       underlying random number generator (e.g., :py:class:`drjit.cuda.PCG32`)
-       instead of using the high-level :py:func:`drjit.rand` interface.
-
-    Args:
-        source (type[ArrayT]): A Dr.Jit tensor or array type.
-
-        shape (int | tuple[int, ...]): The target shape
-
-        seed (int | None): A seed value used to initialize the random number generator.
-          If no value is provided, a global seed value is used (and then subsequently
-          incremented). Refer to :py:func:`drjit.seed()`.
-
-        version (int): Optional parameter to target a specific implementation
-          of this function in the case of future changes.
-
-    Returns:
-        ArrayT: The generated array of random variates.
-    """
-
-    global _rand_seed
-
-    if isinstance(shape, int):
-        shape = (shape, )
-
-    # Resolve details about the array type
-    is_jit = is_jit_v(dtype)
-    is_tensor = is_tensor_v(dtype)
-    value_tp = leaf_t(dtype)
-    seed_tp = uint64_array_t(value_tp)
-    rng_tp = _sys.modules[value_tp.__module__].PCG32
-
-    # Compute an opaque seed value
-    if flag(JitFlag.SymbolicScope):
-        if seed is None:
-            raise Exception("drjit.rand(): when used within a symbolic "
-                            "operation, you *must* provide the 'seed' "
-                            "parameter'")
-        seed_v = seed_tp(seed)
+    if method == 'philox4x32':
+        return random.Philox4x32Generator(seed)
     else:
-        seed_v = seed_tp(_rand_seed if seed is None else seed)
-        make_opaque(seed_v)
+        raise RuntimeError("Only generator='philox4x32' is currently supported.")
 
-    if is_tensor:
-        size = prod(shape)
-    else:
-        size = shape[-1]
-
-    # Construct a suitably sized PCG32 instance
-    if version == 1:
-        if is_jit:
-            rng = rng_tp(size, seed_v)
-            leaf_tp = value_tp
-        else:
-            rng = rng_tp(1, seed_v[0])
-            leaf_tp = float
-        func = getattr(rng, _func_name)
-    else:
-        raise Exception("drjit.rand(): unsupported 'version' specified!")
-
-    if depth_v(dtype) <= 1:
-        # Default case: tensors, 1D arrays
-        if is_jit:
-            value = func(leaf_tp)
-        else:
-            value = value_tp(func(leaf_tp) for _ in range(size))
-    else:
-        # Complex case: vectors, matrices, etc.
-        value = empty(dtype, shape)
-
-        def fill(v):
-            if depth_v(v) == 1:
-                if is_jit:
-                    return func(leaf_tp)
-                else:
-                    return value_tp(func(leaf_tp) for _ in range(size))
-
-            for i in range(len(v)):
-                v[i] = fill(v[i])
-
-        fill(value)
-
-    if seed is None:
-        _rand_seed += 1
-
-    if is_tensor:
-        return dtype(value, shape)
-    else:
-        return value
-
-def normal(dtype: Type[ArrayT],
-           shape: Union[int, Tuple[int, ...]],
-           *,
-           seed: Union[int, AnyArray, None] = None,
-           version: int = 1) -> ArrayT:
-    """
-    Return a Dr.Jit array or tensor containing pseudorandom variates
-    following a standard normal distribution
-
-    Please refer to :py:func:`drjit.rand()`, the interfaces of these
-    two functions are identical.
-    """
-
-    return rand(
-        dtype=dtype,
-        shape=shape,
-        seed=seed,
-        version=version,
-        _func_name='next_float_normal'
-    )
 
 def binary_search(start, end, pred):
     '''
