@@ -3586,7 +3586,6 @@ def test96_coop_vec(t, auto_opaque, layout):
     TensorXf16 = mod.TensorXf16
 
     import drjit.nn as nn
-    from drjit.opt import Adam
 
     def func(net, x: ArrayXf):
         return ArrayXf(net(nn.CoopVec(x)))
@@ -3615,6 +3614,7 @@ def test96_coop_vec(t, auto_opaque, layout):
 
         assert dr.allclose(res, ref)
 
+
 @pytest.test_arrays("float32, jit, diff, shape=(*)")
 @pytest.mark.parametrize("auto_opaque", [False, True])
 def test97_coop_vec_bwd(t, auto_opaque):
@@ -3629,7 +3629,6 @@ def test97_coop_vec_bwd(t, auto_opaque):
     TensorXf16 = mod.TensorXf16
 
     import drjit.nn as nn
-    from drjit.opt import Adam
 
     def func(net, x: ArrayXf):
         y = ArrayXf(net(nn.CoopVec(x)))
@@ -3694,6 +3693,7 @@ def test98_changing_list(t, auto_opaque):
     with pytest.raises(RuntimeError):
         frozen(x)
 
+
 @pytest.test_arrays("float32, jit, diff, shape=(*)")
 @pytest.mark.parametrize("auto_opaque", [False, True])
 def test99_construction_failure(t, auto_opaque):
@@ -3724,6 +3724,7 @@ def test99_construction_failure(t, auto_opaque):
     x = t(1, 2, 3, 4)
     with pytest.raises(RuntimeError):
         frozen(x)
+
 
 @pytest.test_arrays("float32, jit, diff, shape=(*)")
 @pytest.mark.parametrize("auto_opaque", [False, True])
@@ -3775,6 +3776,7 @@ def test100_kernel_history(t, auto_opaque, recorded_func):
             assert k1["recording_mode"] == dr.KernelRecordingMode.Recorded
             assert k2["recording_mode"] == dr.KernelRecordingMode.Replayed
 
+
 @pytest.mark.parametrize("auto_opaque", [False, True])
 @pytest.test_arrays("float32, jit, diff, shape=(*)")
 def test101_enabled(t, auto_opaque):
@@ -3800,7 +3802,6 @@ def test101_enabled(t, auto_opaque):
     x = dr.arange(t, 12)
     assert dr.allclose(func(x), frozen(x))
     assert frozen.n_recordings == 1
-
 
 
 @pytest.mark.parametrize("auto_opaque", [False, True])
@@ -3837,4 +3838,3 @@ def test102_assignment(t, auto_opaque):
         func(res)
 
         assert dr.allclose(ref, res)
-

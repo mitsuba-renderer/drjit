@@ -328,6 +328,9 @@ class Linear(Module):
         return matvec(self.weights, arg, self.bias)
 
     def _alloc(self, dtype: Type[drjit.ArrayBase], size : int, rng: drjit.random.Generator, /) -> Tuple[Module, int]:
+        if not drjit.is_tensor_v(dtype):
+            raise TypeError(f"Linear layer requires a Tensor type, but got {dtype}")
+
         in_features, out_features, bias = self.config
         if in_features < 0:
             in_features = size
@@ -550,4 +553,3 @@ class HashEncodingLayer(Module):
 
     def __repr__(self) -> str:
         return self.encoding.__repr__()
-
