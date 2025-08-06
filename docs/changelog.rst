@@ -153,6 +153,10 @@ The v1.1.0 release of Dr.Jit includes several major new features:
   (Dr.Jit PR `#395 <https://github.com/mitsuba-renderer/drjit/pull/395>`__,
   Dr.Jit-Core PR `#145 <https://github.com/mitsuba-renderer/drjit-core/pull/145>`__).
 
+  Related to this, the OptiX backend now requires the OptiX 8.0 ABI
+  (specifically, ABI version 87). This is a requirement for SER. (Dr.Jit-Core
+  PR `#117 <https://github.com/mitsuba-renderer/drjit-core/pull/117>`__).
+
 - **Random Number Generation API**: Introduced a new random number generation
   API around an abstract :py:class:`Generator <drjit.random.Generator>` object
   analogous to `NumPy
@@ -276,6 +280,17 @@ The v1.1.0 release of Dr.Jit includes several major new features:
 
 **Performance Improvements**
 
+- Packet scatter-add operations now map to specialized GPU operations when
+  supported by the hardware and driver. This change also broadens the
+  situations where packet operations can be used on the CPU and GPU. Packets of
+  size 6 were not supported in the past since their size was not a power of
+  two. Now, they are treated as 3 separate size-2 packets. This feature is
+  particularly helpful in combination with the new hash grid class, whose
+  reverse-mode derivative generates atomic packet scatter-additions.
+  (Dr.Jit-Core PR `#151
+  <https://github.com/mitsuba-renderer/drjit-core/pull/151>`__, Dr.Jit PR `#406
+  <https://github.com/mitsuba-renderer/drjit/pull/406>`__).
+
 - Enabled packet memory operations for texture access, providing speedups when
   accessing multi-channel textures on the LLVM and CUDA backends. (PR `#329
   <https://github.com/mitsuba-renderer/drjit/pull/329>`__).
@@ -385,6 +400,9 @@ The v1.1.0 release of Dr.Jit includes several major new features:
 - Fixed :py:func:`dr.abs() <abs>` derivative at x=0 to match PyTorch behavior. (commit `c597de
   <https://github.com/mitsuba-renderer/drjit/commit/c597de37d98a494e51bd55fc2f40e68d2258691f>`__).
 
+- Fixes for NVIDIA 50-series GPUs and recent driver versions. (Dr.Jit-Core PR
+  `#152 <https://github.com/mitsuba-renderer/drjit-core/pull/152>`__).
+
 **Other Improvements**
 
 - Fixed several corner cases in :py:func:`dr.dda.dda() <drjit.dda.dda>` (PR `#311
@@ -410,6 +428,9 @@ The v1.1.0 release of Dr.Jit includes several major new features:
   selective CUDA profiling using the NSight tools. (commit `e4dda9
   <https://github.com/mitsuba-renderer/drjit/commit/e4dda97b53dba696db40e5a8097310d64fb385f9>`__).
 
+- When compiling Dr.Jit with Clang/Linux, ``libstdc++`` can now also be used.
+  Previously, the ``libc++`` standard library was required in this case. (PR
+  `#346 <https://github.com/mitsuba-renderer/drjit/pull/346>`__).
 
 DrJit 1.0.5 (February 3, 2025)
 ------------------------------
