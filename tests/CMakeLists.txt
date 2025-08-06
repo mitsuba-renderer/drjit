@@ -36,6 +36,7 @@ add_drjit_test(while_loop_ext while_loop_ext.cpp)
 add_drjit_test(if_stmt_ext if_stmt_ext.cpp)
 add_drjit_test(custom_type_ext custom_type_ext.cpp)
 add_drjit_test(py_cpp_consistency_ext py_cpp_consistency_ext.cpp)
+add_drjit_test(local_ext local_ext.cpp)
 
 file(GLOB TEST_FILES RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} "*.py")
 
