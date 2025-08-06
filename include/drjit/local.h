@@ -31,12 +31,12 @@ template <typename Value, size_t Size, typename SFINAE = int> struct Local {
     Local(const Local &) = delete;
     Local(Local &&l) {
         for (size_t i = 0; i < Size; ++i)
-            m_data[i] = l.m_dta[i];
+            m_data[i] = l.m_data[i];
     }
     Local &operator=(const Local &) = delete;
     Local &operator=(Local &&l) {
         for (size_t i = 0; i < Size; ++i)
-            m_data[i] = l.m_dta[i];
+            m_data[i] = l.m_data[i];
     }
 
     Value read(const Index &offset, const Mask &active = true) const {
