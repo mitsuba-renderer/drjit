@@ -542,7 +542,6 @@ def test19_no_eval(t):
     skip_if_coopvec_not_supported(t)
 
     # Cooperative vectors cannot be evaluted via dr.eval()
-    UInt32 = dr.uint32_array_t(t)
     a = nn.CoopVec(t(1), t(2))
     with pytest.raises(RuntimeError, match="Cooperative vectors cannot be evaluated"):
         dr.schedule(a)
@@ -659,3 +658,19 @@ def test22_optimize_in_loop_bwd_v2(t, mode):
     assert dr.all(A == TensorXf16([[3, 3], [0, 0]]))
     assert dr.all(b == TensorXf16([[6], [0]]))
 
+
+@pytest.test_arrays('jit,shape=(*),float16,diff')
+def test23_linear_layer_dtype(t):
+    m = sys.modules[t.__module__]
+    Float16 = t
+    TensorXf16 = m.TensorXf16
+
+    net = nn.Sequential(
+        nn.Linear(-1, 32, bias=False),
+        nn.ReLU(),
+        nn.Linear(-1, 3)
+    )
+
+    _ = net.alloc(TensorXf16, 2)
+    with pytest.raises(TypeError, match="Linear layer requires a Tensor type"):
+        _ = net.alloc(Float16, 2)
