@@ -2,6 +2,7 @@ import drjit as dr
 import pytest
 import sys
 from dataclasses import dataclass
+import re
 
 @pytest.test_arrays('-bool,shape=(*)')
 def test01_gather_simple(t):
@@ -912,3 +913,229 @@ def test37_take_multiple(t):
     test1 = np.take(arr, (2, 1), 1)
     test2 = dr.take(arr2, Index(2, 1), 1)
     assert np.all(test1 == test2.numpy(), axis=None)
+
+@pytest.mark.parametrize("packet_size", [1, 2, 3, 4, 5, 6, 12, 16])
+@pytest.mark.parametrize("reduce_op", ["Add", "Mul", "Max", "Min"])
+@pytest.skip_on(RuntimeError, "backend does not support the requested type of atomic reduction")
+@pytest.test_arrays("is_jit, float, shape=(*)")
+@pytest.mark.parametrize("force_optix", [True, False])
+def test35_scatter_packet_reduce(t, reduce_op, packet_size, force_optix):
+    """
+    Tests that packeted scatter reduce operations behave correctly.
+    """
+
+    tp = dr.type_v(t)
+
+    if (
+        dr.backend_v(t) == dr.JitBackend.LLVM
+        and dr.detail.llvm_version()[0] < 16
+        and tp == dr.VarType.Float16
+    ):
+        pytest.skip("Half precision atomics too spotty on LLVM before v16.0.0")
+
+    if (
+        dr.backend_v(t) == dr.JitBackend.CUDA
+        and force_optix
+        and tp == dr.VarType.Float16
+        and reduce_op != "Add"
+    ):
+        pytest.skip(
+            "Only scatter add reductions are supported for Float16 types on the OptiX backend"
+        )
+
+    mod = sys.modules[t.__module__]
+    if tp == dr.VarType.Float16:
+        ArrayXf = mod.ArrayXf16
+    elif tp == dr.VarType.Float32:
+        ArrayXf = mod.ArrayXf
+    elif tp == dr.VarType.Float64:
+        ArrayXf = mod.ArrayXf64
+
+    n = 3
+
+    with dr.scoped_set_flag(dr.JitFlag.KernelHistory, True):
+        with dr.scoped_set_flag(dr.JitFlag.ForceOptiX, force_optix):
+
+            target = dr.zeros(t, n * packet_size)
+            index = mod.UInt32(0, 1, 1, 2)
+            src = dr.rng().uniform(ArrayXf, (packet_size, dr.width(index)))
+
+            op = getattr(dr.ReduceOp, reduce_op)
+
+            dr.scatter_reduce(op, target, src, index)
+
+            dr.kernel_history_clear()
+            dr.eval(target)
+            history = dr.kernel_history((dr.KernelType.JIT,))
+
+    # Manually construct a reference, by scattering into a python list.
+    ref = dr.zeros(t, n * packet_size)
+    for i in range(dr.width(index)):
+        for j in range(packet_size):
+            if reduce_op == "Add":
+                def op(x, y):
+                    return x + y
+            if reduce_op == "Mul":
+                def op(x, y):
+                    return x * y
+            if reduce_op == "Max":
+                def op(x, y):
+                    return max(x, y)
+            if reduce_op == "Min":
+                def op(x, y):
+                    return min(x, y)
+
+            ref[index[i] * packet_size + j] = op(
+                ref[index[i] * packet_size + j], src[j][i]
+            )
+
+    assert dr.allclose(target, ref)
+
+    # Test that we are actually using vector instructions on CUDA and LLVM
+    ir = history[0]["ir"].getvalue()
+    if dr.backend_v(t) is dr.JitBackend.CUDA:
+        compute_capability = dr.detail.cuda_compute_capability()
+        if compute_capability >= 90 and not force_optix:
+            if tp == dr.VarType.Float16:
+                n_regs = {1: 0, 2: 2, 3: 0, 4: 4, 5: 0, 6: 2, 12: 4, 16: 8}[packet_size]
+                n_inst = {1: 0, 2: 1, 3: 0, 4: 1, 5: 0, 6: 3, 12: 3, 16: 2}[packet_size]
+                assert ir.count(f"red.global.v{n_regs}.f16.{reduce_op.lower()}.noftz") == n_inst
+            if tp == dr.VarType.Float32:
+                n_regs = {1: 0, 2: 2, 3: 0, 4: 4, 5: 0, 6: 2, 12: 4, 16: 4}[packet_size]
+                n_inst = {1: 0, 2: 1, 3: 0, 4: 1, 5: 0, 6: 3, 12: 3, 16: 4}[packet_size]
+                assert ir.count(f"red.global.v{n_regs}.f32.{reduce_op.lower()}") == n_inst
+        else:
+            if tp == dr.VarType.Float16:
+                n_inst = {1: 1, 2: 1, 3: 3, 4: 2, 5: 5, 6: 3, 12: 6, 16: 8}[packet_size]
+                assert ir.count("red.global.add.noftz.f16x2") == n_inst
+    elif dr.backend_v(t) is dr.JitBackend.LLVM and reduce_op == "Add":
+        # Compute maximum supported vector width for this architecture
+        target_features = re.search('"target-features"=".*"', ir).string
+        if "+see4.2" in target_features:
+            llvm_vector_width = 4
+        if "+avx" in target_features:
+            llvm_vector_width = 8
+        if "+avx512vl" in target_features:
+            llvm_vector_width = 16
+        if "+neon" in target_features:
+            llvm_vector_width = 4
+
+        if llvm_vector_width == 4:
+            n_regs = {1: 0, 2: 2, 3: 0, 4: 4, 5: 0, 6: 2, 12: 4, 16: 4}[packet_size]
+            n_inst = {1: 0, 2: 1, 3: 0, 4: 1, 5: 0, 6: 3, 12: 3, 16: 4}[packet_size]
+        elif llvm_vector_width == 8:
+            n_regs = {1: 0, 2: 2, 3: 0, 4: 4, 5: 0, 6: 2, 12: 4, 16: 8}[packet_size]
+            n_inst = {1: 0, 2: 1, 3: 0, 4: 1, 5: 0, 6: 3, 12: 3, 16: 2}[packet_size]
+        elif llvm_vector_width == 16:
+            n_regs = {1: 0, 2: 2, 3: 0, 4: 4, 5: 0, 6: 2, 12: 4, 16: 8}[packet_size]
+            n_inst = {1: 0, 2: 1, 3: 0, 4: 1, 5: 0, 6: 3, 12: 3, 16: 2}[packet_size]
+
+        type_str = {
+            dr.VarType.Float16: "f16",
+            dr.VarType.Float32: "f32",
+            dr.VarType.Float64: "f64",
+        }[tp]
+
+        assert ir.count(f"call fastcc void @scatter_add_{n_regs}x{type_str}") == n_inst
+
+
+@pytest.mark.parametrize("packet_size", [1, 2, 3, 4, 5, 6, 12, 16])
+@pytest.test_arrays("is_jit, float, shape=(*)")
+@pytest.mark.parametrize("force_optix", [True, False])
+def test36_gather_packet(t, packet_size, force_optix):
+    """
+    Tests that packeted gather operations behave correctly and use vector instructions.
+    """
+    tp = dr.type_v(t)
+    if (
+        dr.backend_v(t) == dr.JitBackend.LLVM
+        and dr.detail.llvm_version()[0] < 16
+        and tp == dr.VarType.Float16
+    ):
+        pytest.skip("Half precision vectorization too spotty on LLVM before v16.0.0")
+
+    mod = sys.modules[t.__module__]
+    if tp == dr.VarType.Float16:
+        ArrayXf = mod.ArrayXf16
+    elif tp == dr.VarType.Float32:
+        ArrayXf = mod.ArrayXf
+    elif tp == dr.VarType.Float64:
+        ArrayXf = mod.ArrayXf64
+
+    # Make n divisible by packet_size to avoid gather packet errors
+    n = 16 * 16  # 256 - divisible by all packet sizes
+
+    with dr.scoped_set_flag(dr.JitFlag.KernelHistory, True):
+        with dr.scoped_set_flag(dr.JitFlag.ForceOptiX, force_optix):
+            # Create source data, large enough for the largest packet size
+            source = dr.arange(t, n)
+
+            # Create indices for gathering - ensure they don't go out of bounds
+            max_index = n // packet_size - 1
+            index = mod.UInt32(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
+            index = index % max(1, max_index)  # Ensure indices are within bounds
+
+            # Perform packeted gather
+            result = dr.gather(
+                ArrayXf, source=source, index=index, shape=(packet_size, dr.width(index))
+            )
+
+            dr.kernel_history_clear()
+            dr.eval(result)
+            history = dr.kernel_history((dr.KernelType.JIT,))
+
+    # Manual verification - gather the same values using regular indexing
+    ref = dr.zeros(ArrayXf, (packet_size, dr.width(index)))
+    for i in range(dr.width(index)):
+        for j in range(packet_size):
+            ref[j, i] = source[index[i] * packet_size + j]
+
+    assert dr.allclose(result, ref)
+
+    ir = history[0]["ir"].getvalue()
+
+    if dr.backend_v(t) is dr.JitBackend.CUDA:
+        if tp == dr.VarType.Float16:
+            n_regs = {1: 0, 2: 2, 3: 0, 4: 4, 5: 0, 6: 2, 12: 4, 16: 8}[packet_size]
+            n_inst = {1: 0, 2: 1, 3: 0, 4: 1, 5: 0, 6: 3, 12: 3, 16: 2}[packet_size]
+            vec_str = f".v{n_regs//2}" if n_regs > 2 else ""
+            assert ir.count(f"ld.global.nc{vec_str}.b32") == n_inst
+        elif tp == dr.VarType.Float32:
+            n_regs = {1: 0, 2: 2, 3: 0, 4: 4, 5: 0, 6: 2, 12: 4, 16: 4}[packet_size]
+            n_inst = {1: 0, 2: 1, 3: 0, 4: 1, 5: 0, 6: 3, 12: 3, 16: 4}[packet_size]
+            assert ir.count(f"ld.global.nc.v{n_regs}.b32") == n_inst
+        elif tp == dr.VarType.Float64:
+            n_regs = {1: 0, 2: 2, 3: 0, 4: 2, 5: 0, 6: 2, 12: 2, 16: 2}[packet_size]
+            n_inst = {1: 0, 2: 1, 3: 0, 4: 2, 5: 0, 6: 3, 12: 6, 16: 8}[packet_size]
+            assert ir.count(f"ld.global.nc.v{n_regs}.b64") == n_inst
+
+    elif dr.backend_v(t) is dr.JitBackend.LLVM:
+        # Compute maximum supported vector width for this architecture
+        target_features = re.search('"target-features"=".*"', ir).string
+        if "+see4.2" in target_features:
+            llvm_vector_width = 4
+        if "+avx" in target_features:
+            llvm_vector_width = 8
+        if "+avx512vl" in target_features:
+            llvm_vector_width = 16
+        if "+neon" in target_features:
+            llvm_vector_width = 4
+
+        if llvm_vector_width == 4:
+            n_regs = {1: 0, 2: 2, 3: 0, 4: 4, 5: 0, 6: 2, 12: 4, 16: 4}[packet_size]
+            n_inst = {1: 0, 2: 1, 3: 0, 4: 1, 5: 0, 6: 3, 12: 3, 16: 4}[packet_size]
+        elif llvm_vector_width == 8:
+            n_regs = {1: 0, 2: 2, 3: 0, 4: 4, 5: 0, 6: 2, 12: 4, 16: 8}[packet_size]
+            n_inst = {1: 0, 2: 1, 3: 0, 4: 1, 5: 0, 6: 3, 12: 3, 16: 2}[packet_size]
+        elif llvm_vector_width == 16:
+            n_regs = {1: 0, 2: 2, 3: 0, 4: 4, 5: 0, 6: 2, 12: 4, 16: 8}[packet_size]
+            n_inst = {1: 0, 2: 1, 3: 0, 4: 1, 5: 0, 6: 3, 12: 3, 16: 2}[packet_size]
+
+        type_str = {
+            dr.VarType.Float16: "f16",
+            dr.VarType.Float32: "f32",
+            dr.VarType.Float64: "f64",
+        }[tp]
+
+        assert len(re.findall(f"call fastcc \\[.*\\] @gather_{n_regs}x{type_str}", ir)) == n_inst
+

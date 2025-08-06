@@ -180,7 +180,7 @@ nb::object gather(nb::type_object dtype, nb::object source,
 
         // Potentially perform a packet gather
         if ((JitBackend) m.backend != JitBackend::None && m.ndim == 2 &&
-            size != 1 && (size & (size - 1)) == 0) {
+            size != 1 && (size % 2) == 0) {
             uint64_t source_index = source_supp.index(inst_ptr(source));
             uint32_t offset_index = (uint32_t) supp(index.type()).index(inst_ptr(index));
             uint32_t mask_index = (uint32_t) supp(active.type()).index(inst_ptr(active));
@@ -362,9 +362,7 @@ static void scatter_generic(const char *name, ReduceOp op, nb::object target,
         m.shape[m.ndim - 1] == DRJIT_DYNAMIC) {
 
         // Potentially perform a packet scatter
-        if ((JitBackend) m.backend != JitBackend::None && m.ndim == 2 &&
-            size != 1 && (size & (size - 1)) == 0 &&
-            (op == ReduceOp::Identity || op == ReduceOp::Add)) {
+        if ((JitBackend) m.backend != JitBackend::None && m.ndim == 2) {
             const ArraySupplement &sub_s = supp(value_supp.value);
             uint64_t target_index = target_supp.index(inst_ptr(target));
             uint32_t offset_index = (uint32_t) supp(index.type()).index(inst_ptr(index));

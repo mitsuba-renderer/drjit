@@ -6,9 +6,14 @@ from dataclasses import dataclass
 import sys
 
 def skip_if_coopvec_not_supported(t):
-    if dr.backend_v(t) == dr.JitBackend.CUDA:
+    backend = dr.backend_v(t)
+    if backend == dr.JitBackend.CUDA:
         if dr.detail.cuda_version() < (12, 8):
             pytest.skip("CUDA driver does not support cooperative vectors (Driver R570) or later is required")
+    elif backend == dr.JitBackend.LLVM:
+        if dr.detail.llvm_version() < (17, 0):
+            pytest.skip(f"LLVM version {dr.detail.llvm_version()} does not support"
+                        " cooperative vectors, LLVM 17.0 or later is required")
 
 def get_single_entry(x):
     tp = type(x)
@@ -3632,11 +3637,8 @@ def test97_coop_vec_bwd(t, auto_opaque):
 
     def func(net, x: ArrayXf):
         y = ArrayXf(net(nn.CoopVec(x)))
-
         loss = dr.squared_norm(y - 1)
-
         dr.backward(loss)
-
         return loss
 
     frozen = dr.freeze(func, auto_opaque=auto_opaque)
