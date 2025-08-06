@@ -81,15 +81,3 @@ latex_elements = {
 latex_documents = [
     ('index', 'drjit.tex', 'Dr.Jit Documentation', author, 'manual'),
 ]
-
-def process_signature(app, what, name, obj, options, signature, return_annotation):
-    if signature:
-        print(name)
-        print(signature)
-        signature = signature.replace('dr.', 'drjit.')
-    if return_annotation:
-        return_annotation = return_annotation.replace('dr.', 'drjit.')
-    return signature, return_annotation
-
-def setup(app):
-    app.connect('autodoc-process-signature', process_signature)
