@@ -2234,18 +2234,18 @@ struct BlockReduceEdge : Special {
         JitVar result;
         switch (m_op) {
             case ReduceOp::Add:
-                result = dr::repeat(target_grad, m_block_size);
+                result = dr::repeat(target_grad, m_block_size, source->size);
                 break;
 
             case ReduceOp::Mul:
-                result = dr::repeat(target_grad * m_value_out, m_block_size) / m_value_in;
+                result = dr::repeat(target_grad * m_value_out, m_block_size, source->size) / m_value_in;
                 break;
 
             case ReduceOp::Min:
             case ReduceOp::Max:
                 result = dr::select(
-                    dr::repeat(m_value_out, m_block_size) == m_value_in,
-                    dr::repeat(target_grad, m_block_size), scalar(m_value_in.index(), 0.0));
+                    dr::repeat(m_value_out, m_block_size, source->size) == m_value_in,
+                    dr::repeat(target_grad, m_block_size, source->size), scalar(m_value_in.index(), 0.0));
                 break;
 
             default:

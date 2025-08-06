@@ -585,8 +585,8 @@ struct DRJIT_TRIVIAL_ABI JitArray
         return steal(jit_var_tile(m_index, (uint32_t) count));
     }
 
-    JitArray repeat_(size_t count) const {
-        return steal(jit_var_repeat(m_index, (uint32_t) count));
+    JitArray repeat_(size_t count, size_t max_size = 0) const {
+        return steal(jit_var_repeat(m_index, (uint32_t) count, max_size));
     }
 
     JitArray copy() const { return steal(jit_var_copy(m_index)); }
@@ -728,17 +728,17 @@ template <typename T> T tile(const T &value, size_t count) {
     }
 }
 
-template <typename T> T repeat(const T &value, size_t count) {
+template <typename T> T repeat(const T &value, size_t count, size_t max_size = 0) {
     if constexpr (is_traversable_v<T>) {
         T result;
         traverse_2(
             fields(result), fields(value),
-            [count](auto &x, const auto &y) {
-                x = repeat(y, count);
+            [count, max_size](auto &x, const auto &y) {
+                x = repeat(y, count, max_size);
             });
         return result;
     } if constexpr (is_jit_v<T>) {
-        return value.repeat_(count);
+        return value.repeat_(count, max_size);
     } else {
         return value;
     }

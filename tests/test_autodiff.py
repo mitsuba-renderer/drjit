@@ -559,7 +559,7 @@ def test021_sum_0_bwd(t):
     dr.enable_grad(x)
     y = dr.sum(x*x)
     dr.backward(y)
-    assert len(y) == 1 
+    assert len(y) == 1
     assert dr.allclose(y, t(95.0/27.0))
     assert dr.allclose(dr.grad(x), 2 * dr.detach(x))
 
@@ -598,7 +598,7 @@ def test025_sum_2_bwd(t):
     dr.enable_grad(x)
     z = dr.sum(dr.sum(x*x)*x*x)
     dr.backward(z)
-    assert dr.allclose(dr.grad(x), 
+    assert dr.allclose(dr.grad(x),
         [0, 1.59375, 3.1875, 4.78125, 6.375, 7.96875, 9.5625, 11.1562, 12.75])
 
 
@@ -1810,6 +1810,19 @@ def test114_block_sum_rev(t, mode):
     y.grad = [10, 20, 30]
     dr.backward_to(x)
     assert dr.all(x.grad == [10, 10, 20, 20, 30, 30])
+
+@pytest.test_arrays('is_diff,float32,shape=(*)')
+@pytest.mark.parametrize("mode", ['symbolic', 'evaluated'])
+def test114_block_sum_non_divisible(t, mode):
+    # Test with 7 elements, block size 3
+    x = t(1, 2, 3, 4, 5, 6, 7)
+    dr.enable_grad(x)
+    y = dr.block_sum(x, 3, mode=mode)
+    assert dr.all(y == [6, 15, 7])
+
+    y.grad = t(10, 20, 30)
+    dr.backward_to(x)
+    assert dr.all(x.grad == [10, 10, 10, 20, 20, 20, 30])
 
 @pytest.test_arrays('is_diff,float32,shape=(*)')
 def test115_dot_ad(t):
