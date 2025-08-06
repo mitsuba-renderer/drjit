@@ -18,8 +18,9 @@ dependencies = [
 requires-python = ">=3.8"
 authors = [
     { name = "Wenzel Jakob", email = "wenzel.jakob@epfl.ch" },
-    { name = "Sébastien Speierer", email = "sebastien.speierer@epfl.ch" },
+    { name = "Christian Döring", email = "christian.doering@tum.de" },
     { name = "Nicolas Roussel", email = "nicolas.roussel@epfl.ch" },
+    { name = "Sébastien Speierer", email = "sebastien.speierer@epfl.ch" },
     { name = "Delio Vicini", email = "delio.vicini@epfl.ch" }
 ]
 classifiers = [

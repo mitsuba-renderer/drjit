@@ -8,61 +8,408 @@ Changelog
 DrJit 1.1.0 (TBA)
 -----------------
 
-- Added the functions :py:func:`drjit.rand() <rand>` and
-  :py:func:`drjit.normal() <normal>` for generating arrays containing uniform
-  and normally distributed variates. (PR `#360
-  <https://github.com/mitsuba-renderer/drjit/pull/360>`__).
-- Added the function :py:func:`drjit.resample() <resample>` to
-  increase/decrease the resolution of Dr.Jit arrays/tensors along a set of
-  axes. (PR `#358 <https://github.com/mitsuba-renderer/drjit/pull/358>`__).
-- Added infrastructure for gradient-based optimization
-  (:py:class:`dr.opt.Optimizer <drjit.opt.Optimizer>`, :py:class:`dr.opt.SGD
-  <drjit.opt.SGD>`, :py:class:`dr.opt.Adam <drjit.opt.Adam>`,
-  :py:class:`dr.opt.RMSProp <drjit.opt.RMSProp>`), and mixed-precision training
-  (:py:class:`dr.opt.GradScaler <drjit.opt.GradScaler>`). (PR `#345
-  <https://github.com/mitsuba-renderer/drjit/pull/345/files>`__).
-- Added the function :py:func:`dr.concat() <concat>` to concatenate
-  arrays/tensors. (PR `#354
+The v1.1.0 release of Dr.Jit includes several major new features:
+
+**Major Features**
+
+- **Cooperative Vectors**: Dr.Jit now provides an API to efficiently evaluate
+  matrix-vector products in parallel programs. The API targets small matrices
+  (e.g., 128x128, 64×64, or smaller) and inlines all computation into the program.
+  Threads work cooperatively to perform these operations efficiently. On NVIDIA
+  GPUs (Turing or newer), this leverages the OptiX cooperative vector API with
+  tensor core acceleration. See the :ref:`cooperative vector documentation
+  <coop_vec>` for more details. Example:
+
+  .. code-block:: python
+
+     import drjit as dr
+     import drjit.nn as nn
+     from drjit.cuda.ad import Float16, TensorXf16
+
+     # Create a random number generator
+     rng = dr.rng(seed=0)
+
+     # Create a matrix and bias representing an affine transformation
+     A = rng.normal(TensorXf16, shape=(3, 16))  # 3×16 matrix
+     b = TensorXf16([1, 2, 3])                  # Bias vector
+
+     # Pack into optimized memory layout
+     buffer, A_view, b_view = nn.pack(A, b)
+
+     # Create cooperative a vector from 16 inputs
+     vec_in = nn.CoopVec(Float16(1), Float16(2), ...)
+
+     # Perform matrix-vector multiplication: A @ vec_in + b
+     vec_out = nn.matvec(A_view, vec_in, b_view)
+
+     # Unpack result back to regular arrays
+     x, y, z = vec_out
+
+  (Dr.Jit PR `#384 <https://github.com/mitsuba-renderer/drjit/pull/384>`__,
+  Dr.Jit-Core PR `#141 <https://github.com/mitsuba-renderer/drjit-core/pull/141>`__).
+
+- **Neural Network Library**: Building on the cooperative vector functionality,
+  the new :py:mod:`drjit.nn` module provides modular abstractions for
+  constructing, evaluating, and optimizing neural networks, similar to
+  PyTorch's ``nn.Module``. This enables fully fused evaluation of small
+  multilayer perceptrons (MLPs) within larger programs. See the :ref:`neural
+  network module documentation <neural_nets>` for more details. Example:
+
+  .. code-block:: python
+
+     import drjit.nn as nn
+     from drjit.cuda.ad import TensorXf16, Float16
+
+     # Define a small MLP for function approximation
+     net = nn.Sequential(
+         nn.SinEncode(16),                 # Sinusoidal encoding
+         nn.Linear(-1, -1, bias=False),    # Hidden layer
+         nn.ReLU(),
+         nn.Linear(-1, -1, bias=False),    # Hidden layer
+         nn.ReLU(),
+         nn.Linear(-1, 3, bias=False),     # Output layer (3 outputs)
+         nn.Tanh()
+     )
+
+     # Instantiate and optimize for 16-bit tensor cores
+     rng = dr.rng(seed=0)
+     net = net.alloc(dtype=TensorXf16, size=2, rng=rng)
+     weights, net = nn.pack(net, layout='training')
+
+     # Evaluate the network
+     inputs = nn.CoopVec(Float16(0.5), Float16(0.7))
+     outputs = net(inputs)
+     x, y, z = outputs  # Three output values
+
+  (PR `#384 <https://github.com/mitsuba-renderer/drjit/pull/384>`__).
+
+- **Hash Grid Encoding**: Added neural network hash grid encoding inspired by
+  `Instant NGP <https://nvlabs.github.io/instant-ngp>`__, providing
+  multi-resolution spatial encodings. This includes both traditional hash grids
+  and `permutohedral encodings <https://radualexandru.github.io/permuto_sdf>`__
+  for efficient high-dimensional inputs. (PR `#390
+  <https://github.com/mitsuba-renderer/drjit/pull/390>`__, contributed by
+  `Christian Döring <https://github.com/DoeringChristian>`__
+  and `Merlin Nimier-David <https://merlin.nimierdavid.fr>`__).
+
+- **Function Freezing**: Added the :py:func:`@dr.freeze <freeze>` decorator
+  to eliminate repeated tracing overhead by caching and replaying
+  JIT-compiled kernels. Dr.Jit normally traces operations to build
+  computation graphs for compilation, which can become a bottleneck
+  when the same complex computation is performed repeatedly (e.g., in optimization
+  loops). The decorator records kernel launches on the first call and replays
+  them directly on subsequent calls, avoiding re-tracing.
+
+  This can dramatically accelerate programs and makes Dr.Jit usable for
+  realtime rendering and other applications with strict timing requirements.
+  See the :ref:`function freezing documentation <feeze>` for more details.
+  Example:
+
+  .. code-block:: python
+
+     import drjit as dr
+     from drjit.cuda import Float, UInt32
+
+     # Without freezing - traces every time
+     def func(x):
+         y = seriously_complicated_code(x)
+         dr.eval(y) # ..intermediate evaluations..
+         return huge_function(y, x)
+
+     # With freezing - traces only once
+     @dr.freeze
+     def frozen(x):
+         ... # same code as above -- no changes needed
+
+  (Dr.Jit PR `#336 <https://github.com/mitsuba-renderer/drjit/pull/336>`__,
+  Dr.Jit-Core PR `#107 <https://github.com/mitsuba-renderer/drjit-core/pull/107>`__,
+  contributed by `Christian Döring <https://github.com/DoeringChristian>`__).
+
+- **Shader Execution Reordering (SER)**: Added the function
+  :py:func:`dr.reorder_threads() <reorder_threads>` to shuffle threads across
+  the GPU to reduce warp-level divergence. When threads in a warp take
+  different branches (e.g., in :py:func:`dr.switch() <switch>` statements or
+  :ref:`vectorized virtual function calls <cpp-vcall>`) performance can
+  degrade significantly. SER can group threads with similar execution paths
+  into coherent warps to avoid this. This feature is a no-op in LLVM mode.
+  Example:
+
+  .. code-block:: python
+
+     import drjit as dr
+     from drjit.cuda import Array3f, UInt32
+
+     arg = Array3f(...) # Prepare data and callable index
+     callable_idx = UInt32(...) % 4  # 4 different callables
+
+     # Reorder threads before dr.switch() to reduce divergence
+     # The key uses 2 bits (for 4 callables)
+     arg = dr.reorder_threads(key=callable_idx, num_bits=2, value=arg)
+
+     # Now, threads with the same callable_idx are grouped together
+     callables = [func0, func1, func2, func3]
+     out = dr.switch(callable_idx, callables, arg)
+
+  (Dr.Jit PR `#395 <https://github.com/mitsuba-renderer/drjit/pull/395>`__,
+  Dr.Jit-Core PR `#145 <https://github.com/mitsuba-renderer/drjit-core/pull/145>`__).
+
+- **Random Number Generation API**: Introduced a new random number generation
+  API around an abstract :py:class:`Generator <drjit.random.Generator>` object
+  analogous to `NumPy
+  <https://numpy.org/doc/2.2/reference/random/generator.html>`__. Under the
+  hood, this API uses the :py:class:`Philox4x32 <drjit.auto.Philox4x32>`
+  counter-based PRNG from `Salmon et al. [2011]
+  <https://www.thesalmons.org/john/random123/papers/random123sc11.pdf>`__,
+  which provides high-quality random variates that are statistically
+  independent within and across parallel streams. Users create generators with
+  :py:func:`dr.rng() <rng>` and call methods like :py:meth:`.random()
+  <random.Generator.random>` and :py:meth:`.normal() <random.Generator.normal>`. Example:
+
+  .. code-block:: python
+
+     import drjit as dr
+     from drjit.cuda import Float, TensorXf
+
+     # Create a random number generator
+     rng = dr.rng(seed=42)
+
+     # Generate various random distributions
+     uniform = rng.random(Float, 1000)        # Uniform [0, 1)
+     normal = rng.normal(Float, 1000)         # Standard normal
+     tensor = rng.random(TensorXf, (32, 32))  # Random tensor
+
+  (PR `#417 <https://github.com/mitsuba-renderer/drjit/pull/417>`__).
+
+- **Array Resampling and Convolution**: Added :py:func:`dr.resample() <resample>`
+  for changing the resolution of arrays/tensors along specified axes, and
+  :py:func:`dr.convolve() <convolve>` for convolution with continuous kernels.
+  Both operations are fully differentiable and support various reconstruction
+  filters (box, linear, cubic, lanczos, gaussian). Example:
+
+  .. code-block:: python
+
+     # Resample a 2D signal to different resolution
+     data = dr.cuda.TensorXf(original_data)  # Shape: (128, 128)
+     upsampled = dr.resample(
+         data,
+         shape=(256, 256),    # Target resolution
+         filter='lanczos'     # High-quality filter
+     )
+
+     # Apply Gaussian blur via convolution
+     blurred = dr.convolve(
+         data,
+         filter='gaussian',
+         radius=2.0
+     )
+
+  (PRs `#358 <https://github.com/mitsuba-renderer/drjit/pull/358>`__,
+  `#378 <https://github.com/mitsuba-renderer/drjit/pull/378>`__).
+
+- **Gradient-Based Optimizers**: Added an optimization framework
+  that includes various standard optimizers inspired by PyTorch. It includes :py:class:`dr.opt.SGD
+  <opt.SGD>` with optional momentum and Nesterov acceleration,
+  :py:class:`dr.opt.Adam <opt.Adam>` with adaptive learning rates, and
+  :py:class:`dr.opt.RMSProp <opt.RMSProp>`. The optimizers own the parameters
+  and automatically handle mixed-precision training. An optional helper class
+  :py:class:`dr.opt.GradScalar <opt.GradScaler>` implements adaptive gradient
+  scaling for low-precision training.
+
+  .. code-block:: python
+
+     from drjit.opt import Adam
+     from drjit.cuda import Float
+
+     # Create optimizer and register parameters
+     opt = Adam(lr=1e-3)
+     rng = dr.rng(seed=0)
+     opt['params'] = Float(rng.normal(Float, 100))
+
+     # Optimization loop for unknown function f(x)
+     for i in range(1000):
+         # Fetch current parameters
+         params = opt['params']
+
+         # Compute loss and gradients
+         loss = f(params)  # Some function to optimize
+         dr.backward(loss)
+
+         # Update parameters
+         opt.step()
+
+  (PRs `#345 <https://github.com/mitsuba-renderer/drjit/pull/345>`__, `#402
+  <https://github.com/mitsuba-renderer/drjit/pull/402>`__, commit `e3f576
+  <https://github.com/mitsuba-renderer/drjit/commit/e3f57620cb58bac14dfd43189aa1bdf8ba0ff8c0>`__).
+
+- **TensorFlow Interoperability**: Added TensorFlow interop via
+  :py:func:`@dr.wrap <wrap>`, supporting forward and backward automatic
+  differentiation with comprehensive support for variables and tensors. (PR
+  `#301 <https://github.com/mitsuba-renderer/drjit/pull/301>`__, contributed by
+  `Jakob Hoydis <https://github.com/jhoydis>`__).
+
+**Array and Tensor Operations**
+
+- Added :py:func:`dr.concat() <concat>` to concatenate arrays/tensors
+  along a specified axis following the Array API standard. (PR `#354
   <https://github.com/mitsuba-renderer/drjit/pull/354>`__).
-- Enabled the use of packet memory operations when accessing multi-channel
-  textures to improve performance. (PR `#329
+
+- Added :py:func:`dr.take() <take>` and :py:func:`dr.take_interp()
+  <take_interp>` for efficient tensor indexing and interpolated indexing
+  along specified axes. (PR `#420
+  <https://github.com/mitsuba-renderer/drjit/pull/420>`__,
+  commit `b59436
+  <https://github.com/mitsuba-renderer/drjit/commit/b59436b0f041af1ea7ba04bd508b39e2e9a43ac8>`__).
+
+- Added :py:func:`dr.moveaxis() <moveaxis>` for rearranging tensor
+  dimensions, providing NumPy-compatible axis movement. (commit `4d1478
+  <https://github.com/mitsuba-renderer/drjit/commit/4d14784696713f398eee6661913ee11e4d6b1934>`__).
+
+- Implemented comprehensive slice operations for regular (non-tensor) arrays,
+  supporting advanced patterns like nested slices and integer array indexing.
+  (PR `#365
+  <https://github.com/mitsuba-renderer/drjit/pull/365>`__).
+
+- Conversion between tensors and nested arrays (e.g. ``Array3f``) now offers an
+  option (``flip_axis=True``) of whether or not to flip the axis order (e.g.,
+  `Nx3` vs `3xN`). (PR `#348
+  <https://github.com/mitsuba-renderer/drjit/pull/348>`__).
+
+**Performance Improvements**
+
+- Enabled packet memory operations for texture access, providing speedups when
+  accessing multi-channel textures on the LLVM and CUDA backends. (PR `#329
   <https://github.com/mitsuba-renderer/drjit/pull/329>`__).
-- Conversion between tensors and nested arrays (e.g. ``Array3f``) now
-  offers an option of whether to flip the axis order (e.g., `Nx3` vs `3xN`).
-  (PR `#348 <https://github.com/mitsuba-renderer/drjit/pull/348>`__).
-- The semantics of the :py:func:`dr.forward_from() <forward_from>` and
-  :py:func:`dr.backward_from() <backward_from>` was adjusted. In particular,
-  they now preserve an existing gradient (if set) instead of unconditionally
-  overriding it with the value ``1.0``. (PR `#351
-  <https://github.com/mitsuba-renderer/drjit/pull/351>`__).
-- Compile the :py:func:`dr.rsqrt() <rsqrt>` operation to a faster instruction
-  sequence on the LLVM backend, e.g., ``VRSQRTPS`` plus one Newton-Raphson
-  iteration on Intel-compatible processors. (PR `#343
-  <https://github.com/mitsuba-renderer/drjit/pull/343>`__).
-- Added PCG32 methods :py:func:`PCG32.next_float_normal()
-  <drjit.llvm.PCG32.next_float_normal>`, :py:func:`PCG32.next_float32_normal()
-  <drjit.llvm.PCG32.next_float32_normal>`, and :py:func:`PCG32.next_float64_normal()
-  <drjit.llvm.PCG32.next_float64_normal>` to generate standard normal
-  variates. (PR `#353
-  <https://github.com/mitsuba-renderer/drjit/pull/353/files>`__).
-- Added the functions :py:func:`dr.zeros_like() <zeros_like>`,
-  :py:func:`dr.ones_like() <ones_like>`, and :py:func:`dr.empty_like()
-  <empty_like>`. (PR `#345
-  <https://github.com/mitsuba-renderer/drjit/pull/345/files>`__).
+
+- Optimized :py:func:`dr.rsqrt() <rsqrt>` to compile to faster instruction
+  sequences on the LLVM backend using ``VRSQRTPS`` with Newton-Raphson
+  iteration on Intel processors and similar optimizations for ARM Neon. (Dr.Jit
+  PR `#343 <https://github.com/mitsuba-renderer/drjit/pull/343>`__,
+  Dr.Jit-Core PR `#125
+  <https://github.com/mitsuba-renderer/drjit-core/pull/125>`__).
+
 - Made :py:func:`dr.any() <any>`, :py:func:`dr.all() <all>`, and
-  :py:func:`dr.none() <none>` asynchronous with respect to the host.
-  This can improve performance in some situations. (PR `#344
-  <https://github.com/mitsuba-renderer/drjit/pull/344>`__).
-- Added :py:attr:`JitFlag.ForbidSynchronization` to turn synchronization into
-  an error. (PR `#350 <https://github.com/mitsuba-renderer/drjit/pull/350>`__).
-- Miscellaneous bugfixes and improvements. (PRs
-  `#347 <https://github.com/mitsuba-renderer/drjit/pull/347>`__,
-  `#349 <https://github.com/mitsuba-renderer/drjit/pull/349>`__ and
-  commits
-  `38fe4a <https://github.com/mitsuba-renderer/drjit/commit/38fe4a10b6d57bbe0d185c6b9e1b976603b41cab>`__,
-  `74c4d0 <https://github.com/mitsuba-renderer/drjit/commit/74c4d0313a420a22dd9e2fe0cb11205f051cb762>`__,
-  `1cc2db <https://github.com/mitsuba-renderer/drjit/commit/1cc2dbd799739edc5e4d3c5e84519cbe504b2aaa>`__,
-  `4035a8 <https://github.com/mitsuba-renderer/drjit/commit/4035a8c85d88a5bf8db92d4d19a0b90850186751>`__).
+  :py:func:`dr.none() <none>` asynchronous with respect to the host, improving
+  GPU utilization. (Dr.Jit PR `#344
+  <https://github.com/mitsuba-renderer/drjit/pull/344>`__, Dr.Jit-Core PR `#126
+  <https://github.com/mitsuba-renderer/drjit-core/pull/126>`__).
+
+**Random Number Generation (contd.)**
+
+- Added PCG32 reverse generation capabilities with ``prev_*`` methods for
+  all random number generation functions for bidirectional traversal
+  of random sequences. (PR `#398
+  <https://github.com/mitsuba-renderer/drjit/pull/398>`__).
+
+- Added PCG32 methods for generating normally distributed variates:
+  :py:func:`PCG32.next_float_normal() <drjit.llvm.PCG32.next_float_normal>`,
+  :py:func:`PCG32.next_float32_normal() <drjit.llvm.PCG32.next_float32_normal>`,
+  and :py:func:`PCG32.next_float64_normal() <drjit.llvm.PCG32.next_float64_normal>`.
+  (PR `#353 <https://github.com/mitsuba-renderer/drjit/pull/353>`__).
+
+- Added :py:func:`dr.mul_wide() <mul_wide>` and :py:func:`dr.mul_hi() <mul_hi>`
+  for wide integer multiplication, essential for implementing the Philox PRNG.
+  (Dr.Jit PR `#414 <https://github.com/mitsuba-renderer/drjit/pull/414>`__,
+  Dr.Jit-Core PR `#156
+  <https://github.com/mitsuba-renderer/drjit-core/pull/156>`__).
+
+**API Improvements**
+
+- Refined semantics of :py:func:`dr.forward_from() <forward_from>` and
+  :py:func:`dr.backward_from() <backward_from>` to preserve existing
+  gradients instead of unconditionally overriding them.
+  (Dr.Jit PR `#351 <https://github.com/mitsuba-renderer/drjit/pull/351>`__).
+
+- Added utility functions :py:func:`dr.zeros_like() <zeros_like>`,
+  :py:func:`dr.ones_like() <ones_like>`, and :py:func:`dr.empty_like()
+  <empty_like>`.
+  (PR `#345 <https://github.com/mitsuba-renderer/drjit/pull/345/files>`__).
+
+- Added :py:meth:`dr.ArrayBase.item() <ArrayBase.item>` method for extracting scalar values from
+  single-element arrays/tensors, similar to NumPy/PyTorch. (commit `a142bc
+  <https://github.com/mitsuba-renderer/drjit/commit/a142bcdf2143785880cd57c640630abb8b560d9d>`__).
+
+- Added :py:func:`dr.linear_to_srgb() <linear_to_srgb>` and
+  :py:func:`dr.srgb_to_linear() <srgb_to_linear>` for color space conversions.
+  (commit `a7f138
+  <https://github.com/mitsuba-renderer/drjit/commit/a7f1380cb2e684056b51ef6d08e6ea33154a5d62>`__).
+
+- Added :py:attr:`JitFlag.ForbidSynchronization` to catch costly
+  synchronization operations during development. (
+  Dr.Jit PR `#350 <https://github.com/mitsuba-renderer/drjit/pull/350>`__,
+  Dr.Jit-Core PR `#128
+  <https://github.com/mitsuba-renderer/drjit-core/pull/128>`__).
+
+- Added C++ bindings for thread-local memory arrays through the
+  ``dr::Local<Value, Size>`` template, complementing the existing Python
+  functionality. This enables efficient scratch space and stack-like data
+  structures in GPU kernels from C++ code. (commit `c30ade
+  <https://github.com/mitsuba-renderer/drjit/commit/c30ade7aa596dac838dedece2e73f5a4a3adcec8>`__).
+
+**Notable Bugfixes**
+
+- Fixed ``dr::block_reduce()`` derivative computation for
+  arrays not evenly divisible by block size. (commit `df79ed
+  <https://github.com/mitsuba-renderer/drjit/commit/df79ed894a110e2255515e9778032ccac38883a9>`__).
+
+- Fixed potential performance cliffs in :py:func:`dr.gather() <gather>`
+  by memoizing expressions and limiting expression growth (Dr.Jit-Core PR `#159
+  <https://github.com/mitsuba-renderer/drjit-core/pull/159>`__).
+
+- Fixed :py:func:`dr.rotate() <rotate>` quaternion component ordering to match C++
+  implementation. (PR `#416
+  <https://github.com/mitsuba-renderer/drjit/pull/416>`__).
+
+- Fixed the derivative of :py:func:`dr.unit_angle() <unit_angle>` at signed zero.
+  (commit `9d09a9
+  <https://github.com/mitsuba-renderer/drjit/commit/9d09a9e9310b29870756faa8b12fa7b1e60c7396>`__).
+
+- Fixed memory leak in Python bindings using dedicated cleanup thread. (PR `#399
+  <https://github.com/mitsuba-renderer/drjit/pull/399>`__).
+
+- Preserve tensor shapes in symbolic operations. (commit `74c4d0
+  <https://github.com/mitsuba-renderer/drjit/commit/74c4d0313a420a22dd9e2fe0cb11205f051cb762>`__).
+
+- Fixed evaluated loop derivative issues with unchanged differentiable state
+  variables. (commit `074cfe
+  <https://github.com/mitsuba-renderer/drjit/commit/074cfe9d0c2dc805af00d562a20c6c268477104d>`__).
+
+- Fixed symbolic loop backward derivative compilation for simple loops.
+  (commit `01ef10
+  <https://github.com/mitsuba-renderer/drjit/commit/01ef10ef3b5cb147c1c3116d089438dfcb97e2c8>`__).
+
+- Fixed broadcasting of tensors and handling of unknown objects in
+  :py:func:`dr.select() <select>`. (PRs `#339
+  <https://github.com/mitsuba-renderer/drjit/issue/339>`__, PRs `#349
+  <https://github.com/mitsuba-renderer/drjit/issue/349>`__).
+
+- Fixed :py:func:`dr.abs() <abs>` derivative at x=0 to match PyTorch behavior. (commit `c597de
+  <https://github.com/mitsuba-renderer/drjit/commit/c597de37d98a494e51bd55fc2f40e68d2258691f>`__).
+
+**Other Improvements**
+
+- Fixed several corner cases in :py:func:`dr.dda.dda() <drjit.dda.dda>` (PR `#311
+  <https://github.com/mitsuba-renderer/drjit/pull/311>`__).
+
+- Added support for casting to and from boolean array types in Python. (commit `343d16
+  <https://github.com/mitsuba-renderer/drjit/commit/343d16e1305d6c51fcfaaa196ce7737a35768af7>`__).
+
+- Enhanced :py:func:`dr.expr_t() <expr_t>` to preserve custom array types when
+  compatible. (commit `85d66c
+  <https://github.com/mitsuba-renderer/drjit/commit/85d66c3612190a6b653fc47cd9acbf6be4350e79>`__).
+
+- Improved :py:func:`dr.replace_grad() <replace_grad>` to handle non-differentiable and unknown
+  types gracefully. (PR `#364
+  <https://github.com/mitsuba-renderer/drjit/pull/364>`__).
+
+- Improved error handling throughout the codebase by replacing ``abort()``
+  calls with exceptions for better recovery in interactive environments.
+  (commit `27e34c
+  <https://github.com/mitsuba-renderer/drjit/commit/27e34c2170af98a08ff25826a5d49238cc5a29a2>`__).
+
+- Added :py:func:`dr.profile_enable() <profile_enable>` context manager for
+  selective CUDA profiling using the NSight tools. (commit `e4dda9
+  <https://github.com/mitsuba-renderer/drjit/commit/e4dda97b53dba696db40e5a8097310d64fb385f9>`__).
+
 
 DrJit 1.0.5 (February 3, 2025)
 ------------------------------
@@ -348,7 +695,7 @@ Here is what's new:
 
 
 ⚠️ Compatibility ⚠️
--------------------
+^^^^^^^^^^^^^^^^^^^
 
 - **Symbolic loop syntax**: the old "recorded loop" syntax is no longer
   supported. Existing code will need adjustments to use
@@ -372,7 +719,7 @@ Here is what's new:
 
 
 Internals
----------
+^^^^^^^^^
 
 This section documents lower level changes that don't directly impact the
 Python API.
@@ -433,7 +780,7 @@ Python API.
 
 
 Removals
---------
+^^^^^^^^
 
 - Packet-mode virtual function call dispatch (``drjit/vcall_packet.h``)
   was removed.
@@ -445,7 +792,7 @@ Removals
   in any case too inefficient to be useful besides debugging.
 
 Other minor technical improvements
-----------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 - :py:func:`drjit.switch` and :py:func:`drjit.dispatch` now support all
   standard Python calling conventions (positional, keyword, variable length).

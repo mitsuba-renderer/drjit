@@ -231,6 +231,8 @@ The detailed interface of this function is as follows:
    including captured state) into a persistent object that will eventually be
    released by the AD backend when it is no longer needed.
 
+.. _cpp-vcall:
+
 Vectorized method calls
 -----------------------
 

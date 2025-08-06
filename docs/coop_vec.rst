@@ -11,7 +11,7 @@ Cooperative vectors
 <https://github.com/KhronosGroup/GLSL/blob/main/extensions/nv/GLSL_NV_cooperative_vector.txt>`__
 for evaluating matrix-vector products in certain types of GPU workloads. They
 are designed to handle cases, where each thread of a parallel program needs
-to multiply a vector by a reasonably small matrix (e.g., 64x64 or fewer
+to multiply a vector by a reasonably small matrix (e.g., 128x,128, 64x64 or fewer
 entries). By working together, the threads can perform these multiplications
 more efficiently, which is why the approach is called *cooperative*.
 
@@ -302,7 +302,7 @@ Performance considerations
     reduced performance when only a subset of threads participate in the
     operation. When neural networks are evaluated in loops or conditional
     expressions, it may be advisable to incorporate reordering (via
-    :py:func:`dr.reorder() <drjit.reorder>`) to obtain coherent groups of threads.
+    :py:func:`dr.reorder_threads() <drjit.reorder_threads>`) to obtain coherent groups of threads.
 
   - :py:func:`nn.matvec() <drjit.nn.matvec>` currently requires 16-bit
     floating point arguments. FP8 formats may be added in the future.
