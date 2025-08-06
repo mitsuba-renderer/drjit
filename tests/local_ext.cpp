@@ -27,7 +27,7 @@ NB_MODULE(local_ext, m) {
 
 #if defined(DRJIT_ENABLE_CUDA)
     nb::module_ cuda = m.def_submodule("cuda");
-    bind<dr::CUDAArray<float>>(llvm);
+    bind<dr::CUDAArray<float>>(cuda);
 #endif
 
     nb::module_ scalar = m.def_submodule("scalar");
