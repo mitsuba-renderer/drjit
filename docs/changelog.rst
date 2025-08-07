@@ -5,8 +5,8 @@
 Changelog
 #########
 
-DrJit 1.1.0 (TBA)
------------------
+DrJit 1.1.0 (August 7, 2025)
+----------------------------
 
 The v1.1.0 release of Dr.Jit includes several major new features:
 
@@ -17,8 +17,9 @@ The v1.1.0 release of Dr.Jit includes several major new features:
   (e.g., 128x128, 64×64, or smaller) and inlines all computation into the program.
   Threads work cooperatively to perform these operations efficiently. On NVIDIA
   GPUs (Turing or newer), this leverages the OptiX cooperative vector API with
-  tensor core acceleration. See the :ref:`cooperative vector documentation
-  <coop_vec>` for more details. Example:
+  tensor core acceleration. On the LLVM backend, operations compile to
+  sequences of packet instructions (e.g., AVX512). See the :ref:`cooperative
+  vector documentation <coop_vec>` for more details. Example:
 
   .. code-block:: python
 
