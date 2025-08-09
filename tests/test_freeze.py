@@ -3840,3 +3840,65 @@ def test102_assignment(t, auto_opaque):
         func(res)
 
         assert dr.allclose(ref, res)
+
+@pytest.mark.parametrize("auto_opaque", [False, True])
+@pytest.test_arrays("float32, jit, diff, shape=(*)")
+def test103_gradient_scope(t, auto_opaque):
+
+    def func(x):
+        y = x + 1
+        dr.eval(y)
+
+    frozen = dr.freeze(func, auto_opaque = auto_opaque)
+
+    x = t(1, 2, 3)
+    dr.enable_grad(x)
+
+    y = x * 2
+
+    with dr.suspend_grad():
+        z = frozen(y)
+
+    dr.backward(y)
+
+    print(f"{x.grad=}")
+
+
+@pytest.mark.parametrize("auto_opaque", [False, True])
+@pytest.test_arrays("float32, jit, diff, shape=(*)")
+def test104_custom_op(t, auto_opaque):
+
+    def func(x):
+        return x * 2
+
+    class FrozenOp(dr.CustomOp):
+        def __init__(self) -> None:
+            super().__init__()
+            self.func = func
+            self.frozen_eval = dr.freeze(func)
+
+            def bwd(x, dy):
+                x = dr.detach(x)
+                dr.enable_grad(x)
+                y = self.func(x)
+                dr.set_grad(y, dy)
+                dx = dr.backward_to(x)
+                return dx
+
+            self.frozen_bwd = dr.freeze(bwd)
+
+        def eval(self, x):
+            self.x = x
+            return self.frozen_eval(x)
+
+        def backward(self):
+            dx = self.frozen_bwd(self.x, self.grad_out())
+            self.set_grad_in("x", dx)
+
+    x = t(1, 2, 3)
+    dr.enable_grad(x)
+
+    y = dr.custom(FrozenOp, x)
+    dr.backward(y)
+    print(f"{x.grad=}")
+
