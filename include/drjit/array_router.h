@@ -1093,16 +1093,16 @@ void scatter(Target &target, const Value &value, const Index &index,
                           depth_v<Target> == 1,
                       "Target argument of scatter operation must either be a "
                       "pointer address or a flat array!");
-        static_assert(is_array_v<Index> &&
-                      is_integral_v<Index> &&
-                      sizeof(typename Index::Scalar) <= 4,
+
+        static_assert(is_integral_v<Index> &&
+                      sizeof(scalar_t<Index>) <= 4,
                       "Third argument of scatter operation must be a 32 bit index array!");
 
         if constexpr (depth_v<Value> == depth_v<Index>) {
             value.scatter_(target, uint32_array_t<Value>(index), mask, mode);
         } else {
             Target::template scatter_packet_<Value::Size>(
-                target, value, uint32_array_t<Target>(index), mask, mode);
+                target, value, uint32_array_t<value_t<Value>>(index), mask, mode);
         }
     } else if constexpr (is_drjit_struct_v<Value>) {
         static_assert(is_drjit_struct_v<Target>,
