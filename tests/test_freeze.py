@@ -3914,12 +3914,11 @@ def test105_mlp_grad(t, auto_opaque):
 
     import drjit.nn as nn
 
-    @dr.freeze(enabled = True)
+    @dr.freeze(enabled=True)
     def eval(net, x):
         y = ArrayXf(net(nn.CoopVec(x)))
         return y
 
-    @dr.freeze(enabled = False)
     def bwd(net, x):
         y = ArrayXf(net(nn.CoopVec(x)))
         loss = dr.squared_norm(y - 1)
@@ -3936,14 +3935,18 @@ def test105_mlp_grad(t, auto_opaque):
 
     net = net.alloc(TensorXf16, 2)
     weights, net = nn.pack(net, layout="training")
+    print(f"{type(weights)=}, {type(net.layers[1].weights)=}")
 
-    rng = dr.rng(seed = 0)
+    rng = dr.rng(seed=0)
 
     dr.enable_grad(weights)
 
     x = rng.random(ArrayXf, (2, 8))
-    y = eval(net, x)
-    print(f"{y=}")
+
+    with dr.isolate_grad():
+        with dr.resume_grad():
+            buffer = net.layers[1].weights.buffer
+            dr.set_grad(buffer, buffer.grad)
 
     x = rng.random(ArrayXf, (2, 8))
     loss = bwd(net, x)
