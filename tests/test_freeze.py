@@ -3902,3 +3902,50 @@ def test104_custom_op(t, auto_opaque):
     dr.backward(y)
     print(f"{x.grad=}")
 
+
+@pytest.mark.parametrize("auto_opaque", [False, True])
+@pytest.test_arrays("float32, jit, diff, shape=(*)")
+def test105_mlp_grad(t, auto_opaque):
+    skip_if_coopvec_not_supported(t)
+    mod = sys.modules[t.__module__]
+    Float16 = mod.Float16
+    ArrayXf = mod.ArrayXf
+    TensorXf16 = mod.TensorXf16
+
+    import drjit.nn as nn
+
+    @dr.freeze(enabled = True)
+    def eval(net, x):
+        y = ArrayXf(net(nn.CoopVec(x)))
+        return y
+
+    @dr.freeze(enabled = False)
+    def bwd(net, x):
+        y = ArrayXf(net(nn.CoopVec(x)))
+        loss = dr.squared_norm(y - 1)
+        dr.backward(loss)
+        return loss
+
+    net = nn.Sequential(
+        nn.Cast(Float16),
+        nn.Linear(2, 32, bias=False),
+        nn.LeakyReLU(),
+        nn.Linear(-1, 3, bias=False),
+        nn.Exp(),
+    )
+
+    net = net.alloc(TensorXf16, 2)
+    weights, net = nn.pack(net, layout="training")
+
+    rng = dr.rng(seed = 0)
+
+    dr.enable_grad(weights)
+
+    x = rng.random(ArrayXf, (2, 8))
+    y = eval(net, x)
+    print(f"{y=}")
+
+    x = rng.random(ArrayXf, (2, 8))
+    loss = bwd(net, x)
+    print(f"{dr.max(weights.grad)=}")
+
