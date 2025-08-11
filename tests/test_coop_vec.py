@@ -435,8 +435,9 @@ def test15_matvec_in_vcall(t, transpose):
 
 
 @pytest.mark.parametrize('in_vcall', [False, True])
+@pytest.mark.parametrize('grad_lit', [False, True])
 @pytest.test_arrays('jit,tensor,float16,diff')
-def test16_matvec_bwd(t, in_vcall):
+def test16_matvec_bwd(t, in_vcall, grad_lit):
     skip_if_coopvec_not_supported(t)
 
     # Test the reverse-mode derivative of a matrix-vector product
@@ -449,6 +450,9 @@ def test16_matvec_bwd(t, in_vcall):
     buffer, Av, bv = nn.pack(A, b, layout='training')
     x = m.Array2f16(2, 4)
     dr.enable_grad(x, buffer)
+
+    if (grad_lit):
+        dr.set_grad(buffer, dr.zeros(type(buffer), dr.width(buffer)))
 
     def do_mul(x):
         xv = nn.CoopVec(x)
