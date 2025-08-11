@@ -436,8 +436,9 @@ def test15_matvec_in_vcall(t, transpose):
 
 @pytest.mark.parametrize('in_vcall', [False, True])
 @pytest.mark.parametrize('grad_lit', [False, True])
+@pytest.mark.parametrize('separate_buffers', [False, True])
 @pytest.test_arrays('jit,tensor,float16,diff')
-def test16_matvec_bwd(t, in_vcall, grad_lit):
+def test16_matvec_bwd(t, in_vcall, grad_lit, separate_buffers):
     skip_if_coopvec_not_supported(t)
 
     # Test the reverse-mode derivative of a matrix-vector product
@@ -447,12 +448,22 @@ def test16_matvec_bwd(t, in_vcall, grad_lit):
     UInt32 = m.UInt32
     A = t([[1, 3], [-2, 4], [3, -2]])
     b = t([0, 0, 0])
-    buffer, Av, bv = nn.pack(A, b, layout='training')
+    if separate_buffers:
+        buffer, Av= nn.pack(A, layout='training')
+        buffer_bias, bv = nn.pack(b, layout='training')
+    else:
+        buffer, Av, bv = nn.pack(A, b, layout='training')
     x = m.Array2f16(2, 4)
     dr.enable_grad(x, buffer)
 
-    if (grad_lit):
+    if separate_buffers:
+        dr.enable_grad(x, buffer_bias)
+    dr.enable_grad(x, buffer)
+
+    if grad_lit:
         dr.set_grad(buffer, dr.zeros(type(buffer), dr.width(buffer)))
+        if separate_buffers:
+            dr.set_grad(buffer_bias, dr.zeros(type(buffer_bias), dr.width(buffer_bias)))
 
     def do_mul(x):
         xv = nn.CoopVec(x)
