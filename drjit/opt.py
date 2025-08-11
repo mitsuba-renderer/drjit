@@ -1153,6 +1153,10 @@ class GradScaler:
     initially stagnant for a few iterations. This is expected.
     """
 
+    DRJIT_STRUCT = {
+        "scale_factor": Union[float, dr.ArrayBase],
+    }
+
     scale_factor: Union[float, dr.ArrayBase]
     backoff_factor: float
     growth_factor: float
