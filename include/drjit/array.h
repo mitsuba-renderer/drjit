@@ -28,6 +28,9 @@
 #include <cstdint>
 
 // Core C++ headers needed by Dr.Jit
+#if defined(__ANDROID__)
+#  include <cmath>
+#endif
 // On libc++, include <utility> without pulling in the entire C/C++ math library
 #if defined(_LIBCPP_CMATH) || !defined(_LIBCPP_VERSION)
 #  include <utility>
