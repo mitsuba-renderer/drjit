@@ -517,7 +517,7 @@ struct DRJIT_TRIVIAL_ABI DiffArray
     template <size_t N, typename Index, typename Mask>
     static Array<DiffArray, N> gather_packet_(const DiffArray &src, const Index &index,
                                               const Mask &mask, ReduceMode mode) {
-        if constexpr ((N & (N-1)) > 0) {
+        if constexpr (N % 2 != 0) {
             return Base::template gather_packet_<N>(src, index, mask, mode);
         } else {
             static_assert(

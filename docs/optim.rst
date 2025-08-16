@@ -223,7 +223,9 @@ For example,
 is equivalent to (but *more efficient* than) four subsequent gathers that access
 elements ``index4*0`` to ``index*4+3``. Dr.Jit compiles such operations into
 *packet memory operations* whenever the size of the output array is a power of
-two. This yields a small performance improvement on the GPU (on the order of
+two. Other sizes are decomposed into sequences of smaller packet operations
+(for example, size 24 is realized as 3 packets with width 8).
+This yields a small performance improvement on the GPU (on the order of
 5-30%) and a massive speedup on the LLVM CPU backend especially for scatters.
 See the flag :py:attr:`drjit.JitFlag.PacketOps` for details.
 

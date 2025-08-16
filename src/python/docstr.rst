@@ -5859,9 +5859,12 @@
     - The size of the leading dimension of the source/target array is a power
       of two.
 
+      (Non-power-of-two sizes are decomposed into sequences of smaller packet
+      operations---for example, size 24 is realized as 3 packets with width 8).
+
     - The array is read/written via :py:func:`drjit.gather`,
-      :py:func:`drjit.scatter`, :py:func:`drjit.ravel`, or
-      :py:func:`drjit.unravel`.
+      :py:func:`drjit.scatter`, :py:func:`drjit.scatter_add`,
+      :py:func:`drjit.ravel`, or :py:func:`drjit.unravel`.
 
       For example, the following operation gathers 4D vectors from a flat array:
 
@@ -5878,10 +5881,6 @@
           from drjit.auto import Array4f, Float, UInt32
           source = Float(...)
           result = dr.gather(ArrayXf, source, index=index, shape=(16, len(index)))
-
-    - This optimization also applies to atomic scatter-adds performed on the
-      LLVM backend when using the :py:attr:`drjit.ReduceMode.Expand` reduction
-      strategy.
 
     Packet gathers yield a modest performance improvement on the CUDA backend,
     where they produce fewer and larger memory transactions. For example, a
