@@ -395,7 +395,7 @@ Tensor<T> take(const Tensor<T> &value, const typename Tensor<T>::Index &index, i
     const Shape &shape = value.shape();
 
     if (axis < 0)
-        axis += value.ndim();
+        axis += (int) value.ndim();
     if (axis < 0 || axis >= (int) value.ndim())
         drjit_raise("drjit::take(): tensor axis is out of bounds!");
 
@@ -410,7 +410,7 @@ Tensor<T> take(const Tensor<T> &value, const typename Tensor<T>::Index &index, i
         if (d == axis)
             continue;
         else if (d > axis)
-            stride_after *= s;
+            stride_after *= (uint32_t) s;
 
         new_shape.push_back(s);
         total *= s;
@@ -420,7 +420,7 @@ Tensor<T> take(const Tensor<T> &value, const typename Tensor<T>::Index &index, i
           flat_idx = result_idx % stride_after + index*stride_after;
 
     if (axis > 0) {
-        uint32_t full_stride = shape[axis] * stride_after;
+        uint32_t full_stride = (uint32_t) shape[axis] * stride_after;
         Index before_axis_idx = result_idx / stride_after;
         flat_idx += before_axis_idx * full_stride;
     }
@@ -442,7 +442,7 @@ Tensor<T> take_interp(const Tensor<T> &value, const Arg &pos, int axis = 0) {
     const Shape &shape = value.shape();
 
     if (axis < 0)
-        axis += value.ndim();
+        axis += (int) value.ndim();
     if (axis < 0 || axis >= (int) value.ndim())
         drjit_raise("drjit::take_interp(): tensor axis is out of bounds!");
     if (shape[axis] < 2)
@@ -459,7 +459,7 @@ Tensor<T> take_interp(const Tensor<T> &value, const Arg &pos, int axis = 0) {
         if (d == axis)
             continue;
         else if (d > axis)
-            stride_after *= s;
+            stride_after *= (uint32_t) s;
 
         new_shape.push_back(s);
         total *= s;
@@ -471,7 +471,7 @@ Tensor<T> take_interp(const Tensor<T> &value, const Arg &pos, int axis = 0) {
           flat_idx = result_idx % stride_after + index*stride_after;
 
     if (axis > 0) {
-        uint32_t full_stride = shape[axis] * stride_after;
+        uint32_t full_stride = (uint32_t) shape[axis] * stride_after;
         Index before_axis_idx = result_idx / stride_after;
         flat_idx += before_axis_idx * full_stride;
     }
