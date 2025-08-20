@@ -41,10 +41,16 @@ Scalars
 .. py:data:: Int
     :type: type
     :value: int
+.. py:data:: Int8
+    :type: type
+    :value: int
 .. py:data:: Int64
     :type: type
     :value: int
 .. py:data:: UInt
+    :type: type
+    :value: int
+.. py:data:: UInt8
     :type: type
     :value: int
 .. py:data:: UInt64
@@ -644,11 +650,19 @@ Scalar
 
    Derives from :py:class:`drjit.ArrayBase`.
 
+.. autoclass:: UInt8
+
+   Derives from :py:class:`drjit.ArrayBase`.
+
 .. autoclass:: UInt64
 
    Derives from :py:class:`drjit.ArrayBase`.
 
 .. autoclass:: Int
+
+   Derives from :py:class:`drjit.ArrayBase`.
+
+.. autoclass:: Int8
 
    Derives from :py:class:`drjit.ArrayBase`.
 
@@ -1232,11 +1246,19 @@ Scalars
 
    Derives from :py:class:`drjit.ArrayBase`.
 
+.. autoclass:: UInt8
+
+   Derives from :py:class:`drjit.ArrayBase`.
+
 .. autoclass:: UInt64
 
    Derives from :py:class:`drjit.ArrayBase`.
 
 .. autoclass:: Int
+
+   Derives from :py:class:`drjit.ArrayBase`.
+
+.. autoclass:: Int8
 
    Derives from :py:class:`drjit.ArrayBase`.
 
@@ -1811,11 +1833,19 @@ Scalars
 
    Derives from :py:class:`drjit.ArrayBase`.
 
+.. autoclass:: UInt8
+
+   Derives from :py:class:`drjit.ArrayBase`.
+
 .. autoclass:: UInt64
 
    Derives from :py:class:`drjit.ArrayBase`.
 
 .. autoclass:: Int
+
+   Derives from :py:class:`drjit.ArrayBase`.
+
+.. autoclass:: Int8
 
    Derives from :py:class:`drjit.ArrayBase`.
 
@@ -2233,11 +2263,19 @@ Scalars
 
    Derives from :py:class:`drjit.ArrayBase`.
 
+.. autoclass:: UInt8
+
+   Derives from :py:class:`drjit.ArrayBase`.
+
 .. autoclass:: UInt64
 
    Derives from :py:class:`drjit.ArrayBase`.
 
 .. autoclass:: Int
+
+   Derives from :py:class:`drjit.ArrayBase`.
+
+.. autoclass:: Int8
 
    Derives from :py:class:`drjit.ArrayBase`.
 
@@ -2660,11 +2698,19 @@ Scalars
 
    Derives from :py:class:`drjit.ArrayBase`.
 
+.. autoclass:: UInt8
+
+   Derives from :py:class:`drjit.ArrayBase`.
+
 .. autoclass:: UInt64
 
    Derives from :py:class:`drjit.ArrayBase`.
 
 .. autoclass:: Int
+
+   Derives from :py:class:`drjit.ArrayBase`.
+
+.. autoclass:: Int8
 
    Derives from :py:class:`drjit.ArrayBase`.
 
@@ -3259,11 +3305,19 @@ Scalars
 
    Derives from :py:class:`drjit.ArrayBase`.
 
+.. autoclass:: UInt8
+
+   Derives from :py:class:`drjit.ArrayBase`.
+
 .. autoclass:: UInt64
 
    Derives from :py:class:`drjit.ArrayBase`.
 
 .. autoclass:: Int
+
+   Derives from :py:class:`drjit.ArrayBase`.
+
+.. autoclass:: Int8
 
    Derives from :py:class:`drjit.ArrayBase`.
 

@@ -74,6 +74,8 @@ nb::object expr_t(nb::handle h0, nb::handle h1) {
 
     if ((VarType) m.type == VarType::BaseFloat)
         m.type = (uint32_t) VarType::Float32;
+    if ((VarType) m.type == VarType::BaseInt)
+        m.type = (uint32_t) VarType::Int32;
 
     if (!meta_check(m))
         nb::raise_type_error(
@@ -382,6 +384,14 @@ void export_traits(nb::module_ &m) {
     m.def("reinterpret_array_t",
           [](nb::handle h, VarType vt) { return reinterpret_array_t(h, vt); },
           doc_reinterpret_array_t);
+
+    m.def("uint8_array_t",
+          [](nb::handle h) { return reinterpret_array_t(h, VarType::UInt8); },
+          doc_uint8_array_t);
+
+    m.def("int8_array_t",
+          [](nb::handle h) { return reinterpret_array_t(h, VarType::Int8); },
+          doc_int8_array_t);
 
     m.def("uint32_array_t",
           [](nb::handle h) { return reinterpret_array_t(h, VarType::UInt32); },

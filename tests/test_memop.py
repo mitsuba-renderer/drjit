@@ -584,7 +584,7 @@ def test22_repeat(t):
     y = dr.repeat(x, 3)
     assert dr.all(y == [1, 1, 1, 2, 2, 2])
 
-@pytest.test_arrays('shape=(*),-bool')
+@pytest.test_arrays('shape=(*),-bool,-int8')
 def test23_block_sum(t):
     x = t(1, 2, 3, 4, 5, 6)
     assert dr.all(dr.block_sum(x, 1) == x)
@@ -594,7 +594,7 @@ def test23_block_sum(t):
     assert dr.all(dr.block_sum(x, 5) == [15, 6])
     assert dr.all(dr.block_sum(x, 6) == [21])
 
-@pytest.test_arrays('shape=(*),-bool')
+@pytest.test_arrays('shape=(*),-bool,-int8')
 def test24_block_prefix_sum(t):
     x = t(1, 2, 3, 4, 5, 6)
     assert dr.all(dr.block_prefix_sum(x, 1) == [0, 0, 0, 0, 0, 0])
@@ -713,7 +713,7 @@ def test29_packet_gather(t, psize):
         buf = pcg.next_uint32() & 1 == 0
     elif tp in (dr.VarType.Float16, dr.VarType.Float32, dr.VarType.Float64):
         buf = vt(pcg.next_float32())
-    elif tp in (dr.VarType.Int32, dr.VarType.UInt32):
+    elif tp in (dr.VarType.Int32, dr.VarType.UInt32, dr.VarType.UInt8, dr.VarType.Int8):
         buf = vt(pcg.next_uint32())
     elif tp in (dr.VarType.Int64, dr.VarType.UInt64):
         buf = vt(pcg.next_uint64())
@@ -752,7 +752,7 @@ def test30_packet_scatter(t, psize):
             v = pcg.next_uint32() & 1 == 0
         elif tp in (dr.VarType.Float16, dr.VarType.Float32, dr.VarType.Float64):
             v = vt(pcg.next_float32())
-        elif tp in (dr.VarType.Int32, dr.VarType.UInt32):
+        elif tp in (dr.VarType.Int32, dr.VarType.UInt32, dr.VarType.UInt8, dr.VarType.Int8):
             v = vt(pcg.next_uint32())
         elif tp in (dr.VarType.Int64, dr.VarType.UInt64):
             v = vt(pcg.next_uint64())
@@ -776,7 +776,7 @@ def test30_packet_scatter(t, psize):
     assert dr.all(target_1 == target_2)
 
 @pytest.mark.parametrize('psize', [2, 4, 8, 16])
-@pytest.test_arrays('-diff, jit, int, shape=(*, *)')
+@pytest.test_arrays('-diff, jit, int, shape=(*, *), -int8')
 def test31_packet_scatter_add(t, psize):
     np = pytest.importorskip("numpy")
     mod = sys.modules[t.__module__]

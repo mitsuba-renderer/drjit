@@ -23,10 +23,12 @@ void export_scalar(nb::module_& m) {
     m.attr("Float32") = nb::borrow(&PyFloat_Type);
     m.attr("Float64") = nb::borrow(&PyFloat_Type);
     m.attr("Float") = nb::borrow(&PyFloat_Type);
+    m.attr("Int8") = nb::borrow(&PyLong_Type);
     m.attr("Int16") = nb::borrow(&PyLong_Type);
     m.attr("Int32") = nb::borrow(&PyLong_Type);
     m.attr("Int64") = nb::borrow(&PyLong_Type);
     m.attr("Int") = nb::borrow(&PyLong_Type);
+    m.attr("UInt8") = nb::borrow(&PyLong_Type);
     m.attr("UInt16") = nb::borrow(&PyLong_Type);
     m.attr("UInt32") = nb::borrow(&PyLong_Type);
     m.attr("UInt64") = nb::borrow(&PyLong_Type);

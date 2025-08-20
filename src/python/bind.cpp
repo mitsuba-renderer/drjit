@@ -53,10 +53,10 @@ nb::object compat_types(nb::handle module_name, nb::handle self_name, nb::handle
         case VarType::Float64: vt = VarType::Float32; break;
         case VarType::Float32: vt = VarType::Float16; break;
         case VarType::Float16: vt = VarType::UInt64; break;
-        case VarType::UInt64 : vt = VarType::Int64; break;
-        case VarType::Int64: vt = VarType::UInt32; break;
-        case VarType::UInt32 : vt = VarType::Int32; break;
-        case VarType::Int32: vt = VarType::Bool; break;
+        case VarType::UInt64:  vt = VarType::Int64; break;
+        case VarType::Int64:   vt = VarType::UInt32; break;
+        case VarType::UInt32:  vt = VarType::Int32; break;
+        case VarType::Int32:   vt = VarType::Bool; break;
         default: vt = VarType::Void;
     }
 

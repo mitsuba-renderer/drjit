@@ -22,17 +22,17 @@ bool meta_check(ArrayMeta m) noexcept {
 }
 
 static const char *type_name_lowercase[] = {
-    "void", "bool", "int8", "uint8", "int16", "uint16", "int32", "uint32",
+    "void", "bool", "base_int", "int8", "uint8", "int16", "uint16", "int32", "uint32",
     "int64", "uint64", "pointer", "base_float", "float16", "float32", "float64"
 };
 
 static const char *type_name[] = {
-    "Void", "Bool", "Int8", "UInt8", "Int16", "UInt16", "Int", "UInt",
+    "Void", "Bool", "BaseInt", "Int8", "UInt8", "Int16", "UInt16", "Int", "UInt",
     "Int64", "UInt64", "Pointer", "BaseFloat", "Float16", "Float", "Float64"
 };
 
 static const char *type_suffix[] = {
-    "?", "b", "i8", "u8", "i16", "u16", "i", "u",
+    "?", "b", "", "i8", "u8", "i16", "u16", "i", "u",
     "i64", "u64", "p", "", "f16", "f", "f64"
 };
 
@@ -156,23 +156,7 @@ ArrayMeta meta_get(nb::handle h) noexcept {
     } else if (tp.is(&PyBool_Type)) {
         m.type = (uint8_t) VarType::Bool;
     } else if (tp.is(&PyLong_Type)) {
-        int overflow = 0;
-        long long result = PyLong_AsLongLongAndOverflow(h.ptr(), &overflow);
-        VarType vt;
-
-        if (overflow) {
-            vt = overflow > 0 ? VarType::UInt64 : VarType::Int64;
-        } else if (result < 0) {
-            vt = result < INT_MIN ? VarType::Int64 : VarType::Int32;
-
-            if (result == -1 && PyErr_Occurred()) {
-                m.is_valid = false;
-                PyErr_Clear();
-            }
-        } else {
-            vt = result > INT_MAX ? VarType::Int64 : VarType::Int32;
-        }
-        m.type = (uint8_t) vt;
+        m.type = (uint8_t) VarType::BaseInt;
     } else if (tp.is(&PyFloat_Type)) {
         m.type = (uint8_t) VarType::BaseFloat;
     } else if (tp.is(&PyTuple_Type) || tp.is(&PyList_Type)) {
@@ -296,7 +280,7 @@ ArrayMeta meta_get_general(nb::handle h) noexcept {
     else if (h.is(&PyBool_Type))
         m.type = (uint8_t) VarType::Bool;
     else if (h.is(&PyLong_Type))
-        m.type = (uint8_t) VarType::Int32;
+        m.type = (uint8_t) VarType::BaseInt;
     else if (h.is(&PyFloat_Type))
         m.type = (uint8_t) VarType::BaseFloat;
     else
@@ -351,6 +335,8 @@ void promote(nb::object *o, size_t n, bool select) {
 
     if ((VarType) m.type == VarType::BaseFloat)
         m.type = (uint32_t) VarType::Float32;
+    if ((VarType) m.type == VarType::BaseInt)
+        m.type = (uint32_t) VarType::Int32;
 
     for (size_t i = 0; i < n; ++i) {
         // if this is a compatible Dr.Jit array

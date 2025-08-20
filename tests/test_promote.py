@@ -94,7 +94,7 @@ def test3_binop_promote_misc():
     a + 2**10
     with pytest.raises(RuntimeError) as ei:
         a + 2**100
-    assert "drjit.scalar.Array3i.__add__(): Could not promote type 'int' to 'drjit.scalar.Array3u64'." in str(ei.value)
+    assert "drjit.scalar.Array3i.__add__(): Could not promote type 'int' to 'drjit.scalar.Array3i'." in str(ei.value)
 
 def test4_binop_promote_ad():
     try:
