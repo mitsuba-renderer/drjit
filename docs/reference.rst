@@ -871,3 +871,15 @@ section <neural_nets>` for an introduction.
 
     .. autoproperty:: params
     .. automethod:: __call__
+
+
+CUDA / GL interoperability
+--------------------------
+
+.. autofunction:: drjit.cuda.register_gl_buffer
+.. autofunction:: drjit.cuda.register_gl_texture
+.. autofunction:: drjit.cuda.unregister_cuda_resource
+.. autofunction:: drjit.cuda.map_graphics_resource_ptr
+.. autofunction:: drjit.cuda.map_graphics_resource_array
+.. autofunction:: drjit.cuda.unmap_graphics_resource
+.. autofunction:: drjit.cuda.memcpy_2d_to_array_async
