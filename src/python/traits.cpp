@@ -74,6 +74,8 @@ nb::object expr_t(nb::handle h0, nb::handle h1) {
 
     if ((VarType) m.type == VarType::BaseFloat)
         m.type = (uint32_t) VarType::Float32;
+    if ((VarType) m.type == VarType::BaseInt)
+        m.type = (uint32_t) VarType::Int32;
 
     if (!meta_check(m))
         nb::raise_type_error(
