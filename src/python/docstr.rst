@@ -8815,3 +8815,87 @@
     Returns:
         object: The updated ``value`` variable that will trigger the reordering
         if used.
+
+.. ------------------------------------------------------------------------
+
+.. topic:: cuda_register_gl_buffer
+
+    Register a GL buffer as a CUDA graphics resource.
+
+    The created ``CUgraphicsResource`` (pointer) is returned as an opaque pointer.
+    The resource must be unregistered with :py:func:`drjit.unregister_cuda_resource` when done.
+
+    Args:
+        gl_buffer (int): Integer identifying the GL buffer.
+
+    Returns:
+        capsule: An opaque pointer to the CUDA graphics resource.
+
+.. topic:: cuda_register_gl_texture
+
+    Register a GL texture a CUDA graphics resource.
+
+    The created ``CUgraphicsResource`` (pointer) is returned as an opaque pointer.
+    The resource must be unregistered with :py:func:`drjit.unregister_cuda_resource` when done.
+
+    Args:
+        gl_texture (int): Integer identifying the GL texture.
+
+    Returns:
+        capsule: An opaque pointer to the CUDA graphics resource.
+
+.. topic:: cuda_unregister_cuda_resource
+
+    Unregister a CUDA graphics resource that was previously registered
+    with :py:func:`drjit.register_gl_buffer` or :py:func:`drjit.register_gl_texture`.
+    This frees the associated CUDA graphics resource.
+
+    Args:
+        cuda_resource (capsule): The CUDA graphics resource to unregister.
+
+.. topic:: cuda_map_graphics_resource_ptr
+
+    Map a CUDA graphics resource and return a device pointer to the mapped resource.
+    The resource must be unmapped with :py:func:`drjit.unmap_graphics_resource` when done.
+
+    Args:
+        cuda_resource (capsule): The CUDA graphics resource to map
+        n_bytes (int): Output parameter that receives the
+
+    Returns:
+        int: Device pointer to the mapped resource, as an integer.
+        int: Size of the mapped resource, in bytes.
+
+.. topic:: cuda_map_graphics_resource_array
+
+    Map a CUDA graphics resource and return a CUDA array handle to the specified
+    sub-resource. The resource must be unmapped with :py:func:`drjit.unmap_graphics_resource` when done.
+
+    Args:
+        cuda_resource (capsule): The CUDA graphics resource to map.
+        array_index (int): The array index of the sub-resource (default: 0)
+        mip_level (int): The mip level of the sub-resource (default: 0)
+
+    Returns:
+        int: CUDA array handle to the mapped sub-resource, as an integer.
+
+.. topic:: cuda_unmap_graphics_resource
+
+    Unmap a CUDA graphics resource that was previously mapped with
+    :py:func:`drjit.map_graphics_resource_ptr` or :py:func:`drjit.map_graphics_resource_array`.
+
+    Args:
+        cuda_resource (capsule): The CUDA graphics resource to unmap
+
+.. topic:: cuda_memcpy_2d_to_array_async
+
+    Perform an asynchronous 2D memory copy from a source buffer to a CUDA array.
+
+    Args:
+        dst (int): Destination CUDA array pointer, as an int.
+        src (int): Source buffer (host or device memory) pointer, as an int.
+        src_pitch (int): Pitch (bytes per row) of the source buffer
+        component_size_bytes (int): Size in bytes of each component
+        width (int): Width of the region to copy (in elements)
+        height (int): Height of the region to copy (in elements)
+        from_host (bool): True if copying from host memory, False for device memory
