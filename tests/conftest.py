@@ -29,7 +29,7 @@ for o in dr.__dict__.values():
     traverse(o)
 
 
-def test_arrays(*queries, name='t'):
+def _test_arrays(*queries, name='t'):
     """
     Helper function used to parameterize testcases over Dr.Jit array types
 
@@ -97,7 +97,7 @@ def skip_on(exception, reason, msg=None):
 
     return wrapped
 
-def test_packages(name='p'):
+def _test_packages(name='p'):
     def wrapped(func):
         return pytest.mark.parametrize(name, array_packages)(func)
     return wrapped
@@ -110,6 +110,6 @@ def drjit_verbose():
     dr.set_log_level(level)
 
 def pytest_configure():
-    pytest.test_arrays = test_arrays # type: ignore
-    pytest.test_packages = test_packages # type: ignore
+    pytest.test_arrays = _test_arrays # type: ignore
+    pytest.test_packages = _test_packages # type: ignore
     pytest.skip_on = skip_on
