@@ -264,7 +264,7 @@ enum VariableFlags : uint8_t {
  * 'next_fwd' and 'next_bwd' fields each provide an entry point into such a
  * linked list of edges (see also \ref Edge).
  */
-struct Variable {
+struct ADVariable {
     /// Number of references to this AD variable
     uint32_t ref_count = 0;
 
@@ -295,19 +295,19 @@ struct Variable {
     /// Custom flags (see the 'VariableFlag' enum above)
     uint8_t flags = 0;
 
-    Variable() = default;
+    ADVariable() = default;
 
-    Variable(const Variable &) = delete;
-    Variable &operator=(const Variable &) = delete;
+    ADVariable(const ADVariable &) = delete;
+    ADVariable &operator=(const ADVariable &) = delete;
 
-    Variable(Variable &&v) noexcept
+    ADVariable(ADVariable &&v) noexcept
         : ref_count(v.ref_count), next_fwd(v.next_fwd), next_bwd(v.next_bwd),
           grad(std::move(v.grad)), size(v.size), label(v.label),
           counter(v.counter), backend(v.backend), type(v.type), flags(v.flags) {
         v.label = nullptr;
     }
 
-    Variable &operator=(Variable &&v) noexcept {
+    ADVariable &operator=(ADVariable &&v) noexcept {
         ref_count = v.ref_count; next_fwd = v.next_fwd;
         next_bwd = v.next_bwd; grad = std::move(v.grad);
         size = v.size;
@@ -321,7 +321,7 @@ struct Variable {
         return *this;
     }
 
-    ~Variable() {
+    ~ADVariable() {
         if (flags & (uint8_t) VariableFlags::FreeLabel)
             free(label);
     }
@@ -436,7 +436,7 @@ struct State {
     Lock lock;
 
     /// Hash table mapping variable IDs to variable instances
-    std::vector<Variable> variables;
+    std::vector<ADVariable> variables;
 
     /// List of all edges (used and unused ones)
     std::vector<Edge> edges;
@@ -484,7 +484,7 @@ struct State {
         }
     }
 
-    Variable *operator[](ADIndex index) {
+    ADVariable *operator[](ADIndex index) {
         if (unlikely(index > variables.size() || variables[index].ref_count == 0))
             ad_fail("Referenced an unknown variable a%u!", index);
         return &variables[index];
@@ -493,13 +493,13 @@ struct State {
 
 // Special edge (scatter, gather, scatter_reduce, block_sum, etc.)
 struct Special {
-    virtual void backward(Variable * /* source */,
-                          const Variable * /* target */) {
+    virtual void backward(ADVariable * /* source */,
+                          const ADVariable * /* target */) {
         ad_fail("Special::backward(): not implemented!");
     }
 
-    virtual void forward(const Variable * /* source */,
-                         Variable * /* target */) {
+    virtual void forward(const ADVariable * /* source */,
+                         ADVariable * /* target */) {
         ad_fail("Special::forward(): not implemented!");
     }
 
@@ -508,11 +508,11 @@ struct Special {
 
 // Custom operation that copies the gradient from an input node
 struct CopyGrad : Special {
-    void backward(Variable *, const Variable *target) override {
+    void backward(ADVariable *, const ADVariable *target) override {
         grad = target->grad;
     }
 
-    void forward(const Variable *source, Variable *) override {
+    void forward(const ADVariable *source, ADVariable *) override {
         grad = source->grad;
     }
 
@@ -667,23 +667,23 @@ static void ad_sanitation_checkpoint_both() {
 
 
 // Forward declarations
-static void ad_free(ADIndex, Variable *);
-static void ad_var_inc_ref_int(ADIndex index, Variable *v) noexcept;
+static void ad_free(ADIndex, ADVariable *);
+static void ad_var_inc_ref_int(ADIndex index, ADVariable *v) noexcept;
 
 
 // ==========================================================================
 // Reference counting and variable cleanup
 // ==========================================================================
 
-static bool DRJIT_NOINLINE ad_decref_custom_op_output(Variable *);
+static bool DRJIT_NOINLINE ad_decref_custom_op_output(ADVariable *);
 
-static void ad_var_inc_ref_int(ADIndex index, Variable *v) noexcept {
+static void ad_var_inc_ref_int(ADIndex index, ADVariable *v) noexcept {
     DRJIT_MARK_USED(index);
     ad_trace("ad_var_inc_ref(a%u): %u", index, v->ref_count + 1);
     v->ref_count++;
 }
 
-static bool ad_var_dec_ref_int(ADIndex index, Variable *v) noexcept {
+static bool ad_var_dec_ref_int(ADIndex index, ADVariable *v) noexcept {
     DRJIT_MARK_USED(index);
     ad_trace("ad_var_dec_ref(a%u): %u", index, v->ref_count - 1);
     ad_assert(v->ref_count > 0, "ad_var_dec_ref_int(): reference count underflow");
@@ -699,7 +699,7 @@ static bool ad_var_dec_ref_int(ADIndex index, Variable *v) noexcept {
     }
 }
 
-static void ad_free_edges(uint32_t index, Variable *v) {
+static void ad_free_edges(uint32_t index, ADVariable *v) {
     EdgeIndex edge_id = v->next_bwd;
     v->next_bwd = 0;
     (void) index;
@@ -719,7 +719,7 @@ static void ad_free_edges(uint32_t index, Variable *v) {
 
         edge = Edge { };
 
-        Variable *v2 = state[source];
+        ADVariable *v2 = state[source];
         if (!ad_var_dec_ref_int(source, v2)) {
             EdgeIndex fwd = v2->next_fwd;
 
@@ -746,12 +746,12 @@ static void ad_free_edges(uint32_t index, Variable *v) {
     }
 }
 
-static void ad_free(ADIndex index, Variable *v) {
+static void ad_free(ADIndex index, ADVariable *v) {
     ad_trace("ad_free(a%u)", index);
 
     ad_free_edges(index, v);
 
-    *v = Variable { };
+    *v = ADVariable { };
     state.unused_variables.push(index);
 }
 
@@ -831,7 +831,7 @@ char *concat(const char *s1, const char *s2) {
 }
 
 /// Allocate a new variable from the pool
-static std::pair<ADIndex, Variable *> ad_var_new(JitBackend backend,
+static std::pair<ADIndex, ADVariable *> ad_var_new(JitBackend backend,
                                                  size_t size, VarType type,
                                                  bool symbolic,
                                                  bool reuse_indices,
@@ -852,7 +852,7 @@ static std::pair<ADIndex, Variable *> ad_var_new(JitBackend backend,
     ad_sanitation_checkpoint_variables();
 #endif
 
-    Variable *v = &state.variables[index];
+    ADVariable *v = &state.variables[index];
     v->ref_count = 1;
     v->size = size;
     v->counter = state.counter++;
@@ -892,11 +892,11 @@ static EdgeIndex ad_edge_new() {
 }
 
 /// Ensure consistent size of symbolic variables to avoid horiz. reductions
-static void ad_propagate_size(Variable *v) {
+static void ad_propagate_size(ADVariable *v) {
     EdgeIndex edge = v->next_bwd;
     while (edge) {
         Edge &e = state.edges[edge];
-        Variable *v2 = state[e.source];
+        ADVariable *v2 = state[e.source];
         if ((v2->flags & (uint8_t) VariableFlags::Symbolic) &&
             v2->size != v->size && v2->size == 1) {
             v2->size = v->size;
@@ -984,7 +984,7 @@ struct ReleaseHelper {
 /// Forward declaration of a helper function defined later on
 uint32_t ad_record_implicit_dependence(LocalState &ls, ReleaseHelper &rl,
                                        JitBackend backend, uint32_t source,
-                                       Variable *v_source, bool reuse_indices);
+                                       ADVariable *v_source, bool reuse_indices);
 
 /// This helper function is called by essentially all implementations of
 /// arithmetic operations below (e.g. ``ad_var_add``). It creates a new
@@ -1058,7 +1058,7 @@ DRJIT_NOINLINE Index ad_var_new_impl(const char *label, JitVar &&result,
                 if (source == 0)
                     continue;
 
-                Variable *v_source = state[source];
+                ADVariable *v_source = state[source];
                 bool source_symbolic =
                     v_source->flags & (uint8_t) VariableFlags::Symbolic;
 
@@ -1107,7 +1107,7 @@ DRJIT_NOINLINE Index ad_var_new_impl(const char *label, JitVar &&result,
             }
         }
 
-        Variable *v_source = state[source];
+        ADVariable *v_source = state[source];
 
         EdgeIndex edge_index_new = ad_edge_new();
         Edge &edge = state.edges[edge_index_new];
@@ -1177,7 +1177,7 @@ JitIndex ad_grad(Index index, bool null_ok) {
 
     if (ad_index) {
         std::lock_guard<Lock> guard(state.lock);
-        const Variable *v = state[ad_index];
+        const ADVariable *v = state[ad_index];
         result = v->grad;
         backend = (JitBackend) v->backend;
         type = (VarType) v->type;
@@ -1210,7 +1210,7 @@ void ad_clear_grad(Index index) {
     ad_log("ad_clear_grad(a%u)", ad_index);
 
     std::lock_guard<Lock> guard(state.lock);
-    Variable *v = state[ad_index];
+    ADVariable *v = state[ad_index];
     v->grad = JitVar();
 }
 
@@ -1228,7 +1228,7 @@ void ad_accum_grad(Index index, JitIndex value) {
         return;
 
     std::lock_guard<Lock> guard(state.lock);
-    Variable *v = state[ad_index];
+    ADVariable *v = state[ad_index];
 
     JitVar value_v = JitVar::borrow(value);
     size_t size_in = value_v.size();
@@ -1285,7 +1285,7 @@ Index ad_var_set_label(Index index, size_t argc, ...) {
         ad_log("ad_var_set_label(a%u): \"%s\"", ad_index,
                label ? label : "(null)");
 
-        Variable *v = state[ad_index];
+        ADVariable *v = state[ad_index];
 
         if (v->flags & (uint8_t) VariableFlags::FreeLabel)
             free(v->label);
@@ -1318,7 +1318,7 @@ Index ad_var_set_label(Index index, size_t argc, ...) {
 
 /// Forward-mode DFS starting from 'index'
 static void ad_dfs_fwd(std::vector<EdgeRef> &todo, uint32_t index,
-                       Variable *v) {
+                       ADVariable *v) {
     DRJIT_MARK_USED(index);
 
     uint32_t edge_id = v->next_fwd;
@@ -1331,7 +1331,7 @@ static void ad_dfs_fwd(std::vector<EdgeRef> &todo, uint32_t index,
             ad_log("ad_dfs_fwd(): enqueuing edge a%u -> a%u", index,
                    edge.target);
 
-            Variable *v2 = state[edge.target];
+            ADVariable *v2 = state[edge.target];
             ad_var_inc_ref_int(edge.target, v2);
             todo.emplace_back(edge_id, edge.source, edge.target, v->counter,
                               v2->counter);
@@ -1345,7 +1345,7 @@ static void ad_dfs_fwd(std::vector<EdgeRef> &todo, uint32_t index,
 
 /// Reverse-mode DFS starting from 'index'
 static void ad_dfs_bwd(std::vector<EdgeRef> &todo, uint32_t index,
-                       Variable *v) {
+                       ADVariable *v) {
     uint32_t edge_id = v->next_bwd;
     while (edge_id) {
         Edge &edge = state.edges[edge_id];
@@ -1356,7 +1356,7 @@ static void ad_dfs_bwd(std::vector<EdgeRef> &todo, uint32_t index,
             ad_log("ad_dfs_bwd(): enqueuing edge a%u -> a%u", index,
                    edge.source);
 
-            Variable *v2 = state[edge.source];
+            ADVariable *v2 = state[edge.source];
             ad_var_inc_ref_int(index, v);
             todo.emplace_back(edge_id, edge.source, edge.target, v2->counter, v->counter);
             ad_dfs_bwd(todo, edge.source, v2);
@@ -1401,7 +1401,7 @@ void ad_enqueue(dr::ADMode mode, Index index) {
 // todo list keeps a reference on the target vertex, which keeps the
 // edge from being garbage collected.
 
-static std::pair<Variable*, Variable *> ad_lookup_edge(const EdgeRef &er, const Edge &edge) {
+static std::pair<ADVariable*, ADVariable *> ad_lookup_edge(const EdgeRef &er, const Edge &edge) {
     ad_assert(edge.source == er.source && edge.target == er.target,
               "ad_clear_todo(): internal error: edge a%u -> a%u was "
               "in an invalid state! (1)", er.source, er.target);
@@ -1410,7 +1410,7 @@ static std::pair<Variable*, Variable *> ad_lookup_edge(const EdgeRef &er, const 
               "ad_clear_todo(): internal error: edge a%u -> a%u was "
               "in an invalid state! (2)", er.source, er.target);
 
-    Variable *source = state[er.source], *target = state[er.target];
+    ADVariable *source = state[er.source], *target = state[er.target];
 
     ad_assert(source->counter == er.source_counter &&
               target->counter == er.target_counter,
@@ -1433,7 +1433,7 @@ static void ad_clear_todo(std::vector<EdgeRef> &todo, bool remove_edges) {
         if (er.id == 0 && er.source == 0 && er.target == 0)
             continue; // edge has been moved to another todo list
 
-        Variable *source, *target;
+        ADVariable *source, *target;
         std::tie(source, target) = ad_lookup_edge(er, state.edges[er.id]);
 
         if (!remove_edges) {
@@ -1551,7 +1551,7 @@ void ad_traverse(dr::ADMode mode, uint32_t flags) {
                 return;
             pending.erase(prev_i);
 
-            Variable *prev = state[prev_i],
+            ADVariable *prev = state[prev_i],
                      *cur = cur_i ? state[cur_i] : nullptr;
 
             /* Wavefront-style evaluation of loops with differentiable
@@ -1598,7 +1598,7 @@ void ad_traverse(dr::ADMode mode, uint32_t flags) {
         for (EdgeRef &er : todo) {
             Edge &edge = state.edges[er.id];
 
-            Variable *v0, *v1;
+            ADVariable *v0, *v1;
             uint32_t v0i = edge.source, v1i = edge.target;
             std::tie(v0, v1) = ad_lookup_edge(er, edge);
 
@@ -1876,7 +1876,7 @@ int ad_has_grad(Index index) {
         return 0;
 
     std::lock_guard<Lock> guard(state.lock);
-    const Variable *v = state[ad_index];
+    const ADVariable *v = state[ad_index];
     return v->grad.valid();
 }
 
@@ -1907,13 +1907,13 @@ struct MaskEdge : Special {
     MaskEdge(const JitMask &mask, bool negate = false)
         : mask(mask), negate(negate) { }
 
-    void backward(Variable *source, const Variable *target) override {
+    void backward(ADVariable *source, const ADVariable *target) override {
         source->accum(!negate ? (target->grad & mask)
                               : andnot(target->grad, mask),
                       target->size);
     }
 
-    void forward(const Variable *source, Variable *target) override {
+    void forward(const ADVariable *source, ADVariable *target) override {
         target->accum(!negate ? (source->grad & mask)
                               : andnot(source->grad, mask),
                       source->size);
@@ -1926,12 +1926,12 @@ struct MaskEdge : Special {
 struct CastEdge : Special {
     CastEdge(VarType v1, VarType v2) : v1(v1), v2(v2) { }
 
-    void backward(Variable *source, const Variable *target) override {
+    void backward(ADVariable *source, const ADVariable *target) override {
         source->accum(JitVar::steal(jit_var_cast(target->grad.index(), v1, 0)),
                       target->size);
     }
 
-    void forward(const Variable *source, Variable *target) override {
+    void forward(const ADVariable *source, ADVariable *target) override {
         target->accum(JitVar::steal(jit_var_cast(source->grad.index(), v2, 0)),
                       source->size);
     }
@@ -1963,7 +1963,7 @@ struct Gather : Special {
         mask_stack = JitMask::steal(mask_idx);
     }
 
-    void backward(Variable *source, const Variable *target) override {
+    void backward(ADVariable *source, const ADVariable *target) override {
         JitVar &source_grad = source->grad;
 
         if (source->size == 1 && target->size == 1 &&
@@ -1988,7 +1988,7 @@ struct Gather : Special {
             source_grad, target->grad, offset, mask, reduce_mode);
     }
 
-    void forward(const Variable *source, Variable *target) override {
+    void forward(const ADVariable *source, ADVariable *target) override {
         MaskGuard guard(backend, mask_stack);
         target->accum(dr::gather<JitVar>(source->grad, offset, mask),
                       std::max(width(offset), width(mask)));
@@ -2017,7 +2017,7 @@ struct Scatter : Special {
         }
     }
 
-    void backward(Variable *source, const Variable *target) override {
+    void backward(ADVariable *source, const ADVariable *target) override {
         MaskGuard guard(backend, mask_stack);
 
         JitVar grad;
@@ -2042,7 +2042,7 @@ struct Scatter : Special {
         source->accum(grad, width(offset));
     }
 
-    void forward(const Variable *source, Variable *target) override {
+    void forward(const ADVariable *source, ADVariable *target) override {
         JitVar &target_grad = target->grad;
 
         if (!target_grad.valid()) {
@@ -2120,11 +2120,11 @@ struct ScatterTarget : Special {
         return 0;
     }
 
-    void backward(Variable *source, const Variable *target) override {
+    void backward(ADVariable *source, const ADVariable *target) override {
         source->accum(target->grad & create_mask(), target->size);
     }
 
-    void forward(const Variable *source, Variable *target) override {
+    void forward(const ADVariable *source, ADVariable *target) override {
         target->accum(source->grad & create_mask(), source->size);
     }
 
@@ -2141,7 +2141,7 @@ struct BlockPrefixReduceEdge : Special {
         : m_op(op), m_block_size(block_size), m_exclusive(exclusive),
           m_reverse(reverse) { }
 
-    void forward(const Variable *source, Variable *target) override {
+    void forward(const ADVariable *source, ADVariable *target) override {
         if (m_op != ReduceOp::Add)
             ad_raise("BlockPrefixReduceEdge: forward mode differentiation of "
                      "dr.block_prefix_reduce() has only been implemented for "
@@ -2156,7 +2156,7 @@ struct BlockPrefixReduceEdge : Special {
         target->accum(value, source->size);
     }
 
-    void backward(Variable *source, const Variable *target) override {
+    void backward(ADVariable *source, const ADVariable *target) override {
         if (m_op != ReduceOp::Add)
             ad_raise("BlockPrefixReduceEdge: reverse mode differentiation of "
                      "dr.block_prefix_reduce() has only been implemented for "
@@ -2191,7 +2191,7 @@ struct BlockReduceEdge : Special {
         }
     }
 
-    void forward(const Variable *source, Variable *target) override {
+    void forward(const ADVariable *source, ADVariable *target) override {
         JitVar source_grad = source->grad;
 
         if (source_grad.size() != source->size)
@@ -2223,7 +2223,7 @@ struct BlockReduceEdge : Special {
         target->accum(result, target->size);
     }
 
-    void backward(Variable *source, const Variable *target) override {
+    void backward(ADVariable *source, const ADVariable *target) override {
         JitVar target_grad = target->grad;
         if (!target_grad.valid())
             return;
@@ -2262,7 +2262,7 @@ struct BlockReduceEdge : Special {
 };
 
 struct ShrinkEdge : Special {
-    void forward(const Variable *source, Variable *target) override {
+    void forward(const ADVariable *source, ADVariable *target) override {
         JitVar value = source->grad;
         if (value.size() != source->size)
             value.resize(source->size);
@@ -2272,7 +2272,7 @@ struct ShrinkEdge : Special {
             target->size);
     }
 
-    void backward(Variable *source, const Variable *target) override {
+    void backward(ADVariable *source, const ADVariable *target) override {
         JitVar value = target->grad;
         if (!value.valid())
             return;
@@ -2304,7 +2304,7 @@ Index ad_var_new(JitIndex i0) {
         const char *prefix = jit_prefix(info.backend);
 
         std::lock_guard<Lock> guard(state.lock);
-        Variable *v = state[ad_index(result)];
+        ADVariable *v = state[ad_index(result)];
 
         if (!prefix || !label)
             v->label = label ? strdup(label) : nullptr;
@@ -2361,7 +2361,7 @@ uint32_t ad_pred(uint32_t ad_index, uint32_t i_) {
         return 0;
 
     std::lock_guard<Lock> guard(state.lock);
-    const Variable *v = state[ad_index];
+    const ADVariable *v = state[ad_index];
     uint32_t edge = v->next_bwd;
 
     for (uint32_t i = 0; i < i_; ++i) {
@@ -3071,7 +3071,7 @@ public:
         std::lock_guard<Lock> guard(state.lock);
         size_t n = m_output_indices.size();
 
-        const Variable *v = state[m_input_indices[0]];
+        const ADVariable *v = state[m_input_indices[0]];
         if (!v->grad.valid())
             return;
 
@@ -3079,7 +3079,7 @@ public:
 
         jit_var_gather_packet(n, v->grad.index(), offset.index(), mask.index(), out.data());
         for (size_t i = 0; i < n; ++i) {
-            Variable *v_ = state[m_output_indices[i]];
+            ADVariable *v_ = state[m_output_indices[i]];
             v_->accum(JitVar::steal(out[i]), v_->size);
             out[i] = 0;
         }
@@ -3092,7 +3092,7 @@ public:
         index32_vector grad_out;
         grad_out.reserve(n);
         for (size_t i = 0; i < n; ++i) {
-            Variable *v = state[m_output_indices[i]];
+            ADVariable *v = state[m_output_indices[i]];
             uint32_t index = v->grad.index();
 
             if (index) {
@@ -3103,7 +3103,7 @@ public:
             }
         }
 
-        Variable *source = state[m_input_indices[0]];
+        ADVariable *source = state[m_input_indices[0]];
         JitVar &source_grad = source->grad;
         if (!source_grad.valid())
             source_grad = scalar(m_backend, (VarType) source->type, 0.0);
@@ -3260,7 +3260,7 @@ public:
         size_t n_valid = 0;
         JitVar zero = scalar(m_backend, m_type, 0.0);
 
-        Variable *target = state[m_output_indices[0]];
+        ADVariable *target = state[m_output_indices[0]];
 
         if (m_inputs[0]) {
             JitVar &source_grad = state[m_inputs[0]]->grad;
@@ -3272,7 +3272,7 @@ public:
             grad_in[i] = zero.index();
 
             if (m_inputs[i+1]) {
-                Variable *v2 = state[m_inputs[i+1]];
+                ADVariable *v2 = state[m_inputs[i+1]];
                 if (v2->grad.valid()) {
                     grad_in[i] = v2->grad.index();
                     n_valid++;
@@ -3299,7 +3299,7 @@ public:
         std::lock_guard<Lock> guard(state.lock);
         JitIndex *out = (JitIndex *) alloca(sizeof(JitIndex) * m_n);
 
-        Variable *v = state[m_output_indices[0]];
+        ADVariable *v = state[m_output_indices[0]];
         if (!v->grad.valid())
             return;
 
@@ -3309,13 +3309,13 @@ public:
         for (size_t i = 0; i < m_n; ++i) {
             JitVar g = JitVar::steal(out[i]);
             if (m_inputs[i+1]) {
-                Variable *v2 = state[m_inputs[i+1]];
+                ADVariable *v2 = state[m_inputs[i+1]];
                 v2->accum(g, v2->size);
             }
         }
 
         if (m_inputs[0]) {
-            Variable *v2 = state[m_inputs[0]];
+            ADVariable *v2 = state[m_inputs[0]];
             if (m_op == ReduceOp::Identity)
                 v2->accum(andnot(v->grad, m_blend), v->size);
             else if (m_op == ReduceOp::Add)
@@ -3505,7 +3505,7 @@ const char *ad_var_whos() {
                "  ID        Type        Size     Refs    Label\n"
                "  =========================================================\n");
     for (uint32_t id : indices) {
-        const Variable *v = state[id];
+        const ADVariable *v = state[id];
         buffer.fmt("  %-9i %-3s %12zu %8u    %s\n", id, type_name_short[v->type],
                    v->size, v->ref_count, v->label ? v->label : "");
     }
@@ -3538,7 +3538,7 @@ const char *ad_var_graphviz() {
     std::hash<std::string> hasher;
 
     for (uint32_t index : indices) {
-        const Variable *v = state[index];
+        const ADVariable *v = state[index];
         const char *label = v->label,
                    *label_without_prefix = label;
 
@@ -3663,7 +3663,7 @@ const char *ad_var_graphviz() {
     }
 
     for (uint32_t index : indices) {
-        const Variable *v = state[index];
+        const ADVariable *v = state[index];
 
         uint32_t edge = v->next_bwd, edge_count = 0;
         while (edge) {
@@ -3710,7 +3710,7 @@ void ad_var_check_implicit(uint64_t index) {
         return;
 
     std::lock_guard<Lock> guard(state.lock);
-    Variable *v = state[ad_index];
+    ADVariable *v = state[ad_index];
 
     if (!(v->flags & (uint8_t) VariableFlags::Symbolic)) {
         std::vector<Scope> &scopes = local_state.scopes;
@@ -3730,7 +3730,7 @@ void ad_var_check_implicit(uint64_t index) {
 // and keep track of implicit dependencies of symbolic function calls
 uint32_t ad_record_implicit_dependence(LocalState &ls, ReleaseHelper &rh,
                                        JitBackend backend,
-                                       uint32_t source, Variable *v_source,
+                                       uint32_t source, ADVariable *v_source,
                                        bool reuse_indices) {
     std::vector<Scope> &scopes = ls.scopes;
     if (scopes.empty())
@@ -3842,14 +3842,14 @@ public:
         JitIndex *tmp = (JitIndex *) alloca(sizeof(JitIndex) * size);
         size_t n_valid = 0;
 
-        Variable *target = state[m_output_indices[0]];
+        ADVariable *target = state[m_output_indices[0]];
         JitVar zero = scalar(m_backend, (VarType) target->type, 0.0);
 
         for (uint32_t i = 0; i < size; ++i) {
             tmp[i] = zero.index();
 
             if (m_inputs[i]) {
-                Variable *v2 = state[m_inputs[i]];
+                ADVariable *v2 = state[m_inputs[i]];
                 if (v2->grad.valid()) {
                     tmp[i] = v2->grad.index();
                     n_valid++;
@@ -3867,7 +3867,7 @@ public:
         std::lock_guard<Lock> guard(state.lock);
         uint32_t n = (uint32_t) m_inputs.size();
 
-        Variable *v = state[m_output_indices[0]];
+        ADVariable *v = state[m_output_indices[0]];
         if (!v->grad.valid())
             return;
 
@@ -3879,7 +3879,7 @@ public:
             JitVar var = JitVar::steal(tmp[i]);
             if (!index)
                 continue;
-            Variable *v2 = state[index];
+            ADVariable *v2 = state[index];
             v2->accum(var, v2->size);
         }
     }
@@ -3949,7 +3949,7 @@ public:
         std::lock_guard<Lock> guard(state.lock);
         size_t n = m_output_indices.size();
 
-        const Variable *v = state[m_input_indices[0]];
+        const ADVariable *v = state[m_input_indices[0]];
         if (!v->grad.valid())
             return;
 
@@ -3957,7 +3957,7 @@ public:
         jit_coop_vec_unpack(v->grad.index(), (uint32_t) n, tmp);
 
         for (size_t i = 0; i < n; ++i) {
-            Variable *vo = state[m_output_indices[i]];
+            ADVariable *vo = state[m_output_indices[i]];
             vo->accum(JitVar::steal(tmp[i]), vo->size);
         }
     }
@@ -3969,7 +3969,7 @@ public:
         JitIndex *tmp = (JitIndex *) alloca(sizeof(JitIndex) * n);
 
         for (size_t i = 0; i < n; ++i) {
-            const Variable *v = state[m_output_indices[i]];
+            const ADVariable *v = state[m_output_indices[i]];
             uint32_t index = v->grad.index();
 
             if (index)
@@ -3984,7 +3984,7 @@ public:
         for (size_t i = 0; i < m_output_indices.size(); ++i)
             jit_var_dec_ref(tmp[i]);
 
-        Variable *source = state[m_input_indices[0]];
+        ADVariable *source = state[m_input_indices[0]];
         source->accum(packed, source->size);
     }
 
@@ -4139,12 +4139,12 @@ uint64_t ad_coop_vec_ternary_op(JitOp op, uint64_t i0, uint64_t i1, uint64_t i2)
 struct CoopCast : Special {
     CoopCast(VarType v1, VarType v2) : v1(v1), v2(v2) { }
 
-    void backward(Variable *source, const Variable *target) override {
+    void backward(ADVariable *source, const ADVariable *target) override {
         source->accum(JitVar::steal(jit_coop_vec_cast(target->grad.index(), v1)),
                       target->size);
     }
 
-    void forward(const Variable *source, Variable *target) override {
+    void forward(const ADVariable *source, ADVariable *target) override {
         target->accum(JitVar::steal(jit_coop_vec_cast(source->grad.index(), v2)),
                       source->size);
     }
@@ -4189,11 +4189,11 @@ public:
     void forward() override {
         std::lock_guard<Lock> guard(state.lock);
 
-        const Variable *A_v = ad_index(m_A) ? state[ad_index(m_A)] : nullptr,
+        const ADVariable *A_v = ad_index(m_A) ? state[ad_index(m_A)] : nullptr,
                        *x_v = ad_index(m_x) ? state[ad_index(m_x)] : nullptr,
                        *b_v = ad_index(m_b) ? state[ad_index(m_b)] : nullptr;
 
-        Variable *out_v = state[m_output_indices[0]];
+        ADVariable *out_v = state[m_output_indices[0]];
         bool has_b_grad = b_v && b_v->grad.valid();
 
         if (A_v && A_v->grad.valid()) {
@@ -4223,13 +4223,13 @@ public:
 
     void backward() override {
         std::lock_guard<Lock> guard(state.lock);
-        Variable *out_v = state[m_output_indices[0]];
+        ADVariable *out_v = state[m_output_indices[0]];
         const JitVar &grad = out_v->grad;
 
         if (!grad.valid())
             return;
 
-        Variable *A_v = ad_index(m_A) ? state[ad_index(m_A)] : nullptr,
+        ADVariable *A_v = ad_index(m_A) ? state[ad_index(m_A)] : nullptr,
                  *x_v = ad_index(m_x) ? state[ad_index(m_x)] : nullptr,
                  *b_v = ad_index(m_b) ? state[ad_index(m_b)] : nullptr;
 
@@ -4441,7 +4441,7 @@ struct CustomOp : Special {
         }
     }
 
-    bool swap(const Edge &e, Variable *v) {
+    bool swap(const Edge &e, ADVariable *v) {
         if (e.copy_grad) {
             CopyGrad &copy_grad = *(CopyGrad *) e.special.get();
             std::swap(copy_grad.grad, v->grad);
@@ -4451,7 +4451,7 @@ struct CustomOp : Special {
         }
     }
 
-    bool clear(const Edge &e, Variable *v) {
+    bool clear(const Edge &e, ADVariable *v) {
         if (e.copy_grad) {
             CopyGrad &copy_grad = *(CopyGrad *) e.special.get();
             v->grad = copy_grad.grad;
@@ -4473,7 +4473,7 @@ struct CustomOp : Special {
         }
     }
 
-    void forward(const Variable *source, Variable *) override {
+    void forward(const ADVariable *source, ADVariable *) override {
         ad_log("ad_traverse(): evaluating forward derivative of custom "
                "operation \"%s\"..", m_op->name());
         uint32_t next_bwd = source->next_bwd;
@@ -4504,7 +4504,7 @@ struct CustomOp : Special {
         }
     }
 
-    void backward(Variable *, const Variable *target) override {
+    void backward(ADVariable *, const ADVariable *target) override {
         uint32_t next_fwd = target->next_fwd;
 
         ad_log("ad_traverse(): evaluating backward derivative of custom "
@@ -4539,7 +4539,7 @@ struct CustomOp : Special {
 
 void ad_add_special(uint32_t v0i, uint32_t v1i, bool is_custom,
                     dr::unique_ptr<Special> special) {
-    Variable *v0 = state[v0i], *v1 = state[v1i];
+    ADVariable *v0 = state[v0i], *v1 = state[v1i];
 
     if (v0->counter >= v1->counter)
         ad_fail("ad_add_special(): internal error!");
@@ -4563,7 +4563,7 @@ void ad_add_special(uint32_t v0i, uint32_t v1i, bool is_custom,
     ad_var_inc_ref_int(v0i, v0);
 }
 
-static Variable *ad_custom_output_create(uint32_t index, Variable *v) {
+static ADVariable *ad_custom_output_create(uint32_t index, ADVariable *v) {
     bool is_scatter = v->label && strncmp(v->label, "scatter", 7) == 0;
 
     // References should be held by: caller & CustomOp (2x)
@@ -4635,7 +4635,7 @@ bool ad_custom_op(dr::detail::CustomOpBase *op) {
 
     if (outputs.size() == 1) {
         v1i = outputs[0];
-        Variable *v1 = ad_custom_output_create(v1i, state[v1i]);
+        ADVariable *v1 = ad_custom_output_create(v1i, state[v1i]);
         ad_log(" - out: a%u", v1i);
         ad_var_inc_ref_int(v1i, v1);
     } else {
@@ -4654,7 +4654,7 @@ bool ad_custom_op(dr::detail::CustomOpBase *op) {
 
             flags_ref |= (uint8_t) VariableFlags::Visited;
 
-            Variable *vo = ad_custom_output_create(o, state[o]);
+            ADVariable *vo = ad_custom_output_create(o, state[o]);
 
             ad_log(" - out: a%u", o);
             ad_add_special(v1i, o, false, dr::make_unique<CopyGrad>());
@@ -4678,7 +4678,7 @@ bool ad_custom_op(dr::detail::CustomOpBase *op) {
     ad_add_special(v0i, v1i, true,
                    dr::make_unique<CustomOp>(op, std::move(scope)));
 
-    Variable *v0 = state[v0i], *v1 = state[v1i];
+    ADVariable *v0 = state[v0i], *v1 = state[v1i];
 
     if (v1->flags & (uint8_t) VariableFlags::FreeLabel)
         free(v1->label);
@@ -4702,7 +4702,7 @@ bool ad_custom_op(dr::detail::CustomOpBase *op) {
 // This routine is called when decreasing the reference count of an output node
 // following a CustomOp. It breaks what would otherwise be an uncollectable
 // reference cycle, since the CustomOp references its own outputs.
-static bool DRJIT_NOINLINE ad_decref_custom_op_output(Variable *v) {
+static bool DRJIT_NOINLINE ad_decref_custom_op_output(ADVariable *v) {
     uint32_t next_bwd = v->next_bwd;
     if (v->ref_count != 2 || !next_bwd)
         return false;
