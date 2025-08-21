@@ -8873,7 +8873,6 @@
 
     Args:
         cuda_resource (capsule): The CUDA graphics resource to map.
-        array_index (int): The array index of the sub-resource (default: 0)
         mip_level (int): The mip level of the sub-resource (default: 0)
 
     Returns:
@@ -8895,7 +8894,99 @@
         dst (int): Destination CUDA array pointer, as an int.
         src (int): Source buffer (host or device memory) pointer, as an int.
         src_pitch (int): Pitch (bytes per row) of the source buffer
-        component_size_bytes (int): Size in bytes of each component
-        width (int): Width of the region to copy (in elements)
         height (int): Height of the region to copy (in elements)
         from_host (bool): True if copying from host memory, False for device memory
+
+.. topic:: cuda_GLInterop
+
+    Abstraction for efficient CUDA/OpenGL interoperability.
+
+    This class provides a high-level interface for mapping OpenGL buffers and
+    textures to CUDA, allowing direct GPU-to-GPU data transfers without going
+    through host memory.
+
+    The class manages the lifecycle of CUDA graphics resources and ensures
+    proper resource mapping/unmapping through its context manager interface.
+
+    Example:
+        .. code-block:: python
+
+            # For OpenGL buffers
+            interop = dr.cuda.GLInterop.from_buffer(gl_buffer_id)
+            interop.map().upload(drjit_tensor).unmap()
+
+            # For OpenGL textures
+            interop = dr.cuda.GLInterop.from_texture(gl_texture_id)
+            interop.map().upload(drjit_tensor).unmap()
+
+.. topic:: cuda_GLInterop_from_buffer
+
+    Create a GLInterop instance from an OpenGL buffer.
+
+    This static method registers an OpenGL buffer as a CUDA graphics resource
+    and returns a GLInterop object for managing the mapping.
+
+    Args:
+        gl_buffer (int): OpenGL buffer object identifier
+
+    Returns:
+        GLInterop: Object managing the CUDA/OpenGL buffer interoperability
+
+.. topic:: cuda_GLInterop_from_texture
+
+    Create a GLInterop instance from an OpenGL texture.
+
+    This static method registers an OpenGL texture as a CUDA graphics resource
+    and returns a GLInterop object for managing the mapping.
+
+    Args:
+        gl_texture (int): OpenGL texture object identifier
+
+    Returns:
+        GLInterop: Object managing the CUDA/OpenGL texture interoperability
+
+.. topic:: cuda_GLInterop_map
+
+    Map the OpenGL resource for CUDA access.
+
+    This method maps the registered OpenGL resource (buffer or texture) so it
+    can be accessed from CUDA. The resource must be unmapped after use.
+
+    Args:
+        mip_level (int): For textures, specifies the mipmap level to map (default: 0).
+          Ignored for buffers.
+
+    Returns:
+        GLInterop: Returns self to allow method chaining
+
+.. topic:: cuda_GLInterop_upload
+
+    Upload data from a CUDA array to the mapped OpenGL resource.
+
+    This method performs an efficient GPU-to-GPU transfer from a CUDA array
+    to the mapped OpenGL resource. The resource must be mapped before calling
+    this method.
+
+    For buffers, the input array size must match the buffer size exactly.
+    For textures, the input must be a 2D or 3D array where dimensions
+    correspond to height × width × channels.
+
+    You *must* ensure that the source and targets have matching resolution
+    and data type. This function does not perform any error checking and
+    will happily write beyond the end of the buffer.
+
+    Args:
+        buffer (ndarray): CUDA array containing the data to upload.
+
+    Returns:
+        GLInterop: Returns self to allow method chaining
+
+.. topic:: cuda_GLInterop_unmap
+
+    Unmap the OpenGL resource after CUDA access.
+
+    This method unmaps the OpenGL resource, making it available for OpenGL
+    operations again. Should be called after all CUDA operations are complete.
+
+    Returns:
+        GLInterop: Returns self to allow method chaining

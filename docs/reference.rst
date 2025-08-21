@@ -876,10 +876,21 @@ section <neural_nets>` for an introduction.
 CUDA / GL interoperability
 --------------------------
 
-.. autofunction:: drjit.cuda.register_gl_buffer
-.. autofunction:: drjit.cuda.register_gl_texture
-.. autofunction:: drjit.cuda.unregister_cuda_resource
-.. autofunction:: drjit.cuda.map_graphics_resource_ptr
-.. autofunction:: drjit.cuda.map_graphics_resource_array
-.. autofunction:: drjit.cuda.unmap_graphics_resource
-.. autofunction:: drjit.cuda.memcpy_2d_to_array_async
+.. py:currentmodule:: drjit.cuda
+
+High-level interface
+^^^^^^^^^^^^^^^^^^^^
+
+.. autoclass:: GLInterop
+
+
+Low-level interface
+^^^^^^^^^^^^^^^^^^^
+
+.. autofunction:: register_gl_buffer
+.. autofunction:: register_gl_texture
+.. autofunction:: unregister_cuda_resource
+.. autofunction:: map_graphics_resource_ptr
+.. autofunction:: map_graphics_resource_array
+.. autofunction:: unmap_graphics_resource
+.. autofunction:: memcpy_2d_to_array_async

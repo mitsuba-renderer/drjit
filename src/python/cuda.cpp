@@ -88,6 +88,8 @@ void export_cuda(nb::module_ &m) {
         }
 
         GLInterop *upload(const nb::ndarray<nb::ro, nb::device::cuda, nb::c_contig> &buffer) {
+            if (!ptr)
+                nb::raise("GLInterop: not mapped!");
             if (is_texture) {
                 if (buffer.ndim() != 2 && buffer.ndim() != 3)
                     nb::raise("GLInterop::write(): expected a 2D input buffer!");
@@ -131,11 +133,11 @@ void export_cuda(nb::module_ &m) {
         size_t buf_size = 0;
     };
 
-    nb::class_<GLInterop>(m, "GLInterop")
-        .def_static("from_buffer", &GLInterop::from_buffer)
-        .def_static("from_texture", &GLInterop::from_texture)
-        .def("map", &GLInterop::map, "mip_level"_a = 0, nb::rv_policy::none)
-        .def("upload", &GLInterop::upload, nb::rv_policy::none)
-        .def("unmap", &GLInterop::unmap, nb::rv_policy::none);
+    nb::class_<GLInterop>(m, "GLInterop", doc_cuda_GLInterop)
+        .def_static("from_buffer", &GLInterop::from_buffer, doc_cuda_GLInterop_from_buffer)
+        .def_static("from_texture", &GLInterop::from_texture, doc_cuda_GLInterop_from_texture)
+        .def("map", &GLInterop::map, "mip_level"_a = 0, nb::rv_policy::none, doc_cuda_GLInterop_map)
+        .def("upload", &GLInterop::upload, nb::rv_policy::none, doc_cuda_GLInterop_upload)
+        .def("unmap", &GLInterop::unmap, nb::rv_policy::none, doc_cuda_GLInterop_unmap);
  }
 #endif
