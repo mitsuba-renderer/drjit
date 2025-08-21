@@ -1178,6 +1178,8 @@ void scatter_reduce(ReduceOp op, Target &target, const Value &value,
                 }
 
                 drjit_fail("Reduce operation not supported");
+
+                return Value{}; // Never reached, but silences compiler warnings
             };
 
             if constexpr (is_array_v<Target>)

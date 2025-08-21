@@ -197,7 +197,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT {
 
     template <typename T>
     DRJIT_INLINE void set_entry(size_t i, T &&value) {
-        derived().entry(i) = std::forward<T>(value);
+        derived().entry(i) = static_cast<Value>(std::forward<T>(value));
     }
 
     template <typename Mask, enable_if_mask_t<Mask> = 0>

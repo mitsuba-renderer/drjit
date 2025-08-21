@@ -556,10 +556,10 @@ nb::object apply_ret_pair(ArrayOp op, const char *name, nb::handle_t<dr::ArrayBa
 
         Impl impl = (Impl) s[op];
 
-        raise_if(impl == DRJIT_OP_NOT_IMPLEMENTED,
+        raise_if((void*) impl == DRJIT_OP_NOT_IMPLEMENTED,
                  "operation not supported for this type.");
 
-        if (impl != DRJIT_OP_DEFAULT) {
+        if ((void*) impl != DRJIT_OP_DEFAULT) {
             impl(inst_ptr(h), inst_ptr(r0), inst_ptr(r1));
             return nb::make_tuple(r0, r1);
         }

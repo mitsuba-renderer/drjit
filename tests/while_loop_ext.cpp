@@ -11,8 +11,6 @@ namespace dr = drjit;
 using namespace nb::literals;
 
 template <typename UInt> drjit::tuple<UInt, UInt> simple_loop() {
-    using Bool = dr::mask_t<UInt>;
-
     UInt i = dr::arange<UInt>(7),
          j = 0;
 
@@ -52,7 +50,6 @@ struct Sampler {
 };
 
 template <typename UInt> UInt loop_with_rng() {
-    using Bool = dr::mask_t<UInt>;
     using Sampler = Sampler<dr::float32_array_t<UInt>>;
 
     auto s1 = dr::make_unique<Sampler>(3);

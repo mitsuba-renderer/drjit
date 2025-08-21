@@ -17,7 +17,7 @@
 namespace nb = nanobind;
 namespace dr = drjit;
 
-using namespace nb::literals;
+using nb::literals::operator""_a;
 
 using dr::ArrayMeta;
 using dr::ArraySupplement;

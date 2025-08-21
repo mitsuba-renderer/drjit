@@ -54,6 +54,9 @@ extern nb::object apply_ret_pair(ArrayOp op, const char *name,
 
 /// Callback for the ``traverse()`` operation below
 struct TraverseCallback {
+    // Virtual destructor
+    virtual ~TraverseCallback() = default;
+
     // Recursively called on leaf arrays
     virtual void operator()(nb::handle h) = 0;
 
@@ -69,11 +72,17 @@ struct TraverseCallback {
 
 /// Callback for the ``traverse_pair()`` operation below
 struct TraversePairCallback {
+    // Virtual destructor
+    virtual ~TraversePairCallback() = default;
+
     virtual void operator()(nb::handle h1, nb::handle h2) = 0;
 };
 
 /// Callback for the ``transform()`` operation below
 struct TransformCallback {
+    // Virtual destructor
+    virtual ~TransformCallback() = default;
+
     // Into what type should the input array be transformed? Identity by default.
     virtual nb::handle transform_type(nb::handle tp) const;
 
@@ -99,6 +108,9 @@ struct TransformCallback {
 
 /// Callback for the ``transform_pair()`` operation below
 struct TransformPairCallback {
+    // Virtual destructor
+    virtual ~TransformPairCallback() = default;
+
     virtual nb::handle transform_type(nb::handle tp) const;
     virtual void operator()(nb::handle h1, nb::handle h2, nb::handle h3) = 0;
 
