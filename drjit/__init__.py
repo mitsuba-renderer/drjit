@@ -980,10 +980,10 @@ def transform_compose(s, q, t, /):
         raise Exception('drjit.transform_compose(): unsupported input type!')
 
     if s.shape[:2] != (3,3):
-        raise Exception('drjit.transform_decompose(): scale has invalid shape!')
+        raise Exception('drjit.transform_compose(): scale has invalid shape!')
 
     if len(t) != 3:
-        raise Exception('drjit.transform_decompose(): translation has invalid shape!')
+        raise Exception('drjit.transform_compose(): translation has invalid shape!')
 
     m = _sys.modules[s.__module__]
     Matrix3f = replace_type_t(m.Matrix3f, type_v(s))
