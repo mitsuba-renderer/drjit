@@ -16,6 +16,7 @@
 
 /// Abstract callback declaration used by traverse() below
 struct Callback {
+    virtual ~Callback() = default;
     virtual nb::object process(nb::handle tp, nb::handle v1, nb::handle v2) = 0;
 };
 

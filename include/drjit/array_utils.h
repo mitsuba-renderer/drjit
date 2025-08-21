@@ -246,10 +246,10 @@ template <typename T> DRJIT_INLINE T lzcnt_(T v) {
     unsigned long result;
     if constexpr (sizeof(T) <= 4) {
         _BitScanReverse(&result, (unsigned long) v);
-        return (v != 0) ? (31 - result) : 32;
+        return (T) ((v != 0) ? (31 - result) : 32);
     } else {
         _BitScanReverse64(&result, (unsigned long long) v);
-        return (v != 0) ? (63 - result) : 64;
+        return (T) ((v != 0) ? (63 - result) : 64);
     }
 #else
     if constexpr (sizeof(T) <= 4)
@@ -264,10 +264,10 @@ template <typename T> DRJIT_INLINE T tzcnt_(T v) {
     unsigned long result;
     if constexpr (sizeof(T) <= 4) {
         _BitScanForward(&result, (unsigned long) v);
-        return (v != 0) ? result : 32;
+        return (T) ((v != 0) ? result : 32);
     } else {
         _BitScanForward64(&result, (unsigned long long) v);
-        return (v != 0) ? result: 64;
+        return (T) ((v != 0) ? result: 64);
     }
 #else
     if constexpr (sizeof(T) <= 4)

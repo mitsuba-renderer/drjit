@@ -101,6 +101,7 @@ private:                                                                       \
             CallStateT *state = (CallStateT *) state_p;                        \
             state->update_args(args_i);                                        \
             if constexpr (std::is_same_v<Ret, void>) {                         \
+                (void) rv_i; /* unused for void return types */                \
                 if (detail::is_valid_call_ptr<Class_, Base_>(self_))           \
                     ((Class_ *) self_)->Name(drjit::get<Is>(state->args)...);  \
             } else {                                                           \
