@@ -165,15 +165,15 @@ are unlikely to appear within the same warp, hence
 
 .. only:: not latex
 
-   .. image:: https://rgl.s3.eu-central-1.amazonaws.com/media/uploads/wjakob/2024/01/scatter_add_cuda.svg
+   .. image:: https://d38rqfq1h7iukm.cloudfront.net/media/uploads/wjakob/2024/01/scatter_add_cuda.svg
      :class: only-light
 
-   .. image:: https://rgl.s3.eu-central-1.amazonaws.com/media/uploads/wjakob/2024/01/scatter_add_cuda_dark.svg
+   .. image:: https://d38rqfq1h7iukm.cloudfront.net/media/uploads/wjakob/2024/01/scatter_add_cuda_dark.svg
      :class: only-dark
 
 .. only:: latex
 
-   .. image:: https://rgl.s3.eu-central-1.amazonaws.com/media/uploads/wjakob/2024/01/scatter_add_cuda.svg
+   .. image:: https://d38rqfq1h7iukm.cloudfront.net/media/uploads/wjakob/2024/01/scatter_add_cuda.svg
 
 The :py:attr:`drjit.ReduceMode.Local` strategy in the above plot performs a
 `butterfly reduction <https://en.wikipedia.org/wiki/Butterfly_network>`__ to
@@ -188,15 +188,15 @@ the target array grows, and the optimization becomes ineffective.
 
 .. only:: not latex
 
-   .. image:: https://rgl.s3.eu-central-1.amazonaws.com/media/uploads/wjakob/2024/01/scatter_add_llvm.svg
+   .. image:: https://d38rqfq1h7iukm.cloudfront.net/media/uploads/wjakob/2024/01/scatter_add_llvm.svg
      :class: only-light
 
-   .. image:: https://rgl.s3.eu-central-1.amazonaws.com/media/uploads/wjakob/2024/01/scatter_add_llvm_dark.svg
+   .. image:: https://d38rqfq1h7iukm.cloudfront.net/media/uploads/wjakob/2024/01/scatter_add_llvm_dark.svg
      :class: only-dark
 
 .. only:: latex
 
-   .. image:: https://rgl.s3.eu-central-1.amazonaws.com/media/uploads/wjakob/2024/01/scatter_add_llvm.svg
+   .. image:: https://d38rqfq1h7iukm.cloudfront.net/media/uploads/wjakob/2024/01/scatter_add_llvm.svg
 
 The :py:attr:`drjit.ReduceMode.Expand` strategy produces a near-flat profile.
 It replicates the target array to avoid write conflicts altogether, which

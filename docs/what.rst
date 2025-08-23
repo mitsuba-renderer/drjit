@@ -96,7 +96,7 @@ Users of `JAX <https://github.com/google/jax>`__ may find this familiar: JAX
 combines tracing with tensor-based optimizations for machine learning
 workloads. JAX is generally amazing, but we find that its optimization often
 tend to backfire in large non-ML workloads, causing `crashes or timeouts
-<https://rgl.s3.eu-central-1.amazonaws.com/media/papers/Jakob2022DrJit.pdf>`__.
+<https://d38rqfq1h7iukm.cloudfront.net/media/papers/Jakob2022DrJit.pdf>`__.
 Dr.Jit is tiny compared to JAX (~20K LOC for the compiler part versus > 1 million
 for the JAX XLA backend) and what it does is simple: it really just captures
 and later replays computation in parallel without trying to be overly clever
@@ -200,17 +200,17 @@ wrote code in Python (called the *metaprogram*) that subsequently generated
 
 .. only:: not latex
 
-   .. image:: https://rgl.s3.eu-central-1.amazonaws.com/media/uploads/wjakob/2024/06/pipeline-light.svg
+   .. image:: https://d38rqfq1h7iukm.cloudfront.net/media/uploads/wjakob/2024/06/pipeline-light.svg
      :class: only-light
      :align: center
 
-   .. image:: https://rgl.s3.eu-central-1.amazonaws.com/media/uploads/wjakob/2024/06/pipeline-dark.svg
+   .. image:: https://d38rqfq1h7iukm.cloudfront.net/media/uploads/wjakob/2024/06/pipeline-dark.svg
      :class: only-dark
      :align: center
 
 .. only:: latex
 
-   .. image:: https://rgl.s3.eu-central-1.amazonaws.com/media/uploads/wjakob/2024/06/pipeline-light.svg
+   .. image:: https://d38rqfq1h7iukm.cloudfront.net/media/uploads/wjakob/2024/06/pipeline-light.svg
      :align: center
 
 Dr.Jit took care of partitioning this generated program into computational

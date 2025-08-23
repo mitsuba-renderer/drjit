@@ -93,19 +93,19 @@ Suppose that a traced computation has the following dependence structure.
 
 .. only:: not latex
 
-   .. image:: https://rgl.s3.eu-central-1.amazonaws.com/media/uploads/wjakob/2024/06/cgraph1-light.svg
+   .. image:: https://d38rqfq1h7iukm.cloudfront.net/media/uploads/wjakob/2024/06/cgraph1-light.svg
      :width: 300
      :class: only-light
      :align: center
 
-   .. image:: https://rgl.s3.eu-central-1.amazonaws.com/media/uploads/wjakob/2024/06/cgraph1-dark.svg
+   .. image:: https://d38rqfq1h7iukm.cloudfront.net/media/uploads/wjakob/2024/06/cgraph1-dark.svg
      :width: 300
      :class: only-dark
      :align: center
 
 .. only:: latex
 
-   .. image:: https://rgl.s3.eu-central-1.amazonaws.com/media/uploads/wjakob/2024/06/cgraph1-light.svg
+   .. image:: https://d38rqfq1h7iukm.cloudfront.net/media/uploads/wjakob/2024/06/cgraph1-light.svg
      :width: 300
      :align: center
 
@@ -122,19 +122,19 @@ CPU/GPU).
 
 .. only:: not latex
 
-   .. image:: https://rgl.s3.eu-central-1.amazonaws.com/media/uploads/wjakob/2024/06/cgraph2-light.svg
+   .. image:: https://d38rqfq1h7iukm.cloudfront.net/media/uploads/wjakob/2024/06/cgraph2-light.svg
      :class: only-light
      :width: 300
      :align: center
 
-   .. image:: https://rgl.s3.eu-central-1.amazonaws.com/media/uploads/wjakob/2024/06/cgraph2-dark.svg
+   .. image:: https://d38rqfq1h7iukm.cloudfront.net/media/uploads/wjakob/2024/06/cgraph2-dark.svg
      :width: 300
      :class: only-dark
      :align: center
 
 .. only:: latex
 
-   .. image:: https://rgl.s3.eu-central-1.amazonaws.com/media/uploads/wjakob/2024/06/cgraph2-light.svg
+   .. image:: https://d38rqfq1h7iukm.cloudfront.net/media/uploads/wjakob/2024/06/cgraph2-light.svg
      :width: 300
      :align: center
 
@@ -189,17 +189,17 @@ therefore looks as follows:
 
 .. only:: not latex
 
-   .. image:: https://rgl.s3.eu-central-1.amazonaws.com/media/uploads/wjakob/2024/06/cgraph3-light.svg
+   .. image:: https://d38rqfq1h7iukm.cloudfront.net/media/uploads/wjakob/2024/06/cgraph3-light.svg
      :class: only-light
      :align: center
 
-   .. image:: https://rgl.s3.eu-central-1.amazonaws.com/media/uploads/wjakob/2024/06/cgraph3-dark.svg
+   .. image:: https://d38rqfq1h7iukm.cloudfront.net/media/uploads/wjakob/2024/06/cgraph3-dark.svg
      :class: only-dark
      :align: center
 
 .. only:: latex
 
-   .. image:: https://rgl.s3.eu-central-1.amazonaws.com/media/uploads/wjakob/2024/06/cgraph3-light.svg
+   .. image:: https://d38rqfq1h7iukm.cloudfront.net/media/uploads/wjakob/2024/06/cgraph3-light.svg
      :align: center
 
 This behavior is transparent, which means that no special steps need to be
@@ -230,17 +230,17 @@ diagram visualizes the role of the cache:
 
 .. only:: not latex
 
-   .. image:: https://rgl.s3.eu-central-1.amazonaws.com/media/uploads/wjakob/2024/06/cache-light.svg
+   .. image:: https://d38rqfq1h7iukm.cloudfront.net/media/uploads/wjakob/2024/06/cache-light.svg
      :class: only-light
      :align: center
 
-   .. image:: https://rgl.s3.eu-central-1.amazonaws.com/media/uploads/wjakob/2024/06/cache-dark.svg
+   .. image:: https://d38rqfq1h7iukm.cloudfront.net/media/uploads/wjakob/2024/06/cache-dark.svg
      :class: only-dark
      :align: center
 
 .. only:: latex
 
-   .. image:: https://rgl.s3.eu-central-1.amazonaws.com/media/uploads/wjakob/2024/06/cache-light.svg
+   .. image:: https://d38rqfq1h7iukm.cloudfront.net/media/uploads/wjakob/2024/06/cache-light.svg
      :align: center
 
 In a gradient-based optimization, typically only the first gradient step will
@@ -365,17 +365,17 @@ of :py:func:`dr.sinh() <drjit.sinh>`.
 
 .. only:: not latex
 
-   .. image:: https://rgl.s3.eu-central-1.amazonaws.com/media/uploads/wjakob/2024/06/gv-light.svg
+   .. image:: https://d38rqfq1h7iukm.cloudfront.net/media/uploads/wjakob/2024/06/gv-light.svg
      :class: only-light
      :align: center
 
-   .. image:: https://rgl.s3.eu-central-1.amazonaws.com/media/uploads/wjakob/2024/06/gv-dark.svg
+   .. image:: https://d38rqfq1h7iukm.cloudfront.net/media/uploads/wjakob/2024/06/gv-dark.svg
      :class: only-dark
      :align: center
 
 .. only:: latex
 
-   .. image:: https://rgl.s3.eu-central-1.amazonaws.com/media/uploads/wjakob/2024/06/gv-light.svg
+   .. image:: https://d38rqfq1h7iukm.cloudfront.net/media/uploads/wjakob/2024/06/gv-light.svg
      :align: center
 
 Pitfalls

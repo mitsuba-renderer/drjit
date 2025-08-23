@@ -402,12 +402,12 @@ class TriEncode(Module):
     The following plot shows the first two octaves applied to the linear
     function on :math:`[0, 1]` (without shift).
 
-    .. image:: https://rgl.s3.eu-central-1.amazonaws.com/media/uploads/wjakob/2024/06/tri_encode_light.svg
+    .. image:: https://d38rqfq1h7iukm.cloudfront.net/media/uploads/wjakob/2024/06/tri_encode_light.svg
       :class: only-light
       :width: 600px
       :align: center
 
-    .. image:: https://rgl.s3.eu-central-1.amazonaws.com/media/uploads/wjakob/2024/06/tri_encode_dark.svg
+    .. image:: https://d38rqfq1h7iukm.cloudfront.net/media/uploads/wjakob/2024/06/tri_encode_dark.svg
       :class: only-dark
       :width: 600px
       :align: center
@@ -469,12 +469,12 @@ class SinEncode(Module):
     The following plot shows the first two octaves applied to the linear
     function on :math:`[0, 1]` (without shift).
 
-    .. image:: https://rgl.s3.eu-central-1.amazonaws.com/media/uploads/wjakob/2024/06/sin_encode_light.svg
+    .. image:: https://d38rqfq1h7iukm.cloudfront.net/media/uploads/wjakob/2024/06/sin_encode_light.svg
       :class: only-light
       :width: 600px
       :align: center
 
-    .. image:: https://rgl.s3.eu-central-1.amazonaws.com/media/uploads/wjakob/2024/06/sin_encode_dark.svg
+    .. image:: https://d38rqfq1h7iukm.cloudfront.net/media/uploads/wjakob/2024/06/sin_encode_dark.svg
       :class: only-dark
       :width: 600px
       :align: center

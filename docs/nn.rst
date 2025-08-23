@@ -47,7 +47,7 @@ implements a 2D neural field (right) that we then fit to a low-resolution image 
 Great Wave off Kanagawa
 <https://en.wikipedia.org/wiki/The_Great_Wave_off_Kanagawa>`__ (left).
 
-.. image:: https://rgl.s3.eu-central-1.amazonaws.com/media/uploads/wjakob/2024/06/coopvec-screenshot.png
+.. image:: https://d38rqfq1h7iukm.cloudfront.net/media/uploads/wjakob/2024/06/coopvec-screenshot.png
   :width: 600
   :align: center
 
@@ -66,7 +66,7 @@ mixed-precision training.
     from drjit.auto.ad import Texture2f, TensorXf, TensorXf16, Float16, Float32, Array2f, Array3f
 
     # Load a test image and construct a texture object
-    ref = TensorXf(iio.imread("https://rgl.s3.eu-central-1.amazonaws.com/media/uploads/wjakob/2024/06/wave-128.png") / 256)
+    ref = TensorXf(iio.imread("https://d38rqfq1h7iukm.cloudfront.net/media/uploads/wjakob/2024/06/wave-128.png") / 256)
     tex = Texture2f(ref)
 
     # Establish the network structure
@@ -188,7 +188,7 @@ using a hash grid encoding.
     from drjit.auto.ad import Texture2f, TensorXf, TensorXf16, Float16, Float32, Array2f, Array3f
 
     # Load a test image and construct a texture object
-    ref = TensorXf(iio.imread("https://rgl.s3.eu-central-1.amazonaws.com/media/uploads/wjakob/2024/06/wave-128.png") / 256)
+    ref = TensorXf(iio.imread("https://d38rqfq1h7iukm.cloudfront.net/media/uploads/wjakob/2024/06/wave-128.png") / 256)
     tex = Texture2f(ref)
 
     # Instantiate a random number generator to initialize the network weights
