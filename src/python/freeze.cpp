@@ -1778,9 +1778,12 @@ nb::object FunctionRecording::record(nb::callable func,
 
         out_variables.layout_index = 0;
 
-        { // Evaluate the variables, scheduled when traversing
-            nb::gil_scoped_release guard;
-            jit_eval();
+        {
+            state_unlock_guard guard;
+            { // Evaluate the variables, scheduled when traversing
+                nb::gil_scoped_release guard2;
+                jit_eval();
+            }
         }
 
         out_variables.record_jit_variables();
@@ -1888,9 +1891,12 @@ nb::object FunctionRecording::replay(nb::callable func,
         }
     } else {
         ProfilerPhase profiler("jit replay");
-        nb::gil_scoped_release guard;
-        jit_freeze_replay(recording, in_variables.variables.data(),
-                          out_variables.variables.data());
+        state_unlock_guard guard;
+        {
+            nb::gil_scoped_release guard2;
+            jit_freeze_replay(recording, in_variables.variables.data(),
+                              out_variables.variables.data());
+        }
     }
     jit_log(LogLevel::Info, "Replaying done:");
 
@@ -1956,7 +1962,6 @@ nb::object FrozenFunction::operator()(nb::dict input) {
         // Repeat this a max of 2 times if the number of variables that should
         // be made opaque changed.
         for (uint32_t i = 0; i < 2; i++) {
-            state_lock_guard guard;
             // Enter Resume scope, so we can track gradients
             ADScopeContext ad_scope(drjit::ADScope::Resume, 0, nullptr, 0,
                                     true);
@@ -1988,10 +1993,13 @@ nb::object FrozenFunction::operator()(nb::dict input) {
 
             in_variables->layout_index = 0;
 
-            { // Evaluate the variables, scheduled when traversing
-                ProfilerPhase profiler("eval");
-                nb::gil_scoped_release guard;
-                jit_eval();
+            {
+                state_unlock_guard guard;
+                { // Evaluate the variables, scheduled when traversing
+                    ProfilerPhase profiler("eval");
+                    nb::gil_scoped_release guard2;
+                    jit_eval();
+                }
             }
 
             in_variables->record_jit_variables();
