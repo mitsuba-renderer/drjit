@@ -595,6 +595,7 @@ Array base class
     .. automethod:: torch
     .. automethod:: jax
     .. automethod:: tf
+    .. automethod:: memview
 
 
 Computation graph analysis
