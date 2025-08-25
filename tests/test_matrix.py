@@ -244,3 +244,26 @@ def test18_init_upcast(t):
     assert dr.all(Matrix41f(2) == t(2), axis=None)
     with pytest.raises(TypeError):
         t(Matrix41f(2))
+
+
+@pytest.test_arrays('matrix, shape=(2, 2), -jit')
+def test19_matrix_convert_size(t):
+    mod = sys.modules[t.__module__]
+    Matrix2f = t
+    Matrix3f = getattr(mod, 'Matrix3f')
+
+    a = Matrix2f(1, 2,
+                 3, 4)
+    b = Matrix3f(a)
+    assert dr.all(b == Matrix3f(1, 2, 0,
+                                3, 4, 0,
+                                0, 0, 1), axis=None)
+
+
+    c = Matrix3f(1, 2, 3,
+                 4, 5, 6,
+                 7, 8, 9)
+    d = Matrix2f(c)
+
+    assert dr.all(d == Matrix2f(1, 2,
+                                4, 5), axis=None)

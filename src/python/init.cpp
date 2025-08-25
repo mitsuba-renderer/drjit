@@ -102,6 +102,20 @@ int tp_init_array(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
                         return 0;
                     }
 
+                    if (NB_UNLIKELY(s_arg.is_matrix && s.is_matrix && s.shape[0] != s_arg.shape[0])) {
+                        // Convert between matrices of different sizes
+                        nb::inst_zero(self);
+                        for (size_t i = 0; i < (size_t) s.shape[0]; ++i) {
+                            for (size_t j = 0; j < (size_t) s.shape[0]; ++j) {
+                                if (i < (size_t) s_arg.shape[0] && j < (size_t) s_arg.shape[0])
+                                    nb::handle(nb::handle(self)[i])[j] = nb::handle(nb::handle(arg)[i])[j];
+                                else
+                                    nb::handle(nb::handle(self)[i])[j] = nb::float_(double(i == j));
+                            }
+                        }
+                        return 0;
+                    }
+
                     // Potentially load from the CPU
                     m_temp = s;
                     m_temp.backend = (uint64_t) JitBackend::None;
