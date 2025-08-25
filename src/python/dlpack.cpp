@@ -124,9 +124,10 @@ static nb::ndarray<> dlpack(nb::handle_t<ArrayBase> h, bool force_cpu, nb::handl
                     stream > 2 is a CUDA handle to the consumer's stream
                 */
                 if (!stream.is_none() && !stream.equal(nb::int_(-1)) && !stream.equal(nb::int_(1))) {
-                    if (stream.equal(nb::int_(0)))
+                    if (stream.equal(nb::int_(0))) {
+                        nb::gil_scoped_release guard;
                         jit_sync_thread();
-                    else {
+                    } else {
                         uintptr_t stream_handle;
                         if (!nb::try_cast(stream, stream_handle))
                             nb::raise_type_error("__dlpack__(): 'stream' argument must be 'None' or of type 'int'.");
@@ -134,6 +135,7 @@ static nb::ndarray<> dlpack(nb::handle_t<ArrayBase> h, bool force_cpu, nb::handl
                     }
                 }
             } else {
+                nb::gil_scoped_release guard;
                 jit_sync_thread();
             }
 
