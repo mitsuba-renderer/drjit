@@ -275,6 +275,16 @@ Quaternion<Value> matrix_to_quat(const Matrix<Value, Size> &m) {
     return q0123 * (rsqrt(t0123) * .5f);
 }
 
+template <typename T>
+Array<T, 3> quat_apply(const Quaternion<T> &q, const Array<T, 3> &v) {
+    Array<T, 3> im = imag(q);
+    T re = real(q);
+
+    return 2.f * dot(im, v) * im
+           + (re*re - dot(im, im)) * v
+           + 2.f * re * cross(im, v);
+}
+
 
 template <typename Value>
 Array<Value, 3> quat_to_euler(const Quaternion<Value> &q) {
@@ -291,7 +301,7 @@ Array<Value, 3> quat_to_euler(const Quaternion<Value> &q) {
     Value roll = select(gimbal_lock, 2.f * atan2(q.x(), q.w()), atan2(sinr_cosp, cosr_cosp));
 
     // pitch (y-axis rotation)
-    Value pitch = select(gimbal_lock, copysign(.5f * Pi<Value>, sinp), asin(sinp));
+    Value pitch = select(gimbal_lock, copysign(Value(.5f) * Pi<Value>, sinp), asin(sinp));
 
     // yaw (z-axis rotation)
     Value siny_cosp = 2 * fmadd(q.w(), q.z(), q.x() * q.y());

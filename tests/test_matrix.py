@@ -112,12 +112,13 @@ def test13_polar(t):
     assert dr.allclose(q @ q.T, dr.identity(t))
 
 
-@pytest.test_arrays('matrix,shape=(4, 4, *)', 'matrix,shape=(4, 4)')
+@pytest.test_arrays('matrix,shape=(4, 4, *),-float16', 'matrix,shape=(4, 4),-float16')
 def test14_transform_decompose(t):
     m = sys.modules[t.__module__]
     name = t.__name__
     Quat     = dr.replace_type_t(m.Quaternion4f, dr.type_v(t))
     Matrix3f = dr.replace_type_t(m.Matrix3f, dr.type_v(t))
+    Matrix4f = dr.replace_type_t(m.Matrix4f, dr.type_v(t))
     Array3f  = dr.replace_type_t(m.Array3f, dr.type_v(t))
 
     v = [[1, 0, 0, 8], [0, 2, 0, 7], [0, 0, 9, 6], [0, 0, 0, 1]]
@@ -131,33 +132,32 @@ def test14_transform_decompose(t):
     assert dr.allclose(v, dr.transform_compose(s, q, tr))
 
     q2 = dr.rotate(Quat, Array3f(0, 0, 1), 15.0)
-    mtx @= dr.quat_to_matrix(q2)
+    mtx @= dr.quat_to_matrix(Matrix4f, q2)
     s, q, tr = dr.transform_decompose(mtx)
     assert dr.allclose(q, q2)
 
 
-@pytest.test_arrays('matrix,shape=(4, 4, *)', 'matrix,shape=(4, 4)')
+@pytest.test_arrays('matrix,shape=(4, 4, *),-float16', 'matrix,shape=(4, 4),-float16')
 def test15_matrix_to_quat(t):
     m = sys.modules[t.__module__]
     Quat    = dr.replace_type_t(m.Quaternion4f, dr.type_v(t))
     Array3f = dr.replace_type_t(m.Array3f, dr.type_v(t))
+    Matrix3f = dr.replace_type_t(m.Matrix3f, dr.type_v(t))
 
     # Type checks
     o_t = type(dr.matrix_to_quat(t(1)))
-    if t == m.Matrix4f16:
-        assert o_t == m.Quaternion4f16
-    elif t == m.Matrix4f:
+    if t == m.Matrix4f:
         assert o_t == m.Quaternion4f
     else:
         assert o_t == m.Quaternion4f64
 
     q = dr.rotate(Quat, Array3f(0, 0, 1), 15.0)
-    mtx = dr.quat_to_matrix(q)
+    mtx = dr.quat_to_matrix(Matrix3f, q)
     q2 = dr.matrix_to_quat(mtx)
     assert dr.allclose(q, q2)
 
 
-@pytest.test_arrays('quaternion')
+@pytest.test_arrays('quaternion,-float16')
 def test16_quat_to_euler(t):
     import sys
     m = sys.modules[t.__module__]
@@ -195,7 +195,7 @@ def test16_quat_to_euler(t):
     assert(dr.allclose(q, dr.euler_to_quat(e)))
 
 
-@pytest.test_arrays('quaternion')
+@pytest.test_arrays('quaternion,-float16')
 def test17_quat_to_matrix(t):
     import sys
     m = sys.modules[t.__module__]
@@ -207,13 +207,13 @@ def test17_quat_to_matrix(t):
     q = t([ 0, 0, 0, 1 ])
     m3 = Matrix3f([ [1, 0, 0], [0, 1, 0], [0, 0, 1] ])
     m4 = Matrix4f([ [1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1] ])
-    assert(dr.allclose(dr.quat_to_matrix(q, size=3), m3))
-    assert(dr.allclose(dr.quat_to_matrix(q, size=4), m4))
+    assert(dr.allclose(dr.quat_to_matrix(Matrix3f, q), m3))
+    assert(dr.allclose(dr.quat_to_matrix(Matrix4f, q), m4))
     assert(dr.allclose(q, dr.matrix_to_quat(m3)))
     assert(dr.allclose(q, dr.matrix_to_quat(m4)))
 
     # Type checks
-    o_t = type(dr.quat_to_matrix(q, size=3))
+    o_t = type(dr.quat_to_matrix(Matrix3f, q))
     if t == m.Quaternion4f16:
         assert o_t == m.Matrix3f16
     elif t == m.Quaternion4f:
@@ -225,15 +225,15 @@ def test17_quat_to_matrix(t):
     q = t([ 0, 0, 1 / dr.sqrt(2), 1 / dr.sqrt(2) ])
     m3 = Matrix3f([ [0, -1, 0], [1, 0, 0], [0, 0, 1] ])
     m4 = Matrix4f([ [0, -1, 0, 0], [1, 0, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1] ])
-    assert(dr.allclose(dr.quat_to_matrix(q, size=3), m3))
-    assert(dr.allclose(dr.quat_to_matrix(q, size=4), m4))
+    assert(dr.allclose(dr.quat_to_matrix(Matrix3f, q), m3))
+    assert(dr.allclose(dr.quat_to_matrix(Matrix4f, q), m4))
     assert(dr.allclose(q, dr.matrix_to_quat(m3)))
     assert(dr.allclose(q, dr.matrix_to_quat(m4)))
 
     # Round trip "Random" quaternion
     q = t(0.72331658, 0.49242236, 0.31087897, 0.3710628)
-    assert(dr.allclose(q, dr.matrix_to_quat(dr.quat_to_matrix(q, size=3))))
-    assert(dr.allclose(q, dr.matrix_to_quat(dr.quat_to_matrix(q, size=4))))
+    assert(dr.allclose(q, dr.matrix_to_quat(dr.quat_to_matrix(Matrix3f, q))))
+    assert(dr.allclose(q, dr.matrix_to_quat(dr.quat_to_matrix(Matrix4f, q))))
 
 @pytest.test_arrays('-float16, matrix,shape=(4, 4, *)')
 def test18_init_upcast(t):

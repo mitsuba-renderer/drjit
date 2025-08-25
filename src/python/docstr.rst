@@ -9013,3 +9013,90 @@
 
     Returns:
         GLInterop: Returns self to allow method chaining
+
+.. topic:: rotate
+
+    Constructs a rotation quaternion encoding a ritation by ``angle`` radians
+    around the ``axis``.
+
+    The function requires ``axis`` to be normalized.
+
+    Args:
+        axis (drjit.ArrayBase): A 3-dimensional Dr.Jit array representing the rotation axis
+
+        angle (float | drjit.ArrayBase): Rotation angle.
+
+    Returns:
+        drjit.ArrayBase: The resulting rotation quaternion
+
+
+.. topic:: matrix_to_quat
+
+    Converts a 3x3 matrix containing a pure rotation into a rotation
+    quaternion.
+
+    Args:
+        arg (drjit.ArrayBase): A 3x3 Dr.Jit matrix instance
+
+    Returns:
+        drjit.ArrayBase: The Dr.Jit quaternion corresponding the to input matrix.
+
+
+.. topic:: quat_to_matrix
+
+    Converts a rotation quaternion into a 3x3 rotation matrix.
+
+    Args:
+        arg (drjit.ArrayBase): A 3x3 Dr.Jit matrix typ
+
+    Returns:
+        drjit.ArrayBase: The resulting 3x3 matrix
+
+
+.. topic:: quat_to_euler
+
+    Converts a rotation quaternion into its Euler angle representation.
+    The Euler angle order is "XYZ".
+
+    Args:
+        arg (drjit.ArrayBase): A Dr.Jit quaternion type
+
+    Returns:
+        drjit.ArrayBase: A 3D Dr.Jit array containing Euler angles.
+
+.. topic:: euler_to_quat
+
+    Converts Euler angles into a rotation quaternion.
+    The order of the Euler angles is "XYZ".
+
+    Args:
+        arg (drjit.ArrayBase): A 3D Dr.Jit array containing the Euler angles.
+
+    Returns:
+        drjit.ArrayBase: A rotation quaternion.
+
+.. topic:: quat_apply
+
+    Applies a rotation quaternion to a 3D vector.
+
+    This operation is equivalent to ``quat_to_matrix(arg0) @ arg1`` but more efficient.
+
+    Args:
+        arg0 (drjit.ArrayBase): A rotation quaterion
+        arg1 (drjit.ArrayBase): A 3D Dr.Jit array
+
+    Returns:
+        drjit.ArrayBase: The rotated vector
+
+.. topic:: slerp
+
+    Linearly interpolate between two rotation quaternions ``a`` and ``b``.
+    Works analogously to :py:func:`lerp`.
+
+    Args:
+        a (int | float | drjit.ArrayBase): A Python or Dr.Jit type
+        b (int | float | drjit.ArrayBase): A Python or Dr.Jit type
+        t (int | float | drjit.ArrayBase): A Python or Dr.Jit type
+
+    Returns:
+        float | drjit.ArrayBase: Interpolated result

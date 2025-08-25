@@ -86,6 +86,7 @@ nanobind_add_module(
   resample.h    resample.cpp
   coop_vec.h    coop_vec.cpp
   reorder.h     reorder.cpp
+  quat.h        quat.cpp
 
   # Backends
   scalar.h      scalar.cpp
