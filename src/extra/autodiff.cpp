@@ -3031,6 +3031,54 @@ static Index ad_var_memop_remap(Index index, bool input) {
 
 // ==========================================================================
 
+uint64_t ad_var_tile(Index index, uint32_t count) {
+    JitVar result = JitVar::steal(jit_var_tile(jit_index(index), count));
+
+    if (likely(is_detached(index)))
+        return result.release();
+    else {
+        VarInfo info = jit_set_backend(jit_index(index));
+
+        JitVar input_size_var = JitVar::steal(jit_var_literal(info.backend, VarType::UInt32, &info.size, 1, 0));
+        JitVar offset = JitVar::steal(jit_var_counter(info.backend, result.size()));
+        offset = JitVar::steal(jit_var_mod(offset.index(), input_size_var.index()));
+
+        uint64_t one_u64 = 1;
+        JitVar mask = JitVar::steal(jit_var_literal(info.backend, VarType::Bool, &one_u64, 1, 0));
+
+        return ad_var_new("tile", std::move(result),
+                         SpecialArg(index, new Gather(
+                             GenericArray<uint32_t>::borrow(offset.index()),
+                             JitMask::borrow(mask.index()),
+                             ReduceMode::Auto)));
+    }
+}
+
+uint64_t ad_var_repeat(Index index, uint32_t count, size_t max_size) {
+    JitVar result = JitVar::steal(jit_var_repeat(jit_index(index), count, max_size));
+
+    if (likely(is_detached(index)))
+        return result.release();
+    else {
+        VarInfo info = jit_set_backend(jit_index(index));
+
+        JitVar offset = JitVar::steal(jit_var_counter(info.backend, result.size()));
+        JitVar divisor = JitVar::steal(jit_var_literal(info.backend, VarType::UInt32, &count, 1, 0));
+        offset = JitVar::steal(jit_var_div(offset.index(), divisor.index()));
+
+        uint64_t one_u64 = 1;
+        JitVar mask = JitVar::steal(jit_var_literal(info.backend, VarType::Bool, &one_u64, 1, 0));
+
+        return ad_var_new("repeat", std::move(result),
+                         SpecialArg(index, new Gather(
+                             GenericArray<uint32_t>::borrow(offset.index()),
+                             JitMask::borrow(mask.index()),
+                             ReduceMode::Auto)));
+    }
+}
+
+// ==========================================================================
+
 uint64_t ad_var_gather(Index source, JitIndex offset, JitIndex mask, ReduceMode mode) {
     JitVar result = JitVar::steal(jit_var_gather(jit_index(source), offset, mask));
 
