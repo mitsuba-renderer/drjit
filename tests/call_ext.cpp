@@ -53,7 +53,7 @@ template <typename Float> struct Base : drjit::TraversableBase {
         }
     }
 
-    virtual ~Base() { jit_registry_remove(this); }
+    virtual ~Base() override { jit_registry_remove(this); }
 
     static constexpr const char *Variant =
         Float::Backend == JitBackend::CUDA ? "cuda" : "llvm";
