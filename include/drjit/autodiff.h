@@ -408,11 +408,11 @@ struct DRJIT_TRIVIAL_ABI DiffArray
             return steal(jit_var_tile(m_index, count));
     }
 
-    DiffArray repeat_(size_t count) const {
+    DiffArray repeat_(size_t count, size_t max_size = 0) const {
         if constexpr (IsFloat)
-            return steal(ad_var_repeat(m_index, count));
+            return steal(ad_var_repeat(m_index, count, max_size));
         else
-            return steal(jit_var_repeat(m_index, count));
+            return steal(jit_var_repeat(m_index, count, max_size));
     }
 
     DiffArray dot_(const DiffArray &a) const { return sum(*this * a); }

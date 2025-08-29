@@ -168,7 +168,8 @@ extern DRJIT_EXTRA_EXPORT uint64_t ad_var_block_reduce(ReduceOp op,
 extern DRJIT_EXTRA_EXPORT uint64_t ad_var_tile(uint64_t index, uint32_t count);
 
 /// Repeat values of an array into larger blocks
-extern DRJIT_EXTRA_EXPORT uint64_t ad_var_repeat(uint64_t index, uint32_t count);
+extern DRJIT_EXTRA_EXPORT uint64_t ad_var_repeat(uint64_t index, uint32_t count,
+                                                  size_t max_size = 0);
 
 /// Perform a differentiable gather operation. See jit_var_gather for signature.
 extern DRJIT_EXTRA_EXPORT uint64_t ad_var_gather(uint64_t source,
