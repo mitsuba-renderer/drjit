@@ -190,93 +190,52 @@ set(STUB_ARGS
 # enabled.
 
 if (NOT (DRJIT_SANITIZE_ASAN OR DRJIT_SANITIZE_UBSAN))
-  nanobind_add_stub(
-    drjit-stub-main
-    MODULE drjit
-    OUTPUT ${DRJIT_PYTHON_DST_DIR}/__init__.pyi
-    MARKER_FILE ${DRJIT_PYTHON_DST_DIR}/py.typed
-    ${STUB_ARGS}
+  # Expected set of outputs and marker files for all stubs
+
+  set(DRJIT_STUBS
+    ${DRJIT_PYTHON_DST_DIR}/__init__.pyi
+    ${DRJIT_PYTHON_DST_DIR}/ast.pyi
+    ${DRJIT_PYTHON_DST_DIR}/interop.pyi
+    ${DRJIT_PYTHON_DST_DIR}/random.pyi
+    ${DRJIT_PYTHON_DST_DIR}/detail.pyi
+    ${DRJIT_PYTHON_DST_DIR}/nn.pyi
+    ${DRJIT_PYTHON_DST_DIR}/hashgrid.pyi
+    ${DRJIT_PYTHON_DST_DIR}/scalar/__init__.pyi
   )
 
-  nanobind_add_stub(
-    drjit-stub-ast
-    MODULE drjit.ast
-    OUTPUT ${DRJIT_PYTHON_DST_DIR}/ast.pyi
-    ${STUB_ARGS}
-  )
-
-  nanobind_add_stub(
-    drjit-stub-interop
-    MODULE drjit.interop
-    OUTPUT ${DRJIT_PYTHON_DST_DIR}/interop.pyi
-    ${STUB_ARGS}
-  )
-
-  nanobind_add_stub(
-    drjit-stub-detail
-    MODULE drjit.detail
-    OUTPUT ${DRJIT_PYTHON_DST_DIR}/detail.pyi
-    ${STUB_ARGS}
-  )
-
-  nanobind_add_stub(
-    drjit-stub-nn
-    MODULE drjit.nn
-    OUTPUT ${DRJIT_PYTHON_DST_DIR}/nn.pyi
-    ${STUB_ARGS}
-  )
-
-  nanobind_add_stub(
-    drjit-stub-hashgrid
-    MODULE drjit.hashgrid
-    OUTPUT ${DRJIT_PYTHON_DST_DIR}/hashgrid.pyi
-    ${STUB_ARGS}
-  )
-
-  nanobind_add_stub(
-    drjit-stub-scalar
-    MODULE drjit.scalar
-    OUTPUT ${DRJIT_PYTHON_DST_DIR}/scalar/__init__.pyi
-    ${STUB_ARGS}
-  )
+  set(DRJIT_MARKERS
+    ${DRJIT_PYTHON_DST_DIR}/py.typed)
 
   if (DRJIT_ENABLE_LLVM)
-    nanobind_add_stub(
-      drjit-stub-llvm
-      MARKER_FILE ${DRJIT_PYTHON_DST_DIR}/llvm/py.typed
-      MODULE drjit.llvm
-      OUTPUT ${DRJIT_PYTHON_DST_DIR}/llvm/__init__.pyi
-      ${STUB_ARGS}
-    )
-
-    nanobind_add_stub(
-      drjit-stub-llvm-ad
-      MODULE drjit.llvm.ad
-      OUTPUT ${DRJIT_PYTHON_DST_DIR}/llvm/ad.pyi
-      ${STUB_ARGS}
-    )
+    list(APPEND DRJIT_STUBS
+      ${DRJIT_PYTHON_DST_DIR}/llvm/__init__.pyi
+      ${DRJIT_PYTHON_DST_DIR}/llvm/ad.pyi)
+    list(APPEND DRJIT_MARKERS
+      ${DRJIT_PYTHON_DST_DIR}/llvm/py.typed)
   endif()
 
   if (DRJIT_ENABLE_CUDA)
-    nanobind_add_stub(
-      drjit-stub-cuda
-      MARKER_FILE ${DRJIT_PYTHON_DST_DIR}/cuda/py.typed
-      MODULE drjit.cuda
-      OUTPUT ${DRJIT_PYTHON_DST_DIR}/cuda/__init__.pyi
-      ${STUB_ARGS}
-    )
-
-    nanobind_add_stub(
-      drjit-stub-cuda-ad
-      MODULE drjit.cuda.ad
-      OUTPUT ${DRJIT_PYTHON_DST_DIR}/cuda/ad.pyi
-      ${STUB_ARGS}
-    )
+    list(APPEND DRJIT_STUBS
+      ${DRJIT_PYTHON_DST_DIR}/cuda/__init__.pyi
+      ${DRJIT_PYTHON_DST_DIR}/cuda/ad.pyi)
+    list(APPEND DRJIT_MARKERS
+      ${DRJIT_PYTHON_DST_DIR}/cuda/py.typed)
   endif()
 
+  nanobind_add_stub(
+    drjit-stubs
+    MODULE drjit
+    RECURSIVE
+    MARKER_FILE ${DRJIT_MARKERS}
+    OUTPUT      ${DRJIT_STUBS}
+    OUTPUT_PATH ${DRJIT_PYTHON_DST_DIR}
+    ${STUB_ARGS}
+  )
+
+  # Generate the 'auto' version of the stubs using string replacement
   add_custom_command(
     OUTPUT ${DRJIT_PYTHON_DST_DIR}/auto/__init__.pyi
-    DEPENDS drjit-stub-llvm
+    DEPENDS drjit-stubs
     COMMAND cmake -P ${CMAKE_CURRENT_SOURCE_DIR}/../../resources/auto-stub.cmake
       ${DRJIT_PYTHON_DST_DIR}/llvm/__init__.pyi
       ${DRJIT_PYTHON_DST_DIR}/auto/__init__.pyi
@@ -284,7 +243,7 @@ if (NOT (DRJIT_SANITIZE_ASAN OR DRJIT_SANITIZE_UBSAN))
 
   add_custom_command(
     OUTPUT ${DRJIT_PYTHON_DST_DIR}/auto/ad.pyi
-    DEPENDS drjit-stub-llvm-ad
+    DEPENDS drjit-stubs
     COMMAND cmake -P ${CMAKE_CURRENT_SOURCE_DIR}/../../resources/auto-stub.cmake
       ${DRJIT_PYTHON_DST_DIR}/llvm/ad.pyi
       ${DRJIT_PYTHON_DST_DIR}/auto/ad.pyi

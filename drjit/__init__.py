@@ -2855,4 +2855,7 @@ def unit_angle(a, b):
 
 newaxis = None
 
+from . import hashgrid as hashgrid
+from . import nn as nn
+
 del overload, Optional
