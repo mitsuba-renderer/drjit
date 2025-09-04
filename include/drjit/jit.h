@@ -553,6 +553,14 @@ struct DRJIT_TRIVIAL_ABI JitArray
         return steal(jit_var_scatter_inc(&m_index, index.index(), mask.index()));
     }
 
+    template <typename Mask>
+    JitArray scatter_cas_(const JitArray &old_value, const JitArray &new_value,
+                          const JitArray &index, const Mask &mask) {
+        return steal(jit_var_scatter_cas(&m_index, old_value.index(),
+                                         new_value.index(), index.index(),
+                                         mask.index()));
+    }
+
     //! @}
     // -----------------------------------------------------------------------
 

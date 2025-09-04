@@ -636,6 +636,15 @@ struct DRJIT_TRIVIAL_ABI DiffArray
                                  offset.index(), mask.index());
     }
 
+    template <typename Mask>
+    DiffArray scatter_cas_(const DiffArray &old_value,
+                           const DiffArray &new_value, const DiffArray &index,
+                           const Mask &mask) {
+        return steal(jit_var_scatter_cas(&m_index, old_value.index(),
+                                         new_value.index(), index.index(),
+                                         mask.index()));
+    }
+
     //! @}
     // -----------------------------------------------------------------------
 
