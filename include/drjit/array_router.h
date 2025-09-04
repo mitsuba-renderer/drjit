@@ -1218,6 +1218,17 @@ void scatter_add_kahan(Target &&target_1, Target &&target_2,
     value.scatter_add_kahan_(target_1, target_2, index, mask);
 }
 
+template <typename Target>
+Target scatter_cas(Target &target, const Target &old_value,
+                   const Target &new_value, const uint32_array_t<Target> &index,
+                   const mask_t<Target> &mask= true) {
+    // Only supported for 1D JIT operations
+    static_assert(is_jit_v<Target> &&
+                  std::is_same_v<scalar_t<Target>, uint32_t> &&
+                  depth_v<Target> == 1);
+    return target.scatter_cas_(old_value, new_value, index, mask);
+}
+
 template <typename T, typename TargetType>
 decltype(auto) migrate(const T &value, TargetType target) {
     static_assert(std::is_enum_v<TargetType>);
