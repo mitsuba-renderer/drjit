@@ -62,3 +62,24 @@ def test04_repeat_ad(t):
     dr.backward(x2_repeated_pkg)
 
     assert dr.all(dr.grad(x_repeated_dr) == dr.grad(x_repeated_pkg))
+
+#FIXME: improve and move
+@pytest.test_arrays('float32,cuda,is_diff,shape=(*)')
+def test05_scatter_cas(t):
+    pkg = get_pkg(t)
+    UInt32 = dr.uint32_array_t(t)
+
+    target = dr.arange(UInt32, 10) + 5
+    dr.make_opaque(target)
+
+    old_value = UInt32(20, 20, 20,  8,  9, 20)
+    new_value = UInt32(30, 30, 30, 13, 14, 20)
+    index =     UInt32( 1,  0,  4,  3,  4,  5)
+
+    print()
+    print(target)
+    out = pkg.scatter_cas(target, old_value, new_value, index, True)
+    #// 6, 5, 9, 8, 9, 10
+    print(out)
+    #// 5, 6, 7, 13, 14, 10, 11, 12, 13, 14
+    print(target)
