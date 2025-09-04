@@ -883,13 +883,13 @@ CUDA / GL interoperability
 .. py:currentmodule:: drjit.cuda
 
 High-level interface
-^^^^^^^^^^^^^^^^^^^^
+____________________
 
 .. autoclass:: GLInterop
 
 
 Low-level interface
-^^^^^^^^^^^^^^^^^^^
+___________________
 
 .. autofunction:: register_gl_buffer
 .. autofunction:: register_gl_texture

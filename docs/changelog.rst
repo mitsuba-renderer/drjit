@@ -103,7 +103,7 @@ The v1.1.0 release of Dr.Jit includes several major new features:
 
   This can dramatically accelerate programs and makes Dr.Jit usable for
   realtime rendering and other applications with strict timing requirements.
-  See the :ref:`function freezing documentation <feeze>` for more details.
+  See the :ref:`function freezing documentation <freeze>` for more details.
   Example:
 
   .. code-block:: python

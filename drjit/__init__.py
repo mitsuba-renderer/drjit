@@ -1436,7 +1436,7 @@ def sh_eval(d: ArrayBase, order: int) -> list:
 
     The Mathematica equivalent of a specific entry is given by:
 
-    .. code-block:: wolfram-language
+    .. code-block:: wolfram
 
         SphericalHarmonicQ[l_, m_, d_] := Block[{θ, ϕ},
           θ = ArcCos[d[[3]]];
