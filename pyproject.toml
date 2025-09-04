@@ -1,7 +1,7 @@
 [build-system]
 requires = [
     "scikit-build-core",
-    "nanobind==2.8.0",
+    "nanobind==2.9.1",
     "typing_extensions",
     "hatch-fancy-pypi-readme"
 ]
