@@ -553,6 +553,19 @@ struct DRJIT_TRIVIAL_ABI JitArray
         return steal(jit_var_scatter_inc(&m_index, index.index(), mask.index()));
     }
 
+    template <typename Mask>
+    std::pair<JitArray, JitArray>
+    scatter_cas_(JitArray &target, const JitArray &compare,
+                 const JitArray &index, const Mask &mask) const {
+        Index target_index = target.index();
+        Index old, success;
+        jit_var_scatter_cas(&target_index, compare.index(), m_index,
+                            index.index(), mask.index(), &old, &success);
+        target = steal(target_index);
+
+        return { steal(old), steal(success) };
+    }
+
     //! @}
     // -----------------------------------------------------------------------
 

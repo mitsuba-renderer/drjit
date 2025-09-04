@@ -22,8 +22,10 @@
 #include <drjit/autodiff.h>
 #include <memory>
 #include <algorithm>
+#include <iostream>
 
 #include "../ext/nanobind/src/buffer.h"
+
 
 using Buffer = nanobind::detail::Buffer;
 
@@ -106,6 +108,8 @@ static void repr_array(Buffer &buffer, nb::handle h, size_t indent,
                 repr_array(buffer, h, indent + 1, threshold, shape, depth + 1, index);
             } else {
                 nb::object o = h[nb::tuple(index)];
+
+                std::cout << nb::str(o.type()).c_str() << std::endl;
 
                 if (s.is_tensor)
                     o = nb::steal(s.tensor_array(o.ptr()))[0];

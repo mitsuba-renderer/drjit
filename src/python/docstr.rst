@@ -7036,12 +7036,12 @@
 
     .. code-block:: python
 
-       my_index = dr.scatter_inc(target=ctr, index=UInt32(0), mask=active)
+       my_index = dr.scatter_inc(target=ctr, index=UInt32(0), active=active)
        dr.scatter(
            target=data_compact_1,
            value=data_1,
            index=my_index,
-           mask=active
+           active=active
        )
 
        dr.eval(data_compact_1) # Run Kernel #1
@@ -7050,7 +7050,7 @@
            target=data_compact_2,
            value=data_2,
            index=my_index, # <-- oops, reusing my_index in another kernel.
-           mask=active     #     This raises an exception.
+           active=active     #     This raises an exception.
        )
 
     To get the above code to work, you will need to evaluate ``my_index`` at the
