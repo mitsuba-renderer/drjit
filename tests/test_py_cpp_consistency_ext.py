@@ -1,7 +1,7 @@
 """
 There are instances where functions that have Python-specific arguments such
 as PyTrees use an independent code path relative to just the pure C++ interface.
-These tests provide basic coverage to check consistency between the two 
+These tests provide basic coverage to check consistency between the two
 implementations.
 """
 
@@ -37,7 +37,7 @@ def test03_tile_ad(t):
     x_tiled_pkg = pkg.tile(x, 3)
 
     dr.enable_grad(x_tiled_dr, x_tiled_pkg)
-    
+
     x2_tiled_dr = x_tiled_dr * x_tiled_dr
     x2_tiled_pkg = x_tiled_pkg * x_tiled_pkg
 
@@ -53,7 +53,7 @@ def test04_repeat_ad(t):
     x_repeated_dr = dr.repeat(x, 3)
     x_repeated_pkg = pkg.repeat(x, 3)
 
-    dr.enable_grad(x_repeated_dr, x_repeated_pkg)   
+    dr.enable_grad(x_repeated_dr, x_repeated_pkg)
 
     x2_repeated_dr = x_repeated_dr * x_repeated_dr
     x2_repeated_pkg = x_repeated_pkg * x_repeated_pkg
