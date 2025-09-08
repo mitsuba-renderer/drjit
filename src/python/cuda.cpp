@@ -11,6 +11,7 @@
 #include "cuda.h"
 #include "random.h"
 #include "texture.h"
+#include "event.h"
 
 #include <drjit-core/gl_interop.h>
 
@@ -139,5 +140,7 @@ void export_cuda(nb::module_ &m) {
         .def("map", &GLInterop::map, "mip_level"_a = 0, nb::rv_policy::none, doc_cuda_GLInterop_map)
         .def("upload", &GLInterop::upload, nb::rv_policy::none, doc_cuda_GLInterop_upload)
         .def("unmap", &GLInterop::unmap, nb::rv_policy::none, doc_cuda_GLInterop_unmap);
+
+    bind_event<JitBackend::CUDA>(m, "Event");
  }
 #endif
