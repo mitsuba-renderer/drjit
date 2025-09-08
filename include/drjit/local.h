@@ -16,8 +16,18 @@
 
 NAMESPACE_BEGIN(drjit)
 
-template <typename Value, size_t Size, typename SFINAE = int> struct Local {
-    using Index = uint32_t;
+template <typename Value_,
+          size_t Size_,
+          typename Index_ = uint32_array_t<Value_>,
+          typename SFINAE = int>
+struct Local {
+    static constexpr size_t Size = Size_;
+    static_assert(Size != Dynamic, "Scalar local arrays are only fixed size. "
+                                   "If you meant to instantiate a JIT variant "
+                                   "or a DRJIT_STRUCT you may have forgotten to "
+                                   "add the Index template parameter.");
+    using Value = Value_;
+    using Index = Index_;
     using Mask = bool;
 
     Local() = default;
@@ -57,50 +67,156 @@ private:
     Value m_data[Size];
 };
 
-template <typename Value, size_t Size> struct Local<Value, Size, enable_if_array_t<Value>> {
-    static constexpr JitBackend Backend = backend_v<Value>;
-    using Index = uint32_array_t<Value>;
-    using Mask = mask_t<Value>;
+/**
+ * \brief Local memory implemented on top of drjit-core jit_array_*
+ * \details The array `value` of static or dynamic width will be used
+ * to initialize the entries of local memory with length `Size`.
+ * `Size` can be drjit::Dynamic, in which case a call to resize will
+ * be required before usage.
+ */
+template <typename Value_, size_t Size_, typename Index_>
+struct Local<Value_, Size_, Index_,
+             enable_if_t<is_array_v<Value_> || (is_array_v<Index_> && is_drjit_struct_v<Value_>)>>
+{
+    static constexpr JitBackend Backend = backend_v<Value_>;
+    static constexpr size_t Size = Size_;
+    using Value = Value_;
+    using Index = Index_;
+    using Mask = mask_t<Index>;
 
-    Local() {
-        m_index = jit_array_create(Backend, Value::Type, 1, Size);
+    /**
+     * \brief Allocate local memory
+     * \param value optional inital value (also used when resizing dynamic memory)
+     */
+    Local(Value value = empty<Value>())
+        : m_size(Size == Dynamic ? 1 : Size), m_value(value) {
+        initialize();
     }
 
-    Local(const Value &value) {
-        uint32_t tmp = jit_array_create(Backend, Value::Type, 1, Size);
-        m_index = jit_array_init(tmp, value.index());
-        jit_var_dec_ref(tmp);
+    ~Local() {
+        for (uint32_t index : m_arrays)
+            jit_var_dec_ref(index);
     }
-
-    ~Local() { jit_var_dec_ref(m_index); }
     Local(const Local &) = delete;
     Local(Local &&l) {
-        m_index = l.m_index;
-        l.m_index = 0;
+        m_arrays.swap(l.m_arrays);
+        l.m_arrays.clear();
     }
     Local &operator=(const Local &) = delete;
     Local &operator=(Local &&l) {
-        jit_var_dec_ref(m_index);
-        m_index = l.m_index;
-        l.m_index = 0;
+        for (uint32_t index : m_arrays)
+            jit_var_dec_ref(index);
+        m_arrays.swap(l.m_arrays);
+        l.m_arrays.clear();
     }
 
     Value read(const Index &offset, const Mask &active = true) const {
-        return Value::steal(jit_array_read(m_index, offset.index(), active.index()));
+        Value result;
+        size_t counter = 0;
+        auto callback  = [&](auto &result, auto &&callback) -> void {
+            using T = std::decay_t<decltype(result)>;
+            if constexpr (is_jit_v<T> && depth_v<T> == 1) {
+                if (counter >= m_arrays.size())
+                    jit_raise("Local::read(): internal error, ran out of "
+                              "variable arrays!");
+                result = T::steal(jit_array_read(m_arrays[counter++],
+                                                  offset.index(), active.index()));
+            } else if constexpr (is_traversable_v<T>) {
+                /// Recurse and try again if the object is traversable
+                traverse_1(fields(result), [&](auto &result) {
+                    callback(result, callback);
+                });
+            }
+        };
+        callback(result, callback);
+
+        if (counter != m_arrays.size())
+            jit_raise(
+                "Local::read(): internal error, did not access all variable "
+                "arrays!");
+
+        return result;
     }
 
     void write(const Index &offset, const Value &value, const Mask &active = true) {
-        uint32_t new_index = jit_array_write(m_index, offset.index(),
-                                             value.index(), active.index());
-        jit_var_dec_ref(m_index);
-        m_index = new_index;
+        size_t counter = 0;
+        auto callback  = [&](auto &value, auto &&callback) -> void {
+            using T = std::decay_t<decltype(value)>;
+            if constexpr (is_jit_v<T> && depth_v<T> == 1) {
+                if (counter >= m_arrays.size())
+                    jit_raise("Local::write(): internal error, ran out of "
+                                "variable arrays!");
+
+                if (value.index_ad())
+                    jit_raise("Local memory writes are not differentiable. You "
+                                "must use 'drjit.detach()' to disable gradient "
+                                "tracking of the written value.");
+
+                uint32_t result =
+                    jit_array_write(m_arrays[counter], offset.index(),
+                                     value.index(), active.index());
+                jit_var_dec_ref(m_arrays[counter]);
+                m_arrays[counter++] = result;
+
+            } else if constexpr (is_traversable_v<T>) {
+                /// Recurse and try again if the object is traversable
+                traverse_1(fields(value),
+                                [&](auto &value) { callback(value, callback); });
+            }
+        };
+        callback(value, callback);
+
+        if (counter != m_arrays.size())
+            jit_raise(
+                "Local.write(): internal error, did not access all variable "
+                "arrays!");
     }
 
-    size_t size() const { return Size; }
+    size_t size() { return m_size; }
+
+    /**
+     * Reserve a new array of `length` and discard any current contents
+     */
+    void resize(size_t size) {
+        for (uint32_t index : m_arrays)
+            jit_var_dec_ref(index);
+        m_arrays.clear();
+        m_size = size;
+        initialize();
+    }
 
 private:
-    uint32_t m_index;
-};
+    void initialize() {
+        auto callback = [&](auto &value, auto &&callback) -> void {
+            using T = std::decay_t<decltype(value)>;
+            if constexpr (is_jit_v<T> && depth_v<T> == 1) {
+                uint32_t result;
+                if (!value.empty()) {
+                    uint32_t i1  = value.index();
+                    size_t width = jit_var_size(i1);
+                    uint32_t i2  = jit_array_create(
+                        backend_v<T>, var_type<value_t<T>>::value,
+                        width, m_size);
+                    result = jit_array_init(i2, i1);
+                    jit_var_dec_ref(i2);
+                } else {
+                    result = jit_array_create(
+                        backend_v<T>, var_type<value_t<T>>::value,
+                        1, m_size);
+                }
+                m_arrays.push_back(result);
+            } else if constexpr (is_traversable_v<T>) {
+                /// Recurse and try again if the object is traversable
+                traverse_1(fields(value),
+                               [&](auto &value) { callback(value, callback); });
+            }
+        };
+        callback(m_value, callback);
+    }
 
+    size_t m_size;
+    Value m_value;
+    vector<uint32_t> m_arrays;
+};
 
 NAMESPACE_END(drjit)
