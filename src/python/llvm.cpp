@@ -11,6 +11,7 @@
 #include "llvm.h"
 #include "random.h"
 #include "texture.h"
+#include "event.h"
 
 #if defined(DRJIT_ENABLE_LLVM)
 void export_llvm(nb::module_ &m) {
@@ -24,5 +25,7 @@ void export_llvm(nb::module_ &m) {
     m.attr("Float32") = m.attr("Float");
     m.attr("Int32") = m.attr("Int");
     m.attr("UInt32") = m.attr("UInt");
+
+    bind_event<JitBackend::LLVM>(m, "Event");
 }
 #endif

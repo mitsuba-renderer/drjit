@@ -9100,3 +9100,66 @@
 
     Returns:
         float | drjit.ArrayBase: Interpolated result
+
+.. topic:: Event
+
+    Event object for synchronization and timing
+
+    This class provides an API for inserting events into the command stream.
+    This enables relative time measurements, and to wait for the completion
+    of prior events.
+
+.. topic:: Event_init
+
+    Create a new Event
+
+    Args:
+        enable_timing (bool): If True, the event can be used for timing measurements.
+                              If False, timing queries will raise an error.
+                              Default: True
+
+.. topic:: Event_record
+
+    Record the event in the current stream
+
+    Marks a point in the computation stream. The event will be considered
+    complete when all previously enqueued work has finished.
+
+.. topic:: Event_query
+
+    Check if the event has completed without blocking
+
+    Returns:
+        bool: True if all work preceding the event has completed, False otherwise
+
+.. topic:: Event_wait
+
+    Wait for the event to complete
+
+    Blocks the current thread until all work preceding the event has completed.
+
+.. topic:: Event_elapsed_time
+
+    Calculate elapsed time between this event and another
+
+    Args:
+        end_event (Event): The end event for timing measurement
+
+    Returns:
+        float: Elapsed time in milliseconds between this event and ``end_event``
+
+    Raises:
+        RuntimeError: If either event doesn't have timing enabled or if events
+                      are from different contexts/backends
+
+.. topic:: Event_handle
+
+    Get the raw backend-specific event handle as a 64-bit integer
+
+    For CUDA backend, returns the CUevent handle.
+    For LLVM backend, returns the Task* pointer.
+
+    This is useful for debugging and advanced interoperability.
+
+    Returns:
+        int: The raw event handle as an integer

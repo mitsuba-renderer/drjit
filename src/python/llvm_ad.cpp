@@ -25,5 +25,9 @@ void export_llvm_ad(nb::module_ &m) {
     m.attr("Float32") = m.attr("Float");
     m.attr("Int32") = m.attr("Int");
     m.attr("UInt32") = m.attr("UInt");
+
+    // Create Event alias from non-AD module
+    nb::module_ llvm_module = nb::module_::import_("drjit.llvm");
+    m.attr("Event") = llvm_module.attr("Event");
 }
 #endif
