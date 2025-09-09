@@ -637,12 +637,17 @@ struct DRJIT_TRIVIAL_ABI DiffArray
     }
 
     template <typename Mask>
-    DiffArray scatter_cas_(const DiffArray &old_value,
-                           const DiffArray &new_value, const DiffArray &index,
-                           const Mask &mask) {
-        return steal(jit_var_scatter_cas(&m_index, old_value.index(),
-                                         new_value.index(), index.index(),
-                                         mask.index()));
+    std::pair<DiffArray, DiffArray>
+    scatter_cas_(DiffArray &target, const DiffArray &compare,
+                 const DiffArray &index, const Mask &mask) const {
+        uint32_t target_index = target.index();
+        uint32_t old, success;
+
+        jit_var_scatter_cas(&target_index, compare.index(), m_index,
+                            index.index(), mask.index(), &old, &success);
+        target = steal(target_index);
+
+        return { steal(old), steal(success) };
     }
 
     //! @}

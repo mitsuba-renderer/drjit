@@ -1,4 +1,5 @@
 #include <nanobind/nanobind.h>
+#include <nanobind/stl/pair.h>
 #include <drjit/python.h>
 #include <drjit/autodiff.h>
 #include <drjit/packet.h>
@@ -18,12 +19,13 @@ Float repeat(const Float &source, uint32_t count) {
 }
 
 template <typename Float>
-dr::uint32_array_t<Float> scatter_cas(dr::uint32_array_t<Float> &target,
-                                      const dr::uint32_array_t<Float> &old_value,
-                                      const dr::uint32_array_t<Float> &new_value,
-                                      const dr::uint32_array_t<Float> &index,
-                                      const dr::mask_t<Float> &mask) {
-    return scatter_cas(target, old_value, new_value, index, mask);
+std::pair<dr::uint32_array_t<Float>, dr::bool_array_t<Float>>
+scatter_cas(dr::uint32_array_t<Float> &target,
+            const dr::uint32_array_t<Float> &comparison,
+            const dr::uint32_array_t<Float> &value,
+            const dr::uint32_array_t<Float> &index,
+            const dr::mask_t<Float> &mask) {
+    return scatter_cas(target, comparison, value, index, mask);
 }
 
 template <JitBackend Backend> void bind(nb::module_ &m) {

@@ -1219,14 +1219,13 @@ void scatter_add_kahan(Target &&target_1, Target &&target_2,
 }
 
 template <typename Target>
-Target scatter_cas(Target &target, const Target &old_value,
-                   const Target &new_value, const uint32_array_t<Target> &index,
-                   const mask_t<Target> &mask= true) {
+std::pair<Target, bool_array_t<Target>>
+scatter_cas(Target &target, const Target &compare, const Target &value,
+            const uint32_array_t<Target> &index,
+            const mask_t<Target> &mask = true) {
     // Only supported for 1D JIT operations
-    static_assert(is_jit_v<Target> &&
-                  std::is_same_v<scalar_t<Target>, uint32_t> &&
-                  depth_v<Target> == 1);
-    return target.scatter_cas_(old_value, new_value, index, mask);
+    static_assert(is_jit_v<Target> && depth_v<Target> == 1);
+    return value.scatter_cas_(target, compare, index, mask);
 }
 
 template <typename T, typename TargetType>
