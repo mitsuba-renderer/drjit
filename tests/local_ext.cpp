@@ -6,15 +6,35 @@
 namespace nb = nanobind;
 namespace dr = drjit;
 
+using nb::literals::operator""_a;
+
+
+template <typename Float, typename Local>
+auto bind_local(nb::module_ &m, const dr::string& name) {
+    auto c =  nb::class_<Local>(m, name.c_str())
+        .def(nb::init<>())
+        .def(nb::init<typename Local::Value>())
+        .def("__len__", &Local::size)
+        .def("read", &Local::read, "index"_a, "active"_a = true)
+        .def("write", &Local::write, "offset"_a, "value"_a, "active"_a = true);
+
+    if constexpr (dr::is_jit_v<Float>) {
+        c = c.def("resize", &Local::resize);
+    }
+    return c;
+}
+
 template <typename Float>
 void bind(nb::module_ &m) {
     using UInt32 = dr::uint32_array_t<Float>;
+    using Local10 = dr::Local<Float, 10>;
+    using LocalDyn = dr::Local<Float, dr::Dynamic>;
 
-    m.def("lookup", [](UInt32 offset, Float value, UInt32 offset2) {
-        dr::Local<Float, 10> local(3.f);
-        local.write(offset, value);
-        return local.read(offset2);
-    });
+    bind_local<Float, Local10>(m, "Local10");
+
+    if constexpr (dr::is_jit_v<Float>) {
+        bind_local<Float, LocalDyn>(m, "LocalDyn");
+    }
 }
 
 NB_MODULE(local_ext, m) {
