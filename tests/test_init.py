@@ -1,5 +1,6 @@
 import drjit as dr
 import pytest
+import sys
 
 # Test the default ``Array()`` initialization for every Dr.Jit type
 @pytest.test_arrays()
@@ -640,3 +641,46 @@ def test29_bool_casts(t):
 
     assert dr.all(Mask(t([0, 1, 0, 3])) == [False, True, False, True])
     assert dr.all(t(Mask([False, True, False, True])) == [0, 1, 0, 1])
+
+
+@pytest.mark.parametrize('reverse', [True, False])
+@pytest.test_arrays('uint32, -is_diff, shape=(*), jit')
+def test30_init_ad_from_non_ad_with_cast(t, reverse):
+    mod = sys.modules[t.__module__]
+    Float = mod.Float
+    UInt32 = mod.UInt32
+    Array3f = mod.Array3f
+    Array3i = mod.Array3i
+    TensorXf = mod.TensorXf
+    TensorXi = mod.TensorXi
+
+    def make_ad_types(output_tp, arg_tp):
+        if not reverse: # Other way around
+            output_tp = dr.diff_array_t(output_tp)
+            arg_tp = dr.detached_t(arg_tp)
+            return output_tp, arg_tp
+        else:
+            output_tp = dr.detached_t(output_tp)
+            arg_tp = dr.diff_array_t(arg_tp)
+            return output_tp, arg_tp
+
+    # 1D
+    Float, UInt32 = make_ad_types(Float, UInt32)
+    assert Float.__module__ != UInt32.__module__
+    casted = Float(UInt32([0, 1, 2, 3]))
+    assert type(casted) == Float
+    assert dr.all(casted == [0., 1., 2., 3.])
+
+    # 2D
+    Array3f, Array3i = make_ad_types(Array3f, Array3i)
+    assert Array3f.__module__ != Array3i.__module__
+    casted = Array3f(Array3i([0, 1, 2, 3], [4, 5, 6, 7], [8, 9, 10, 11]))
+    assert type(casted) == Array3f
+    assert dr.all(casted == [[0., 1., 2., 3.], [4., 5., 6., 7.], [8., 9., 10., 11.]], axis=None)
+
+    # Tensor
+    TensorXf, TensorXi = make_ad_types(TensorXf, TensorXi)
+    assert TensorXf.__module__ != TensorXi.__module__
+    casted = TensorXf(TensorXi([[0, 1], [2, 3]]))
+    assert type(casted) == TensorXf
+    assert dr.all(casted == [[0, 1], [2, 3]], axis=None)
