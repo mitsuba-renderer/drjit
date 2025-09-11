@@ -640,3 +640,12 @@ def test29_bool_casts(t):
 
     assert dr.all(Mask(t([0, 1, 0, 3])) == [False, True, False, True])
     assert dr.all(t(Mask([False, True, False, True])) == [0, 1, 0, 1])
+
+
+@pytest.test_arrays('float32, -is_diff, shape=(*), jit')
+def test30_init_ad_from_non_ad_with_cast(t):
+    Float = dr.diff_array_t(dr.float32_array_t(t))
+    casted = Float(t([0, 1, 2, 3]))
+
+    assert type(casted) == Float
+    assert dr.all(casted == [0., 1., 2., 3.])
