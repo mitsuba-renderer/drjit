@@ -83,7 +83,7 @@ int tp_init_array(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
                     ArrayMeta m_self = s,
                               m_arg  = s_arg;
 
-                    // Potentially convert AD <-> non-AD arrays
+                    // Convert AD <-> non-AD 1D types without casting
                     ArrayMeta m_temp = s_arg;
                     m_temp.is_diff = m_self.is_diff;
                     if (m_temp == m_self && m_self.ndim == 1 && s_arg.index) {
@@ -91,6 +91,20 @@ int tp_init_array(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
                         s.init_index(index, inst_ptr(self));
                         nb::inst_mark_ready(self);
                         return 0;
+                    }
+
+                    // Convert AD <-> non-AD 1D types with casting
+                    m_temp = s_arg;
+                    if ((m_temp.is_diff != m_self.is_diff) &&
+                        m_self.ndim == 1 && s_arg.index) {
+                        m_temp.is_diff = m_self.is_diff;
+
+                        nb::handle arg_casted_t = meta_get_type(m_temp);
+                        nb::handle arg_t = meta_get_type(s_arg);
+                        nb::object arg_casted = arg_casted_t(nb::handle(arg));
+                        nb::object init_args = nb::make_tuple(arg_casted);
+
+                        return tp_init_array(self, init_args.ptr(), kwds);
                     }
 
                     // Potentially do a cast
