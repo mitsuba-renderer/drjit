@@ -866,3 +866,35 @@ def test25_eval_ad_migrated(t, texture_type, init):
     result = tex.eval(pos)
     dr.eval(result)
     assert not tex.migrated()
+
+
+@pytest.mark.parametrize("texture_type", ['Texture1f64', 'Texture1f', 'Texture1f16'])
+@pytest.mark.parametrize("init", ['constructor', 'set_tensor'])
+@pytest.mark.parametrize("migrate", [True, False])
+@pytest.test_arrays("is_jit, float32, diff, shape=(*)")
+def test26_tensor_getter_does_not_drop_gradient_tracking(t, texture_type, init, migrate):
+    # Regression test to insure that `Texture::tensor() doesn't accidentlly drop
+    # gradient tracking on its internal members when called in a `suspend_grad`
+    # scope.
+    mod = sys.modules[t.__module__]
+    TexType = getattr(mod, texture_type)
+    tex = TexType([1], 1)
+    TensorType = type(tex.tensor())
+
+    # Differentiating the texture should not require the texture to be unmigrated
+    tex_data = t(1)
+    tensor = TensorType(tex_data, shape=(1, 1))
+    dr.enable_grad(tensor)
+    if init == 'constructor':
+        tex = TexType(tensor, use_accel=True, migrate=migrate)
+    elif init == 'set_tensor':
+        tex.set_tensor(tensor, migrate=migrate)
+
+    if dr.backend_v(t) == dr.JitBackend.CUDA and texture_type != "Texture1f64":
+        assert tex.migrated() == migrate
+    else:
+        assert tex.migrated() == False
+
+    with dr.suspend_grad():
+        tex.tensor() # Might mutate some internal state
+    assert dr.grad_enabled(tex.tensor())

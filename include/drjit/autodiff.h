@@ -877,7 +877,7 @@ namespace detail {
 
 template <typename T> struct suspend_grad {
     static constexpr bool Enabled =
-        is_diff_v<T> && std::is_floating_point_v<scalar_t<T>>;
+        is_diff_v<T> && is_floating_point_v<scalar_t<T>>;
     suspend_grad() : condition(true) {
         if constexpr (Enabled)
             ad_scope_enter(ADScope::Suspend, 0, nullptr, -1);
@@ -897,6 +897,38 @@ template <typename T> struct suspend_grad {
     }
 
     ~suspend_grad() {
+        if constexpr (Enabled) {
+            if (condition)
+                ad_scope_leave(true);
+        }
+    }
+
+    bool condition;
+};
+
+
+template <typename T> struct resume_grad {
+    static constexpr bool Enabled =
+        is_diff_v<T> && is_floating_point_v<scalar_t<T>>;
+    resume_grad() : condition(true) {
+        if constexpr (Enabled)
+            ad_scope_enter(ADScope::Resume, 0, nullptr, -1);
+    }
+    template <typename... Args>
+    resume_grad(bool when, const Args &... args) : condition(when) {
+        if constexpr (Enabled) {
+            if (condition) {
+                vector<uint64_t> indices;
+                (detail::collect_indices<false>(args, indices), ...);
+                ad_scope_enter(
+                    ADScope::Resume, indices.size(), indices.data(), -1);
+            }
+        } else {
+            (((void) args), ...);
+        }
+    }
+
+    ~resume_grad() {
         if constexpr (Enabled) {
             if (condition)
                 ad_scope_leave(true);
