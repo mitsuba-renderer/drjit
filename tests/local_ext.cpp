@@ -17,9 +17,9 @@ auto bind_local(nb::module_ &m, const dr::string& name) {
         .def("read", &Local::read, "index"_a, "active"_a = true)
         .def("write", &Local::write, "offset"_a, "value"_a, "active"_a = true);
 
-    if constexpr (dr::is_jit_v<Float>) {
+    if constexpr (dr::is_jit_v<Float>)
         c = c.def("resize", &Local::resize);
-    }
+
     return c;
 }
 
@@ -31,9 +31,8 @@ void bind(nb::module_ &m) {
     
     bind_local<Float, Local10>(m, "Local10");
 
-    if constexpr (dr::is_jit_v<Float>) {
+    if constexpr (dr::is_jit_v<Float>)
         bind_local<Float, LocalDyn>(m, "LocalDyn");
-    }
 
     struct MyStruct
     {

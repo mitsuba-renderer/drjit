@@ -81,8 +81,8 @@ struct Local<Value_, Size_, Index_,
     using Mask = mask_t<Index>;
 
     /**
-     * @brief Allocate local memory
-     * @param value optional inital value (also used when resizing dynamic memory)
+     * \brief Allocate local memory
+     * \param value optional inital value (also used when resizing dynamic memory)
      */
     Local(Value value = empty<Value>())
         : m_size(Size == Dynamic ? 1 : Size), m_value(value) {
@@ -90,9 +90,8 @@ struct Local<Value_, Size_, Index_,
     }
 
     ~Local() { 
-        for (uint32_t index : m_arrays) {
+        for (uint32_t index : m_arrays)
             jit_var_dec_ref(index);
-        }
     }
     Local(const Local &) = delete;
     Local(Local &&l) {
@@ -101,9 +100,8 @@ struct Local<Value_, Size_, Index_,
     }
     Local &operator=(const Local &) = delete;
     Local &operator=(Local &&l) {
-        for (uint32_t index : m_arrays) {
+        for (uint32_t index : m_arrays)
             jit_var_dec_ref(index);
-        }
         m_arrays.swap(l.m_arrays);
         l.m_arrays.clear();
     }
@@ -114,10 +112,9 @@ struct Local<Value_, Size_, Index_,
         auto callback  = [&](auto &result, auto &&callback) -> void {
             using T = std::decay_t<decltype(result)>;
             if constexpr (is_jit_v<T> && depth_v<T> == 1) {
-                if (counter >= m_arrays.size()) {
+                if (counter >= m_arrays.size()) 
                     jit_raise("Local::read(): internal error, ran out of "
                               "variable arrays!");
-                }
                 result = T::steal(jit_array_read(m_arrays[counter++],
                                                   offset.index(), active.index()));
             } else if constexpr (is_traversable_v<T>) {
@@ -142,16 +139,15 @@ struct Local<Value_, Size_, Index_,
         auto callback  = [&](auto &value, auto &&callback) -> void {
             using T = std::decay_t<decltype(value)>;
             if constexpr (is_jit_v<T> && depth_v<T> == 1) {
-                if (counter >= m_arrays.size()) {
+                if (counter >= m_arrays.size()) 
                     jit_raise("Local::write(): internal error, ran out of "
                                 "variable arrays!");
-                }
 
-                if (value.index_ad()) {
+                if (value.index_ad())
                     jit_raise("Local memory writes are not differentiable. You "
                                 "must use 'drjit.detach()' to disable gradient "
                                 "tracking of the written value.");
-                }
+
                 uint32_t result =
                     jit_array_write(m_arrays[counter], offset.index(),
                                      value.index(), active.index());
@@ -178,9 +174,8 @@ struct Local<Value_, Size_, Index_,
      * Reserve a new array of `length` and discard any current contents
      */
     void resize(size_t size) {
-        for (uint32_t index : m_arrays) {
+        for (uint32_t index : m_arrays)
             jit_var_dec_ref(index);
-        }
         m_arrays.clear();
         m_size = size;
         initialize();
