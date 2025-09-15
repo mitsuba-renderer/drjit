@@ -89,7 +89,7 @@ struct Local<Value_, Size_, Index_,
         initialize();
     }
 
-    ~Local() { 
+    ~Local() {
         for (uint32_t index : m_arrays)
             jit_var_dec_ref(index);
     }
@@ -112,7 +112,7 @@ struct Local<Value_, Size_, Index_,
         auto callback  = [&](auto &result, auto &&callback) -> void {
             using T = std::decay_t<decltype(result)>;
             if constexpr (is_jit_v<T> && depth_v<T> == 1) {
-                if (counter >= m_arrays.size()) 
+                if (counter >= m_arrays.size())
                     jit_raise("Local::read(): internal error, ran out of "
                               "variable arrays!");
                 result = T::steal(jit_array_read(m_arrays[counter++],
@@ -139,7 +139,7 @@ struct Local<Value_, Size_, Index_,
         auto callback  = [&](auto &value, auto &&callback) -> void {
             using T = std::decay_t<decltype(value)>;
             if constexpr (is_jit_v<T> && depth_v<T> == 1) {
-                if (counter >= m_arrays.size()) 
+                if (counter >= m_arrays.size())
                     jit_raise("Local::write(): internal error, ran out of "
                                 "variable arrays!");
 

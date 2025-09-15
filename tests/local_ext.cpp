@@ -28,7 +28,7 @@ void bind(nb::module_ &m) {
     using UInt32 = dr::uint32_array_t<Float>;
     using Local10 = dr::Local<Float, 10>;
     using LocalDyn = dr::Local<Float, dr::Dynamic>;
-    
+
     bind_local<Float, Local10>(m, "Local10");
 
     if constexpr (dr::is_jit_v<Float>)
