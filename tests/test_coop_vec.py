@@ -588,9 +588,9 @@ def test20_matvec_in_loop(t, mode):
     cnt = UInt32(0)
     res = Float32(0)
 
-    while dr.hint(cnt < 3, mode=mode):
+    while dr.hint(cnt < 3, mode=mode, exclude=[_]):
         x = nn.CoopVec(Float16([0.5]), Float16([0.5]))
-        a, b = nn.matvec(A_view, x, b_view)
+        a, _ = nn.matvec(A_view, x, b_view)
         res += Float32(a)
         cnt += 1
 
