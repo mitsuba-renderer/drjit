@@ -16,10 +16,14 @@
 
 NAMESPACE_BEGIN(drjit)
 
-template <typename Value_, size_t Size_, typename SFINAE = int> struct Local {
+template <typename Value_,
+          size_t Size_,
+          typename Index_ = uint32_array_t<Value_>,
+          typename SFINAE = int>
+struct Local {
     static constexpr size_t Size = Size_;
     using Value = Value_;
-    using Index = uint32_t;
+    using Index = Index_;
     using Mask = bool;
 
     Local() = default;
@@ -66,12 +70,15 @@ private:
  * `Size` can be drjit::Dynamic, in which case a call to resize will
  * be required before usage.
  */
-template <typename Value_, size_t Size_> struct Local<Value_, Size_, enable_if_array_t<Value_>> {
+template <typename Value_, size_t Size_, typename Index_>
+struct Local<Value_, Size_, Index_,
+             enable_if_t<is_array_v<Value_> || (is_array_v<Index_> && is_drjit_struct_v<Value_>)>>
+{
     static constexpr JitBackend Backend = backend_v<Value_>;
     static constexpr size_t Size = Size_;
     using Value = Value_;
-    using Index = uint32_array_t<Value>;
-    using Mask = mask_t<Value>;
+    using Index = Index_;
+    using Mask = mask_t<Index>;
 
     /**
      * @brief Allocate local memory
@@ -212,6 +219,5 @@ private:
     Value m_value;
     vector<uint32_t> m_arrays;
 };
-
 
 NAMESPACE_END(drjit)

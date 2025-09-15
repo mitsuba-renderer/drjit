@@ -8,7 +8,6 @@ namespace dr = drjit;
 
 using nb::literals::operator""_a;
 
-
 template <typename Float, typename Local>
 auto bind_local(nb::module_ &m, const dr::string& name) {
     auto c =  nb::class_<Local>(m, name.c_str())
@@ -29,12 +28,47 @@ void bind(nb::module_ &m) {
     using UInt32 = dr::uint32_array_t<Float>;
     using Local10 = dr::Local<Float, 10>;
     using LocalDyn = dr::Local<Float, dr::Dynamic>;
-
+    
     bind_local<Float, Local10>(m, "Local10");
 
     if constexpr (dr::is_jit_v<Float>) {
         bind_local<Float, LocalDyn>(m, "LocalDyn");
     }
+
+    struct MyStruct
+    {
+        Float value;
+        UInt32 priority;
+        DRJIT_STRUCT(MyStruct, value, priority)
+
+        MyStruct(int i) : value(i), priority(i) {}
+    };
+
+    auto mystruct = nb::class_<MyStruct>(m, "MyStruct")
+        .def(nb::init<>())
+        .def(nb::init<int>())
+        .def_rw("value", &MyStruct::value)
+        .def_rw("priority", &MyStruct::priority);
+
+    nb::handle u32;
+    if constexpr (dr::is_array_v<UInt32>)
+        u32 = nb::type<UInt32>();
+    else
+        u32 = nb::handle((PyObject *) &PyLong_Type);
+
+    nb::handle f32;
+    if constexpr (dr::is_array_v<UInt32>)
+        f32 = nb::type<Float>();
+    else
+        f32 = nb::handle((PyObject *) &PyFloat_Type);
+
+    nb::dict fields;
+    fields["value"] = f32;
+    fields["priority"] = u32;
+    mystruct.attr("DRJIT_STRUCT") = fields;
+
+    using LocalStruct10 = dr::Local<MyStruct, 10, UInt32>;
+    bind_local<Float, LocalStruct10>(m, "LocalStruct10");
 }
 
 NB_MODULE(local_ext, m) {

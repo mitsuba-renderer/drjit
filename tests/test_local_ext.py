@@ -73,3 +73,31 @@ def test03_write_read(t):
     
     assert dr.allclose(sum, expected)
 
+
+@pytest.test_arrays('float32,shape=(*)')
+def test04_struct(t):
+    pkg = get_pkg(t)
+    width = 20 if dr.backend_v(t) == dr.JitBackend else 1
+
+    values = dr.ones(pkg.MyStruct, width)
+    local = pkg.LocalStruct10(values)
+
+    def validate_index(idx, value):
+        struct = local.read(idx)
+        assert dr.width(struct) == width
+        assert dr.allclose(struct.value, value)
+        assert dr.allclose(struct.priority, value)
+
+    for i in range(10):
+        validate_index(i, 1)
+
+    values = dr.zeros(pkg.MyStruct, width)
+    local.write(0, values)
+
+    validate_index(0, 0)
+    for i in range(1,10):
+        validate_index(i, 1)
+
+    if dr.backend_v(t) == dr.JitBackend:
+        with pytest.raises(RuntimeError, match="out of bounds"):
+            validate_index(10, 1)
