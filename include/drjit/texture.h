@@ -388,6 +388,12 @@ public:
         } else {
             sync_device_data();
             if (m_tensor_dirty) {
+                // We need to update the unpadded tensor representation
+                // (`m_unpadded_value`). We therefore override any ongoing AD
+                // scope, to guarantee that `m_unpadded_value` is always
+                // AD-enabled if the original data `m_value` is also AD-enabled.
+                resume_grad<Storage> ad_scope_guard;
+
                 if (m_channels != m_channels_storage) {
                     UInt32 idx = arange<UInt32>(
                         (m_size * m_channels) / m_channels_storage
