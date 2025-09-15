@@ -737,3 +737,15 @@ def test31_tensor_loop_preserve_shape(t, mode):
 
     assert a.shape == (10, 11)
 
+
+@pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
+@pytest.test_arrays('uint32,is_jit,shape=(*)')
+@dr.syntax
+def test32_loop_with_only_side_effects(t, mode):
+    result = dr.zeros(t, 5)
+    i = t(1)
+    while i <= 2:
+        dr.scatter_add(result, t(10), t(0, 1, 2) * i)
+        i += 1
+
+    assert dr.allclose(result, [20, 10, 20, 0, 10])
