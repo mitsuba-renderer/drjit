@@ -6156,6 +6156,17 @@
     When enabled, traversal of complex objects, that usually are opaque to
     loops and conditionals, is enabled.
 
+.. topic:: JitFlag_SpillToSharedMemory
+
+    Enable spilling of excess registers into shared memory.
+
+    This flag activates an optimization that stores registers in shared memory
+    when register pressure is high, reducing the need to spill to slower 
+    local memory. This can improve performance by lowering memory latency on 
+    register-intensive kernels. This flag only applies to the CUDA backend.
+
+    This flag is *enabled* by default.
+
 .. topic:: JitFlag_Default
 
     The default set of optimization flags consisting of
