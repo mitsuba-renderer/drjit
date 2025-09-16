@@ -22,6 +22,10 @@ template <typename Value_,
           typename SFINAE = int>
 struct Local {
     static constexpr size_t Size = Size_;
+    static_assert(Size != Dynamic, "Scalar local arrays are only fixed size. "
+                                   "If you meant to instantiate a JIT variant "
+                                   "or a DRJIT_STRUCT you may have forgotten to "
+                                   "add the Index template parameter.");
     using Value = Value_;
     using Index = Index_;
     using Mask = bool;
