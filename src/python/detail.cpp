@@ -349,9 +349,11 @@ void traverse_py_cb_ro_impl(nb::handle self, nb::callable c) {
 
     PyTraverseCallback traverse_cb(std::move(c));
 
-    auto dict    = nb::borrow<nb::dict>(nb::getattr(self, "__dict__"));
-    for (auto value : dict.values())
-        traverse("traverse_py_cb_ro", traverse_cb, value);
+    if (nb::hasattr(self, "__dict__")) {
+        auto dict = nb::borrow<nb::dict>(nb::getattr(self, "__dict__"));
+        for (auto value : dict.values())
+            traverse("traverse_py_cb_ro", traverse_cb, value);
+    }
 }
 
 /**
@@ -391,9 +393,11 @@ void traverse_py_cb_rw_impl(nb::handle self, nb::callable c) {
 
     PyTraverseCallback traverse_cb(std::move(c));
 
-    auto dict = nb::borrow<nb::dict>(nb::getattr(self, "__dict__"));
-    for (auto value : dict.values())
-        traverse("traverse_py_cb_rw", traverse_cb, value, true);
+    if (nb::hasattr(self, "__dict__")) {
+        auto dict = nb::borrow<nb::dict>(nb::getattr(self, "__dict__"));
+        for (auto value : dict.values())
+            traverse("traverse_py_cb_rw", traverse_cb, value, true);
+    }
 }
 
 void export_detail(nb::module_ &) {
