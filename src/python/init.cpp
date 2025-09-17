@@ -100,7 +100,6 @@ int tp_init_array(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
                         m_temp.is_diff = m_self.is_diff;
 
                         nb::handle arg_casted_t = meta_get_type(m_temp);
-                        nb::handle arg_t = meta_get_type(s_arg);
                         nb::object arg_casted = arg_casted_t(nb::handle(arg));
                         nb::object init_args = nb::make_tuple(arg_casted);
 
