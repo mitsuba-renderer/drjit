@@ -5,8 +5,8 @@
 Changelog
 #########
 
-Upcoming release
------------------
+DrJit 1.2.0 (October 17, 2025)
+------------------------------
 
 **New Features**
 
