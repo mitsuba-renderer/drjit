@@ -5,6 +5,102 @@
 Changelog
 #########
 
+Upcoming release
+-----------------
+
+**New Features**
+
+- **Event API**: Added an event API for fine-grained timing and synchronization
+  of GPU kernels. This enables more detailed performance profiling and better
+  control over asynchronous operations.
+  (Dr.Jit PR `#441 <https://github.com/mitsuba-renderer/drjit/pull/441>`__,
+  Dr.Jit-Core PR `#174 <https://github.com/mitsuba-renderer/drjit-core/pull/174>`__).
+
+- **OpenGL Interoperability**: Improved CUDA-OpenGL interoperability with
+  simplified APIs. This enables efficient sharing of data between CUDA kernels
+  and OpenGL rendering.
+  (Dr.Jit PR `#429 <https://github.com/mitsuba-renderer/drjit/pull/429>`__,
+  Dr.Jit-Core PR `#164 <https://github.com/mitsuba-renderer/drjit-core/pull/164>`__,
+  contributed by `Merlin Nimier-David <https://merlin.nimierdavid.fr>`__).
+
+- **Enhanced Int8/UInt8 Support**: Improved support for 8-bit integer types
+  with better casting and bitcast operations.
+  (Dr.Jit PR `#428 <https://github.com/mitsuba-renderer/drjit/pull/428>`__,
+  Dr.Jit-Core PR `#163 <https://github.com/mitsuba-renderer/drjit-core/pull/163>`__,
+  contributed by `Merlin Nimier-David <https://merlin.nimierdavid.fr>`__).
+
+**Performance Improvements**
+
+- **Register Spilling to Shared Memory**: CUDA backend now supports spilling
+  registers to shared memory, improving performance for kernels with high
+  register pressure. (Dr.Jit-Core commit `fdc7cae7`).
+
+- **Memory View Support**: Arrays can now be converted to Python ``memoryview``
+  objects for efficient zero-copy data access. (commit `b7039184`).
+
+- **DLPack GIL Release**: The ``dr.ArrayBase.dlpack()`` method now releases
+  the GIL while waiting, improving multi-threaded performance. (commit `0adf9b4a`).
+
+- **Thread Synchronization**: ``dr.sync_thread()`` now releases the GIL while
+  waiting, preventing unnecessary blocking in multi-threaded applications.
+  (commit `956d2f57`).
+
+**API Improvements**
+
+- **Spherical Direction Utilities**: Added Python implementation of spherical
+  direction utilities (``dr.sphdir``).
+  (PR `#432 <https://github.com/mitsuba-renderer/drjit/pull/432>`__,
+  contributed by `Sébastien Speierer <https://github.com/Speierers>`__).
+
+- **Matrix Conversions**: Added support for converting between 3D and 4D
+  matrices: ``Matrix4f`` can be constructed from a 3D matrix and ``Matrix3f``
+  from a 4D matrix. (commit `7f8ea890`).
+
+- **Quaternion API**: Improved the quaternion Python API for better usability
+  and consistency. (commit `282da88a`).
+
+- **Type casts**: Allow casting between Dr.Jit types to properly allow
+  AD<->non-AD conversions when required. (commit `72f1e6b2`).
+
+**Bug Fixes**
+
+- Fixed deadlock issues in ``@dr.freeze`` decorator. (commit `e8fc555e`).
+
+- Fixed gradient tracking in ``Texture.tensor()`` to ensure gradients are
+  never dropped inadvertently.
+  (PR `#444 <https://github.com/mitsuba-renderer/drjit/pull/444>`__).
+
+- Fixed AD support for C++ ``repeat`` and ``tile`` operations with proper
+  gradient propagation. (commits `fd693056`, `282da88a`).
+
+- Fixed Python object traversal to check that ``__dict__`` exists before
+  accessing it, preventing crashes with certain object types. (commit `433adaf0`).
+
+- Fixed symbolic loop size calculation to properly account for side-effects.
+  (Dr.Jit-Core commit `31bf911`).
+
+- Fixed read-after-free issue in OptiX SBT data loading.
+  (Dr.Jit-Core commit `009adef`, contributed by `Merlin Nimier-David <https://merlin.nimierdavid.fr>`__).
+
+**Other Improvements**
+
+- Updated to nanobind `v2.9.2 <https://github.com/wjakob/nanobind/releases/tag/v2.9.2>`__
+
+- Improved error messages by adding function names to vectorized call errors.
+  (Dr.Jit-Core PR `#165 <https://github.com/mitsuba-renderer/drjit-core/pull/165>`__,
+  contributed by `Sébastien Speierer <https://github.com/Speierers>`__).
+
+- Added missing checks for JIT leak warnings.
+  (Dr.Jit-Core PR `#166 <https://github.com/mitsuba-renderer/drjit-core/pull/166>`__,
+  contributed by `Sébastien Speierer <https://github.com/Speierers>`__).
+
+- Added warning for LLVM API initialization failures.
+  (Dr.Jit-Core PR `#168 <https://github.com/mitsuba-renderer/drjit-core/pull/168>`__,
+  contributed by `Sébastien Speierer <https://github.com/Speierers>`__).
+
+- Fixed pytest warnings and improved test infrastructure.
+  (PR `#436 <https://github.com/mitsuba-renderer/drjit/pull/436>`__).
+
 DrJit 1.1.0 (August 7, 2025)
 ----------------------------
 
