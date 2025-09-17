@@ -340,12 +340,15 @@ NB_MODULE(_drjit_ext, m_) {
     });
 
     auto_ad.def("__getattr__", [=](nb::handle key) -> nb::object {
-        if (jit_has_backend(JitBackend::CUDA))
+        if (jit_has_backend(JitBackend::CUDA)) {
             set_backend(JitBackend::CUDA);
-        else if (jit_has_backend(JitBackend::LLVM))
+        } else if (jit_has_backend(JitBackend::LLVM)) {
             set_backend(JitBackend::LLVM);
-        else
+        } else {
             set_backend(JitBackend::None);
+            return nb::none();
+        }
+
         nb::object mod = nb::module_::import_("drjit.auto.ad");
         return nb::steal(PyObject_GetAttr(mod.ptr(), key.ptr()));
     });
