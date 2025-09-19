@@ -100,11 +100,12 @@ class Philox4x32Generator(Generator):
 
     DRJIT_STRUCT = { '_seed' : ArrayOrInt, '_counter' : ArrayOrInt }
 
-    def __init__(self, seed: ArrayOrInt = 0, counter: ArrayOrInt = 0):
+    def __init__(self, seed: ArrayOrInt = 0, counter: ArrayOrInt = 0, symbolic: bool = False):
         seed_tp = dr.uint64_array_t(seed)
         counter_tp = dr.uint32_array_t(seed)
         self._seed = seed_tp(seed)
         self._counter = counter_tp(counter)
+        self._symbolic = symbolic
 
     def clone(self) -> 'Generator':
         return Philox4x32Generator(self._seed, self._counter)
@@ -127,7 +128,7 @@ class Philox4x32Generator(Generator):
             seed_tp = dr.uint64_array_t(leaf_tp)
             counter_tp = dr.uint32_array_t(leaf_tp)
 
-            symbolic = dr.flag(dr.JitFlag.SymbolicScope)
+            symbolic = self._symbolic or dr.flag(dr.JitFlag.SymbolicScope)
 
             if type(seed) is not seed_tp:
                 if symbolic:

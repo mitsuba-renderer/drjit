@@ -215,8 +215,10 @@ def test06_rng_seed(t):
 
 
 @pytest.test_arrays('shape=(*), float')
-def test06_rng_distr(t):
-    rng = dr.rng()
+@pytest.mark.parametrize('symbolic', (True, False))
+def test06_rng_distr(t, symbolic):
+    m = sys.modules[t.__module__]
+    rng = dr.rng(symbolic=symbolic, seed = m.UInt32(0))
     x = rng.random(t, 100)
     assert type(x) is t
     assert dr.all((x >= 0) & (x < 1))

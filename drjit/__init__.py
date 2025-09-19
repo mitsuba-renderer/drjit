@@ -2258,7 +2258,7 @@ def upsample(t, shape=None, scale_factor=None):
         return type(t)(gather(type(t.array), t.array, index), tuple(shape))
 
 
-def rng(seed: Union[ArrayBase, int] = 0, method='philox4x32') -> random.Generator:
+def rng(seed: Union[ArrayBase, int] = 0, method='philox4x32', symbolic: bool = False) -> random.Generator:
     '''
     Return a seeded random number generator.
 
@@ -2275,10 +2275,16 @@ def rng(seed: Union[ArrayBase, int] = 0, method='philox4x32') -> random.Generato
     - Only ``method=philox4x32`` is supported at the moment. This returns a
       generator object wrapping the :py:class:`Philox4x32
       <drjit.auto.Philox4x32>` counter-based PRNG.
+
+    - When ``symbolic=True`` is specified, the internal sampler state will
+      never be explicitly evaluated. This is useful in cases where you wish
+      to explicitly bake these constants into the generated program. Dr.Jit
+      also detects when the sampler is used in a symbolic code block (e.g.,
+      a symbolic loop) and automaticallky sets this flag in such a case.
     '''
 
     if method == 'philox4x32':
-        return random.Philox4x32Generator(seed)
+        return random.Philox4x32Generator(seed, symbolic=symbolic)
     else:
         raise RuntimeError("Only generator='philox4x32' is currently supported.")
 
