@@ -77,6 +77,16 @@ VarType dlpack_type_to_drjit(nb::dlpack::dtype dt) {
 
 using JitVar = drjit::JitArray<JitBackend::None, void>;
 
+/// Recursively walk through a (potentially nested) mask array and flatten it to a byte array 'buf'
+static void expand_mask(nb::handle h, nb::bytearray &buf, size_t &ctr) {
+    for (nb::handle ch: h) {
+        if (nb::isinstance<nb::bool_>(ch))
+            buf[ctr++] = (ch.ptr() == Py_True) ? 1 : 0;
+        else
+            expand_mask(ch, buf, ctr);
+    }
+}
+
 static nb::ndarray<> dlpack(nb::handle_t<ArrayBase> h, bool force_cpu, nb::handle stream = nb::none()) {
     const ArraySupplement &s = supp(h.type());
     bool is_dynamic = false;
@@ -158,9 +168,6 @@ static nb::ndarray<> dlpack(nb::handle_t<ArrayBase> h, bool force_cpu, nb::handl
             ptr = s2.data(inst_ptr(arr));
         }
     } else {
-        owner = nb::borrow(h);
-        ptr = s.data(inst_ptr(h));
-
         shape.resize(s.ndim);
         strides.resize(s.ndim);
 
@@ -176,6 +183,22 @@ static nb::ndarray<> dlpack(nb::handle_t<ArrayBase> h, bool force_cpu, nb::handl
 
             if (i == 0)
                 break;
+        }
+
+        if ((VarType) s.type == VarType::Bool) {
+            // Special case for masks in the scalar module, which are stored in
+            // a platform dependent manner (e.g. bit-packed)
+            nb::bytearray buf;
+            buf.resize(stride);
+
+            size_t ctr = 0;
+            expand_mask(h, buf, ctr);
+
+            owner = buf;
+            ptr = buf.data();
+        } else {
+            owner = nb::borrow(h);
+            ptr = s.data(inst_ptr(h));
         }
     }
 
@@ -276,5 +299,35 @@ void export_dlpack(nb::module_ &) {
       .def("memview",
            [](nb::handle_t<ArrayBase> h) {
                 return nb::ndarray<nb::memview>(dlpack(h, true).handle());
-           }, doc_memview);
+           }, doc_memview)
+
+      .def("__getstate__",
+           [](nb::handle_t<ArrayBase> h) {
+               nb::ndarray<> ndarray = dlpack(h, true);
+               nb::bytearray data(ndarray.data(), ndarray.size()*ndarray.itemsize());
+               return nb::make_tuple(h.attr("shape"), data);
+           })
+
+      .def("__setstate__",
+           [](nb::handle_t<ArrayBase> self, nb::handle value) {
+               nb::object shape_ = value[0],
+                          data_ = value[1];
+               if (!nb::isinstance<nb::tuple>(shape_) ||
+                   !nb::isinstance<nb::bytearray>(data_))
+                   nb::raise("drjit.Arrayself.__setstate__(): invalid input data provided");
+
+               nb::tuple shape = nb::borrow<nb::tuple>(std::move(shape_));
+               nb::bytearray data = nb::borrow<nb::bytearray>(std::move(data_));
+               size_t ndim = shape.size();
+               vector<size_t> shape_v(ndim);
+               for (size_t i = 0; i < ndim; ++i)
+                   shape_v[i] = nb::cast<size_t>(shape[i]);
+
+               nb::dlpack::dtype dtype = drjit_type_to_dlpack((VarType) supp(self.type()).type);
+               nb::ndarray ndarray =
+                   nb::ndarray<nb::memview>((void *) data.data(), ndim, shape_v.data(),
+                                            data, nullptr, dtype, nb::device::cpu::value);
+               nb::object result = self.type()(ndarray);
+               nb::inst_move(self, result);
+           });
 }
