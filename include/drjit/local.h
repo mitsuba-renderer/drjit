@@ -89,7 +89,7 @@ void init_impl(const T &value, const size_t size, vector<uint32_t>& arrays) {
         }
         arrays.push_back(result);
     } else if constexpr (is_traversable_v<T>) {
-        /// Recurse and try again if the object is traversable
+        // Recurse and try again if the object is traversable
         traverse_1(fields(value),
                     [&](auto &v) { init_impl(v, size, arrays); });
     }
@@ -107,7 +107,7 @@ void read_impl(T &result,
                         "variable arrays!");
         result = T::steal(jit_array_read(arrays[counter++], offset, active));
     } else if constexpr (is_traversable_v<T>) {
-        /// Recurse and try again if the object is traversable
+        // Recurse and try again if the object is traversable
         traverse_1(fields(result), [&](auto &r) {
             read_impl(r, offset, active, arrays, counter);
         });
@@ -136,7 +136,7 @@ void write_impl(const uint32_t &offset,
         arrays[counter++] = result;
 
     } else if constexpr (is_traversable_v<T>) {
-        /// Recurse and try again if the object is traversable
+        // Recurse and try again if the object is traversable
         traverse_1(fields(value),
                         [&](auto &v) { write_impl(offset, v, active, arrays, counter); });
     }
