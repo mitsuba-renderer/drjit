@@ -171,9 +171,10 @@ int tp_init_array(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
             // Try to construct from an instance created by another
             // array programming framework or a Dr.Jit tensor
             nb::object converted_complex_scalar;
-            if (is_drjit_tensor || (!arg_is_drjit && !is_builtin(arg_tp) && nb::ndarray_check(arg))) {
+            bool is_ndarray = nb::ndarray_check(arg);
+            if (is_drjit_tensor || (!arg_is_drjit && !is_builtin(arg_tp) && is_ndarray)) {
                 // For scalar types we want to rely on broadcasting below
-                if (is_drjit_tensor || meta_get(arg).ndim) {
+                if (is_drjit_tensor || PyCapsule_CheckExact(arg) || nb::getattr(arg, "ndim", nb::int_(0)).not_equal(nb::int_(0))) {
                     // Import flattened array in C-style ordering
                     nb::object flattened;
 
