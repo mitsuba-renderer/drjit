@@ -548,6 +548,77 @@ void scatter_add_kahan(nb::handle_t<dr::ArrayBase> target_1,
     }
 }
 
+nb::object scatter_exch(nb::handle_t<dr::ArrayBase> target, nb::object value,
+                        nb::object index, nb::object active) {
+    nb::handle tp = target.type();
+    const ArraySupplement &s = supp(tp);
+
+    if (s.ndim != 1 || s.backend == (uint8_t) JitBackend::None)
+        nb::raise("drjit.scatter_exch(): 'target' must be a JIT-compiled 1D array");
+
+    ArrayMeta target_meta = s,
+              active_meta = target_meta,
+              index_meta  = target_meta;
+
+    active_meta.type = (uint16_t) VarType::Bool;
+    index_meta.type = (uint16_t) VarType::UInt32;
+
+    nb::handle active_tp = meta_get_type(active_meta),
+               index_tp = meta_get_type(index_meta);
+
+    // FIXME: create helper
+    if (!index.type().is(index_tp)) {
+        try {
+            index = index_tp(index);
+        } catch (nb::python_error &e) {
+            nb::raise_from(e, PyExc_TypeError,
+                           "drjit.scatter_exch(): 'index' argument has an "
+                           "unsupported type, please provide an instance that "
+                           "is convertible to drjit.uint32_array_t(target).");
+        }
+    }
+
+    if (!active.type().is(active_tp)) {
+        try {
+            active = active_tp(active);
+        } catch (nb::python_error &e) {
+            nb::raise_from(e, PyExc_TypeError,
+                           "drjit.scatter_exch(): 'active' argument has an "
+                           "unsupported type, please provide an instance that "
+                           "is convertible to drjit.mask_t(target).");
+        }
+    }
+
+    if (!value.type().is(tp)) {
+        try {
+            value = tp(value);
+        } catch (nb::python_error &e) {
+            nb::raise_from(e, PyExc_TypeError,
+                           "drjit.scatter_exch(): 'value' argument has an "
+                           "unsupported type, please provide an instance that "
+                           "is convertible to the type of 'target'.");
+        }
+    }
+
+    if (s.scatter_exch) {
+        nb::object result = nb::inst_alloc(tp);
+
+        s.scatter_exch(
+            inst_ptr(value),
+            inst_ptr(index),
+            inst_ptr(active),
+            inst_ptr(target),
+            inst_ptr(result)
+        );
+
+        nb::inst_mark_ready(result);
+        return result;
+    } else {
+        nb::raise("drjit.scatter_exch(): not unsupported for type '%s'.",
+                  nb::type_name(tp).c_str());
+    }
+}
+
 nb::object scatter_cas(nb::handle_t<dr::ArrayBase> target, nb::object compare,
                        nb::object value, nb::object index, nb::object active) {
     nb::handle tp = target.type();
@@ -1252,6 +1323,9 @@ void export_memop(nb::module_ &m) {
      .def("scatter_add_kahan", &scatter_add_kahan,
           "target_1"_a, "target_2"_a, "value"_a, "index"_a,
           "active"_a = true, doc_scatter_add_kahan)
+     .def("scatter_exch", &scatter_exch,
+          "target"_a, "value"_a, "index"_a, "active"_a = true,
+          doc_scatter_inc)
      .def("scatter_cas", &scatter_cas,
           "target"_a, "compare"_a, "value"_a, "index"_a, "active"_a = true,
           doc_scatter_inc)

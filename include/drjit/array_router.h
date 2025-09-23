@@ -1128,9 +1128,9 @@ void scatter(Target &target, const Value &value, const Index &index,
 }
 
 template <typename Index>
-Index scatter_inc(Index &target, const Index &index, const mask_t<Index> &value = true) {
+Index scatter_inc(Index &target, const Index &index, const mask_t<Index> &mask = true) {
     static_assert(is_jit_v<Index> && std::is_same_v<scalar_t<Index>, uint32_t> && depth_v<Index> == 1);
-    return target.scatter_inc_(index, value);
+    return target.scatter_inc_(index, mask);
 }
 
 template <typename Target, typename Value, typename Index, typename Mask = mask_t<Index>>
@@ -1219,12 +1219,19 @@ void scatter_add_kahan(Target &&target_1, Target &&target_2,
 }
 
 template <typename Target>
+Target scatter_exch(Target &target, const Target &value,
+                    const uint32_array_t<Target> &index,
+                    const mask_t<Target> &mask = true) {
+    static_assert(is_jit_v<Target> && depth_v<Target> == 1, "Only 1D arrays are supported!");
+    return target.scatter_exch_(value, index, mask);
+}
+
+template <typename Target>
 std::pair<Target, bool_array_t<Target>>
 scatter_cas(Target &target, const Target &compare, const Target &value,
             const uint32_array_t<Target> &index,
             const mask_t<Target> &mask = true) {
-    // Only supported for 1D JIT operations
-    static_assert(is_jit_v<Target> && depth_v<Target> == 1);
+    static_assert(is_jit_v<Target> && depth_v<Target> == 1, "Only 1D arrays are supported!");
     return value.scatter_cas_(target, compare, index, mask);
 }
 
@@ -1563,6 +1570,7 @@ void set_label(T &value, Labels... prefix) {
  */
 template <typename T>
 struct scoped_disable_symbolic {
+
     scoped_disable_symbolic() {
         if constexpr(drjit::is_jit_v<T>) {
             uint32_t index = jit_var_mask_default(T::Backend, 1);
@@ -1575,6 +1583,9 @@ struct scoped_disable_symbolic {
         if constexpr (drjit::is_jit_v<T>)
             jit_var_mask_pop(T::Backend);
     }
+
+    scoped_disable_symbolic(const scoped_disable_symbolic &) = delete;
+    scoped_disable_symbolic &operator=(const scoped_disable_symbolic &) = delete;
 };
 
 template <typename T> bool grad_enabled(const T &value) {

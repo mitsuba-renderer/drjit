@@ -63,11 +63,11 @@ def test04_repeat_ad(t):
 
     assert dr.all(dr.grad(x_repeated_dr) == dr.grad(x_repeated_pkg))
 
-#FIXME: improve and move
-@pytest.test_arrays('float32,cuda,is_diff,shape=(*)')
+@pytest.test_arrays('float32,is_diff,shape=(*)')
 def test05_scatter_cas(t):
     pkg = get_pkg(t)
     UInt32 = dr.uint32_array_t(t)
+    Mask = dr.mask_t(t)
 
     target = dr.arange(UInt32, 10) + 5
     dr.make_opaque(target)
@@ -75,6 +75,8 @@ def test05_scatter_cas(t):
     old_value = UInt32(20, 20, 20,  8,  9, 20)
     new_value = UInt32(30, 30, 30, 13, 14, 20)
     index =     UInt32( 1,  0,  4,  3,  4,  5)
+    mask = Mask(True, True, True, True, True, True)
+    dr.make_opaque(old_value, new_value, index, mask)
 
     old, swapped = pkg.scatter_cas(target, old_value, new_value, index, True)
     dr.eval(old, swapped)
@@ -83,8 +85,33 @@ def test05_scatter_cas(t):
     assert dr.all(swapped == [False, False, False, True, True, False])
     assert dr.allclose(target, [5, 6, 7, 13, 14, 10, 11, 12, 13, 14])
 
-@pytest.test_arrays('float32,cuda,is_diff,shape=(*)')
-def test06_scatter_cas(t):
+
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+def test06_scatter_cas_raise(t):
+    pkg = get_pkg(t)
+    UInt32 = dr.uint32_array_t(t)
+    Mask = dr.mask_t(t)
+
+    target = dr.full(UInt32, 5, 10)
+    dr.make_opaque(target)
+
+    old_value = UInt32(20, 20, 20,  5,  5, 20)
+    new_value = UInt32(30, 30, 30, 13, 14, 20)
+    index =     UInt32( 1,  0,  4,  3,  4,  5)
+    mask = Mask(True, True, True, True, True, True)
+    dr.make_opaque(old_value, new_value, index, mask)
+
+    old, swapped = pkg.scatter_cas(target, old_value, new_value, index, True)
+    dr.eval(old, swapped)
+
+    # Test masking too
+
+    assert dr.allclose(old, [5, 5, 5, 5, 5, 5])
+    assert dr.all(swapped == [False, False, False, True, True, False])
+    assert dr.allclose(target, [5, 5, 5, 13, 14, 5, 5, 5, 5, 5])
+
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+def test07_scatter_cas(t):
     pkg = get_pkg(t)
     UInt32 = dr.uint32_array_t(t)
 
@@ -103,8 +130,32 @@ def test06_scatter_cas(t):
 
     with pytest.raises(RuntimeError):
         dr.eval(swapped)
+    # Check tracing time error instead #fixme
 
 
+
+@pytest.test_arrays('float32,llvm,is_diff,shape=(*)')
+def test08_scatter_exch(t):
+    UInt32 = dr.uint32_array_t(t)
+    Mask = dr.mask_t(t)
+
+    dr.set_flag(dr.JitFlag.Debug, True)
+
+    target = dr.full(UInt32, 5, 10)
+    dr.make_opaque(target)
+
+    new_value = UInt32(30, 30, 30, 13, 14, 20)
+    index =     UInt32( 1,  0,  4,  3,  2,  5)
+    mask = Mask(True, True, True, True, True, True)
+    dr.make_opaque(new_value, index, mask)
+
+    old = dr.scatter_exch(target, new_value, index, mask)
+    dr.eval(old)
+
+    # Test masking too
+
+    assert dr.allclose(old, [5, 5, 5, 5, 5, 5])
+    assert dr.allclose(target, [30, 30, 14, 13, 30, 20, 5, 5, 5, 5])
 
 #@pytest.test_arrays('float32,cuda,is_diff,shape=(*)')
 #def test06_scatter_cas(t):
@@ -126,36 +177,33 @@ def test06_scatter_cas(t):
 #
 #    print(target)
 #
-#
-#@pytest.test_arrays('float32,cuda,shape=(*),-is_diff')
-#def test07_scatter_cas(t):
-#    pkg = get_pkg(t)
-#    UInt32 = dr.uint32_array_t(t)
-#    Float = t
-#
-#    dr.set_flag(dr.JitFlag.Debug, True)
-#    dr.set_flag(dr.JitFlag.ReuseIndices, False)
-#
-#    ctr = UInt32(0)
-#    active = dr.mask_t(t)([True, False, True])
-#    data_compact_1 = Float(0, 1)
-#    data_compact_2 = Float(10, 11)
-#    
-#
-#    my_index = dr.scatter_inc(ctr, UInt32(0), active)
-#    dr.scatter(
-#        target=data_compact_1,
-#        value=Float(2, 3, 4),
-#        index=my_index,
-#        active=active
-#    )
-#
-#    dr.eval(data_compact_1) # Run Kernel #1
-#
-#    dr.scatter(
-#        target=data_compact_2,
-#        value=Float(12, 13, 14),
-#        index=my_index, # <-- oops, reusing my_index in another kernel.
-#        active=active     #     This raises an exception.
-#    )
-#
+
+@pytest.test_arrays('float32,cuda,shape=(*),-is_diff')
+def test07_scatter_inc(t):
+    pkg = get_pkg(t)
+    UInt32 = dr.uint32_array_t(t)
+    Float = t
+
+    dr.set_flag(dr.JitFlag.Debug, True)
+    dr.set_flag(dr.JitFlag.ReuseIndices, False)
+
+    ctr = UInt32(0)
+    active = dr.mask_t(t)([True, False, True])
+    data_compact_1 = Float(0, 1)
+    data_compact_2 = Float(10, 11)
+
+
+    my_index = dr.scatter_inc(ctr, UInt32(0), active)
+    dr.scatter(
+        target=data_compact_1,
+        value=Float(2, 3, 4),
+        index=my_index,
+        active=active
+    )
+
+    tmp = my_index + 2
+
+    dr.eval(data_compact_1) # Run Kernel #1
+
+    with pytest.raises(RuntimeError):
+        dr.eval(tmp)
