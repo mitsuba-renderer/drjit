@@ -1219,6 +1219,14 @@ void scatter_add_kahan(Target &&target_1, Target &&target_2,
 }
 
 template <typename Target>
+Target scatter_exch(Target &target, const Target &value,
+                    const uint32_array_t<Target> &index,
+                    const mask_t<Target> &mask = true) {
+    static_assert(is_jit_v<Target> && depth_v<Target> == 1, "Only 1D arrays are supported!");
+    return target.scatter_exch_(value, index, mask);
+}
+
+template <typename Target>
 std::pair<Target, bool_array_t<Target>>
 scatter_cas(Target &target, const Target &compare, const Target &value,
             const uint32_array_t<Target> &index,

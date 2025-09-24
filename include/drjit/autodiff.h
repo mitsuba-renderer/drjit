@@ -637,11 +637,23 @@ struct DRJIT_TRIVIAL_ABI DiffArray
     }
 
     template <typename Index, typename Mask>
+    DiffArray scatter_exch_(const DiffArray &value, const Index &index,
+                            const Mask &mask) {
+        uint32_t target_index = (uint32_t) m_index;
+        DiffArray result = steal(
+            jit_var_scatter_exch(&target_index, value.index(), index.index(), mask.index()));
+        m_index = target_index;
+
+        return result;
+    }
+
+    template <typename Index, typename Mask>
     std::pair<DiffArray, DiffArray>
     scatter_cas_(DiffArray &target, const DiffArray &compare,
                  const Index &index, const Mask &mask) const {
         uint32_t target_index = target.index();
         uint32_t old, success;
+
         jit_var_scatter_cas(&target_index, compare.index(), (uint32_t) m_index,
                             index.index(), mask.index(), &old, &success);
         target.release();
