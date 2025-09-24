@@ -1139,3 +1139,142 @@ def test36_gather_packet(t, packet_size, force_optix):
 
         assert len(re.findall(f"call fastcc \\[.*\\] @gather_{n_regs}x{type_str}", ir)) == n_inst
 
+
+@pytest.test_arrays('float32,jit,shape=(*)', 'uint32,jit,shape=(*)')
+@pytest.mark.parametrize("opaque", [True, False])
+def test36_scatter_cas(t, opaque):
+    UInt32 = dr.uint32_array_t(t)
+    Mask = dr.mask_t(t)
+
+    target =     t(  1,  2,   3,  4,  5, 6, 7)
+    compare =    t(999,  1, 999,  3,  5)
+    value =      t( 10, 20,  30, 40, 50)
+    index = UInt32(  1,  0,   3,  2,  4)
+    mask = dr.full(Mask, True, 5)
+
+    if opaque:
+        dr.make_opaque(target, compare, value, index, mask)
+
+    old, swapped = dr.scatter_cas(target, compare, value, index, mask)
+    dr.eval(old, swapped)
+
+    assert dr.allclose(old, [2, 1, 4, 3, 5])
+    assert dr.all(swapped == [False, True, False, True, True])
+    assert dr.allclose(target, [20, 2, 40, 4, 50, 6, 7])
+
+
+@pytest.test_arrays('float32,jit,shape=(*)', 'uint32,jit,shape=(*)')
+@pytest.mark.parametrize("opaque", [True, False])
+def test37_scatter_cas_masked(t, opaque):
+    UInt32 = dr.uint32_array_t(t)
+    Mask = dr.mask_t(t)
+
+    target =     t(  1,  2,   3,  4,  5, 6, 7)
+    compare =    t(999,  1, 999,  3,  5)
+    value =      t( 10, 20,  30, 40, 50)
+    index = UInt32(  1,  0,   3,  2,  4)
+    mask = Mask(True, True, True, True, False)
+
+    if opaque:
+        dr.make_opaque(target, compare, value, index, mask)
+
+    old, swapped = dr.scatter_cas(target, compare, value, index, mask)
+    dr.eval(old, swapped)
+
+    assert dr.allclose(old, [2, 1, 4, 3, 0])
+    assert dr.all(swapped == [False, True, False, True, False])
+    assert dr.allclose(target, [20, 2, 40, 4, 5, 6, 7])
+
+
+@pytest.test_arrays('float32,jit,shape=(*)', 'uint32,jit,shape=(*)')
+def test38_scatter_cas_vcall(t):
+    # Test `dr.scatter_cas()` when nested in a vcall
+    UInt32 = dr.uint32_array_t(t)
+
+    buffer1 = t(0, 1, 2, 0, 4)
+    buffer2 = t(0, 2, 0, 3, 4)
+
+    # `f()` and `g()` will be merged
+    def f(idx):
+        dr.scatter_cas(buffer1, 0, 1, idx)
+    def g(idx):
+        dr.scatter_cas(buffer2, 0, 1, idx)
+    def h(buffer):
+        pass
+
+    funcs = [f, g, h]
+    idx = UInt32(0, 0, 1, 1, 2)
+
+    dr.switch(idx, funcs, dr.arange(UInt32, 5))
+    dr.eval(buffer1, buffer2)
+
+    assert dr.allclose(buffer1, [1, 1, 2, 0, 4])
+    assert dr.allclose(buffer2, [0, 2, 1, 3, 4])
+
+
+@pytest.test_arrays('float32,jit,shape=(*)', 'uint32,jit,shape=(*)')
+@pytest.mark.parametrize("opaque", [True, False])
+def test39_scatter_exch(t, opaque):
+    UInt32 = dr.uint32_array_t(t)
+    Mask = dr.mask_t(t)
+
+    target =     t(  1,  2,   3,  4,  5, 6, 7)
+    value =      t( 10, 20,  30, 40, 50)
+    index = UInt32(  1,  0,   3,  2,  4)
+    mask = dr.full(Mask, True, 5)
+
+    if opaque:
+        dr.make_opaque(target, value, index, mask)
+
+    old = dr.scatter_exch(target, value, index, mask)
+    dr.eval(old)
+
+    assert dr.allclose(old, [2, 1, 4, 3, 5])
+    assert dr.allclose(target, [20, 10, 40, 30, 50, 6, 7])
+
+
+@pytest.test_arrays('float32,jit,shape=(*)', 'uint32,jit,shape=(*)')
+@pytest.mark.parametrize("opaque", [True, False])
+def test40_scatter_exch_masked(t, opaque):
+    UInt32 = dr.uint32_array_t(t)
+    Mask = dr.mask_t(t)
+
+    target =     t(  1,  2,   3,  4,  5, 6, 7)
+    value =      t( 10, 20,  30, 40, 50)
+    index = UInt32(  1,  0,   3,  2,  4)
+    mask = Mask(True, True, True, False, False)
+
+    if opaque:
+        dr.make_opaque(target, value, index, mask)
+
+    old = dr.scatter_exch(target, value, index, mask)
+    dr.eval(old)
+
+    assert dr.allclose(old, [2, 1, 4, 0, 0])
+    assert dr.allclose(target, [20, 10, 3, 30, 5, 6, 7])
+
+
+@pytest.test_arrays('float32,jit,shape=(*)', 'uint32,jit,shape=(*)')
+def test41_scatter_exch_vcall(t):
+    # Test `dr.scatter_exch()` when nested in a vcall
+    UInt32 = dr.uint32_array_t(t)
+
+    buffer1 = t(0, 1, 2, 0, 4)
+    buffer2 = t(0, 2, 0, 3, 4)
+
+    # `f()` and `g()` will be merged
+    def f(idx):
+        dr.scatter_exch(buffer1, 8, idx)
+    def g(idx):
+        dr.scatter_exch(buffer2, 9, idx)
+    def h(buffer):
+        pass
+
+    funcs = [f, g, h]
+    idx = UInt32(0, 0, 1, 1, 2)
+
+    dr.switch(idx, funcs, dr.arange(UInt32, 5))
+    dr.eval(buffer1, buffer2)
+
+    assert dr.allclose(buffer1, [8, 8, 2, 0, 4])
+    assert dr.allclose(buffer2, [0, 2, 9, 9, 4])
