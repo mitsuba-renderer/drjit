@@ -1234,10 +1234,10 @@ void export_memop(nb::module_ &m) {
           "active"_a = true, doc_scatter_add_kahan)
      .def("scatter_exch", &scatter_exch,
           "target"_a, "value"_a, "index"_a, "active"_a = true,
-          "") // FIXME add doc
+          doc_scatter_exch)
      .def("scatter_cas", &scatter_cas,
           "target"_a, "compare"_a, "value"_a, "index"_a, "active"_a = true,
-          "") // FIXME add doc
+          doc_scatter_cas)
      .def("ravel",
           [](nb::handle array, char order) {
               return ravel(array, order);

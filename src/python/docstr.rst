@@ -7085,6 +7085,164 @@
     relatively simple prefix sum, which does not require atomic memory operations
     (these can be slow in some cases).
 
+.. topic:: scatter_exch
+
+    Atomically exchange values in an array and return the previous values.
+
+    This operation performs an atomic *exchange* (swap) operation: it writes
+    ``value`` to ``target[index]`` and returns the original value that was stored
+    at that location before the write. This is essentially an atomic
+    read-modify-write operation that combines a gather and scatter in a single
+    atomic step.
+
+    The operation is similar to :py:func:`drjit.scatter()`, but with the
+    additional functionality of returning the old values. This makes it useful
+    for implementing various synchronization primitives and lock-free data
+    structures.
+
+    Each lane of this operation executes atomically. However, when multiple lanes
+    write to the same index, the order of operations is non-deterministic due to
+    the parallel execution model. While each individual exchange is atomic, the
+    final value at a contested location and the returned old values will depend on
+    the hardware scheduling.
+
+    The optional ``active`` argument can be used to mask out some of the updates.
+    Masked lanes will return zero and will not perform the exchange operation.
+
+    The function :py:func:`drjit.scatter_exch()` exhibits the following unusual
+    behavior compared to regular Dr.Jit operations: the return value references the
+    instantaneous state during a potentially large sequence of atomic operations.
+    This instantaneous state is not reproducible in later kernel evaluations, and
+    Dr.Jit will refuse to do so when the returned value is reused. In essence, the
+    variable is "consumed" by the process of evaluation.
+
+    .. code-block:: python
+
+       old = dr.scatter_exch(target=buffer, value=new_val, index=idx, active=active)
+       dr.scatter(
+           target=data_compact_1,
+           value=data_1,
+           index=old,  # Using the returned old values as indices
+           active=active
+       )
+
+       dr.eval(data_compact_1) # Run Kernel #1
+
+       dr.scatter(
+           target=data_compact_2,
+           value=data_2,
+           index=old, # <-- oops, reusing 'old' in another kernel.
+           active=active #  This raises an exception.
+       )
+
+    To get the above code to work, you will need to evaluate ``old`` at the
+    same time to materialize it into a stored (and therefore trivially
+    reproducible) representation.
+
+    .. code-block:: python
+
+       dr.eval(data_compact_1, old)
+
+    Args:
+        target (object): a JIT-compiled 1D dynamic Dr.Jit array (e.g.,
+          :py:class:`drjit.cuda.Float` or :py:class:`drjit.llvm.Float`)
+          that will be updated with new values.
+
+        value (object): values to write into the target array. Must be
+          convertible to the same type as ``target``.
+
+        index (object): a 1D dynamic unsigned 32-bit Dr.Jit array (e.g.,
+          :py:class:`drjit.cuda.UInt32` or :py:class:`drjit.llvm.UInt32`)
+          specifying the write indices. Dr.Jit will attempt an implicit
+          conversion if another type is provided.
+
+        active (object): an optional 1D dynamic Dr.Jit mask array (e.g.,
+          :py:class:`drjit.cuda.Bool` or :py:class:`drjit.llvm.Bool`)
+          specifying active lanes. The default is ``True``.
+
+    Returns:
+        drjit.ArrayBase: The previous values at the specified indices before
+        the exchange operation. Masked lanes return zero.
+
+.. topic:: scatter_cas
+
+    Atomically perform a compare-and-swap operation on array elements.
+
+    This operation performs an atomic *compare-and-swap* (CAS): it compares the
+    current value at ``target[index]`` with ``compare``, and only if they match,
+    it writes ``value`` to that location. The operation returns a tuple containing
+    the original value at the target location and a boolean mask indicating which
+    comparisons succeeded.
+
+    This atomic primitive is fundamental for building lock-free data structures
+    and synchronization mechanisms. It enables threads to conditionally update
+    shared memory only if it hasn't been modified by another thread.
+
+    Each lane of this operation executes atomically. When multiple lanes target
+    the same index, the order of operations is non-deterministic due to parallel
+    execution. Only one lane will succeed in performing the swap if they all
+    provide the same comparison value.
+
+    The optional ``active`` argument can be used to mask out some of the operations.
+    Masked lanes will return zero for the old value and ``False`` for the success
+    mask, and will not perform any memory transactions.
+
+    The function :py:func:`drjit.scatter_cas()` exhibits the following unusual
+    behavior compared to regular Dr.Jit operations: the returned ``old`` and
+    ``success`` values references the instantaneous state during a potentially
+    large sequence of atomic operations. This instantaneous state is not
+    reproducible in later kernel evaluations, and Dr.Jit will refuse to do so
+    when the returned values are reused. In essence, these variables are
+    "consumed" by the process of evaluation.
+
+    .. code-block:: python
+
+       old, success = dr.scatter_cas(target=buffer, compare=expected,
+                                     value=new_val, index=idx, active=active)
+
+       # Use the old values immediately in the same kernel
+       dr.scatter(target=other_buffer, value=data, index=old, active=success)
+
+       dr.eval(other_buffer) # Run Kernel #1
+
+       # This would fail - can't reuse 'old' or 'success' in another kernel
+       # dr.scatter(target=another_buffer, value=data2, index=old, active=success)
+
+    To reuse these values across multiple kernels, evaluate them together with
+    the first operation to materialize them into stored representations:
+
+    .. code-block:: python
+
+       dr.eval(other_buffer, old, success)
+
+    Args:
+        target (object): a JIT-compiled 1D dynamic Dr.Jit array (e.g.,
+          :py:class:`drjit.cuda.Float` or :py:class:`drjit.llvm.UInt32`)
+          that will be conditionally updated.
+
+        compare (object): values to compare against the current contents of
+          ``target[index]``. Must be convertible to the same type as ``target``.
+
+        value (object): values to write into the target array if the comparison
+          succeeds. Must be convertible to the same type as ``target``.
+
+        index (object): a 1D dynamic unsigned 32-bit Dr.Jit array (e.g.,
+          :py:class:`drjit.cuda.UInt32` or :py:class:`drjit.llvm.UInt32`)
+          specifying the indices to operate on. Dr.Jit will attempt an implicit
+          conversion if another type is provided.
+
+        active (object): an optional 1D dynamic Dr.Jit mask array (e.g.,
+          :py:class:`drjit.cuda.Bool` or :py:class:`drjit.llvm.Bool`)
+          specifying active lanes. The default is ``True``.
+
+    Returns:
+        tuple: A tuple ``(old, success)`` where:
+
+        - ``old`` (drjit.ArrayBase): The original values at the specified indices
+          before any modification. Masked lanes return zero.
+        - ``success`` (drjit.ArrayBase): A boolean mask indicating which
+          compare-and-swap operations succeeded. Masked lanes return ``False``.
+
 .. topic:: scatter_add_kahan
 
     Perform a Kahan-compensated atomic scatter-addition.
