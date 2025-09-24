@@ -1128,9 +1128,9 @@ void scatter(Target &target, const Value &value, const Index &index,
 }
 
 template <typename Index>
-Index scatter_inc(Index &target, const Index &index, const mask_t<Index> &value = true) {
+Index scatter_inc(Index &target, const Index &index, const mask_t<Index> &mask = true) {
     static_assert(is_jit_v<Index> && std::is_same_v<scalar_t<Index>, uint32_t> && depth_v<Index> == 1);
-    return target.scatter_inc_(index, value);
+    return target.scatter_inc_(index, mask);
 }
 
 template <typename Target, typename Value, typename Index, typename Mask = mask_t<Index>>
