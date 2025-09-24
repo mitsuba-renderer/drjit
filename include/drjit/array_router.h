@@ -1553,6 +1553,7 @@ void set_label(T &value, Labels... prefix) {
  */
 template <typename T>
 struct scoped_disable_symbolic {
+
     scoped_disable_symbolic() {
         if constexpr(drjit::is_jit_v<T>) {
             uint32_t index = jit_var_mask_default(T::Backend, 1);
@@ -1565,6 +1566,9 @@ struct scoped_disable_symbolic {
         if constexpr (drjit::is_jit_v<T>)
             jit_var_mask_pop(T::Backend);
     }
+
+    scoped_disable_symbolic(const scoped_disable_symbolic &) = delete;
+    scoped_disable_symbolic &operator=(const scoped_disable_symbolic &) = delete;
 };
 
 template <typename T> bool grad_enabled(const T &value) {
