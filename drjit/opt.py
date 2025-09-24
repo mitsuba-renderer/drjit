@@ -1102,6 +1102,160 @@ class Adam(Optimizer[Tuple[int, dr.ArrayBase, dr.ArrayBase]]):
         )
 
 
+class AdamW(Adam):
+    """
+    This class implements the AdamW optimizer as presented in the paper
+    *Decoupled Weight Decay Regularization* by Loshchilov and Hutter, ICLR 2019.
+
+    AdamW improves upon Adam by decoupling weight decay from gradient-based
+    optimization. Instead of applying weight decay through L2 regularization in
+    the loss function (which interacts poorly with adaptive learning rates),
+    AdamW applies weight decay directly to the parameters.
+
+    The method uses the following update equations:
+
+    .. math::
+
+       \\begin{align*}
+           \\mathbf{m}_{i+1} &= \\beta_1 \\cdot \\mathbf{m}_i + (1-\\beta_1)\\cdot\\mathbf{g}_{i+1}\\\\
+           \\mathbf{v}_{i+1} &= \\beta_2 \\cdot \\mathbf{v}_i + (1-\\beta_2)\\cdot\\mathbf{g}_{i+1}^2\\\\
+           \\mathbf{p}_{i+1} &= \\mathbf{p}_i - \\eta \\frac{\\sqrt{1-\\beta_2^{i+1}}}{1-\\beta_1^{i+1}} \\frac{\\mathbf{m}_{i+1}}{\\sqrt{\\mathbf{v}_{i+1}}+\\varepsilon} - \\eta \\lambda \\mathbf{p}_i,
+       \\end{align*}
+
+    where :math:`\\mathbf{p}_i` is the parameter value at iteration :math:`i`,
+    :math:`\\mathbf{g}_i` denotes the associated gradient, :math:`\\eta` is the
+    learning rate, :math:`\\varepsilon` is a small number to avoid division
+    by zero, and :math:`\\lambda` is the weight decay coefficient.
+
+    The key difference from Adam is the final term :math:`- \\eta \\lambda \\mathbf{p}_i`,
+    which applies weight decay directly to parameters independently of gradients.
+    This leads to better generalization, especially when using adaptive learning rates.
+
+    The scale factor :math:`\\frac{\\sqrt{1-\\beta_2^{i+1}}}{1-\\beta_1^{i+1}}`
+    corrects for the zero-valued initialization of the moment accumulators.
+    """
+
+    # Weight decay coefficient
+    weight_decay: float
+
+    def __init__(
+        self,
+        lr: LearningRate,
+        params: Optional[Mapping[str, dr.ArrayBase]] = None,
+        *,
+        beta_1: float = 0.9,
+        beta_2: float = 0.999,
+        epsilon: float = 1e-8,
+        weight_decay: float = 0.01,
+        mask_updates: bool = False,
+        promote_fp16: bool = True,
+        uniform: bool = False,
+    ):
+        """
+        Construct a new AdamW optimizer object with decoupled weight decay.
+
+        Args:
+
+            lr (float | drjit.ArrayBase):
+                Learning rate parameter. You may want to try different values
+                (e.g. powers of two) to find the best setting for a specific
+                problem. Use :py:func:`Optimizer.set_learning_rate` to
+                later adjust this value globally, or for specific parameters.
+
+            beta_1 (float):
+                Weight of the first-order moment exponential moving average
+                (EMA). Values approaching ``1`` will cause past gradients to
+                persist for a longer amount of time.
+
+            beta_2 (float):
+                Weight of the second-order moment EMA. Values approaching ``1``
+                will cause past gradients to persist for a longer amount of
+                time.
+
+            weight_decay (float):
+                Weight decay coefficient for L2 regularization. Unlike Adam,
+                this is applied directly to parameters rather than gradients,
+                providing better regularization with adaptive learning rates.
+
+            uniform (bool):
+                If enabled, the optimizer will use the *UniformAdam* variant of
+                Adam [Nicolet et al. 2021], where the update rule uses the
+                *maximum* of the second moment estimates at the current step
+                instead of the per-element second moments.
+
+            mask_updates (bool):
+                Mask updates to zero-valued gradient components?
+                See :py:func:`Optimizer.__init__()` for details on this parameter.
+
+            promote_fp16 (bool):
+                promoted half-precision variables to single precision internal storage?
+                See :py:func:`Optimizer.__init__()` for details on this parameter.
+
+            params (Mapping[str, drjit.ArrayBase] | None):
+                Optional dictionary-like object containing an initial set of
+                parameters.
+        """
+
+        super().__init__(
+            lr,
+            params,
+            beta_1=beta_1,
+            beta_2=beta_2,
+            epsilon=epsilon,
+            mask_updates=mask_updates,
+            promote_fp16=promote_fp16,
+            uniform=uniform
+        )
+
+        if weight_decay < 0:
+            raise RuntimeError("'weight_decay' must be >= 0")
+
+        self.weight_decay = weight_decay
+
+    def _step(
+        self,
+        cache: "_LRCache",
+        value: dr.ArrayBase,
+        grad: dr.ArrayBase,
+        lr: LearningRate,
+        extra: Tuple[int, dr.ArrayBase, dr.ArrayBase],
+        /,
+    ) -> Tuple[dr.ArrayBase, Tuple[int, dr.ArrayBase, dr.ArrayBase]]:
+        new_value, new_extra = super()._step(cache, value, grad, lr, extra)
+        scaled_value = dr.fma(value, -lr * self.weight_decay, new_value)
+        return scaled_value, new_extra
+
+    def __repr__(self):
+        """Return a human-readable string representation"""
+        lr_dict: Dict[str, LearningRate] = dict(default=self.lr)
+        total_count = 0
+        for k, state in self.state.items():
+            total_count += dr.prod(state[0].shape)
+            lr = state[2]
+            if lr is not None:
+                lr_dict[k] = lr
+
+        return (
+            "AdamW[\\n"
+            "  parameters = %s,\\n"
+            "  total_count = %u,\\n"
+            "  lr = %s,\\n"
+            "  beta = (%g, %g),\\n"
+            "  epsilon = %g,\\n"
+            "  weight_decay = %g\\n"
+            "]"
+            % (
+                list(self.keys()),
+                total_count,
+                lr_dict,
+                self.beta_1,
+                self.beta_2,
+                self.epsilon,
+                self.weight_decay,
+            )
+        )
+
+
 class GradScaler:
     """
     Gradient scaler for automatic mixed-precision training.

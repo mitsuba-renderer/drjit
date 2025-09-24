@@ -1,5 +1,5 @@
 import drjit as dr
-from drjit.opt import Adam, SGD, RMSProp, GradScaler
+from drjit.opt import Adam, SGD, RMSProp, AdamW, GradScaler
 import pytest
 
 
@@ -313,11 +313,54 @@ def test09_optimize_nested(t):
     assert dr.width(opt["x"]) == 1
 
 
+@pytest.test_arrays("is_diff,float,shape=(*),float32")
+def test11_adamw(t):
+    # Spot-check a run of the AdamW optimizer against PyTorch
+    #
+    # Reference:
+    #
+    # import torch
+    #
+    # x = torch.Tensor([1.0])
+    # x.requires_grad_()
+    # opt = torch.optim.AdamW(lr = .5, weight_decay=0.01, params=(x,))
+    #
+    # for _ in range(10):
+    #     opt.zero_grad()
+    #     loss = (x - 2)**2
+    #     loss.backward()
+    #     opt.step()
+    #     print(f'{x[0].item()}, ', end='')
+
+    x = t(1)
+    opt = AdamW(lr=0.5, weight_decay=0.01, params={"x": x})
+
+    xv = []
+    for _ in range(10):
+        dr.backward((opt["x"] - 2) ** 2)
+        opt.step()
+        xv.append(opt["x"][0])
+
+    ref = [
+        1.494999885559082,
+        1.954341173171997,
+        2.318138837814331,
+        2.5214834213256836,
+        2.5630908012390137,
+        2.4874978065490723,
+        2.339653491973877,
+        2.1559929847717285,
+        1.9682894945144653,
+        1.8056352138519287
+    ]
+    assert dr.allclose(xv, ref)
+
+
 @pytest.mark.parametrize("optimizer_class", [SGD, RMSProp, Adam])
 @pytest.mark.parametrize("promote_fp16", [False, True])
 @pytest.test_arrays("is_diff,float,shape=(*),float32")
-def test10_promote_fp16(optimizer_class, promote_fp16, t):
-    """Demosntrate that without FP16->FP32 promotion, rounding error can break optimizations"""
+def test12_promote_fp16(optimizer_class, promote_fp16, t):
+    """Demonstrate that without FP16->FP32 promotion, rounding error can break optimizations"""
     t16 = dr.float16_array_t(t)
 
 
