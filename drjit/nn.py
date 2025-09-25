@@ -232,6 +232,50 @@ class Tanh(Module):
     DRJIT_STRUCT = { }
     def __call__(self, arg: CoopVec, /) -> CoopVec:
         return drjit.tanh(arg)
+    
+
+class Sigmoid(Module):
+    r"""
+    Sigmoid activation function.
+    
+    .. math::
+       \mathrm{Sigmoid}(x) = \frac{1}{1 + e^{-x}} = 0.5 + 0.5 \cdot \tanh(x/2)
+    """
+    DRJIT_STRUCT = {}
+    
+    def __call__(self, arg: CoopVec, /) -> CoopVec:
+        # Use the identity: sigmoid(x) = 0.5 + 0.5 * tanh(x/2)
+        half_x = arg * 0.5
+        tanh_half_x = drjit.tanh(half_x)
+        return drjit.fma(0.5, tanh_half_x, 0.5)  # 0.5 * tanh + 0.5
+    
+class SiLU(Module):
+    r"""
+    SiLU activation function. Also known as the "swish" function.
+    """
+    DRJIT_STRUCT = {}
+    
+    def __call__(self, arg: CoopVec, /) -> CoopVec:
+        # Use the identity: sigmoid(x) = 0.5 + 0.5 * tanh(x/2)
+        half_x = arg * 0.5
+        tanh_half_x = drjit.tanh(half_x)
+        sigmoid = drjit.fma(0.5, tanh_half_x, 0.5)  # 0.5 * tanh + 0.5
+        return arg * sigmoid
+    
+class Softplus(Module):
+    r"""
+    Softplus activation function.
+    
+    .. math::
+       \mathrm{Softplus}(x) = \log(1 + e^x)
+    """
+    DRJIT_STRUCT = {}
+    
+    def __call__(self, arg: CoopVec, /) -> CoopVec:
+        # For numerical stability: log(1 + exp(x)) = x + log(1 + exp(-x)) when x > 0
+        # Using exp2: log(1 + exp(x)) = log(1 + 2^(x/ln(2))) = ln(2) * log2(1 + 2^(x/ln(2)))
+        x_log2 = arg * (1 / drjit.log(2))
+        return drjit.log(2) * drjit.log2(1.0 + drjit.exp2(x_log2))
 
 class ScaleAdd(Module):
     r"""
