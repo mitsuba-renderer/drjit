@@ -200,9 +200,12 @@ Matrix4 transform_compose(const Matrix<entry_t<Matrix4>, 3> &s,
         "Matrix::transform_compose(): template argument must be of type Matrix<T, 4>");
 
     using Value = entry_t<Matrix4>;
-    Matrix4 result(quat_to_matrix<Matrix<Value, 3>>(q) * s);
-    result.entry(3) = concat(t, Array<Value, 1>(1));
-    return result;
+    Matrix3 m33(quat_to_matrix<Matrix<Value, 3>>(q) * s);
+    return Matrix4(
+        m33[0][0], m33[0][1], m33[0][2], t[0],
+        m33[1][0], m33[1][1], m33[1][2], t[1],
+        m33[2][0], m33[2][1], m33[2][2], t[2],
+        0, 0, 0, 0);
 }
 
 template <typename Matrix4>
