@@ -1011,7 +1011,7 @@ class Adam(Optimizer[Tuple[int, dr.ArrayBase, dr.ArrayBase]]):
         v_tp: dr.ArrayBase  # Second moment EMA state from previous iteration
 
         # Unpack optimizer state
-        t_p, m_tp, v_tp = extra[:3]
+        t_p, m_tp, v_tp = extra
 
         # Increase the iteration count
         t = t_p + 1
@@ -1136,7 +1136,7 @@ class AdamW(Adam):
     """
 
     # Weight decay coefficient
-    weight_decay: float
+    global_weight_decay: float
 
     def __init__(
         self,
@@ -1146,7 +1146,7 @@ class AdamW(Adam):
         beta_1: float = 0.9,
         beta_2: float = 0.999,
         epsilon: float = 1e-8,
-        weight_decay: Optional[float | Mapping[str, float]] = None,
+        weight_decay: Union[float, Mapping[str, float]] = None,
         mask_updates: bool = False,
         promote_fp16: bool = True,
         uniform: bool = False,
@@ -1274,7 +1274,7 @@ class AdamW(Adam):
         
         decay = extra[3]
         #Take Adam step
-        new_value, new_extra = super()._step(cache, value, grad, lr, extra)
+        new_value, new_extra = super()._step(cache, value, grad, lr, extra[:3])
         
         # Take weight decay step
         scaled_value = dr.fma(value, -lr * decay, new_value)

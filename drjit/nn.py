@@ -252,6 +252,9 @@ class Sigmoid(Module):
 class SiLU(Module):
     r"""
     SiLU activation function. Also known as the "swish" function.
+    .. math::
+       \mathrm{SiLU}(x) = x \cdot \mathrm{Sigmoid}(x) 
+                        = \frac{x}{1 + e^{-x}} 
     """
     DRJIT_STRUCT = {}
     
