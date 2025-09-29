@@ -438,6 +438,46 @@
     Returns:
         type: Result of the conversion as described above.
 
+.. topic:: replace_shape_t
+
+    Converts the provided Dr.Jit type into an analogous version with the
+    specified shape.
+
+    The optional third argument can be used to override the desired kind of
+    Dr.Jit array and can be set to one of ``"array"``, ``"matrix"``,
+    ``"quaternion"``, or ``"complex"``.
+
+    This function implements the following set of behaviors:
+
+    1. When invoked with a Dr.Jit array *type* ``arg0``, it returns an analogous
+       version with a different shape, as specified via ``arg1``.
+
+       For example, when called with :py:class:`drjit.cuda.Array1f` and ``(3,
+       -1)``, it will return :py:class:`drjit.cuda.Array3f`.
+
+       When called with :py:class:`drjit.cuda.Array3f` and ``(2, 2,
+       -1)``, it will return :py:class:`drjit.cuda.Array22f`.
+
+       When called with :py:class:`drjit.cuda.Array3f`, ``(2, 2, -1)`` and
+       ``"matrix"``, the function instead returns
+       :py:class:`drjit.cuda.Matrix2f`.
+
+    2. When the input is not a type, it returns ``replace_type_t(type(arg0), arg1)``.
+
+    3. When the input is not a Dr.Jit type, the function returns ``arg0``.
+
+    Args:
+        arg0 (object): An arbitrary Python object
+
+        arg1 (tuple[int]): The desired shape
+
+        arg2 (str | None): Optional: use this to override the desired array
+          kind. The following values are legal: ``"array"``, ``"matrix"``,
+          ``"quaternion"``, or ``"complex"``.
+
+    Returns:
+        type: Result of the conversion as described above.
+
 .. topic:: is_complex_v
 
     Check whether the input is a Dr.Jit array instance or type representing a complex number.

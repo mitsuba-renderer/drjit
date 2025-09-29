@@ -261,6 +261,7 @@ _______________________
 .. autofunction:: float32_array_t
 .. autofunction:: float64_array_t
 .. autofunction:: replace_type_t
+.. autofunction:: replace_shape_t
 .. autofunction:: detached_t
 .. autofunction:: expr_t
 .. autofunction:: array_t
