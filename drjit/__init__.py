@@ -2805,18 +2805,53 @@ _clip = clip
 
 def srgb_to_linear(x: ArrayT, clip: bool = True) -> ArrayT:
     """
-    Convert a sRGB gamma-corrected intensity value on the interval [0, 1] into
-    a linear intensity value on the interval [0, 1].
+    Convert sRGB gamma-corrected values to linear intensity values.
 
-    Values outside of the range [0, 1] are clipped by default. You may specify
-    `clip=False` to avoid this step if your data is already guranteed to be in
-    this range.
+    Applies the inverse sRGB transfer function (gamma expansion) to convert
+    gamma-encoded sRGB values to linear RGB values. The sRGB transfer function
+    uses a piecewise curve with a linear segment near black for numerical stability.
+
+    When `clip=True` (default), input values are clamped to [0, 1] before conversion.
+    When `clip=False`, the transformation preserves the sign and applies the sRGB
+    curve to the absolute value, enabling round-trip conversion of out-of-gamut
+    colors. This is useful for wide-gamut workflows where colors may temporarily
+    exceed the [0, 1] range during processing.
+
+    The transformation is defined as:
+
+    .. math::
+
+        f(x) = \\begin{cases}
+            \\frac{x}{12.92} & \\text{if } x \\leq 0.04045 \\\\
+            \\left(\\frac{x + 0.055}{1.055}\\right)^{2.4} & \\text{if } x > 0.04045
+        \\end{cases}
+
+    When ``clip=False``, the transformation becomes:
+
+    .. math::
+
+        f(x) = \\text{sign}(x) \\cdot f(|x|)
+
+    Args:
+        x (ArrayT): Dr.Jit array containing sRGB gamma-corrected values.
+                   Typically in range [0, 1] for in-gamut colors.
+        clip (bool): If True, clamp input values to [0, 1]. If False, preserve
+                    sign and apply transformation to absolute values. Default: True.
+
+    Returns:
+        ArrayT: Linear intensity values. When clip=True, output is in [0, 1].
+                When clip=False, output preserves the sign of input values.
     """
 
     if clip:
         x = _clip(x, 0, 1)
+        s = 1
+    else:
+        s = sign(x)
+        x = abs(x)
 
-    return select(
+
+    return s * select(
         x < 0.04045,
         x / 12.92,
         fma(x, 1 / 1.055, 0.055 / 1.055) ** 2.4
@@ -2824,18 +2859,52 @@ def srgb_to_linear(x: ArrayT, clip: bool = True) -> ArrayT:
 
 def linear_to_srgb(x: ArrayT, clip: bool = True) -> ArrayT:
     """
-    Convert a linear intensity value on the interval [0, 1] to into a sRGB
-    value by applying the underlying gamma correction curve.
+    Convert linear intensity values to sRGB gamma-corrected values.
 
-    Values outside of the range [0, 1] are clipped by default. You may specify
-    `clip=False` to avoid this step if your data is already guranteed to be in
-    this range.
+    Applies the sRGB transfer function (gamma compression) to convert linear RGB
+    values to gamma-encoded sRGB values suitable for display or storage. The sRGB
+    transfer function uses a piecewise curve with a linear segment near black for
+    numerical stability.
+
+    When `clip=True` (default), input values are clamped to [0, 1] before conversion.
+    When `clip=False`, the transformation preserves the sign and applies the sRGB
+    curve to the absolute value, enabling handling of out-of-gamut colors in
+    wide-gamut workflows.
+
+    The transformation is defined as:
+
+    .. math::
+
+        f(x) = \\begin{cases}
+            12.92 \\cdot x & \\text{if } x \\leq 0.0031308 \\\\
+            1.055 \\cdot x^{1/2.4} - 0.055 & \\text{if } x > 0.0031308
+        \\end{cases}
+
+    When ``clip=False``, the transformation becomes:
+
+    .. math::
+
+        f(x) = \\text{sign}(x) \\cdot f(|x|)
+
+    Args:
+        x (ArrayT): Dr.Jit array containing linear intensity values.
+                   Typically in range [0, 1] for in-gamut colors.
+        clip (bool): If True, clamp input values to [0, 1]. If False, preserve
+                    sign and apply transformation to absolute values. Default: True.
+
+    Returns:
+        ArrayT: sRGB gamma-corrected values. When clip=True, output is in [0, 1].
+                When clip=False, output preserves the sign of input values.
     """
 
     if clip:
         x = _clip(x, 0, 1)
+        s = 1
+    else:
+        s = sign(x)
+        x = abs(x)
 
-    return select(
+    return s * select(
         x < 0.0031308,
         x * 12.92,
         fma(1.055, x ** (1.0 / 2.4), -0.055)
