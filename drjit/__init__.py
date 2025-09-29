@@ -2910,6 +2910,143 @@ def linear_to_srgb(x: ArrayT, clip: bool = True) -> ArrayT:
         fma(1.055, x ** (1.0 / 2.4), -0.055)
     )
 
+_SRGB_TO_LMS = [
+    0.4122214708, 0.5363325363, 0.0514459929,
+    0.2119034982, 0.6806995451, 0.1073969566,
+    0.0883024619, 0.2817188376, 0.6299787005
+]
+
+_CBRT_LMS_TO_OKLAB = [
+    0.2104542553,  0.7936177850, -0.0040720468,
+    1.9779984951, -2.4285922050, +0.4505937099,
+    0.0259040371,  0.7827717662, -0.8086757660,
+]
+
+_OKLAB_TO_CBRT_LMS = [
+    1.0,  0.3963377774,  0.2158037573,
+    1.0, -0.1055613458, -0.0638541728,
+    1.0, -0.0894841775, -1.2914855480
+]
+
+_LMS_TO_SRGB = [
+     4.0767416621, -3.3077115913,  0.2309699292,
+    -1.2684380046,  2.6097574011, -0.3413193965,
+    -0.0041960863, -0.7034186147,  1.7076147010
+]
+
+def linear_srgb_to_oklab(value: ArrayT) -> ArrayT:
+    """
+    Convert colors from linear sRGB to Oklab color space.
+
+    Oklab is a perceptual color space designed for image processing that provides
+    better perceptual uniformity than CIELAB or HSV. The L, a, b coordinates are
+    perceptually orthogonal, enabling independent manipulation of lightness, green-red
+    axis, and blue-yellow axis without perceived changes in the other dimensions.
+    Oklab produces smooth color transitions and accurately predicts human perception
+    of hue and chroma.
+
+    For more details, see: https://bottosson.github.io/posts/oklab/
+
+    This function supports Dr.Jit tensors and arrays with RGB or RGBA data.
+    For tensors, the color channels must be in the trailing dimension.
+    For arrays, the color channels must be in the leading dimension.
+    Alpha channels are preserved unchanged in RGBA inputs.
+
+    The function expects **linear sRGB** values as input, not gamma-encoded
+    sRGB. For typical gamma-encoded image data (e.g., from image files), first
+    apply :py:func:`dr.srgb_to_linear() <drjit.srgb_to_linear>` to convert to
+    linear sRGB before using this function.
+
+    Args:
+        value (dr.ArrayBase): Dr.Jit tensor or array containing **linear sRGB** colors.
+                              For tensors: shape [..., 3] for RGB or [..., 4] for RGBA.
+                              For arrays: shape [3, ...] for RGB or [4, ...] for RGBA.
+
+    Returns:
+        dr.ArrayBase: Colors converted to Oklab space with same shape as input.
+                      L represents lightness, a represents green-red axis,
+                      b represents blue-yellow axis.
+    """
+
+    if not is_array_v(value):
+        raise Exception('linear_srgb_to_oklab(): expected a Jit tensor/array type as input!')
+
+    Type = type(value)
+    shape = value.shape
+
+    if is_tensor_v(value):
+        if shape[-1] != 3 and shape[-1] != 4:
+            raise Exception('linear_srgb_to_oklab(): tensors must have trailing dimension 3 (RGB) or 4 (RGBA)')
+        value = reshape(value, (-1, shape[-1]))
+        Array = replace_shape_t(Type, (shape[-1], -1), 'array')
+        value_2 = Array(value, flip_axes=True)
+        value_2 = linear_srgb_to_oklab(value_2)
+        return reshape(Type(value_2, flip_axes = True), shape)
+    elif shape[0] == 4:
+        value_2 = Type()
+        value_2.xyz = linear_srgb_to_oklab(value.xyz)
+        value_2.w = value.w
+        return value_2
+    elif shape[0] != 3:
+        raise Exception('linear_srgb_to_oklab(): arrays must have leading dimension 3 (RGB) or 4 (RGBA)')
+
+    Matrix = replace_shape_t(Type, (3, 3), 'matrix')
+    lms = Matrix(_SRGB_TO_LMS) @ value
+    return Matrix(_CBRT_LMS_TO_OKLAB) @ cbrt(lms)
+
+def oklab_to_linear_srgb(value: ArrayT) -> ArrayT:
+    """
+    Convert colors from Oklab color space back to linear sRGB.
+
+    This function performs the inverse transformation of linear_srgb_to_oklab,
+    converting Oklab L, a, b coordinates back to linear sRGB values.
+
+    This function supports Dr.Jit tensors and arrays with Lab or LabA data.
+    For tensors, the color channels must be in the trailing dimension.
+    For arrays, the color channels must be in the leading dimension.
+    Alpha channels are preserved unchanged in LabA inputs.
+
+    This function returns **linear sRGB** values, not gamma-encoded sRGB. To
+    obtain gamma-encoded sRGB for typical image output (e.g., for display or
+    saving to image files), apply :py:func:`dr.linear_to_srgb()
+    <drjit.linear_to_srgb>` to the output of this function.
+
+    Args:
+        value (dr.ArrayBase): Dr.Jit tensor or array containing Oklab colors.
+                              For tensors: shape [..., 3] for Lab or [..., 4] for LabA.
+                              For arrays: shape [3, ...] for Lab or [4, ...] for LabA.
+
+    Returns:
+        dr.ArrayBase: Colors converted to **linear sRGB** space with same shape as input.
+                      Values are in linear sRGB (not gamma-corrected).
+    """
+
+    if not is_array_v(value):
+        raise Exception('oklab_to_linear_srgb(): expected a Jit tensor/array type as input!')
+
+    Type = type(value)
+    shape = value.shape
+
+    if is_tensor_v(value):
+        if shape[-1] != 3 and shape[-1] != 4:
+            raise Exception('oklab_to_linear_srgb(): tensors must have trailing dimension 3 (Lab) or 4 (LabA)')
+        value = reshape(value, (-1, shape[-1]))
+        Array = replace_shape_t(Type, (shape[-1], -1), 'array')
+        value_2 = Array(value, flip_axes=True)
+        value_2 = oklab_to_linear_srgb(value_2)
+        return reshape(Type(value_2, flip_axes=True), shape)
+    elif shape[0] == 4:
+        value_2 = Type()
+        value_2.xyz = oklab_to_linear_srgb(value.xyz)
+        value_2.w = value.w
+        return value_2
+    elif shape[0] != 3:
+        raise Exception('oklab_to_linear_srgb(): arrays must have leading dimension 3 (Lab) or 4 (LabA)')
+
+    Matrix = replace_shape_t(Type, (3, 3), 'matrix')
+
+    lms = (Matrix(_OKLAB_TO_CBRT_LMS) @ value)**3
+    return Matrix(_LMS_TO_SRGB) @ lms
 
 def unit_angle(a, b):
     """
