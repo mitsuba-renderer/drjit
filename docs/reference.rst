@@ -161,6 +161,8 @@ Miscellaneous operations
 .. autofunction:: copy
 .. autofunction:: linear_to_srgb
 .. autofunction:: srgb_to_linear
+.. autofunction:: linear_srgb_to_oklab
+.. autofunction:: oklab_to_linear_srgb
 .. autofunction:: reorder_threads
 
 Just-in-time compilation
