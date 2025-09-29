@@ -237,6 +237,46 @@ void export_traits(nb::module_ &m) {
               return nb::borrow(tp);
           }, doc_replace_type_t);
 
+    m.def("replace_shape_t",
+          [](nb::handle h, const vector<int> &shape, nb::handle type) {
+              nb::handle tp = h.is_type() ? h : h.type();
+
+              if (is_drjit_type(tp)) {
+                  ArrayMeta m = supp(tp);
+                  if (shape.size() >= 4)
+                      nb::raise("drjit.replace_shape(): len(shape) must be < 4");
+
+                  m.ndim = (uint16_t) shape.size();
+                  for (size_t i = 0; i < shape.size(); ++i) {
+                      int s = shape[i];
+                      if (s >= 255 || s < -1)
+                          nb::raise("drjit.replace_shape(): invalid shape entry %i", s);
+                      m.shape[i] = s == -1 ? DRJIT_DYNAMIC : (uint8_t) shape[i];
+                  }
+
+                  if (!type.is_none()) {
+                      const char *type_str = nb::cast<const char *>(type);
+                      m.is_class = false; m.is_complex = false;
+                      m.is_matrix = false; m.is_quaternion = false;
+                      m.is_sequence = false; m.is_tensor = false;
+                      m.is_vector = false;
+                      if (strcmp(type_str, "array") == 0)
+                          m.is_vector = true;
+                      else if (strcmp(type_str, "matrix") == 0)
+                          m.is_matrix = true;
+                      else if (strcmp(type_str, "quaternion") == 0)
+                          m.is_quaternion = true;
+                      else if (strcmp(type_str, "complex") == 0)
+                          m.is_complex = true;
+                      else
+                          nb::raise("drjit.replace_shape(): expected 'type' to equal one of (\"array\", \"matrix\", \"quaternion\", \"complex\")");
+                  }
+
+                  tp = meta_get_type(m);
+              }
+              return nb::borrow(tp);
+          }, doc_replace_shape_t, nb::arg(), nb::arg(), nb::arg() = nb::none());
+
     m.def("backend_v",
           [](nb::handle h) {
               nb::handle tp = h.is_type() ? h : h.type();

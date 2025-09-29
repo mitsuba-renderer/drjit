@@ -213,3 +213,15 @@ def test02_expr_t(t):
     with pytest.raises(TypeError) as ei:
         dr.expr_t(MyStruct, m.Float)
     assert "expr_t(): incompatible types" in str(ei.value)
+
+@pytest.test_arrays("float, shape=(*), is_jit")
+def test03_replace_shape(t):
+    m = sys.modules[t.__module__]
+
+    assert dr.replace_shape_t(m.Float, (-1,)) is m.Float
+    assert dr.replace_shape_t(m.Float, (0, -1)) is m.Array0f
+    assert dr.replace_shape_t(m.Float, (1, -1)) is m.Array1f
+    assert dr.replace_shape_t(m.Float, (-1, -1)) is m.ArrayXf
+    assert dr.replace_shape_t(m.Float, (2, 2, -1)) is m.Array22f
+    assert dr.replace_shape_t(m.Float, (2, 2, -1), 'matrix') is m.Matrix2f
+    assert dr.replace_shape_t(m.Float, (2, -1), 'complex') is m.Complex2f
