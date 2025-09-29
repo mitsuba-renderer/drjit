@@ -22,9 +22,10 @@ Matrix translate(const Array<entry_t<Matrix>, size_v<Matrix> - 1> &v) {
     size_t N = size_v<Matrix>;
     Matrix trafo = identity<Matrix>();
     for (size_t i = 0; i < N - 1; ++i)
-        trafo(N - 1, i) = v.entry(i);
+        trafo(i, N - 1) = v.entry(i);
     trafo(N - 1, N - 1) = 1;
-    return transpose(trafo);
+
+    return trafo;
 }
 
 template <typename Matrix>
@@ -200,12 +201,13 @@ Matrix4 transform_compose(const Matrix<entry_t<Matrix4>, 3> &s,
         "Matrix::transform_compose(): template argument must be of type Matrix<T, 4>");
 
     using Value = entry_t<Matrix4>;
-    Matrix3 m33(quat_to_matrix<Matrix<Value, 3>>(q) * s);
-    return Matrix4(
-        m33[0][0], m33[0][1], m33[0][2], t[0],
-        m33[1][0], m33[1][1], m33[1][2], t[1],
-        m33[2][0], m33[2][1], m33[2][2], t[2],
-        0, 0, 0, 0);
+
+    Matrix4 result(quat_to_matrix<Matrix<Value, 3>>(q) * s);
+    for (size_t i = 0; i < 3; ++i)
+        result(i, 3) = t.entry(i);
+    result(3, 3) = 1;
+
+    return result;
 }
 
 template <typename Matrix4>
@@ -219,7 +221,11 @@ Matrix4 transform_compose_inverse(const Matrix<entry_t<Matrix4>, 3> &s,
     using Value = entry_t<Matrix4>;
     Matrix<Value, 3> inv_m = inverse(quat_to_matrix<Matrix<Value, 3>>(q) * s);
     Matrix4 result(inv_m);
-    result.entry(3) = concat(inv_m * -t, Array<Value, 1>(1));
+    auto tmp = inv_m * -t;
+    for (size_t i = 0; i < 3; ++i)
+        result(i, 3) = tmp.entry(i);
+    result(3, 3) = 1;
+
     return result;
 }
 
