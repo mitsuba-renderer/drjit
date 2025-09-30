@@ -2925,7 +2925,7 @@ def test74_auto_opaque_retraverse(t):
 @pytest.mark.parametrize("auto_opaque", [False, True])
 def test75_changing_literal_width(t, auto_opaque):
     """
-    Tests that the auot opaque feature correctly forces evaluation of literals,
+    Tests that the auto opaque feature correctly forces evaluation of literals,
     if the literal size changes between calls to the frozen function.
     """
 

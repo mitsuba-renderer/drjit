@@ -1627,12 +1627,15 @@ size_t FlatVariablesHasher::operator()(
                     "The layout consists of more than 100M elements, which "
                     "might lead to hash collisions when looking up previous "
                     "recordings of frozen functions.");
-        if (layout_.index >> 26)
+        if (layout_.index >> 26 &&
+            !(layout_.flags & ((uint32_t) LayoutFlag::Undefined |
+                               (uint32_t) LayoutFlag::Literal))) {
             jit_log(
                 LogLevel::Warn,
                 "The layout consists of more than 100M opaque variables, which "
                 "might lead to hash collisions when looking up previous "
                 "recordings of frozen functions.");
+        }
         union {
             struct {
                 uint64_t num : 26;
