@@ -1278,3 +1278,38 @@ def test41_scatter_exch_vcall(t):
 
     assert dr.allclose(buffer1, [8, 8, 2, 0, 4])
     assert dr.allclose(buffer2, [0, 2, 9, 9, 4])
+
+
+@pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
+@pytest.test_arrays('uint32,is_jit,shape=(*)')
+@dr.syntax
+def test42_masked_gather_loop(t, mode):
+    # Symbolic (reindexed) gathers, should re-apply masks to previous gathers
+    # even when the mask is implicit due to a loop
+
+    Int32 = dr.int32_array_t(t)
+    Mask = dr.mask_t(t)
+
+    # Note: Use non-power of 2 sizes of array to make sure LLVM default masks work
+
+    buf_0 = t(1, 2, 3, 4, 5, 6, 7, 8)
+    mask_1 = (dr.arange(t, 5) % 4) != 0 # False, True, True, True, False
+    index_1 = dr.arange(t, 5) * 2
+    buf_1 = dr.gather(t, buf_0, index_1, mask_1) # 0, 3, 5, 7, 0
+
+    active = Mask(True, True, False)
+    out = dr.zeros(t, 3)
+    counter = dr.zeros(t, 3)
+
+    while dr.hint(active, exclude=[buf_1], mode=mode):
+        index_2 = t(Int32(0, 2, -1))
+        out += dr.gather(t, buf_1, index_2) # 0, 5, 0
+
+        counter += 1
+        active = counter == 0
+
+    # Lane 0: outputs 0 because the gather on buf_0 masked it
+    # Lane 1: outputs 5 because we lookup index 2 of buf_1, which is index 4 of buf_0
+    # Lane 2: outputs 0 because the gather on buf_1 masked it
+
+    assert dr.all(out == [0, 5, 0], axis=None)
