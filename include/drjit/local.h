@@ -39,15 +39,9 @@ struct Local {
 
     ~Local() = default;
     Local(const Local &) = delete;
-    Local(Local &&l) {
-        for (size_t i = 0; i < Size; ++i)
-            m_data[i] = l.m_data[i];
-    }
+    Local(Local &&l) = default;
     Local &operator=(const Local &) = delete;
-    Local &operator=(Local &&l) {
-        for (size_t i = 0; i < Size; ++i)
-            m_data[i] = l.m_data[i];
-    }
+    Local &operator=(Local &&l) = default;
 
     Value read(const Index &offset, const Mask &active = true) const {
         if (active)
@@ -176,16 +170,16 @@ struct Local<Value_, Size_, Index_,
             jit_var_dec_ref(index);
     }
     Local(const Local &) = delete;
-    Local(Local &&l) {
-        m_arrays.swap(l.m_arrays);
-        l.m_arrays.clear();
-    }
+    Local(Local &&l) = default;
+
     Local &operator=(const Local &) = delete;
     Local &operator=(Local &&l) {
         for (uint32_t index : m_arrays)
             jit_var_dec_ref(index);
-        m_arrays.swap(l.m_arrays);
-        l.m_arrays.clear();
+        m_size = std::move(l.m_size);
+        m_value = std::move(l.m_value);
+        m_arrays = std::move(l.m_arrays);
+        return *this;
     }
 
     Value read(const Index &offset, const Mask &active = true) const {
