@@ -435,24 +435,34 @@ template <typename T> NB_INLINE void bind_base(ArrayBinding &b) {
             i = 0;
 
         nb::handle result;
-        if (i < size) {
-            nb::detail::cleanup_list cleanup(o);
-            try {
-                auto &&value = inst->entry(i);
-                result = nb::detail::make_caster<Value>::from_cpp(
-                    value, nb::rv_policy::reference_internal, &cleanup);
-            } catch (const std::exception &e) {
-                nb::str tp_name = nb::inst_name(o);
-                PyErr_Format(PyExc_RuntimeError, "%U.__getitem__(): %s",
-                             tp_name.ptr(), e.what());
-            }
-            assert(!cleanup.used());
-        } else {
-            nb::str tp_name = nb::inst_name(o);
+
+        if (i >= size) {
             PyErr_Format(
                 PyExc_IndexError,
                 "%U.__getitem__(): entry %zd is out of bounds (the array is of size %zu).",
-                tp_name.ptr(), i_, size);
+                nb::inst_name(o).ptr(), i_, size);
+        } else {
+            try {
+                if constexpr (depth_v<T> == 1) {
+                    Value value;
+                    {
+                        using Guard = std::conditional_t<is_jit_v<T>, nb::gil_scoped_release, int>;
+                        Guard guard;
+                        (void) guard;
+                        value = inst->entry(i);
+                    }
+                    result = nb::detail::make_caster<Value>::from_cpp(value, nb::rv_policy::automatic, nullptr);
+                } else {
+                    Value &value = inst->entry(i);
+                    nb::detail::cleanup_list cleanup(o);
+                        result = nb::detail::make_caster<Value>::from_cpp(
+                                value, nb::rv_policy::reference_internal, &cleanup).ptr();
+                    assert(!cleanup.used());
+                }
+            } catch (const std::exception &e) {
+                PyErr_Format(PyExc_RuntimeError, "%U.__getitem__(): %s",
+                             nb::inst_name(o).ptr(), e.what());
+            }
         }
         return result.ptr();
     };
