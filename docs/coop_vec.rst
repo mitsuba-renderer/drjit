@@ -66,7 +66,7 @@ multiplication.
    x = nn.CoopVec(... 16 values ...)
 
    # Evaluate A @ x + b
-   v_out = nn.matvec(A_view, v_in, b_view)
+   v_out = nn.matvec(A_view, x, b_view)
 
    # Unpack the resulting cooperative vector
    x, y, z = v_out
