@@ -22,10 +22,10 @@ void export_profile(nb::module_ &m) {
     };
 
     struct profile_range {
-        const char *value;
+        nb::str value;
 
         void __enter__() {
-            jit_profile_range_push(value);
+            jit_profile_range_push(value.c_str());
         }
 
         void __exit__(nb::handle, nb::handle, nb::handle) {
@@ -34,7 +34,7 @@ void export_profile(nb::module_ &m) {
     };
 
     nb::class_<profile_range>(m, "profile_range", doc_profile_range)
-        .def(nb::init<const char *>())
+        .def(nb::init<nb::str>())
         .def("__enter__", &profile_range::__enter__)
         .def("__exit__", &profile_range::__exit__, nb::arg().none(),
              nb::arg().none(), nb::arg().none());
