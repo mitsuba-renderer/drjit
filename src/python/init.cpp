@@ -173,8 +173,16 @@ int tp_init_array(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
             nb::object converted_complex_scalar;
             bool is_ndarray = nb::ndarray_check(arg);
             if (is_drjit_tensor || (!arg_is_drjit && !is_builtin(arg_tp) && is_ndarray)) {
+                bool has_dim = false;
+                if (is_drjit_tensor || PyCapsule_CheckExact(arg))
+                    has_dim = true;
+                else if (nb::int_ ndim = nb::borrow<nb::int_>(nb::getattr(arg, "ndim", nb::handle())); ndim.is_valid())
+                    has_dim = ((int) ndim) > 0;
+                else
+                    has_dim = meta_get(arg).ndim > 0;
+
                 // For scalar types we want to rely on broadcasting below
-                if (is_drjit_tensor || PyCapsule_CheckExact(arg) || nb::getattr(arg, "ndim", nb::int_(0)).not_equal(nb::int_(0))) {
+                if (has_dim) {
                     // Import flattened array in C-style ordering
                     nb::object flattened;
 
