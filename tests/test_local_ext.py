@@ -11,7 +11,7 @@ def get_pkg(t):
         return m.cuda
     elif backend == dr.JitBackend.Invalid:
         return m.scalar
-    
+
 def is_constant_valued(local, value):
     for i in range(len(local)):
         assert dr.allclose(local.read(i), value)
@@ -66,11 +66,11 @@ def test03_write_read(t):
         sum += local.read(i)
 
     expected = dr.sum(dr.arange(t, len(local))) + (dr.arange(t, width) * len(local))
-    
+
     if dr.backend_v(t) == dr.JitBackend.Invalid:
         sum = sum[0]
         expected = expected[0]
-    
+
     assert dr.allclose(sum, expected)
 
 
@@ -101,3 +101,16 @@ def test04_struct(t):
     if dr.backend_v(t) == dr.JitBackend:
         with pytest.raises(RuntimeError, match="out of bounds"):
             validate_index(10, 1)
+
+@pytest.test_arrays('float32,shape=(*)')
+def test05_loop(t):
+    pkg = get_pkg(t)
+    pkg.test_Local10_loop()
+    pkg.test_Local10_loop_struct()
+
+    if dr.backend_v(t) == dr.JitBackend:
+        pkg.test_LocalDyn_loop()
+        pkg.test_LocalDyn_loop_struct()
+
+    pkg.test_LocalStruct10_loop()
+    pkg.test_LocalStruct10_loop_struct()

@@ -38,9 +38,9 @@ struct Local {
     }
 
     ~Local() = default;
-    Local(const Local &) = delete;
+    Local(const Local &) = default;
     Local(Local &&l) = default;
-    Local &operator=(const Local &) = delete;
+    Local &operator=(const Local &) = default;
     Local &operator=(Local &&l) = default;
 
     Value read(const Index &offset, const Mask &active = true) const {
@@ -169,10 +169,21 @@ struct Local<Value_, Size_, Index_,
         for (uint32_t index : m_arrays)
             jit_var_dec_ref(index);
     }
-    Local(const Local &) = delete;
+    Local(const Local &l) {
+        *this = l;
+    }
     Local(Local &&l) = default;
 
-    Local &operator=(const Local &) = delete;
+    Local &operator=(const Local &l) {
+        for (uint32_t index : m_arrays)
+            jit_var_dec_ref(index);
+        m_size = l.m_size;
+        m_value = l.m_value;
+        m_arrays = l.m_arrays;
+        for (uint32_t index : m_arrays)
+            jit_var_inc_ref(index);
+        return *this;
+    }
     Local &operator=(Local &&l) {
         for (uint32_t index : m_arrays)
             jit_var_dec_ref(index);
