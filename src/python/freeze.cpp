@@ -1624,13 +1624,15 @@ size_t FlatVariablesHasher::operator()(
         // impacting performance but not correctness.
         if (layout_.num >> 26)
             jit_log(LogLevel::Warn,
-                    "The layout consists of more than 100M elements, which "
+                    "The layout consists of more than 2^26 elements, which "
                     "might lead to hash collisions when looking up previous "
                     "recordings of frozen functions.");
-        if (layout_.index >> 26)
+        if (layout_.index >> 26 &&
+            !(layout_.flags & (uint32_t) LayoutFlag::Literal) &&
+            !(layout_.flags & (uint32_t) LayoutFlag::Literal))
             jit_log(
                 LogLevel::Warn,
-                "The layout consists of more than 100M opaque variables, which "
+                "The layout consists of more than 2^26 opaque variables, which "
                 "might lead to hash collisions when looking up previous "
                 "recordings of frozen functions.");
         union {
