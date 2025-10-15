@@ -36,7 +36,7 @@ we could add a call to :py:func:`dr.sync_thread()`.
    start = time.end()
    y = f(x)
    dr.eval(y)
-   dr.sync_thread(y)
+   dr.sync_thread()
    end = time.end()
 
 However, explicit synchronization is generally an *anti-pattern* and not
