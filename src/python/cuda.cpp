@@ -25,8 +25,9 @@ struct PyGreenContext {
         if (!ctx)
             nb::raise("Failed to create CUDA green context.");
 
-        if (actual != requested)
-            nb::raise("drjit.green_context(): requested %u SMs but CUDA provided %u.",
+        // Note: actual may be larger than requested due to alignment/minimum requirements
+        if (actual < requested)
+            nb::raise("drjit.green_context(): requested %u SMs but CUDA only provided %u.",
                       requested, actual);
     }
 
@@ -57,7 +58,7 @@ struct PyGreenContext {
         jit_cuda_green_context_leave(token);
     }
 
-    nb::capsule other() const {
+    nb::capsule remaining_ctx() const {
         if (!other_raw)
             return nb::capsule(nullptr, "CUcontext");
         return nb::capsule(other_raw, "CUcontext");
@@ -201,7 +202,7 @@ void export_cuda(nb::module_ &m) {
 
     bind_event<JitBackend::CUDA>(m, "Event");
 
-    nb::class_<PyGreenContext>(m, "green_context")
+    nb::class_<PyGreenContext>(m, "green_context", doc_cuda_green_context)
         .def(nb::init<uint32_t>(), "sm_count"_a)
         .def("__enter__", [](PyGreenContext &self) -> PyGreenContext & {
             self.enter();
@@ -210,9 +211,10 @@ void export_cuda(nb::module_ &m) {
         .def("__exit__", [](PyGreenContext &self, nb::handle, nb::handle, nb::handle) {
             self.exit();
             return false;
-        })
-        .def("other", &PyGreenContext::other)
-        .def("sm_count", &PyGreenContext::sm_count)
-        .def("requested_sm_count", &PyGreenContext::requested_sm_count);
+        }, nb::arg().none(), nb::arg().none(), nb::arg().none())
+        .def_prop_ro("remaining_ctx", &PyGreenContext::remaining_ctx, doc_cuda_green_context_remaining_ctx)
+        .def_prop_ro("sm_count", &PyGreenContext::sm_count, doc_cuda_green_context_sm_count)
+        .def_prop_ro("requested_sm_count", &PyGreenContext::requested_sm_count,
+                     doc_cuda_green_context_requested_sm_count);
  }
 #endif

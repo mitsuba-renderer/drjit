@@ -26,8 +26,8 @@ void export_cuda_ad(nb::module_ &m) {
     m.attr("Int32") = m.attr("Int");
     m.attr("UInt32") = m.attr("UInt");
 
-    // Create Event alias from non-AD module
     nb::module_ cuda_module = nb::module_::import_("drjit.cuda");
     m.attr("Event") = cuda_module.attr("Event");
+    m.attr("green_context") = cuda_module.attr("green_context");
 }
 #endif

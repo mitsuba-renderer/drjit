@@ -887,6 +887,19 @@ section <neural_nets>` for an introduction.
     .. automethod:: __call__
 
 
+CUDA contexts
+-------------
+
+.. py:currentmodule:: drjit.cuda
+
+.. autoclass:: green_context
+
+   This class is also available as :py:class:`drjit.cuda.ad.green_context`.
+
+   .. autoproperty:: sm_count
+   .. autoproperty:: requested_sm_count
+   .. autoproperty:: remaining_ctx
+
 CUDA / GL interoperability
 --------------------------
 

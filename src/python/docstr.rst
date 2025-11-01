@@ -9233,6 +9233,89 @@
     Returns:
         GLInterop: Returns self to allow method chaining
 
+.. topic:: cuda_green_context
+
+    Context manager for creating CUDA green contexts with isolated GPU resources.
+
+    A green context allows partitioning the GPU into smaller units with a specific
+    number of streaming multiprocessors (SMs). Dr.Jit can launch kernels into this
+    green context, which will be isolated from other computations running on the
+    remaining SMs. This is useful for concurrent kernel execution and resource
+    management on GPUs.
+
+    Green contexts can be created once and entered/exited multiple times via the
+    Python context manager interface.
+
+    Note:
+        CUDA may not always satisfy the requested SM count exactly. The actual
+        number of SMs allocated may be larger due to hardware alignment or minimum
+        requirements. If fewer SMs than requested are available, an exception is
+        raised.
+
+    Args:
+        sm_count (int): The number of streaming multiprocessors to allocate for
+          this green context.
+
+    Raises:
+        RuntimeError: If the green context cannot be created or if CUDA cannot
+          provide at least the requested number of SMs.
+
+    Example:
+        .. code-block:: python
+
+            from drjit.cuda import green_context
+
+            # Simple usage - isolate 16 SMs for computation
+            with green_context(16):
+                # Kernels launched here use only 16 SMs
+                result = some_computation()
+
+            # Access context information
+            with green_context(16) as ctx:
+                print(f"Requested: {ctx.requested_sm_count} SMs")
+                print(f"Actual: {ctx.sm_count} SMs")
+
+                # Use remaining_ctx for concurrent computation
+                other_ctx = ctx.remaining_ctx
+                if other_ctx is not None:
+                    # Launch work on remaining SMs
+                    pass
+
+.. topic:: cuda_green_context_sm_count
+
+    The actual number of SMs allocated to this green context.
+
+    The actual SM count may be larger than the requested count due to hardware
+    alignment constraints or minimum requirements.
+
+    Type:
+        int
+
+.. topic:: cuda_green_context_requested_sm_count
+
+    The requested number of SMs for this green context.
+
+    Type:
+        int
+
+.. topic:: cuda_green_context_remaining_ctx
+
+    A CUDA context capsule for the remaining SMs.
+
+    This property provides a Python capsule containing the CUDA context (``CUcontext``)
+    for the set of streaming multiprocessors that are *not* part of this green
+    context. This can be used to launch separate computations on the remaining
+    GPU resources in isolation from this green context.
+
+    Important:
+        The green context object must remain alive while the remaining context
+        is being used by other computations. Destroying the green context will
+        invalidate the remaining context.
+
+    Type:
+        typing.CapsuleType | None: A capsule with type ``"CUcontext"`` containing
+        the CUDA context for the remaining SMs, or ``None`` if no such context exists.
+
 .. topic:: rotate
 
     Constructs a rotation quaternion encoding a ritation by ``angle`` radians
