@@ -9,11 +9,69 @@
 */
 
 #include "cuda.h"
+#include <drjit-core/jit.h>
 #include "random.h"
 #include "texture.h"
 #include "event.h"
 
 #include <drjit-core/gl_interop.h>
+#include <vector>
+#include <string>
+
+struct PyGreenContext {
+    explicit PyGreenContext(uint32_t sm_count) {
+        ctx = jit_cuda_green_context_make(sm_count, &actual, &other_raw);
+        requested = sm_count;
+        if (!ctx)
+            nb::raise("Failed to create CUDA green context.");
+
+        if (actual != requested)
+            nb::raise("drjit.green_context(): requested %u SMs but CUDA provided %u.",
+                      requested, actual);
+    }
+
+    ~PyGreenContext() {
+        while (!tokens.empty()) {
+            jit_cuda_green_context_leave(tokens.back());
+            tokens.pop_back();
+        }
+        if (ctx) {
+            jit_cuda_green_context_release(ctx);
+            ctx = nullptr;
+        }
+    }
+
+    PyGreenContext *enter() {
+        if (!ctx)
+            nb::raise("GreenContext.enter(): context has been released.");
+        void *token = jit_cuda_green_context_enter(ctx);
+        tokens.push_back(token);
+        return this;
+    }
+
+    void exit() {
+        if (tokens.empty())
+            nb::raise("GreenContext.__exit__(): context is not active.");
+        void *token = tokens.back();
+        tokens.pop_back();
+        jit_cuda_green_context_leave(token);
+    }
+
+    nb::capsule other() const {
+        if (!other_raw)
+            return nb::capsule(nullptr, "CUcontext");
+        return nb::capsule(other_raw, "CUcontext");
+    }
+
+    uint32_t sm_count() const { return actual; }
+    uint32_t requested_sm_count() const { return requested; }
+
+    CUDAGreenContext *ctx = nullptr;
+    void *other_raw = nullptr;
+    uint32_t actual = 0;
+    uint32_t requested = 0;
+    std::vector<void *> tokens;
+};
 
 #if defined(DRJIT_ENABLE_CUDA)
 void export_cuda(nb::module_ &m) {
@@ -142,5 +200,19 @@ void export_cuda(nb::module_ &m) {
         .def("unmap", &GLInterop::unmap, nb::rv_policy::none, doc_cuda_GLInterop_unmap);
 
     bind_event<JitBackend::CUDA>(m, "Event");
+
+    nb::class_<PyGreenContext>(m, "green_context")
+        .def(nb::init<uint32_t>(), "sm_count"_a)
+        .def("__enter__", [](PyGreenContext &self) -> PyGreenContext & {
+            self.enter();
+            return self;
+        }, nb::rv_policy::reference)
+        .def("__exit__", [](PyGreenContext &self, nb::handle, nb::handle, nb::handle) {
+            self.exit();
+            return false;
+        })
+        .def("other", &PyGreenContext::other)
+        .def("sm_count", &PyGreenContext::sm_count)
+        .def("requested_sm_count", &PyGreenContext::requested_sm_count);
  }
 #endif
