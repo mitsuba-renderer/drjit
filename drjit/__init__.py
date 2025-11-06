@@ -1663,7 +1663,8 @@ def resample(
     source: ArrayT,
     shape: Sequence[int],
     filter: Union[Literal["box", "linear", "hamming", "cubic", "lanczos", "gaussian"], Callable[[float], float]] = "cubic",
-    filter_radius: Optional[float] = None
+    filter_radius: Optional[float] = None,
+    boundary_mode: Union[Literal["clamp", "wrap", "mirror"], 'detail.BoundaryMode'] = "clamp"
 ) -> ArrayT:
     """
     Resample an input array/tensor to increase or decrease its resolution along
@@ -1751,10 +1752,28 @@ def resample(
           The radius of the pixel filter in the output sample space. Should
           only be specified when using a custom reconstruction filter.
 
+        boundary_mode (str | drjit.detail.BoundaryMode):
+          Specifies how out-of-bounds samples are handled. Options are:
+
+          - ``"clamp"`` (default): Clamp coordinates to edge values
+          - ``"wrap"``: Wrap coordinates periodically
+          - ``"mirror"``: Mirror/reflect coordinates at boundaries
+
     Returns:
         drjit.ArrayBase: The resampled output array. Its type matches
         ``source``, and its shape matches ``shape``.
     """
+
+    # Convert string boundary_mode to enum
+    if isinstance(boundary_mode, str):
+        boundary_mode_map = {
+            "clamp": detail.BoundaryMode.Clamp,
+            "wrap": detail.BoundaryMode.Wrap,
+            "mirror": detail.BoundaryMode.Mirror
+        }
+        boundary_mode = boundary_mode_map.get(boundary_mode.lower())
+        if boundary_mode is None:
+            raise ValueError(f"Invalid boundary_mode. Must be one of: 'clamp', 'wrap', 'mirror'")
 
     source_shape = source.shape
     strides = _compute_strides(shape)
@@ -1775,7 +1794,7 @@ def resample(
             continue
 
         # Cache resampler in case it can be reused
-        key = (source_res, target_res, filter, filter_radius)
+        key = (source_res, target_res, filter, filter_radius, boundary_mode)
 
         resampler = _resample_cache.get(key, None)
         if resampler is None:
@@ -1784,6 +1803,7 @@ def resample(
                 target_res=target_res,
                 filter=filter,
                 filter_radius=filter_radius,
+                boundary_mode=boundary_mode,
             )
             _resample_cache[key] = resampler
 
@@ -1801,7 +1821,8 @@ def convolve(
     source: ArrayT,
     filter: Union[Literal["box", "linear", "hamming", "cubic", "lanczos", "gaussian"], Callable[[float], float]],
     filter_radius: float,
-    axis: Union[int, Tuple[int, ...], None] = None
+    axis: Union[int, Tuple[int, ...], None] = None,
+    boundary_mode: Union[Literal["clamp", "wrap", "mirror"], 'detail.BoundaryMode'] = "clamp"
 ) -> ArrayT:
     """
     Convolve one or more axes of an input array/tensor with a 1D filter
@@ -1842,9 +1863,27 @@ def convolve(
           along which to convolve. The default argument ``axis=None`` causes all
           axes to be convolved. Negative values count from the last dimension.
 
+        boundary_mode (str | drjit.detail.BoundaryMode):
+          Specifies how out-of-bounds samples are handled. Options are:
+
+          - ``"clamp"`` (default): Clamp coordinates to edge values
+          - ``"wrap"``: Wrap coordinates periodically
+          - ``"mirror"``: Mirror/reflect coordinates at boundaries
+
     Returns:
         drjit.ArrayBase: The resampled output array. Its type matches ``source``.
     """
+
+    # Convert string boundary_mode to enum
+    if isinstance(boundary_mode, str):
+        boundary_mode_map = {
+            "clamp": detail.BoundaryMode.Clamp,
+            "wrap": detail.BoundaryMode.Wrap,
+            "mirror": detail.BoundaryMode.Mirror
+        }
+        boundary_mode = boundary_mode_map.get(boundary_mode.lower())
+        if boundary_mode is None:
+            raise ValueError(f"Invalid boundary_mode. Must be one of: 'clamp', 'wrap', 'mirror'")
 
     shape = source.shape
     strides = _compute_strides(shape)
@@ -1863,7 +1902,7 @@ def convolve(
         res = shape[i]
 
         # Cache resampler in case it can be reused
-        key = (res, res, filter, filter_radius)
+        key = (res, res, filter, filter_radius, boundary_mode)
 
         resampler = _resample_cache.get(key, None)
         if resampler is None:
@@ -1872,7 +1911,8 @@ def convolve(
                 target_res=res,
                 filter=filter,
                 filter_radius=filter_radius,
-                convolve=True
+                convolve=True,
+                boundary_mode=boundary_mode
             )
             _resample_cache[key] = resampler
 

@@ -23,14 +23,16 @@ struct Resampler::Impl {
     uint32_t source_res;
     uint32_t target_res;
     uint32_t taps;
+    BoundaryMode boundary_mode;
     unique_ptr<uint32_t[]> offset;
     unique_ptr<double[]> weights;
     mutable std::any offset_cache;
     mutable std::any weights_cache;
 
     Impl(uint32_t source_res, uint32_t target_res, Resampler::Filter filter,
-         const void *payload, double radius, double radius_scale)
-        : source_res(source_res), target_res(target_res) {
+         const void *payload, double radius, double radius_scale,
+         BoundaryMode boundary_mode)
+        : source_res(source_res), target_res(target_res), boundary_mode(boundary_mode) {
         if (source_res == 0 || target_res == 0)
             drjit_raise("drjit.Resampler(): source/target resolution cannot be zero!");
 
@@ -68,7 +70,9 @@ struct Resampler::Impl {
                 double rel = (offset_i - center + l + .5) * filter_scale;
 
                 double weight = 0.0;
-                if (offset_i + l < source_res)
+                // For clamp mode: only compute weight if in bounds (optimization)
+                // For wrap/mirror: always compute weight, boundary handling done during sampling
+                if (boundary_mode != BoundaryMode::Clamp || offset_i + l < source_res)
                     weight = filter(rel, payload);
                 weights[i * taps + l] = weight;
                 sum += weight;
@@ -84,6 +88,37 @@ struct Resampler::Impl {
             double normalization = 1.0 / sum;
             for (uint32_t l = 0; l < taps; l++)
                 weights[i * taps + l] *= normalization;
+        }
+    }
+
+    /// Apply boundary mode to convert potentially out-of-bounds index to valid index
+    inline uint32_t apply_boundary_mode(int32_t idx) const {
+        switch (boundary_mode) {
+            case BoundaryMode::Clamp:
+                return (uint32_t) std::max(0, std::min((int32_t)source_res - 1, idx));
+
+            case BoundaryMode::Wrap: {
+                idx = idx % (int32_t)source_res;
+                if (idx < 0)
+                    idx += source_res;
+                return (uint32_t) idx;
+            }
+
+            case BoundaryMode::Mirror: {
+                // Mirror the index at boundaries
+                if (idx < 0)
+                    idx = -idx - 1;
+                int32_t period = 2 * (int32_t)source_res - 2;
+                if (period > 0) {
+                    idx = idx % period;
+                    if (idx >= (int32_t)source_res)
+                        idx = period - idx;
+                }
+                return (uint32_t) std::max(0, std::min((int32_t)source_res - 1, idx));
+            }
+
+            default:
+                return (uint32_t) idx;
         }
     }
 
@@ -129,7 +164,8 @@ static inline double sinc(double x) {
     return std::sin(x) / x;
 }
 
-Resampler::Resampler(uint32_t source_res, uint32_t target_res, const char *filter, double radius_scale) {
+Resampler::Resampler(uint32_t source_res, uint32_t target_res, const char *filter,
+                     double radius_scale, BoundaryMode boundary_mode) {
     Resampler::Filter filter_cb = nullptr;
     double radius = 0.0;
 
@@ -191,13 +227,14 @@ Resampler::Resampler(uint32_t source_res, uint32_t target_res, const char *filte
                     "'hamming', 'cubic', and 'lanczos' are supported).");
     }
 
-    d = new Impl(source_res, target_res, filter_cb, nullptr, radius, radius_scale);
+    d = new Impl(source_res, target_res, filter_cb, nullptr, radius, radius_scale,
+                 boundary_mode);
 }
 
 Resampler::Resampler(uint32_t source_res, uint32_t target_res,
                      Resampler::Filter filter, const void *payload,
-                     double radius)
-    : d(new Impl(source_res, target_res, filter, payload, radius, 1.0)) {
+                     double radius, BoundaryMode boundary_mode)
+    : d(new Impl(source_res, target_res, filter, payload, radius, 1.0, boundary_mode)) {
 }
 
 Resampler::~Resampler() { }
@@ -217,6 +254,7 @@ void Resampler::resample(const Value *source, Value *target,
         const Value *in;
         Value *out;
         bool parallelize_outer;
+        BoundaryMode boundary_mode;
     };
 
     auto callback = [](uint32_t outer, void *payload) {
@@ -224,22 +262,54 @@ void Resampler::resample(const Value *source, Value *target,
             std::conditional_t<sizeof(Value) < sizeof(float), float, Value>;
 
         Task t = *(Task *) payload;
+
         for (uint32_t inner = 0; inner < t.inner_dim; ++inner) {
             uint32_t i = t.parallelize_outer ? outer : inner,
                      j = t.parallelize_outer ? inner : outer;
 
-            const Value *in =
-                t.in + ((i * t.source_res + t.offset[j]) * t.stride);
+            // For clamp mode (default), use the optimized offset pointer
+            // For wrap/mirror modes, need to index from the start of the row
+            const Value *in_base = t.in + (i * t.source_res * t.stride);
+            const Value *in = (t.boundary_mode == BoundaryMode::Clamp)
+                ? in_base + (t.offset[j] * t.stride)
+                : in_base;
             Value *out = t.out + (i * t.target_res + j) * t.stride;
 
             for (uint32_t k = 0; k < t.stride; ++k) {
                 Accum accum = 0;
                 for (uint32_t l = 0; l < t.taps; ++l) {
                     double weight = t.weights[j * t.taps + l];
-                    if (weight != 0) {
-                        Value value = in[l * t.stride + k];
-                        accum =
-                            fmadd((Accum) weight, (Accum) value, accum);
+
+                    if (t.boundary_mode == BoundaryMode::Clamp) {
+                        // Clamp mode: weights are only non-zero for in-bounds samples
+                        // Use optimized pointer with offset already applied
+                        if (weight != 0) {
+                            Value value = in[l * t.stride + k];
+                            accum = fmadd((Accum) weight, (Accum) value, accum);
+                        }
+                    } else {
+                        // Wrap/Mirror modes: weights are computed for all taps
+                        // Apply boundary mode to get the wrapped index
+                        int32_t abs_idx = (int32_t)(t.offset[j] + l);
+
+                        if (t.boundary_mode == BoundaryMode::Wrap) {
+                            abs_idx = abs_idx % (int32_t)t.source_res;
+                            if (abs_idx < 0)
+                                abs_idx += t.source_res;
+                        } else { // Mirror
+                            if (abs_idx < 0)
+                                abs_idx = -abs_idx - 1;
+                            int32_t period = 2 * (int32_t)t.source_res - 2;
+                            if (period > 0) {
+                                abs_idx = abs_idx % period;
+                                if (abs_idx >= (int32_t)t.source_res)
+                                    abs_idx = period - abs_idx;
+                            }
+                            abs_idx = std::max(0, std::min((int32_t)t.source_res - 1, abs_idx));
+                        }
+
+                        Value value = in_base[abs_idx * t.stride + k];
+                        accum = fmadd((Accum) weight, (Accum) value, accum);
                     }
                 }
                 if constexpr (std::is_same_v<Value, uint8_t>)
@@ -268,7 +338,8 @@ void Resampler::resample(const Value *source, Value *target,
         d->weights.get(),
         source,
         target,
-        parallelize_outer
+        parallelize_outer,
+        d->boundary_mode
     };
 
     if (small_workload) {
@@ -284,6 +355,7 @@ Array Resampler::resample_fwd(const Array &source, uint32_t stride) const {
     using Accum = std::conditional_t<sizeof(scalar_t<Array>) <= 4,
                                      float32_array_t<Array>, Array>;
     using UInt32 = uint32_array_t<Array>;
+    using Int32 = int32_array_t<Array>;
 
     const Accum &weights = d->get_weights<Accum>();
     const UInt32 &offset = d->get_offset<UInt32>();
@@ -304,25 +376,70 @@ Array Resampler::resample_fwd(const Array &source, uint32_t stride) const {
            l = zeros<UInt32>(target_size);
 
     UInt32 offset_j = gather<UInt32>(offset, j),
-           weight_offset = j * d->taps,
-           source_offset = fmadd(i, d->source_res, offset_j) * stride + k;
+           weight_offset = j * d->taps;
+
+    UInt32 base_offset = i * d->source_res * stride + k;
 
     Accum target = zeros<Accum>(target_size);
-    tie(l, target) = while_loop(
-        make_tuple(l, target),
-        // Loop condition
-        [taps = d->taps](const UInt32 &l, const Accum &) {
-            return l < taps;
-        },
-        // Loop body
-        [source_offset, source, weight_offset, weights,
-         stride](UInt32 &l, Accum &target) {
-            Accum weight = gather<Accum>(weights, weight_offset + l);
-            Array value = gather<Array>(source, source_offset + l * stride,
-                                        weight != Accum(0));
-            target = fmadd(weight, Accum(value), target);
-            l += 1;
-        });
+
+    // For clamp mode, use optimized path (original behavior)
+    if (d->boundary_mode == BoundaryMode::Clamp) {
+        tie(l, target) = while_loop(
+            make_tuple(l, target),
+            // Loop condition
+            [taps = d->taps](const UInt32 &l, const Accum &) {
+                return l < taps;
+            },
+            // Loop body
+            [base_offset, offset_j, source, weight_offset, weights,
+             stride](UInt32 &l, Accum &target) {
+                Accum weight = gather<Accum>(weights, weight_offset + l);
+                UInt32 source_offset = base_offset + offset_j * stride + l * stride;
+                Array value = gather<Array>(source, source_offset,
+                                            weight != Accum(0));
+                target = fmadd(weight, Accum(value), target);
+                l += 1;
+            });
+    } else {
+        // For wrap/mirror modes, apply boundary mode to indices
+        tie(l, target) = while_loop(
+            make_tuple(l, target),
+            // Loop condition
+            [taps = d->taps](const UInt32 &l, const Accum &) {
+                return l < taps;
+            },
+            // Loop body
+            [base_offset, offset_j, source, weight_offset, weights,
+             stride, source_res = d->source_res, boundary_mode = d->boundary_mode]
+            (UInt32 &l, Accum &target) {
+                Accum weight = gather<Accum>(weights, weight_offset + l);
+
+                // Compute the actual source index
+                Int32 source_idx = Int32(offset_j) + Int32(l);
+
+                // Apply boundary mode
+                UInt32 wrapped_idx;
+                if (boundary_mode == BoundaryMode::Wrap) {
+                    Int32 wrapped = source_idx % Int32(source_res);
+                    wrapped = select(wrapped < 0, wrapped + Int32(source_res), wrapped);
+                    wrapped_idx = UInt32(wrapped);
+                } else { // Mirror
+                    Int32 mirrored = select(source_idx < 0, -source_idx - 1, source_idx);
+                    int32_t period = 2 * (int32_t)source_res - 2;
+                    if (period > 0) {
+                        mirrored = mirrored % period;
+                        mirrored = select(mirrored >= Int32(source_res),
+                                        period - mirrored, mirrored);
+                    }
+                    wrapped_idx = UInt32(maximum(Int32(0), minimum(Int32(source_res - 1), mirrored)));
+                }
+
+                UInt32 source_offset = base_offset + wrapped_idx * stride;
+                Array value = gather<Array>(source, source_offset);
+                target = fmadd(weight, Accum(value), target);
+                l += 1;
+            });
+    }
 
     return Array(target);
 }
@@ -332,6 +449,7 @@ Array Resampler::resample_bwd(const Array &target, uint32_t stride) const {
     using Accum = std::conditional_t<sizeof(scalar_t<Array>) <= 4,
                                      float32_array_t<Array>, Array>;
     using UInt32 = uint32_array_t<Array>;
+    using Int32 = int32_array_t<Array>;
 
     const Accum &weights = d->get_weights<Accum>();
     const UInt32 &offset = d->get_offset<UInt32>();
@@ -352,29 +470,76 @@ Array Resampler::resample_bwd(const Array &target, uint32_t stride) const {
            l = zeros<UInt32>(target_size);
 
     UInt32 offset_j = gather<UInt32>(offset, j),
-           weight_offset = j * d->taps,
-           source_offset = fmadd(i, d->source_res, offset_j) * stride + k;
+           weight_offset = j * d->taps;
+
+    UInt32 base_offset = i * d->source_res * stride + k;
 
     Accum source = zeros<Accum>(source_size);
 
-    tie(l, source) = while_loop(
-        make_tuple(l, source),
-        // Loop condition
-        [taps = d->taps](const UInt32 &l, const Accum &) {
-            return l < taps;
-        },
-        // Loop body
-        [source_offset, target, weight_offset, weights,
-         stride](UInt32 &l, Accum &source) {
-            Accum weight = gather<Accum>(weights, weight_offset + l);
-            scatter_add(
-                source,
-                Accum(target) * weight,
-                source_offset + l * stride,
-                weight != Accum(0)
-            );
-            l += 1;
-        });
+    // For clamp mode, use optimized path (original behavior)
+    if (d->boundary_mode == BoundaryMode::Clamp) {
+        tie(l, source) = while_loop(
+            make_tuple(l, source),
+            // Loop condition
+            [taps = d->taps](const UInt32 &l, const Accum &) {
+                return l < taps;
+            },
+            // Loop body
+            [base_offset, offset_j, target, weight_offset, weights,
+             stride](UInt32 &l, Accum &source) {
+                Accum weight = gather<Accum>(weights, weight_offset + l);
+                UInt32 source_offset = base_offset + offset_j * stride + l * stride;
+                scatter_add(
+                    source,
+                    Accum(target) * weight,
+                    source_offset,
+                    weight != Accum(0)
+                );
+                l += 1;
+            });
+    } else {
+        // For wrap/mirror modes, apply boundary mode to indices
+        tie(l, source) = while_loop(
+            make_tuple(l, source),
+            // Loop condition
+            [taps = d->taps](const UInt32 &l, const Accum &) {
+                return l < taps;
+            },
+            // Loop body
+            [base_offset, offset_j, target, weight_offset, weights,
+             stride, source_res = d->source_res, boundary_mode = d->boundary_mode]
+            (UInt32 &l, Accum &source) {
+                Accum weight = gather<Accum>(weights, weight_offset + l);
+
+                // Compute the actual source index
+                Int32 source_idx = Int32(offset_j) + Int32(l);
+
+                // Apply boundary mode
+                UInt32 wrapped_idx;
+                if (boundary_mode == BoundaryMode::Wrap) {
+                    Int32 wrapped = source_idx % Int32(source_res);
+                    wrapped = select(wrapped < 0, wrapped + Int32(source_res), wrapped);
+                    wrapped_idx = UInt32(wrapped);
+                } else { // Mirror
+                    Int32 mirrored = select(source_idx < 0, -source_idx - 1, source_idx);
+                    int32_t period = 2 * (int32_t)source_res - 2;
+                    if (period > 0) {
+                        mirrored = mirrored % period;
+                        mirrored = select(mirrored >= Int32(source_res),
+                                        period - mirrored, mirrored);
+                    }
+                    wrapped_idx = UInt32(maximum(Int32(0), minimum(Int32(source_res - 1), mirrored)));
+                }
+
+                UInt32 source_offset = base_offset + wrapped_idx * stride;
+                scatter_add(
+                    source,
+                    Accum(target) * weight,
+                    source_offset
+                );
+                l += 1;
+            });
+    }
 
     return Array(source);
 }

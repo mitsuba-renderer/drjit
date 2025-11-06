@@ -15,6 +15,18 @@
 NAMESPACE_BEGIN(drjit)
 
 /**
+ * \brief Boundary handling modes for resampling operations
+ */
+enum class BoundaryMode {
+    /// Clamp coordinates to edges (default behavior)
+    Clamp = 0,
+    /// Wrap coordinates periodically
+    Wrap = 1,
+    /// Mirror/reflect coordinates at boundaries
+    Mirror = 2
+};
+
+/**
  * \brief Helper data structure to increase or decrease the resolution of an
  * array/tensor along a set of axes.
  *
@@ -64,9 +76,16 @@ public:
      *
      * The optional ``radius_scale`` parameter can be used to scale the
      * filter kernel radius.
+     *
+     * The optional ``boundary_mode`` parameter specifies how out-of-bounds
+     * samples are handled:
+     * - ``BoundaryMode::Clamp``: clamp to edge values (default)
+     * - ``BoundaryMode::Wrap``: wrap around periodically
+     * - ``BoundaryMode::Mirror``: mirror/reflect at boundaries
      */
     Resampler(uint32_t source_res, uint32_t target_res, const char *filter,
-              double radius_scale = 1.0);
+              double radius_scale = 1.0,
+              BoundaryMode boundary_mode = BoundaryMode::Clamp);
 
     /**
      * \brief Construct a Resampler using a custom filter kernel.
@@ -78,9 +97,13 @@ public:
      * The implementation will invoke ``filter(x, payload)`` a number of times
      * to precompute internal tables used for resampling. The filter must return
      * zero for positions ``x`` outside of the interval ``[-radius, radius]``.
+     *
+     * The optional ``boundary_mode`` parameter specifies how out-of-bounds
+     * samples are handled (see the documentation for the other constructor).
      */
     Resampler(uint32_t source_res, uint32_t target_res, Filter filter,
-              const void *payload, double radius);
+              const void *payload, double radius,
+              BoundaryMode boundary_mode = BoundaryMode::Clamp);
 
     /// Free the resampler object
     ~Resampler();
