@@ -1664,7 +1664,7 @@ def resample(
     shape: Sequence[int],
     filter: Union[Literal["box", "linear", "hamming", "cubic", "lanczos", "gaussian"], Callable[[float], float]] = "cubic",
     filter_radius: Optional[float] = None,
-    boundary_mode: Union[Literal["clamp", "wrap", "mirror"], 'detail.BoundaryMode'] = "clamp"
+    wrap_mode: Union[Literal["clamp", "wrap", "mirror"], 'WrapMode'] = "clamp"
 ) -> ArrayT:
     """
     Resample an input array/tensor to increase or decrease its resolution along
@@ -1752,28 +1752,41 @@ def resample(
           The radius of the pixel filter in the output sample space. Should
           only be specified when using a custom reconstruction filter.
 
-        boundary_mode (str | drjit.detail.BoundaryMode):
-          Specifies how out-of-bounds samples are handled. Options are:
+        wrap_mode (str | drjit.WrapMode):
+          Specifies how out-of-bounds samples are handled when the reconstruction
+          filter extends beyond array boundaries. This parameter is analogous to
+          texture wrap modes in graphics APIs. Options are:
 
-          - ``"clamp"`` (default): Clamp coordinates to edge values
-          - ``"wrap"``: Wrap coordinates periodically
-          - ``"mirror"``: Mirror/reflect coordinates at boundaries
+          - ``"clamp"`` (default): Clamp coordinates to edge values. Edge pixels
+            are repeated, which is suitable for most images and signals. This mode
+            maintains backward compatibility with PIL/Pillow's Image.resize().
+
+          - ``"wrap"`` or ``"repeat"``: Wrap coordinates periodically. Suitable
+            for tiling textures or periodic signals. When the filter extends beyond
+            the right edge, it samples from the left edge and vice versa.
+
+          - ``"mirror"``: Mirror/reflect coordinates at boundaries. Creates smooth
+            reflections at edges, which can be useful for avoiding discontinuities
+            in certain applications.
+
+          All modes work on CPU, LLVM JIT, and CUDA GPU backends with full
+          support for automatic differentiation.
 
     Returns:
         drjit.ArrayBase: The resampled output array. Its type matches
         ``source``, and its shape matches ``shape``.
     """
 
-    # Convert string boundary_mode to enum
-    if isinstance(boundary_mode, str):
-        boundary_mode_map = {
-            "clamp": detail.BoundaryMode.Clamp,
-            "wrap": detail.BoundaryMode.Wrap,
-            "mirror": detail.BoundaryMode.Mirror
+    # Convert string wrap_mode to enum
+    if isinstance(wrap_mode, str):
+        wrap_mode_map = {
+            "clamp": WrapMode.Clamp,
+            "wrap": WrapMode.Repeat,
+            "mirror": WrapMode.Mirror
         }
-        boundary_mode = boundary_mode_map.get(boundary_mode.lower())
-        if boundary_mode is None:
-            raise ValueError(f"Invalid boundary_mode. Must be one of: 'clamp', 'wrap', 'mirror'")
+        wrap_mode = wrap_mode_map.get(wrap_mode.lower())
+        if wrap_mode is None:
+            raise ValueError(f"Invalid wrap_mode. Must be one of: 'clamp', 'wrap', 'mirror'")
 
     source_shape = source.shape
     strides = _compute_strides(shape)
@@ -1794,7 +1807,7 @@ def resample(
             continue
 
         # Cache resampler in case it can be reused
-        key = (source_res, target_res, filter, filter_radius, boundary_mode)
+        key = (source_res, target_res, filter, filter_radius, wrap_mode)
 
         resampler = _resample_cache.get(key, None)
         if resampler is None:
@@ -1803,7 +1816,7 @@ def resample(
                 target_res=target_res,
                 filter=filter,
                 filter_radius=filter_radius,
-                boundary_mode=boundary_mode,
+                wrap_mode=wrap_mode,
             )
             _resample_cache[key] = resampler
 
@@ -1822,7 +1835,7 @@ def convolve(
     filter: Union[Literal["box", "linear", "hamming", "cubic", "lanczos", "gaussian"], Callable[[float], float]],
     filter_radius: float,
     axis: Union[int, Tuple[int, ...], None] = None,
-    boundary_mode: Union[Literal["clamp", "wrap", "mirror"], 'detail.BoundaryMode'] = "clamp"
+    wrap_mode: Union[Literal["clamp", "wrap", "mirror"], 'WrapMode'] = "clamp"
 ) -> ArrayT:
     """
     Convolve one or more axes of an input array/tensor with a 1D filter
@@ -1863,27 +1876,40 @@ def convolve(
           along which to convolve. The default argument ``axis=None`` causes all
           axes to be convolved. Negative values count from the last dimension.
 
-        boundary_mode (str | drjit.detail.BoundaryMode):
-          Specifies how out-of-bounds samples are handled. Options are:
+        wrap_mode (str | drjit.WrapMode):
+          Specifies how out-of-bounds samples are handled when the reconstruction
+          filter extends beyond array boundaries. This parameter is analogous to
+          texture wrap modes in graphics APIs. Options are:
 
-          - ``"clamp"`` (default): Clamp coordinates to edge values
-          - ``"wrap"``: Wrap coordinates periodically
-          - ``"mirror"``: Mirror/reflect coordinates at boundaries
+          - ``"clamp"`` (default): Clamp coordinates to edge values. Edge pixels
+            are repeated, which is suitable for most images and signals. This mode
+            maintains backward compatibility with PIL/Pillow's Image.resize().
+
+          - ``"wrap"`` or ``"repeat"``: Wrap coordinates periodically. Suitable
+            for tiling textures or periodic signals. When the filter extends beyond
+            the right edge, it samples from the left edge and vice versa.
+
+          - ``"mirror"``: Mirror/reflect coordinates at boundaries. Creates smooth
+            reflections at edges, which can be useful for avoiding discontinuities
+            in certain applications.
+
+          All modes work on CPU, LLVM JIT, and CUDA GPU backends with full
+          support for automatic differentiation.
 
     Returns:
         drjit.ArrayBase: The resampled output array. Its type matches ``source``.
     """
 
-    # Convert string boundary_mode to enum
-    if isinstance(boundary_mode, str):
-        boundary_mode_map = {
-            "clamp": detail.BoundaryMode.Clamp,
-            "wrap": detail.BoundaryMode.Wrap,
-            "mirror": detail.BoundaryMode.Mirror
+    # Convert string wrap_mode to enum
+    if isinstance(wrap_mode, str):
+        wrap_mode_map = {
+            "clamp": WrapMode.Clamp,
+            "wrap": WrapMode.Repeat,
+            "mirror": WrapMode.Mirror
         }
-        boundary_mode = boundary_mode_map.get(boundary_mode.lower())
-        if boundary_mode is None:
-            raise ValueError(f"Invalid boundary_mode. Must be one of: 'clamp', 'wrap', 'mirror'")
+        wrap_mode = wrap_mode_map.get(wrap_mode.lower())
+        if wrap_mode is None:
+            raise ValueError(f"Invalid wrap_mode. Must be one of: 'clamp', 'wrap', 'mirror'")
 
     shape = source.shape
     strides = _compute_strides(shape)
@@ -1902,7 +1928,7 @@ def convolve(
         res = shape[i]
 
         # Cache resampler in case it can be reused
-        key = (res, res, filter, filter_radius, boundary_mode)
+        key = (res, res, filter, filter_radius, wrap_mode)
 
         resampler = _resample_cache.get(key, None)
         if resampler is None:
@@ -1912,7 +1938,7 @@ def convolve(
                 filter=filter,
                 filter_radius=filter_radius,
                 convolve=True,
-                boundary_mode=boundary_mode
+                wrap_mode=wrap_mode
             )
             _resample_cache[key] = resampler
 

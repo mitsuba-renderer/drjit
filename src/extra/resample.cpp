@@ -23,7 +23,7 @@ struct Resampler::Impl {
     uint32_t source_res;
     uint32_t target_res;
     uint32_t taps;
-    BoundaryMode boundary_mode;
+    WrapMode wrap_mode;
     unique_ptr<uint32_t[]> offset;
     unique_ptr<double[]> weights;
     mutable std::any offset_cache;
@@ -31,8 +31,8 @@ struct Resampler::Impl {
 
     Impl(uint32_t source_res, uint32_t target_res, Resampler::Filter filter,
          const void *payload, double radius, double radius_scale,
-         BoundaryMode boundary_mode)
-        : source_res(source_res), target_res(target_res), boundary_mode(boundary_mode) {
+         WrapMode wrap_mode)
+        : source_res(source_res), target_res(target_res), wrap_mode(wrap_mode) {
         if (source_res == 0 || target_res == 0)
             drjit_raise("drjit.Resampler(): source/target resolution cannot be zero!");
 
@@ -72,7 +72,7 @@ struct Resampler::Impl {
                 double weight = 0.0;
                 // For clamp mode: only compute weight if in bounds (optimization)
                 // For wrap/mirror: always compute weight, boundary handling done during sampling
-                if (boundary_mode != BoundaryMode::Clamp || offset_i + l < source_res)
+                if (wrap_mode != WrapMode::Clamp || offset_i + l < source_res)
                     weight = filter(rel, payload);
                 weights[i * taps + l] = weight;
                 sum += weight;
@@ -92,19 +92,19 @@ struct Resampler::Impl {
     }
 
     /// Apply boundary mode to convert potentially out-of-bounds index to valid index
-    inline uint32_t apply_boundary_mode(int32_t idx) const {
-        switch (boundary_mode) {
-            case BoundaryMode::Clamp:
+    inline uint32_t apply_wrap_mode(int32_t idx) const {
+        switch (wrap_mode) {
+            case WrapMode::Clamp:
                 return (uint32_t) std::max(0, std::min((int32_t)source_res - 1, idx));
 
-            case BoundaryMode::Wrap: {
+            case WrapMode::Repeat: {
                 idx = idx % (int32_t)source_res;
                 if (idx < 0)
                     idx += source_res;
                 return (uint32_t) idx;
             }
 
-            case BoundaryMode::Mirror: {
+            case WrapMode::Mirror: {
                 // Mirror the index at boundaries
                 if (idx < 0)
                     idx = -idx - 1;
@@ -165,7 +165,7 @@ static inline double sinc(double x) {
 }
 
 Resampler::Resampler(uint32_t source_res, uint32_t target_res, const char *filter,
-                     double radius_scale, BoundaryMode boundary_mode) {
+                     double radius_scale, WrapMode wrap_mode) {
     Resampler::Filter filter_cb = nullptr;
     double radius = 0.0;
 
@@ -228,13 +228,13 @@ Resampler::Resampler(uint32_t source_res, uint32_t target_res, const char *filte
     }
 
     d = new Impl(source_res, target_res, filter_cb, nullptr, radius, radius_scale,
-                 boundary_mode);
+                 wrap_mode);
 }
 
 Resampler::Resampler(uint32_t source_res, uint32_t target_res,
                      Resampler::Filter filter, const void *payload,
-                     double radius, BoundaryMode boundary_mode)
-    : d(new Impl(source_res, target_res, filter, payload, radius, 1.0, boundary_mode)) {
+                     double radius, WrapMode wrap_mode)
+    : d(new Impl(source_res, target_res, filter, payload, radius, 1.0, wrap_mode)) {
 }
 
 Resampler::~Resampler() { }
@@ -254,7 +254,7 @@ void Resampler::resample(const Value *source, Value *target,
         const Value *in;
         Value *out;
         bool parallelize_outer;
-        BoundaryMode boundary_mode;
+        WrapMode wrap_mode;
     };
 
     auto callback = [](uint32_t outer, void *payload) {
@@ -270,7 +270,7 @@ void Resampler::resample(const Value *source, Value *target,
             // For clamp mode (default), use the optimized offset pointer
             // For wrap/mirror modes, need to index from the start of the row
             const Value *in_base = t.in + (i * t.source_res * t.stride);
-            const Value *in = (t.boundary_mode == BoundaryMode::Clamp)
+            const Value *in = (t.wrap_mode == WrapMode::Clamp)
                 ? in_base + (t.offset[j] * t.stride)
                 : in_base;
             Value *out = t.out + (i * t.target_res + j) * t.stride;
@@ -280,7 +280,7 @@ void Resampler::resample(const Value *source, Value *target,
                 for (uint32_t l = 0; l < t.taps; ++l) {
                     double weight = t.weights[j * t.taps + l];
 
-                    if (t.boundary_mode == BoundaryMode::Clamp) {
+                    if (t.wrap_mode == WrapMode::Clamp) {
                         // Clamp mode: weights are only non-zero for in-bounds samples
                         // Use optimized pointer with offset already applied
                         if (weight != 0) {
@@ -292,7 +292,7 @@ void Resampler::resample(const Value *source, Value *target,
                         // Apply boundary mode to get the wrapped index
                         int32_t abs_idx = (int32_t)(t.offset[j] + l);
 
-                        if (t.boundary_mode == BoundaryMode::Wrap) {
+                        if (t.wrap_mode == WrapMode::Repeat) {
                             abs_idx = abs_idx % (int32_t)t.source_res;
                             if (abs_idx < 0)
                                 abs_idx += t.source_res;
@@ -339,7 +339,7 @@ void Resampler::resample(const Value *source, Value *target,
         source,
         target,
         parallelize_outer,
-        d->boundary_mode
+        d->wrap_mode
     };
 
     if (small_workload) {
@@ -383,7 +383,7 @@ Array Resampler::resample_fwd(const Array &source, uint32_t stride) const {
     Accum target = zeros<Accum>(target_size);
 
     // For clamp mode, use optimized path (original behavior)
-    if (d->boundary_mode == BoundaryMode::Clamp) {
+    if (d->wrap_mode == WrapMode::Clamp) {
         tie(l, target) = while_loop(
             make_tuple(l, target),
             // Loop condition
@@ -410,7 +410,7 @@ Array Resampler::resample_fwd(const Array &source, uint32_t stride) const {
             },
             // Loop body
             [base_offset, offset_j, source, weight_offset, weights,
-             stride, source_res = d->source_res, boundary_mode = d->boundary_mode]
+             stride, source_res = d->source_res, wrap_mode = d->wrap_mode]
             (UInt32 &l, Accum &target) {
                 Accum weight = gather<Accum>(weights, weight_offset + l);
 
@@ -419,7 +419,7 @@ Array Resampler::resample_fwd(const Array &source, uint32_t stride) const {
 
                 // Apply boundary mode
                 UInt32 wrapped_idx;
-                if (boundary_mode == BoundaryMode::Wrap) {
+                if (wrap_mode == WrapMode::Repeat) {
                     Int32 wrapped = source_idx % Int32(source_res);
                     wrapped = select(wrapped < 0, wrapped + Int32(source_res), wrapped);
                     wrapped_idx = UInt32(wrapped);
@@ -477,7 +477,7 @@ Array Resampler::resample_bwd(const Array &target, uint32_t stride) const {
     Accum source = zeros<Accum>(source_size);
 
     // For clamp mode, use optimized path (original behavior)
-    if (d->boundary_mode == BoundaryMode::Clamp) {
+    if (d->wrap_mode == WrapMode::Clamp) {
         tie(l, source) = while_loop(
             make_tuple(l, source),
             // Loop condition
@@ -507,7 +507,7 @@ Array Resampler::resample_bwd(const Array &target, uint32_t stride) const {
             },
             // Loop body
             [base_offset, offset_j, target, weight_offset, weights,
-             stride, source_res = d->source_res, boundary_mode = d->boundary_mode]
+             stride, source_res = d->source_res, wrap_mode = d->wrap_mode]
             (UInt32 &l, Accum &source) {
                 Accum weight = gather<Accum>(weights, weight_offset + l);
 
@@ -516,7 +516,7 @@ Array Resampler::resample_bwd(const Array &target, uint32_t stride) const {
 
                 // Apply boundary mode
                 UInt32 wrapped_idx;
-                if (boundary_mode == BoundaryMode::Wrap) {
+                if (wrap_mode == WrapMode::Repeat) {
                     Int32 wrapped = source_idx % Int32(source_res);
                     wrapped = select(wrapped < 0, wrapped + Int32(source_res), wrapped);
                     wrapped_idx = UInt32(wrapped);
