@@ -3064,6 +3064,17 @@ def unit_angle(a, b):
     temp = 2 * asin(.5 * norm(b - mulsign(a, dot_uv)))
     return select(dot_uv >= 0, temp, pi - temp)
 
+from functools import wraps
+
+def func(tp):
+    def decorator(wrapped):
+        @wraps(wrapped)
+        def wrapper(*args, **kwargs):
+            return switch(tp(0), [wrapped], *args, **kwargs)
+
+        return wrapper
+    return decorator
+
 
 newaxis = None
 
