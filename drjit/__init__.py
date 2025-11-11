@@ -3070,7 +3070,7 @@ def func(tp):
     def decorator(wrapped):
         @wraps(wrapped)
         def wrapper(*args, **kwargs):
-            return switch(tp(0), [wrapped], *args, **kwargs)
+            return switch(tp(0), [wrapped], *args, label=f"{wrapped.__name__}", **kwargs)
 
         return wrapper
     return decorator
