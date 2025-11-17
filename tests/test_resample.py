@@ -113,3 +113,13 @@ def test07_convolve(t):
     y = dr.convolve(x, 'linear', 2)
     z = t((1+2*.5)/1.5, (1*.5+2+10*.5)/2, (2*.5+10+100*.5)/2, (100+10*.5)/1.5)
     assert dr.allclose(y, z)
+
+@pytest.test_arrays("float, shape=(*)")
+def test08_convolve_wrap(t):
+    source = t(1, 2, 3, 4)
+    result = dr.convolve(source, "linear", 2, wrap_mode = "wrap")
+
+    expected = dr.convolve(t(*source, *source, *source), "linear", 2, wrap_mode = "clamp")[4:8]
+
+    assert dr.allclose(result, expected)
+

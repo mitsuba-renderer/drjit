@@ -47,6 +47,17 @@ subsequent interpolated lookups (see :py:class:`dr.FilterMode <FilterMode>` and
        wrap_mode=dr.WrapMode.Repeat
    )
 
+The :py:class:`dr.WrapMode <WrapMode>` enum controls how out-of-bounds texture
+coordinates are handled:
+
+- ``WrapMode.Clamp``: Clamp coordinates to edge values (edge pixels are repeated)
+- ``WrapMode.Repeat``: Wrap coordinates periodically (for tiling textures)
+- ``WrapMode.Mirror``: Mirror/reflect coordinates at boundaries
+
+These wrap modes are also used by :py:func:`dr.resample` and
+:py:func:`dr.convolve` to control boundary behavior during resampling and
+convolution operations.
+
 The :py:func:`.eval() <drjit.auto.Texture2f.eval>` function queries the function
 at a position on the unit cube. In this example involving a 2D texture, we must
 provide a 2D input point, and the evaluation produces three output channels.

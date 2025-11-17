@@ -47,6 +47,13 @@ DrJit 1.2.0 (September 17, 2025)
 
 **API Improvements**
 
+- **Wrap Modes for Resample and Convolve**: Added ``wrap_mode`` parameter to
+  :py:func:`dr.resample` and :py:func:`dr.convolve` functions to control
+  boundary handling. Supports ``"clamp"`` (default, maintains backward
+  compatibility), ``"wrap"`` (periodic wrapping for tiling textures), and
+  ``"mirror"`` (reflection at boundaries). All modes work on CPU, LLVM, and
+  CUDA backends with full autodiff support. (commits `d691d959`, `d96ba5d9`).
+
 - **Spherical Direction Utilities**: Added Python implementation of spherical
   direction utilities (``dr.sphdir``).
   (PR `#432 <https://github.com/mitsuba-renderer/drjit/pull/432>`__,

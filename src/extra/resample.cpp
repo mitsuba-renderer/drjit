@@ -85,9 +85,13 @@ struct Resampler::Impl {
                     "samples!");
 
             // Normalize the weights for each output sample
-            double normalization = 1.0 / sum;
-            for (uint32_t l = 0; l < taps; l++)
-                weights[i * taps + l] *= normalization;
+            // For wrap/mirror modes, don't renormalize since all taps have valid samples
+            // Only clamp mode needs renormalization due to boundary truncation
+            if (wrap_mode == WrapMode::Clamp) {
+                double normalization = 1.0 / sum;
+                for (uint32_t l = 0; l < taps; l++)
+                    weights[i * taps + l] *= normalization;
+            }
         }
     }
 
