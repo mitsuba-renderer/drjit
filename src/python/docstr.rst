@@ -2876,7 +2876,9 @@
     tuple. For example, ``[5:10:2, ..., None]`` would be specified as ``(slice(5,
     10, 2), Ellipsis, None)``.
 
-    An example is shown below:
+    When multiple integer arrays appear in the indices, they follow NumPy/PyTorch
+    advanced indexing semantics: the arrays are broadcast together and select
+    element-wise, producing a single output dimension.
 
     .. code-block:: pycon
 

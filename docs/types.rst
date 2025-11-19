@@ -573,6 +573,16 @@ indexing with :py:attr:`drjit.newaxis` (or equivalently, ``None``).
    >>> t2.shape
    (2, 3, 1, 40)
 
+When multiple integer arrays are used in the slicing operation, they follow NumPy/PyTorch
+advanced indexing semantics: the arrays are broadcast together and select
+element-wise, producing a single output dimension instead of a grid.
+
+.. code-block:: pycon
+
+   >>> t = TensorXf(dr.arange(Float, 16), shape=(4, 4))
+   >>> t[UInt32(0, 2), UInt32(0, 2)]
+   [0, 10]
+
 Slicing internally turns into a :py:func:`drjit.gather` operation that reads
 from the underlying flat array, while slice assignment turns into
 :py:func:`drjit.scatter`. The conversion from a slice tuple into concrete

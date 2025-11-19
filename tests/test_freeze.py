@@ -3505,11 +3505,12 @@ def test90_tensor_slicing(t, auto_opaque):
 
     frozen = dr.freeze(func, auto_opaque=auto_opaque)
 
-    for i in range(3):
+    for i in range(4):
         shape = ((i + 5), 10)
         x = mod.TensorXf(dr.arange(mod.Float, dr.prod(shape)), shape=shape)
-        row = dr.arange(mod.UInt32, i + 4)
-        col = dr.arange(mod.UInt32, 3) + 1
+        # Both row and col must have the same length for advanced indexing
+        row = dr.arange(mod.UInt32, i+2)
+        col = dr.arange(mod.UInt32, i+2) + 1
 
         res = frozen(x, row, col)
         ref = func(x, row, col)
@@ -4001,7 +4002,6 @@ def test105_batched_gemm_varying_batch(t, auto_opaque):
         assert dr.allclose(res, ref, atol=1e-3)
 
 
-
 @pytest.test_arrays("float32, jit, shape=(*)")
 @pytest.mark.parametrize("auto_opaque", [False, True])
 def test106_nested_switch(t, auto_opaque):
@@ -4060,3 +4060,31 @@ def test107_frozen_getter(t, auto_opaque):
         assert dr.all(res == t([1 + it, 1 + it, 1 + it, 2 + it, 2 + it]))
 
     assert func.n_recordings == 1
+
+
+@pytest.test_arrays("float32, jit, diff, shape=(*)")
+@pytest.mark.parametrize("auto_opaque", [False, True])
+@pytest.mark.xfail(reason="Consecutive advanced + slice dims bakes "
+                           "advanced_size in the kernel")
+def test108_tensor_slicing_advanced_trailing(t, auto_opaque):
+    """
+    Tests advanced tensor indexing with a trailing slice dimension
+    inside frozen functions. The tensor shape is fixed so the freeze
+    key matches and replay is attempted with differently sized arrays.
+    """
+    mod = sys.modules[t.__module__]
+
+    def func(x: mod.TensorXf, row: mod.UInt32):
+        return x[row, :]
+
+    frozen = dr.freeze(func, auto_opaque=auto_opaque)
+
+    x = mod.TensorXf(dr.arange(mod.Float, 10 * 3), shape=(10, 3))
+    for i in range(4):
+        row = dr.arange(mod.UInt32, i + 2)
+
+        res = frozen(x, row)
+        ref = func(x, row)
+
+        assert dr.allclose(res, ref)
+

@@ -102,6 +102,13 @@ DrJit 1.4.0 (TBA)
   reverse mode via trajectory replay. See the
   :ref:`documentation <diff_loops>` for details.
 
+- **NumPy-style advanced tensor indexing**: Tensor indexing with multiple
+  integer arrays now follows NumPy/PyTorch semantics. Previously,
+  ``t[arr1, arr2]`` selected all combinations (a grid); it now selects
+  element-wise pairs, matching ``torch`` and ``numpy`` behavior. Non-consecutive
+  array indices (e.g., ``t[arr, :, arr]``) correctly broadcast and move the
+  result dimension to the front of the output shape.
+
 - **NumPy-style array/tensor manipulation and sorting**: This release brings a
   large set NumPy-compatible functions for sorting, reshaping, and reindexing
   arrays and tensors. This includes :py:func:`dr.sort() <sort>`,
