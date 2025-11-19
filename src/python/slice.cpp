@@ -23,14 +23,17 @@
 struct Component {
     Py_ssize_t start, step, slice_size, size;
     nb::object object;
+    bool is_array = false;
+    bool produces_output_dim = true;
 
     Component(Py_ssize_t start, Py_ssize_t step, Py_ssize_t slice_size,
-              Py_ssize_t size)
-        : start(start), step(step), slice_size(slice_size), size(size) { }
+              Py_ssize_t size, bool produces_output_dim = true)
+        : start(start), step(step), slice_size(slice_size), size(size),
+          produces_output_dim(produces_output_dim) { }
 
     Component(nb::handle h, Py_ssize_t slice_size, Py_ssize_t size)
         : start(0), step(1), slice_size(slice_size), size(size),
-          object(nb::borrow(h)) { }
+          object(nb::borrow(h)), is_array(true) { }
 };
 
 inline bool is_signed_int (VarType vt) {
@@ -96,7 +99,7 @@ slice_index(const nb::type_object_t<ArrayBase> &dtype,
                           "bounds for axis %zu with size %zd.",
                           v, components.size(), size);
 
-            components.emplace_back(v, 1, 1, size);
+            components.emplace_back(v, 1, 1, size, false);
             continue;
         } else if (tp.is(&PySlice_Type)) {
             Py_ssize_t start, stop, step;
@@ -175,6 +178,66 @@ slice_index(const nb::type_object_t<ArrayBase> &dtype,
     if (size_out == 0)
         return { nb::tuple(shape_out), dtype() };
 
+    // Non-consecutive advanced indexing (e.g. t[arr, :, arr]):
+    // when multiple array indices are separated by non-array components,
+    // PyTorch/NumPy broadcast them together and move the result dimension
+    // to the front of the output shape. Detect this and rebuild shape_out
+    // before the main index-computation loop below.
+    bool non_consecutive = false;
+    size_t advanced_size = 0;
+    {
+        int first_adv = -1, last_adv = -1;
+        for (size_t k = 0; k < components.size(); ++k)
+            if (components[k].is_array) {
+                if (first_adv < 0) first_adv = (int) k;
+                last_adv = (int) k;
+            }
+
+        if (first_adv >= 0 && last_adv > first_adv) {
+            for (int k = first_adv + 1; k < last_adv; ++k) {
+                if (!components[k].is_array) {
+                    non_consecutive = true;
+                    break;
+                }
+            }
+        }
+    }
+
+    if (non_consecutive) {
+        // Determine the broadcasted advanced index size: all advanced
+        // index arrays must have the same length, or length 1 (which
+        // is broadcast to match the others).
+        for (const Component &c : components) {
+            if (!c.is_array)
+                continue;
+            size_t sz = (size_t) c.slice_size;
+            if (advanced_size == 0)
+                advanced_size = sz;
+            else if (sz != 1 && advanced_size != 1 &&
+                     sz != advanced_size)
+                nb::raise("drjit.slice_index(): advanced index "
+                          "arrays with shapes %zu and %zu cannot "
+                          "be broadcast together.",
+                          advanced_size, sz);
+            if (sz > advanced_size)
+                advanced_size = sz;
+        }
+
+        // Rebuild shape_out: the broadcasted advanced dimension goes
+        // to the front, followed by None and slice dims in order.
+        shape_out = nb::list();
+        shape_out.append(advanced_size);
+        for (size_t k = 0; k < none_count; ++k)
+            shape_out.append(1);
+        for (const Component &c : components)
+            if (!c.is_array && c.produces_output_dim)
+                shape_out.append(c.slice_size);
+
+        size_out = 1;
+        for (nb::handle h : shape_out)
+            size_out *= nb::cast<size_t>(h);
+    }
+
     // A "passthrough" axis is a full `:` slice over a dim of its full
     // input size, e.g. axes 1 and 2 in `t[a, :, :]`. Such an axis is the
     // identity: its input and output strides agree, so within a run of
@@ -237,6 +300,16 @@ slice_index(const nb::type_object_t<ArrayBase> &dtype,
     nb::object active = nb::borrow(Py_True);
     nb::object index_out = dtype(base);
 
+    // For non-consecutive advanced indexing, peel the broadcasted
+    // advanced dimension (outermost in shape_out) off the flat index
+    // before entering the per-axis loop.
+    nb::object advanced_idx;
+    if (non_consecutive) {
+        size_t rest_size = size_out / advanced_size;
+        advanced_idx = index.floor_div(dtype(rest_size));
+        index = fma(advanced_idx, dtype(uint32_t(-rest_size)), index);
+    }
+
     // Process axes from innermost to outermost, peeling one output
     // coordinate off `index` at each step.
     in_stride = 1;
@@ -244,7 +317,11 @@ slice_index(const nb::type_object_t<ArrayBase> &dtype,
         const Component &c = components[k];
         if (!is_skippable(c)) {
             nb::object rem;
-            if (k == first) {
+            if (non_consecutive && c.is_array) {
+                // Advanced index: use the shared broadcasted index.
+                // Size-1 arrays are broadcast (always read element 0).
+                rem = (c.slice_size == 1) ? dtype(0) : advanced_idx;
+            } else if (k == first) {
                 rem = std::move(index);
             } else {
                 nb::object next = index.floor_div(dtype(c.slice_size));
