@@ -3430,8 +3430,10 @@ def test90_tensor_slicing(t, auto_opaque):
     for i in range(3):
         shape = ((i + 5), 10)
         x = mod.TensorXf(dr.arange(mod.Float, dr.prod(shape)), shape=shape)
-        row = dr.arange(mod.UInt32, i + 4)
-        col = dr.arange(mod.UInt32, 3) + 1
+        # Both row and col must have the same length for advanced indexing
+        n = 3
+        row = dr.arange(mod.UInt32, n)
+        col = dr.arange(mod.UInt32, n) + 1
 
         res = frozen(x, row, col)
         ref = func(x, row, col)

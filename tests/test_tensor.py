@@ -63,7 +63,7 @@ def test01_slice_index(t):
     check(shape=(3, 7), indices=(t(0), slice(0, 7, 3)),
           shape_out=(1, 3), index_out=t(0, 3, 6))
     check(shape=(3, 7), indices=(t(0), t(0, 3, 6)),
-          shape_out=(1, 3), index_out=t(0, 3, 6))
+          shape_out=(3,), index_out=t(0, 3, 6))  # Consecutive advanced indices → single dimension
     check(shape=(3, 7), indices=(2, slice(None, None, None)),
           shape_out=(7,), index_out=t(14, 15, 16, 17, 18, 19, 20))
     check(shape=(3, 7), indices=(slice(None, None, None), 2),
@@ -758,7 +758,7 @@ def test24_multidim_scalar(t):
 
 
 @pytest.test_arrays("float32, jit")
-def test25_multidim_complex(t):
+def test25_multidim_advanced(t):
     pytest.importorskip("torch")
 
     mod = sys.modules[t.__module__]
@@ -777,5 +777,29 @@ def test25_multidim_complex(t):
     index_torch = index.torch().long()
     ref = x_torch[index_torch, :, index_torch]
     res = x[index, :, index]
+
+    assert dr.allclose(res, ref)
+
+
+@pytest.test_arrays("float32, jit")
+def test26_4d_advanced(t):
+    pytest.importorskip("torch")
+
+    mod = sys.modules[t.__module__]
+    UInt32 = mod.UInt32
+    TensorXf = mod.TensorXf
+    Float = mod.Float
+
+    shape = (10, 10, 10, 10)
+    rng = dr.rng()
+    index = dr.arange(UInt32, 5) + 1
+
+    x = rng.random(Float, dr.prod(shape))
+    x = TensorXf(x, shape)
+    x_torch = x.torch()
+
+    index_torch = index.torch().long()
+    ref = x_torch[index_torch, :, index_torch, :]
+    res = x[index, :, index, :]
 
     assert dr.allclose(res, ref)

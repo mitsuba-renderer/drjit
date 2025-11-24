@@ -95,7 +95,7 @@ slice_index(const nb::type_object_t<ArrayBase> &dtype,
     for (nb::handle h : indices) {
         if (h.is_none()) {
             index_info.push_back({IndexInfo::None, 1});
-            is_advanced.push_back(false);
+            // Note: None doesn't create a component, so don't push to is_advanced
             continue;
         }
 
@@ -164,13 +164,18 @@ slice_index(const nb::type_object_t<ArrayBase> &dtype,
                 is_advanced.push_back(true);
                 has_advanced = true;
 
-                // For broadcasting: all advanced indices must have the same size
-                // (PyTorch/NumPy requirement for advanced indexing)
-                if (advanced_size == 0)
+                // Track the maximum size for broadcasting
+                // PyTorch/NumPy broadcast all advanced indices to the same shape
+                if (advanced_size == 0) {
                     advanced_size = slice_size;
-                else if (advanced_size != slice_size)
-                    nb::raise("drjit.slice_index(): advanced index arrays must have the same length, "
-                              "got %zu and %zu.", advanced_size, slice_size);
+                } else if (slice_size != 1 && advanced_size != 1 && advanced_size != slice_size) {
+                    // Broadcasting rules: sizes must be 1 or equal
+                    nb::raise("drjit.slice_index(): advanced index arrays with shapes %zu and %zu "
+                              "cannot be broadcast together.", advanced_size, slice_size);
+                } else if (slice_size > advanced_size) {
+                    // Update to the larger size (broadcasting smaller arrays to match)
+                    advanced_size = slice_size;
+                }
 
                 index_info.push_back({IndexInfo::Advanced, slice_size});
                 continue;
@@ -232,14 +237,20 @@ slice_index(const nb::type_object_t<ArrayBase> &dtype,
         }
 
         if (consecutive) {
-            // Advanced indices are consecutive: keep them in place
+            // Advanced indices are consecutive: replace all with a single dimension
+            bool advanced_added = false;
             for (const auto &info : index_info) {
                 if (info.type == IndexInfo::None) {
                     shape_out.append(1);
                 } else if (info.type == IndexInfo::Slice) {
                     shape_out.append(info.size);
                 } else if (info.type == IndexInfo::Advanced) {
-                    shape_out.append(advanced_size);
+                    if (!advanced_added) {
+                        // All consecutive advanced indices produce a single dimension
+                        shape_out.append(advanced_size);
+                        advanced_added = true;
+                    }
+                    // Subsequent advanced indices don't add dimensions
                 }
                 // Integer indices don't contribute
             }
@@ -383,7 +394,14 @@ slice_index(const nb::type_object_t<ArrayBase> &dtype,
 
                 if (is_advanced[i]) {
                     // Advanced index: use the advanced_idx to gather from the index array
-                    dim_index = gather(dtype, c.object, advanced_idx, active, ReduceMode::Auto);
+                    // Handle broadcasting: if the index array has size 1, broadcast it
+                    if (c.slice_size == 1) {
+                        // Broadcast: gather only the single element
+                        dim_index = gather(dtype, c.object, dtype(0), active, ReduceMode::Auto);
+                    } else {
+                        // Normal gather with advanced_idx
+                        dim_index = gather(dtype, c.object, advanced_idx, active, ReduceMode::Auto);
+                    }
                 } else if (c.slice_size == 1) {
                     // Integer index (not a slice, not advanced)
                     dim_index = dtype(c.start);
