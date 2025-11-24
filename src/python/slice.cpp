@@ -22,15 +22,24 @@
 
 /// Holds metadata about slicing component
 struct Component {
+    enum Type { None, Integer, Slice, Advanced, Ellipsis };
+
+    Type type;
     Py_ssize_t start, step, slice_size, size;
     nb::object object;
 
-    Component(Py_ssize_t start, Py_ssize_t step, Py_ssize_t slice_size,
-              Py_ssize_t size)
-        : start(start), step(step), slice_size(slice_size), size(size) { }
+    // Constructor for None indices
+    Component(Type t)
+        : type(t), start(0), step(1), slice_size(1), size(1) { }
 
-    Component(nb::handle h, Py_ssize_t slice_size, Py_ssize_t size)
-        : start(0), step(1), slice_size(slice_size), size(size),
+    // Constructor for integer and slice indices
+    Component(Type t, Py_ssize_t start, Py_ssize_t step, Py_ssize_t slice_size,
+              Py_ssize_t size)
+        : type(t), start(start), step(step), slice_size(slice_size), size(size) { }
+
+    // Constructor for advanced indices (array indexing)
+    Component(Type t, nb::handle h, Py_ssize_t slice_size, Py_ssize_t size)
+        : type(t), start(0), step(1), slice_size(slice_size), size(size),
           object(nb::borrow(h)) { }
 };
 
@@ -73,29 +82,15 @@ slice_index(const nb::type_object_t<ArrayBase> &dtype,
            indices_len = nb::len(indices);
 
     std::vector<Component> components;
-    components.reserve(shape_len);
+    components.reserve(indices_len);  // May include None indices
 
-    // Track which components are advanced (array) indices for PyTorch compatibility
-    std::vector<bool> is_advanced;
-    is_advanced.reserve(shape_len);
-
-    // Track positions and types of indices for proper shape construction
-    struct IndexInfo {
-        enum Type { None, Integer, Slice, Advanced, Ellipsis };
-        Type type;
-        size_t size;  // For Slice and Advanced
-    };
-    std::vector<IndexInfo> index_info;
-
-    // First pass: parse indices and mark advanced indices
+    // First pass: parse indices
     nb::list basic_shapes;       // Shapes from basic indexing (slices)
     size_t advanced_size = 0;    // Size of advanced index arrays (all must be same)
-    bool has_advanced = false;
 
     for (nb::handle h : indices) {
         if (h.is_none()) {
-            index_info.push_back({IndexInfo::None, 1});
-            // Note: None doesn't create a component, so don't push to is_advanced
+            components.emplace_back(Component::None);
             continue;
         }
 
@@ -115,18 +110,14 @@ slice_index(const nb::type_object_t<ArrayBase> &dtype,
                           "bounds for axis %zu with size %zd.",
                           v, components.size(), size);
 
-            components.emplace_back(v, 1, 1, size);
-            is_advanced.push_back(false);
-            index_info.push_back({IndexInfo::Integer, 0});
+            components.emplace_back(Component::Integer, v, 1, 1, size);
             continue;
         } else if (tp.is(&PySlice_Type)) {
             Py_ssize_t start, stop, step;
             size_t slice_length;
             nb::detail::slice_compute(h.ptr(), size, start, stop, step, slice_length);
-            components.emplace_back(start, step, (Py_ssize_t) slice_length, size);
-            is_advanced.push_back(false);
+            components.emplace_back(Component::Slice, start, step, (Py_ssize_t) slice_length, size);
             basic_shapes.append(slice_length);
-            index_info.push_back({IndexInfo::Slice, slice_length});
             continue;
         } else if (is_drjit_type(tp)) {
             const ArraySupplement *s2 = &supp(tp);
@@ -160,9 +151,7 @@ slice_index(const nb::type_object_t<ArrayBase> &dtype,
                 if (!o.type().is(dtype))
                     o = dtype(o);
 
-                components.emplace_back(o, slice_size, size);
-                is_advanced.push_back(true);
-                has_advanced = true;
+                components.emplace_back(Component::Advanced, o, slice_size, size);
 
                 // Track the maximum size for broadcasting
                 // PyTorch/NumPy broadcast all advanced indices to the same shape
@@ -177,7 +166,6 @@ slice_index(const nb::type_object_t<ArrayBase> &dtype,
                     advanced_size = slice_size;
                 }
 
-                index_info.push_back({IndexInfo::Advanced, slice_size});
                 continue;
             }
         } else if (tp.is(&PyEllipsis_Type)) {
@@ -188,10 +176,8 @@ slice_index(const nb::type_object_t<ArrayBase> &dtype,
                 if (shape_offset >= shape_len)
                     nb::detail::fail("slice_index(): internal error.");
                 size = nb::cast<Py_ssize_t>(shape[shape_offset++]);
-                components.emplace_back(0, 1, size, size);
-                is_advanced.push_back(false);
+                components.emplace_back(Component::Slice, 0, 1, size, size);
                 basic_shapes.append(size);
-                index_info.push_back({IndexInfo::Slice, (size_t)size});
             }
             continue;
         }
@@ -205,10 +191,8 @@ slice_index(const nb::type_object_t<ArrayBase> &dtype,
     // Implicit ellipsis at the end
     while (shape_offset != shape_len) {
         Py_ssize_t size = nb::cast<Py_ssize_t>(shape[shape_offset++]);
-        components.emplace_back(0, 1, size, size);
-        is_advanced.push_back(false);
+        components.emplace_back(Component::Slice, 0, 1, size, size);
         basic_shapes.append(size);
-        index_info.push_back({IndexInfo::Slice, (size_t)size});
     }
 
     // Build output shape following PyTorch/NumPy advanced indexing rules:
@@ -217,239 +201,222 @@ slice_index(const nb::type_object_t<ArrayBase> &dtype,
     // - Advanced indices: if consecutive, stay in place; if non-consecutive, move to front
     shape_out.clear();
 
-    if (has_advanced) {
-        // Check if all advanced indices are consecutive
-        int first_adv = -1, last_adv = -1;
-        for (size_t i = 0; i < index_info.size(); ++i) {
-            if (index_info[i].type == IndexInfo::Advanced) {
-                if (first_adv == -1) first_adv = i;
-                last_adv = i;
-            }
+    // Check if there are advanced indices and if they're consecutive
+    int first_adv = -1, last_adv = -1;
+    for (size_t i = 0; i < components.size(); ++i) {
+        if (components[i].type == Component::Advanced) {
+            if (first_adv == -1) first_adv = i;
+            last_adv = i;
         }
+    }
 
-        bool consecutive = true;
+    bool has_advanced = (first_adv != -1);
+    bool consecutive = true;
+    if (has_advanced) {
         for (int i = first_adv; i <= last_adv; ++i) {
-            if (index_info[i].type == IndexInfo::None) continue;  // None doesn't break consecutiveness
-            if (index_info[i].type != IndexInfo::Advanced) {
+            if (components[i].type == Component::None) continue;  // None doesn't break consecutiveness
+            if (components[i].type != Component::Advanced) {
                 consecutive = false;
                 break;
             }
         }
+    }
 
-        if (consecutive) {
-            // Advanced indices are consecutive: replace all with a single dimension
-            bool advanced_added = false;
-            for (const auto &info : index_info) {
-                if (info.type == IndexInfo::None) {
-                    shape_out.append(1);
-                } else if (info.type == IndexInfo::Slice) {
-                    shape_out.append(info.size);
-                } else if (info.type == IndexInfo::Advanced) {
-                    if (!advanced_added) {
-                        // All consecutive advanced indices produce a single dimension
-                        shape_out.append(advanced_size);
-                        advanced_added = true;
-                    }
-                    // Subsequent advanced indices don't add dimensions
+    // Build output shape based on index arrangement
+    if (has_advanced && consecutive) {
+        // Advanced indices are consecutive: replace all with a single dimension
+        bool advanced_added = false;
+        for (const auto &comp : components) {
+            if (comp.type == Component::None) {
+                shape_out.append(1);
+            } else if (comp.type == Component::Slice) {
+                shape_out.append(comp.slice_size);
+            } else if (comp.type == Component::Advanced) {
+                if (!advanced_added) {
+                    // All consecutive advanced indices produce a single dimension
+                    shape_out.append(advanced_size);
+                    advanced_added = true;
                 }
-                // Integer indices don't contribute
+                // Subsequent advanced indices don't add dimensions
             }
-        } else {
-            // Advanced indices are non-consecutive: move to front
-            shape_out.append(advanced_size);
-            for (const auto &info : index_info) {
-                if (info.type == IndexInfo::None) {
-                    shape_out.append(1);
-                } else if (info.type == IndexInfo::Slice) {
-                    shape_out.append(info.size);
-                }
-                // Integer and Advanced (already added) don't contribute here
-            }
+            // Integer indices don't contribute
         }
-
-        // Calculate total size from the actual output shape
-        size_out = 1;
-        for (nb::handle h : shape_out)
-            size_out *= nb::cast<size_t>(h);
+    } else if (has_advanced && !consecutive) {
+        // Advanced indices are non-consecutive: move to front
+        shape_out.append(advanced_size);
+        for (const auto &comp : components) {
+            if (comp.type == Component::None) {
+                shape_out.append(1);
+            } else if (comp.type == Component::Slice) {
+                shape_out.append(comp.slice_size);
+            }
+            // Integer and Advanced (already added) don't contribute here
+        }
     } else {
         // No advanced indexing: process each index type in order
-        for (const auto &info : index_info) {
-            if (info.type == IndexInfo::None) {
+        for (const auto &comp : components) {
+            if (comp.type == Component::None) {
                 shape_out.append(1);
-            } else if (info.type == IndexInfo::Slice) {
-                shape_out.append(info.size);
+            } else if (comp.type == Component::Slice) {
+                shape_out.append(comp.slice_size);
             }
             // Integer indices don't contribute to shape
         }
-
-        size_out = 1;
-        for (nb::handle h : shape_out)
-            size_out *= nb::cast<size_t>(h);
     }
+
+    // Calculate total size from the actual output shape
+    size_out = 1;
+    for (nb::handle h : shape_out)
+        size_out *= nb::cast<size_t>(h);
 
     nb::object index = arange(dtype, 0, size_out, 1),
                index_out;
 
     nb::object active = nb::borrow(Py_True);
     if (size_out) {
-        if (has_advanced) {
-            // Advanced indexing: need to handle broadcasting
-            // We need to map output indices back to input dimensions
+        // Unified algorithm that handles both basic and advanced indexing
+        index_out = dtype(0);
 
-            index_out = dtype(0);
-
-            // Calculate the stride multiplier for the input tensor dimensions
-            size_t input_stride = 1;
-            std::vector<size_t> input_strides;
-            for (auto it = components.rbegin(); it != components.rend(); ++it) {
+        // Calculate the stride multiplier for the input tensor dimensions
+        // Skip None components as they don't correspond to input dimensions
+        size_t input_stride = 1;
+        std::vector<size_t> input_strides;
+        for (auto it = components.rbegin(); it != components.rend(); ++it) {
+            if (it->type == Component::None) {
+                input_strides.push_back(0);  // Placeholder for None
+            } else {
                 input_strides.push_back(input_stride);
                 input_stride *= it->size;
             }
-            std::reverse(input_strides.begin(), input_strides.end());
+        }
+        std::reverse(input_strides.begin(), input_strides.end());
 
-            // Decompose output index according to output shape
-            // This works for any arrangement of None, Advanced, and Slice dimensions
-            nb::object remaining = index;
-            std::vector<nb::object> output_dim_indices;
+        // Decompose output index according to output shape
+        nb::object remaining = index;
+        std::vector<nb::object> output_dim_indices;
 
-            // Decompose based on actual output shape (in reverse order)
-            for (size_t i = nb::len(shape_out); i > 0; --i) {
-                size_t dim_size = nb::cast<size_t>(shape_out[i - 1]);
-                nb::object dim_idx;
-                if (i > 1) {
-                    nb::object quotient = remaining.floor_div(dtype(dim_size));
-                    dim_idx = remaining - quotient * dtype(dim_size);
-                    remaining = quotient;
-                } else {
-                    dim_idx = remaining;
-                }
-                output_dim_indices.insert(output_dim_indices.begin(), dim_idx);
+        // Decompose based on actual output shape (in reverse order)
+        for (size_t i = nb::len(shape_out); i > 0; --i) {
+            size_t dim_size = nb::cast<size_t>(shape_out[i - 1]);
+            nb::object dim_idx;
+            if (i > 1) {
+                nb::object quotient = remaining.floor_div(dtype(dim_size));
+                dim_idx = remaining - quotient * dtype(dim_size);
+                remaining = quotient;
+            } else {
+                dim_idx = remaining;
             }
+            output_dim_indices.insert(output_dim_indices.begin(), dim_idx);
+        }
 
-            // Extract advanced_idx and basic indices from output_dim_indices
-            // Check if advanced indices are consecutive or not
-            int first_adv = -1, last_adv = -1;
-            for (size_t i = 0; i < index_info.size(); ++i) {
-                if (index_info[i].type == IndexInfo::Advanced) {
-                    if (first_adv == -1) first_adv = i;
-                    last_adv = i;
-                }
+        // Check if there are advanced indices and if they're consecutive
+        int first_adv = -1, last_adv = -1;
+        for (size_t i = 0; i < components.size(); ++i) {
+            if (components[i].type == Component::Advanced) {
+                if (first_adv == -1) first_adv = i;
+                last_adv = i;
             }
+        }
 
-            bool consecutive = true;
+        bool has_advanced = (first_adv != -1);
+        bool consecutive = true;
+        if (has_advanced) {
             for (int i = first_adv; i <= last_adv; ++i) {
-                if (index_info[i].type == IndexInfo::None) continue;
-                if (index_info[i].type != IndexInfo::Advanced) {
+                if (components[i].type == Component::None) continue;
+                if (components[i].type != Component::Advanced) {
                     consecutive = false;
                     break;
                 }
             }
+        }
 
-            nb::object advanced_idx = dtype(0);
-            std::vector<nb::object> basic_dim_indices;
-            size_t output_idx = 0;
-            bool advanced_found = false;
+        // Extract advanced_idx and basic indices from output_dim_indices
+        nb::object advanced_idx = dtype(0);
+        std::vector<nb::object> basic_dim_indices;
+        size_t output_idx = 0;
+        bool advanced_found = false;
 
-            if (consecutive) {
-                // Consecutive: advanced index is in its natural position
-                for (const auto &info : index_info) {
-                    if (info.type == IndexInfo::None) {
+        if (has_advanced && consecutive) {
+            // Advanced indices are consecutive: they stay in their natural position
+            for (const auto &comp : components) {
+                if (comp.type == Component::None) {
+                    output_idx++;
+                } else if (comp.type == Component::Advanced) {
+                    if (!advanced_found) {
+                        advanced_idx = output_dim_indices[output_idx];
+                        advanced_found = true;
+                    }
+                    output_idx++;
+                } else if (comp.type == Component::Slice) {
+                    basic_dim_indices.push_back(output_dim_indices[output_idx]);
+                    output_idx++;
+                }
+            }
+        } else if (has_advanced && !consecutive) {
+            // Advanced indices are non-consecutive: they're moved to the front
+            advanced_idx = output_dim_indices[0];
+            output_idx = 1;
+            for (const auto &comp : components) {
+                if (comp.type == Component::None) {
+                    if (output_idx < output_dim_indices.size()) {
                         output_idx++;
-                    } else if (info.type == IndexInfo::Advanced) {
-                        if (!advanced_found) {
-                            advanced_idx = output_dim_indices[output_idx];
-                            advanced_found = true;
-                        }
-                        output_idx++;
-                    } else if (info.type == IndexInfo::Slice) {
+                    }
+                } else if (comp.type == Component::Slice) {
+                    if (output_idx < output_dim_indices.size()) {
                         basic_dim_indices.push_back(output_dim_indices[output_idx]);
                         output_idx++;
                     }
                 }
-            } else {
-                // Non-consecutive: advanced index is at the front
-                advanced_idx = output_dim_indices[0];
-                output_idx = 1;
-                for (const auto &info : index_info) {
-                    if (info.type == IndexInfo::None) {
-                        if (output_idx < output_dim_indices.size()) {
-                            output_idx++;
-                        }
-                    } else if (info.type == IndexInfo::Slice) {
-                        if (output_idx < output_dim_indices.size()) {
-                            basic_dim_indices.push_back(output_dim_indices[output_idx]);
-                            output_idx++;
-                        }
-                    }
-                    // Advanced indices are all represented by the first dimension
-                }
-            }
-
-            // Now map output indices back to input dimensions
-            size_t basic_idx_counter = 0;
-
-            for (size_t i = 0; i < components.size(); ++i) {
-                const Component &c = components[i];
-                nb::object dim_index;
-
-                if (is_advanced[i]) {
-                    // Advanced index: use the advanced_idx to gather from the index array
-                    // Handle broadcasting: if the index array has size 1, broadcast it
-                    if (c.slice_size == 1) {
-                        // Broadcast: gather only the single element
-                        dim_index = gather(dtype, c.object, dtype(0), active, ReduceMode::Auto);
-                    } else {
-                        // Normal gather with advanced_idx
-                        dim_index = gather(dtype, c.object, advanced_idx, active, ReduceMode::Auto);
-                    }
-                } else if (c.slice_size == 1) {
-                    // Integer index (not a slice, not advanced)
-                    dim_index = dtype(c.start);
-                } else {
-                    // Basic slice: get the pre-computed dimension index
-                    if (basic_idx_counter < basic_dim_indices.size()) {
-                        dim_index = basic_dim_indices[basic_idx_counter];
-                        // Apply slice transformation
-                        dim_index = fma(dim_index, dtype(uint32_t(c.step)), dtype(uint32_t(c.start)));
-                        basic_idx_counter++;
-                    } else {
-                        dim_index = dtype(c.start);
-                    }
-                }
-
-                // Add contribution to output index
-                index_out += dim_index * dtype(uint32_t(input_strides[i]));
             }
         } else {
-            // No advanced indexing: use original algorithm
-            size_out = 1;
-            index_out = dtype(0);
-
-            for (auto it = components.rbegin(); it != components.rend(); ++it) {
-                const Component &c = *it;
-                nb::object index_next, index_rem;
-
-                if (it + 1 != components.rend()) {
-                    index_next = index.floor_div(dtype(c.slice_size));
-                    index_rem = index - index_next * dtype(c.slice_size);
-                } else {
-                    index_rem = index;
+            // No advanced indexing: just map output dimensions to input
+            for (const auto &comp : components) {
+                if (comp.type == Component::None) {
+                    output_idx++;
+                } else if (comp.type == Component::Slice) {
+                    if (output_idx < output_dim_indices.size()) {
+                        basic_dim_indices.push_back(output_dim_indices[output_idx]);
+                        output_idx++;
+                    }
                 }
-
-                nb::object index_val;
-                if (!c.object.is_valid())
-                    index_val = fma(index_rem, dtype(uint32_t(c.step * size_out)),
-                                    dtype(uint32_t(c.start * size_out)));
-                else
-                    index_val = gather(dtype, c.object, index_rem, active,
-                                       ReduceMode::Auto) *
-                                dtype(uint32_t(size_out));
-
-                index_out += index_val;
-
-                index = std::move(index_next);
-                size_out *= c.size;
             }
+        }
+
+        // Map output indices back to input dimensions
+        size_t basic_idx_counter = 0;
+        for (size_t i = 0; i < components.size(); ++i) {
+            const Component &c = components[i];
+
+            // Skip None indices as they don't correspond to input dimensions
+            if (c.type == Component::None)
+                continue;
+
+            nb::object dim_index;
+
+            if (c.type == Component::Advanced) {
+                // Advanced index: use the advanced_idx to gather from the index array
+                // Handle broadcasting: if the index array has size 1, broadcast it
+                if (c.slice_size == 1) {
+                    dim_index = gather(dtype, c.object, dtype(0), active, ReduceMode::Auto);
+                } else {
+                    dim_index = gather(dtype, c.object, advanced_idx, active, ReduceMode::Auto);
+                }
+            } else if (c.type == Component::Integer) {
+                // Integer index
+                dim_index = dtype(c.start);
+            } else if (c.type == Component::Slice) {
+                // Basic slice: get the dimension index and apply slice transformation
+                if (basic_idx_counter < basic_dim_indices.size()) {
+                    dim_index = basic_dim_indices[basic_idx_counter];
+                    dim_index = fma(dim_index, dtype(uint32_t(c.step)), dtype(uint32_t(c.start)));
+                    basic_idx_counter++;
+                } else {
+                    dim_index = dtype(c.start);
+                }
+            }
+
+            // Add contribution to output index
+            index_out += dim_index * dtype(uint32_t(input_strides[i]));
         }
     } else {
         index_out = dtype();
