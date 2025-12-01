@@ -543,6 +543,7 @@ nb::object import_ndarray(ArrayMeta m, PyObject *arg, vector<size_t> *shape_out,
                 case nb::dlpack::dtype_code::Float: buf.put("float"); break;
                 case nb::dlpack::dtype_code::Bfloat: buf.put("bfloat"); break;
                 case nb::dlpack::dtype_code::Complex: buf.put("complex"); break;
+                default: nb::raise("import_ndarray(): unsupported data type!");
             }
 
             if (code != nb::dlpack::dtype_code::Bool)
