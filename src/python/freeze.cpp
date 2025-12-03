@@ -564,10 +564,13 @@ uint32_t FlatVariables::construct_jit_index(uint32_t prev_index) {
 
     if (prev_index) {
         if (vt != (VarType) jit_var_type(prev_index))
-            jit_fail("VarType mismatch %u != %u while assigning (r%u) "
-                     "-> (r%u)!",
-                     (uint32_t) vt, (uint32_t) jit_var_type(prev_index),
-                     (uint32_t) prev_index, (uint32_t) index);
+            jit_raise("After replaying a frozen function, when updating"
+                      "its input a VarType mismatch occured %u != %u while"
+                      "assigning (r%u) -> (r%u). This likely occured because "
+                      "part of the frozen function could not be replayed "
+                      "resulting in a different input layout.",
+                      (uint32_t) vt, (uint32_t) jit_var_type(prev_index),
+                      (uint32_t) prev_index, (uint32_t) index);
     }
     return index;
 }
@@ -2095,9 +2098,9 @@ nb::object FrozenFunction::operator()(nb::dict input) {
             in_variables->release();
 
             this->prev_key = in_variables;
-            this->recordings.insert(
-                { std::move(in_variables), std::move(recording) });
-
+            if (!jit_freeze_discarded())
+                this->recordings.insert(
+                    { std::move(in_variables), std::move(recording) });
         } else {
             FunctionRecording *recording = it.value().get();
 
