@@ -121,6 +121,8 @@ def skip_if_unsupported(config, t, needs_int32: bool = False):
         if dr.backend_v(t) == dr.JitBackend.CUDA:
             if not TF_HAS_GPU:
                 pytest.skip("TensorFlow didn't detect a CUDA device, skipping.")
+            elif dr.detail.cuda_compute_capability() >= 120:
+                pytest.skip("Skipping TensorFlow tests on CUDA with sm_120+.")
             if needs_int32 and config[2] == "graph":
                 pytest.xfail("Expected to fail due to TF dlpack issue for int32,"
                             " see https://github.com/tensorflow/tensorflow/issues/78091")
