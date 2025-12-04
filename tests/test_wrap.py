@@ -196,22 +196,24 @@ def test02_flipped_simple_bwd(t, config, is_diff, scalar_deriv):
     elif config[0] == 'tf':
         import tensorflow as tf
         dt = tf_dtype(t)
-        x = tf.cast(tf.range(3), dt)
-        y = test_fn(x)
-        assert tf.reduce_all(y == x * 2)
-        if is_diff:
-            if scalar_deriv:
-                with tf.GradientTape() as tape:
-                    tape.watch(x)
-                    out = test_fn(x)
-                grad = tape.gradient(out, x)
-                assert tf.reduce_all(grad == tf.constant([2, 2, 2], dtype=dt))
-            else:
-                with tf.GradientTape() as tape:
-                    tape.watch(x)
-                    out = test_fn(x)
-                grad = tape.gradient(out, x, output_gradients=tf.constant([10, 20, 30], dtype=dt))
-                assert tf.reduce_all(grad == tf.constant([20, 40, 60], dtype=dt))
+        device = 'gpu' if 'cuda' in str(t) else 'cpu'
+        with tf.device(device):
+            x = tf.cast(tf.range(3), dt)
+            y = test_fn(x)
+            assert tf.reduce_all(y == x * 2)
+            if is_diff:
+                if scalar_deriv:
+                    with tf.GradientTape() as tape:
+                        tape.watch(x)
+                        out = test_fn(x)
+                    grad = tape.gradient(out, x)
+                    assert tf.reduce_all(grad == tf.constant([2, 2, 2], dtype=dt))
+                else:
+                    with tf.GradientTape() as tape:
+                        tape.watch(x)
+                        out = test_fn(x)
+                    grad = tape.gradient(out, x, output_gradients=tf.constant([10, 20, 30], dtype=dt))
+                    assert tf.reduce_all(grad == tf.constant([20, 40, 60], dtype=dt))
 
 @pytest.mark.parametrize('config', configs + configs_tf_jit)
 @pytest.test_arrays('is_diff,float,shape=(*)')
@@ -322,23 +324,25 @@ def test06_flipped_simple_multiarg_bwd(t, config):
 
     elif config[0] == 'tf':
         dt = tf_dtype(t)
-        x = tf.constant([0, 1, 2], dtype=dt)
-        y = tf.constant([4], dtype=dt)
-        a, b, c = test_fn(x, y)
-
-        assert tf.reduce_all(a == tf.constant([4, 5, 6], dtype=dt))
-        assert tf.reduce_all(b == tf.constant([4], dtype=dt))
-        assert tf.reduce_all(c == tf.constant([0, 1, 2], dtype=dt))
-
-        with tf.GradientTape() as tape:
-            tape.watch([x, y])
+        device = 'gpu' if 'cuda' in str(t) else 'cpu'
+        with tf.device(device):
+            x = tf.constant([0, 1, 2], dtype=dt)
+            y = tf.constant([4], dtype=dt)
             a, b, c = test_fn(x, y)
-        grad = tape.gradient([a, b, c], [x, y],
-                            output_gradients=[tf.constant([10, 20, 30], dtype=dt),
-                                            tf.constant([40], dtype=dt),
-                                            tf.constant([50, 60, 70], dtype=dt)])
-        assert tf.reduce_all(grad[0] == tf.constant([60, 80, 100], dtype=dt))
-        assert tf.reduce_all(grad[1] == tf.constant([100], dtype=dt))
+
+            assert tf.reduce_all(a == tf.constant([4, 5, 6], dtype=dt))
+            assert tf.reduce_all(b == tf.constant([4], dtype=dt))
+            assert tf.reduce_all(c == tf.constant([0, 1, 2], dtype=dt))
+
+            with tf.GradientTape() as tape:
+                tape.watch([x, y])
+                a, b, c = test_fn(x, y)
+            grad = tape.gradient([a, b, c], [x, y],
+                                output_gradients=[tf.constant([10, 20, 30], dtype=dt),
+                                                tf.constant([40], dtype=dt),
+                                                tf.constant([50, 60, 70], dtype=dt)])
+            assert tf.reduce_all(grad[0] == tf.constant([60, 80, 100], dtype=dt))
+            assert tf.reduce_all(grad[1] == tf.constant([100], dtype=dt))
 
 @pytest.mark.parametrize('config', configs + configs_tf_jit)
 @pytest.test_arrays('is_diff,float,shape=(*)')
@@ -444,26 +448,28 @@ def test10_flipped_nondiff_bwd(t, config):
             torch.autograd.backward(a, torch.tensor([10, 20, 30], dtype=dt))
             assert dr.all(x.grad == torch.tensor([20, 40, 60], dtype=dt))
     elif config[0] == 'tf':
-         with dr.detail.scoped_rtld_deepbind():
-            @wrap_flipped(config)
-            def test_fn(x, y, z):
-                return x*2, y+1, ~z
+        device = 'gpu' if 'cuda' in str(t) else 'cpu'
+        with tf.device(device):
+            with dr.detail.scoped_rtld_deepbind():
+                @wrap_flipped(config)
+                def test_fn(x, y, z):
+                    return x*2, y+1, ~z
 
-            dt = tf_dtype(t)
-            x = tf.constant([0, 1, 2], dtype=dt)
-            y = tf.cast(x, dtype=tf.int32)
-            if config[1]:
-                z = y > 0
-            else:
-                z = y
+                dt = tf_dtype(t)
+                x = tf.constant([0, 1, 2], dtype=dt)
+                y = tf.cast(x, dtype=tf.int32)
+                if config[1]:
+                    z = y > 0
+                else:
+                    z = y
 
-            a, b, c = test_fn(x, y, z)
-            assert tf.reduce_all(a == x*2)  and tf.reduce_all(b == y+1) and tf.reduce_all(c == ~z)
-            with tf.GradientTape() as tape:
-                tape.watch(x)
                 a, b, c = test_fn(x, y, z)
-            grad = tape.gradient(a, x, output_gradients=tf.constant([10, 20, 30], dtype=dt))
-            assert tf.reduce_all(grad == tf.constant([20, 40, 60], dtype=dt))
+                assert tf.reduce_all(a == x*2)  and tf.reduce_all(b == y+1) and tf.reduce_all(c == ~z)
+                with tf.GradientTape() as tape:
+                    tape.watch(x)
+                    a, b, c = test_fn(x, y, z)
+                grad = tape.gradient(a, x, output_gradients=tf.constant([10, 20, 30], dtype=dt))
+                assert tf.reduce_all(grad == tf.constant([20, 40, 60], dtype=dt))
 
 @pytest.mark.parametrize('config', configs + configs_tf_jit)
 @pytest.test_arrays('is_diff,float32,shape=(*)')
@@ -564,18 +570,20 @@ def test14_flipped_scalar_bwd(t, config):
         assert torch.all(x.grad == torch.tensor([20, 40, 60], dtype=dt))
 
     elif config[0] == 'tf':
-        dt = tf_dtype(t)
-        x = tf.constant([0, 1, 2], dtype=dt)
+        device = 'gpu' if 'cuda' in str(t) else 'cpu'
+        with tf.device(device):
+            dt = tf_dtype(t)
+            x = tf.constant([0, 1, 2], dtype=dt)
 
-        a, b, c = test_fn(x, 4, 5.0)
-        assert tf.reduce_all(a == x*2) and (b == 5) and (c == 6)
-
-        with tf.GradientTape() as tape:
-            tape.watch(x)
             a, b, c = test_fn(x, 4, 5.0)
-        grad = tape.gradient(a, x, output_gradients=tf.constant([10, 20, 30], dtype=dt))
+            assert tf.reduce_all(a == x*2) and (b == 5) and (c == 6)
 
-        assert tf.reduce_all(grad == tf.constant([20, 40, 60], dtype=dt))
+            with tf.GradientTape() as tape:
+                tape.watch(x)
+                a, b, c = test_fn(x, 4, 5.0)
+            grad = tape.gradient(a, x, output_gradients=tf.constant([10, 20, 30], dtype=dt))
+
+            assert tf.reduce_all(grad == tf.constant([20, 40, 60], dtype=dt))
 
 @pytest.mark.parametrize('config', configs + configs_tf_jit)
 @pytest.test_arrays('is_diff,float,shape=(*)')
@@ -961,20 +969,22 @@ def test26_flipped_pytree_bwd(t, config):
 
     elif config[0] == 'tf':
         dt = tf_dtype(t)
-        x = tf.constant([1, 2, 3], dtype=dt)
-        y = tf.constant([4, 5, 6], dtype=dt)
-        with tf.GradientTape() as tape:
-            tape.watch([x, y])
-            xt = [
-                { 'hello' : x },
-                { 'world' : (y,) }
-            ]
-            rt = test_fn(xt)
-            r = rt[123]
-        grad = tape.gradient(r, [x, y], output_gradients=tf.constant([100, 200, 300], dtype=dt))
+        device = 'gpu' if 'cuda' in str(t) else 'cpu'
+        with tf.device(device):
+            x = tf.constant([1, 2, 3], dtype=dt)
+            y = tf.constant([4, 5, 6], dtype=dt)
+            with tf.GradientTape() as tape:
+                tape.watch([x, y])
+                xt = [
+                    { 'hello' : x },
+                    { 'world' : (y,) }
+                ]
+                rt = test_fn(xt)
+                r = rt[123]
+            grad = tape.gradient(r, [x, y], output_gradients=tf.constant([100, 200, 300], dtype=dt))
 
-        assert tf.reduce_all(grad[0] == tf.constant([100, 200, 300], dtype=dt))
-        assert tf.reduce_all(grad[1] == tf.constant([200, 400, 600], dtype=dt))
+            assert tf.reduce_all(grad[0] == tf.constant([100, 200, 300], dtype=dt))
+            assert tf.reduce_all(grad[1] == tf.constant([200, 400, 600], dtype=dt))
 
 @pytest.mark.parametrize('config', configs_torch + configs_tf)
 @pytest.test_arrays('is_diff,float,shape=(*)')
@@ -1083,6 +1093,7 @@ def test29_flipped_non_tensor_output_bwd(t, config):
 @pytest.mark.parametrize('config', configs_torch + configs_tf + configs_tf_jit)
 @pytest.test_arrays('is_diff,float,shape=(*)')
 def test30_nested(t, config):
+    skip_if_unsupported(config, t)
     @wrap(config)
     def add(x, y):
         return x + y
@@ -1107,15 +1118,17 @@ def test30_nested(t, config):
 
     elif config[0] == 'tf':
         dt = tf_dtype(t)
-        x = tf.constant([0, 1, 2], dtype=dt)
-        y = x * 4
+        device = 'gpu' if 'cuda' in str(t) else 'cpu'
+        with tf.device(device):
+            x = tf.constant([0, 1, 2], dtype=dt)
+            y = x * 4
 
-        with tf.GradientTape() as tape:
-            tape.watch([x, y])
-            out = test_fn(x, y)
-        grad = tape.gradient(out, [x, y],
-                             output_gradients=tf.constant([1, 2, 3], dtype=dt))
+            with tf.GradientTape() as tape:
+                tape.watch([x, y])
+                out = test_fn(x, y)
+            grad = tape.gradient(out, [x, y],
+                                output_gradients=tf.constant([1, 2, 3], dtype=dt))
 
-        assert tf.reduce_all(out == tf.constant([0, 5, 20], dtype=dt))
-        assert tf.reduce_all(grad[0] == tf.constant([0, 12, 36], dtype=dt))
-        assert tf.reduce_all(grad[1] == tf.constant([0, 2, 6], dtype=dt))
+            assert tf.reduce_all(out == tf.constant([0, 5, 20], dtype=dt))
+            assert tf.reduce_all(grad[0] == tf.constant([0, 12, 36], dtype=dt))
+            assert tf.reduce_all(grad[1] == tf.constant([0, 2, 6], dtype=dt))
