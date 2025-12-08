@@ -380,7 +380,7 @@ void promote(nb::object *o, size_t n, bool select) {
             args[1] = o[i].ptr();
 
             PyObject *res =
-                NB_VECTORCALL(h2.ptr(), args + 1,
+                PyObject_Vectorcall(h2.ptr(), args + 1,
                               PY_VECTORCALL_ARGUMENTS_OFFSET | 1, nullptr);
 
             if (NB_UNLIKELY(!res)) {

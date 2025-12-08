@@ -256,7 +256,7 @@ int tp_init_array(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
             } else {
                 PyObject *args2[2] = { nullptr, arg };
                 element = nb::steal(
-                    NB_VECTORCALL((PyObject *) value_tp, args2 + 1,
+                    PyObject_Vectorcall((PyObject *) value_tp, args2 + 1,
                                   1 | PY_VECTORCALL_ARGUMENTS_OFFSET, nullptr));
                 if (NB_UNLIKELY(!element.is_valid())) {
                     nb::error_scope scope;
