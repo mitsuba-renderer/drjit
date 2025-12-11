@@ -2098,7 +2098,7 @@ nb::object FrozenFunction::operator()(nb::dict input) {
             in_variables->release();
 
             this->prev_key = in_variables;
-            if (!jit_freeze_discarded())
+            if (!jit_freeze_discarded(recording->recording))
                 this->recordings.insert(
                     { std::move(in_variables), std::move(recording) });
         } else {
