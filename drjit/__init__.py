@@ -33,6 +33,8 @@ from .interop import wrap
 import drjit.random
 import warnings as _warnings
 
+from functools import wraps
+
 
 def get_cmake_dir() -> str:
     "Return the path to the Dr.Jit CMake module directory."
@@ -3072,6 +3074,111 @@ def unit_angle(a, b):
     dot_uv = dot(a, b)
     temp = 2 * asin(.5 * norm(b - mulsign(a, dot_uv)))
     return select(dot_uv >= 0, temp, pi - temp)
+
+def func(
+    f: Optional[F] = None,
+    *,
+    backend: Optional[JitBackend] = None
+):
+    """
+    Decorator that prevents the body of the decorated function from being
+    inlined into the caller, emitting it as a separate callable in the
+    generated IR instead. This can significantly reduce compilation time for
+    large programs where the decorated function is called from multiple sites.
+
+    .. code-block:: python
+
+       @dr.func
+       def f(x):
+           return x * 3
+
+       @dr.func(backend=dr.JitBackend.LLVM)
+       def g(x):
+           return x * 3
+
+    The decorated function must be *pure*: its return values should only
+    depend on its input arguments. Accessing global Dr.Jit arrays or other
+    external state from within the function can lead to errors.
+
+    The backend is automatically inferred from the function arguments on the
+    first call. Once detected, it is cached and reused for subsequent calls.
+    If the function takes no Dr.Jit array arguments (directly or within a
+    :ref:`PyTree <pytrees>`), the backend must be specified explicitly via the
+    ``backend`` parameter.
+
+    Args:
+        f (Callable): The function to decorate.
+
+        backend (Optional[JitBackend]): Backend to use for the generated
+          function. If specified, this always takes priority over automatic
+          detection. If not specified, the backend is inferred from the
+          arguments on the first call.
+    """
+    backend = backend if backend is not None else JitBackend.Invalid
+
+    def _detect_backend(*args, **kwargs):
+        def check(a):
+            b = backend_v(a)
+            if b != JitBackend.Invalid:
+                return b
+            tp = type(a)
+            if tp is list or tp is tuple:
+                for v in a:
+                    b = check(v)
+                    if b != JitBackend.Invalid:
+                        return b
+            elif tp is dict:
+                for v in a.values():
+                    b = check(v)
+                    if b != JitBackend.Invalid:
+                        return b
+            else:
+                desc = getattr(tp, 'DRJIT_STRUCT', None)
+                if type(desc) is dict:
+                    for k in desc:
+                        b = check(getattr(a, k))
+                        if b != JitBackend.Invalid:
+                            return b
+            return JitBackend.Invalid
+
+        for a in args:
+            b = check(a)
+            if b != JitBackend.Invalid:
+                return b
+        for a in kwargs.values():
+            b = check(a)
+            if b != JitBackend.Invalid:
+                return b
+        return JitBackend.Invalid
+
+
+    def decorator(f):
+        cached_backend = JitBackend.Invalid
+
+        @wraps(f)
+        def wrapper(*args, **kwargs):
+            nonlocal cached_backend
+            if backend != JitBackend.Invalid:
+                b = backend
+            elif cached_backend != JitBackend.Invalid:
+                b = cached_backend
+            else:
+                b = _detect_backend(*args, **kwargs)
+                if b == JitBackend.Invalid:
+                    raise RuntimeError(
+                        "dr.func(): could not detect the backend from the "
+                        "input arguments. Please specify it explicitly via "
+                        "the 'backend' parameter.")
+                cached_backend = b
+            m = _sys.modules[f'drjit.{b.name.lower()}']
+            tp = m.UInt32
+            return switch(tp(0), [f], *args, label=f"{f.__name__}", **kwargs)
+
+        return wrapper
+
+    if f is not None:
+        return decorator(f)
+    return decorator
 
 
 newaxis = None
