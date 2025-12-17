@@ -9465,3 +9465,61 @@
 
     Returns:
         int: The raw event handle as an integer
+
+.. topic:: Queue
+
+    A message queue for GPU-based inter-kernel communication.
+
+    This class provides a mechanism for sending messages between GPU kernels
+    with support for typed payloads and responses.
+
+.. topic:: Queue_Queue
+
+    Construct a message queue.
+
+    Args:
+        buffer (drjit.cuda.UInt32): A CUDA 1D UInt32 array for queue storage.
+
+        msg_types (int): Number of distinct message types.
+
+        msg_max_size (int): Maximum message payload size in bytes.
+
+        batch_size (int): Number of messages per batch.
+
+        batches (int): Number of batches in the queue.
+
+        callback (capsule): Queue callback capsule.
+
+        debug (bool): Enable debug mode.
+
+.. topic:: Queue_send
+
+    Send a message to the queue.
+
+    Args:
+        msg_id (drjit.cuda.UInt32): CUDA UInt32 array specifying the message
+            type for each element.
+
+        *args: PyTree of Dr.Jit arrays containing the message payload.
+
+    Returns:
+        Queue.Message: A Message object for retrieving the response.
+
+.. topic:: Queue_Message
+
+    Represents a sent message with a pending response.
+
+.. topic:: Queue_Message_response
+
+    Retrieve the response data.
+
+    This method unpacks the response payload into Dr.Jit arrays matching
+    the types specified in the arguments. The result is cached, so subsequent
+    calls return the same tuple without re-processing.
+
+    Args:
+        *args: PyTree of Dr.Jit array types specifying the expected response
+            layout. Each type must be a CUDA-backed array type.
+
+    Returns:
+        tuple: A tuple of Dr.Jit arrays containing the response data.

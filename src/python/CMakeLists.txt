@@ -83,6 +83,7 @@ nanobind_add_module(
   profile.h     profile.cpp
   tracker.h     tracker.cpp
   local.h       local.cpp
+  queue.h       queue.cpp
   resample.h    resample.cpp
   coop_vec.h    coop_vec.cpp
   reorder.h     reorder.cpp

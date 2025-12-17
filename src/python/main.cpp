@@ -40,6 +40,7 @@
 #include "profile.h"
 #include "tracker.h"
 #include "local.h"
+#include "queue.h"
 #include "resample.h"
 #include "coop_vec.h"
 #include "reorder.h"
@@ -265,6 +266,7 @@ NB_MODULE(_drjit_ext, m_) {
     export_profile(m);
     export_tracker(detail);
     export_local(m);
+    export_queue(m);
     export_resample(m);
     export_reorder(m);
     export_quat(m);

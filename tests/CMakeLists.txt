@@ -38,6 +38,30 @@ add_drjit_test(custom_type_ext custom_type_ext.cpp)
 add_drjit_test(py_cpp_consistency_ext py_cpp_consistency_ext.cpp)
 add_drjit_test(local_ext local_ext.cpp)
 
+# CUDA-based queue test extension
+if (DRJIT_ENABLE_CUDA)
+  enable_language(CUDA)
+
+  nanobind_add_module(
+    queue_ext
+    NB_DOMAIN drjit
+    ${DRJIT_DIST_FLAGS}
+    queue_ext.cpp
+  )
+
+  set_source_files_properties(queue_ext.cpp PROPERTIES LANGUAGE CUDA)
+  target_link_libraries(queue_ext PRIVATE drjit drjit-core drjit-extra)
+  target_compile_definitions(queue_ext PRIVATE -DDRJIT_ENABLE_CUDA)
+
+  if (MSVC)
+    set_target_properties(queue_ext PROPERTIES
+      LIBRARY_OUTPUT_DIRECTORY_RELEASE        ${CMAKE_CURRENT_BINARY_DIR}
+      LIBRARY_OUTPUT_DIRECTORY_DEBUG          ${CMAKE_CURRENT_BINARY_DIR}
+      LIBRARY_OUTPUT_DIRECTORY_RELWITHDEBINFO ${CMAKE_CURRENT_BINARY_DIR}
+      LIBRARY_OUTPUT_DIRECTORY_MINSIZEREL     ${CMAKE_CURRENT_BINARY_DIR})
+  endif()
+endif()
+
 file(GLOB TEST_FILES RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} "*.py")
 
 foreach (FNAME IN ITEMS ${TEST_FILES})

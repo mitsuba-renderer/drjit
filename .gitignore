@@ -25,6 +25,7 @@ Makefile
 *.dSYM
 __pycache__
 *.pyc
+\.cache
 
 # Visual Studio
 *.vcxproj
