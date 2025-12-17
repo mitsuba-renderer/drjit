@@ -770,10 +770,46 @@ def test30_packet_scatter(t, psize):
     dr.eval(target_1)
 
     with dr.scoped_set_flag(dr.JitFlag.PacketOps, True):
-        dr.scatter(target_2, value_arr, perm)
-    dr.eval(target_2)
+        with dr.scoped_set_flag(dr.JitFlag.KernelHistory, True):
+            dr.kernel_history_clear()
+            dr.scatter(target_2, value_arr, perm)
+            dr.eval(target_2)
+            history = dr.kernel_history((dr.KernelType.JIT,))
 
     assert dr.all(target_1 == target_2)
+
+    if dr.backend_v(t) is dr.JitBackend.CUDA and tp in (dr.VarType.Float16, dr.VarType.Float32, dr.VarType.Float64) and history:
+        compute_capability = dr.detail.cuda_compute_capability()
+        supports_256bit = compute_capability >= 120
+        ir = history[0]["ir"].getvalue()
+
+        if tp == dr.VarType.Float16:
+            if supports_256bit:
+                # CC 120+: 256-bit (v8) stores
+                n_regs = {2: 2, 4: 4, 8: 8, 16: 16}[psize]
+                n_inst = {2: 1, 4: 1, 8: 1, 16: 1}[psize]
+            else:
+                # CC < 120: up to 128-bit (v4) stores
+                n_regs = {2: 2, 4: 4, 8: 4, 16: 4}[psize]
+                n_inst = {2: 1, 4: 1, 8: 2, 16: 4}[psize]
+            vec_str = f".v{n_regs//2}" if n_regs > 2 else ""
+            assert ir.count(f"st.global{vec_str}.b32") == n_inst
+        elif tp == dr.VarType.Float32:
+            if supports_256bit:
+                n_regs = {2: 2, 4: 4, 8: 8, 16: 8}[psize]
+                n_inst = {2: 1, 4: 1, 8: 1, 16: 2}[psize]
+            else:
+                n_regs = {2: 2, 4: 4, 8: 4, 16: 4}[psize]
+                n_inst = {2: 1, 4: 1, 8: 2, 16: 4}[psize]
+            assert ir.count(f"st.global.v{n_regs}.b32") == n_inst
+        elif tp == dr.VarType.Float64:
+            if supports_256bit:
+                n_regs = {2: 2, 4: 4, 8: 4, 16: 4}[psize]
+                n_inst = {2: 1, 4: 1, 8: 2, 16: 4}[psize]
+            else:
+                n_regs = {2: 2, 4: 2, 8: 2, 16: 2}[psize]
+                n_inst = {2: 1, 4: 2, 8: 4, 16: 8}[psize]
+            assert ir.count(f"st.global.v{n_regs}.b64") == n_inst
 
 @pytest.mark.parametrize('psize', [2, 4, 8, 16])
 @pytest.test_arrays('-diff, jit, int, shape=(*, *), -int8')
@@ -995,7 +1031,13 @@ def test35_scatter_packet_reduce(t, reduce_op, packet_size, force_optix):
     ir = history[0]["ir"].getvalue()
     if dr.backend_v(t) is dr.JitBackend.CUDA:
         compute_capability = dr.detail.cuda_compute_capability()
-        if compute_capability >= 90 and not force_optix:
+        cuda_version = dr.detail.cuda_version()
+        # CC 90+ supports f16x2 atomic reductions
+        supports_f16x2_reduction = compute_capability >= 90
+        # CC 120+ supports wide vector reductions (red.global.vX.f16 and red.global.vX.f32)
+        supports_wide_vector_reduction = compute_capability >= 120 and \
+            (not force_optix or cuda_version >= (13, 2))
+        if supports_wide_vector_reduction:
             if tp == dr.VarType.Float16:
                 n_regs = {1: 0, 2: 2, 3: 0, 4: 4, 5: 0, 6: 2, 12: 4, 16: 8}[packet_size]
                 n_inst = {1: 0, 2: 1, 3: 0, 4: 1, 5: 0, 6: 3, 12: 3, 16: 2}[packet_size]
@@ -1004,10 +1046,10 @@ def test35_scatter_packet_reduce(t, reduce_op, packet_size, force_optix):
                 n_regs = {1: 0, 2: 2, 3: 0, 4: 4, 5: 0, 6: 2, 12: 4, 16: 4}[packet_size]
                 n_inst = {1: 0, 2: 1, 3: 0, 4: 1, 5: 0, 6: 3, 12: 3, 16: 4}[packet_size]
                 assert ir.count(f"red.global.v{n_regs}.f32.{reduce_op.lower()}") == n_inst
-        else:
-            if tp == dr.VarType.Float16:
-                n_inst = {1: 1, 2: 1, 3: 3, 4: 2, 5: 5, 6: 3, 12: 6, 16: 8}[packet_size]
-                assert ir.count("red.global.add.noftz.f16x2") == n_inst
+        elif supports_f16x2_reduction and tp == dr.VarType.Float16:
+            # CC 90-119: use f16x2 atomic reductions
+            n_inst = {1: 1, 2: 1, 3: 3, 4: 2, 5: 5, 6: 3, 12: 6, 16: 8}[packet_size]
+            assert ir.count("red.global.add.noftz.f16x2") == n_inst
     elif dr.backend_v(t) is dr.JitBackend.LLVM and reduce_op == "Add":
         # Compute maximum supported vector width for this architecture
         target_features = re.search('"target-features"=".*"', ir).string
@@ -1095,18 +1137,37 @@ def test36_gather_packet(t, packet_size, force_optix):
     ir = history[0]["ir"].getvalue()
 
     if dr.backend_v(t) is dr.JitBackend.CUDA:
+        compute_capability = dr.detail.cuda_compute_capability()
+        cuda_version = dr.detail.cuda_version()
+        supports_256bit = compute_capability >= 120 and \
+            (not force_optix or cuda_version >= (13, 2))
+
         if tp == dr.VarType.Float16:
-            n_regs = {1: 0, 2: 2, 3: 0, 4: 4, 5: 0, 6: 2, 12: 4, 16: 8}[packet_size]
-            n_inst = {1: 0, 2: 1, 3: 0, 4: 1, 5: 0, 6: 3, 12: 3, 16: 2}[packet_size]
+            if supports_256bit:
+                # CC 120+: 256-bit (v8) loads
+                n_regs = {1: 0, 2: 2, 3: 0, 4: 4, 5: 0, 6: 2, 12: 4, 16: 16}[packet_size]
+                n_inst = {1: 0, 2: 1, 3: 0, 4: 1, 5: 0, 6: 3, 12: 3, 16: 1}[packet_size]
+            else:
+                # CC < 120: up to 128-bit (v4) loads
+                n_regs = {1: 0, 2: 2, 3: 0, 4: 4, 5: 0, 6: 2, 12: 4, 16: 8}[packet_size]
+                n_inst = {1: 0, 2: 1, 3: 0, 4: 1, 5: 0, 6: 3, 12: 3, 16: 2}[packet_size]
             vec_str = f".v{n_regs//2}" if n_regs > 2 else ""
             assert ir.count(f"ld.global.nc{vec_str}.b32") == n_inst
         elif tp == dr.VarType.Float32:
-            n_regs = {1: 0, 2: 2, 3: 0, 4: 4, 5: 0, 6: 2, 12: 4, 16: 4}[packet_size]
-            n_inst = {1: 0, 2: 1, 3: 0, 4: 1, 5: 0, 6: 3, 12: 3, 16: 4}[packet_size]
+            if supports_256bit:
+                n_regs = {1: 0, 2: 2, 3: 0, 4: 4, 5: 0, 6: 2, 12: 4, 16: 8}[packet_size]
+                n_inst = {1: 0, 2: 1, 3: 0, 4: 1, 5: 0, 6: 3, 12: 3, 16: 2}[packet_size]
+            else:
+                n_regs = {1: 0, 2: 2, 3: 0, 4: 4, 5: 0, 6: 2, 12: 4, 16: 4}[packet_size]
+                n_inst = {1: 0, 2: 1, 3: 0, 4: 1, 5: 0, 6: 3, 12: 3, 16: 4}[packet_size]
             assert ir.count(f"ld.global.nc.v{n_regs}.b32") == n_inst
         elif tp == dr.VarType.Float64:
-            n_regs = {1: 0, 2: 2, 3: 0, 4: 2, 5: 0, 6: 2, 12: 2, 16: 2}[packet_size]
-            n_inst = {1: 0, 2: 1, 3: 0, 4: 2, 5: 0, 6: 3, 12: 6, 16: 8}[packet_size]
+            if supports_256bit:
+                n_regs = {1: 0, 2: 2, 3: 0, 4: 4, 5: 0, 6: 2, 12: 4, 16: 4}[packet_size]
+                n_inst = {1: 0, 2: 1, 3: 0, 4: 1, 5: 0, 6: 3, 12: 3, 16: 4}[packet_size]
+            else:
+                n_regs = {1: 0, 2: 2, 3: 0, 4: 2, 5: 0, 6: 2, 12: 2, 16: 2}[packet_size]
+                n_inst = {1: 0, 2: 1, 3: 0, 4: 2, 5: 0, 6: 3, 12: 6, 16: 8}[packet_size]
             assert ir.count(f"ld.global.nc.v{n_regs}.b64") == n_inst
 
     elif dr.backend_v(t) is dr.JitBackend.LLVM:
