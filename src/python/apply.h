@@ -87,7 +87,7 @@ struct TransformCallback {
     virtual nb::handle transform_type(nb::handle tp) const;
 
     // How should unknown (non-array) types be transformed? Should directly
-    // return the output object Identity by default.
+    // return the output object identity by default.
     virtual nb::object transform_unknown(nb::handle h) const;
 
     /// Initialize 'h2' (already allocated) based on 'h1'
@@ -115,7 +115,7 @@ struct TransformPairCallback {
     virtual void operator()(nb::handle h1, nb::handle h2, nb::handle h3) = 0;
 
     // How should unknown (non-array) types be transformed? Should directly
-    // return the output object Identity by default.
+    // return the output object identity by default.
     virtual nb::object transform_unknown(nb::handle h1, nb::handle h2) const;
 };
 
