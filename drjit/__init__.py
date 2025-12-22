@@ -1488,7 +1488,7 @@ def meshgrid(*args, indexing='xy') -> tuple: # <- proper type signature in stubs
         *args: A sequence of 1D coordinate arrays
 
         indexing (str): Specifies the indexing convention. Must be either set
-        to ``'xy'`` (the default) or ``'ij'``.
+          to ``'xy'`` (the default) or ``'ij'``.
 
     Returns:
         tuple: A tuple of flattened coordinate arrays (one per input)
