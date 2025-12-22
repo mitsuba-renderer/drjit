@@ -1488,7 +1488,7 @@
 
     Evaluate the error function.
 
-    The `error function <https://en.wikipedia.org/wiki/Error_function>` is
+    The `error function <https://en.wikipedia.org/wiki/Error_function>`__ is
     defined as
 
     .. math::
@@ -1504,7 +1504,7 @@
         arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
 
     Returns:
-        float | drjit.ArrayBase: :math:`\mathrm{erf}(\textt{arg})`
+        float | drjit.ArrayBase: :math:`\mathrm{erf}(\texttt{arg})`
 
 .. topic:: erfinv
 
@@ -1520,7 +1520,7 @@
         arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
 
     Returns:
-        float | drjit.ArrayBase: :math:`\mathrm{erf}^{-1}(\textt{arg})`
+        float | drjit.ArrayBase: :math:`\mathrm{erf}^{-1}(\texttt{arg})`
 
 .. topic:: lgamma
 
