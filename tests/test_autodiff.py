@@ -2159,3 +2159,13 @@ def test137_forward_from_existing_gradient(t):
     a.grad = 1000
     dr.forward_from(a)
     assert dr.allclose(b.grad, 2000)
+
+@pytest.test_arrays('is_diff,float,shape=(*)')
+def test138_relative_grad(t):
+    x = t(1.0, 2.0, 3.0)
+    dr.enable_grad(x)
+    y = x**2
+    y_replaced = dr.relative_grad(y)
+    assert dr.allclose(y_replaced, dr.ones_like(y))
+    dr.backward(y_replaced)
+    assert dr.allclose(dr.grad(x), 2 * x / dr.square(x))
