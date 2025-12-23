@@ -336,15 +336,22 @@ def lerp(a, b, t):
 
     return fma(b, t, fma(a, -t, a))
 
+def relative_grad(x: dr.ArrayBase):
+    """
+    Create a factor with primal value ``1`` that injects a *relative*
+    first-order derivative with respect to ``x``.
 
-# -------------------------------------------------------------------
-#     Deprecated wrappers for old Dr.Jit operations
-# -------------------------------------------------------------------
+    For nonzero ``x``, the returned value has the same first-order derivative as
 
-def transpose(arg, /):
-    _warnings.warn("transpose(x) is deprecated, please use x.T",
-                   DeprecationWarning, stacklevel=2)
-    return arg.T
+        x / detach(x)
+
+    so gradient contributions depend on the *relative change* ``dx/x`` rather
+    than the absolute scale of ``x``.
+
+    The implementation handles zero-valued inputs gracefully.
+    """
+    grad_source = select(x != 0, x * detach(rcp(x)), 0)
+    return replace_grad(1, grad_source)
 
 
 def inverse(arg, /):
