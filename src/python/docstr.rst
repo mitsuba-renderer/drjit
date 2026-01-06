@@ -6940,7 +6940,7 @@
     Return whether textures with :py:func:`use_accel()` set to ``True`` only store
     the data as a hardware-accelerated CUDA texture.
 
-    If ``False`` then a copy of the array data will additionally be retained .
+    If ``False`` then a copy of the array data will additionally be retained.
 
 .. topic:: Texture_shape
 
@@ -6949,6 +6949,9 @@
 .. topic:: Texture_eval
 
     Evaluate the linear interpolant represented by this texture.
+
+    The numerical precision of the interpolation is dictated by the
+    floating point precision of the query point type.
 
 .. topic:: Texture_eval_fetch
 
@@ -6974,6 +6977,9 @@
     (thus the default AD graph gives incorrect results). The implementation
     calls :py:func:`eval_cubic_helper()` function to replace the AD graph with a
     direct evaluation of the B-Spline basis functions in that case.
+
+    The numerical precision of the interpolation is dictated by the
+    floating point precision of the query point type.
 
 .. topic:: Texture_eval_cubic_grad
 

@@ -54,7 +54,7 @@ public:
     static constexpr bool IsSingle = std::is_same_v<scalar_t<Storage_>, float>;
     static constexpr bool HasCudaTexture = (IsHalf || IsSingle) && IsCUDA;
     static constexpr int CudaFormat = HasCudaTexture ?
-        IsHalf ? (int)CudaTextureFormat::Float16 : (int)CudaTextureFormat::Float32 : -1;
+        IsHalf ? (int) CudaTextureFormat::Float16 : (int) CudaTextureFormat::Float32 : -1;
 
     using Int32 = int32_array_t<Storage_>;
     using UInt32 = uint32_array_t<Storage_>;
@@ -564,13 +564,18 @@ public:
      * arrays that track derivative information, the function records the AD
      * graph of \ref eval_nonaccel() and combines it with the primal result of
      * \ref eval_cuda().
+     *
+     * The numerical precision of the interpolation is dictated by the
+     * floating point precision of the query point type.
+     *
+     * When queried in double precision, this function always dispatches to
+     * `eval_nonaccel()`.
      */
     template <typename Value>
     void eval(const Array<Value, Dimension> &pos, Value *out,
               mask_t<Value> active = true) const {
         using ArrayX = DynamicArray<Value>;
 
-        // Only use acceleration if query is half or single precision
         if constexpr (HasCudaTexture && (sizeof(scalar_t<Value>) <= 4)) {
             if (m_use_accel) {
                 eval_cuda(pos, out, active);
@@ -596,6 +601,15 @@ public:
                 return;
             }
         }
+
+        // Querying a migrated FP16/FP32 texture with FP64
+        if constexpr (HasCudaTexture)
+            if (m_use_accel && m_migrated)
+                jit_log(
+                    ::LogLevel::Warn,
+                    "Texture::eval(): Querying a migrated FP16/FP32 texture "
+                    "with FP64 precision returns zeros. Use a lower precision "
+                    "query type or disable texture migration.");
 
         eval_nonaccel(pos, out, active);
     }
@@ -949,6 +963,15 @@ public:
                     return out;
                 }
             }
+
+            if constexpr (HasCudaTexture)
+                if (m_use_accel && m_migrated)
+                    jit_log(
+                        ::LogLevel::Warn,
+                        "Texture::eval(): Querying a migrated FP16/FP32 texture "
+                        "with FP64 precision returns zeros. Use a lower precision "
+                        "query type or disable texture migration.");
+
             DRJIT_MARK_USED(force_nonaccel);
             eval_nonaccel(pos, out.data(), active);
             return out;
