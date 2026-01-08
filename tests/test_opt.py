@@ -272,6 +272,50 @@ def test06_adam(t):
 
 
 @pytest.test_arrays("is_diff,float,shape=(*),float32")
+def test06b_adam_amsgrad(t):
+    # Spot-check a run of the Adam optimizer with AMSGrad against PyTorch
+    #
+    # Reference:
+    #
+    # import torch
+    #
+    # x = torch.Tensor([1.0])
+    # x.requires_grad_()
+    # opt = torch.optim.Adam(lr=0.5, amsgrad=True, params=(x,))
+    #
+    # for _ in range(10):
+    #     opt.zero_grad()
+    #     loss = (x - 2)**2
+    #     loss.backward()
+    #     opt.step()
+    #     print(f'{x[0].item()}, ', end='')
+
+    x = t(1)
+    opt = Adam(lr=0.5, amsgrad=True, params={"x": x})
+
+    xv = []
+    for _ in range(10):
+        dr.backward((opt["x"] - 2) ** 2)
+        opt.step()
+        xv.append(opt["x"][0])
+
+    ref = [
+        1.5,
+        1.9660897254943848,
+        2.3358898162841797,
+        2.5423123836517334,
+        2.585469961166382,
+        2.511090040206909,
+        2.363814353942871,
+        2.179227113723755,
+        1.9882631301879883,
+        1.8197473287582397
+    ]
+    assert dr.allclose(xv, ref)
+
+
+
+@pytest.test_arrays("is_diff,float,shape=(*),float32")
 def test07_adam_incompat_shape(t):
     opt = Adam(lr=1)
     opt["x"] = t(1, 2, 3)

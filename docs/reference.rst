@@ -737,6 +737,10 @@ gradient-based optimization and adaptive mixed-precision training.
 
    .. automethod:: __init__
 
+.. autoclass:: AdamW
+
+   .. automethod:: __init__
+
 .. autoclass:: RMSProp
 
    .. automethod:: __init__
