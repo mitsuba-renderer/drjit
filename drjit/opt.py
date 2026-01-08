@@ -873,7 +873,7 @@ class RMSProp(Optimizer[dr.ArrayBase]):
         )
 
 
-class Adam(Optimizer[Tuple[int, dr.ArrayBase, dr.ArrayBase]]):
+class Adam(Optimizer[Tuple[int, dr.ArrayBase, dr.ArrayBase, Optional[dr.ArrayBase]]]):
     """
     This class implements the Adam optimizer as presented in the paper *Adam: A
     Method for Stochastic Optimization* by Kingman and Ba, ICLR 2015.
@@ -906,8 +906,9 @@ class Adam(Optimizer[Tuple[int, dr.ArrayBase, dr.ArrayBase]]):
     moment accumulators :math:`\\mathbf{m}_i`
     and :math:`\\mathbf{v}_i` at :math:`i=0`.
 
-    This class also implements two extensions that are turned off by default.
-    See the descriptions of the ``mask_updates`` and ``uniform`` parameters below.
+    This class also implements several extensions that are turned off by default.
+    See the descriptions of the ``mask_updates``, ``uniform``, and ``amsgrad``
+    parameters below.
     """
 
     # First moment EMA weight
@@ -925,6 +926,9 @@ class Adam(Optimizer[Tuple[int, dr.ArrayBase, dr.ArrayBase]]):
     # Uniform Adam: use maximum of second moment [Nicolet et al. 2021]
     uniform: bool
 
+    # AMSGrad: use maximum of second moment EMA [Reddi et al. 2018]
+    amsgrad: bool
+
     def __init__(
         self,
         lr: LearningRate,
@@ -936,6 +940,7 @@ class Adam(Optimizer[Tuple[int, dr.ArrayBase, dr.ArrayBase]]):
         mask_updates: bool = False,
         promote_fp16: bool = True,
         uniform: bool = False,
+        amsgrad: bool = False,
     ):
         """
         Construct a new Adam optimizer object. The default parameters
@@ -965,6 +970,13 @@ class Adam(Optimizer[Tuple[int, dr.ArrayBase, dr.ArrayBase]]):
                 *maximum* of the second moment estimates at the current step
                 instead of the per-element second moments.
 
+            amsgrad (bool):
+                If enabled, the optimizer will use the AMSGrad variant
+                [Reddi et al. 2018], which maintains the maximum of all past
+                squared gradient values and uses that maximum instead of the
+                exponential moving average to normalize the gradient. This can
+                help with convergence in some cases where Adam fails.
+
             mask_updates (bool):
                 Mask updates to zero-valued gradient components?
                 See :py:func:`Optimizer.__init__()` for details on this parameter.
@@ -978,13 +990,6 @@ class Adam(Optimizer[Tuple[int, dr.ArrayBase, dr.ArrayBase]]):
                 parameters.
         """
 
-        super().__init__(
-            lr,
-            params,
-            mask_updates=mask_updates,
-            promote_fp16=promote_fp16
-        )
-
         if beta_1 < 0 or beta_1 >= 1:
             raise RuntimeError("'beta_1' must be on the interval [0, 1)")
         if beta_2 < 0 or beta_2 >= 1:
@@ -996,6 +1001,14 @@ class Adam(Optimizer[Tuple[int, dr.ArrayBase, dr.ArrayBase]]):
         self.beta_2 = beta_2
         self.epsilon = epsilon
         self.uniform = uniform
+        self.amsgrad = amsgrad
+
+        super().__init__(
+            lr,
+            params,
+            mask_updates=mask_updates,
+            promote_fp16=promote_fp16
+        )
 
     def _step(
         self,
@@ -1003,15 +1016,16 @@ class Adam(Optimizer[Tuple[int, dr.ArrayBase, dr.ArrayBase]]):
         value: dr.ArrayBase,
         grad: dr.ArrayBase,
         lr: LearningRate,
-        extra: Tuple[int, dr.ArrayBase, dr.ArrayBase],
+        extra: Tuple[int, dr.ArrayBase, dr.ArrayBase, Optional[dr.ArrayBase]],
         /,
-    ) -> Tuple[dr.ArrayBase, Tuple[int, dr.ArrayBase, dr.ArrayBase]]:
+    ) -> Tuple[dr.ArrayBase, Tuple[int, dr.ArrayBase, dr.ArrayBase, Optional[dr.ArrayBase]]]:
         t_p: int  # Integer time/iteration value
         m_tp: dr.ArrayBase  # First moment EMA state from previous iteration
         v_tp: dr.ArrayBase  # Second moment EMA state from previous iteration
+        v_max_p: Optional[dr.ArrayBase]  # Maximum of second moment (AMSGrad)
 
         # Unpack optimizer state
-        t_p, m_tp, v_tp = extra
+        t_p, m_tp, v_tp, v_max_p = extra
 
         # Increase the iteration count
         t = t_p + 1
@@ -1035,8 +1049,18 @@ class Adam(Optimizer[Tuple[int, dr.ArrayBase, dr.ArrayBase]]):
             ema_factor,
         )
 
-        # Optional: use maximum of second order term
-        v_tm = dr.max(v_t) if self.uniform else v_t
+        # Determine which second moment estimate to use for normalization
+        v_max: Optional[dr.ArrayBase] = None
+        if self.amsgrad:
+            # AMSGrad: maintain the maximum of all past squared gradients
+            assert v_max_p is not None
+            v_max = dr.maximum(v_max_p, v_t)
+            v_tm = v_max
+        elif self.uniform:
+            # UniformAdam: use maximum of current second moment
+            v_tm = dr.max(v_t)
+        else:
+            v_tm = v_t
 
         # Use a faster approximation for tiny epsilon values
         if self.epsilon <= 1e-6:
@@ -1044,7 +1068,7 @@ class Adam(Optimizer[Tuple[int, dr.ArrayBase, dr.ArrayBase]]):
         else:
             step = m_t / (dr.sqrt(v_tm) + self.epsilon)
 
-        return dr.fma(step, scale, value), (t, m_t, v_t)
+        return dr.fma(step, scale, value), (t, m_t, v_t, v_max)
 
     # Implementation detail of Optimizer.reset()
     def _reset(self, key: str, value: dr.ArrayBase, promoted: bool, /) -> None:
@@ -1054,16 +1078,17 @@ class Adam(Optimizer[Tuple[int, dr.ArrayBase, dr.ArrayBase]]):
         t = UInt(0)
         m_t = dr.opaque(tp, 0, valarr.shape)
         v_t = dr.opaque(tp, 0, valarr.shape)
-        self.state[key] = value, promoted, None, (t, m_t, v_t)
+        v_max = dr.opaque(tp, 0, valarr.shape) if self.amsgrad else None
+        self.state[key] = value, promoted, None, (t, m_t, v_t, v_max)
 
     # Blend between the old and new versions of the optimizer extra state
     def _select(
         self,
         mask: dr.ArrayBase,
-        extra: Tuple[int, dr.ArrayBase, dr.ArrayBase],
-        new_extra: Tuple[int, dr.ArrayBase, dr.ArrayBase],
+        extra: Tuple[int, dr.ArrayBase, dr.ArrayBase, Optional[dr.ArrayBase]],
+        new_extra: Tuple[int, dr.ArrayBase, dr.ArrayBase, Optional[dr.ArrayBase]],
         /,
-    ) -> Tuple[int, dr.ArrayBase, dr.ArrayBase]:
+    ) -> Tuple[int, dr.ArrayBase, dr.ArrayBase, Optional[dr.ArrayBase]]:
         # Known issue: we don't mask the update to 't' here. That would
         # require moving this parameter to the GPU, with a whole bunch
         # of downsides. It is only relevant for AMP training. Oh well.
@@ -1071,6 +1096,7 @@ class Adam(Optimizer[Tuple[int, dr.ArrayBase, dr.ArrayBase]]):
             new_extra[0],
             dr.select(mask, extra[1], new_extra[1]),
             dr.select(mask, extra[2], new_extra[2]),
+            dr.select(mask, extra[3], new_extra[3]),
         )
 
     def __repr__(self):
@@ -1150,6 +1176,7 @@ class AdamW(Adam):
         mask_updates: bool = False,
         promote_fp16: bool = True,
         uniform: bool = False,
+        amsgrad: bool = False,
     ):
         """
         Construct a new AdamW optimizer object with decoupled weight decay.
@@ -1183,6 +1210,13 @@ class AdamW(Adam):
                 *maximum* of the second moment estimates at the current step
                 instead of the per-element second moments.
 
+            amsgrad (bool):
+                If enabled, the optimizer will use the AMSGrad variant
+                [Reddi et al. 2018], which maintains the maximum of all past
+                squared gradient values and uses that maximum instead of the
+                exponential moving average to normalize the gradient. This can
+                help with convergence in some cases where Adam fails.
+
             mask_updates (bool):
                 Mask updates to zero-valued gradient components?
                 See :py:func:`Optimizer.__init__()` for details on this parameter.
@@ -1204,7 +1238,8 @@ class AdamW(Adam):
             epsilon=epsilon,
             mask_updates=mask_updates,
             promote_fp16=promote_fp16,
-            uniform=uniform
+            uniform=uniform,
+            amsgrad=amsgrad,
         )
 
         if weight_decay < 0:
@@ -1218,9 +1253,9 @@ class AdamW(Adam):
         value: dr.ArrayBase,
         grad: dr.ArrayBase,
         lr: LearningRate,
-        extra: Tuple[int, dr.ArrayBase, dr.ArrayBase],
+        extra: Tuple[int, dr.ArrayBase, dr.ArrayBase, Optional[dr.ArrayBase]],
         /,
-    ) -> Tuple[dr.ArrayBase, Tuple[int, dr.ArrayBase, dr.ArrayBase]]:
+    ) -> Tuple[dr.ArrayBase, Tuple[int, dr.ArrayBase, dr.ArrayBase, Optional[dr.ArrayBase]]]:
         new_value, new_extra = super()._step(cache, value, grad, lr, extra)
         scaled_value = dr.fma(value, -lr * self.weight_decay, new_value)
         return scaled_value, new_extra
@@ -1236,13 +1271,13 @@ class AdamW(Adam):
                 lr_dict[k] = lr
 
         return (
-            "AdamW[\\n"
-            "  parameters = %s,\\n"
-            "  total_count = %u,\\n"
-            "  lr = %s,\\n"
-            "  beta = (%g, %g),\\n"
-            "  epsilon = %g,\\n"
-            "  weight_decay = %g\\n"
+            "AdamW[\n"
+            "  parameters = %s,\n"
+            "  total_count = %u,\n"
+            "  lr = %s,\n"
+            "  beta = (%g, %g),\n"
+            "  epsilon = %g,\n"
+            "  weight_decay = %g\n"
             "]"
             % (
                 list(self.keys()),
