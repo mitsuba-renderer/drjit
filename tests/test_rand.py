@@ -235,10 +235,37 @@ def test06_rng_distr(t, symbolic):
     if dr.type_v(x) != dr.VarType.Float16:
         assert dr.allclose(dr.mean(dr.square(x-2)), 9, atol = 5e-1)
 
+@pytest.test_arrays('shape=(*), int32, jit')
+@pytest.mark.parametrize('symbolic', (True, False))
+def test07_rng_integers(t, symbolic):
+    m = sys.modules[t.__module__]
+    rng = dr.rng(symbolic=symbolic, seed=m.UInt32(0))
+
+    # Test [0, high)
+    x = rng.integers(t, 1000, 100)
+    assert type(x) is t
+    assert dr.all((x >= 0) & (x < 100))
+
+    # Test [low, high)
+    x = rng.integers(t, 1000, low=10, high=20)
+    assert dr.all((x >= 10) & (x < 20))
+
+    # Test negative interval (only for signed types)
+    if dr.type_v(t) == dr.VarType.Int32:
+        x = rng.integers(t, 1000, low=-50, high=50)
+        assert dr.all((x >= -50) & (x < 50))
+
+    # Test endpoint=True (inclusive high)
+    x = rng.integers(t, 10000, low=0, high=10, endpoint=True)
+    assert dr.all((x >= 0) & (x <= 10))
+    # Verify that 10 actually appears (with high probability)
+    assert dr.any(x == 10)
+
+
 @pytest.test_arrays('shape=(*), float, jit')
 @pytest.mark.parametrize('seed_mode', (0, 1))
 @dr.syntax
-def test06_rng_symbolic(t, seed_mode):
+def test08_rng_symbolic(t, seed_mode):
     """Test symbolic recording of dr.rng() operations"""
     Index = dr.uint32_array_t(t)
     if seed_mode == 0:

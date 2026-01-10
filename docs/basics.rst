@@ -283,8 +283,9 @@ random variates suitable for most applications.
 
 Samples are independent across entries of returned arrays/tensors, and
 across sequences of calls to :py:func:`.random()
-<drjit.random.Generator.random>`/ :py:func:`.normal()
-<drjit.random.Generator.normal>`:
+<drjit.random.Generator.random>`, :py:func:`.normal()
+<drjit.random.Generator.normal>`, and
+:py:func:`.integers() <drjit.random.Generator.integers>`:
 
 .. code-block:: pycon
 

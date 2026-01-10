@@ -64,6 +64,36 @@ class Generator:
 
         return dr.fma(self.random(dtype, shape), high-low, low)
 
+    def integers(self, dtype: typing.Type[ArrayT], shape: Shape, low: ArrayOrInt = 0, high: typing.Optional[ArrayOrInt] = None, endpoint: bool = False) -> ArrayT:
+        """
+        Return a Dr.Jit array or tensor containing uniformly distributed
+        pseudorandom 32-bit integers.
+
+        If ``high`` is ``None``, integers are drawn from ``[0, low)``.
+        Otherwise, integers are drawn from ``[low, high)``, or ``[low, high]``
+        if ``endpoint=True``.
+
+        Args:
+            dtype (type[ArrayT]): A Dr.Jit 32-bit integer array type
+                (``Int32`` or ``UInt32``).
+
+            shape (int | tuple[int, ...]): The target shape
+
+            low (int | drjit.ArrayBase): Lowest integer to be drawn (inclusive).
+                If ``high`` is ``None``, this parameter specifies the exclusive
+                upper bound, and 0 becomes the lower bound.
+
+            high (int | drjit.ArrayBase | None): If provided, one above the
+                largest integer to be drawn. If ``endpoint=True``, this is the
+                largest integer to be drawn (inclusive).
+
+            endpoint (bool): If ``True``, ``high`` is inclusive. Default: ``False``.
+
+        Returns:
+            ArrayT: The generated array of random integers.
+        """
+        raise NotImplementedError("integers(): use a subclass that implements this function")
+
     def normal(self, dtype: typing.Type[ArrayT], shape: Shape, loc: ArrayOrFloat = 0.0, scale: ArrayOrFloat = 1.0) -> ArrayT:
         """
         Return a Dr.Jit array or tensor containing pseudorandom variates
@@ -206,6 +236,44 @@ class Philox4x32Generator(Generator):
         else:
             raise RuntimeError('Unsupported "dtype": must be a Dr.Jit float16/float32/float64 array.')
         return self._sample(dtype, shape, fn_name)
+
+    def integers(self, dtype: typing.Type[ArrayT], shape: Shape, low: ArrayOrInt = 0, high: typing.Optional[ArrayOrInt] = None, endpoint: bool = False) -> ArrayT:
+        if high is None:
+            high = low
+            low = 0
+
+        if endpoint:
+            high = high + 1
+
+        tp = dr.type_v(dtype)
+        if tp not in (dr.VarType.Int32, dr.VarType.UInt32):
+            raise RuntimeError('Unsupported "dtype": must be a Dr.Jit int32/uint32 array or tensor.')
+
+        if isinstance(shape, int):
+            shape = (shape,)
+
+        UInt32 = dr.uint32_array_t(dtype)
+        UInt64 = dr.uint64_array_t(dtype)
+        bound = UInt32(high - low)
+        threshold = (-bound) % bound
+
+        x = self._sample(UInt32, shape, 'next_uint32x4')
+        m = UInt64(x) * UInt64(bound)
+
+        def loop_cond(m):
+            return UInt32(m) < threshold
+
+        def loop_body(m):
+            x = self._sample(UInt32, shape, 'next_uint32x4')
+            return (UInt64(x) * UInt64(bound),)
+
+        (m,) = dr.while_loop(
+            state=(m,),
+            cond=loop_cond,
+            body=loop_body
+        )
+
+        return dtype(m >> 32) + low
 
     def normal(self, dtype: typing.Type[ArrayT], shape: Shape, loc: ArrayOrFloat = 0.0, scale: ArrayOrFloat = 1.0) -> ArrayT:
         tp = dr.type_v(dtype)

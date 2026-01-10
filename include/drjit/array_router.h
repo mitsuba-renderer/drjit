@@ -810,7 +810,7 @@ template <typename T> T prefix_sum(const T &value, bool exclusive = true, bool r
 
 /// Forward declarations
 template <typename T, typename... Ts> size_t width(const T &, const Ts& ...);
-template <typename T> bool schedule(const T &value);
+template <typename T> DRJIT_INLINE bool schedule(const T &value);
 
 template <typename T> DRJIT_INLINE T zeros(size_t size) {
     DRJIT_MARK_USED(size);
@@ -1402,7 +1402,7 @@ DRJIT_INNER_REDUCTION(mean)
 //! @{ \name JIT compilation and autodiff-related
 // -----------------------------------------------------------------------
 
-template <typename T> DRJIT_INLINE bool schedule(const T &value) {
+template <typename T> bool schedule(const T &value) {
     if constexpr (is_jit_v<T> && depth_v<T> == 1) {
         return value.derived().schedule_();
     } else if constexpr (is_traversable_v<T>) {
