@@ -171,7 +171,19 @@ static size_t ad_loop_evaluated_mask(JitBackend backend, const char *name,
 
         // Push the mask onto mask stack and execute the loop body
         {
-            scoped_push_mask guard(backend, (uint32_t) active.index());
+            uint32_t size = jit_var_size(active.index());
+
+            JitVar it_mask;
+            if (size != 1) {
+                // default mask already part of 'active'
+                it_mask = JitVar::borrow(active.index());
+            } else {
+                // 'active' is now an evaluated scalar with value 'true'.
+                // Push the default mask to avoid undefined behavior in vectorized LLVM ops
+                it_mask = JitVar::steal(jit_var_mask_default(backend, 1));
+            }
+
+            scoped_push_mask guard(backend, (uint32_t) it_mask.index());
             body_cb(payload);
         }
 
