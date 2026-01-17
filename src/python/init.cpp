@@ -416,6 +416,8 @@ static bool array_init_from_seq(PyObject *self, const ArraySupplement &s, PyObje
                 case VarType::Float64: FROM_SEQ_IMPL(double);   break;
                 case VarType::Int8:    FROM_SEQ_IMPL(int8_t);  break;
                 case VarType::UInt8:   FROM_SEQ_IMPL(uint8_t); break;
+                case VarType::Int16:   FROM_SEQ_IMPL(int16_t);  break;
+                case VarType::UInt16:  FROM_SEQ_IMPL(uint16_t); break;
                 case VarType::Int32:   FROM_SEQ_IMPL(int32_t);  break;
                 case VarType::UInt32:  FROM_SEQ_IMPL(uint32_t); break;
                 case VarType::Int64:   FROM_SEQ_IMPL(int64_t);  break;

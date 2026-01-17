@@ -178,6 +178,13 @@ def test01_traits(t):
     assert dr.float_array_t(dr.scalar.Array3u64) is dr.scalar.Array3f64
     assert dr.float32_array_t(dr.scalar.Array3u64) is dr.scalar.Array3f
     assert dr.float_array_t(dr.scalar.TensorXu64) is dr.scalar.TensorXf64
+
+    # Test UInt16 and Int16 type traits
+    assert dr.uint16_array_t(dr.scalar.Array3f) is dr.scalar.Array3u16
+    assert dr.int16_array_t(dr.scalar.Array3f) is dr.scalar.Array3i16
+    assert dr.uint16_array_t(dr.scalar.Array3u) is dr.scalar.Array3u16
+    assert dr.int16_array_t(dr.scalar.Array3i) is dr.scalar.Array3i16
+
     assert dr.leaf_t(dr.scalar.Matrix3f) is dr.scalar.Array3f
     assert dr.leaf_t(dr.scalar.TensorXf) is dr.scalar.ArrayXf
 
