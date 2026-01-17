@@ -713,7 +713,7 @@ def test29_packet_gather(t, psize):
         buf = pcg.next_uint32() & 1 == 0
     elif tp in (dr.VarType.Float16, dr.VarType.Float32, dr.VarType.Float64):
         buf = vt(pcg.next_float32())
-    elif tp in (dr.VarType.Int32, dr.VarType.UInt32, dr.VarType.UInt8, dr.VarType.Int8):
+    elif tp in (dr.VarType.Int32, dr.VarType.UInt32, dr.VarType.UInt8, dr.VarType.Int8, dr.VarType.Int16, dr.VarType.UInt16):
         buf = vt(pcg.next_uint32())
     elif tp in (dr.VarType.Int64, dr.VarType.UInt64):
         buf = vt(pcg.next_uint64())
@@ -752,7 +752,7 @@ def test30_packet_scatter(t, psize):
             v = pcg.next_uint32() & 1 == 0
         elif tp in (dr.VarType.Float16, dr.VarType.Float32, dr.VarType.Float64):
             v = vt(pcg.next_float32())
-        elif tp in (dr.VarType.Int32, dr.VarType.UInt32, dr.VarType.UInt8, dr.VarType.Int8):
+        elif tp in (dr.VarType.Int32, dr.VarType.UInt32, dr.VarType.UInt8, dr.VarType.Int8, dr.VarType.Int16, dr.VarType.UInt16):
             v = vt(pcg.next_uint32())
         elif tp in (dr.VarType.Int64, dr.VarType.UInt64):
             v = vt(pcg.next_uint64())
