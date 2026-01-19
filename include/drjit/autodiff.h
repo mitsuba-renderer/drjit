@@ -966,8 +966,11 @@ template <typename T> struct resume_grad {
 
 namespace detail {
     template <typename T>
-    void check_grad_enabled(const char *name, const T &value) {
-        if (!grad_enabled(value))
+    void check_grad_enabled(const char *name, const T &value, uint32_t flags) {
+        bool rv = grad_enabled(value);
+        if (!rv &
+            !(flags & (uint32_t) ADFlag::AllowNoGrad) &
+            jit_flag(JitFlag::SymbolicCalls))
             drjit_raise(
                 "drjit::%s(): the argument does not depend on the input "
                 "variable(s) being differentiated. Throwing an exception since "
@@ -980,7 +983,7 @@ namespace detail {
 
 template <typename T>
 void backward_from(T &value, uint32_t flags = (uint32_t) ADFlag::Default) {
-    detail::check_grad_enabled("backward_from", value);
+    detail::check_grad_enabled("backward_from", value, flags);
 
     // Handle case where components of an N-d vector map to the same AD variable
     if constexpr (depth_v<T> > 1)
@@ -999,14 +1002,14 @@ void backward_from(T &value, uint32_t flags = (uint32_t) ADFlag::Default) {
 
 template <typename T>
 void backward_to(const T &value, uint32_t flags = (uint32_t) ADFlag::Default) {
-    detail::check_grad_enabled("backward_to", value);
+    detail::check_grad_enabled("backward_to", value, flags);
     enqueue(ADMode::Forward, value);
     traverse(ADMode::Backward, flags);
 }
 
 template <typename T>
 void forward_from(T &value, uint32_t flags = (uint32_t) ADFlag::Default) {
-    detail::check_grad_enabled("forward_from", value);
+    detail::check_grad_enabled("forward_from", value, flags);
 
     if constexpr (is_complex_v<T>)
         set_grad(value, T(1.f, 1.f));
@@ -1021,7 +1024,7 @@ void forward_from(T &value, uint32_t flags = (uint32_t) ADFlag::Default) {
 
 template <typename T>
 void forward_to(T &value, uint32_t flags = (uint32_t) ADFlag::Default) {
-    detail::check_grad_enabled("forward_to", value);
+    detail::check_grad_enabled("forward_to", value, flags);
     enqueue(ADMode::Backward, value);
     traverse(ADMode::Forward, flags);
 }
