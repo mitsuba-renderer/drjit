@@ -447,7 +447,7 @@ public:
 
         PosF32 pos(pos_);
 
-        if constexpr (HasCudaTexture && (sizeof(scalar_t<Value>) <= 4)) {
+        if constexpr (HasCudaTexture) {
             if (m_use_accel) {
                 uint32_t pos_idx[Dimension];
                 uint32_t *out_idx =
@@ -565,18 +565,16 @@ public:
      * graph of \ref eval_nonaccel() and combines it with the primal result of
      * \ref eval_cuda().
      *
-     * The numerical precision of the interpolation is dictated by the
-     * floating point precision of the query point type.
-     *
-     * When queried in double precision, this function always dispatches to
-     * `eval_nonaccel()`.
+     * When using the non-hardware-accelerated evaluation, the numerical
+     * precision of the interpolation is dictated by the floating point
+     * precision of the query point type.
      */
     template <typename Value>
     void eval(const Array<Value, Dimension> &pos, Value *out,
               mask_t<Value> active = true) const {
         using ArrayX = DynamicArray<Value>;
 
-        if constexpr (HasCudaTexture && (sizeof(scalar_t<Value>) <= 4)) {
+        if constexpr (HasCudaTexture) {
             if (m_use_accel) {
                 eval_cuda(pos, out, active);
 
@@ -602,15 +600,6 @@ public:
             }
         }
 
-        // Querying a migrated FP16/FP32 texture with FP64
-        if constexpr (HasCudaTexture)
-            if (m_use_accel && m_migrated)
-                jit_log(
-                    ::LogLevel::Warn,
-                    "Texture::eval(): Querying a migrated FP16/FP32 texture "
-                    "with FP64 precision returns zeros. Use a lower precision "
-                    "query type or disable texture migration.");
-
         eval_nonaccel(pos, out, active);
     }
 
@@ -620,10 +609,6 @@ public:
      *
      * This is an implementation detail, please use \ref eval_fetch() that may
      * dispatch to this function depending on its inputs.
-     *
-     * For 1D or 3D textures, there is no PTX instruction to directly fetch the
-     * texels. In those cases, this method resorts to querying exactly the
-     * middle of the texels.
      */
     template <typename Value>
     void eval_fetch_cuda(const Array<Value, Dimension> &pos_,
@@ -631,7 +616,7 @@ public:
                          mask_t<Value> active = true) const {
         using PosF = Array<Value, Dimension>;
 
-        if constexpr (HasCudaTexture && (sizeof(scalar_t<Value>) <= 4)) {
+        if constexpr (HasCudaTexture) {
             if (m_use_accel) {
                 if constexpr (Dimension == 1) {
                     PosF pos(pos_);
@@ -765,29 +750,7 @@ public:
 
         if constexpr (HasCudaTexture) {
             if (m_use_accel) {
-                constexpr size_t out_size = 1 << Dimension;
-
-                if constexpr (std::is_same_v<scalar_t<Value>, double>) {
-                    // For double-precision HW-accelerated queries use 32-bit precision
-                    using Float32 = float32_array_t<Value>;
-                    using ArrayXf32 = DynamicArray<Float32>;
-                    using PosF32 = Array<Float32, Dimension>;
-
-                    PosF32 pos_f32(pos);
-                    Array<Float32 *, out_size> out_f32;
-                    ArrayXf32 out_f32_values =
-                        empty<ArrayXf32>(out_size * m_channels);
-                    for (size_t i = 0; i < out_size; ++i)
-                        out_f32[i] = out_f32_values.data() + i * m_channels;
-
-                    eval_fetch_cuda(pos_f32, out_f32, active);
-
-                    for (size_t i = 0; i < out_size; ++i)
-                        for (size_t ch = 0; ch < m_channels; ++ch)
-                            out[i][ch] = Value(out_f32[i][ch]);
-                } else {
-                    eval_fetch_cuda(pos, out, active);
-                }
+                eval_fetch_cuda(pos, out, active);
 
                 if constexpr (IsDiff) {
                     // Re-attach the computation if gradient tracking is enabled
@@ -798,6 +761,8 @@ public:
                         // if it was fully migrated.
                         if (grad_enabled(pos))
                             sync_device_data();
+
+                        constexpr size_t out_size = 1 << Dimension;
 
                         Array<Value *, out_size> out_nonaccel;
                         ArrayX out_nonaccel_values =
@@ -981,21 +946,12 @@ public:
         auto eval_helper = [&](const PosF &pos,
                                const Mask &active) -> ArrayX {
             ArrayX out = empty<ArrayX>(m_channels);
-            if constexpr (HasCudaTexture && (sizeof(scalar_t<Value>) <= 4)) {
+            if constexpr (HasCudaTexture) {
                 if (m_use_accel && !force_nonaccel) {
                     eval_cuda(pos, out.data(), active);
                     return out;
                 }
             }
-
-            if constexpr (HasCudaTexture)
-                if (m_use_accel && m_migrated)
-                    jit_log(
-                        ::LogLevel::Warn,
-                        "Texture::eval(): Querying a migrated FP16/FP32 texture "
-                        "with FP64 precision returns zeros. Use a lower precision "
-                        "query type or disable texture migration.");
-
             DRJIT_MARK_USED(force_nonaccel);
             eval_nonaccel(pos, out.data(), active);
             return out;
