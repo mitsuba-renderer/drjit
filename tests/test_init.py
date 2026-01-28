@@ -684,3 +684,22 @@ def test30_init_ad_from_non_ad_with_cast(t, reverse):
     casted = TensorXf(TensorXi([[0, 1], [2, 3]]))
     assert type(casted) == TensorXf
     assert dr.all(casted == [[0, 1], [2, 3]], axis=None)
+
+
+@pytest.test_arrays('float32, shape=(*, *), jit')
+def test31_init_arrayx_from_tensor_and_ndarray(t):
+    # Test initialization of ArrayXf from tensors
+    np = pytest.importorskip("numpy")
+    mod = sys.modules[t.__module__]
+    TensorXf = mod.TensorXf
+
+    x = np.array([[1, 2, 3, 4, 5], [6, 7, 8, 9, 10]], dtype=np.float32)
+
+    def check(result):
+        assert len(result) == 2
+        assert len(result[0]) == 5
+        assert dr.all(result[0] == [1, 2, 3, 4, 5])
+        assert dr.all(result[1] == [6, 7, 8, 9, 10])
+
+    check(t(x))
+    check(t(TensorXf(x)))

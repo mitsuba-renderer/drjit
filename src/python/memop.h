@@ -32,7 +32,8 @@ extern nb::object ravel(nb::handle h, char order,
                         const VarType *vt_in = nullptr);
 
 extern nb::object unravel(const nb::type_object_t<ArrayBase> &dtype,
-                          nb::handle_t<ArrayBase> array, char order);
+                          nb::handle_t<ArrayBase> array, char order,
+                          const vector<size_t> *shape_hint = nullptr);
 
 extern nb::object scatter_inc(nb::handle_t<drjit::ArrayBase> target,
                               nb::object index, nb::object active);

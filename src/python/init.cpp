@@ -185,6 +185,7 @@ int tp_init_array(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
                 if (has_dim) {
                     // Import flattened array in C-style ordering
                     nb::object flattened;
+                    dr::vector<size_t> source_shape_vec;
 
                     if (s.is_complex)
                         do_flip_axes = true;
@@ -207,13 +208,14 @@ int tp_init_array(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
                                       d, s.shape[d], source_shape);
                         }
                         flattened = nb::steal(as.tensor_array(arg));
+                        source_shape_vec = shape;
                     } else {
-                        flattened = import_ndarray(s, arg);
+                        flattened = import_ndarray(s, arg, &source_shape_vec);
                     }
 
                     nb::object unraveled = unravel(
                         nb::borrow<nb::type_object_t<dr::ArrayBase>>(self_tp),
-                        flattened, do_flip_axes ? 'F' : 'C');
+                        flattened, do_flip_axes ? 'F' : 'C', &source_shape_vec);
 
                     nb::inst_move(self, unraveled);
                     return 0;

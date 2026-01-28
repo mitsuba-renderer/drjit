@@ -801,20 +801,21 @@ static nb::object unravel_recursive(nb::handle dtype,
     } else {
         const ArraySupplement &s = supp(dtype);
 
-        nb::object result = dtype();
+        nb::list result_list;
         for (Py_ssize_t i = 0; i < shape[depth]; ++i) {
-            result[i] =
+            result_list.append(
                 unravel_recursive(s.value, value, index_dtype, shape, strides,
-                                  offset, depth + 1, stop_depth);
+                                  offset, depth + 1, stop_depth));
             offset += strides[depth];
         }
 
-        return result;
+        return dtype(result_list);
     }
 }
 
 nb::object unravel(const nb::type_object_t<ArrayBase> &dtype,
-                   nb::handle_t<ArrayBase> array, char order) {
+                   nb::handle_t<ArrayBase> array, char order,
+                   const vector<size_t> *shape_hint) {
     const ArraySupplement &s = supp(dtype);
     if (s.is_tensor)
         throw nb::type_error(
@@ -852,10 +853,15 @@ nb::object unravel(const nb::type_object_t<ArrayBase> &dtype,
     int ndim = s.ndim;
     for (int i = 0; i < ndim; ++i) {
         if (s.shape[i] == DRJIT_DYNAMIC) {
-            if (i != s.ndim - 1)
+            if (shape_hint && (size_t) i < shape_hint->size()) {
+                // Use the provided shape hint for this dynamic dimension
+                shape[i] = (Py_ssize_t) (*shape_hint)[i];
+            } else if (i != s.ndim - 1) {
                 throw nb::type_error("drjit.unravel(): only the last dimension "
                                      "of 'dtype' may be dynamic!");
-            shape[i] = size / stride;
+            } else {
+                shape[i] = size / stride;
+            }
         } else {
             shape[i] = s.shape[i];
         }
@@ -1132,7 +1138,7 @@ static nb::object reshape(nb::type_object dtype, nb::handle value,
             }
 
             return unravel(nb::borrow<nb::type_object_t<ArrayBase>>(dtype),
-                           raveled, order);
+                           raveled, order, &new_shape);
         }
     } catch (nb::python_error &e) {
         nb::raise_from(e, PyExc_RuntimeError,
