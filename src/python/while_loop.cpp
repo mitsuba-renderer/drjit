@@ -77,7 +77,6 @@ static uint32_t while_loop_cond_cb(void *p) {
 
     const ArraySupplement *s = &check_cond(ls->active);
     if (s->is_tensor) {
-        ls->tracker.set_shape(s->tensor_shape(inst_ptr(temp)));
         temp = nb::steal(s->tensor_array(temp.ptr()));
         s = &check_cond(temp);
     }

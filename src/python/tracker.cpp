@@ -131,8 +131,8 @@ struct VariableTracker::Impl {
     /// Perform extra checks to ensure that the size of variables remains compatible?
     bool check_size;
 
-    /// Desired target shape for tensors
-    vector<size_t> target_shape;
+    /// Per-tensor shape storage
+    tsl::robin_map<dr::string, dr::vector<size_t>, StringHash> shapes;
 
     /// Implementation detail of ``read()`` and ``write()``
     void traverse(Context &ctx, nb::handle state,
@@ -355,13 +355,55 @@ bool VariableTracker::Impl::traverse(Context &ctx, nb::handle h) {
             }
             v->shape = shape;
 
+            dr::string tensor_label = ctx.label;
+            // Keep track of the tennsor's shape
+            if (!ctx.write && !shape.empty())
+                shapes[tensor_label] = shape;
+
             ScopedAppendLabel guard(ctx, ".array");
             nb::object array = nb::steal(s.tensor_array(h.ptr()));
             changed = traverse(ctx, array);
 
-            if (ctx.write && nb::len(array) > 1 && size == 1 && !target_shape.empty()) {
-                v->shape = target_shape;
-                shape = target_shape;
+            // If we're writing a tensor and the current array size is
+            // incompatible with the tensor's shape, it must be updated
+            size_t array_len = (size_t) nb::len(array);
+            if (ctx.write && size != array_len) {
+                // Check the 'shapes' map to see if a shape was stored there
+                auto shape_it = shapes.find(tensor_label);
+                if (shape_it != shapes.end()) {
+                    size_t recorded_size = 1;
+                    for (size_t sv : shape_it->second)
+                        recorded_size *= sv;
+                    if (recorded_size == array_len) {
+                        v->shape = shape_it->second;
+                        shape = shape_it->second;
+                        size = recorded_size;
+                    }
+                }
+
+                if (size != array_len) {
+                    const dr::vector<size_t> *found = nullptr;
+
+                    // Check if there is a compatible tensor argument from
+                    // which the shape information could be taken
+                    for (const auto &kv : shapes) {
+                        size_t shape_size = 1;
+                        for (size_t sv : kv.second)
+                            shape_size *= sv;
+                        if (shape_size == array_len) {
+                            found = &kv.second;
+                            break;
+                        }
+                    }
+
+                    if (found) {
+                        shape = *found;
+                    } else if (array_len) {
+                        shape.clear();
+                        shape.push_back(array_len);
+                    }
+                    v->shape = shape;
+                }
             }
         } else if (s.ndim > 1) {
             size_t size = s.shape[0];
@@ -695,10 +737,6 @@ nb::object VariableTracker::restore(const dr::vector<dr::string> &labels,
         }
         return result;
     }
-}
-
-void VariableTracker::set_shape(const vector<size_t> &shape) {
-    m_impl->target_shape = shape;
 }
 
 nb::object VariableTracker::rebuild(const dr::vector<dr::string> &labels,

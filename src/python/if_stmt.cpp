@@ -79,7 +79,6 @@ nb::object if_stmt(nb::tuple args, nb::handle cond, nb::callable true_fn,
         else
             is_scalar = cond.type().is(&PyBool_Type);
 
-        vector<size_t> shape;
         if (!is_scalar) {
             nb::handle tp = cond.type();
 
@@ -89,7 +88,6 @@ nb::object if_stmt(nb::tuple args, nb::handle cond, nb::callable true_fn,
                     (JitBackend) s.backend != JitBackend::None) {
                     backend = (JitBackend) s.backend;
                     if (s.is_tensor) {
-                        shape = s.tensor_shape(inst_ptr(cond));
                         nb::object temp = nb::steal(s.tensor_array(cond.ptr()));
                         cond_index = (uint32_t) supp(temp.type()).index(inst_ptr(cond));
                     } else {
@@ -144,7 +142,6 @@ nb::object if_stmt(nb::tuple args, nb::handle cond, nb::callable true_fn,
         stash_ref(is->args, is->sr);
 
         dr::detail::index64_vector args_i, rv_i;
-        is->tracker.set_shape(shape);
         is->tracker.read(is->args, args_i, is->arg_labels, "args");
 
         bool all_done =

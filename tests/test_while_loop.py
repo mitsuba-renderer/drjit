@@ -749,3 +749,25 @@ def test32_loop_with_only_side_effects(t, mode):
         i += 1
 
     assert dr.allclose(result, [20, 10, 20, 0, 10])
+
+
+@pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
+@pytest.test_arrays('float32,is_diff,shape=(),is_tensor')
+@dr.syntax
+def test33_tensor_loop_ad(t, mode):
+    # Test that tensor shape is preserved during AD backward pass
+    UInt32 = dr.uint32_array_t(dr.array_t(t))
+
+    x = t([1, 2, 3])
+    dr.enable_grad(x)
+
+    i = UInt32(0)
+    y = dr.zeros(t, 3)
+    while dr.hint(i < 10, mode=mode, max_iterations=-1):
+        y += x
+        i += 1
+
+    assert y.shape == (3,)
+    dr.backward(y)
+    assert x.grad.shape == (3,)
+    assert dr.allclose(x.grad, t([10, 10, 10]))

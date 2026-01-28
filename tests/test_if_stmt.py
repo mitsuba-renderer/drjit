@@ -639,3 +639,42 @@ def test19_tensor_cond(t, mode, variant):
         assert dr.all(z == t([5, 6, 7, 8, 9, 0, 0]))
     else:
         assert dr.all(z == t([1, 1, 1, 1, 1, 0, 0]))
+
+
+@pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
+@pytest.test_arrays('float32,is_diff,shape=(),is_tensor')
+@dr.syntax
+def test20_tensor_cond_ad(t, mode):
+    # Test that tensor shape is preserved during AD backward pass
+    x = t([1, 2, 3])
+    dr.enable_grad(x)
+
+    if dr.hint(x < 100, mode=mode):
+        y = x * 2
+    else:
+        y = x * 3
+
+    assert y.shape == (3,)
+    dr.backward(y)
+    assert x.grad.shape == (3,)
+    assert dr.allclose(x.grad, t([2, 2, 2]))
+
+
+@pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
+@pytest.test_arrays('float32,is_jit,shape=(),is_tensor')
+@dr.syntax
+def test21_tensor_cond_scalar_with_tensor(t, mode):
+    # Test shape inference when condition is scalar but operands are tensors
+    def my_fun(x, y):
+        if dr.hint(x < 0, mode=mode):
+            r = x + y
+        else:
+            r = x - y
+        return r
+
+    x = t([5.0])
+    y = t([1, 2, 3, 4, 5, 6], shape=(2, 3))
+
+    r = my_fun(x, y)
+    assert r.shape == (2, 3)
+    assert dr.allclose(r, t([4, 3, 2, 1, 0, -1], shape=(2, 3)))
