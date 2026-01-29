@@ -356,7 +356,7 @@ bool VariableTracker::Impl::traverse(Context &ctx, nb::handle h) {
             v->shape = shape;
 
             dr::string tensor_label = ctx.label;
-            // Keep track of the tennsor's shape
+            // Keep track of the tensor's shape
             if (!ctx.write && !shape.empty())
                 shapes[tensor_label] = shape;
 
