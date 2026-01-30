@@ -470,7 +470,8 @@ void export_detail(nb::module_ &) {
     d.def("leak_warnings", &leak_warnings, doc_leak_warnings);
     d.def("set_leak_warnings", &set_leak_warnings, doc_set_leak_warnings);
     d.def("traverse_py_cb_ro", &traverse_py_cb_ro_impl);
-    d.def("traverse_py_cb_rw", traverse_py_cb_rw_impl);
+    d.def("traverse_py_cb_rw", &traverse_py_cb_rw_impl);
+    d.def("freeze_discard", jit_freeze_discard);
 
     nb::enum_<AllocType>(d, "AllocType")
         .value("Host", AllocType::Host)
