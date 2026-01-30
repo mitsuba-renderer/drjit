@@ -1227,6 +1227,9 @@ void ad_accum_grad(Index index, JitIndex value) {
     if (unlikely(ad_index == 0))
         return;
 
+    if (jit_var_is_zero_literal(value))
+        return;
+
     std::lock_guard<Lock> guard(state.lock);
     ADVariable *v = state[ad_index];
 

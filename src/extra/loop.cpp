@@ -830,8 +830,13 @@ public:
                 continue;
 
             if (in.has_grad_in) {
-                ad_var_dec_ref(m_state[offset]);
-                m_state[offset] = ad_grad(m_state2[i]);
+                uint32_t grad = ad_grad(m_state2[i]);
+                if (!jit_var_is_zero_literal(grad)) {
+                    ad_var_dec_ref(m_state[offset]);
+                    m_state[offset] = grad;
+                } else {
+                    jit_var_dec_ref(grad);
+                }
             }
 
             offset++;
