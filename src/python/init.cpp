@@ -213,6 +213,10 @@ int tp_init_array(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
                         flattened = import_ndarray(s, arg, &source_shape_vec);
                     }
 
+                    if (do_flip_axes)
+                        std::reverse(source_shape_vec.begin(),
+                                     source_shape_vec.end());
+
                     nb::object unraveled = unravel(
                         nb::borrow<nb::type_object_t<dr::ArrayBase>>(self_tp),
                         flattened, do_flip_axes ? 'F' : 'C', &source_shape_vec);
@@ -587,9 +591,9 @@ nb::object import_ndarray(ArrayMeta m, PyObject *arg, vector<size_t> *shape_out,
     if (m.is_complex) {
         if (shape_out) {
             shape_out->resize(shape_out->size() + 1);
-            for (size_t i = 1; i < ndim; ++i)
+            for (size_t i = shape_out->size() - 1; i > 0; --i)
                 shape_out->operator[](i) = shape_out->operator[](i - 1);
-            shape_out->operator[](0) = 0;
+            shape_out->operator[](0) = 2;
         }
         ndim += 1;
         size *= 2;
