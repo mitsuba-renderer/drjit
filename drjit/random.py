@@ -163,6 +163,11 @@ class Philox4x32Generator(Generator):
             if type(seed) is not seed_tp:
                 if symbolic:
                     raise RuntimeError('To generate random numbers within a symbolic loop, you must initialize the Generator with a seed of the underlying JIT backend, e.g.: rng = dr.rng(seed=dr.cuda.UInt32(0))')
+                # When we record a frozen function, this will result in a
+                # change of a type in the input of the function. The recording
+                # were this change occurred cannot be replayed and has to be
+                # discarded.
+                dr.detail.freeze_discard(dr.backend_v(seed_tp), "Philox4x32Generator allocated seed")
 
                 seed = seed_tp(seed)
                 counter = counter_tp(counter)

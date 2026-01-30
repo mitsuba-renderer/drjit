@@ -3840,3 +3840,37 @@ def test102_assignment(t, auto_opaque):
         func(res)
 
         assert dr.allclose(ref, res)
+
+@pytest.mark.parametrize("auto_opaque", [False, True])
+@pytest.test_arrays("float32, jit, diff, shape=(*)")
+def test103_rng(t, auto_opaque):
+    """
+    This tests, that calling a frozen function with a re-seeded random number
+    generator does not result in a crash. When the rng is initialized with a
+    python integer, it will convert it to a Dr.Jit UInt64 in the first call to
+    ``rng.random``. The frozen function will therefore be recorded twice once
+    with the python ``int`` as an input, and then again with a ``UInt64``
+    variable as input. The first recording cannot be replayed, and Dr.Jit
+    should therefore discard this recording. The RNG should therefore call
+    ``jit_freeze_discard``.
+    """
+    def func(rng: dr.random.Generator, _):
+        return rng.random(t, 10)
+
+    frozen = dr.freeze(func, auto_opaque=auto_opaque)
+
+    rng_ref = dr.rng(42)
+    rng_frozen = dr.rng(42)
+
+    x = t(1)
+
+    for i in range(3):
+        res = frozen(rng_frozen, x)
+        ref = func(rng_ref, x)
+
+        assert dr.allclose(ref, res)
+
+    res = frozen(dr.rng(42), x)
+    ref = func(dr.rng(42), x)
+    assert dr.allclose(ref, res)
+
