@@ -790,8 +790,8 @@ def test30_packet_scatter(t, psize):
                 n_inst = {2: 1, 4: 1, 8: 1, 16: 1}[psize]
             else:
                 # CC < 120: up to 128-bit (v4) stores
-                n_regs = {2: 2, 4: 4, 8: 4, 16: 4}[psize]
-                n_inst = {2: 1, 4: 1, 8: 2, 16: 4}[psize]
+                n_regs = {2: 2, 4: 4, 8: 8, 16: 8}[psize]
+                n_inst = {2: 1, 4: 1, 8: 1, 16: 2}[psize]
             vec_str = f".v{n_regs//2}" if n_regs > 2 else ""
             assert ir.count(f"st.global{vec_str}.b32") == n_inst
         elif tp == dr.VarType.Float32:
