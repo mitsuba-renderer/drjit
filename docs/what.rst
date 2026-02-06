@@ -250,7 +250,8 @@ Dr.Jit provides two backends with feature parity:
 
 2. The `LLVM <https://llvm.org>`__ backend targets Intel (``x86_64``) and ARM
    (``aarch64``) CPUs. It parallelizes the program using the available CPU
-   cores and vector instruction set extensions such as AVX, AVX512, NEON, etc.
+   cores and vector instruction set extensions. On Intel (``x86_64``) for 
+   example, this requires extensions such as AVX, AVX512, NEON, etc. 
    You can explicitly request this backend by importing types from
    ``drjit.llvm`` or ``drjit.llvm.ad`` (add ``.ad`` if derivative computation is needed).
 
