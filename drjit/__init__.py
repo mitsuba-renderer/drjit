@@ -3132,13 +3132,16 @@ def func(
                     b = check(v)
                     if b != JitBackend.Invalid:
                         return b
-            else:
-                desc = getattr(tp, 'DRJIT_STRUCT', None)
-                if type(desc) is dict:
-                    for k in desc:
-                        b = check(getattr(a, k))
-                        if b != JitBackend.Invalid:
-                            return b
+            elif type(getattr(tp, 'DRJIT_STRUCT', None)) is dict:
+                for k in tp.DRJIT_STRUCT:
+                    b = check(getattr(a, k))
+                    if b != JitBackend.Invalid:
+                        return b
+            elif hasattr(tp, '__dataclass_fields__'):
+                for k in tp.__dataclass_fields__:
+                    b = check(getattr(a, k))
+                    if b != JitBackend.Invalid:
+                        return b
             return JitBackend.Invalid
 
         for a in args:
