@@ -722,7 +722,7 @@ def test18_apply_loop_mask(t, capsys, symbolic_config):
 
 # Loop state should be filtered when call is analyzed
 @pytest.test_arrays('float32,diff,shape=(*)')
-@dr.syntax(print_code=True, recursive=True)
+@dr.syntax(recursive=True)
 def test19_filter_loop_state(t):
     Float = t
     UInt32 = dr.uint32_array_t(t)
