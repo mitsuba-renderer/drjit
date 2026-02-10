@@ -3966,9 +3966,6 @@ Index ad_coop_vec_pack(uint32_t n, const Index *in) {
         tmp[i] = jit_index(index);
         attached |= ad_index(index) != 0;
     }
-    // If we are in a suspend_grad scope, disable gradient tracking
-    if (ad_grad_suspended())
-        attached = false;
 
     JitVar result = JitVar::steal(jit_coop_vec_pack(n, tmp));
 
@@ -3976,11 +3973,14 @@ Index ad_coop_vec_pack(uint32_t n, const Index *in) {
         VarInfo vi = jit_set_backend(result.index());
 
         ref<CoopVecPack> ps = new CoopVecPack();
-        for (size_t i = 0; i < n; ++i)
-            ps->add_input(vi.backend, ad_index(in[i]));
+        for (size_t i = 0; i < n; ++i) {
+            if (ad_grad_enabled(in[i]))
+                ps->add_input(vi.backend, ad_index(in[i]));
+        }
 
         uint64_t ad_result = ad_var_new(result.index());
-        ps->add_output(vi.backend, ad_index(ad_result));
+        if (ad_grad_enabled(ad_result))
+            ps->add_output(vi.backend, ad_index(ad_result));
 
         if (ad_custom_op(ps.get()))
             return ad_result;
