@@ -718,3 +718,36 @@ def test18_apply_loop_mask(t, capsys, symbolic_config):
                 assert dr.allclose(out.grad[1], 0)
                 transcript = capsys.readouterr().err
                 assert "Attempted to invoke callable with index 123, but this value must be strictly smaller than 2" not in transcript
+
+
+# Loop state should be filtered when call is analyzed
+@pytest.test_arrays('float32,diff,shape=(*)')
+@dr.syntax(print_code=True, recursive=True)
+def test19_filter_loop_state(t):
+    Float = t
+    UInt32 = dr.uint32_array_t(t)
+
+    buffer = dr.zeros(Float, 100)
+    dr.make_opaque(buffer)
+
+    def f(x):
+        nonlocal buffer
+        # This is a bit contrived, as we excplictly include `buffer`
+        # This can happen quite naturally if `buffer` is a member of `self` and we
+        # call something like `self.eval()` in the loop body.
+        while dr.hint(x < Float(10), include=[buffer]):
+            x += dr.gather(Float, buffer, UInt32(0))
+            x += 1
+            # `buffer` is eliminated from loop state
+
+        # When analyzing this call (`jitc_var_call_analyze`) we need to exclude `buffer`,
+        # and only conserve the JIT variable of its pointer. Without this filtering,
+        # the analysis will fail as it finds a variable of size 100 (`buffer`).
+
+        return x
+
+    def g(x):
+        return x
+
+    out = dr.switch(UInt32([0, 1]) ,[f, g], x=Float([0.1, 0.2]))
+    assert dr.allclose(out, [10.1, 0.2])
