@@ -3966,6 +3966,9 @@ Index ad_coop_vec_pack(uint32_t n, const Index *in) {
         tmp[i] = jit_index(index);
         attached |= ad_index(index) != 0;
     }
+    // If we are in a suspend_grad scope, disable gradient tracking
+    if (ad_grad_suspended())
+        attached = false;
 
     JitVar result = JitVar::steal(jit_coop_vec_pack(n, tmp));
 
