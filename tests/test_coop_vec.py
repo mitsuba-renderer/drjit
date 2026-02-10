@@ -689,3 +689,13 @@ def test23_linear_layer_dtype(t):
     _ = net.alloc(TensorXf16, 2)
     with pytest.raises(TypeError, match="Linear layer requires a Tensor type"):
         _ = net.alloc(Float16, 2)
+
+@pytest.test_arrays("jit,shape=(*),float16,diff")
+def test25_suspend_grad(t):
+
+    x = t(1, 2, 3)
+    y = t(2, 3, 4)
+    dr.enable_grad(y)
+    with dr.suspend_grad():
+        z = nn.CoopVec(x, y)
+
