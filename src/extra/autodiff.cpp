@@ -3964,7 +3964,7 @@ Index ad_coop_vec_pack(uint32_t n, const Index *in) {
     for (uint32_t i = 0; i < n; ++i) {
         Index index = in[i];
         tmp[i] = jit_index(index);
-        attached |= ad_index(index) != 0;
+        attached |= ad_grad_enabled(index);
     }
 
     JitVar result = JitVar::steal(jit_coop_vec_pack(n, tmp));
@@ -3973,14 +3973,11 @@ Index ad_coop_vec_pack(uint32_t n, const Index *in) {
         VarInfo vi = jit_set_backend(result.index());
 
         ref<CoopVecPack> ps = new CoopVecPack();
-        for (size_t i = 0; i < n; ++i) {
-            if (ad_grad_enabled(in[i]))
-                ps->add_input(vi.backend, ad_index(in[i]));
-        }
+        for (size_t i = 0; i < n; ++i)
+            ps->add_input(vi.backend, ad_index(in[i]));
 
         uint64_t ad_result = ad_var_new(result.index());
-        if (ad_grad_enabled(ad_result))
-            ps->add_output(vi.backend, ad_index(ad_result));
+        ps->add_output(vi.backend, ad_index(ad_result));
 
         if (ad_custom_op(ps.get()))
             return ad_result;
