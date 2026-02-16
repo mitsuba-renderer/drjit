@@ -5,8 +5,8 @@
 Changelog
 #########
 
-Upcoming changes
---------------------------------
+DrJit 1.3.0 (February 16, 2026)
+-------------------------------
 
 **New Features**
 
