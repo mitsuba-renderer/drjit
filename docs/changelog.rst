@@ -47,13 +47,11 @@ Upcoming changes
 
 - **Bounded Integer RNG**: Added :py:meth:`dr.rng().integers()
   <random.Generator.integers>` to generate uniformly distributed integers on a
-  given interval using Lemire's nearly divisionless algorithm. (commit
-  `cb09caa
+  given interval. (commit `cb09caa
   <https://github.com/mitsuba-renderer/drjit/commit/cb09caac>`__).
 
 - **Symbolic RNG mode**: :py:func:`dr.rng() <rng>` now accepts a
-  ``symbolic`` argument for a purely symbolic sampler where state constants
-  are merged into the generated program. (commit `51bacbf
+  ``symbolic`` argument for a purely symbolic sampler. (commit `51bacbf
   <https://github.com/mitsuba-renderer/drjit/commit/51bacbf4>`__).
 
 - **ArrayX Initialization from Tensors**: Nested array types with multiple
@@ -102,19 +100,13 @@ Upcoming changes
 **Bug Fixes**
 
 - Fixed a bug where constructing a cooperative vector inside a
-  ``dr.suspend_grad()`` scope could raise an exception when one of the
-  arguments still had gradients attached.
+  ``dr.suspend_grad()`` scope could raise an exception.
   (PR `#475 <https://github.com/mitsuba-renderer/drjit/pull/475>`__,
   contributed by `Christian Döring <https://github.com/DoeringChristian>`__).
 
 - Fixed a crash when calling a frozen function with a re-seeded random number
   generator whose seed was a Python integer type.
   (PR `#471 <https://github.com/mitsuba-renderer/drjit/pull/471>`__,
-  contributed by `Christian Döring <https://github.com/DoeringChristian>`__).
-
-- Fixed a race condition in ``jit_freeze_discard()``.
-  (Dr.Jit PR `#464 <https://github.com/mitsuba-renderer/drjit/pull/464>`__,
-  Dr.Jit-Core PR `#181 <https://github.com/mitsuba-renderer/drjit-core/pull/181>`__,
   contributed by `Christian Döring <https://github.com/DoeringChristian>`__).
 
 - Fixed a bug in the C++ ``transform_compose()`` function where the
@@ -125,8 +117,7 @@ Upcoming changes
 
 - Fixed multiple issues in the Dr.Jit-Core ``gather`` re-indexing logic: the
   mask stack is now correctly applied during re-indexing, and nested gather
-  masks are combined rather than overwritten. Also fixed a possible
-  use-after-free in ``jitc_var_gather_reindex``.
+  masks are combined rather than overwritten.
   (Dr.Jit-Core PR `#178 <https://github.com/mitsuba-renderer/drjit-core/pull/178>`__).
 
 - Fixed a bug in virtual call analysis when a target contained a symbolic
@@ -148,21 +139,12 @@ Upcoming changes
   (commit `df4cf48
   <https://github.com/mitsuba-renderer/drjit/commit/df4cf483>`__).
 
-- Fixed corruption in ``drjit.profile_range()`` where the range string could
-  be freed before being recorded by NVTX.
-  (commit `8a4f858
-  <https://github.com/mitsuba-renderer/drjit/commit/8a4f8580>`__).
-
 - Fixed ``Texture::eval_fetch_cuda`` to handle double-precision queries
   gracefully by casting to single-precision when a HW-accelerated texture is
   requested. (commits `83083d8
   <https://github.com/mitsuba-renderer/drjit/commit/83083d8a>`__,
   `054d115
   <https://github.com/mitsuba-renderer/drjit/commit/054d1150>`__).
-
-- Fixed OptiX failure after a recording threw an exception.
-  (Dr.Jit-Core commit `72140d5
-  <https://github.com/mitsuba-renderer/drjit-core/commit/72140d5>`__).
 
 - Fixed symbolic loop size computation to also account for side-effect sizes.
   (Dr.Jit-Core commit `c6dfc83
@@ -180,11 +162,6 @@ Upcoming changes
   clarifications regarding numerical precision and extra diagnostics for
   migrated textures. (commit `4edae0a
   <https://github.com/mitsuba-renderer/drjit/commit/4edae0af>`__).
-
-- Fixed ``dr.sync_thread()`` signature to match its documented API (no
-  arguments).
-  (PR `#456 <https://github.com/mitsuba-renderer/drjit/pull/456>`__,
-  contributed by `Louie Lu <https://github.com/mlouielu>`__).
 
 DrJit 1.2.0 (September 17, 2025)
 --------------------------------
