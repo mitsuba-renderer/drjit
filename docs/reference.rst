@@ -134,7 +134,7 @@ Random number generation
    .. automethod:: random
    .. automethod:: uniform
    .. automethod:: normal
-   .. automethod:: integer
+   .. automethod:: integers
    .. automethod:: clone
 
 .. py:module:: drjit
