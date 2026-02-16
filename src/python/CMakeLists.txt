@@ -196,10 +196,10 @@ if (NOT (DRJIT_SANITIZE_ASAN OR DRJIT_SANITIZE_UBSAN))
     ${DRJIT_PYTHON_DST_DIR}/__init__.pyi
     ${DRJIT_PYTHON_DST_DIR}/ast.pyi
     ${DRJIT_PYTHON_DST_DIR}/interop.pyi
-    ${DRJIT_PYTHON_DST_DIR}/random.pyi
     ${DRJIT_PYTHON_DST_DIR}/detail.pyi
-    ${DRJIT_PYTHON_DST_DIR}/nn.pyi
     ${DRJIT_PYTHON_DST_DIR}/hashgrid.pyi
+    ${DRJIT_PYTHON_DST_DIR}/nn.pyi
+    ${DRJIT_PYTHON_DST_DIR}/random.pyi
     ${DRJIT_PYTHON_DST_DIR}/scalar/__init__.pyi
   )
 

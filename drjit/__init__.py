@@ -30,7 +30,7 @@ else:
 
 from .ast import syntax, hint
 from .interop import wrap
-import drjit.random
+from . import random
 import warnings as _warnings
 
 from functools import wraps
