@@ -5,6 +5,187 @@
 Changelog
 #########
 
+Upcoming changes
+--------------------------------
+
+**New Features**
+
+- **Atomic Scatter Operations**: Added :py:func:`dr.scatter_cas()
+  <scatter_cas>` (atomic compare-and-swap) and :py:func:`dr.scatter_exch()
+  <scatter_exch>` (atomic exchange) operations. On the CUDA backend, these map
+  to native PTX instructions; the LLVM implementation uses a loop over the
+  vectorization width.
+  (Dr.Jit PR `#450 <https://github.com/mitsuba-renderer/drjit/pull/450>`__,
+  Dr.Jit-Core PR `#177 <https://github.com/mitsuba-renderer/drjit-core/pull/177>`__).
+
+- **AdamW Optimizer**: Added the :py:class:`dr.opt.AdamW <opt.AdamW>`
+  optimizer with built-in weight decay, equivalent to PyTorch's implementation.
+  (PR `#449 <https://github.com/mitsuba-renderer/drjit/pull/449>`__).
+
+- **AMSGrad for Adam/AdamW**: The :py:class:`dr.opt.Adam <opt.Adam>` and
+  :py:class:`dr.opt.AdamW <opt.AdamW>` optimizers now support an optional
+  ``amsgrad`` parameter. AMSGrad keeps a running maximum of the second moments,
+  which can help improve stability near local minima.
+  (PR `#467 <https://github.com/mitsuba-renderer/drjit/pull/467>`__).
+
+- **Functions in IR** :py:func:`dr.func`: A new function decorator that
+  forces a Python function to also become a callable in the generated IR. This
+  can improve compilation times: without it, Dr.Jit emits the function body's
+  IR every time it is called within a single kernel. With ``@dr.func``, each
+  call resolves to a function call in the IR, emitting the body only once.
+  (Dr.Jit PR `#473 <https://github.com/mitsuba-renderer/drjit/pull/473>`__,
+  Dr.Jit-Core PR `#183 <https://github.com/mitsuba-renderer/drjit-core/pull/183>`__).
+
+- **Oklab Color Space Conversion**: Added :py:func:`dr.linear_srgb_to_oklab()
+  <linear_srgb_to_oklab>` and :py:func:`dr.oklab_to_linear_srgb()
+  <oklab_to_linear_srgb>` for perceptually uniform color space conversion.
+  (PR `#453 <https://github.com/mitsuba-renderer/drjit/pull/453>`__).
+
+- **Pickling Support**: Dr.Jit arrays can now be natively pickled and
+  unpickled via Python's ``pickle`` module.
+  (PR `#448 <https://github.com/mitsuba-renderer/drjit/pull/448>`__).
+
+- **Bounded Integer RNG**: Added :py:meth:`dr.rng().integers()
+  <random.Generator.integers>` to generate uniformly distributed integers on a
+  given interval using Lemire's nearly divisionless algorithm. (commit
+  `cb09caa
+  <https://github.com/mitsuba-renderer/drjit/commit/cb09caac>`__).
+
+- **Symbolic RNG mode**: :py:func:`dr.rng() <rng>` now accepts a
+  ``symbolic`` argument for a purely symbolic sampler where state constants
+  are merged into the generated program. (commit `51bacbf
+  <https://github.com/mitsuba-renderer/drjit/commit/51bacbf4>`__).
+
+- **ArrayX Initialization from Tensors**: Nested array types with multiple
+  dynamic dimensions (like ``ArrayXf``) can now be initialized from Dr.Jit
+  tensors or NumPy arrays. (commit `e7e1339
+  <https://github.com/mitsuba-renderer/drjit/commit/e7e13399>`__).
+
+- **Type Trait**: Added :py:func:`dr.replace_shape_t() <replace_shape_t>`
+  convenience type trait for writing generic functions that need to reshape
+  array types. (commit `4643452
+  <https://github.com/mitsuba-renderer/drjit/commit/46b24535>`__).
+
+**Hardware/platform-specfic features**
+
+- **NVIDIA Blackwell (SM120+)**: Added support for wide packet loads, gathers,
+  and atomics on NVIDIA Blackwell GPUs (SM120+). (commit `879c103
+  <https://github.com/mitsuba-renderer/drjit/commit/879c103b>`__).
+
+- **Python 3.14 Compatibility**: Fixed compatibility with PEP 649 deferred
+  annotation evaluation, ensuring Dr.Jit works correctly on Python 3.14.
+  (commit `7fa6eb4
+  <https://github.com/mitsuba-renderer/drjit/commit/7fa6eb4b>`__).
+
+- **Linux ARM Wheels**: Added ``ubuntu-24.04-arm`` to the wheels pipeline.
+  (PR `#461 <https://github.com/mitsuba-renderer/drjit/pull/461>`__,
+  contributed by `Merlin Nimier-David <https://merlin.nimierdavid.fr>`__).
+
+**Performance Improvements**
+
+- **Simplified Single-Target Virtual Calls**: When a virtual function call has
+  only a single target (as is the case for ``@dr.func``), the JIT backend now
+  eliminates the indirection/dispatch loop and calls the function directly,
+  producing simpler IR.
+  (Dr.Jit-Core PR `#183 <https://github.com/mitsuba-renderer/drjit-core/pull/183>`__).
+
+- **AD Early Exit for Zero Derivatives**: The AD graph traversal now skips
+  edges with zero-valued derivatives, avoiding unnecessary computation.
+  (commit `06b0a9d
+  <https://github.com/mitsuba-renderer/drjit/commit/06b0a9db>`__).
+
+- **GIL Release in __getitem__**: ``dr.ArrayBase.__getitem__()`` now releases
+  the GIL while waiting, improving multi-threaded performance.
+  (commit `c24be70
+  <https://github.com/mitsuba-renderer/drjit/commit/c24be704>`__).
+
+**Bug Fixes**
+
+- Fixed a bug where constructing a cooperative vector inside a
+  ``dr.suspend_grad()`` scope could raise an exception when one of the
+  arguments still had gradients attached.
+  (PR `#475 <https://github.com/mitsuba-renderer/drjit/pull/475>`__,
+  contributed by `Christian Döring <https://github.com/DoeringChristian>`__).
+
+- Fixed a crash when calling a frozen function with a re-seeded random number
+  generator whose seed was a Python integer type.
+  (PR `#471 <https://github.com/mitsuba-renderer/drjit/pull/471>`__,
+  contributed by `Christian Döring <https://github.com/DoeringChristian>`__).
+
+- Fixed a race condition in ``jit_freeze_discard()``.
+  (Dr.Jit PR `#464 <https://github.com/mitsuba-renderer/drjit/pull/464>`__,
+  Dr.Jit-Core PR `#181 <https://github.com/mitsuba-renderer/drjit-core/pull/181>`__,
+  contributed by `Christian Döring <https://github.com/DoeringChristian>`__).
+
+- Fixed a bug in the C++ ``transform_compose()`` function where the
+  translation was placed in the last row of the matrix rather than the last
+  column.
+  (PR `#451 <https://github.com/mitsuba-renderer/drjit/pull/451>`__,
+  contributed by `Delio Vicini <https://github.com/dvicini>`__).
+
+- Fixed multiple issues in the Dr.Jit-Core ``gather`` re-indexing logic: the
+  mask stack is now correctly applied during re-indexing, and nested gather
+  masks are combined rather than overwritten. Also fixed a possible
+  use-after-free in ``jitc_var_gather_reindex``.
+  (Dr.Jit-Core PR `#178 <https://github.com/mitsuba-renderer/drjit-core/pull/178>`__).
+
+- Fixed a bug in virtual call analysis when a target contained a symbolic
+  loop — the analysis now accounts for eliminated/optimized-out loop state
+  variables.
+  (Dr.Jit-Core PR `#184 <https://github.com/mitsuba-renderer/drjit-core/pull/184>`__).
+
+- Fixed LLVM backend compilation of wavefront loops with scalar masks.
+  (commit `16a81d0
+  <https://github.com/mitsuba-renderer/drjit/commit/16a81d08>`__).
+
+- Fixed lost tensor shapes when a loop or conditional is replayed for AD
+  passes, with more robust inference of tensor output shapes.
+  (commit `9d201f2
+  <https://github.com/mitsuba-renderer/drjit/commit/9d201f20>`__).
+
+- Fixed a regression in ``ArrayX`` initialization from tensors and NumPy
+  ndarrays (wrong shape hint order for flipped axes and broken shift loop).
+  (commit `df4cf48
+  <https://github.com/mitsuba-renderer/drjit/commit/df4cf483>`__).
+
+- Fixed corruption in ``drjit.profile_range()`` where the range string could
+  be freed before being recorded by NVTX.
+  (commit `8a4f858
+  <https://github.com/mitsuba-renderer/drjit/commit/8a4f8580>`__).
+
+- Fixed ``Texture::eval_fetch_cuda`` to handle double-precision queries
+  gracefully by casting to single-precision when a HW-accelerated texture is
+  requested. (commits `83083d8
+  <https://github.com/mitsuba-renderer/drjit/commit/83083d8a>`__,
+  `054d115
+  <https://github.com/mitsuba-renderer/drjit/commit/054d1150>`__).
+
+- Fixed OptiX failure after a recording threw an exception.
+  (Dr.Jit-Core commit `72140d5
+  <https://github.com/mitsuba-renderer/drjit-core/commit/72140d5>`__).
+
+- Fixed symbolic loop size computation to also account for side-effect sizes.
+  (Dr.Jit-Core commit `c6dfc83
+  <https://github.com/mitsuba-renderer/drjit-core/commit/c6dfc83>`__).
+
+- Fixed spurious warning when freezing functions with very wide literals.
+  (PR `#455 <https://github.com/mitsuba-renderer/drjit/pull/455>`__).
+
+**Other Improvements**
+
+- Updated to nanobind `v2.10.2
+  <https://github.com/wjakob/nanobind/releases/tag/v2.10.2>`__.
+
+- Improved documentation and log messages for textures, including
+  clarifications regarding numerical precision and extra diagnostics for
+  migrated textures. (commit `4edae0a
+  <https://github.com/mitsuba-renderer/drjit/commit/4edae0af>`__).
+
+- Fixed ``dr.sync_thread()`` signature to match its documented API (no
+  arguments).
+  (PR `#456 <https://github.com/mitsuba-renderer/drjit/pull/456>`__,
+  contributed by `Louie Lu <https://github.com/mlouielu>`__).
+
 DrJit 1.2.0 (September 17, 2025)
 --------------------------------
 
