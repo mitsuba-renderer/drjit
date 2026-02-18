@@ -3427,11 +3427,12 @@ def test90_tensor_slicing(t, auto_opaque):
 
     frozen = dr.freeze(func, auto_opaque=auto_opaque)
 
-    for i in range(3):
+    for i in range(4):
         shape = ((i + 5), 10)
         x = mod.TensorXf(dr.arange(mod.Float, dr.prod(shape)), shape=shape)
-        row = dr.arange(mod.UInt32, i + 4)
-        col = dr.arange(mod.UInt32, 3) + 1
+        # Both row and col must have the same length for advanced indexing
+        row = dr.arange(mod.UInt32, i+2)
+        col = dr.arange(mod.UInt32, i+2) + 1
 
         res = frozen(x, row, col)
         ref = func(x, row, col)

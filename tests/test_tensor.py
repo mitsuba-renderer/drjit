@@ -63,7 +63,7 @@ def test01_slice_index(t):
     check(shape=(3, 7), indices=(t(0), slice(0, 7, 3)),
           shape_out=(1, 3), index_out=t(0, 3, 6))
     check(shape=(3, 7), indices=(t(0), t(0, 3, 6)),
-          shape_out=(1, 3), index_out=t(0, 3, 6))
+          shape_out=(3,), index_out=t(0, 3, 6))  # Consecutive advanced indices → single dimension
     check(shape=(3, 7), indices=(2, slice(None, None, None)),
           shape_out=(7,), index_out=t(14, 15, 16, 17, 18, 19, 20))
     check(shape=(3, 7), indices=(slice(None, None, None), 2),
@@ -686,3 +686,120 @@ def test23_item_array(t):
 
     with pytest.raises(RuntimeError, match='can only convert arrays of length 1'):
         t([]).item()
+
+
+@pytest.test_arrays('is_tensor, -bool')
+def test24_pytorch_compat_scalar_indexing(t):
+    """
+    Test PyTorch-compatible indexing behavior: integer indexing should
+    return 0-D tensors, not Python scalars.
+
+    This is critical for PyTorch compatibility, as PyTorch always returns
+    tensors (even 0-D) from indexing operations, unlike NumPy which returns
+    Python scalars.
+    """
+    # Test 1: Single integer index on 1D tensor returns 0-D tensor
+    v = t([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
+    result = v[5]
+    assert result.ndim == 0, f"Single int index should return 0-D tensor, got ndim={result.ndim}"
+    assert result.shape == (), f"Single int index should return shape=(), got {result.shape}"
+
+    # Test 2: Negative index also returns 0-D tensor
+    result = v[-1]
+    assert result.ndim == 0, f"Negative int index should return 0-D tensor, got ndim={result.ndim}"
+    assert result.shape == (), f"Negative int index should return shape=(), got {result.shape}"
+
+    # Test 3: Multiple integer indices on 2D tensor return 0-D tensor
+    v2 = t(list(range(20)), shape=(4, 5))
+    result = v2[2, 3]
+    assert result.ndim == 0, f"Multi-int index should return 0-D tensor, got ndim={result.ndim}"
+    assert result.shape == (), f"Multi-int index should return shape=(), got {result.shape}"
+
+    # Test 4: Single index on 2D tensor reduces dimension (returns 1D)
+    result = v2[2]
+    assert result.ndim == 1, f"Single index on 2D should return 1-D tensor, got ndim={result.ndim}"
+    assert result.shape == (5,), f"Single index on 2D should return shape=(5,), got {result.shape}"
+
+    # Test 5: Full indexing on 3D tensor returns 0-D tensor
+    v3 = t(list(range(60)), shape=(3, 4, 5))
+    result = v3[1, 2, 3]
+    assert result.ndim == 0, f"Full 3D index should return 0-D tensor, got ndim={result.ndim}"
+    assert result.shape == (), f"Full 3D index should return shape=(), got {result.shape}"
+
+    # Test 6: Verify the 0-D tensor contains the correct value
+    # For consistency check, compare with item() method
+    v_simple = t([42])
+    result_0d = v_simple[0]
+    assert result_0d.ndim == 0
+    # The 0-D tensor should have the same value as item()
+    assert result_0d.item() == 42
+
+
+@pytest.test_arrays("float32, jit")
+def test24_multidim_scalar(t):
+    pytest.importorskip("torch")
+
+    mod = sys.modules[t.__module__]
+    UInt32 = mod.UInt32
+    TensorXf = mod.TensorXf
+    Float = mod.Float
+
+    shape = (10, 10, 10)
+    rng = dr.rng()
+
+    x = rng.random(Float, dr.prod(shape))
+    x = TensorXf(x, shape)
+    x_torch = x.torch()
+
+    ref = x_torch[:, 1, :]
+    res = x[:, 1, :]
+
+    assert dr.allclose(res, ref)
+
+
+@pytest.test_arrays("float32, jit")
+def test25_multidim_advanced(t):
+    pytest.importorskip("torch")
+
+    mod = sys.modules[t.__module__]
+    UInt32 = mod.UInt32
+    TensorXf = mod.TensorXf
+    Float = mod.Float
+
+    shape = (10, 10, 10)
+    rng = dr.rng()
+    index = dr.arange(UInt32, 5) + 1
+
+    x = rng.random(Float, dr.prod(shape))
+    x = TensorXf(x, shape)
+    x_torch = x.torch()
+
+    index_torch = index.torch().long()
+    ref = x_torch[index_torch, :, index_torch]
+    res = x[index, :, index]
+
+    assert dr.allclose(res, ref)
+
+
+@pytest.test_arrays("float32, jit")
+def test26_4d_advanced(t):
+    pytest.importorskip("torch")
+
+    mod = sys.modules[t.__module__]
+    UInt32 = mod.UInt32
+    TensorXf = mod.TensorXf
+    Float = mod.Float
+
+    shape = (10, 10, 10, 10)
+    rng = dr.rng()
+    index = dr.arange(UInt32, 5) + 1
+
+    x = rng.random(Float, dr.prod(shape))
+    x = TensorXf(x, shape)
+    x_torch = x.torch()
+
+    index_torch = index.torch().long()
+    ref = x_torch[index_torch, :, index_torch, :]
+    res = x[index, :, index, :]
+
+    assert dr.allclose(res, ref)
