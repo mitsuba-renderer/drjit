@@ -5,6 +5,21 @@
 Changelog
 #########
 
+Upcoming changes
+-------------------------------
+
+**Bug Fixes**
+
+- Fixed LLVM library search paths to include ``aarch64`` and WSL-specific
+  directories. This resolves failures to locate LLVM on ARM Linux systems and
+  Windows Subsystem for Linux.
+  (Dr.Jit-Core PR `#185 <https://github.com/mitsuba-renderer/drjit-core/pull/185>`__).
+
+- Fixed ordering of CUDA forward declarations of callables, resolving cases
+  where a forward declaration could appear after the actual function definition.
+  (Dr.Jit-Core commit `213983e
+  <https://github.com/mitsuba-renderer/drjit-core/commit/213983e4>`__).
+
 DrJit 1.3.0 (February 16, 2026)
 -------------------------------
 
