@@ -3531,10 +3531,12 @@ Index ad_var_block_reduce(ReduceOp op, Index index, uint32_t block_size, int sym
 // Debugging: GraphViz, variable listing
 // ==========================================================================
 
-static const char *type_name_short[(int) VarType::Count] {
-    "void ", "msk", "i8",  "u8",  "i16", "u16", "i32",
+static const char *type_name_short[] {
+    "void ", "msk", "???", "i8",  "u8",  "i16", "u16", "i32",
     "u32", "i64", "u64", "ptr", "???", "f16", "f32", "f64"
 };
+static_assert(sizeof(type_name_short) / sizeof(type_name_short[0]) == (size_t) VarType::Count,
+              "type_name_short is out of sync with VarType enum");
 
 
 const char *ad_var_whos() {
