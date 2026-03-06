@@ -219,6 +219,11 @@ def tensor_reduce(
     return Tensor(out_array, out_shape)
 
 class PrefixRedOp(dr.CustomOp):
+    op: dr.ReduceOp
+    axis: int
+    exclusive: bool
+    reverse: bool
+
     def eval(self, op: dr.ReduceOp, value: ArrayT, axis: int, exclusive: bool, reverse: bool) -> ArrayT:
         self.op = op
         self.axis = axis
