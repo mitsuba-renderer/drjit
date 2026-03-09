@@ -108,14 +108,14 @@ drjit.select$:
     @overload
     def select(arg0: bool | AnyArray, arg1: T, arg2: T) -> T: ...
 
-drjit.atan2$:
+drjit.(atan2)$:
     @overload
     def \1(arg0: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], arg1: SelfCpT, /) -> SelfT:
         \doc
     @overload
     def \1(arg0: SelfCpT, arg1: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], /) -> SelfT: ...
 
-drjit.step$:
+drjit.(step)$:
     @overload
     def \1(arg0: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], arg1: SelfCpT, /) -> SelfT:
         \doc
@@ -298,10 +298,6 @@ drjit.sh_eval$:
     def sh_eval(d: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], order: int) -> list[ValT]:
         \doc
 
-drjit.sh_eval$:
-    def sh_eval(d: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], order: int) -> list[ValT]:
-        \doc
-
 # -------------- drjit.syntax, interop, detail ----------------
 
 # Clean the drjit.interop stub
@@ -312,8 +308,8 @@ drjit.detail.bind:
 
 # ------------------- Backend-specific part -------------------
 #
-drjit\.(cuda|llvm|auto)(.ad|).Array[0-4]([^0-4].*)\.__(set|del)item__:
-drjit\.(cuda|llvm|auto)(.ad|).Array[0-4]([^0-4].*)\.__getitem__:
+drjit\.(cuda|llvm|auto)(\.ad|).Array[0-4]([^0-4].*)\.__(set|del)item__:
+drjit\.(cuda|llvm|auto)(\.ad|).Array[0-4]([^0-4].*)\.__getitem__:
     xx: Array2\3
     xy: Array2\3
     xz: Array2\3
@@ -661,26 +657,39 @@ PCG32.__isub__:
         \doc
 
 drjit.scalar.__prefix__:
-    from builtins import (
-        bool as Bool,
-        float as Float,
-        float as Float16,
-        float as Float32,
-        float as Float64,
-        int as Int,
-        int as Int16,
-        int as Int32,
-        int as Int64,
-        int as UInt,
-        int as UInt16,
-        int as UInt32,
-        int as UInt64
-    )
+    \from builtins import bool as Bool
+    \from builtins import float as Float
+    \from builtins import float as Float16
+    \from builtins import float as Float32
+    \from builtins import float as Float64
+    \from builtins import int as Int
+    \from builtins import int as Int16
+    \from builtins import int as Int32
+    \from builtins import int as Int64
+    \from builtins import int as UInt
+    \from builtins import int as UInt16
+    \from builtins import int as UInt32
+    \from builtins import int as UInt64
 
 drjit.__prefix__:
-    \from typing import TypeAlias
-    \from collections.abc import Iterable, Sequence
-    Axis: TypeAlias = int | tuple[int] | None
+    \from typing import Iterable, TypeAlias, Union, Optional, Type, Callable, Generic, TypeVar, Literal, Tuple
+    \from collections.abc import Callable as _Callable, Sequence as Sequence
+    \from drjit.nn import CoopVec as CoopVec
+    Axis: TypeAlias = int | tuple[int, ...] | None
+    F = TypeVar("F")
 
 drjit.coop.__prefix__:
     \from typing import overload, Literal
+
+drjit.hashgrid.__prefix__:
+    \from typing import Type, Iterable
+    \from drjit import ArrayBase
+
+drjit.nn.__prefix__:
+    \from drjit import SelfT, SelfCpT, ValT, ValCpT, T, PlainT, MaskT, ArrayT
+    PyTree = object
+
+# Correct the type hint for memview
+drjit.ArrayBase.memview:
+    def memview(self) -> memoryview:
+        \doc
