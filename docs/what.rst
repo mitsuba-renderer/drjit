@@ -255,7 +255,13 @@ Dr.Jit provides two backends with feature parity:
    ``drjit.llvm`` or ``drjit.llvm.ad`` (add ``.ad`` if derivative computation is needed).
 
    Note that LLVM >= 11.0 must be installed on your machine for this backend to
-   be available. LLVM can be installed as follows:
+   be available.  ```x86_64``` support is limited to CPUs with the ```FMA``` 
+   instruction set, like Intel Haswell (2013) and AMD Piledriver (2012) and newer. A 
+   patch to emulate ```FMA``` instructions can be found in drjit-core pull request 
+   `59 <https://github.com/mitsuba-renderer/drjit-core/pull/59>`__, but is not 
+   officially supported. 
+
+   LLVM can be installed as follows:
 
    - **macOS**: Install `Homebrew <https://brew.sh>`__ and then enter the following
      command:
