@@ -70,7 +70,7 @@ void export_history(nb::module_ &m) {
         .value("Other", KernelType::Other);
 
     nb::enum_<KernelRecordingMode>(m, "KernelRecordingMode")
-        .value("None", KernelRecordingMode::None)
+        .value("Inactive", KernelRecordingMode::Inactive)
         .value("Recorded", KernelRecordingMode::Recorded)
         .value("Replayed", KernelRecordingMode::Replayed);
 }
