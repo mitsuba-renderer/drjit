@@ -307,9 +307,9 @@ def _flatten(a, flat, desc, /):
         for v in a.values():
             _flatten(v, flat, desc)
     else:
-        desc = getattr(tp, 'DRJIT_STRUCT', None)
-        if type(desc) is dict:
-            for k in desc:
+        struct_desc = getattr(tp, 'DRJIT_STRUCT', None)
+        if type(struct_desc) is dict:
+            for k in struct_desc:
                 _flatten(getattr(a, k), flat, desc)
         else:
             flat.append(a)
@@ -325,10 +325,10 @@ def _unflatten(flat, desc, /):
         keys = desc.pop()
         return { k : _unflatten(flat, desc) for k in keys }
     else:
-        desc = getattr(tp, 'DRJIT_STRUCT', None)
-        if type(desc) is dict:
+        struct_desc = getattr(tp, 'DRJIT_STRUCT', None)
+        if type(struct_desc) is dict:
             result = tp()
-            for k in desc:
+            for k in struct_desc:
                 setattr(result, k, _unflatten(flat, desc))
             return result
         else:
