@@ -68,7 +68,7 @@ drjit.(imag|real)$:
     def \1(arg: complex, /) -> float: ...
 
 # Improve the types of reduction operations
-drjit.(sum|prod|min|max|norm|squared_norm)$:
+drjit.(sum|prod|min|max|mean|norm|squared_norm)$:
     @overload
     def \1(value: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], axis: Axis = 0,
            mode: Literal['symbolic', 'evaluated', None] = None) -> RedT:
