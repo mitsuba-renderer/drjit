@@ -20,6 +20,7 @@
 #include "traits.h"
 #include "autodiff.h"
 #include "reduce.h"
+#include <drjit/extra.h>
 #include <cmath>
 #include <nanobind/typing.h>
 
@@ -162,7 +163,8 @@ static PyObject *nb_inplace_power(PyObject *h0, PyObject *h1) noexcept {
     }
 }
 
-static nb::object matmul(nb::handle h0, nb::handle h1);
+static nb::object matmul(nb::handle h0, nb::handle h1, bool At = false,
+                         bool Bt = false);
 
 static PyObject *nb_multiply(PyObject *h0, PyObject *h1) noexcept {
     if (!is_matrix_v(h0) && !is_matrix_v(h1)) {
@@ -810,12 +812,12 @@ static nb::object rcp(nb::handle_t<ArrayBase> h0) {
         ArrayOp::Rcp, "rcp", std::make_index_sequence<1>(), h0.ptr()));
 }
 
-nb::object matmul(nb::handle h0, nb::handle h1) {
+nb::object matmul(nb::handle h0, nb::handle h1, bool At, bool Bt) {
     const nb::handle tp0 = h0.type(),
                      tp1 = h1.type();
     bool d0 = is_drjit_type(tp0), d1 = is_drjit_type(tp1);
 
-    bool type_error = false;
+    bool type_error = false, value_error = false;
     try {
         auto outer_static = [](const ArrayMeta &m) {
             return m.ndim > 0 && m.shape[0] != DRJIT_DYNAMIC;
@@ -824,13 +826,185 @@ nb::object matmul(nb::handle h0, nb::handle h1) {
         if (d0 && d1) {
             const ArraySupplement &s0 = supp(tp0), &s1 = supp(tp1);
 
-            if (s0.is_tensor || s1.is_tensor)
-                nb::raise(
-                    "this operation only handles fixed-sizes arrays. A different "
-                    "approach is needed for multiplications involving potentially "
-                    "large dynamic arrays/tensors. Other other tools like PyTorch, "
-                    "JAX, or Tensorflow will be preferable in such situations "
-                    "(e.g., to train neural networks");
+            if (s0.is_tensor || s1.is_tensor) {
+                if (!s0.is_tensor || !s1.is_tensor || !tp0.is(tp1))
+                    nb::raise(
+                        "operands must share the same element type and backend "
+                        "(got %s and %s).",
+                        nb::type_name(tp0).c_str(),
+                        nb::type_name(tp1).c_str());
+
+                const dr::vector<size_t> &shape_a =
+                    s0.tensor_shape(inst_ptr(h0));
+                const dr::vector<size_t> &shape_b =
+                    s1.tensor_shape(inst_ptr(h1));
+
+                if (shape_a.size() == 0 || shape_b.size() == 0) {
+                    value_error = true;
+                    nb::raise("0-D (scalar) tensor inputs are not supported.");
+                }
+
+                // 1-D operands follow NumPy ``matmul`` semantics: ``A``
+                // is treated as ``(1, K)`` (the prepended axis is dropped
+                // from the output), ``B`` as ``(K, 1)`` (the appended
+                // axis is dropped). Transpose flags are meaningless on a
+                // 1-D operand and are rejected.
+                size_t ra = shape_a.size(), rb = shape_b.size();
+                bool a_is_1d = (ra == 1), b_is_1d = (rb == 1);
+
+                if (a_is_1d && At) {
+                    value_error = true;
+                    nb::raise("At=True is invalid for a 1-D 'A' operand.");
+                }
+                if (b_is_1d && Bt) {
+                    value_error = true;
+                    nb::raise("Bt=True is invalid for a 1-D 'B' operand.");
+                }
+
+                // Reduce ``At == Bt == True`` to the single-transpose
+                // case via the identity ``A^T @ B^T = (B @ A)^T``; the
+                // underlying GEMM kernel only handles one transpose.
+                if (At && Bt)
+                    return matmul(h1, h0, false, false).attr("mT");
+
+                // Last two dims are the matrix dims (subject to At/Bt
+                // for ndim >= 2); leading dims are the batch prefix,
+                // broadcast with NumPy rules.
+                size_t M, K_a, K_b, N;
+                if (a_is_1d) {
+                    M = 1; K_a = shape_a[0];
+                } else {
+                    M   = At ? shape_a[ra - 1] : shape_a[ra - 2];
+                    K_a = At ? shape_a[ra - 2] : shape_a[ra - 1];
+                }
+                if (b_is_1d) {
+                    K_b = shape_b[0]; N = 1;
+                } else {
+                    K_b = Bt ? shape_b[rb - 1] : shape_b[rb - 2];
+                    N   = Bt ? shape_b[rb - 2] : shape_b[rb - 1];
+                }
+                if (K_a != K_b) {
+                    value_error = true;
+                    nb::raise("shape mismatch: A has K=%zu (At=%s), "
+                              "B has K=%zu (Bt=%s).",
+                              K_a, At ? "True" : "False",
+                              K_b, Bt ? "True" : "False");
+                }
+
+                // Right-aligned broadcast over the batch prefixes (``d=0``
+                // is innermost; missing leading axes default to 1, NumPy
+                // prepend rules). Per-operand strides are 0 along broadcast
+                // dims and a running product of non-broadcast extents
+                // otherwise, so the kernel can decode batch indices in
+                // place without a separate broadcast pass.
+                size_t na  = a_is_1d ? 0 : (ra - 2),
+                       nb_ = b_is_1d ? 0 : (rb - 2);
+                size_t n = na > nb_ ? na : nb_;
+
+                if (n > DRJIT_GEMM_MAX_BDIMS) {
+                    value_error = true;
+                    nb::raise("tensor matmul: batch rank %zu exceeds the "
+                              "maximum of %u.",
+                              n, (unsigned) DRJIT_GEMM_MAX_BDIMS);
+                }
+
+
+                GemmBatch gb = { };
+                gb.n_bdims = (uint32_t) n;
+                gb.n_rdims = 0;
+
+                size_t a_run = a_is_1d ? shape_a[0]
+                                       : shape_a[ra - 2] * shape_a[ra - 1];
+                size_t b_run = b_is_1d ? shape_b[0]
+                                       : shape_b[rb - 2] * shape_b[rb - 1];
+                size_t grid_count = 1;
+                for (size_t d = 0; d < n; ++d) {
+                    size_t ea = (d < na)  ? shape_a[na  - 1 - d] : 1;
+                    size_t eb = (d < nb_) ? shape_b[nb_ - 1 - d] : 1;
+                    if (ea != eb && ea != 1 && eb != 1) {
+                        value_error = true;
+                        nb::raise("cannot broadcast batch prefixes of "
+                                  "A and B along dim %zu (got %zu vs %zu).",
+                                  d, ea, eb);
+                    }
+                    size_t e = (ea > eb) ? ea : eb;
+                    gb.extent[d] = (uint32_t) e;
+                    grid_count  *= e;
+
+                    if (ea == 1 && e != 1) {
+                        gb.a_stride[d] = 0;
+                    } else {
+                        gb.a_stride[d] = (uint32_t) a_run;
+                        a_run *= ea;
+                    }
+                    if (eb == 1 && e != 1) {
+                        gb.b_stride[d] = 0;
+                    } else {
+                        gb.b_stride[d] = (uint32_t) b_run;
+                        b_run *= eb;
+                    }
+                }
+
+                // Output tensor shape: leading = out_batch (leftmost =
+                // outermost = ``gb.extent[n-1]``), then ``M`` if A is
+                // not 1-D, then ``N`` if B is not 1-D. Dropping the
+                // inserted unit axes is purely a shape relabel — the
+                // flat element count is unchanged.
+                nb::object shape_out;
+                {
+                    size_t out_rank =
+                        n + (a_is_1d ? 0 : 1) + (b_is_1d ? 0 : 1);
+                    nb::tuple t = nb::steal<nb::tuple>(
+                        PyTuple_New((Py_ssize_t) out_rank));
+                    Py_ssize_t pos = 0;
+                    for (size_t d = 0; d < n; ++d)
+                        PyTuple_SET_ITEM(t.ptr(), pos++,
+                                         PyLong_FromSize_t((size_t) gb.extent[n - 1 - d]));
+                    if (!a_is_1d)
+                        PyTuple_SET_ITEM(t.ptr(), pos++, PyLong_FromSize_t(M));
+                    if (!b_is_1d)
+                        PyTuple_SET_ITEM(t.ptr(), pos++, PyLong_FromSize_t(N));
+                    shape_out = std::move(t);
+                }
+
+                // Short-circuit cases that skip the kernel and return a
+                // zero tensor: an empty grid batch (``grid_count == 0``),
+                // an empty matrix dim (``M == 0`` or ``N == 0``), or an
+                // empty contraction (``K == 0`` -- output is a sum over
+                // zero terms).
+                if (grid_count == 0 || M == 0 || N == 0 || K_a == 0) {
+                    nb::object zero = array_module.attr("zeros")(tp0, shape_out);
+                    return zero;
+                }
+
+                nb::object array_a = nb::steal(s0.tensor_array(h0.ptr())),
+                           array_b = nb::steal(s1.tensor_array(h1.ptr()));
+                const ArraySupplement &sa = supp(array_a.type());
+
+                // 1-D x 1-D inner product (M = N = 1, no batch): dispatch
+                // to the fused multiply-and-reduce kernel instead of a
+                // GEMM with degenerate matrix dims.
+                uint64_t i_out;
+                if (a_is_1d && b_is_1d) {
+                    i_out = ad_var_reduce_dot(
+                        sa.index(inst_ptr(array_a)),
+                        sa.index(inst_ptr(array_b)));
+                } else {
+                    const GemmBatch *bp = (n == 0) ? nullptr : &gb;
+                    i_out = ad_var_batched_gemm(
+                        sa.index(inst_ptr(array_a)),
+                        sa.index(inst_ptr(array_b)),
+                        (int) At, (int) Bt,
+                        (uint32_t) M, (uint32_t) N, (uint32_t) K_a, bp);
+                }
+
+                nb::object array_out = nb::inst_alloc(array_a.type());
+                sa.init_index(i_out, inst_ptr(array_out));
+                nb::inst_mark_ready(array_out);
+                ad_var_dec_ref(i_out);
+
+                return tp0(array_out, shape_out);
+            }
 
             if (s0.is_complex || s1.is_complex || s0.is_quaternion || s1.is_quaternion)
                 nb::raise("complex/quaternion-valued inputs not supported.");
@@ -951,13 +1125,21 @@ nb::object matmul(nb::handle h0, nb::handle h1) {
         type_error = true;
         nb::raise("unsupported input types.");
     } catch (nb::python_error &e) {
-        nb::raise_from(e, PyExc_RuntimeError,
+        PyObject *exc = (value_error || e.matches(PyExc_ValueError))
+                            ? PyExc_ValueError
+                            : ((type_error || e.matches(PyExc_TypeError))
+                                   ? PyExc_TypeError
+                                   : PyExc_RuntimeError);
+        nb::raise_from(e, exc,
                        "drjit.matmul(<%U>, <%U>): failed (see above)!",
                        nb::inst_name(h0).ptr(), nb::inst_name(h1).ptr());
     } catch (const std::exception &e) {
-        nb::chain_error(type_error ? PyExc_TypeError : PyExc_RuntimeError,
-                        "drjit.matmul(<%U>, <%U>): %s", nb::inst_name(h0).ptr(),
-                        nb::inst_name(h1).ptr(), e.what());
+        PyObject *exc = value_error ? PyExc_ValueError
+                                    : (type_error ? PyExc_TypeError
+                                                  : PyExc_RuntimeError);
+        nb::chain_error(exc, "drjit.matmul(<%U>, <%U>): %s",
+                        nb::inst_name(h0).ptr(), nb::inst_name(h1).ptr(),
+                        e.what());
         nb::raise_python_error();
     }
 }
@@ -1352,7 +1534,8 @@ void export_base(nb::module_ &m) {
 
     m.def("square", [](nb::handle h) { return h * h; }, doc_square,
           nb::sig("def square(arg: T, /) -> T"));
-    m.def("matmul", &matmul, doc_matmul);
+    m.def("matmul", &matmul, nb::arg("A"), nb::arg("B"),
+          nb::arg("At") = false, nb::arg("Bt") = false, doc_matmul);
 
     m.def("minimum",
           [](Py_ssize_t a, Py_ssize_t b) { return dr::minimum(a, b); });
