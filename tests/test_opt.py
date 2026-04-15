@@ -1,5 +1,5 @@
 import drjit as dr
-from drjit.opt import Adam, SGD, RMSProp, AdamW, GradScaler
+from drjit.opt import Adam, SGD, RMSProp, AdamW, GradScaler, Muon
 import pytest
 
 
@@ -398,6 +398,33 @@ def test11_adamw(t):
         1.8056352138519287
     ]
     assert dr.allclose(xv, ref)
+
+
+@pytest.test_arrays("is_diff,float32,is_tensor,is_jit")
+def test11b_muon(t):
+    # Regression test for the Muon optimizer on a 2x2 tensor. The
+    # reference values below were observed from this implementation and
+    # exist solely to detect unintended changes in future revisions.
+    Array = dr.array_t(t)
+    x = t(Array(1.0, 2.0, 3.0, 4.0), shape=(2, 2))
+    target = t(Array(0.5, 1.0, 1.5, 2.0), shape=(2, 2))
+    opt = Muon(lr=0.1, params={"x": x})
+
+    xv = []
+    for _ in range(5):
+        diff = (opt["x"] - target).array
+        dr.backward(dr.sum(diff * diff))
+        opt.step()
+        xv.append(list(opt["x"].array))
+
+    ref = [
+        [1.068066120147705, 1.9174460172653198, 2.925870418548584, 3.9740560054779053],
+        [1.1246968507766724, 1.843029260635376,  2.8568994998931885, 3.9446542263031006],
+        [1.168973445892334,  1.7773514986038208, 2.7934353351593018, 3.9114456176757812],
+        [1.082324504852295,  1.803946614265442,  2.787897825241089,  3.8374311923980713],
+        [1.1550300121307373, 1.7182414531707764, 2.7118663787841797, 3.8130948543548584],
+    ]
+    assert dr.allclose(xv, ref, atol=1e-4)
 
 
 @pytest.mark.parametrize("optimizer_class", [SGD, RMSProp, Adam])
