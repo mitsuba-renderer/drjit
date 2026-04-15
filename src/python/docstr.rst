@@ -687,17 +687,69 @@
     :py:func:`drjit.scalar.Matrix3f` and :py:func:`drjit.scalar.Array33f` have the
     same shape and are treated identically.
 
+    **Tensor matrix multiplication.** In addition to the fixed-size cases
+    above, this function also accepts two Dr.Jit tensors of matching element
+    type and backend. It fully replicates the NumPy / PyTorch ``matmul``
+    semantics including batched matrix products, broadcasting of leading
+    batch axes, matrix-vector products, and inner products. The optional
+    ``At`` / ``Bt`` flags can be used to transpose the associated matrix
+    operands on the fly. The batch rank is limited to 6.
+
+    Under the hood, the CUDA backend uses a block-matrix multiplication in
+    which each thread block cooperatively stages tiles of ``A`` and ``B``
+    through shared memory and accumulates the output tile in registers. The
+    CPU backend uses a GotoBLAS-style tiled GEMM parallelized across cores
+    via nanothread, with an inner microkernel that the compiler
+    auto-vectorizes into SIMD. Broadcasts along batch dimensions are
+    consumed directly by the kernel via zero strides, and under automatic
+    differentiation the reverse-mode gradient of a broadcast operand folds
+    its sum-over-batch into the backward GEMM's contraction — so no
+    expanded copy of a broadcast operand is materialized in either the
+    primal or the derivative.
+
+    Note that the CUDA implementation does not use the tensor cores
+    available on recent NVIDIA GPUs, which can greatly accelerate
+    half-precision math. For fp16 matmuls, Dr.Jit is therefore not
+    competitive with PyTorch.
+
+    Supported element types are :py:attr:`drjit.VarType.Float16`,
+    :py:attr:`drjit.VarType.Float32`, :py:attr:`drjit.VarType.Float64`,
+    :py:attr:`drjit.VarType.Int32`, and :py:attr:`drjit.VarType.UInt32`.
+
     .. note::
 
-       This operation only handles fixed-sizes arrays. A different approach is
-       needed for multiplications involving potentially large dynamic
-       arrays/tensors. Other tools like PyTorch, JAX, or Tensorflow will be
-       preferable in such situations (e.g., to train neural networks).
+       **Performance tips (CUDA).** The tensor matmul ships a small family
+       of precompiled kernels and picks the largest tile it can align to
+       the operand strides. To land on the fastest path, the contiguous
+       dimensions of both operands and ``N`` should be divisible by
+       ``V``, where
+
+       - ``V = 8`` for ``Float16``,
+       - ``V = 4`` for ``Float32`` / ``Int32`` / ``UInt32``,
+       - ``V = 2`` for ``Float64``.
+
+       When this divisibility doesn't hold the kernel falls back to a
+       smaller tile with scalar loads, which can be an order of magnitude
+       slower. The CPU (LLVM) backend is not affected by this.
+
+       The fixed-size array path (types such as
+       :py:func:`drjit.cuda.Matrix4f`, as opposed to Dr.Jit tensors) only
+       handles small matrices whose dimensions are known at compile time. To
+       multiply large dynamic matrices, use the N-D tensor path described
+       above.
 
     Args:
-        arg0 (dr.ArrayBase): Dr.Jit array type
+        arg0 (dr.ArrayBase): Dr.Jit array or Dr.Jit tensor.
 
-        arg1 (dr.ArrayBase): Dr.Jit array type
+        arg1 (dr.ArrayBase): Dr.Jit array or Dr.Jit tensor.
+
+        At (bool): If ``True``, transpose the last two dimensions of ``arg0``
+          on the fly. Only applies to the tensor path and is invalid when
+          ``arg0`` is 1-D. Defaults to ``False``.
+
+        Bt (bool): If ``True``, transpose the last two dimensions of ``arg1``
+          on the fly. Only applies to the tensor path and is invalid when
+          ``arg1`` is 1-D. Defaults to ``False``.
 
     Returns:
         object: The result of the operation as defined above

@@ -162,6 +162,15 @@ extern DRJIT_EXTRA_EXPORT uint64_t ad_var_transpose(uint64_t source,
                                                     uint32_t batch,
                                                     uint32_t M, uint32_t N);
 
+/// Differentiable matrix multiplication. See \ref jit_var_batched_gemm for
+/// the shape, transpose, and batching convention — this entry point follows
+/// the same convention and adds forward- and reverse-mode AD on top.
+extern DRJIT_EXTRA_EXPORT uint64_t ad_var_batched_gemm(uint64_t i_A, uint64_t i_B,
+                                                       int At, int Bt,
+                                                       uint32_t M, uint32_t N,
+                                                       uint32_t K,
+                                                       const struct GemmBatch *batch);
+
 /// Compute an exclusive or inclusive prefix reduction
 extern DRJIT_EXTRA_EXPORT uint64_t ad_var_block_prefix_reduce(ReduceOp op,
                                                               uint64_t index,

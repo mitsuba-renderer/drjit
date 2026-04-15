@@ -3874,3 +3874,50 @@ def test103_rng(t, auto_opaque):
     ref = func(dr.rng(42), x)
     assert dr.allclose(ref, res)
 
+
+@pytest.mark.parametrize("auto_opaque", [False, True])
+@pytest.test_arrays("float32, jit, shape=(*)")
+def test104_batched_gemm(t, auto_opaque):
+    """Tests that ``dr.matmul`` on tensors can be recorded and replayed."""
+    import numpy as np
+    mod = sys.modules[t.__module__]
+    TensorXf = mod.TensorXf
+
+    def func(A, B):
+        return dr.matmul(A, B)
+
+    frozen = dr.freeze(func, auto_opaque=auto_opaque)
+    for i in range(3):
+        rng = np.random.default_rng(seed=i)
+        A = TensorXf(rng.standard_normal((7, 5)).astype(np.float32))
+        B = TensorXf(rng.standard_normal((5, 9)).astype(np.float32))
+        res = frozen(A, B)
+        ref = func(A, B)
+        assert dr.allclose(res, ref, atol=1e-3)
+
+
+@pytest.mark.parametrize("auto_opaque", [False, True])
+@pytest.test_arrays("float32, jit, shape=(*)")
+def test105_batched_gemm_varying_batch(t, auto_opaque):
+    """Replays ``dr.matmul`` on 3-D tensors with varying leading batch
+    dim. The FrozenFunction input key only hashes the inner shape
+    (``shape[1:]``), so the cached recording is reused across batch
+    sizes. Without a dry-run pass the GEMM replay would launch with
+    the stale recorded batch extent; this test guards that path."""
+    import numpy as np
+    mod = sys.modules[t.__module__]
+    TensorXf = mod.TensorXf
+
+    def func(A, B):
+        return dr.matmul(A, B)
+
+    frozen = dr.freeze(func, auto_opaque=auto_opaque)
+    for batch in (2, 5, 3, 1):
+        rng = np.random.default_rng(seed=batch)
+        A = TensorXf(rng.standard_normal((batch, 4, 8)).astype(np.float32))
+        B = TensorXf(rng.standard_normal((batch, 8, 4)).astype(np.float32))
+        res = frozen(A, B)
+        ref = func(A, B)
+        assert tuple(res.shape) == tuple(ref.shape)
+        assert dr.allclose(res, ref, atol=1e-3)
+

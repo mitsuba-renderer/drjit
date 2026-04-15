@@ -119,8 +119,13 @@ Rearranging array contents
 .. autofunction:: reshape
 .. autofunction:: tile
 .. autofunction:: repeat
+
+Other operations on tensors
+---------------------------
+
 .. autofunction:: resample
 .. autofunction:: convolve
+.. autofunction:: matmul
 
 Random number generation
 ------------------------
