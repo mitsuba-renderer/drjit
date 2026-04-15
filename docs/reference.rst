@@ -740,6 +740,10 @@ gradient-based optimization and adaptive mixed-precision training.
 
    .. automethod:: __init__
 
+.. autoclass:: RMSProp
+
+   .. automethod:: __init__
+
 .. autoclass:: Adam
 
    .. automethod:: __init__
@@ -748,7 +752,7 @@ gradient-based optimization and adaptive mixed-precision training.
 
    .. automethod:: __init__
 
-.. autoclass:: RMSProp
+.. autoclass:: Muon
 
    .. automethod:: __init__
 

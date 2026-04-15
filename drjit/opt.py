@@ -1257,7 +1257,8 @@ class AdamW(Adam):
         /,
     ) -> Tuple[dr.ArrayBase, Tuple[int, dr.ArrayBase, dr.ArrayBase, Optional[dr.ArrayBase]]]:
         new_value, new_extra = super()._step(cache, value, grad, lr, extra)
-        scaled_value = dr.fma(value, -lr * self.weight_decay, new_value)
+        neg_lr_wd = cache.product(dr.leaf_t(grad), lr, self.weight_decay, -1.0)
+        scaled_value = dr.fma(value, neg_lr_wd, new_value)
         return scaled_value, new_extra
 
     def __repr__(self):
@@ -1463,3 +1464,169 @@ class GradScaler:
 
             self.scale_factor = next_scale
             self.it = next_it
+
+def _newton_schulz(X, steps: int):
+    # Quintic Newton-Schulz iteration from muon.py; coefficients chosen
+    # to maximize the slope at zero (Keller Jordan et al.), with the
+    # B = b*A + c*A@A computation strategy suggested by @jxbz, @leloykun,
+    # and @YouJiacheng.
+    a, b, c = 3.4445, -4.7750, 2.0315
+    tall = X.shape[-2] > X.shape[-1]
+    X = X * dr.rcp(dr.norm(X.array) + 1e-7)
+    for _ in range(steps):
+        if tall:
+            A = dr.matmul(X, X, At=True)
+            B = dr.fma(b, A, c * (A@A))
+            X = dr.fma(a, X, X@B)
+        else:
+            A = dr.matmul(X, X, Bt=True)
+            B = dr.fma(b, A, c * (A@A))
+            X = dr.fma(a, X, B@X)
+    return X
+
+
+class Muon(Optimizer):
+    """Muon - MomentUm Orthogonalized by Newton-schulz.
+
+    Muon is specifically designed for the hidden weights of a neural network.
+    Other parameters (input embeddings, output layers, scalars, biases) should
+    be optimized with a standard method such as :py:class:`AdamW`.
+
+    The optimizer runs SGD with momentum and then post-processes the
+    (optionally Nesterov-mixed) update by replacing each 2D parameter's update
+    with (approximately) the nearest orthogonal matrix. The orthogonalization
+    uses a quintic Newton-Schulz iteration whose coefficients maximize the
+    slope at zero.
+
+    Reference:
+        Keller Jordan, "Muon: An optimizer for hidden layers in neural
+        networks," https://kellerjordan.github.io/posts/muon/, 2024.
+
+    This class is a Dr.Jit port of the reference PyTorch implementation
+    by Keller Jordan et al.
+    """
+
+    def __init__(self, lr, params=None, *, momentum=0.95, nesterov=True,
+                 ns_steps=5, weight_decay=0.0, mask_updates=False,
+                 promote_fp16=True):
+        """
+        Args:
+
+            lr (float | drjit.ArrayBase):
+                Learning rate, interpreted as the target spectral norm per
+                update. Use :py:func:`Optimizer.set_learning_rate` to later
+                adjust this value globally, or for specific parameters.
+
+            momentum (float):
+                Momentum factor used to compute the EMA of past gradients.
+                Must lie in ``[0, 1)``. A value of ``0.95`` is usually fine.
+
+            nesterov (bool):
+                If enabled, the Nesterov-mixed combination of the gradient
+                and the momentum EMA is orthogonalized instead of the raw
+                momentum EMA.
+
+            ns_steps (int):
+                Number of Newton-Schulz iterations used to orthogonalize the
+                update. Five steps are sufficient in practice.
+
+            weight_decay (float):
+                Decoupled AdamW-style weight decay coefficient. The update
+                rule applies ``-lr * weight_decay * p`` in addition to the
+                orthogonalized step.
+
+            mask_updates (bool):
+                Mask updates to zero-valued gradient components?
+                See :py:func:`Optimizer.__init__()` for details on this parameter.
+
+            promote_fp16 (bool):
+                Promote half-precision variables to single-precision internal
+                storage? See :py:func:`Optimizer.__init__()` for details on
+                this parameter.
+
+            params (Mapping[str, drjit.ArrayBase] | None):
+                Optional dictionary-like object containing an initial set of
+                parameters. Each entry must be a 2D tensor.
+        """
+        if not 0 <= momentum < 1:
+            raise RuntimeError("'momentum' must be in [0, 1)")
+        self.momentum = momentum
+        self.nesterov = nesterov
+        self.ns_steps = ns_steps
+        self.weight_decay = weight_decay
+        super().__init__(lr, params, mask_updates=mask_updates,
+                         promote_fp16=promote_fp16)
+
+    def _step(self, cache, value, grad, lr, extra):
+        m, shape = extra
+
+        beta = self.momentum
+        m_next = dr.fma(beta, m, grad)
+        if self.nesterov:
+            u_flat = dr.fma(beta, m_next, grad)
+        else:
+            u_flat = m_next
+
+        Tensor = dr.tensor_t(type(value))
+        U = Tensor(u_flat, shape)
+        U = _newton_schulz(U, self.ns_steps)
+        u_flat = U.array
+
+        # Get opaque step scale
+        leaf = dr.leaf_t(value)
+        ns_scale = max(1.0, shape[-2] / shape[-1]) ** 0.5
+        neg_lr = cache.product(leaf, lr, -ns_scale)
+
+        retained = value
+        if self.weight_decay != 0.0:
+            neg_lr_wd = cache.product(leaf, lr, self.weight_decay, -1.0)
+            retained = dr.fma(neg_lr_wd, value, value)
+        new_value = dr.fma(neg_lr, u_flat, retained)
+
+        return new_value, (m_next, shape)
+
+    def _reset(self, key, value, promoted):
+        if len(value.shape) != 2:
+            raise RuntimeError(
+                f"Muon requires 2D parameters; got shape {value.shape!r} "
+                f"for '{key}'")
+        valarr = value.array
+        tp = type(valarr)
+        m = dr.opaque(tp, 0, valarr.shape)
+        self.state[key] = value, promoted, None, (m, value.shape)
+
+    def _select(self, mask, extra, new_extra):
+        old_m, shape = extra
+        new_m, _ = new_extra
+        return (dr.select(mask, old_m, new_m), shape)
+
+    def __repr__(self):
+        """Return a human-readable string representation"""
+        lr_dict: Dict[str, LearningRate] = dict(default=self.lr)
+        total_count = 0
+        for k, state in self.state.items():
+            total_count += dr.prod(state[0].shape)
+            lr = state[2]
+            if lr is not None:
+                lr_dict[k] = lr
+
+        return (
+            "Muon[\n"
+            "  parameters = %s,\n"
+            "  total_count = %u,\n"
+            "  lr = %s,\n"
+            "  momentum = %g,\n"
+            "  nesterov = %s,\n"
+            "  ns_steps = %u,\n"
+            "  weight_decay = %g\n"
+            "]"
+            % (
+                list(self.keys()),
+                total_count,
+                lr_dict,
+                self.momentum,
+                self.nesterov,
+                self.ns_steps,
+                self.weight_decay,
+            )
+        )
