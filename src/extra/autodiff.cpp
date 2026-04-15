@@ -2944,6 +2944,200 @@ Index ad_var_reduce_dot(Index i0, Index i1) {
 
 // ==========================================================================
 
+/// Edge encoding gradient propagation for one operand of an (optionally
+/// batched) GEMM. Remembers the *other* forward operand and the full
+/// forward batch spec (with potentially zero strides encoding broadcasts).
+///
+/// Backward for a broadcast operand folds the sum-over-batch into the
+/// derivative GEMM's contraction via ``GemmBatch::n_rdims``: dims where
+/// the source operand had ``stride == 0`` become reduce dims of the
+/// backward GEMM and the kernel accumulates over them in-register, which
+/// avoids any full-size intermediate allocation.
+struct BatchedGemmEdge : Special {
+    BatchedGemmEdge(bool is_a_edge, JitVar other, int At, int Bt,
+               uint32_t M, uint32_t N, uint32_t K, const GemmBatch *batch)
+        : m_is_a_edge(is_a_edge), m_other(std::move(other)),
+          m_At(At), m_Bt(Bt), m_M(M), m_N(N), m_K(K),
+          m_has_batch(batch && (batch->n_bdims + batch->n_rdims) > 0),
+          m_batch(batch ? *batch : GemmBatch{}) { }
+
+    // Batch count across grid dims only (excludes reduce dims).
+    static size_t batch_grid_count(const GemmBatch &b) {
+        size_t n = 1;
+        for (uint32_t d = 0; d < b.n_bdims; ++d)
+            n *= b.extent[d];
+        return n;
+    }
+
+    // dC's natural per-dim stride: running product of ``M*N`` across the
+    // forward grid-batch layout. Used whenever ``dC`` appears as an
+    // operand of a derivative GEMM.
+    void fill_dc_strides(uint32_t dC_mn, uint32_t *out) const {
+        uint32_t s = dC_mn;
+        uint32_t n_total = m_batch.n_bdims + m_batch.n_rdims;
+        for (uint32_t d = 0; d < n_total; ++d) {
+            out[d] = s;
+            s *= m_batch.extent[d];
+        }
+    }
+
+    // Build a derivative GemmBatch. ``src_stride`` is the forward stride
+    // array of the *source* operand (A or B) whose derivative we are
+    // computing — dims where it is 0 are broadcast and must be summed in
+    // the backward pass, so they become reduce dims. ``op1_stride`` and
+    // ``op2_stride`` are the strides of the derivative GEMM's two
+    // operands along each forward dim (either a forward stride array or
+    // a ``fill_dc_strides`` array).
+    GemmBatch make_deriv_batch(const uint32_t *src_stride,
+                               const uint32_t *op1_stride,
+                               const uint32_t *op2_stride) const {
+        GemmBatch b = { };
+        if (!m_has_batch)
+            return b;
+
+        uint32_t n_total = m_batch.n_bdims + m_batch.n_rdims;
+        uint32_t grid_idx[DRJIT_GEMM_MAX_BDIMS],
+                 reduce_idx[DRJIT_GEMM_MAX_BDIMS];
+        uint32_t n_grid = 0, n_reduce = 0;
+        for (uint32_t d = 0; d < n_total; ++d) {
+            if (src_stride[d] == 0)
+                reduce_idx[n_reduce++] = d;
+            else
+                grid_idx[n_grid++] = d;
+        }
+
+        auto fill = [&](uint32_t new_d, uint32_t old_d) {
+            b.extent[new_d]   = m_batch.extent[old_d];
+            b.a_stride[new_d] = op1_stride[old_d];
+            b.b_stride[new_d] = op2_stride[old_d];
+        };
+
+        b.n_bdims = n_grid;
+        b.n_rdims = n_reduce;
+        for (uint32_t i = 0; i < n_grid;   ++i) fill(i,            grid_idx[i]);
+        for (uint32_t i = 0; i < n_reduce; ++i) fill(n_grid + i, reduce_idx[i]);
+        return b;
+    }
+
+    // Forward mode: the derivative GEMM has the same output shape as C
+    // (no reduces). ``source->grad`` is laid out like the source operand
+    // (possibly broadcast), so the forward batch spec applies unchanged.
+    void forward(const ADVariable *source, ADVariable *target) override {
+        if (!source->grad.valid())
+            return;
+
+        uint32_t c_mk = (uint32_t) ((size_t) m_M * m_N);
+        const GemmBatch *bp = m_has_batch ? &m_batch : nullptr;
+
+        JitVar contrib;
+        if (m_is_a_edge)
+            contrib = JitVar::steal(jit_var_batched_gemm(source->grad.index(),
+                                                         m_other.index(), m_At,
+                                                         m_Bt, m_M, m_N, m_K, bp));
+        else
+            contrib = JitVar::steal(jit_var_batched_gemm(m_other.index(),
+                                                         source->grad.index(), m_At,
+                                                         m_Bt, m_M, m_N, m_K, bp));
+
+        size_t fwd_grid = m_has_batch ? batch_grid_count(m_batch) : 1;
+        target->accum(std::move(contrib), fwd_grid * c_mk);
+    }
+
+    // Reverse mode: given ``target->grad`` (dC), produce the input-side
+    // gradient dA or dB via a derivative GEMM whose output batch shape
+    // matches the source operand (broadcast dims folded in as reduces).
+    //
+    // Forward: ``C = op_At(A) @ op_Bt(B)`` of shape ``(M, N)``. Logical
+    // derivatives are
+    //   ``dA_logical = dC @ B_logical^T``     (A-edge, shape M x K)
+    //   ``dB_logical = A_logical^T @ dC``     (B-edge, shape K x N)
+    // We store ``dSrc`` in the same orientation as the source operand;
+    // when ``src_t`` is set we instead compute ``dSrc^T``, which mirrors
+    // the operand positions and flips both kernel transpose flags. The
+    // four (edge, src_t) cases unify into a single GEMM call below.
+    void backward(ADVariable *source, const ADVariable *target) override {
+        if (!target->grad.valid())
+            return;
+
+        uint32_t c_mn = (uint32_t) ((size_t) m_M * m_N);
+
+        uint32_t dc_stride[DRJIT_GEMM_MAX_BDIMS] = { };
+        if (m_has_batch)
+            fill_dc_strides(c_mn, dc_stride);
+
+        const bool a_edge  = m_is_a_edge;
+        const bool src_t   = a_edge ? m_At : m_Bt;
+        const bool other_t = a_edge ? m_Bt : m_At;
+
+        const uint32_t *src_stride =
+            a_edge ? m_batch.a_stride : m_batch.b_stride;
+        const uint32_t *other_stride =
+            a_edge ? m_batch.b_stride : m_batch.a_stride;
+
+        // Source storage shape ``(s1, s2)`` and contraction dim ``kc`` of
+        // the derivative GEMM that produces dSrc.
+        const uint32_t s1 = a_edge ? m_M : m_K;
+        const uint32_t s2 = a_edge ? m_K : m_N;
+        const uint32_t kc = a_edge ? m_N : m_M;
+
+        // ``dC`` is the kernel's left operand iff ``a_edge XOR src_t``.
+        // Its kernel transpose flag equals ``src_t``; the other operand
+        // takes the *opposite* of ``src_t`` XOR'd with its forward flag
+        // (one side has to provide the "_logical^T" factor).
+        const bool dc_left   = a_edge ^ src_t;
+        const int  dc_t_k    = (int) src_t;
+        const int  other_t_k = (int) (other_t ^ !src_t);
+
+        const uint32_t *op1_stride = dc_left ? dc_stride   : other_stride;
+        const uint32_t *op2_stride = dc_left ? other_stride : dc_stride;
+
+        GemmBatch bc = make_deriv_batch(src_stride, op1_stride, op2_stride);
+        JitVar contrib = JitVar::steal(jit_var_batched_gemm(
+            dc_left ? target->grad.index() : m_other.index(),
+            dc_left ? m_other.index()      : target->grad.index(),
+            dc_left ? dc_t_k               : other_t_k,
+            dc_left ? other_t_k            : dc_t_k,
+            src_t ? s2 : s1,
+            src_t ? s1 : s2,
+            kc,
+            m_has_batch ? &bc : nullptr));
+
+        size_t grad_grid = m_has_batch ? batch_grid_count(bc) : 1;
+        source->accum(std::move(contrib), grad_grid * (size_t) s1 * s2);
+    }
+
+    bool m_is_a_edge;
+    JitVar m_other;
+    int m_At, m_Bt;
+    uint32_t m_M, m_N, m_K;
+    bool m_has_batch;
+    GemmBatch m_batch;
+};
+
+Index ad_var_batched_gemm(Index i_A, Index i_B, int At, int Bt,
+                    uint32_t M, uint32_t N, uint32_t K,
+                    const GemmBatch *batch) {
+    JitIndex A_jit = jit_index(i_A), B_jit = jit_index(i_B);
+
+    JitVar C = JitVar::steal(jit_var_batched_gemm(A_jit, B_jit, At, Bt, M, N, K,
+                                                  batch));
+
+    if (is_detached(i_A) && is_detached(i_B))
+        return C.release();
+
+    JitVar A = JitVar::borrow(A_jit),
+           B = JitVar::borrow(B_jit);
+
+    return ad_var_new(
+        "batched_gemm", std::move(C),
+        SpecialArg(i_A, new BatchedGemmEdge(/*is_a_edge*/ true,  B,
+                                            At, Bt, M, N, K, batch)),
+        SpecialArg(i_B, new BatchedGemmEdge(/*is_a_edge*/ false, A,
+                                            At, Bt, M, N, K, batch)));
+}
+
+// ==========================================================================
+
 Index ad_var_transpose(Index source, uint32_t batch, uint32_t M, uint32_t N) {
     JitIndex source_jit = jit_index(source);
     if (source_jit == 0)
