@@ -9,11 +9,12 @@ with detail.scoped_rtld_deepbind():
         import platform
         py_ver_pkg = detail._PYTHON_VERSION
         py_ver_cur = platform.python_version()
+        filename = _drjit_ext.__file__
 
         err = ImportError(
-            f'Could not import the Dr.Jit binary extension. It is likely that '
-            f'the Python version for which Dr.Jit was compiled ({py_ver_pkg}) '
-            f'is incompatible with the current interpreter ({py_ver_cur}).')
+            f'Could not import the Dr.Jit binary extension at {filename}. '
+            f'It is likely that the Python version for which Dr.Jit was compiled ({py_ver_pkg}) '
+            f'is incompatible with the current interpreter ({py_ver_cur}), or that a binary dependency is missing.')
 
         err.__cause__ = e
         raise err

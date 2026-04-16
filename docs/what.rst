@@ -44,6 +44,10 @@ To install the latest version of Dr.Jit for Python, run the following shell comm
 
    $ python -m pip install --upgrade drjit
 
+The binary extension requires ``libatomic`` to be installed on the system. It is
+part of most distributions, but not all. If needed, install it using your 
+distribution's package manager.
+
 With that taken care of, let's see how Dr.Jit works in the context of a simple
 example.
 
