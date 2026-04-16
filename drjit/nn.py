@@ -553,3 +553,161 @@ class HashEncodingLayer(Module):
 
     def __repr__(self) -> str:
         return self.encoding.__repr__()
+
+import drjit as dr
+
+_registry = {}
+
+def compute_key(arg: Module):
+    key = ""
+
+    def traverse(arg: Module):
+        nonlocal key
+        key += f"{type(arg)}("
+        if isinstance(arg, tuple | list):
+            for elem in arg:
+                traverse(elem)
+                key += ","
+        elif isinstance(arg, dict):
+            for k, v in arg.items():
+                key += f"{k}:"
+                traverse(v)
+                key += ","
+        elif hasattr(arg, "DRJIT_STRUCT"):
+            for k, _ in arg.DRJIT_STRUCT.items():
+                key += f"{k}:"
+                traverse(getattr(arg, k))
+                key += ","
+        elif hasattr(arg, "__dataclass_fields__"):
+            for k, _ in vars(arg).item():
+                key += f"{k}:"
+                traverse(getattr(arg, k))
+                key += ","
+        elif dr.is_array_v(arg):
+            key += "drjit array"
+        else:
+            key += f"{arg}"
+        key += ")"
+
+    traverse(arg)
+
+    return key
+
+
+def traverse(arg: Module, **kwargs):
+
+    if isinstance(arg, tuple):
+        res = []
+        for i, elem in enumerate(arg):
+            res.append(traverse(elem, **kwargs))
+        return tuple(res)
+    elif isinstance(arg, list):
+        for i, elem in enumerate(arg):
+            arg[i] = traverse(elem, **kwargs)
+    elif isinstance(arg, dict):
+        for k, v in arg.items():
+            arg[k] = traverse(v, **kwargs)
+    elif hasattr(arg, "DRJIT_STRUCT"):
+        for k, _ in arg.DRJIT_STRUCT.items():
+            setattr(arg, k, traverse(getattr(arg, k), **kwargs))
+    elif hasattr(arg, "__dataclass_fields__"):
+        for k, _ in vars(arg).item():
+            setattr(arg, k, traverse(getattr(arg, k), **kwargs))
+    elif dr.is_array_v(arg) and dr.is_array_v(type(arg)):
+        traverse_array = kwargs.get("traverse_array")
+        if traverse_array is not None:
+            return traverse_array(arg)
+    return arg
+
+
+def diff_pack(module: Module, layout: str):
+    """Differentiable packing using gather/scatter operations.
+
+    Returns packed weights that maintain gradient connections to unpacked weights.
+    When you backprop through packed weights, gradients automatically flow back to
+    the unpacked weights via DrJit's built-in gradient handling.
+    """
+
+    # Construct a unique key for this module architecture
+
+    key = compute_key(module)
+
+    IndexType = None
+    mod = None
+    # Build or retrieve the packing index mapping
+    if key not in _registry:
+        # Construct the mapping by replacing tensors with sequential indices
+        i = 0
+        backup = []
+
+        def construct_mock(t: dr.TensorXf | dr.TensorXf16):
+            nonlocal i, IndexType, backup, mod
+            backup.append(t)
+
+            tp = type(t)
+            dtype = dr.leaf_t(t)
+            shape = dr.shape(t)
+            n_elems = dr.prod(shape)
+
+            if IndexType is None:
+                mod = sys.modules[dtype.__module__]
+                if dr.is_half_v(dtype):
+                    IndexType = mod.UInt16
+                else:
+                    IndexType = mod.UInt32
+            # To track unused elements, we add ``1`` to the indices, and assume
+            # that the unused elements are ``0``. This is subtracted out in the
+            # end.
+            indices = dr.reinterpret_array(
+                dtype, dr.arange(IndexType, i, i + n_elems) + 1
+            )
+
+            # Create a tensor with sequential indices
+            result = dr.reshape(tp(indices), shape=shape)
+            i += n_elems
+            return result
+
+        traverse(module, traverse_array=construct_mock)
+
+        # Pack with the mock indices to see the packing order
+        packed, _ = pack(module, layout)
+        packed = dr.reinterpret_array(IndexType, packed)
+        packed = mod.UInt32(packed)
+
+        traverse(module, traverse_array=lambda array: backup.pop(0))
+
+        # The packed array now contains indices showing where each unpacked element ended up
+        # Store this as the forward mapping
+        packed = mod.UInt32(packed) - 1
+        _registry[key] = packed
+    else:
+        packed = _registry[key]
+
+    # Collect all unpacked tensors in order
+    unpacked_arrays = []
+
+    def traverse_array(t):
+        if dr.is_tensor_v(t):
+            unpacked_arrays.append(t.array)
+        else:
+            unpacked_arrays.append(t)
+        return t
+
+    traverse(module, traverse_array=traverse_array)
+
+    # Concatenate all unpacked weights into a single flat array
+    all_unpacked = dr.concat(unpacked_arrays)
+
+    # Gather from unpacked using the packing indices
+    # This maintains gradients: dr.gather automatically handles backward pass
+    # Note: All indices are guaranteed to be valid (built from nn.pack), so no active mask needed
+    dtype = dr.leaf_t(all_unpacked)
+    packed_weights = dr.gather(
+        dtype,
+        all_unpacked,
+        packed,
+        active=packed < dr.width(all_unpacked),
+        mode=dr.ReduceMode.Permute,
+    )
+
+    return packed_weights
