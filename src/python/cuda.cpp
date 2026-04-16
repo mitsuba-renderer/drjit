@@ -9,11 +9,16 @@
 */
 
 #include "cuda.h"
+#include <drjit-core/jit.h>
 #include "random.h"
 #include "texture.h"
 #include "event.h"
 
 #include <drjit-core/gl_interop.h>
+#include <vector>
+#include <string>
+
+#include "green_context.h"
 
 #if defined(DRJIT_ENABLE_CUDA)
 void export_cuda(nb::module_ &m) {
@@ -142,5 +147,20 @@ void export_cuda(nb::module_ &m) {
         .def("unmap", &GLInterop::unmap, nb::rv_policy::none, doc_cuda_GLInterop_unmap);
 
     bind_event<JitBackend::CUDA>(m, "Event");
+
+    nb::class_<PyGreenContext>(m, "green_context", doc_cuda_green_context)
+        .def(nb::init<uint32_t>(), "sm_count"_a)
+        .def("__enter__", [](PyGreenContext &self) -> PyGreenContext & {
+            self.enter();
+            return self;
+        }, nb::rv_policy::reference)
+        .def("__exit__", [](PyGreenContext &self, nb::handle, nb::handle, nb::handle) {
+            self.exit();
+            return false;
+        }, nb::arg().none(), nb::arg().none(), nb::arg().none())
+        .def_prop_ro("remaining_ctx", &PyGreenContext::remaining_ctx, doc_cuda_green_context_remaining_ctx)
+        .def_prop_ro("sm_count", &PyGreenContext::sm_count, doc_cuda_green_context_sm_count)
+        .def_prop_ro("requested_sm_count", &PyGreenContext::requested_sm_count,
+                     doc_cuda_green_context_requested_sm_count);
  }
 #endif

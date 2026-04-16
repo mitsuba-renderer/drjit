@@ -92,6 +92,7 @@ nanobind_add_module(
   scalar.h      scalar.cpp
   llvm.h        llvm.cpp llvm_ad.cpp
   cuda.h        cuda.cpp cuda_ad.cpp
+  green_context.h green_context.cpp
 )
 
 
