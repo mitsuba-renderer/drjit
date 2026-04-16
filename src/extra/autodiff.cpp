@@ -2944,6 +2944,44 @@ Index ad_var_reduce_dot(Index i0, Index i1) {
 
 // ==========================================================================
 
+Index ad_var_transpose(Index source, uint32_t batch, uint32_t M, uint32_t N) {
+    JitIndex source_jit = jit_index(source);
+    if (source_jit == 0)
+        return 0;
+
+    size_t total = (size_t) batch * (size_t) M * (size_t) N;
+    JitBackend backend = jit_set_backend(source_jit).backend;
+
+    // Build the permuted gather indices. For output position ``z``,
+    //   b   = z / (M*N),     inner = z % (M*N)
+    //   c_n = inner % M,     r_n   = inner / M
+    //   old = b*(M*N) + c_n*N + r_n
+    // For M == 1 or N == 1 this degenerates to ``old == z``, which the
+    // JIT's constant folding collapses into a no-op gather.
+    uint32_t MN = M * N;
+    JitVar ctr  = JitVar::steal(jit_var_counter(backend, total));
+    JitVar c_MN = JitVar::steal(jit_var_u32(backend, MN));
+    JitVar c_M  = JitVar::steal(jit_var_u32(backend, M));
+    JitVar c_N  = JitVar::steal(jit_var_u32(backend, N));
+
+    JitVar b     = JitVar::steal(jit_var_div(ctr.index(), c_MN.index()));
+    JitVar inner = JitVar::steal(jit_var_mod(ctr.index(), c_MN.index()));
+    JitVar c_n   = JitVar::steal(jit_var_mod(inner.index(), c_M.index()));
+    JitVar r_n   = JitVar::steal(jit_var_div(inner.index(), c_M.index()));
+
+    JitVar t1  = JitVar::steal(jit_var_mul(b.index(), c_MN.index()));
+    JitVar t2  = JitVar::steal(jit_var_mul(c_n.index(), c_N.index()));
+    JitVar t3  = JitVar::steal(jit_var_add(t1.index(), t2.index()));
+    JitVar idx = JitVar::steal(jit_var_add(t3.index(), r_n.index()));
+
+    JitMask mask = JitMask::steal(jit_var_mask_default(backend, total));
+
+    return ad_var_gather(source, idx.index(), mask.index(),
+                         ReduceMode::Permute);
+}
+
+// ==========================================================================
+
 Index ad_var_cast(Index i0, VarType vt) {
     JitVar result = JitVar::steal(jit_var_cast(jit_index(i0), vt, 0));
 

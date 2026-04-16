@@ -151,6 +151,17 @@ extern DRJIT_EXTRA_EXPORT uint64_t ad_var_reduce(JitBackend, VarType,
 /// Dot product reduction
 extern DRJIT_EXTRA_EXPORT uint64_t ad_var_reduce_dot(uint64_t i0, uint64_t i1);
 
+/// Transpose the last two dimensions of a row-major tensor. The input is
+/// interpreted as a (``batch``, ``M``, ``N``) view over ``source``'s flat
+/// storage, and the output has shape (``batch``, ``N``, ``M``). The shape
+/// relabel lives on the caller side — this function returns a flat JIT
+/// variable of size ``batch * M * N``. Built on top of ``ad_var_gather``:
+/// both forward and reverse-mode AD are handled by the underlying gather,
+/// which recognizes the 1-to-1 permutation via ``ReduceMode::Permute``.
+extern DRJIT_EXTRA_EXPORT uint64_t ad_var_transpose(uint64_t source,
+                                                    uint32_t batch,
+                                                    uint32_t M, uint32_t N);
+
 /// Compute an exclusive or inclusive prefix reduction
 extern DRJIT_EXTRA_EXPORT uint64_t ad_var_block_prefix_reduce(ReduceOp op,
                                                               uint64_t index,

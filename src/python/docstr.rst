@@ -2245,8 +2245,26 @@
 
 .. topic:: ArrayBase_T
 
-    This property returns the transpose of ``self``. When the underlying
-    array is not a matrix type, it raises a ``TypeError``.
+    Transpose of ``self``.
+
+    - For fixed-size matrix types, returns a matrix with rows and columns
+      swapped.
+    - For Dr.Jit tensors, returns the transpose of a 2-D tensor. This
+      matches PyTorch's semantics: only rank-2 tensors are accepted, and
+      higher-rank tensors raise a ``TypeError``. Use :py:attr:`mT` to
+      transpose only the last two dimensions of a higher-rank tensor.
+
+    Other array types raise ``TypeError``.
+
+.. topic:: ArrayBase_mT
+
+    Matrix transpose — swaps the last two dimensions of ``self``, leaving
+    any leading batch dimensions unchanged. Requires at least 2 dimensions
+    and mirrors the semantics of PyTorch's ``.mT`` / NumPy's ``.mT``.
+
+    For fixed-size matrix types this is equivalent to :py:attr:`T`. For
+    tensors, the operation is evaluated as a permuted gather and is fully
+    differentiable. Non-matrix, non-tensor types raise ``TypeError``.
 
 .. topic:: ArrayBase_shape
 
