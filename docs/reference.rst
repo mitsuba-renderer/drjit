@@ -542,6 +542,7 @@ Array base class
     .. autoproperty:: z
     .. autoproperty:: w
     .. autoproperty:: T
+    .. autoproperty:: mT
     .. autoproperty:: index
     .. autoproperty:: index_ad
     .. autoproperty:: grad

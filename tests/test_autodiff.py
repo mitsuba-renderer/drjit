@@ -1841,7 +1841,13 @@ def test115_dot_ad(t):
     dr.backward_from(c1)
     g1 = a.grad, b.grad
 
-    assert dr.all((c0 == c1) & (g0[0] == g1[0]) & (g0[1] == g1[1]))
+    # Both paths are correct float32 reductions over 102400 terms, but
+    # they accumulate in different orders (generic sum tree vs. fused
+    # mul-add in ``dr.dot``), so the result can differ by tens of ULPs
+    # around the ~7.9e9 magnitude of ``c0``.
+    assert dr.allclose(c0, c1, rtol=1e-5)
+    assert dr.allclose(g0[0], g1[0], rtol=1e-5)
+    assert dr.allclose(g0[1], g1[1], rtol=1e-5)
 
 @pytest.test_arrays('is_diff,float32,shape=(*, *)')
 def test116_arrayxf_backprop(t):

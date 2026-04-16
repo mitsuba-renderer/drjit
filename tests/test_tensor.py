@@ -686,3 +686,105 @@ def test23_item_array(t):
 
     with pytest.raises(RuntimeError, match='can only convert arrays of length 1'):
         t([]).item()
+
+
+@pytest.test_arrays('is_tensor,jit,float,-is_diff')
+@pytest.mark.parametrize('shape', [(1, 1), (3, 5), (5, 3), (16, 16), (17, 23)])
+def test24_transpose_T_2d(t, shape):
+    """``.T`` on a 2-D tensor produces the expected shape and values."""
+    np = pytest.importorskip("numpy")
+    A_np = np.arange(shape[0] * shape[1], dtype='float32').reshape(shape)
+    A = t(A_np)
+    B = A.T
+    assert B.shape == (shape[1], shape[0])
+    assert (B.numpy() == A_np.T).all()
+
+
+@pytest.test_arrays('is_tensor,jit,float32,-is_diff')
+@pytest.mark.parametrize('shape', [
+    (2, 3, 4),
+    (2, 3, 4, 5),
+    (1, 7, 1, 5, 3),
+    (6, 1, 1),
+])
+def test25_transpose_mT(t, shape):
+    """``.mT`` swaps the last two dims of an N-D tensor, preserving batch dims."""
+    np = pytest.importorskip("numpy")
+    A_np = np.arange(int(np.prod(shape)), dtype='float32').reshape(shape)
+    A = t(A_np)
+    B = A.mT
+    out_shape = shape[:-2] + (shape[-1], shape[-2])
+    assert B.shape == out_shape
+    assert (B.numpy() == np.swapaxes(A_np, -1, -2)).all()
+
+
+@pytest.test_arrays('is_tensor,jit,float32,-is_diff')
+@pytest.mark.parametrize('shape', [(0, 3, 4), (2, 0, 4), (2, 3, 0)])
+def test26_transpose_empty(t, shape):
+    """Transpose of a tensor with an empty axis returns an empty tensor with the last two dims swapped."""
+    np = pytest.importorskip("numpy")
+    A = t(np.zeros(shape, dtype='float32'))
+    B = A.mT
+    assert B.shape == shape[:-2] + (shape[-1], shape[-2])
+
+
+@pytest.test_arrays('is_tensor,jit,float32,-is_diff')
+def test27_transpose_errors(t):
+    """``.T`` rejects tensors with rank != 2; ``.mT`` rejects rank < 2."""
+    import numpy as np
+    with pytest.raises(TypeError, match="2-D tensors"):
+        _ = t(np.zeros((2, 3, 4), dtype='float32')).T
+    with pytest.raises(TypeError, match="2-D tensors"):
+        _ = t(np.zeros((5,), dtype='float32')).T
+    with pytest.raises(TypeError, match="at least 2 dimensions"):
+        _ = t(np.zeros((5,), dtype='float32')).mT
+
+
+@pytest.test_arrays('is_tensor,jit,float32,-is_diff')
+@pytest.mark.parametrize('shape', [(3, 5), (2, 4, 6), (2, 3, 4, 5)])
+def test28_transpose_roundtrip(t, shape):
+    """``x.mT.mT == x``."""
+    np = pytest.importorskip("numpy")
+    rng = np.random.default_rng(seed=hash(shape) & 0xffff)
+    A_np = rng.standard_normal(shape).astype('float32')
+    A = t(A_np)
+    assert (A.mT.mT.numpy() == A_np).all()
+
+
+@pytest.test_arrays('is_tensor,jit,float32,is_diff')
+@pytest.mark.parametrize('shape', [(3, 5), (2, 4, 6)])
+def test29_transpose_grad(t, shape):
+    """Reverse- and forward-mode AD through ``.mT``: the adjoint is the same permutation."""
+    np = pytest.importorskip("numpy")
+    rng = np.random.default_rng(seed=hash(('g', shape)) & 0xffff)
+    A_np = rng.standard_normal(shape).astype('float32')
+    out_shape = shape[:-2] + (shape[-1], shape[-2])
+    dB_np = rng.standard_normal(out_shape).astype('float32')
+    dA_np = rng.standard_normal(shape).astype('float32')
+
+    A = t(A_np)
+    dr.enable_grad(A)
+    B = A.mT
+    dr.set_grad(B, t(dB_np))
+    dr.backward_to(A)
+    assert np.allclose(dr.grad(A).numpy(), np.swapaxes(dB_np, -1, -2),
+                       atol=1e-5)
+
+    A = t(A_np)
+    dr.enable_grad(A)
+    dr.set_grad(A, t(dA_np))
+    B = A.mT
+    dr.forward_to(B)
+    assert np.allclose(dr.grad(B).numpy(), np.swapaxes(dA_np, -1, -2),
+                       atol=1e-5)
+
+
+@pytest.test_arrays('matrix,shape=(4, 4),float32', 'matrix,shape=(4, 4, *),float32')
+def test30_transpose_matrix(t):
+    """``.T`` and ``.mT`` on fixed-size matrix types return the transpose."""
+    vals = list(range(16))
+    vals_T = [vals[j * 4 + i] for i in range(4) for j in range(4)]
+    m = t(*vals)
+    m_T = t(*vals_T)
+    assert dr.all(m.T == m_T, axis=None)
+    assert dr.all(m.mT == m_T, axis=None)

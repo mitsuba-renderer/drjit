@@ -566,17 +566,104 @@ void complex_setter(nb::handle_t<ArrayBase> h, nb::handle value) {
         nb::raise_python_error();
 }
 
-static nb::object transpose_getter(nb::handle_t<ArrayBase> h) {
+// Transpose the last two dimensions of a row-major Dr.Jit tensor. The caller
+// must ensure ``shape.size() >= 2``.
+static nb::object tensor_transpose_mT(nb::handle_t<ArrayBase> h) {
+    nb::handle tp = h.type();
+    const ArraySupplement &s = supp(tp);
+    const dr::vector<size_t> &shape = s.tensor_shape(inst_ptr(h));
+
+    size_t r = shape.size();
+    size_t M = shape[r - 2], N = shape[r - 1];
+    size_t batch = 1;
+    for (size_t i = 0; i < r - 2; ++i)
+        batch *= shape[i];
+
+    nb::tuple shape_out = nb::steal<nb::tuple>(PyTuple_New((Py_ssize_t) r));
+    for (size_t i = 0; i < r - 2; ++i)
+        PyTuple_SET_ITEM(shape_out.ptr(), (Py_ssize_t) i,
+                         PyLong_FromSize_t(shape[i]));
+    PyTuple_SET_ITEM(shape_out.ptr(), (Py_ssize_t) (r - 2),
+                     PyLong_FromSize_t(N));
+    PyTuple_SET_ITEM(shape_out.ptr(), (Py_ssize_t) (r - 1),
+                     PyLong_FromSize_t(M));
+
+    // Empty output: no underlying element, return a zero-valued tensor.
+    // Also reached when either matrix dim is zero — the output is empty
+    // regardless of the batch size.
+    if (batch == 0 || M == 0 || N == 0)
+        return array_module.attr("zeros")(tp, shape_out);
+
+    nb::object array_in = nb::steal(s.tensor_array(h.ptr()));
+    const ArraySupplement &sa = supp(array_in.type());
+
+    uint64_t i_out = ad_var_transpose(sa.index(inst_ptr(array_in)),
+                                      (uint32_t) batch,
+                                      (uint32_t) M, (uint32_t) N);
+
+    nb::object array_out = nb::inst_alloc(array_in.type());
+    sa.init_index(i_out, inst_ptr(array_out));
+    nb::inst_mark_ready(array_out);
+    ad_var_dec_ref(i_out);
+
+    return tp(array_out, shape_out);
+}
+
+// Matrix-style transpose of a statically-shaped 2-D ``Matrix`` array: swaps
+// the two leading dimensions by directly permuting the fixed-size entries.
+static nb::object matrix_transpose(nb::handle_t<ArrayBase> h) {
     const ArraySupplement &s = supp(h.type());
-
-    if (NB_UNLIKELY(!s.is_matrix))
-        nb::raise_type_error("'%s' is not a matrix type.", nb::inst_name(h).c_str());
-
     nb::object result = nb::inst_alloc_zero(h.type());
     for (size_t i = 0; i < s.shape[0]; ++i)
         for (size_t j = 0; j < s.shape[1]; ++j)
             result[i][j] = h[j][i];
     return result;
+}
+
+// ``.T`` — transpose. For fixed-size matrix types, reverses the two static
+// dimensions. For tensors, follows PyTorch semantics: only 2-D tensors are
+// accepted; higher-rank tensors must use ``.mT`` to transpose just the
+// last two dimensions.
+static nb::object transpose_getter(nb::handle_t<ArrayBase> h) {
+    const ArraySupplement &s = supp(h.type());
+
+    if (s.is_matrix)
+        return matrix_transpose(h);
+
+    if (s.is_tensor) {
+        size_t r = s.tensor_shape(inst_ptr(h)).size();
+        if (NB_UNLIKELY(r != 2))
+            nb::raise_type_error(
+                "'.T' is only defined for 2-D tensors (got rank %zu). "
+                "For higher-rank tensors, use '.mT' to transpose the "
+                "last two dimensions.", r);
+        return tensor_transpose_mT(h);
+    }
+
+    nb::raise_type_error("'%s' is not a matrix or tensor type.",
+                         nb::inst_name(h).c_str());
+}
+
+// ``.mT`` — matrix transpose. Swaps the last two dimensions of a tensor
+// (batch dimensions are preserved) or of a fixed-size matrix. For
+// fixed-size matrix types this is equivalent to ``.T``.
+static nb::object matrix_transpose_getter(nb::handle_t<ArrayBase> h) {
+    const ArraySupplement &s = supp(h.type());
+
+    if (s.is_matrix)
+        return matrix_transpose(h);
+
+    if (s.is_tensor) {
+        size_t r = s.tensor_shape(inst_ptr(h)).size();
+        if (NB_UNLIKELY(r < 2))
+            nb::raise_type_error(
+                "'.mT' requires at least 2 dimensions (got rank %zu).",
+                r);
+        return tensor_transpose_mT(h);
+    }
+
+    nb::raise_type_error("'%s' is not a matrix or tensor type.",
+                         nb::inst_name(h).c_str());
 }
 
 static int nb_bool(PyObject *o) noexcept {
@@ -1130,6 +1217,7 @@ void export_base(nb::module_ &m) {
                    nb::for_setter(nb::sig("def imag(self, value: ValCpT, /) -> None")));
 
     ab.def_prop_ro("T", transpose_getter, doc_ArrayBase_T, nb::sig("def T(self, /) -> SelfT"));
+    ab.def_prop_ro("mT", matrix_transpose_getter, doc_ArrayBase_mT, nb::sig("def mT(self, /) -> SelfT"));
 
     ab.def_prop_rw(
         "grad", [](nb::handle_t<ArrayBase> h) { return ::grad(h); },
