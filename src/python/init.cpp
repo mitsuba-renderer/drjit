@@ -13,6 +13,13 @@
 #include <condition_variable>
 #include <mutex>
 #include <thread>
+
+#if defined(_WIN32)
+#  include <windows.h>
+#else
+#  include <dlfcn.h>
+#endif
+
 #include <utility>
 #include <vector>
 
@@ -661,13 +668,11 @@ nb::object import_ndarray(ArrayMeta m, PyObject *arg, vector<size_t> *shape_out,
 // Py_AddPendingCall is not always serviced, see also
 // https://github.com/python/cpython/issues/95820.
 
-extern int disable_gc_scope;
-
-using CleanupCallback = int(*)(void*);
+using CleanupCallback = void(*)(void*);
 static std::mutex python_cleanup_queue_mutex;
 static std::condition_variable python_cleanup_queue_cond;
 static bool python_cleanup_thread_stop = false;
-static std::vector<std::pair<CleanupCallback, void*>> python_cleanup_queue;
+static std::vector<nb::detail::ndarray_handle*> python_cleanup_queue;
 static std::thread python_cleanup_thread;
 
 void python_cleanup_thread_main() {
@@ -677,13 +682,13 @@ void python_cleanup_thread_main() {
             return !python_cleanup_queue.empty() || python_cleanup_thread_stop;
         });
 
-        std::vector<std::pair<CleanupCallback, void*>> calls_to_execute;
-        calls_to_execute.swap(python_cleanup_queue);
+        std::vector<nb::detail::ndarray_handle*> todo;
+        todo.swap(python_cleanup_queue);
         lock.unlock();
 
         nb::gil_scoped_acquire guard;
-        for (const auto& item : calls_to_execute)
-            item.first(item.second);
+        for (auto p: todo)
+            nb::detail::ndarray_dec_ref(p);
         if (python_cleanup_thread_stop)
             break;
     }
@@ -703,30 +708,30 @@ void python_cleanup_thread_static_shutdown() {
     python_cleanup_thread.join();
 }
 
-void enqueue_python_cleanup_call(CleanupCallback callback, void* data_ptr) {
+void enqueue_python_cleanup(nb::detail::ndarray_handle *p) {
     std::scoped_lock lock(python_cleanup_queue_mutex);
-    python_cleanup_queue.emplace_back(callback, data_ptr);
+    python_cleanup_queue.emplace_back(p);
     python_cleanup_queue_cond.notify_one();
-}
-
-static int ndarray_free_cb_3(void *p) {
-    if (disable_gc_scope) {
-        // Don't service pending calls while in the logger critical section.
-        // That's because we can have arbitrary Dr.Jit/Dr.Jit-Extra functions
-        // on the call stack. Re-entering Python to then free nd-arrays,
-        // which can call code in Dr.Jit/Dr.Jit-extra, is a recipe for deadlocks.
-        enqueue_python_cleanup_call(ndarray_free_cb_3, p);
-    } else {
-        nb::detail::ndarray_dec_ref((nb::detail::ndarray_handle *) p);
-    }
-    return 0;
 }
 
 int drjit_py_is_alive = 1;
 
+// Resolved at init time via dlsym (see export_init). Returns non-null
+// when the calling thread holds the GIL, allowing synchronous ndarray cleanup.
+extern "C" {
+    static PyThreadState *(*py_tstate_unchecked_get)() = nullptr;
+}
+extern int disable_gc_scope;
+
 static void ndarray_free_cb_2(void *p) {
-    if (nb::is_alive() && drjit_py_is_alive)
-        enqueue_python_cleanup_call(ndarray_free_cb_3, p);
+    if (!nb::is_alive() || !drjit_py_is_alive)
+        return;
+
+    // If we're currently holding the GIL, then, release the array right now
+    if (!disable_gc_scope && py_tstate_unchecked_get && py_tstate_unchecked_get())
+        nb::detail::ndarray_dec_ref((nb::detail::ndarray_handle *) p);
+    else
+        enqueue_python_cleanup((nb::detail::ndarray_handle *) p);
 }
 
 static void ndarray_free_cb(uint32_t, int free, void *p) {
@@ -738,9 +743,17 @@ static void ndarray_free_cb(uint32_t, int free, void *p) {
     JitBackend backend = (JitBackend) (msg & mask);
     void *p2 = (void *) (msg & ~mask);
 
-    // Don't run the next step if Dr.Jit has already shut down
-    if (nb::is_alive() && jit_has_backend(backend) && drjit_py_is_alive)
+    if (!(nb::is_alive() && jit_has_backend(backend) && drjit_py_is_alive))
+        return;
+
+    if (backend == JitBackend::LLVM) {
+        // Variable is potentially used concurrently. Enqueue a host function
+        // to relesae it asynchronously
         jit_enqueue_host_func(backend, ndarray_free_cb_2, p2);
+    } else {
+        // Immediately try to release it
+        ndarray_free_cb_2(p2);
+    }
 }
 
 static void ndarray_keep_alive(JitBackend backend, uint32_t index, nb::detail::ndarray_handle *p) {
@@ -1171,6 +1184,23 @@ nb::object extract_type(nb::object tp) {
 }
 
 void export_init(nb::module_ &m) {
+    // PyThreadState_GetUnchecked (or _PyThreadState_UncheckedGet on older
+    // versions) is used by ndarray_free_cb to detect whether the current
+    // thread holds the GIL, enabling synchronous cleanup. It is not part
+    // of the stable ABI, so we resolve it at runtime via dlsym.
+    for (const char *name : { "PyThreadState_GetUnchecked",
+                              "_PyThreadState_UncheckedGet" }) {
+#if defined(_WIN32)
+        void *h = (void *) GetProcAddress(GetModuleHandleA(nullptr), name);
+#else
+        void *h = dlsym(RTLD_DEFAULT, name);
+#endif
+        if (h) {
+            py_tstate_unchecked_get = (PyThreadState *(*)()) h;
+            break;
+        }
+    }
+
     m.def("empty",
           [](nb::type_object dtype, size_t size) {
               return full("empty", dtype, nb::handle(), size);
