@@ -140,8 +140,14 @@ class Philox4x32Generator(Generator):
     def clone(self) -> 'Generator':
         return Philox4x32Generator(self._seed, self._counter)
 
-    def _sample(self, dtype: typing.Type[ArrayT], shape: Shape, fn_name: str) -> ArrayT:
-        counter, seed = self._counter, self._seed
+    def _sample(self, dtype: typing.Type[ArrayT], shape: Shape, fn_name: str,
+                counter: typing.Optional[ArrayOrInt] = None) -> ArrayT:
+        # ``counter`` override needed by the symbolic loop in ``integers()``.
+        external_counter = counter is not None
+        if external_counter:
+            seed = self._seed
+        else:
+            counter, seed = self._counter, self._seed
 
         if isinstance(shape, int):
             shape = (shape, )
@@ -226,7 +232,8 @@ class Philox4x32Generator(Generator):
             fill(value)
 
 
-        self._seed, self._counter = seed, counter
+        if not external_counter:
+            self._seed, self._counter = seed, counter
 
         return value
 
@@ -265,18 +272,26 @@ class Philox4x32Generator(Generator):
         x = self._sample(UInt32, shape, 'next_uint32x4')
         m = UInt64(x) * UInt64(bound)
 
-        def loop_cond(m):
+        # Rejection loop: a lane-shaped iteration counter ``i`` drives the
+        # Philox counter ``base + i`` (so ``self._counter`` itself stays
+        # scalar across calls). ``max(i_out)`` is the final iteration count.
+        base = self._counter
+        counter_tp = dr.uint32_array_t(dr.leaf_t(UInt32))
+
+        def loop_cond(m, i):
             return UInt32(m) < threshold
 
-        def loop_body(m):
-            x = self._sample(UInt32, shape, 'next_uint32x4')
-            return (UInt64(x) * UInt64(bound),)
+        def loop_body(m, i):
+            x = self._sample(UInt32, shape, 'next_uint32x4', counter=base + i)
+            return (UInt64(x) * UInt64(bound), i + counter_tp(1))
 
-        (m,) = dr.while_loop(
-            state=(m,),
+        m, i_out = dr.while_loop(
+            state=(m, counter_tp(0)),
             cond=loop_cond,
             body=loop_body
         )
+
+        self._counter = base + dr.max(i_out)
 
         return dtype(m >> 32) + low
 
