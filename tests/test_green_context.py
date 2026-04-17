@@ -13,7 +13,12 @@ def test_green_context_basic():
 
     size = 128 * 1024
 
-    with dr.cuda.green_context(1) as ctx:
+    try:
+        ctx_mgr = dr.cuda.green_context(1)
+    except RuntimeError as e:
+        pytest.skip(f"green contexts unsupported by this driver/device: {e}")
+
+    with ctx_mgr as ctx:
         x = dr.arange(cuda.Float, size)
         y = dr.sqrt(x + 1.0)
         dr.eval(y)
