@@ -558,8 +558,9 @@ import drjit as dr
 
 _registry = {}
 
-def compute_key(arg: Module):
+def compute_key(arg: Module, layout):
     key = ""
+    key += f"{layout=}, "
 
     def traverse(arg: Module):
         nonlocal key
@@ -630,7 +631,7 @@ def diff_pack(module: Module, layout: str):
 
     # Construct a unique key for this module architecture
 
-    key = compute_key(module)
+    key = compute_key(module, layout)
 
     IndexType = None
     mod = None
@@ -651,10 +652,15 @@ def diff_pack(module: Module, layout: str):
 
             if IndexType is None:
                 mod = sys.modules[dtype.__module__]
-                if dr.is_half_v(dtype):
+                vt =  dr.type_v(dtype)
+                if vt == dr.VarType.Float16:
                     IndexType = mod.UInt16
-                else:
+                elif vt == dr.VarType.Float32:
                     IndexType = mod.UInt32
+                elif vt == dr.VarType.Float64:
+                    IndexType = mod.UInt64
+                else:
+                    raise TypeError(f"diffpack(): unsuported type {vt}")
             # To track unused elements, we add ``1`` to the indices, and assume
             # that the unused elements are ``0``. This is subtracted out in the
             # end.
