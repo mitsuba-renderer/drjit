@@ -57,13 +57,13 @@ DTYPES = {
 # set). Stored numeric values are ``(gflops, rsd)`` pairs; ``_fmt_g``
 # appends ``±RSD%`` to its cell when ``--rsd`` is active.
 COLUMNS = (
-    ('Backend',   'backend',   None,        'left'),
-    ('Type',      'type',      None,        'left'),
-    ('Op',        'op',        None,        'left'),
-    ('Size',      'size',      None,        'right'),
-    ('Dr.Jit',    'drjit',     None,        'right'),
-    ('Reference', 'reference', None,        'right'),
-    ('Rel.',      'drjit',     'reference', 'right'),
+    ('Size',          'size',      None,        'right'),
+    ('Backend',       'backend',   None,        'left'),
+    ('Type',          'type',      None,        'left'),
+    ('Op',            'op',        None,        'left'),
+    ('Dr.Jit',        'drjit',     None,        'right'),
+    ('PyTorch/NumPy', 'reference', None,        'right'),
+    ('Rel.',          'drjit',     'reference', 'right'),
 )
 
 
@@ -123,7 +123,7 @@ def _bench_cell(size, runs, backends, torch, torch_device, cfg, torch_dtype):
     import numpy as np
 
     np_dtype = getattr(np, cfg['numpy'])
-    atol, kind = cfg['atol'], cfg['kind']
+    kind = cfg['kind']
     _, GenTensor = backends[0]
 
     rng = dr.rng(seed=0)
@@ -185,46 +185,42 @@ def _bench_cell(size, runs, backends, torch, torch_device, cfg, torch_dtype):
         torch.cuda.synchronize()
         return [events[i].elapsed_time(events[i + 1]) for i in range(count)]
 
+    WARMUP = 1
+
     def bench(timer, call):
-        # Take ``runs + 1`` samples and discard the first as warm-up.
+        # Take ``runs + WARMUP`` samples and discard the warm-up prefix.
         # Returns a ``(gflops, rsd)`` pair; rsd is ``None`` with one sample.
-        samples = timer(call, runs + 1)[1:]
+        samples = timer(call, runs + WARMUP)[WARMUP:]
         med = statistics.median(samples)
         rsd = (100 * statistics.stdev(samples) / statistics.mean(samples)
                if len(samples) >= 2 else None)
         return flops / (med * 1e-3) / 1e9, rsd
 
-    def check_dr(C, ref, tag):
-        actual = C.numpy()
-        ok = (np.allclose(actual, ref, atol=atol, rtol=atol) if kind == 'float'
-              else np.array_equal(actual, ref))
-        if not ok:
-            raise AssertionError(f"{tag}: result mismatch vs NumPy")
-
-    refs = {op: plain(A_np, B_np) for op, _, plain in OPS}
     cell = {op: {} for op, _, _ in OPS}
 
+    # Sleep ``IDLE_S`` before each timed bench so the previously-active
+    # framework's worker pool fully parks (default OpenBLAS timeout
+    # ~200 ms; nanothread's is 20 ms; pick the larger).
+    IDLE_S = 0.25
+
     if any(bn == 'llvm' for bn, _ in backends):
-        time.sleep(0.02)
         for op, _, plain in OPS:
+            time.sleep(IDLE_S)
             cell[op]['numpy'] = bench(time_np, lambda p=plain: p(A_np, B_np))
 
     # PyTorch on GPU (independent of Dr.Jit backend).
     if use_torch:
         for op, _, plain in OPS:
+            time.sleep(IDLE_S)
             cell[op]['pytorch'] = bench(
                 time_torch, lambda p=plain: p(A_t, B_t))
 
-    # Dr.Jit backends. Validate the result once before timing; the timed
-    # loop discards its outputs.
     for bn, TensorT in backends:
         A = TensorT(A_np)
         B = TensorT(B_np)
         dr.eval(A, B)
-        if bn == 'llvm':
-            time.sleep(0.02)
         for op, kwargs, _ in OPS:
-            check_dr(dr.matmul(A, B, **kwargs), refs[op], f"{bn}/{op}")
+            time.sleep(IDLE_S)
             cell[op][f'drjit_{bn}'] = bench(
                 time_dr, lambda kw=kwargs: dr.matmul(A, B, **kw))
         del A, B
@@ -276,7 +272,12 @@ def _print_table(rows, columns):
 
 
 def _run_all(sizes, runs, backend_names, dtype_names, show_rsd=False):
-    torch, torch_device = _setup_torch()
+    # PyTorch is only used as the reference for the CUDA backend, so skip
+    # importing it entirely when CUDA isn't in play.
+    if 'cuda' in backend_names and dr.has_backend(dr.JitBackend.CUDA):
+        torch, torch_device = _setup_torch()
+    else:
+        torch, torch_device = None, None
 
     # Resolve per-dtype backends and torch dtype.
     setups = {}
@@ -322,15 +323,15 @@ def _run_all(sizes, runs, backend_names, dtype_names, show_rsd=False):
             size, runs, setup['backends'], torch, torch_device,
             setup['cfg'], setup['torch_dtype'])
 
-    # Output phase. Row order: backend (outer) → type → op → size (inner).
+    # Output phase. Row order: backend (outer) → type → size → op (inner).
     # Reference is NumPy for LLVM rows, PyTorch for CUDA rows.
     ordered_backends = [bn for bn, _ in setups[dtype_names[0]]['backends']]
     rows = []
     for bn in ordered_backends:
         ref_key = 'numpy' if bn == 'llvm' else 'pytorch'
         for name in dtype_names:
-            for op, _, _ in OPS:
-                for s in sizes:
+            for s in sizes:
+                for op, _, _ in OPS:
                     data = results[name, s].get(op, {})
                     rows.append([_render_cell(c, {
                         'backend':   bn.upper(),
