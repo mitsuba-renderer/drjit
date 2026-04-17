@@ -1,180 +1,376 @@
-"""This benchmark compares three frameworks on a single-precision
-``size x size`` matrix multiplication: Dr.Jit's :func:`drjit.matmul`,
-NumPy's ``@`` operator, and (optionally) PyTorch's ``@`` operator.
-The three supported transpose combos are exercised (``A @ B``,
-``A @ B.T``, ``A.T @ B``); for each, the script reports execution
-time, GFLOP/s, and the max elementwise error of the first output row
-relative to NumPy.
+"""Compare matmul performance on Dr.Jit vs NumPy vs (optionally) PyTorch
+across one or more ``size x size`` shapes and all three transpose combos
+(``A @ B``, ``A @ B.T``, ``A.T @ B``). Results are emitted as a single
+Markdown table with one row per (Dr.Jit backend, dtype, op, size) cell.
+The ``Rel.`` column compares Dr.Jit to an appropriate reference (NumPy
+for the LLVM backend, PyTorch for the CUDA backend).
 
-Dr.Jit is exercised against every available backend (``cuda`` and
-``llvm``); PyTorch is skipped when not installed.
-
-Run with ``python tests/bench_gemm.py [size] [--runs N]``
-(defaults: size=4096, runs=1).
+Run with
+    python tests/bench_gemm.py [sizes...] [--runs N] [--backend LIST]
+                               [--dtype LIST]
+where ``sizes`` is one or more matrix side lengths (default:
+``128 256 512 1024 2048 4096``), ``--runs`` defaults to 10 (the median
+is reported), ``--backend`` is a comma-separated list of backends from
+``{llvm, cuda}`` (or ``all``, the default), and ``--dtype`` is a
+comma-separated list of element types from ``{f16, f32, f64, i32, u32}``
+(or ``all``, default ``f32``).
 """
 import argparse
 import os
 import statistics
 import sys
+import time
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 import drjit as dr
 
-def _available_backends():
-    backends = []
-    try:
-        from drjit.cuda import TensorXf as CUDATensor  # noqa: F401
-        backends.append(('cuda', dr.cuda.TensorXf))
-    except ImportError:
-        pass
-    try:
-        from drjit.llvm import TensorXf as LLVMTensor  # noqa: F401
-        backends.append(('llvm', dr.llvm.TensorXf))
-    except ImportError:
-        pass
-    return backends
+
+# The three transpose variants: (label, dr.matmul kwargs, plain '@' form).
+OPS = (
+    ('A @ B',   {},           lambda A, B: A @ B),
+    ('A @ B.T', {'Bt': True}, lambda A, B: A @ B.T),
+    ('A.T @ B', {'At': True}, lambda A, B: A.T @ B),
+)
 
 
-def _benchmark(size=4096, runs=1):
-    import time
+# Per-dtype configuration:
+#   tensor: Dr.Jit tensor attribute name
+#   numpy:  NumPy dtype name
+#   torch:  PyTorch dtype name (or None if unsupported by ``torch.matmul``)
+#   atol:   tolerance for float cross-check (integers compare exactly)
+#   kind:   data-generator selector ('float', 'signed', 'unsigned')
+DTYPES = {
+    'f16': dict(tensor='TensorXf16', numpy='float16', torch='float16',
+                atol=1.0, kind='float'),
+    'f32': dict(tensor='TensorXf',   numpy='float32', torch='float32',
+                atol=1e-2, kind='float'),
+    'f64': dict(tensor='TensorXf64', numpy='float64', torch='float64',
+                atol=1e-8, kind='float'),
+    'i32': dict(tensor='TensorXi',   numpy='int32',   torch='int32',
+                atol=0,    kind='signed'),
+    'u32': dict(tensor='TensorXu',   numpy='uint32',  torch=None,
+                atol=0,    kind='unsigned'),
+}
 
-    import numpy as np
 
+# Output columns. Row-identity fields (backend/type/op/size) arrive as
+# strings; numeric fields go through _fmt_g or _fmt_pct (when `rel` is
+# set). Stored numeric values are ``(gflops, rsd)`` pairs; ``_fmt_g``
+# appends ``±RSD%`` to its cell when ``--rsd`` is active.
+COLUMNS = (
+    ('Backend',   'backend',   None,        'left'),
+    ('Type',      'type',      None,        'left'),
+    ('Op',        'op',        None,        'left'),
+    ('Size',      'size',      None,        'right'),
+    ('Dr.Jit',    'drjit',     None,        'right'),
+    ('Reference', 'reference', None,        'right'),
+    ('Rel.',      'drjit',     'reference', 'right'),
+)
+
+
+def _parse_csv_choices(value, valid, name):
+    items = [v.strip() for v in value.split(',') if v.strip()]
+    if not items:
+        raise argparse.ArgumentTypeError(f"Empty {name} list")
+    if 'all' in items:
+        return list(valid)
+    seen, out = set(), []
+    for item in items:
+        if item not in valid:
+            raise argparse.ArgumentTypeError(
+                f"Invalid {name} {item!r}: choose from "
+                f"{', '.join(valid)}, all")
+        if item not in seen:
+            seen.add(item)
+            out.append(item)
+    return out
+
+
+def _available_backends(backend_names, tensor_attr):
+    """Resolve ``backend_names`` (user order) to ``[(name, TensorT), ...]``."""
+    out = []
+    for bn in backend_names:
+        if bn == 'llvm' and dr.has_backend(dr.JitBackend.LLVM):
+            import drjit.llvm  # noqa: F401
+            out.append(('llvm', getattr(dr.llvm, tensor_attr)))
+        elif bn == 'cuda' and dr.has_backend(dr.JitBackend.CUDA):
+            import drjit.cuda  # noqa: F401
+            out.append(('cuda', getattr(dr.cuda, tensor_attr)))
+    return out
+
+
+def _setup_torch():
     try:
         import torch
-        torch_device = 'cuda' if torch.cuda.is_available() else 'cpu'
-
-
-        if torch_device == 'cuda':
-            if hasattr(torch.backends.cuda.matmul, 'fp32_precision'):
-                torch.backends.cuda.matmul.fp32_precision = 'ieee'
-                torch.backends.cudnn.conv.fp32_precision = 'ieee'
-            else:
-                torch.backends.cuda.matmul.allow_tf32 = False
-                torch.backends.cudnn.allow_tf32 = False
-
     except ImportError:
-        torch = None
-        torch_device = None
+        return None, None
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    if device == 'cuda':
+        # Disable TF32 so PyTorch's f32 matmul is bit-comparable to ours.
+        if hasattr(torch.backends.cuda.matmul, 'fp32_precision'):
+            torch.backends.cuda.matmul.fp32_precision = 'ieee'
+            torch.backends.cudnn.conv.fp32_precision = 'ieee'
+        else:
+            torch.backends.cuda.matmul.allow_tf32 = False
+            torch.backends.cudnn.allow_tf32 = False
+    return torch, device
 
-    backends = _available_backends()
-    if not backends:
-        raise RuntimeError("No Dr.Jit backend available (need cuda or llvm).")
 
-    _, GenTensorXf = backends[0]
+def _bench_cell(size, runs, backends, torch, torch_device, cfg, torch_dtype):
+    """Measure one (size, dtype) cell.
+
+    Returns ``{op: {engine: (gflops, rsd)}}`` where ``engine`` is one
+    of ``numpy``, ``pytorch``, ``drjit_llvm``, ``drjit_cuda``."""
+    import numpy as np
+
+    np_dtype = getattr(np, cfg['numpy'])
+    atol, kind = cfg['atol'], cfg['kind']
+    _, GenTensor = backends[0]
+
     rng = dr.rng(seed=0)
-    A_gen = rng.normal(GenTensorXf, (size, size))
-    B_gen = rng.normal(GenTensorXf, (size, size))
+    if kind == 'float':
+        A_gen = rng.normal(GenTensor, (size, size))
+        B_gen = rng.normal(GenTensor, (size, size))
+    else:
+        # Keep the value range small so accumulated products stay well
+        # within int32/uint32 range for the largest sizes in use.
+        low, high = (-8, 8) if kind == 'signed' else (0, 16)
+        A_gen = rng.integers(GenTensor, (size, size), low=low, high=high)
+        B_gen = rng.integers(GenTensor, (size, size), low=low, high=high)
     dr.eval(A_gen, B_gen)
-    A_np = np.ascontiguousarray(A_gen.numpy())
-    B_np = np.ascontiguousarray(B_gen.numpy())
+    A_np = np.ascontiguousarray(A_gen.numpy().astype(np_dtype, copy=False))
+    B_np = np.ascontiguousarray(B_gen.numpy().astype(np_dtype, copy=False))
     del A_gen, B_gen
 
-    if torch is not None:
+    use_torch = torch_dtype is not None and torch_device == 'cuda'
+    if use_torch:
         A_t = torch.from_numpy(A_np).to(torch_device)
         B_t = torch.from_numpy(B_np).to(torch_device)
 
-    flops = 2.0 * size * size * size
-    print(f"size            : {size} x {size}")
-    print(f"runs            : {runs} (median)")
-    if torch is not None:
-        print(f"PyTorch device  : {torch_device}")
+    flops = 2.0 * size ** 3
 
-    def time_dr(dr_call):
+    def time_dr(call, count):
         with dr.scoped_set_flag(dr.JitFlag.KernelHistory, True):
-            C = dr_call()
-            dr.eval(C)
-            dr.sync_thread()
+            for _ in range(count):
+                call()
             history = dr.kernel_history()
-        return sum(h['execution_time'] for h in history), C
+        # Each matmul emits a fixed number of kernel entries (pack-B +
+        # row-sweep per K-segment), so the history splits evenly.
+        assert len(history) % count == 0, (
+            f"kernel_history length {len(history)} is not a multiple of "
+            f"count {count}: each call is expected to emit the same "
+            f"number of kernel entries")
+        k = len(history) // count
+        return [sum(history[i * k + j]['execution_time'] for j in range(k))
+                for i in range(count)]
 
-    def time_np(np_call):
-        t0 = time.perf_counter()
-        C = np_call()
-        return (time.perf_counter() - t0) * 1e3, C
+    def time_np(call, count):
+        samples = []
+        for _ in range(count):
+            t0 = time.perf_counter()
+            call()
+            samples.append((time.perf_counter() - t0) * 1e3)
+        return samples
 
-    def time_torch(torch_call):
-        if torch_device == 'cuda':
-            start = torch.cuda.Event(enable_timing=True)
-            end = torch.cuda.Event(enable_timing=True)
-            start.record()
-            C = torch_call()
-            end.record()
-            end.synchronize()
-            return start.elapsed_time(end), C
-        t0 = time.perf_counter()
-        C = torch_call()
-        return (time.perf_counter() - t0) * 1e3, C
+    def time_torch(call, count):
+        # Enqueue all ``count`` calls on the CUDA stream back-to-back,
+        # bracketed by ``count + 1`` events (one boundary event reused
+        # as the end of call i and the start of call i+1), and
+        # synchronize once at the end.
+        events = [torch.cuda.Event(enable_timing=True)
+                  for _ in range(count + 1)]
+        events[0].record()
+        for i in range(count):
+            call()
+            events[i + 1].record()
+        torch.cuda.synchronize()
+        return [events[i].elapsed_time(events[i + 1]) for i in range(count)]
 
-    def run(label, dr_call, np_call, torch_call, ref_np, use_torch):
-        # Warm up (JIT compile / BLAS planning)
-        _, C = time_dr(dr_call)
-        time_np(np_call)
-        if use_torch:
-            time_torch(torch_call)
+    def bench(timer, call):
+        # Take ``runs + 1`` samples and discard the first as warm-up.
+        # Returns a ``(gflops, rsd)`` pair; rsd is ``None`` with one sample.
+        samples = timer(call, runs + 1)[1:]
+        med = statistics.median(samples)
+        rsd = (100 * statistics.stdev(samples) / statistics.mean(samples)
+               if len(samples) >= 2 else None)
+        return flops / (med * 1e-3) / 1e9, rsd
 
-        dr_samples = [time_dr(dr_call)[0] for _ in range(runs)]
-        np_samples = [time_np(np_call)[0] for _ in range(runs)]
-        if use_torch:
-            torch_samples = [time_torch(torch_call)[0] for _ in range(runs)]
+    def check_dr(C, ref, tag):
+        actual = C.numpy()
+        ok = (np.allclose(actual, ref, atol=atol, rtol=atol) if kind == 'float'
+              else np.array_equal(actual, ref))
+        if not ok:
+            raise AssertionError(f"{tag}: result mismatch vs NumPy")
 
-        dr_ms = statistics.median(dr_samples)
-        np_ms = statistics.median(np_samples)
-        dr_gflops = flops / (dr_ms * 1e-3) / 1e9
-        np_gflops = flops / (np_ms * 1e-3) / 1e9
+    refs = {op: plain(A_np, B_np) for op, _, plain in OPS}
+    cell = {op: {} for op, _, _ in OPS}
 
-        if use_torch:
-            torch_ms = statistics.median(torch_samples)
-            torch_gflops = flops / (torch_ms * 1e-3) / 1e9
+    if any(bn == 'llvm' for bn, _ in backends):
+        time.sleep(0.02)
+        for op, _, plain in OPS:
+            cell[op]['numpy'] = bench(time_np, lambda p=plain: p(A_np, B_np))
 
-        max_err = float(np.max(np.abs(C.numpy()[0] - ref_np[0])))
+    # PyTorch on GPU (independent of Dr.Jit backend).
+    if use_torch:
+        for op, _, plain in OPS:
+            cell[op]['pytorch'] = bench(
+                time_torch, lambda p=plain: p(A_t, B_t))
 
-        print()
-        print(f"  [{label}]")
-        print(f"    Dr.Jit time     : {dr_ms:7.2f} ms   ({dr_gflops:7.1f} GFLOP/s)")
-        if use_torch:
-            print(f"    PyTorch time    : {torch_ms:7.2f} ms   ({torch_gflops:7.1f} GFLOP/s)")
-            print(f"    PyTorch / Dr.Jit: {dr_ms / torch_ms:.2f}x")
-        print(f"    NumPy time      : {np_ms:7.2f} ms   ({np_gflops:7.1f} GFLOP/s)")
-        print(f"    Dr.Jit / NumPy  : {np_ms / dr_ms:.2f}x")
-        print(f"    max error (row0): {max_err:.3e}")
-        assert np.allclose(C.numpy(), ref_np, atol=1e-2), f"{label}: result mismatch vs NumPy"
-
-    for backend_name, TensorXf in backends:
-        A = TensorXf(A_np)
-        B = TensorXf(B_np)
+    # Dr.Jit backends. Validate the result once before timing; the timed
+    # loop discards its outputs.
+    for bn, TensorT in backends:
+        A = TensorT(A_np)
+        B = TensorT(B_np)
         dr.eval(A, B)
+        if bn == 'llvm':
+            time.sleep(0.02)
+        for op, kwargs, _ in OPS:
+            check_dr(dr.matmul(A, B, **kwargs), refs[op], f"{bn}/{op}")
+            cell[op][f'drjit_{bn}'] = bench(
+                time_dr, lambda kw=kwargs: dr.matmul(A, B, **kw))
+        del A, B
 
-        # Skip PyTorch for the LLVM backend: the CPU path's baseline is
-        # NumPy (BLAS), and PyTorch's CPU BLAS is the same code path, so
-        # including it only adds noise.
-        use_torch = torch is not None and backend_name != 'llvm'
+    return cell
 
-        print()
-        print(f"==== Dr.Jit backend: {backend_name} ====")
 
-        run("A @ B",
-            lambda: dr.matmul(A, B),
-            lambda: A_np @ B_np,
-            lambda: A_t @ B_t if use_torch else None,
-            A_np @ B_np, use_torch)
-        run("A @ B.T",
-            lambda: dr.matmul(A, B, Bt=True),
-            lambda: A_np @ B_np.T,
-            lambda: A_t @ B_t.T if use_torch else None,
-            A_np @ B_np.T, use_torch)
-        run("A.T @ B",
-            lambda: dr.matmul(A, B, At=True),
-            lambda: A_np.T @ B_np,
-            lambda: A_t.T @ B_t if use_torch else None,
-            A_np.T @ B_np, use_torch)
+def _fmt_g(v, show_rsd=False):
+    if v is None:
+        return '—'
+    gf, rsd = v
+    out = f"{gf:>5.0f} GFLOP/s"
+    if show_rsd:
+        out += f" ±{rsd:4.1f}%" if rsd is not None else "       "
+    return out
+
+
+def _fmt_pct(v, ref):
+    if v is None or ref is None or not v[0] or not ref[0]:
+        return '—'
+    return f"{100 * v[0] / ref[0]:.0f}%"
+
+
+def _render_cell(col, data, show_rsd=False):
+    _, key, rel, _ = col
+    v = data.get(key)
+    if rel is not None:
+        return _fmt_pct(v, data.get(rel))
+    return v if isinstance(v, str) else _fmt_g(v, show_rsd)
+
+
+def _print_table(rows, columns):
+    headers = [c[0] for c in columns]
+    aligns = [c[3] for c in columns]
+    widths = [max(len(h), *(len(r[i]) for r in rows))
+              for i, h in enumerate(headers)]
+
+    def pad(text, w, align):
+        return text.ljust(w) if align == 'left' else text.rjust(w)
+
+    print('| ' + ' | '.join(pad(h, w, 'left')
+                            for h, w in zip(headers, widths)) + ' |')
+    seps = [(':' + '-' * (w + 1)) if a == 'left' else ('-' * (w + 1) + ':')
+            for w, a in zip(widths, aligns)]
+    print('|' + '|'.join(seps) + '|')
+    for row in rows:
+        print('| ' + ' | '.join(pad(c, w, a)
+                                for c, w, a in zip(row, widths, aligns)) + ' |')
+
+
+def _run_all(sizes, runs, backend_names, dtype_names, show_rsd=False):
+    torch, torch_device = _setup_torch()
+
+    # Resolve per-dtype backends and torch dtype.
+    setups = {}
+    for name in dtype_names:
+        cfg = DTYPES[name]
+        backends = _available_backends(backend_names, cfg['tensor'])
+        if not backends:
+            raise RuntimeError(
+                f"No Dr.Jit backend available for dtype={name!r}, "
+                f"backends={backend_names!r}.")
+        tname = cfg['torch']
+        torch_dtype = (getattr(torch, tname, None)
+                       if torch is not None and tname is not None else None)
+        setups[name] = dict(cfg=cfg, backends=backends, torch_dtype=torch_dtype)
+
+    # Config header.
+    print(f"runs           : {runs} (median)")
+    print(f"dtypes         : {', '.join(dtype_names)}")
+    print(f"sizes          : {', '.join(str(s) for s in sizes)}")
+    if torch is None:
+        print("PyTorch        : not installed")
+    elif torch_device != 'cuda':
+        print("PyTorch        : CPU-only install (skipped)")
+    else:
+        print(f"PyTorch device : {torch_device}")
+    print()
+
+    # Measurement phase: one cell per (dtype, size), with a progress line.
+    cells = [(d, s) for d in dtype_names for s in sizes]
+    n = len(cells)
+    results = {}
+    for i, (name, size) in enumerate(cells, 1):
+        setup = setups[name]
+        engines = []
+        if any(bn == 'llvm' for bn, _ in setup['backends']):
+            engines.append('numpy')
+        if setup['torch_dtype'] is not None and torch_device == 'cuda':
+            engines.append('pytorch')
+        engines.extend(f'drjit_{bn}' for bn, _ in setup['backends'])
+        print(f"[{i}/{n}] {size}x{size} {name} "
+              f"({', '.join(engines)}) ...", flush=True)
+        results[name, size] = _bench_cell(
+            size, runs, setup['backends'], torch, torch_device,
+            setup['cfg'], setup['torch_dtype'])
+
+    # Output phase. Row order: backend (outer) → type → op → size (inner).
+    # Reference is NumPy for LLVM rows, PyTorch for CUDA rows.
+    ordered_backends = [bn for bn, _ in setups[dtype_names[0]]['backends']]
+    rows = []
+    for bn in ordered_backends:
+        ref_key = 'numpy' if bn == 'llvm' else 'pytorch'
+        for name in dtype_names:
+            for op, _, _ in OPS:
+                for s in sizes:
+                    data = results[name, s].get(op, {})
+                    rows.append([_render_cell(c, {
+                        'backend':   bn.upper(),
+                        'type':      name,
+                        'op':        op,
+                        'size':      str(s),
+                        'drjit':     data.get(f'drjit_{bn}'),
+                        'reference': data.get(ref_key),
+                    }, show_rsd) for c in COLUMNS])
+
+    print()
+    _print_table(rows, COLUMNS)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument('size', nargs='?', type=int, default=4096,
-                        help='Matrix side length (default: 4096)')
-    parser.add_argument('--runs', '-r', type=int, default=1,
-                        help='Number of timed runs per measurement; the median '
-                             'is reported (default: 1)')
+    parser.add_argument(
+        'sizes', nargs='*', type=int,
+        default=[128, 256, 512, 1024, 2048, 4096],
+        help='One or more matrix side lengths '
+             '(default: 128 256 512 1024 2048 4096)')
+    parser.add_argument(
+        '--runs', '-r', type=int, default=10,
+        help='Timed runs per measurement; median is reported (default: 10)')
+    parser.add_argument(
+        '--backend', '-b',
+        type=lambda s: _parse_csv_choices(s, ('llvm', 'cuda'), 'backend'),
+        default=['llvm', 'cuda'],
+        help="Comma-separated list of Dr.Jit backends from "
+             "{llvm, cuda} or 'all' (default: all available)")
+    parser.add_argument(
+        '--dtype', '-d',
+        type=lambda s: _parse_csv_choices(s, tuple(DTYPES), 'dtype'),
+        default=['f32'],
+        help="Comma-separated list of element types from "
+             f"{{{', '.join(DTYPES)}}} or 'all' (default: f32)")
+    parser.add_argument(
+        '--rsd', action='store_true',
+        help='Append the relative standard deviation (stdev / mean of the '
+             'per-call timings) as a suffix to each GFLOP/s value')
     args = parser.parse_args()
-    _benchmark(size=args.size, runs=args.runs)
+
+    _run_all(args.sizes, args.runs, args.backend, args.dtype, args.rsd)
