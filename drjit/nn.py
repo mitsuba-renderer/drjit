@@ -637,12 +637,12 @@ def diff_pack(module: Module, layout: str):
     mod = None
     # Build or retrieve the packing index mapping
     if key not in _registry:
-        # Construct the mapping by replacing tensors with sequential indices
-        i = 0
+        # Collect tensor metadata and back up originals in a single traversal
+        tensor_info = []  # list of (tensor_type, dtype, shape, n_elems)
         backup = []
 
-        def construct_mock(t: dr.TensorXf | dr.TensorXf16):
-            nonlocal i, IndexType, backup, mod
+        def collect_info(t):
+            nonlocal IndexType, mod
             backup.append(t)
 
             tp = type(t)
@@ -652,7 +652,7 @@ def diff_pack(module: Module, layout: str):
 
             if IndexType is None:
                 mod = sys.modules[dtype.__module__]
-                vt =  dr.type_v(dtype)
+                vt = dr.type_v(dtype)
                 if vt == dr.VarType.Float16:
                     IndexType = mod.UInt16
                 elif vt == dr.VarType.Float32:
@@ -660,31 +660,81 @@ def diff_pack(module: Module, layout: str):
                 elif vt == dr.VarType.Float64:
                     IndexType = mod.UInt64
                 else:
-                    raise TypeError(f"diffpack(): unsuported type {vt}")
-            # To track unused elements, we add ``1`` to the indices, and assume
-            # that the unused elements are ``0``. This is subtracted out in the
-            # end.
-            indices = dr.reinterpret_array(
-                dtype, dr.arange(IndexType, i, i + n_elems) + 1
-            )
+                    raise TypeError(f"diffpack(): unsupported type {vt}")
 
-            # Create a tensor with sequential indices
-            result = dr.reshape(tp(indices), shape=shape)
-            i += n_elems
-            return result
+            tensor_info.append((tp, dtype, shape, n_elems))
+            return t
 
-        traverse(module, traverse_array=construct_mock)
+        traverse(module, traverse_array=collect_info)
 
-        # Pack with the mock indices to see the packing order
-        packed, _ = pack(module, layout)
-        packed = dr.reinterpret_array(IndexType, packed)
-        packed = mod.UInt32(packed)
+        # Maximum usable index for IndexType. Index 0 is reserved as a
+        # sentinel for unused packed slots, so usable range is [1, max_idx].
+        if IndexType == mod.UInt16:
+            max_idx = 0xFFFF
+        elif IndexType == mod.UInt32:
+            max_idx = 0xFFFF_FFFF
+        else:
+            max_idx = 0xFFFF_FFFF_FFFF_FFFF
 
+        # Group tensors into chunks that fit within the IndexType range.
+        # Each chunk: (start_tensor, end_tensor, flat_offset)
+        chunks = []
+        chunk_start = 0
+        chunk_elems = 0
+        flat_offset = 0
+        for idx, (_, _, _, n_elems) in enumerate(tensor_info):
+            if chunk_elems + n_elems > max_idx:
+                chunks.append((chunk_start, idx, flat_offset - chunk_elems))
+                chunk_start = idx
+                chunk_elems = 0
+            chunk_elems += n_elems
+            flat_offset += n_elems
+        chunks.append((chunk_start, len(tensor_info), flat_offset - chunk_elems))
+
+        # Determine packed size from a trial pack
+        packed_size = dr.width(pack(module, layout)[0])
+        # Initialize with sentinel value that will fail the
+        # ``packed < dr.width(all_unpacked)`` active mask downstream.
+        packed = dr.full(mod.UInt32, 0xFFFF_FFFF, packed_size)
+
+        # For each chunk, mock only that chunk's tensors with sequential
+        # indices (starting at 1), zero out all others, call pack(), and
+        # merge the resulting indices into the global packed array.
+        for c_start, c_end, c_flat_offset in chunks:
+            tensor_counter = [0]
+            local_i = [0]
+
+            def construct_chunk_mock(t, _cs=c_start, _ce=c_end):
+                ti = tensor_counter[0]
+                tensor_counter[0] += 1
+                tp, dtype, shape, n_elems = tensor_info[ti]
+
+                if _cs <= ti < _ce:
+                    # In this chunk: assign sequential indices starting at 1
+                    indices = dr.reinterpret_array(
+                        dtype,
+                        dr.arange(IndexType, local_i[0], local_i[0] + n_elems) + 1,
+                    )
+                    local_i[0] += n_elems
+                    return dr.reshape(tp(indices), shape=shape)
+                else:
+                    # Not in this chunk: zero sentinel
+                    return dr.reshape(tp(dr.zeros(dtype, n_elems)), shape=shape)
+
+            traverse(module, traverse_array=construct_chunk_mock)
+
+            chunk_packed, _ = pack(module, layout)
+            chunk_packed = dr.reinterpret_array(IndexType, chunk_packed)
+            chunk_packed = mod.UInt32(chunk_packed)
+
+            # Where this chunk placed non-zero indices, write the global
+            # unpacked index into packed.
+            active = chunk_packed > 0
+            packed[active] = chunk_packed - 1 + c_flat_offset
+
+        # Restore original tensors
         traverse(module, traverse_array=lambda array: backup.pop(0))
 
-        # The packed array now contains indices showing where each unpacked element ended up
-        # Store this as the forward mapping
-        packed = mod.UInt32(packed) - 1
         _registry[key] = packed
     else:
         packed = _registry[key]
