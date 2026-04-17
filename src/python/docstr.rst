@@ -7682,11 +7682,20 @@
 
 .. topic:: thread_count
 
-    Return the number of threads that Dr.Jit uses to parallelize computation on the CPU
+    Return the number of threads that Dr.Jit uses to parallelize computation on the CPU.
+
+    The Python main thread will generally also participate in parallel execution,
+    and it implicitly counts as one of the threads. A return value of ``N`` therefore
+    corresponds to ``N - 1`` worker threads plus the calling thread.
 
 .. topic:: set_thread_count
 
     Adjust the number of threads that Dr.Jit uses to parallelize computation on the CPU.
+
+    The Python main thread will generally also participate in parallel execution,
+    and it implicitly counts as one of the threads. Passing ``N`` therefore spawns
+    ``N - 1`` worker threads; the values ``0`` and ``1`` both disable worker threads
+    entirely, in which case all parallel work runs on the calling thread.
 
     The thread pool is primarily used by Dr.Jit's LLVM backend. Other projects using
     underlying `nanothread <https://github.com/mitsuba-renderer/nanothread>`__
