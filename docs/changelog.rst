@@ -5,6 +5,179 @@
 Changelog
 #########
 
+DrJit 1.4.0 (April 18, 2026)
+----------------------------
+
+**New Features**
+
+- **Matrix Multiplication for Tensors**: The ``@`` operator and
+  :py:func:`dr.matmul() <matmul>` now accept Dr.Jit tensors of any dimension
+  and shape, fully replicating NumPy / PyTorch ``matmul`` semantics including
+  batched matrix products, broadcasting of leading batch axes, matrix-vector
+  products, and inner products. Optional ``At`` / ``Bt`` flags transpose the
+  matrix dimensions on the fly. The operation is fully differentiable in both
+  forward and reverse modes. Under the hood, this dispatches to a new batched
+  GEMM entry point in Dr.Jit-Core: on CUDA, a shared-memory block matrix
+  multiplication with precomputed kernels for several tile sizes; on LLVM, a
+  GotoBLAS-style tiled microkernel parallelized via nanothread.
+  (Dr.Jit commit `183dc40
+  <https://github.com/mitsuba-renderer/drjit/commit/183dc401>`__,
+  Dr.Jit-Core PR `#188 <https://github.com/mitsuba-renderer/drjit-core/pull/188>`__,
+  Dr.Jit-Core commits
+  `0cca8de <https://github.com/mitsuba-renderer/drjit-core/commit/0cca8de7>`__,
+  `432ed4a <https://github.com/mitsuba-renderer/drjit-core/commit/432ed4a5>`__,
+  `444c8df <https://github.com/mitsuba-renderer/drjit-core/commit/444c8df7>`__,
+  `4b88649 <https://github.com/mitsuba-renderer/drjit-core/commit/4b886496>`__,
+  `9e53352 <https://github.com/mitsuba-renderer/drjit-core/commit/9e533522>`__).
+
+- **Tensor Transpose**: Added :py:attr:`dr.ArrayBase.T <ArrayBase.T>` (rank-2
+  transpose) and :py:attr:`dr.ArrayBase.mT <ArrayBase.mT>` (swap last two
+  dimensions), matching PyTorch's semantics. Both are differentiable and also
+  apply to fixed-size matrix types.
+  (PR `#486 <https://github.com/mitsuba-renderer/drjit/pull/486>`__).
+
+- **Muon Optimizer**: Added :py:class:`dr.opt.Muon <opt.Muon>` (MomentUm
+  Orthogonalized by Newton-schulz), an optimizer for 2D hidden weights of
+  neural networks with optional AdamW-style decoupled weight decay.
+  (commit `d205c1d
+  <https://github.com/mitsuba-renderer/drjit/commit/d205c1d4>`__).
+
+- **CUDA Green Context API**: Added :py:class:`drjit.cuda.green_context`, a
+  context manager that isolates kernels to a subset of the GPU's streaming
+  multiprocessors. See the :ref:`green contexts documentation <green_context>`
+  for details.
+  (Dr.Jit commit `6c69ecb
+  <https://github.com/mitsuba-renderer/drjit/commit/6c69ecb7>`__,
+  Dr.Jit-Core commit `d4f1a62
+  <https://github.com/mitsuba-renderer/drjit-core/commit/d4f1a62c>`__).
+
+**Performance Improvements**
+
+- **ndarray Cleanup**: ndarray reclamation previously always went through an
+  asynchronous cleanup thread. This detour is now skipped for CUDA ndarrays
+  when the calling thread already holds the GIL.
+  (commit `c01a235
+  <https://github.com/mitsuba-renderer/drjit/commit/c01a2357>`__).
+
+- **Parallel runtime overhaul (nanothread)**: The underlying thread pool
+  received a significant set of changes that reduce tail latency and avoid
+  CPU oversubscription on parallel workloads:
+
+  - **Faster worker wake-up**: idle workers busy-poll for a short while
+    to keep latency low, and then go to sleep to avoid wasting power.
+    When new work arrives the runtime has to rouse all of them as quickly
+    as possible. The previous scheme woke them one at a time, each
+    acquiring a shared lock in turn, which could stall the start of a
+    parallel region by several milliseconds. The new implementation uses
+    the OS's native wait-on-address primitive (``futex`` on Linux,
+    ``WaitOnAddress`` on Windows, ``os_sync_wait_on_address`` on macOS
+    14.4+) so that a single system call wakes every parked worker in
+    parallel, directly from kernel space.
+    (`73efa13 <https://github.com/mitsuba-renderer/nanothread/commit/73efa136>`__).
+
+  - **More reliable idle-sleep timing**: the threshold that decides when
+    a busy-polling worker gives up and goes to sleep used to be a fixed
+    number of failed attempts, which corresponded to very different
+    amounts of real time depending on CPU speed and contention. It is
+    now a 20 ms wall-clock deadline measured with a monotonic clock.
+    In combination with a fix where a just-woken worker could immediately
+    decide it had been idle "too long" and go straight back to sleep,
+    this removes a sleep/wake ping-pong that previously caused large
+    variance in parallel runtimes.
+    (`2ddeca4 <https://github.com/mitsuba-renderer/nanothread/commit/2ddeca45>`__).
+
+  - **No more CPU oversubscription**: when Dr.Jit asks the pool to run
+    work and then waits for the result, the waiting thread also pitches
+    in. The old pool still spawned one worker per core on top of that,
+    producing more runnable threads than cores and forcing the OS to
+    preempt a worker mid-task. The pool now accounts for the caller:
+    ``pool_set_size(N)`` spawns ``N - 1`` workers, and the default size
+    drops from ``core_count()`` to ``core_count() - 1``.
+    (`03cacd0 <https://github.com/mitsuba-renderer/nanothread/commit/03cacd08>`__,
+    `3484048 <https://github.com/mitsuba-renderer/nanothread/commit/34840480>`__).
+
+  - **Better behavior on Apple Silicon**: Apple CPUs split their cores
+    into fast "performance" cores and slower "efficiency" cores. Using
+    all cores sounds appealing but is in fact counterproductive: the
+    efficiency cores become stragglers that hold up every parallel
+    region. The pool is now sized to the performance-core count, the
+    worker threads request the ``USER_INITIATED`` quality-of-service
+    class, and both the workers and the main thread register as a single
+    ``os_workgroup`` so the macOS scheduler keeps them on one cluster.
+    (`e68a4d8 <https://github.com/mitsuba-renderer/nanothread/commit/e68a4d82>`__,
+    `0989258 <https://github.com/mitsuba-renderer/nanothread/commit/09892587>`__,
+    `beca8c6 <https://github.com/mitsuba-renderer/nanothread/commit/beca8c66>`__).
+
+  - **Nicer spin-loops on ARM**: the tight loop used while busy-polling
+    now issues an explicit ``yield`` instruction on ARM, matching the
+    ``pause`` hint already emitted on x86. This tells the hardware that
+    the thread is spinning so it can throttle execution resources.
+    (`9ca2b07 <https://github.com/mitsuba-renderer/nanothread/commit/9ca2b071>`__).
+
+  - **Fixed a timing glitch**: timing information (as surfaced by
+    :py:func:`dr.kernel_history() <kernel_history>`) would occasionally
+    report nonsensical values close to ``2^64`` due to a race between a
+    completing worker and a waiting thread reading a not-yet-published
+    timestamp.
+    (`f116929 <https://github.com/mitsuba-renderer/nanothread/commit/f1169296>`__).
+
+  On the Dr.Jit side, the docstrings for :py:func:`dr.thread_count()
+  <thread_count>` and :py:func:`dr.set_thread_count() <set_thread_count>`
+  were updated to match the new semantics.
+  (Dr.Jit commit `861de5c
+  <https://github.com/mitsuba-renderer/drjit/commit/861de5c6>`__,
+  Dr.Jit-Core commit `742ea73
+  <https://github.com/mitsuba-renderer/drjit-core/commit/742ea739>`__).
+
+**Bug Fixes**
+
+- Fixed a bug in :py:meth:`dr.rng().integers() <random.Generator.integers>`
+  where a symbolic loop was misused, producing invalid LLVM IR.
+  (commit `f7054e1
+  <https://github.com/mitsuba-renderer/drjit/commit/f7054e1b>`__).
+
+- Fixed a variable shadowing bug in ``_flatten``/``_unflatten`` that caused
+  crashes when flattening PyTrees containing custom ``DRJIT_STRUCT`` types.
+  (PR `#482 <https://github.com/mitsuba-renderer/drjit/pull/482>`__).
+
+- Fixed incorrect type names in :py:func:`dr.graphviz_ad() <graphviz_ad>`.
+  (commit `0c685e4
+  <https://github.com/mitsuba-renderer/drjit/commit/0c685e42>`__).
+
+- Fixed minor memory leaks due to recorded/frozen kernels.
+  (Dr.Jit-Core commit `f0bf641
+  <https://github.com/mitsuba-renderer/drjit-core/commit/f0bf641e>`__).
+
+- Fixed memory leaks related to kernel histories.
+  (Dr.Jit-Core commit `318e554
+  <https://github.com/mitsuba-renderer/drjit-core/commit/318e554a>`__).
+
+- Renamed the conflicting ``KernelRecordingMode.None`` enumerator to
+  ``Inactive`` to avoid the collision with Python's ``None``.
+  (Dr.Jit-Core PR `#186 <https://github.com/mitsuba-renderer/drjit-core/pull/186>`__,
+  Dr.Jit PR `#481 <https://github.com/mitsuba-renderer/drjit/pull/481>`__).
+
+**Other Improvements**
+
+- Improved documentation and error messages when the Dr.Jit binary fails to
+  load. (PR `#485 <https://github.com/mitsuba-renderer/drjit/pull/485>`__).
+
+- Various improvements to Dr.Jit's static type annotations: added missing
+  stubs for :py:func:`dr.mean() <mean>`, added type hints for ``PrefixRedOp``,
+  and minor stub pattern replacement rule fixes.
+  (PRs `#478 <https://github.com/mitsuba-renderer/drjit/pull/478>`__,
+  `#480 <https://github.com/mitsuba-renderer/drjit/pull/480>`__,
+  `#483 <https://github.com/mitsuba-renderer/drjit/pull/483>`__).
+
+**Compatibility**
+
+- Dr.Jit-Core now requires CUDA compute capability **7.5 or higher** (Turing
+  and later). The precompiled CC 5.0 and 7.0 PTX bundles have been replaced
+  by a single CC 7.5 bundle, and loading it requires NVIDIA driver **R535
+  or newer**. ``jit_cuda_init()`` enforces this minimum and refuses to enable
+  the CUDA backend on older drivers.
+  (Dr.Jit-Core PR `#188 <https://github.com/mitsuba-renderer/drjit-core/pull/188>`__).
+
 DrJit 1.3.1 (February 23, 2026)
 -------------------------------
 

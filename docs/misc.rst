@@ -582,3 +582,39 @@ with *self*) type parameter of ``Array3u``. In second overload, the test is
 reversed and succeeds, and the result is the ``SelfT`` of ``Array3f``, which is
 also ``Array3f``. The third overload exists to handle cases where neither input
 is a Dr.Jit array type. (e.g. ``dr.maximum(1, 2)``)
+
+.. _green_context:
+
+CUDA green contexts
+-------------------
+
+A *CUDA green context* partitions the GPU into disjoint groups of streaming
+multiprocessors (SMs). Kernels launched into a green context only run on its
+SMs, which can be useful when running multiple independent computations
+concurrently on the same device.
+
+Dr.Jit exposes this feature through a Python context manager class
+:py:class:`drjit.cuda.green_context`. The same class is re-exported from
+:py:mod:`drjit.cuda.ad`. The following example isolates 16 SMs for a piece
+of computation:
+
+.. code-block:: python
+
+   from drjit.cuda import green_context
+
+   with green_context(16):
+       ...  # kernels launched here run on 16 SMs
+
+The actual number of SMs that CUDA allocates to the context may exceed the
+request due to hardware alignment constraints; the bound value exposes both
+counts along with a capsule of the *remaining* CUDA context, which can be
+handed to a separate computation to run it on the other SMs:
+
+.. code-block:: python
+
+   with green_context(16) as ctx:
+       print(ctx.requested_sm_count)  # what we asked for
+       print(ctx.sm_count)            # what CUDA actually allocated
+       other = ctx.remaining_ctx      # capsule with CUcontext for the rest
+
+A single ``green_context`` instance may be entered and exited multiple times.

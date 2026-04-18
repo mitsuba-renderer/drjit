@@ -692,20 +692,24 @@
     type and backend. It fully replicates the NumPy / PyTorch ``matmul``
     semantics including batched matrix products, broadcasting of leading
     batch axes, matrix-vector products, and inner products. The optional
-    ``At`` / ``Bt`` flags can be used to transpose the associated matrix
-    operands on the fly. The batch rank is limited to 6.
+    ``At`` / ``Bt`` flags transpose the associated operand on the fly at
+    essentially no cost on either backend.
 
     Under the hood, the CUDA backend uses a block-matrix multiplication in
     which each thread block cooperatively stages tiles of ``A`` and ``B``
     through shared memory and accumulates the output tile in registers. The
-    CPU backend uses a GotoBLAS-style tiled GEMM parallelized across cores
-    via nanothread, with an inner microkernel that the compiler
-    auto-vectorizes into SIMD. Broadcasts along batch dimensions are
-    consumed directly by the kernel via zero strides, and under automatic
-    differentiation the reverse-mode gradient of a broadcast operand folds
-    its sum-over-batch into the backward GEMM's contraction — so no
-    expanded copy of a broadcast operand is materialized in either the
-    primal or the derivative.
+    CPU backend uses a GotoBLAS-style tiled GEMM with a vectorized
+    microkernel, parallelized over both axes of the output tile grid via
+    nanothread, so shapes with few output rows still use every core.
+    Broadcasts along batch dimensions are consumed directly by the kernel
+    via zero strides, and under automatic differentiation the reverse-mode
+    gradient of a broadcast operand folds its sum-over-batch into the
+    backward GEMM's contraction, so no expanded copy of a broadcast operand
+    is materialized in either the primal or the derivative.
+
+    Half-precision inputs are multiplied and summed in single precision
+    throughout the reduction; the result is narrowed to half precision
+    only at the final store.
 
     Note that the CUDA implementation does not use the tensor cores
     available on recent NVIDIA GPUs, which can greatly accelerate
