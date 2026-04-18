@@ -1,4 +1,5 @@
 furo
+sphinx<8.2
 sphinxcontrib-katex
 typing_extensions
 enum-tools[sphinx]
