@@ -1,19 +1,20 @@
 """Compare matmul performance on Dr.Jit vs NumPy vs (optionally) PyTorch
 across one or more ``size x size`` shapes and all three transpose combos
-(``A @ B``, ``A @ B.T``, ``A.T @ B``). Results are emitted as a single
-Markdown table with one row per (Dr.Jit backend, dtype, op, size) cell.
-The ``Rel.`` column compares Dr.Jit to an appropriate reference (NumPy
-for the LLVM backend, PyTorch for the CUDA backend).
+(``A @ B``, ``A @ B.T``, ``A.T @ B``). Results are emitted as one
+Markdown table per Dr.Jit backend: the LLVM table compares Dr.Jit CPU
+against NumPy, the CUDA table compares Dr.Jit CUDA against PyTorch.
 
 Run with
     python tests/bench_gemm.py [sizes...] [--runs N] [--backend LIST]
-                               [--dtype LIST]
+                               [--dtype LIST] [--op LIST]
 where ``sizes`` is one or more matrix side lengths (default:
 ``128 256 512 1024 2048 4096``), ``--runs`` defaults to 10 (the median
 is reported), ``--backend`` is a comma-separated list of backends from
-``{llvm, cuda}`` (or ``all``, the default), and ``--dtype`` is a
+``{llvm, cuda}`` (or ``all``, the default), ``--dtype`` is a
 comma-separated list of element types from ``{f16, f32, f64, i32, u32}``
-(or ``all``, default ``f32``).
+(or ``all``, default ``f32``), and ``--op`` is a comma-separated list
+of transpose combos from ``{A@B, A@B.T, A.T@B}`` (or ``all``, default
+``all``).
 """
 import argparse
 import os
@@ -26,9 +27,9 @@ import drjit as dr
 
 # The three transpose variants: (label, dr.matmul kwargs, plain '@' form).
 OPS = (
-    ('A @ B',   {},           lambda A, B: A @ B),
-    ('A @ B.T', {'Bt': True}, lambda A, B: A @ B.T),
-    ('A.T @ B', {'At': True}, lambda A, B: A.T @ B),
+    ('A@B',   {},           lambda A, B: A @ B),
+    ('A@B.T', {'Bt': True}, lambda A, B: A @ B.T),
+    ('A.T@B', {'At': True}, lambda A, B: A.T @ B),
 )
 
 
@@ -52,19 +53,27 @@ DTYPES = {
 }
 
 
-# Output columns. Row-identity fields (backend/type/op/size) arrive as
-# strings; numeric fields go through _fmt_g or _fmt_pct (when `rel` is
-# set). Stored numeric values are ``(gflops, rsd)`` pairs; ``_fmt_g``
-# appends ``±RSD%`` to its cell when ``--rsd`` is active.
-COLUMNS = (
-    ('Size',          'size',      None,        'right'),
-    ('Backend',       'backend',   None,        'left'),
-    ('Type',          'type',      None,        'left'),
-    ('Op',            'op',        None,        'left'),
-    ('Dr.Jit',        'drjit',     None,        'right'),
-    ('PyTorch/NumPy', 'reference', None,        'right'),
-    ('Rel.',          'drjit',     'reference', 'right'),
-)
+# Per-backend headers for the two numeric measurement columns.
+# Row-identity fields (size/type/op) arrive as strings; numeric fields go
+# through _fmt_g or _fmt_pct (when `rel` is set). Stored numeric values
+# are ``(gflops, rsd)`` pairs; ``_fmt_g`` appends ``±RSD%`` when
+# ``--rsd`` is active.
+BACKEND_HEADERS = {
+    'llvm': ('Dr.Jit CPU',  'NumPy'),
+    'cuda': ('Dr.Jit CUDA', 'PyTorch'),
+}
+
+
+def _columns_for(backend):
+    drjit_hdr, ref_hdr = BACKEND_HEADERS[backend]
+    return (
+        ('Size',    'size',      None,        'right'),
+        ('Type',    'type',      None,        'left'),
+        ('Op',      'op',        None,        'left'),
+        (drjit_hdr, 'drjit',     None,        'right'),
+        (ref_hdr,   'reference', None,        'right'),
+        ('Rel.',    'drjit',     'reference', 'right'),
+    )
 
 
 def _parse_csv_choices(value, valid, name):
@@ -115,7 +124,8 @@ def _setup_torch():
     return torch, device
 
 
-def _bench_cell(size, runs, backends, torch, torch_device, cfg, torch_dtype):
+def _bench_cell(size, runs, backends, torch, torch_device, cfg, torch_dtype,
+                ops):
     """Measure one (size, dtype) cell.
 
     Returns ``{op: {engine: (gflops, rsd)}}`` where ``engine`` is one
@@ -196,31 +206,32 @@ def _bench_cell(size, runs, backends, torch, torch_device, cfg, torch_dtype):
                if len(samples) >= 2 else None)
         return flops / (med * 1e-3) / 1e9, rsd
 
-    cell = {op: {} for op, _, _ in OPS}
+    cell = {op: {} for op, _, _ in ops}
 
-    # Sleep ``IDLE_S`` before each timed bench so the previously-active
-    # framework's worker pool fully parks (default OpenBLAS timeout
-    # ~200 ms; nanothread's is 20 ms; pick the larger).
+    # Sleep ``IDLE_S`` once before each framework block — just long
+    # enough for the previously-active framework's worker pool to park
+    # (default OpenBLAS timeout ~200 ms; nanothread's is 20 ms; pick the
+    # larger). Ops within the same framework run back-to-back.
     IDLE_S = 0.25
 
     if any(bn == 'llvm' for bn, _ in backends):
-        for op, _, plain in OPS:
-            time.sleep(IDLE_S)
+        time.sleep(IDLE_S)
+        for op, _, plain in ops:
             cell[op]['numpy'] = bench(time_np, lambda p=plain: p(A_np, B_np))
 
     # PyTorch on GPU (independent of Dr.Jit backend).
     if use_torch:
-        for op, _, plain in OPS:
-            time.sleep(IDLE_S)
+        time.sleep(IDLE_S)
+        for op, _, plain in ops:
             cell[op]['pytorch'] = bench(
                 time_torch, lambda p=plain: p(A_t, B_t))
 
     for bn, TensorT in backends:
+        time.sleep(IDLE_S)
         A = TensorT(A_np)
         B = TensorT(B_np)
         dr.eval(A, B)
-        for op, kwargs, _ in OPS:
-            time.sleep(IDLE_S)
+        for op, kwargs, _ in ops:
             cell[op][f'drjit_{bn}'] = bench(
                 time_dr, lambda kw=kwargs: dr.matmul(A, B, **kw))
         del A, B
@@ -271,7 +282,7 @@ def _print_table(rows, columns):
                                 for c, w, a in zip(row, widths, aligns)) + ' |')
 
 
-def _run_all(sizes, runs, backend_names, dtype_names, show_rsd=False):
+def _run_all(sizes, runs, backend_names, dtype_names, ops, show_rsd=False):
     # PyTorch is only used as the reference for the CUDA backend, so skip
     # importing it entirely when CUDA isn't in play.
     if 'cuda' in backend_names and dr.has_backend(dr.JitBackend.CUDA):
@@ -297,6 +308,7 @@ def _run_all(sizes, runs, backend_names, dtype_names, show_rsd=False):
     print(f"runs           : {runs} (median)")
     print(f"dtypes         : {', '.join(dtype_names)}")
     print(f"sizes          : {', '.join(str(s) for s in sizes)}")
+    print(f"ops            : {', '.join(op for op, _, _ in ops)}")
     if torch is None:
         print("PyTorch        : not installed")
     elif torch_device != 'cuda':
@@ -321,29 +333,58 @@ def _run_all(sizes, runs, backend_names, dtype_names, show_rsd=False):
               f"({', '.join(engines)}) ...", flush=True)
         results[name, size] = _bench_cell(
             size, runs, setup['backends'], torch, torch_device,
-            setup['cfg'], setup['torch_dtype'])
+            setup['cfg'], setup['torch_dtype'], ops)
 
-    # Output phase. Row order: backend (outer) → type → size → op (inner).
-    # Reference is NumPy for LLVM rows, PyTorch for CUDA rows.
+    # Output phase: one table per backend. Row order within a table:
+    # type → size → op. Reference is NumPy for LLVM, PyTorch for CUDA.
     ordered_backends = [bn for bn, _ in setups[dtype_names[0]]['backends']]
-    rows = []
     for bn in ordered_backends:
         ref_key = 'numpy' if bn == 'llvm' else 'pytorch'
+        columns = _columns_for(bn)
+        rows = []
         for name in dtype_names:
             for s in sizes:
-                for op, _, _ in OPS:
+                for op, _, _ in ops:
                     data = results[name, s].get(op, {})
                     rows.append([_render_cell(c, {
-                        'backend':   bn.upper(),
                         'type':      name,
-                        'op':        op,
+                        'op':        op.replace('@', ' @ '),
                         'size':      str(s),
                         'drjit':     data.get(f'drjit_{bn}'),
                         'reference': data.get(ref_key),
-                    }, show_rsd) for c in COLUMNS])
+                    }, show_rsd) for c in columns])
 
-    print()
-    _print_table(rows, COLUMNS)
+        print()
+        drjit_hdr, ref_hdr = BACKEND_HEADERS[bn]
+        print(f"### {bn.upper()} backend — {drjit_hdr} vs {ref_hdr}")
+        columns, rows, notes = _drop_constant_columns(columns, rows)
+        for note in notes:
+            print(note)
+        print()
+        _print_table(rows, columns)
+
+
+def _drop_constant_columns(columns, rows):
+    """Remove row-identity columns whose value is constant across all rows.
+
+    Returns ``(columns, rows, notes)`` where ``notes`` is a list of
+    ``"Header: value"`` strings to be printed above the table. Only
+    columns without a ``rel`` (reference) key are eligible — Dr.Jit,
+    reference, and Rel. columns always stay in the table.
+    """
+    if not rows:
+        return columns, rows, []
+    keep_idx, notes = [], []
+    for i, col in enumerate(columns):
+        _, _, rel, _ = col
+        values = {r[i] for r in rows}
+        if rel is None and col[1] in ('size', 'type', 'op') and len(values) == 1:
+            notes.append(f"{col[0]}: {next(iter(values))}")
+        else:
+            keep_idx.append(i)
+    columns = tuple(columns[i] for i in keep_idx)
+    rows = [[r[i] for i in keep_idx] for r in rows]
+    return columns, rows, notes
 
 
 if __name__ == '__main__':
@@ -368,10 +409,19 @@ if __name__ == '__main__':
         default=['f32'],
         help="Comma-separated list of element types from "
              f"{{{', '.join(DTYPES)}}} or 'all' (default: f32)")
+    op_labels = tuple(op for op, _, _ in OPS)
+    parser.add_argument(
+        '--op', '-o',
+        type=lambda s: [next(o for o in OPS if o[0] == lbl)
+                        for lbl in _parse_csv_choices(s, op_labels, 'op')],
+        default=list(OPS),
+        help="Comma-separated list of transpose combos from "
+             f"{{{', '.join(op_labels)}}} or 'all' (default: all)")
     parser.add_argument(
         '--rsd', action='store_true',
         help='Append the relative standard deviation (stdev / mean of the '
              'per-call timings) as a suffix to each GFLOP/s value')
     args = parser.parse_args()
 
-    _run_all(args.sizes, args.runs, args.backend, args.dtype, args.rsd)
+    _run_all(args.sizes, args.runs, args.backend, args.dtype, args.op,
+             args.rsd)

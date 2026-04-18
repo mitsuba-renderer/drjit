@@ -5,8 +5,8 @@
 Changelog
 #########
 
-DrJit 1.4.0 (April 18, 2026)
-----------------------------
+DrJit 1.4.0 (TBA)
+-----------------
 
 **New Features**
 
@@ -20,6 +20,54 @@ DrJit 1.4.0 (April 18, 2026)
   GEMM entry point in Dr.Jit-Core: on CUDA, a shared-memory block matrix
   multiplication with precomputed kernels for several tile sizes; on LLVM, a
   GotoBLAS-style tiled microkernel parallelized via nanothread.
+
+  The design follows the same tradeoff as the other precompiled CUDA kernels
+  shipped with Dr.Jit: rather than chase the last few percent of peak
+  throughput, we aim for kernels that are small enough to ship and simple
+  enough to maintain, while staying reasonably competitive with specialized libraries.
+  On the CPU this matches or slightly exceeds OpenBLAS across the sizes we
+  benchmarked; on the GPU we reach 55%–75% of PyTorch on large single-precision
+  GEMMs without pulling in cuBLAS or cuDNN. The CUDA implementation does not use
+  the tensor cores available on recent NVIDIA GPUs, so for half-precision
+  matrix multiplies PyTorch will be more than 4x faster on GeForce-type cards.
+
+  Benchmarks below are for square single-precision GEMMs.
+  CPU measurements used an AMD Ryzen 9 7950X with NumPy linked against
+  OpenBLAS 0.3.26; GPU measurements used an NVIDIA RTX 5090 with PyTorch
+  2.10.0.
+
+  +------+--------------+--------------+-------+
+  | Size | NumPy        | Dr.Jit CPU   | Rel.  |
+  +======+==============+==============+=======+
+  |  128 |  263 GFLOP/s |  247 GFLOP/s |  94%  |
+  +------+--------------+--------------+-------+
+  |  256 |  781 GFLOP/s |  730 GFLOP/s |  93%  |
+  +------+--------------+--------------+-------+
+  |  512 | 1047 GFLOP/s | 1046 GFLOP/s | 100%  |
+  +------+--------------+--------------+-------+
+  | 1024 | 1744 GFLOP/s | 1830 GFLOP/s | 105%  |
+  +------+--------------+--------------+-------+
+  | 2048 | 2022 GFLOP/s | 2108 GFLOP/s | 104%  |
+  +------+--------------+--------------+-------+
+  | 4096 | 1890 GFLOP/s | 2134 GFLOP/s | 113%  |
+  +------+--------------+--------------+-------+
+
+  +------+---------------+---------------+------+
+  | Size | PyTorch       | Dr.Jit CUDA   | Rel. |
+  +======+===============+===============+======+
+  |  128 |   362 GFLOP/s |   767 GFLOP/s | 212% |
+  +------+---------------+---------------+------+
+  |  256 |  2979 GFLOP/s |  2811 GFLOP/s |  94% |
+  +------+---------------+---------------+------+
+  |  512 | 18725 GFLOP/s | 10331 GFLOP/s |  55% |
+  +------+---------------+---------------+------+
+  | 1024 | 47663 GFLOP/s | 31941 GFLOP/s |  67% |
+  +------+---------------+---------------+------+
+  | 2048 | 68759 GFLOP/s | 50629 GFLOP/s |  74% |
+  +------+---------------+---------------+------+
+  | 4096 | 64250 GFLOP/s | 48248 GFLOP/s |  75% |
+  +------+---------------+---------------+------+
+
   (Dr.Jit commit `183dc4 <https://github.com/mitsuba-renderer/drjit/commit/183dc401a355c3190256c7948345befc2d2df41a>`__,
   Dr.Jit-Core PR `#188 <https://github.com/mitsuba-renderer/drjit-core/pull/188>`__,
   Dr.Jit-Core commits
