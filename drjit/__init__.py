@@ -225,6 +225,133 @@ def allclose(
                 return False
         return True
 
+
+def assert_allclose(
+    actual: object,
+    desired: object,
+    rtol: Optional[float] = None,
+    atol: Optional[float] = None,
+    equal_nan: bool = False,
+    err_msg: str = '',
+) -> None:
+    r'''
+    Raise an ``AssertionError`` if two arrays are not element-wise equal within
+    a given error tolerance.
+
+    This is the assertion-raising counterpart of :py:func:`drjit.allclose` and
+    is analogous to ``numpy.testing.assert_allclose``. Elements are considered
+    equal if
+
+    .. math::
+        |\texttt{actual} - \texttt{desired}| \le
+        |\texttt{desired}| \cdot \texttt{rtol} + \texttt{atol}.
+
+    See :py:func:`drjit.allclose` for the default values of ``rtol`` and
+    ``atol`` (they depend on the input precision).
+
+    Unlike ``numpy.testing.assert_allclose``, the happy path stays on device:
+    the only host-visible reduction is a single boolean, and mismatch count /
+    worst-case absolute and relative differences are only read back when the
+    comparison fails.
+
+    Args:
+        actual (object): A Dr.Jit array or other kind of numeric sequence type.
+
+        desired (object): A Dr.Jit array or other kind of numeric sequence type.
+          Its magnitude sets the relative-tolerance scale.
+
+        rtol (float): Relative error threshold. Defaults depend on precision
+          (see :py:func:`drjit.allclose`).
+
+        atol (float): Absolute error threshold. Defaults depend on precision.
+
+        equal_nan (bool): If **actual** and **desired** *both* contain a *NaN*
+          entry at the same position, should they compare equal?
+
+        err_msg (str): Optional prefix prepended to the generated error message.
+
+    Raises:
+        AssertionError: If the arrays are not equal within the given tolerance.
+    '''
+
+    if is_array_v(actual) or is_array_v(desired):
+        a, b = detach(actual), detach(desired)
+
+        if is_special_v(a):
+            a = array_t(a)(a)
+        if is_special_v(b):
+            b = array_t(b)(b)
+
+        if is_array_v(a):
+            diff = a - b
+        else:
+            diff = b - a
+
+        a = type(diff)(a)
+        b = type(diff)(b)
+
+        vt = type_v(diff)
+
+        if vt == VarType.Float16:
+            rtol_ref, atol_ref = 1e-2, 1e-2
+        elif vt == VarType.Float32:
+            rtol_ref, atol_ref = 1e-3, 1e-5
+        else:
+            rtol_ref, atol_ref = 1e-5, 1e-8
+
+        atol_c = atol_ref if atol is None else atol
+        rtol_c = rtol_ref if rtol is None else rtol
+
+        abs_diff = abs(diff)
+        cond = abs_diff <= abs(b) * rtol_c + atol_c
+
+        # plus/minus infinity
+        if is_float_v(a):
+            cond |= a == b
+
+        if equal_nan:
+            cond |= isnan(a) & isnan(b)
+
+        if all(cond, axis=None):
+            return
+
+        # Mismatching elements only contribute to the diagnostic reductions.
+        mismatched = ~cond
+        sel_abs = select(mismatched, abs_diff, 0)
+        denom = abs(b) + atol_c
+        denom_safe = select(denom > 0, denom, 1)
+        sel_rel = select(mismatched, abs_diff / denom_safe, 0)
+
+        n_mismatch = int(count(mismatched, axis=None).array[0])
+        n_total = width(cond)
+        max_abs = float(max(sel_abs, axis=None).array[0])
+        max_rel = float(max(sel_rel, axis=None).array[0])
+
+        def _labeled(name, arr):
+            label = f' {name}: '
+            return label + repr(arr).replace('\n', '\n' + ' ' * len(label))
+
+        prefix = err_msg + '\n' if err_msg else ''
+        raise AssertionError(
+            f"{prefix}"
+            f"Arrays are not equal to tolerance rtol={rtol_c:g}, atol={atol_c:g}\n"
+            f"Mismatched elements: {n_mismatch} / {n_total} "
+            f"({100.0 * n_mismatch / n_total:.3g}%)\n"
+            f"Max absolute difference: {max_abs:.6g}\n"
+            f"Max relative difference: {max_rel:.6g}\n"
+            f"{_labeled('ACTUAL', a)}\n"
+            f"{_labeled('DESIRED', b)}"
+        )
+
+    if not allclose(actual, desired, rtol, atol, equal_nan):
+        prefix = err_msg + '\n' if err_msg else ''
+        raise AssertionError(
+            f"{prefix}"
+            f"assert_allclose() failed: "
+            f"actual={actual!r}, desired={desired!r}"
+        )
+
+
 # -------------------------------------------------------------------
 #   "Safe" functions that avoid domain errors due to rounding
 # -------------------------------------------------------------------

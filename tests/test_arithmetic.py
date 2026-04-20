@@ -50,6 +50,91 @@ def test02_allclose():
     assert dr.allclose(np.array([1, 2, 3]), dr.scalar.Array3f(1, 2, 3))
     assert dr.allclose(np.array([1, float('nan'), 3.0]), [1, float('nan'), 3], equal_nan=True)
 
+
+def test02b_assert_allclose():
+    # Scalar / Python sequence path
+    dr.assert_allclose(2, 2)
+    dr.assert_allclose([1, 2, 3], [1, 2, 3])
+    dr.assert_allclose([1, 1, 1], 1)
+    with pytest.raises(AssertionError):
+        dr.assert_allclose(2, 3)
+    with pytest.raises(AssertionError):
+        dr.assert_allclose([1, 2, 3], [1, 4, 3])
+
+    # NaN
+    with pytest.raises(AssertionError):
+        dr.assert_allclose(float('nan'), float('nan'))
+    dr.assert_allclose(float('nan'), float('nan'), equal_nan=True)
+
+    # err_msg is prepended on failure
+    with pytest.raises(AssertionError, match='my prefix'):
+        dr.assert_allclose([1, 2, 3], [1, 4, 3], err_msg='my prefix')
+
+
+@pytest.test_arrays('float32,shape=(*),jit,is_diff')
+def test02c_assert_allclose_array(t):
+    dr.assert_allclose(t(1, 2, 3), t(1, 2, 3))
+    dr.assert_allclose(t(1, 2, 3), t(1.0001, 2.0, 3.0), rtol=1e-3, atol=1e-3)
+
+    # Exact failure message (rtol=atol=0 keeps formatting stable).
+    expected = (
+        "Arrays are not equal to tolerance rtol=0, atol=0\n"
+        "Mismatched elements: 1 / 3 (33.3%)\n"
+        "Max absolute difference: 3\n"
+        "Max relative difference: 0.6\n"
+        " ACTUAL: [1, 2, 3]\n"
+        " DESIRED: [1, 5, 3]"
+    )
+    with pytest.raises(AssertionError) as ei:
+        dr.assert_allclose(t(1, 2, 3), t(1, 5, 3), rtol=0, atol=0)
+    assert str(ei.value) == expected
+
+    # err_msg is prepended verbatim, one line above the diagnostic block.
+    with pytest.raises(AssertionError) as ei:
+        dr.assert_allclose(t(1, 2, 3), t(1, 5, 3), rtol=0, atol=0,
+                           err_msg='boom')
+    assert str(ei.value) == 'boom\n' + expected
+
+    # Infinity: equal via the a == b branch.
+    inf = float('inf')
+    dr.assert_allclose(t(1, inf, 3), t(1, inf, 3))
+    with pytest.raises(AssertionError) as ei:
+        dr.assert_allclose(t(1, inf, 3), t(1, 2, 3))
+    assert str(ei.value) == (
+        "Arrays are not equal to tolerance rtol=0.001, atol=1e-05\n"
+        "Mismatched elements: 1 / 3 (33.3%)\n"
+        "Max absolute difference: inf\n"
+        "Max relative difference: inf\n"
+        " ACTUAL: [1, inf, 3]\n"
+        " DESIRED: [1, 2, 3]"
+    )
+
+    # NaN handling
+    nan = float('nan')
+    with pytest.raises(AssertionError):
+        dr.assert_allclose(t(1, nan, 3), t(1, nan, 3))
+    dr.assert_allclose(t(1, nan, 3), t(1, nan, 3), equal_nan=True)
+
+
+@pytest.test_arrays('float32,is_tensor,jit,is_diff')
+def test02d_assert_allclose_tensor(t):
+    a = t([1, 2, 3, 4], (2, 2))
+    dr.assert_allclose(a, t([1, 2, 3, 4], (2, 2)))
+
+    with pytest.raises(AssertionError) as ei:
+        dr.assert_allclose(a, t([1, 2, 3, 9], (2, 2)), rtol=0, atol=0)
+    assert str(ei.value) == (
+        "Arrays are not equal to tolerance rtol=0, atol=0\n"
+        "Mismatched elements: 1 / 4 (25%)\n"
+        "Max absolute difference: 5\n"
+        "Max relative difference: 0.555556\n"
+        " ACTUAL: [[1, 2],\n"
+        "          [3, 4]]\n"
+        " DESIRED: [[1, 2],\n"
+        "           [3, 9]]"
+    )
+
+
 @pytest.test_arrays('-bool,shape=(3)', '-bool,shape=(3, *)', '-bool,shape=(*, *)')
 def test03_binop_simple(t):
     a = t(1, 2, 3)

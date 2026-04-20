@@ -134,6 +134,27 @@ def test07_evaluated_format_big_2d(t):
         '[[0, 0],\n [1, 0],\n [2, 0],\n .. 94 skipped ..,\n [97, 0],\n [98, 0],\n [99, 0]]'
 
 
+@pytest.test_arrays('is_tensor, uint32, jit')
+def test07b_evaluated_format_tensor(t):
+    # Small tensor: no summarization
+    assert dr.format("{}", dr.reshape(dr.arange(t, 6), (2, 3))) == \
+        "[[0, 1, 2],\n [3, 4, 5]]"
+
+    # Large 1D tensor: first-3 / last-3 summarization
+    assert dr.format("{}", dr.arange(t, 100)) == \
+        "[0, 1, 2, .. 94 skipped .., 97, 98, 99]"
+
+    # Large 2D tensor: rows AND columns both summarized recursively
+    assert dr.format("{}", dr.reshape(dr.arange(t, 10000), (100, 100))) == \
+        "[[0, 1, 2, .. 94 skipped .., 97, 98, 99],\n" \
+        " [100, 101, 102, .. 94 skipped .., 197, 198, 199],\n" \
+        " [200, 201, 202, .. 94 skipped .., 297, 298, 299],\n" \
+        " .. 94 skipped ..,\n" \
+        " [9700, 9701, 9702, .. 94 skipped .., 9797, 9798, 9799],\n" \
+        " [9800, 9801, 9802, .. 94 skipped .., 9897, 9898, 9899],\n" \
+        " [9900, 9901, 9902, .. 94 skipped .., 9997, 9998, 9999]]"
+
+
 @pytest.test_arrays('shape=(*), uint32, jit')
 def test08_symbolic_print(t):
     b = Buffer()

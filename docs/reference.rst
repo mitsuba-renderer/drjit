@@ -154,6 +154,7 @@ Also relevant here are :py:func:`any`, :py:func:`all`, :py:func:`none`, and :py:
 .. autofunction:: isnan
 .. autofunction:: isfinite
 .. autofunction:: allclose
+.. autofunction:: assert_allclose
 
 Miscellaneous operations
 ------------------------
