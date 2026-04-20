@@ -60,7 +60,7 @@ multiplication.
    b = rng.random(TensorXf, m)
 
    # Pack 'A' and 'b' into a buffer with an optimal layout
-   buffer, A_view, b_view = nn.pack(A, b)
+   A_view, b_view = nn.pack(A, b)
 
    # Create a cooperative vector
    x = nn.CoopVec(... 16 values ...)
@@ -207,11 +207,14 @@ memory layouts for either *inference* (the default) or *training*. You must
 specify ``layout='training'`` if you wish to differentiate matrix
 multiplication in reverse mode.
 
-Following this step, ``A`` and ``b`` have been merged into ``buffer``, and
-``A_view`` and ``b_view`` encode the offset and layout within this larger
-buffer. Matrix views *cannot* be used in arithmetic expressions and are best
-thought of as opaque handles. They only exist to describe the input of the
-matrix-vector multiplication operation explained next.
+Following this step, ``A`` and ``b`` have been merged into a single shared
+buffer, and ``A_view`` and ``b_view`` encode the offset and layout within
+that buffer. The buffer itself is accessible via the
+:py:attr:`MatrixView.buffer <drjit.nn.MatrixView.buffer>` attribute on any
+of the returned views. Matrix views *cannot* be used in arithmetic
+expressions and are best thought of as opaque handles. They only exist to
+describe the input of the matrix-vector multiplication operation explained
+next.
 
 Two other view-related operations be useful in certain situations, please
 see the linked documentation for details.
@@ -260,8 +263,8 @@ propagate derivatives through subsequent operations. Here is an example:
    dr.enable_grad(a)
 
    # Differentiable matrix + bias vector
-   buffer, A_view, b_view = nn.pack(A, b)
-   dr.enable_grad(buffer)
+   A_view, b_view = nn.pack(A, b)
+   dr.enable_grad(A_view.buffer)
 
    # Pack grad-enabled variables into a cooperative vector
    x = nn.CoopVec(a)
@@ -280,12 +283,10 @@ Specific views or cooperative vectors can also be detached via
 
    y = nn.matvec(A_view, dr.detach(x), dr.detach(b_view))
 
-Note that the conversion functions :py:func:`nn.pack() <drjit.nn.pack()>` and
-:py:func:`nn.unpack() <drjit.nn.unpack()>` are *not differentiable*. This is
-intentional: to train a neural network, convert the initial coefficient values
-into training-optimal layout and optimize this representation directly. Doing
-so is more efficient than changing layouts twice in every optimization step
-(once for the weights and once for their derivatives).
+The :py:func:`nn.pack() <drjit.nn.pack()>` function propagates derivatives
+through the packing step when its inputs carry gradient tracking. See the
+:ref:`neural network documentation <neural_nets>` for a discussion of how
+this interacts with different optimizers.
 
 The following AD operations recognize :py:func:`nn.CoopVec
 <drjit.nn.CoopVec>` and :py:func:`nn.MatrixView <drjit.nn.MatrixView>` objects:

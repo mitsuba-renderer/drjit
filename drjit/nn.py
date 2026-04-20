@@ -1,13 +1,14 @@
 from __future__ import annotations
 import drjit
 import sys
+from collections.abc import MutableMapping
 from .hashgrid import HashGridEncoding, PermutoEncoding
 from . import hashgrid
 
 if sys.version_info < (3, 11):
-    from typing_extensions import Tuple, Sequence, Union, Type, TypeAlias, Optional, Any, overload
+    from typing_extensions import Tuple, Sequence, Union, Type, TypeAlias, Optional, Any, Dict, Iterator, TypeVar
 else:
-    from typing import Tuple, Sequence, Union, Type, TypeAlias, Optional, Any, overload
+    from typing import Tuple, Sequence, Union, Type, TypeAlias, Optional, Any, Dict, Iterator, TypeVar
 
 # Import classes/functions from C++ extension
 MatrixView = drjit.detail.nn.MatrixView
@@ -19,19 +20,88 @@ view = drjit.detail.nn.view
 cast = drjit.detail.nn.cast
 T = drjit.detail.nn.T
 
+
 TensorOrViewOrNone: TypeAlias = Union[
     drjit.ArrayBase,
     MatrixView,
     None
 ]
 
-class Module:
+# Type variable for activation-like modules whose ``__call__`` preserves the
+# input type (either :class:`CoopVec` or a Dr.Jit tensor).
+_InputT = TypeVar('_InputT', CoopVec, drjit.ArrayBase)
+
+
+def _walk_params(root: 'Module', prefix: str):
+    """Walk a Module's ``DRJIT_STRUCT`` tree and collect parameter leaves.
+
+    Returns ``(params, packed_key)`` where ``params`` maps dotted paths to
+    ``(owner, attr)`` pairs that locate each leaf on its parent module, and
+    ``packed_key`` is the key whose entry backs a :func:`pack`-produced
+    buffer (or ``None`` in tensor mode).
+    """
+    params: Dict[str, Tuple[Any, str]] = {}
+    packed_key: Optional[str] = None
+
+    def visit_module(mod: 'Module', sub_prefix: str) -> None:
+        nonlocal packed_key
+        if getattr(mod, '_packed_buffer', None) is not None:
+            key = f'{sub_prefix}.weights' if sub_prefix else 'weights'
+            params[key] = (mod, '_packed_buffer')
+            packed_key = key
+            return
+
+        struct = getattr(type(mod), 'DRJIT_STRUCT', None)
+        if struct is None:
+            return
+
+        for name in struct:
+            sub_key = f'{sub_prefix}.{name}' if sub_prefix else name
+            visit(getattr(mod, name, None), sub_key, mod, name)
+
+    def visit(value: Any, key: str, owner: Any, attr: Optional[str]) -> None:
+        if value is None:
+            return
+        if isinstance(value, Module):
+            visit_module(value, key)
+        elif isinstance(value, (tuple, list)):
+            for i, item in enumerate(value):
+                visit(item, f'{key}.{i}', owner=None, attr=None)
+        elif isinstance(value, MatrixView):
+            return
+        elif isinstance(value, drjit.ArrayBase) and attr is not None:
+            params[key] = (owner, attr)
+
+    visit_module(root, prefix)
+    return params, packed_key
+
+class Module(MutableMapping):
     """
     This is the base class of a modular set of operations that make
     the specification of neural network architectures more convenient.
 
     Module subclasses are :ref:`PyTrees <pytrees>`, which means that various
     Dr.Jit operations can automatically traverse them.
+
+    Every allocated :class:`Module` additionally behaves as a
+    :class:`collections.abc.MutableMapping` keyed by dotted parameter paths
+    (e.g., ``'layers.0.weights'``). This mirrors the :class:`drjit.opt.Optimizer`
+    interface and enables symmetric parameter transfer:
+
+    .. code-block:: python
+
+       opt = Adam(lr=1e-3)
+       opt.update(net)       # pull every parameter into the optimizer (once)
+
+       for i in range(n):
+           net.update(opt)   # push optimizer state back into the net
+           ...
+
+    After attach, the optimizer is the source of truth: ``opt.update(net)``
+    must not be called again. On a packed module the mapping exposes a single
+    ``'weights'`` entry whose underlying buffer is referenced by the per-layer
+    :class:`MatrixView` instances; writes to that entry are in-place so the
+    views remain valid.
 
     Constructing a neural network generally involves the following pattern:
 
@@ -48,14 +118,12 @@ class Module:
        net = net.alloc(TensorXf16, 2)
 
        # 3. Pack coefficients into a training-optimal layout
-       coeffs, net = nn.pack(net, layout='training')
+       net = nn.pack(net, layout='training')
 
     Network evaluation expects a :ref:`cooperative vector <coop_vec>` as input
     (i.e., ``net(nn.CoopVec(...))``) and returns another cooperative vector.
-    The ``coeffs`` buffer contains all weight/bias data in training-optimal
-    format and can be optimized, which will directly impact the packed network
-    ``net`` that references this buffer.
     """
+
     def __call__(self, arg: CoopVec, /) -> CoopVec:
         """
         Evaluate the model with an input cooperative vector and return the result.
@@ -75,7 +143,8 @@ class Module:
         """
         return self, size
 
-    def alloc(self, dtype: Type[drjit.ArrayBase], size: int = -1, rng: Optional[drjit.random.Generator] = None) -> Module:
+    def alloc(self, dtype: Type[drjit.ArrayBase], size: int = -1,
+              rng: Optional[drjit.random.Generator] = None) -> Module:
         """
         Returns a new instance of the model with allocated weights.
 
@@ -113,16 +182,74 @@ class Module:
     def __repr__(self) -> str:
         return f"{type(self).__name__}()"
 
-class Sequential(Module, Sequence[Module]):
+    # ---- MutableMapping interface ---------------------------------------
+
+    def _params_cache(self) -> Dict[str, Tuple[Any, str]]:
+        d = getattr(self, '_params', None)
+        if d is None:
+            params, packed_key = _walk_params(self, getattr(self, 'prefix', ''))
+            self._params = params
+            self._packed_key = packed_key
+            d = params
+        return d
+
+    def __getitem__(self, key: str) -> drjit.ArrayBase:
+        slot = self._params_cache().get(key)
+        if slot is None:
+            raise KeyError(key)
+        owner, attr = slot
+        return getattr(owner, attr)
+
+    def __setitem__(self, key: str, value: drjit.ArrayBase) -> None:
+        slot = self._params_cache().get(key)
+        if slot is None:
+            raise KeyError(key)
+        owner, attr = slot
+
+        if key == self._packed_key:
+            # MatrixViews on the sub-layers point into this buffer's memory;
+            # a reference swap would leave them dangling.
+            getattr(owner, attr)[:] = value
+            return
+
+        existing = getattr(owner, attr)
+        if type(value) is not type(existing):
+            value = type(existing)(value)
+        setattr(owner, attr, value)
+
+    def __delitem__(self, key: str) -> None:
+        raise TypeError(
+            "drjit.nn.Module: parameter keys cannot be deleted via the "
+            "mapping interface."
+        )
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._params_cache())
+
+    def __len__(self) -> int:
+        return len(self._params_cache())
+
+    def __contains__(self, key: object) -> bool:
+        return key in self._params_cache()
+
+class Sequential(Module):
     """
     This model evaluates provided arguments ``arg[0]``, ``arg[1]``, ..., in sequence.
+
+    The optional ``prefix`` keyword is prepended to every key exposed through
+    the :class:`MutableMapping` interface (e.g., ``'mlp.layers.0.weights'``
+    instead of ``'layers.0.weights'``). This is useful when sharing a single
+    optimizer across multiple networks. The prefix is retained through
+    :func:`pack`.
     """
-    DRJIT_STRUCT = { 'layers' : tuple }
+    DRJIT_STRUCT = { 'layers' : tuple, 'prefix': str }
 
     layers: tuple[Module, ...]
+    prefix: str
 
-    def __init__(self, *args: Module):
+    def __init__(self, *args: Module, prefix: str = ''):
         self.layers = args
+        self.prefix = prefix
 
     def __call__(self, arg: CoopVec, /) -> CoopVec:
         for l in self.layers:
@@ -134,15 +261,7 @@ class Sequential(Module, Sequence[Module]):
         for l in self.layers:
             l_new, size = l._alloc(dtype, size, rng)
             result.append(l_new)
-        return Sequential(*result), size
-
-    def __len__(self):
-        """Return the number of contained models"""
-        return len(self.layers)
-
-    def __getitem__(self, index: int, /) -> Module: # type: ignore
-        """Return the model at position ``index``"""
-        return self.layers[index]
+        return Sequential(*result, prefix=self.prefix), size
 
     def __repr__(self) -> str:
         s = 'Sequential(\n'
@@ -165,10 +284,11 @@ class ReLU(Module):
 
        \mathrm{ReLU}(x) = \mathrm{max}\{x, 0\}.
 
+    Accepts both :class:`CoopVec` and tensor inputs.
     """
 
     DRJIT_STRUCT = { }
-    def __call__(self, arg: CoopVec, /) -> CoopVec:
+    def __call__(self, arg: _InputT, /) -> _InputT:
         return drjit.maximum(arg, 0)
 
 class LeakyReLU(Module):
@@ -183,13 +303,15 @@ class LeakyReLU(Module):
           x,&\mathrm{if}\ x\ge 0,\\
           \texttt{negative\_slope}\cdot x,&\mathrm{otherwise}.
        \end{cases}
+
+    Accepts both :class:`CoopVec` and tensor inputs.
     """
 
     DRJIT_STRUCT = { 'negative_slope': Union[float, drjit.ArrayBase] }
     def __init__(self, negative_slope: Union[float, drjit.ArrayBase] = 1e-2):
         self.negative_slope = negative_slope
 
-    def __call__(self, arg: CoopVec, /) -> CoopVec:
+    def __call__(self, arg: _InputT, /) -> _InputT:
         return drjit.maximum(arg, 0) + drjit.minimum(arg, 0.0) * self.negative_slope
 
 
@@ -202,9 +324,10 @@ class Exp2(Module):
        \mathrm{Exp2}(x) = 2^x
 
     On the CUDA backend, this function directly maps to an efficient native GPU instruction.
+    Accepts both :class:`CoopVec` and tensor inputs.
     """
     DRJIT_STRUCT = { }
-    def __call__(self, arg: CoopVec, /) -> CoopVec:
+    def __call__(self, arg: _InputT, /) -> _InputT:
         return drjit.exp2(arg)
 
 class Exp(Module):
@@ -214,9 +337,11 @@ class Exp(Module):
     .. math::
 
        \mathrm{Exp}(x) = e^x
+
+    Accepts both :class:`CoopVec` and tensor inputs.
     """
     DRJIT_STRUCT = { }
-    def __call__(self, arg: CoopVec, /) -> CoopVec:
+    def __call__(self, arg: _InputT, /) -> _InputT:
         return drjit.exp2(arg * (1 / drjit.log(2)))
 
 class Tanh(Module):
@@ -228,9 +353,10 @@ class Tanh(Module):
        \mathrm{Tanh}(x) = \frac{\exp(x)-\exp(-x)}{\exp(x)+\exp(-x)}
 
     On the CUDA backend, this function directly maps to an efficient native GPU instruction.
+    Accepts both :class:`CoopVec` and tensor inputs.
     """
     DRJIT_STRUCT = { }
-    def __call__(self, arg: CoopVec, /) -> CoopVec:
+    def __call__(self, arg: _InputT, /) -> _InputT:
         return drjit.tanh(arg)
 
 class ScaleAdd(Module):
@@ -242,6 +368,8 @@ class ScaleAdd(Module):
     .. math::
 
        \mathrm{ScaleAdd}(x) = x\cdot\texttt{scale} + \texttt{offset}
+
+    Accepts both :class:`CoopVec` and tensor inputs.
     """
     DRJIT_STRUCT = {'scale': Union[None, float, int, drjit.ArrayBase],
                     'offset': Union[None, float, int, drjit.ArrayBase]}
@@ -249,21 +377,24 @@ class ScaleAdd(Module):
                  offset: Union[float, int, drjit.ArrayBase, None] = None):
         self.scale = scale
         self.offset = offset
-    def __call__(self, arg: CoopVec, /) -> CoopVec:
+    def __call__(self, arg: _InputT, /) -> _InputT:
         if not self.scale or not self.offset:
             raise Exception("drjit.nn.ScaleAdd(): you must set a scale and offset!")
         return drjit.fma(arg, self.scale, self.offset)
 
 class Cast(Module):
     """
-    Cast the input cooperative vector to a different precision. Should be
-    instantiated with the desired element type, e.g. ``Cast(drjit.cuda.ad.Float32)``
+    Cast the input to a different precision. Should be instantiated with the
+    desired element type, e.g. ``Cast(drjit.cuda.ad.Float32)``. Accepts both
+    :class:`CoopVec` and tensor inputs.
     """
     DRJIT_STRUCT = { 'dtype': Optional[Type[drjit.ArrayBase]] }
     def __init__(self, dtype: Optional[Type[drjit.ArrayBase]] = None):
         self.dtype = dtype
-    def __call__(self, arg: CoopVec, /) -> CoopVec:
-        return cast(arg, self.dtype)
+    def __call__(self, arg: _InputT, /) -> _InputT:
+        if isinstance(arg, CoopVec):
+            return cast(arg, self.dtype)
+        return drjit.tensor_t(self.dtype)(arg)
     def __repr__(self):
         return f'Cast(dtype={self.dtype.__name__})'
 
@@ -311,21 +442,37 @@ class Linear(Module):
         s += ')'
         return s
 
-    def __call__(self, arg: CoopVec, /) -> CoopVec:
-        if self.weights is None:
+    def __call__(self, arg: _InputT, /) -> _InputT:
+        w = self.weights
+        if w is None:
             raise RuntimeError(
-                "Uninitialized network. Call 'net = net.alloc(""<Tensor type>"
-                ")' to initialize the weight storage first. Following this, "
-                "use 'drjit.nn.pack()' to transform the network into an "
-                "optimal layout for evaluation."
+                "drjit.nn.Linear: uninitialized network. Call "
+                "'net = net.alloc(<Tensor type>)' to initialize the weight "
+                "storage first."
             )
-        elif not isinstance(self.weights, MatrixView) or \
-           (self.bias is not None and not isinstance(self.bias, MatrixView)):
+
+        if isinstance(arg, CoopVec):
+            if not isinstance(w, MatrixView):
+                raise RuntimeError(
+                    "drjit.nn.Linear: cooperative-vector evaluation requires "
+                    "packed weights. Call 'drjit.nn.pack(net)' to transform "
+                    "the network into a cooperative-vector layout."
+                )
+            return matvec(w, arg, self.bias)
+
+        if isinstance(w, MatrixView):
             raise RuntimeError(
-                "Uninitialized network. Use 'drjit.nn.pack()' to transform"
-                "the network into an optimal layout for evaluation."
+                "drjit.nn.Linear: tensor-mode evaluation requires unpacked 2D "
+                "weights. Either wrap the input as 'nn.CoopVec(...)' or "
+                "construct a fresh unpacked module (without calling "
+                "'drjit.nn.pack()')."
             )
-        return matvec(self.weights, arg, self.bias)
+
+        y = w @ arg
+        if self.bias is not None:
+            bias = self.bias
+            y = y + drjit.reshape(bias, (bias.shape[0], 1))
+        return y
 
     def _alloc(self, dtype: Type[drjit.ArrayBase], size : int, rng: drjit.random.Generator, /) -> Tuple[Module, int]:
         if not drjit.is_tensor_v(dtype):
@@ -350,15 +497,86 @@ class Linear(Module):
             result.bias = drjit.zeros(dtype, out_features)
         return result, out_features
 
-def _sincos_tri(t: T) -> tuple[T, T]:
-    """Implementation detail of the TriEncode class"""
+def _sincos_tri(t):
+    """Triangular sine/cosine approximations with period 1."""
     s = t - .25
-    st = s - drjit.round(s)
-    ct = t - drjit.round(t)
-    return (
-        drjit.fma(drjit.abs(st), -4, 1),
-        drjit.fma(drjit.abs(ct), -4, 1)
-    )
+    return (drjit.fma(drjit.abs(s - drjit.round(s)), -4, 1),
+            drjit.fma(drjit.abs(t - drjit.round(t)), -4, 1))
+
+
+def _tri_encode_coopvec(arg, O, shift):
+    r = []
+    for a in list(arg):
+        for i in range(O):
+            r += _sincos_tri(drjit.fma(a, 2 ** i, shift * i))
+    return CoopVec(r)
+
+
+def _tri_encode_tensor(arg, O, shift):
+    C, N = arg.shape
+    tensor_tp = type(arg)
+    out = drjit.empty(tensor_tp, (C * 2 * O, N))
+    for i in range(O):
+        s, c = _sincos_tri(drjit.fma(arg, 2.0 ** i, shift * i))
+        out[2 * i::2 * O, :] = s.array
+        out[2 * i + 1::2 * O, :] = c.array
+    return out
+
+
+def _sin_encode_rotations(shift, O):
+    """Precompute the per-octave rotation following each double-angle step.
+
+    Going from octave i-1 to i, the target angle is
+    ``θ_i = 2 θ_{i-1} + β_i`` with ``β_i = 2π · s · (2 - i)``. Returns the
+    list ``[(sin β_1, cos β_1), ..., (sin β_{O-1}, cos β_{O-1})]``, or
+    ``None`` when the rotation is identically zero (``shift == 0`` collapses
+    to the pure double-angle recurrence).
+    """
+    if O <= 1 or shift == 0:
+        return None
+    return [drjit.sincos(2 * drjit.pi * shift * (2 - i)) for i in range(1, O)]
+
+
+def _sin_encode_step(s, c, rot):
+    # Double-angle on (s, c), then an optional fixed rotation by the next β_i.
+    s2 = 2 * s
+    s, c = s2 * c, drjit.fma(-s2, s, 1)
+    if rot is not None:
+        sb, cb = rot
+        s, c = drjit.fma(s, cb, c * sb), drjit.fma(c, cb, -s * sb)
+    return s, c
+
+
+def _sin_encode_coopvec(arg, O, shift):
+    if O == 0:
+        return CoopVec([])
+    rots = _sin_encode_rotations(shift, O)
+    r = []
+    for a in list(arg):
+        s, c = drjit.sincos(a * (2 * drjit.pi))
+        r += [s, c]
+        for i in range(1, O):
+            s, c = _sin_encode_step(s, c, rots[i - 1] if rots else None)
+            r += [s, c]
+    return CoopVec(r)
+
+
+def _sin_encode_tensor(arg, O, shift):
+    C, N = arg.shape
+    tensor_tp = type(arg)
+    if O == 0:
+        return drjit.zeros(tensor_tp, (0, N))
+    out = drjit.empty(tensor_tp, (C * 2 * O, N))
+    s, c = drjit.sincos(arg * (2 * drjit.pi))
+    out[0::2 * O, :] = s.array
+    out[1::2 * O, :] = c.array
+    rots = _sin_encode_rotations(shift, O)
+    for i in range(1, O):
+        s, c = _sin_encode_step(s, c, rots[i - 1] if rots else None)
+        out[2 * i::2 * O, :] = s.array
+        out[2 * i + 1::2 * O, :] = c.array
+    return out
+
 
 class TriEncode(Module):
     r"""
@@ -368,11 +586,11 @@ class TriEncode(Module):
     .. math::
 
        x\mapsto \begin{bmatrix}
-           \sin_\triangle(2^0\,x)\\
-           \cos_\triangle(2^0\,x)\\
+           \sin_\triangle(2^0\,x + 0\cdot s)\\
+           \cos_\triangle(2^0\,x + 0\cdot s)\\
            \vdots\\
-           \cos_\triangle(2^{n-1}\, x)\\
-           \sin_\triangle(2^{n-1}\, x)
+           \sin_\triangle(2^{n-1}\, x + (n-1)\cdot s)\\
+           \cos_\triangle(2^{n-1}\, x + (n-1)\cdot s)
        \end{bmatrix}
 
     where
@@ -385,7 +603,7 @@ class TriEncode(Module):
 
     .. math::
 
-       \sin_\triangle(x) = \cos_\triangle(x-1/4)
+       \sin_\triangle(x) = \cos_\triangle(x-1/4).
 
     The value :math:`n` refers to the number of *octaves*. This layer increases
     the dimension by a factor of :math:`2n`.
@@ -394,10 +612,15 @@ class TriEncode(Module):
     :math:`[0, 1]`, it is advisable that you reduce it to this range to avoid
     losing information.
 
-    Minima/maxima of higher frequency components conincide on a regular
+    Minima/maxima of higher frequency components coincide on a regular
     lattice, which can lead to reduced fitting performance at those locations.
-    Specify the optional parameter ``shift`` to phase-shift the :math:`i`-th
-    frequency by :math:`2\,\pi\,\mathrm{shift}` to avoid this behavior.
+    Specify the optional ``shift`` parameter :math:`s` (in *fractional
+    periods*, so that ``shift=0.25`` is a quarter period) to phase-shift the
+    :math:`i`-th octave by :math:`i\cdot s` and avoid this.
+
+    Accepts both :class:`CoopVec` and 2D tensor inputs (batched evaluation).
+    For a tensor of shape ``(C, N)`` with ``N`` independent samples, the
+    output has shape ``(2\,n\,C, N)``.
 
     The following plot shows the first two octaves applied to the linear
     function on :math:`[0, 1]` (without shift).
@@ -428,14 +651,10 @@ class TriEncode(Module):
     def __repr__(self) -> str:
         return f'TriEncode(octaves={self.octaves}, shift={self.shift}, in_channels={self.channels}, out_features={self.channels*self.octaves*2})'
 
-    def __call__(self, arg: CoopVec, /) -> CoopVec:
-        args, r = list(arg), list()
-        for arg in args:
-            for i in range(self.octaves):
-                s, c = _sincos_tri(drjit.fma(arg, 2**i, self.shift*i))
-                r.append(s)
-                r.append(c)
-        return CoopVec(r)
+    def __call__(self, arg: _InputT, /) -> _InputT:
+        if isinstance(arg, CoopVec):
+            return _tri_encode_coopvec(arg, self.octaves, self.shift)
+        return _tri_encode_tensor(arg, self.octaves, self.shift)
 
 
 class SinEncode(Module):
@@ -446,13 +665,12 @@ class SinEncode(Module):
     .. math::
 
        x\mapsto \begin{bmatrix}
-           \sin(2^0\, 2\pi x)\\
-           \cos(2^0\, 2\pi x)\\
+           \sin\bigl(2\pi(2^0\,x + 0\cdot s)\bigr)\\
+           \cos\bigl(2\pi(2^0\,x + 0\cdot s)\bigr)\\
            \vdots\\
-           \sin(2^{n-1}\, 2\pi x)\\
-           \cos(2^{n-1}\, 2\pi x)\\
+           \sin\bigl(2\pi(2^{n-1}\,x + (n-1)\cdot s)\bigr)\\
+           \cos\bigl(2\pi(2^{n-1}\,x + (n-1)\cdot s)\bigr)
        \end{bmatrix}
-
 
     The value :math:`n` refers to the number of *octaves*. This layer increases
     the dimension by a factor of :math:`2n`.
@@ -461,10 +679,15 @@ class SinEncode(Module):
     :math:`[0, 1]`, it is advisable that you reduce it to this range to avoid
     losing information.
 
-    Minima/maxima of higher frequency components conincide on a regular
+    Minima/maxima of higher frequency components coincide on a regular
     lattice, which can lead to reduced fitting performance at those locations.
-    Specify the optional parameter ``shift`` to phase-shift the :math:`i`-th
-    frequency by :math:`\mathrm{shift}` radians to avoid this behavior.
+    Specify the optional ``shift`` parameter :math:`s` (in *fractional
+    periods*, so that ``shift=0.25`` is a quarter period) to phase-shift the
+    :math:`i`-th octave by :math:`i\cdot s` and avoid this.
+
+    Accepts both :class:`CoopVec` and 2D tensor inputs (batched evaluation).
+    For a tensor of shape ``(C, N)`` with ``N`` independent samples, the
+    output has shape ``(2\,n\,C, N)``.
 
     The following plot shows the first two octaves applied to the linear
     function on :math:`[0, 1]` (without shift).
@@ -480,47 +703,25 @@ class SinEncode(Module):
       :align: center
     """
 
-    DRJIT_STRUCT = { 'octaves' : int, 'shift': Union[tuple, None], 'channels': int }
+    DRJIT_STRUCT = { 'octaves' : int, 'shift': float, 'channels': int }
 
     def __init__(self, octaves: int = 0, shift: float = 0) -> None:
         self.octaves = octaves
+        self.shift = shift
         self.channels = -1
 
-        if shift == 0:
-            self.shift = None
-        else:
-            self.shift = (drjit.sin(shift * 2 * drjit.pi),
-                          drjit.cos(shift * 2 * drjit.pi))
-
     def _alloc(self, dtype: Type[drjit.ArrayBase], size : int, rng: drjit.random.Generator, /) -> Tuple[Module, int]:
-        r = SinEncode(self.octaves)
+        r = SinEncode(self.octaves, self.shift)
         r.channels = size
-        r.shift = self.shift
         return r, size * self.octaves * 2
 
     def __repr__(self) -> str:
         return f'SinEncode(octaves={self.octaves}, shift={self.shift}, in_channels={self.channels}, out_features={self.channels*self.octaves*2})'
 
-    def __call__(self, arg: CoopVec, /) -> CoopVec:
-        args, r = list(arg), list()
-        for arg in args:
-            s, c = drjit.sincos(arg * 2 * drjit.pi)
-            r.append(s)
-            r.append(c)
-            for _ in range(1, self.octaves):
-                # Recurrence for double angle sine/cosine
-                s2 = 2 * s
-                s, c = s2 * c, drjit.fma(-s2, s, 1)
-                r.append(s)
-                r.append(c)
-
-                if self.shift:
-                    # Recurrence for sine/cosine angle addition
-                    ss, cs = self.shift
-                    s, c = drjit.fma(s, cs,  c*ss), \
-                           drjit.fma(c, cs, -s*ss)
-
-        return CoopVec(r)
+    def __call__(self, arg: _InputT, /) -> _InputT:
+        if isinstance(arg, CoopVec):
+            return _sin_encode_coopvec(arg, self.octaves, self.shift)
+        return _sin_encode_tensor(arg, self.octaves, self.shift)
 
 class HashEncodingLayer(Module):
     """

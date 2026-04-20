@@ -3608,7 +3608,7 @@ def test96_coop_vec(t, auto_opaque, layout):
     rng = dr.rng(seed=0)
     net = net.alloc(TensorXf16, size=2, rng=rng)
 
-    weights, net = nn.pack(net, layout=layout)
+    net = nn.pack(net, layout=layout)
 
     rng = dr.rng()
     for i in range(3):
@@ -3653,7 +3653,8 @@ def test97_coop_vec_bwd(t, auto_opaque):
 
     net = net.alloc(TensorXf16, 2)
 
-    weights, net = nn.pack(net, layout="training")
+    net = nn.pack(net, layout="training")
+    weights = net['weights']
 
     rng = dr.rng()
     x = rng.random(ArrayXf, (2, 2))

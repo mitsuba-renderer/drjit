@@ -88,6 +88,52 @@ DrJit 1.4.0 (TBA)
   neural networks with optional AdamW-style decoupled weight decay.
   (commit `d205c1 <https://github.com/mitsuba-renderer/drjit/commit/d205c1d4dd57870a54eff0875c2e336a99191317>`__).
 
+- **Redesign of the** :py:mod:`drjit.nn` **API**. Besides
+  :ref:`cooperative vectors <coop_vec>`, the :py:mod:`drjit.nn` API now also
+  accepts regular tensors as inputs through the same ``__call__`` interface.
+  Cooperative vectors better fuse with surrounding computation, while tensor
+  evaluation is convenient for batched evaluation of much larger networks.
+  The two modes are described in detail in the :ref:`neural network
+  documentation <neural_nets>`.
+
+  Every :py:class:`nn.Module <drjit.nn.Module>` is now also a
+  :py:class:`MutableMapping <collections.abc.MutableMapping>` keyed by the
+  full path to each parameter (e.g. ``'layers.0.weights'``), and the
+  optimizer integration is driven through this interface.
+  ``opt.update(net)`` pulls every parameter into the optimizer initially and
+  casts to the correct precision, and ``net.update(opt)`` pushes the updated
+  state back into the network at the start of each step.
+
+  In Dr.Jit 1.1.0, users had to manually cast the packed buffer to
+  :py:class:`Float32 <drjit.cuda.ad.Float32>` for the optimizer and write
+  it back to :py:class:`Float16 <drjit.cuda.ad.Float16>` each iteration:
+
+  .. code-block:: python
+
+     weights, net = nn.pack(net, layout='training')
+     opt = Adam(lr=1e-3, params={'weights': Float32(weights)})
+
+     for i in range(n):
+         weights[:] = Float16(opt['weights'])
+         ...
+
+  This is no longer required:
+
+  .. code-block:: python
+
+     net = nn.pack(net, layout='training')
+     opt = Adam(lr=1e-3)
+     opt.update(net)
+
+     for i in range(n):
+         net.update(opt)
+         ...
+
+- :py:func:`nn.pack() <drjit.nn.pack>` **is now differentiable**. This
+  unlocks matrix-level optimizers such as :py:class:`Muon <drjit.opt.Muon>`
+  on cooperative-vector networks via an in-loop ``nn.pack`` pattern. See
+  the :ref:`neural network documentation <neural_nets>` for details.
+
 - **CUDA Green Context API**: Added :py:class:`drjit.cuda.green_context`, a
   context manager that isolates kernels to a subset of the GPU's streaming
   multiprocessors. See the :ref:`green contexts documentation <green_context>`
@@ -170,6 +216,41 @@ DrJit 1.4.0 (TBA)
   (Dr.Jit commit `861de5 <https://github.com/mitsuba-renderer/drjit/commit/861de5c67b641c4f1ce6f5826c868809fe991416>`__,
   Dr.Jit-Core commit `742ea7 <https://github.com/mitsuba-renderer/drjit-core/commit/742ea73963c9ab96b1fa9fa8fdf040da32e5a459>`__).
 
+**API Breaks**
+
+- ⚠️ :py:func:`nn.pack() <drjit.nn.pack>` and :py:func:`nn.unpack()
+  <drjit.nn.unpack>` **no longer return the shared buffer as the first
+  element of the result tuple**. They now return only the packed/unpacked
+  PyTree with matrix views in place of the input tensors. The underlying
+  buffer remains available via the :py:attr:`MatrixView.buffer
+  <drjit.nn.MatrixView.buffer>` attribute, or, for a packed
+  :py:class:`nn.Module <drjit.nn.Module>`, via the ``'weights'`` entry of
+  the module's mapping interface (i.e. ``net['weights']``).
+
+  Migration:
+
+  .. code-block:: python
+
+     # Before
+     buffer, A_view, b_view = nn.pack(A, b, layout='training')
+     dr.enable_grad(buffer)
+
+     # After
+     A_view, b_view = nn.pack(A, b, layout='training')
+     dr.enable_grad(A_view.buffer)
+
+  For a packed :py:class:`nn.Module <drjit.nn.Module>`:
+
+  .. code-block:: python
+
+     # Before
+     buffer, net = nn.pack(net, layout='training')
+     dr.enable_grad(buffer)
+
+     # After
+     net = nn.pack(net, layout='training')
+     dr.enable_grad(net['weights'])
+
 **Bug Fixes**
 
 - Fixed a bug in :py:meth:`dr.rng().integers() <random.Generator.integers>`
@@ -179,6 +260,10 @@ DrJit 1.4.0 (TBA)
 - Fixed a variable shadowing bug in ``_flatten``/``_unflatten`` that caused
   crashes when flattening PyTrees containing custom ``DRJIT_STRUCT`` types.
   (PR `#482 <https://github.com/mitsuba-renderer/drjit/pull/482>`__).
+
+- Fixed a bug in :py:class:`nn.SinEncode <drjit.nn.SinEncode>` where the
+  per-octave phase offset did not match the documented formula. Code using
+  ``shift=0`` is unaffected.
 
 - Fixed incorrect type names in :py:func:`dr.graphviz_ad() <graphviz_ad>`.
   (commit `0c685e <https://github.com/mitsuba-renderer/drjit/commit/0c685e42d553aad27063c6fd756f5cba91ac503c>`__).

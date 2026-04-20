@@ -9032,7 +9032,15 @@
 
 .. topic:: nn_pack
 
-   A training-optimal layout must be used used if the program *backpropagates*
+   Re-pack a set of matrices and bias vectors into a single contiguous buffer
+   with an inference- or training-optimal layout for use with
+   :py:func:`drjit.nn.matvec`.
+
+   When the argument is an :py:class:`nn.Module <drjit.nn.Module>`, the
+   function returns ``(buffer, packed_module)``; see :py:class:`nn.Module
+   <drjit.nn.Module>` for the training-loop pattern.
+
+   A training-optimal layout must be used if the program *backpropagates*
    (as in :py:func:`dr.backward*() <drjit.backward>`) gradients through
    matrix-vector products. Inference (primal evaluation) and forward derivative
    propagation (as in :py:func:`dr.forward*() <drjit.forward>`) does not

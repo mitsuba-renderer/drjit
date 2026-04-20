@@ -556,6 +556,18 @@ extern DRJIT_EXTRA_EXPORT void ad_reorder(uint64_t key, uint32_t num_bits,
 /// Pack a set of regular Dr.Jit variables to form a cooperative vector
 extern DRJIT_EXTRA_EXPORT uint64_t ad_coop_vec_pack(uint32_t n, const uint64_t *in);
 
+/// Differentiable wrapper around \ref jit_coop_vec_pack_matrices. The
+/// underlying primitive packs ``count`` matrices residing in a single source
+/// buffer ``in`` (with layout described by ``in_descr``) into a single
+/// destination buffer ``out`` (described by ``out_descr``); this wrapper adds
+/// forward- and reverse-mode AD on top, with the adjoint implemented via the
+/// same primitive invoked on swapped descriptor pairs. Returns a (possibly
+/// new) AD-attached index for ``out``; if neither operand carries gradient
+/// tracking the input ``out`` index is returned unchanged.
+extern DRJIT_EXTRA_EXPORT uint64_t ad_coop_vec_pack_matrices(
+    uint32_t count, uint64_t in, const MatrixDescr *in_descr,
+    uint64_t out, const MatrixDescr *out_descr);
+
 /// Unpack a cooperative vector into its components
 extern DRJIT_EXTRA_EXPORT void ad_coop_vec_unpack(uint64_t index, uint32_t n, uint64_t *out);
 

@@ -96,12 +96,12 @@ def test04_pack_unpack(t, sub_slice):
     assert Xv2.buffer is X.array
 
     for layout in ('inference', 'training'):
-        _, *Pa = nn.pack(
+        Pa = nn.pack(
             Xv1, Xv2,
             layout=layout
         )
 
-        _, X1a, X2a = nn.unpack(*Pa)
+        X1a, X2a = nn.unpack(*Pa)
         assert dr.all(m.TensorXf16(X1a) == X1[:, 0:32], axis=None)
         assert dr.all(m.TensorXf16(X2a) == X2[:, 0:32], axis=None)
 
@@ -139,10 +139,10 @@ def test05_matvec(t, shape, transpose, bias, pack):
 
     if pack:
         if bias:
-            _, A, b = nn.pack(A, b)
+            A, b = nn.pack(A, b)
             assert A.buffer is b.buffer
         else:
-            _, A = nn.pack(A)
+            A = nn.pack(A)
     else:
         A = nn.view(A)
         if bias:
@@ -349,10 +349,10 @@ def test14_matvec_fwd(t, transpose, has_A_grad, has_x_grad, has_b_grad, layout):
     # Set up 'A' matrix
     A      = [[4, 2], [5, 1]]
     A_grad = [[2, 1], [1, -1]]
-    _, A_v = nn.pack(Tensor(A), layout=layout)
+    A_v = nn.pack(Tensor(A), layout=layout)
     A_ref = Matrix2f(A)
     if has_A_grad:
-        _, A_grad_v = nn.pack(Tensor(A_grad))
+        A_grad_v = nn.pack(Tensor(A_grad))
         assert not dr.grad_enabled(A_v)
         dr.enable_grad(A_v)
         assert dr.grad_enabled(A_v)
@@ -374,12 +374,12 @@ def test14_matvec_fwd(t, transpose, has_A_grad, has_x_grad, has_b_grad, layout):
     if has_b_grad is not None:
         b1, b2 = Float(-1), Float(1)
         b_ref = Array2f(b1, b2)
-        _, b_v = nn.pack(Tensor([-1, 1]))
+        b_v = nn.pack(Tensor([-1, 1]))
 
         if has_b_grad is True:
             dr.enable_grad(b_ref)
             b_ref.grad = [1, -1]
-            _, b_grad_v = nn.pack(Tensor([1, -1]))
+            b_grad_v = nn.pack(Tensor([1, -1]))
             dr.enable_grad(b_v.buffer)
             b_v.buffer.grad = b_grad_v.buffer
 
@@ -410,7 +410,7 @@ def test15_matvec_in_vcall(t, transpose):
     rng = dr.rng()
     A = rng.normal(t, (size, size))
     b = rng.normal(t, size)
-    _, A, b = nn.pack(A, b)
+    A, b = nn.pack(A, b)
 
     def mult_it():
         x = nn.CoopVec(
@@ -449,14 +449,16 @@ def test16_matvec_bwd(t, in_vcall, grad_lit, separate_buffers):
     A = t([[1, 3], [-2, 4], [3, -2]])
     b = t([0, 0, 0])
     if separate_buffers:
-        buffer, Av= nn.pack(A, layout='training')
-        buffer_bias, bv = nn.pack(b, layout='training')
+        Av = nn.pack(A, layout='training')
+        bv = nn.pack(b, layout='training')
     else:
-        buffer, Av, bv = nn.pack(A, b, layout='training')
+        Av, bv = nn.pack(A, b, layout='training')
+    buffer = Av.buffer
     x = m.Array2f16(2, 4)
     dr.enable_grad(x, buffer)
 
     if separate_buffers:
+        buffer_bias = bv.buffer
         dr.enable_grad(x, buffer_bias)
     dr.enable_grad(x, buffer)
 
@@ -488,8 +490,8 @@ def test16_matvec_bwd(t, in_vcall, grad_lit, separate_buffers):
     assert dr.all(grad_x_ref == grad_x)
 
     dr.schedule(grad_x)
-    _, grad_A = nn.unpack(Av.grad)
-    _, grad_b = nn.unpack(bv.grad)
+    grad_A = nn.unpack(Av.grad)
+    grad_b = nn.unpack(bv.grad)
 
     grad_A = t(grad_A)
     grad_b = t(grad_b)[:, 0]
@@ -583,12 +585,13 @@ def test20_matvec_in_loop(t, mode):
     A = dr.ones(TensorXf16, shape=(2, 2))
     b = dr.zeros(Float16, shape=(2))
 
-    _, A_view, b_view = nn.pack(A, b, layout='inference')
+    A_view, b_view = nn.pack(A, b, layout='inference')
+    buffer = A_view.buffer
 
     cnt = UInt32(0)
     res = Float32(0)
 
-    while dr.hint(cnt < 3, mode=mode, exclude=[_]):
+    while dr.hint(cnt < 3, mode=mode, exclude=[buffer]):
         x = nn.CoopVec(Float16([0.5]), Float16([0.5]))
         a, _ = nn.matvec(A_view, x, b_view)
         res += Float32(a)
@@ -614,8 +617,8 @@ def test21_optimize_in_loop_bwd(t, mode):
     A = dr.ones(TensorXf16, shape=(2, 2))
     b = dr.zeros(Float16, shape=(2))
 
-    buf, A_view, b_view = nn.pack(A, b, layout='training')
-    dr.enable_grad(buf)
+    A_view, b_view = nn.pack(A, b, layout='training')
+    dr.enable_grad(A_view.buffer)
 
     cnt = dr.zeros(UInt32, 2)
     res = dr.zeros(Float32, 2)
@@ -628,7 +631,7 @@ def test21_optimize_in_loop_bwd(t, mode):
 
     dr.backward(res)
 
-    _, A_view, b_view = nn.unpack(A_view.grad, b_view.grad)
+    A_view, b_view = nn.unpack(A_view.grad, b_view.grad)
     A = TensorXf16(A_view)
     b = TensorXf16(b_view)
     assert dr.all(A == TensorXf16([[3, 3], [0, 0]]))
@@ -654,8 +657,8 @@ def test22_optimize_in_loop_bwd_v2(t, mode):
     A = dr.ones(TensorXf16, shape=(2, 2))
     b = dr.zeros(Float16, shape=(2))
 
-    buf, A_view, b_view = nn.pack(A, b, layout='training')
-    dr.enable_grad(buf)
+    A_view, b_view = nn.pack(A, b, layout='training')
+    dr.enable_grad(A_view.buffer)
 
     cnt = dr.zeros(UInt32, 2)
     res = dr.zeros(Float32, 2)
@@ -667,7 +670,7 @@ def test22_optimize_in_loop_bwd_v2(t, mode):
         dr.backward(res)
         cnt += 1
 
-    _, A_view, b_view = nn.unpack(A_view.grad, b_view.grad)
+    A_view, b_view = nn.unpack(A_view.grad, b_view.grad)
     A = TensorXf16(A_view)
     b = TensorXf16(b_view)
     assert dr.all(A == TensorXf16([[3, 3], [0, 0]]))
@@ -698,4 +701,87 @@ def test25_suspend_grad(t):
     dr.enable_grad(y)
     with dr.suspend_grad():
         z = nn.CoopVec(x, y)
+
+
+@pytest.test_arrays('jit,shape=(*),float16,diff')
+def test26_pack_matrices_bwd(t):
+    skip_if_coopvec_not_supported(t)
+
+    # Reverse-mode AD through nn.pack: gradient on the packed buffer must
+    # flow back to the row-major source matrix via the inverse layout. The
+    # backward matvec primitive (jit_coop_vec_outer_product_accum) requires a
+    # training-optimal layout on CUDA, so the inference layout is not exercised
+    # here.
+    m = sys.modules[t.__module__]
+    TensorXf16 = m.TensorXf16
+    Array2f16 = m.Array2f16
+    Array3f16 = m.Array3f16
+
+    A_data = [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]]
+    A = TensorXf16(A_data)
+    dr.enable_grad(A)
+
+    A_view = nn.pack(A, layout='training')
+    assert dr.grad_enabled(A_view.buffer)
+
+    x = Array2f16(2.0, 3.0)
+    y = Array3f16(nn.matvec(A_view, nn.CoopVec(x)))
+    dr.backward(dr.sum(y))
+
+    # dL/dA[i, j] = x[j] for L = sum_i (A @ x)_i.
+    A_grad = TensorXf16(A.grad)
+    assert dr.all(A_grad == TensorXf16([[2, 3], [2, 3], [2, 3]]))
+
+
+@pytest.mark.parametrize('layout', ['training', 'inference'])
+@pytest.test_arrays('jit,shape=(*),float16,diff')
+def test27_pack_matrices_fwd(t, layout):
+    skip_if_coopvec_not_supported(t)
+    if dr.backend_v(t) == dr.JitBackend.LLVM and layout == 'training':
+        pytest.skip("Layout not used in LLVM backend")
+
+    # Forward-mode AD through nn.pack.
+    m = sys.modules[t.__module__]
+    TensorXf16 = m.TensorXf16
+    Array2f16 = m.Array2f16
+    Array3f16 = m.Array3f16
+
+    A = TensorXf16([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]])
+    dr.enable_grad(A)
+    dr.set_grad(A, TensorXf16([[1.0, 0.0], [0.0, 1.0], [1.0, 1.0]]))
+
+    A_view = nn.pack(A, layout=layout)
+    x = Array2f16(2.0, 3.0)
+    y = Array3f16(nn.matvec(A_view, nn.CoopVec(x)))
+    dr.forward_to(y)
+
+    # y.grad[i] = sum_j (dA/dt)[i, j] * x[j].
+    assert dr.all(y.grad == Array3f16(2, 3, 5))
+
+
+@pytest.test_arrays('jit,shape=(*),float16,diff')
+def test28_pack_matrices_mixed(t):
+    # Mixed AD-enabled / non-AD inputs to nn.pack: only the source carrying
+    # gradient receives a backward contribution.
+    skip_if_coopvec_not_supported(t)
+
+    m = sys.modules[t.__module__]
+    TensorXf16 = m.TensorXf16
+    Array2f16 = m.Array2f16
+
+    A = TensorXf16([[1.0, 2.0], [3.0, 4.0]])
+    B = TensorXf16([[5.0, 6.0]])
+    dr.enable_grad(A)
+
+    A_view, B_view = nn.pack(A, B, layout='training')
+    assert dr.grad_enabled(A_view.buffer)
+    assert not dr.grad_enabled(B)
+
+    x = Array2f16(2.0, 3.0)
+    y_a = Array2f16(nn.matvec(A_view, nn.CoopVec(x)))
+    y_b_v = nn.matvec(B_view, nn.CoopVec(x))
+    loss = dr.sum(y_a) + dr.sum(t(*y_b_v))
+    dr.backward(loss)
+
+    assert dr.all(TensorXf16(A.grad) == TensorXf16([[2, 3], [2, 3]]))
 
