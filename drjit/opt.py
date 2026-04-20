@@ -248,7 +248,13 @@ class Optimizer(Generic[Extra], MutableMapping[str, dr.ArrayBase]):
 
         if not (dr.is_diff_v(value) and dr.is_float_v(value)):
             raise TypeError(
-                f'Optimizer.__setitem__(): parameter "{key}" is not differentiable!'
+                f'Optimizer.__setitem__(): cannot register parameter "{key}" of '
+                f'type "{type(value).__name__}". Dr.Jit optimizers expect a '
+                f'differentiable Dr.Jit array or tensor. If you intended to '
+                f'register a PyTree (tuple, list, dict, dataclass, '
+                f'DRJIT_STRUCT, ...), note that nested structures are not '
+                f'supported and must be flattened into individual entries '
+                f'before registration.'
             )
 
         if dr.width(value) == 0:
@@ -262,12 +268,12 @@ class Optimizer(Generic[Extra], MutableMapping[str, dr.ArrayBase]):
         # Ensure that this copy is not in symbolic/literal form
         dr.make_opaque(value)
 
-        # Reattach the copy to the AD graph
-        dr.enable_grad(value)
-
+        # Do cast _before_ enable_grad so that `value` will receive gradients
         promoted = self.promote_fp16 and dr.type_v(value) == dr.VarType.Float16
         if promoted:
             value = dr.float32_array_t(value)(value)
+
+        dr.enable_grad(value)
 
         if prev is not None and prev[0].shape == value.shape:
             self.state[key] = value, promoted, *prev[2:]
@@ -1504,6 +1510,40 @@ class Muon(Optimizer):
 
     This class is a Dr.Jit port of the reference PyTorch implementation
     by Keller Jordan et al.
+
+    When handed a :py:class:`drjit.nn.Module` via :py:meth:`update`, Muon
+    silently drops every non-2D entry (biases, scalars, etc.) — these are
+    meant to be optimized by a standard rule such as :py:class:`AdamW`
+    attached to the same module. The two optimizers then cover disjoint
+    subsets of ``net.keys()``, and a single ``net.update(opt)`` call per
+    optimizer at the top of the training loop keeps the network parameters
+    synchronized:
+
+    .. code-block:: python
+
+       muon = Muon(lr=0.02)
+       muon.update(net)
+
+       adamw = AdamW(lr=1e-3)
+       adamw.update({k: net[k] for k in net if len(net[k].shape) == 1})
+
+       for i in range(n_iter):
+           net.update(muon)
+           net.update(adamw)
+           y = net(x_tensor)
+           loss = ...
+           dr.backward(loss)
+           muon.step()
+           adamw.step()
+
+    For :py:func:`drjit.nn.pack`-based cooperative-vector networks, hand
+    ``Muon`` the *unpacked* module and call :py:func:`drjit.nn.pack` inside
+    the training loop. The matrix-pack path is differentiable, so gradients
+    on the packed buffer flow back through the layout transform to the
+    per-layer 2D weight tensors and from there into Muon's
+    single-precision state.
+    See the :ref:`neural network documentation <neural_nets>` for the full
+    side-by-side flows.
     """
 
     def __init__(self, lr, params=None, *, momentum=0.95, nesterov=True,
@@ -1584,6 +1624,12 @@ class Muon(Optimizer):
         new_value = dr.fma(neg_lr, u_flat, retained)
 
         return new_value, (m_next, shape)
+
+    def _filter(self, params):
+        # Muon is only meaningful on 2D weight matrices; drop scalar, 1D
+        # (biases), or higher-rank entries so that ``update(net)`` can be
+        # called on a whole module without the user having to hand-filter.
+        return {k: v for k, v in params.items() if len(v.shape) == 2}
 
     def _reset(self, key, value, promoted):
         if len(value.shape) != 2:

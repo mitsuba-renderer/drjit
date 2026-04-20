@@ -873,9 +873,6 @@ section <neural_nets>` for an introduction.
 
 .. autoclass:: Sequential
 
-   .. automethod:: __len__
-   .. automethod:: __getitem__
-
 .. autoclass:: Linear
 .. autoclass:: ReLU
 .. autoclass:: LeakyReLU

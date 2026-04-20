@@ -471,7 +471,7 @@ static nb::object repack_impl(const char *name, MatrixLayout layout,
     }
 }
 
-static std::pair<nb::object, nb::object> repack(const char *name, const char *layout_str, nb::handle arg) {
+static nb::object repack(const char *name, const char *layout_str, nb::handle arg) {
     uint32_t offset = 0;
     std::vector<RepackItem> items;
     MatrixLayout layout;
@@ -502,13 +502,16 @@ static std::pair<nb::object, nb::object> repack(const char *name, const char *la
         out.reserve(items.size());
 
         auto submit = [&] {
-            jit_coop_vec_pack_matrices(
+            uint64_t new_out = ad_coop_vec_pack_matrices(
                 (uint32_t) in.size(),
-                (uint32_t) s.index(inst_ptr(buf_cur)),
+                s.index(inst_ptr(buf_cur)),
                 in.data(),
-                (uint32_t) s.index(inst_ptr(buffer)),
+                s.index(inst_ptr(buffer)),
                 out.data()
             );
+            // Promote buffer's AD index when ad_coop_vec_pack_matrices wraps
+            // the in-place pack in a fresh AD variable.
+            s.reset_index(new_out, inst_ptr(buffer));
         };
 
         for (size_t i = 0; i < items.size(); ++i) {
@@ -539,7 +542,13 @@ static std::pair<nb::object, nb::object> repack(const char *name, const char *la
             submit();
     }
 
-    return { buffer, result };
+    // Stash the packed weights so that drjit.nn.Module can find them
+    if (!buffer.is_none() && layout != MatrixLayout::RowMajor &&
+        !result.type().is(view_type) &&
+        get_drjit_struct(result.type()).is_valid())
+        nb::setattr(result, "_packed_buffer", buffer);
+
+    return result;
 }
 
 static CoopVec coopvec_abs_workaround(nb::handle_t<CoopVec> &v) {
@@ -677,38 +686,28 @@ void export_coop_vec(nb::module_ &m) {
 
     nn.def("pack", [](nb::handle arg, const char *layout) { return repack("pack", layout, arg); },
            nb::arg(), "layout"_a = "inference",
-           nb::sig("def pack(arg: MatrixView | drjit.AnyArray, *, layout: typing.Literal['inference', 'training'] = 'inference') -> typing.Tuple[drjit.ArrayBase, MatrixView]"),
+           nb::sig("def pack(arg: MatrixView | drjit.AnyArray, *, layout: typing.Literal['inference', 'training'] = 'inference') -> MatrixView"),
            doc_nn_pack);
 
     nn.def("pack",
            [](nb::args args, const char *layout) {
-               auto temp = repack("pack", layout, args);
-               nb::list l;
-               l.append(temp.first);
-               l.extend(temp.second);
-               return nb::tuple(l);
+               return nb::tuple(repack("pack", layout, args));
            },
            "args"_a, "layout"_a = "inference",
            nb::sig("def pack(*args: PyTree, layout: typing.Literal['inference', "
-                   "'training'] = 'inference') -> typing.Tuple[drjit.ArrayBase, "
-                   "typing.Unpack[typing.Tuple[PyTree, ...]]]"));
+                   "'training'] = 'inference') -> typing.Tuple[PyTree, ...]"));
 
     nn.def("unpack", [](nb::handle arg) {
         return repack("unpack", nullptr, arg); },
-           nb::sig("def unpack(arg: MatrixView | drjit.AnyArray, /) -> typing.Tuple[drjit.ArrayBase, MatrixView]"),
+           nb::sig("def unpack(arg: MatrixView | drjit.AnyArray, /) -> MatrixView"),
            doc_nn_unpack);
 
     nn.def("unpack",
            [](nb::args args) {
-               auto temp = repack("unpack", nullptr, args);
-               nb::list l;
-               l.append(temp.first);
-               l.extend(temp.second);
-               return nb::tuple(l);
+               return nb::tuple(repack("unpack", nullptr, args));
            },
            "args"_a,
-           nb::sig("def unpack(*args: PyTree) -> typing.Tuple[drjit.ArrayBase, "
-                   "typing.Unpack[typing.Tuple[PyTree, ...]]]"));
+           nb::sig("def unpack(*args: PyTree) -> typing.Tuple[PyTree, ...]"));
 
     nn.def("matvec", &matvec, "A"_a.noconvert(), "x"_a.noconvert(),
            "b"_a.noconvert() = nb::none(), "transpose"_a = false,

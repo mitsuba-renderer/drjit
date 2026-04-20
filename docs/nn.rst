@@ -5,16 +5,38 @@
 Neural Networks
 ===============
 
-Dr.Jit's neural network infrastructure builds on :ref:`cooperative vectors
-<coop_vec>`. Please review their documentation before reading this section.
-
 The module :py:mod:`drjit.nn` provides convenient modular abstractions to
-construct, evaluate,  and optimize neural networks. Their design resembles the
+construct, evaluate, and optimize neural networks. Their design resembles the
 PyTorch `nn.Module
 <https://pytorch.org/docs/stable/generated/torch.nn.Module.html>`__ classes.
-The Dr.Jit :py:class:`nn.Module <Module>` class takes a cooperative vector as input
-and produces another cooperative vector. Modules can be chained to form longer
-sequential pipelines.
+
+Neural network declarations in Dr.Jit can be compiled in two fundamentally
+different ways:
+
+- **Tensor mode** is the conventional approach: each layer's matrix
+  multiplication is dispatched to a dedicated matrix multiplication kernel
+  and the surrounding pre- and post-processing is JIT-compiled by Dr.Jit.
+
+- **Cooperative-vector mode** additionally fuses the layer matrix
+  multiplications themselves into the surrounding kernel via the
+  :ref:`cooperative vectors <coop_vec>` API. The result is a single
+  *megakernel* that can evaluate an entire neural network alongside other
+  work (including texture lookups, ray tracing, etc.) without paying
+  the cross-kernel synchronization and memory-traffic cost that a split
+  into multiple kernels would otherwise incur.
+
+  This mode is most interesting when intermediate layer state can comfortably
+  fit into registers. On GPU, layer widths in the range from 16 to 64 are the
+  practical sweet spot. Wider networks (128..256) can work as well but are more
+  challenging to compile into efficient kernels. For large networks, tensor
+  mode tends to win because dedicated matrix multiplication kernels can exploit
+  more of the hardware's matrix-math throughput.
+
+The choice between the two is made at evaluation time by deciding what to
+hand to the network: a tensor selects tensor mode; a :py:class:`CoopVec
+<drjit.nn.CoopVec>` selects cooperative-vector mode after a one-time
+:py:func:`pack` of the weights into a hardware-friendly layout. Most layers
+work unchanged across both modes.
 
 .. warning::
 
@@ -36,6 +58,121 @@ The set of neural network module currently includes:
   :py:class:`nn.Exp <Exp>`, :py:class:`nn.Exp2 <Exp2>`, :py:class:`nn.Tanh <Tanh>`.
 
 - Miscellaneous: :py:class:`nn.Cast <Cast>`, :py:class:`nn.ScaleAdd <ScaleAdd>`.
+
+Accessing and optimizing Module parameters
+------------------------------------------
+
+Every allocated :py:class:`nn.Module <Module>` is a
+:py:class:`MutableMapping <collections.abc.MutableMapping>`. Each key is
+a string that encodes the full path to a parameter tensor inside the
+module tree, separated by dots (for example ``'layers.0.weights'`` or
+``'layers.2.bias'``):
+
+.. code-block:: python
+
+   net = nn.Sequential(nn.Linear(2, 4), nn.ReLU(), nn.Linear(-1, 1)).alloc(TensorXf16, 2)
+
+   list(net.keys())        # ['layers.0.weights', 'layers.0.bias', 'layers.2.weights', 'layers.2.bias']
+   net['layers.0.weights']                              # read a tensor
+   for k, v in net.items():                             # iterate over parameters
+       ...
+   net['layers.0.weights'] = new_weights                # reassign
+
+Writing to ``net[k]`` updates the parameter on the relevant submodule with
+casts if needed, e.g., when a single-precision optimizer modifies a
+half-precision model.
+
+The same mapping interface drives parameter transfer with an optimizer. An
+optimizer pulls every parameter in once initially, and the user's training
+loop pushes the optimizer's updated state back into the network before
+each forward pass:
+
+.. code-block:: python
+
+   opt = Adam(lr=1e-3)
+   opt.update(net)            # pull every parameter into the optimizer (once)
+
+   for i in range(n_iter):
+       net.update(opt)        # push the optimizer state back into the net
+       y = net(x)
+       loss = ...
+       dr.backward(loss)
+       opt.step()
+
+After the initial ``opt.update(net)`` the optimizer holds the authoritative
+copy of the parameters. Do not call ``opt.update(net)`` a second time later
+on, as it would overwrite the just-computed step.
+
+Optimization in tensor mode
+---------------------------
+
+Tensor mode is the simplest case: each layer's 2D weight tensor is already
+a parameter in the module mapping, and the optimizer attaches to those
+tensors directly. Any optimizer works:
+
+.. code-block:: python
+
+   net = nn.Sequential(...).alloc(TensorXf16, batch_size)
+
+   opt = Adam(lr=0.02)
+   opt.update(net)
+
+   for i in range(n_iter):
+       net.update(opt)
+       y = net(x_tensor)
+       loss = ...
+       dr.backward(loss); opt.step()
+
+For a complete training setup that also includes 1D parameters (biases),
+pair :py:class:`Muon <drjit.opt.Muon>` on the 2D weights with
+:py:class:`AdamW <drjit.opt.AdamW>` on everything else — see the
+:py:class:`Muon <drjit.opt.Muon>` docstring for a worked example.
+
+Optimization in cooperative-vector mode
+---------------------------------------
+
+Cooperative-vector mode adds a complication: hardware matrix-vector
+operations want their weights in a vendor-specific *packed* layout, not
+the row-major form the per-layer 2D tensors use. The conversion happens
+through a call to :py:func:`pack(net) <pack>`, which produces a packed
+module whose mapping collapses to a single ``'weights'`` entry pointing
+at the packed buffer.
+
+**Where** in the training loop :py:func:`pack` runs determines which view
+the optimizer sees. Element-wise optimizers are happy with the packed
+buffer, so :py:func:`pack` can be called once, outside the loop:
+
+.. code-block:: python
+
+   packed_net = nn.pack(net, layout='training')
+
+   opt = Adam(lr=1e-3)
+   opt.update(packed_net)
+
+   for i in range(n_iter):
+       packed_net.update(opt)
+       y = packed_net(nn.CoopVec(x))
+       loss = ...
+       dr.backward(loss); opt.step()
+
+Matrix-level optimizers such as :py:class:`Muon <drjit.opt.Muon>` need to
+see each layer's weights as a 2D matrix, so :py:func:`pack` is called
+*inside* the loop on the unpacked module. :py:func:`pack` is
+differentiable, so gradients on the packed buffer flow back through the
+layout transform to the per-layer 2D weight tensors and into the
+optimizer's state:
+
+.. code-block:: python
+
+   opt = Muon(lr=0.02)
+   opt.update(net)
+
+   for i in range(n_iter):
+       net.update(opt)
+       packed_net = nn.pack(net, layout='training')
+       y = packed_net(nn.CoopVec(x))
+       loss = ...
+       dr.backward(loss); opt.step()
 
 Example
 -------
@@ -69,7 +206,8 @@ mixed-precision training.
     ref = TensorXf(iio.imread("https://d38rqfq1h7iukm.cloudfront.net/media/uploads/wjakob/2024/06/wave-128.png") / 256)
     tex = Texture2f(ref)
 
-    # Establish the network structure
+    # Establish the network structure. Networks with an encoding
+    # layer do not need biases, which simplifies the architecture.
     net = nn.Sequential(
         nn.TriEncode(16, 0.2),
         nn.Cast(Float16),
@@ -94,11 +232,13 @@ mixed-precision training.
     )
 
     # Convert to training-optimal layout
-    weights, net = nn.pack(net, layout='training')
+    net = nn.pack(net, layout='training')
     print(net)
 
-    # Optimize a single-precision copy of the parameters
-    opt = Adam(lr=1e-3, params={'weights': Float32(weights)})
+    # The optimizer discovers the parameter via the module's mapping
+    # interface and keeps its own single-precision copy of the packed buffer.
+    opt = Adam(lr=1e-3)
+    opt.update(net)
 
     # This is an adaptive mixed-precision (AMP) optimization, where a half
     # precision computation runs within a larger single-precision program.
@@ -108,8 +248,8 @@ mixed-precision training.
     res = 256
 
     for i in tqdm(range(40000)):
-        # Update network state from optimizer
-        weights[:] = Float16(opt['weights'])
+        # Push the latest optimizer state back into the network (Float32 -> Float16).
+        net.update(opt)
 
         # Generate jittered positions on [0, 1]^2
         t = dr.arange(Float32, res)
@@ -224,7 +364,9 @@ using a hash grid encoding.
     # Establish the network structure.
     # In contrast to the previous example, we use a HashEncodingLayer, referencing
     # the previously created hash grid. Its parameters will not be part of the
-    # packed weights, and have to be handled separately.
+    # packed weights, and have to be handled separately. The ``prefix`` keeps
+    # the packed weights from colliding with the hash grid parameters when both
+    # are handed to a single optimizer.
     net = nn.Sequential(
         nn.HashEncodingLayer(enc),
         nn.Cast(Float16),
@@ -235,26 +377,23 @@ using a hash grid encoding.
         nn.Linear(-1, -1, bias=False),
         nn.LeakyReLU(),
         nn.Linear(-1, 3, bias=False),
-        nn.Exp()
+        nn.Exp(),
+        prefix='mlp'
     )
 
-    # Instantiate the network for a specific backend + input size
+    # Instantiate the network for a specific backend + input size.
     net = net.alloc(TensorXf16, 2, rng=rng)
 
-    # Convert to training-optimal layout
-    weights, net = nn.pack(net, layout='training')
+    # Convert to training-optimal layout.
+    net = nn.pack(net, layout='training')
     print(net)
 
-    # Optimize a single-precision copy of the parameters.
-    # In addition to the network weights, we also add the parameters of the
-    # encoding.
-    opt = Adam(
-        lr=1e-3,
-        params={
-            "mlp.weights": Float32(weights),
-            "enc.params": Float32(enc.params),
-        },
-    )
+    # Optimize a single-precision copy of the parameters. The optimizer picks
+    # up ``mlp.weights`` from ``net`` through the mapping interface and we
+    # add the encoding parameters alongside.
+    opt = Adam(lr=1e-3)
+    opt.update(net)
+    opt['enc.params'] = Float32(enc.params)
 
     # This is an adaptive mixed-precision (AMP) optimization, where a half
     # precision computation runs within a larger single-precision program.
@@ -264,9 +403,9 @@ using a hash grid encoding.
     res = 256
 
     for i in tqdm(range(40000)):
-        # Update network state from optimizer
-        weights[:] = Float16(opt['mlp.weights'])
-        # Update the encoding parameters as well
+        # Push the latest network weights back into the net (Float32 -> Float16).
+        net.update(opt)
+        # The encoding parameters still have to be written back manually.
         enc.params[:] = Float16(opt['enc.params'])
 
         # Generate jittered positions on [0, 1]^2

@@ -13,7 +13,7 @@ def test01_basic(t):
     with pytest.raises(KeyError, match="nonexistent"):
         opt["nonexistent"]
 
-    with pytest.raises(TypeError, match='parameter "x" is not differentiable'):
+    with pytest.raises(TypeError, match='cannot register parameter "x" of type "int"'):
         opt["x"] = 1  # type: ignore
 
     with pytest.raises(RuntimeError, match='parameter "x" is empty'):

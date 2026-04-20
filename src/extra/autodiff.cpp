@@ -4231,6 +4231,174 @@ Index ad_coop_vec_pack(uint32_t n, const Index *in) {
     return result.release();
 }
 
+/**
+ * \brief AD wrapper around jit_coop_vec_pack_matrices.
+ *
+ * One instance corresponds to a single ``jit_coop_vec_pack_matrices`` call:
+ * a batch of ``count`` matrices residing in one source buffer is laid out
+ * into one destination buffer. The forward- and reverse-mode AD callbacks
+ * each issue a single ``jit_coop_vec_pack_matrices`` call; the reverse-mode
+ * callback swaps the input/output descriptor pair to invert the layout.
+ *
+ * Two AD inputs are tracked:
+ *   - ``m_inputs[0]``: the source buffer.
+ *   - ``m_inputs[1]``: the prior AD state of the destination buffer, used to
+ *     chain a sequence of pack calls that write into the same destination.
+ *     Either input slot may be 0 when its variable has no AD attachment.
+ *
+ * The chain semantics are exact when successive pack calls write to
+ * *disjoint* regions of an initially-zero destination buffer — which is the
+ * invariant that ``drjit.nn.pack`` (the only caller) maintains. Under that
+ * invariant the destination's gradient at any region only originates from
+ * one pack call, and the simple passthrough/accumulate handling below
+ * matches the OVERWRITE semantics of the underlying primitive without
+ * needing an explicit mask.
+ */
+class CoopVecPackMatrices : public dr::detail::CustomOpBase {
+public:
+    CoopVecPackMatrices(uint32_t count, const MatrixDescr *in_descr,
+                        const MatrixDescr *out_descr,
+                        size_t in_size, size_t out_size)
+        : m_in_descr(in_descr, in_descr + count),
+          m_out_descr(out_descr, out_descr + count),
+          m_in_size(in_size), m_out_size(out_size) { }
+
+    ~CoopVecPackMatrices() {
+        std::lock_guard<Lock> guard(state.lock);
+        for (uint32_t index : m_output_indices)
+            ad_var_dec_ref_int(index, state[index]);
+    }
+
+    void forward() override {
+        std::lock_guard<Lock> guard(state.lock);
+        ADVariable *target = state[m_output_indices[0]];
+
+        // Pass the prior destination's gradient through unchanged.
+        if (m_inputs[1]) {
+            ADVariable *prev = state[m_inputs[1]];
+            if (prev->grad.valid())
+                target->accum(prev->grad, target->size);
+        }
+
+        // Layout-transform the source's gradient into a fresh zero scratch
+        // buffer, then accumulate it. The scratch is zero outside the
+        // out_descr regions, so this leaves the prior gradient unchanged
+        // there. Inside the out_descr regions the prior gradient is zero
+        // by the disjoint-regions invariant noted on the class, so the
+        // accumulate likewise reproduces the OVERWRITE semantics of the
+        // underlying pack.
+        if (m_inputs[0]) {
+            ADVariable *input = state[m_inputs[0]];
+            if (input->grad.valid()) {
+                uint64_t zero = 0;
+                JitVar tmp = JitVar::steal(jit_var_literal(
+                    m_backend, m_out_descr[0].dtype, &zero,
+                    m_out_size, 1));
+                jit_coop_vec_pack_matrices(
+                    (uint32_t) m_in_descr.size(), input->grad.index(),
+                    m_in_descr.data(), tmp.index(), m_out_descr.data());
+                target->accum(tmp, target->size);
+            }
+        }
+    }
+
+    void backward() override {
+        std::lock_guard<Lock> guard(state.lock);
+        ADVariable *out = state[m_output_indices[0]];
+        if (!out->grad.valid())
+            return;
+
+        // Pass the destination's gradient back to the prior state. The
+        // disjoint-regions invariant (see class comment) ensures that the
+        // contribution at this op's out_descr regions is harmless: in the
+        // chained-pack use case the prior state is consumed only by this
+        // op, so any spurious gradient at the overwritten regions has no
+        // downstream effect.
+        if (m_inputs[1]) {
+            ADVariable *prev = state[m_inputs[1]];
+            prev->accum(out->grad, prev->size);
+        }
+
+        // Inverse pack: read the destination's gradient at the out_descr
+        // regions, layout-convert back to the in_descr regions of a fresh
+        // scratch buffer, and accumulate into the source's gradient.
+        if (m_inputs[0]) {
+            ADVariable *input = state[m_inputs[0]];
+            uint64_t zero = 0;
+            JitVar tmp = JitVar::steal(jit_var_literal(
+                m_backend, m_in_descr[0].dtype, &zero,
+                m_in_size, 1));
+            jit_coop_vec_pack_matrices(
+                (uint32_t) m_out_descr.size(), out->grad.index(),
+                m_out_descr.data(), tmp.index(), m_in_descr.data());
+            input->accum(tmp, input->size);
+        }
+    }
+
+    void add_input(JitBackend backend, uint32_t index) {
+        add_index(backend, index, true);
+        m_inputs.push_back(index);
+    }
+
+    void add_output(JitBackend backend, uint32_t index) {
+        add_index(backend, index, false);
+        std::lock_guard<Lock> guard(state.lock);
+        ad_var_inc_ref_int(index, state[index]);
+    }
+
+    const char *name() const override { return "pack_matrices"; }
+
+private:
+    std::vector<MatrixDescr> m_in_descr, m_out_descr;
+    std::vector<uint32_t> m_inputs;
+    size_t m_in_size, m_out_size;
+};
+
+/**
+ * Differentiable wrapper around \ref jit_coop_vec_pack_matrices. The semantics
+ * match the underlying primitive — ``count`` matrices are packed from the
+ * ``in`` buffer (with layout described by ``in_descr``) into the ``out``
+ * buffer (described by ``out_descr``). The output buffer is mutated in place;
+ * if neither operand has AD attachment the call is a thin wrapper around the
+ * JIT primitive and the unchanged ``out`` index is returned. Otherwise a
+ * fresh AD variable is created on top of the output buffer's JIT index, and
+ * the returned combined index reflects this attachment.
+ */
+Index ad_coop_vec_pack_matrices(uint32_t count, Index in,
+                                const MatrixDescr *in_descr, Index out,
+                                const MatrixDescr *out_descr) {
+    if (count == 0)
+        return out;
+
+    JitIndex in_j  = jit_index(in),
+             out_j = jit_index(out);
+
+    jit_coop_vec_pack_matrices(count, in_j, in_descr, out_j, out_descr);
+
+    ADIndex in_a  = ad_index(in),
+            out_a = ad_index(out);
+
+    if (in_a == 0 && out_a == 0)
+        return out;
+
+    VarInfo vi = jit_set_backend(out_j);
+
+    ref<CoopVecPackMatrices> op = new CoopVecPackMatrices(
+        count, in_descr, out_descr,
+        jit_var_size(in_j), jit_var_size(out_j));
+    op->add_input(vi.backend, in_a);
+    op->add_input(vi.backend, out_a);
+
+    uint64_t ad_result = ad_var_new(out_j);
+    op->add_output(vi.backend, ad_index(ad_result));
+
+    if (ad_custom_op(op.get()))
+        return ad_result;
+
+    ad_var_dec_ref(ad_result);
+    return out;
+}
+
 class CoopVecUnpack : public dr::detail::CustomOpBase {
 public:
     ~CoopVecUnpack() {
