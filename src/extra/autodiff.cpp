@@ -3029,14 +3029,18 @@ struct BatchedGemmEdge : Special {
         uint32_t c_mk = (uint32_t) ((size_t) m_M * m_N);
         const GemmBatch *bp = m_has_batch ? &m_batch : nullptr;
 
+        JitVar src_grad = source->grad;
+        if (src_grad.size() != source->size)
+            src_grad.resize(source->size);
+
         JitVar contrib;
         if (m_is_a_edge)
-            contrib = JitVar::steal(jit_var_batched_gemm(source->grad.index(),
+            contrib = JitVar::steal(jit_var_batched_gemm(src_grad.index(),
                                                          m_other.index(), m_At,
                                                          m_Bt, m_M, m_N, m_K, bp));
         else
             contrib = JitVar::steal(jit_var_batched_gemm(m_other.index(),
-                                                         source->grad.index(), m_At,
+                                                         src_grad.index(), m_At,
                                                          m_Bt, m_M, m_N, m_K, bp));
 
         size_t fwd_grid = m_has_batch ? batch_grid_count(m_batch) : 1;
@@ -3092,9 +3096,14 @@ struct BatchedGemmEdge : Special {
         const uint32_t *op2_stride = dc_left ? other_stride : dc_stride;
 
         GemmBatch bc = make_deriv_batch(src_stride, op1_stride, op2_stride);
+
+        JitVar dc_grad = target->grad;
+        if (dc_grad.size() != target->size)
+            dc_grad.resize(target->size);
+
         JitVar contrib = JitVar::steal(jit_var_batched_gemm(
-            dc_left ? target->grad.index() : m_other.index(),
-            dc_left ? m_other.index()      : target->grad.index(),
+            dc_left ? dc_grad.index()      : m_other.index(),
+            dc_left ? m_other.index()      : dc_grad.index(),
             dc_left ? dc_t_k               : other_t_k,
             dc_left ? other_t_k            : dc_t_k,
             src_t ? s2 : s1,

@@ -546,3 +546,54 @@ def test22_matmul_1d_grad(t, A_shape, B_shape):
     C = dr.matmul(A, B)
     dr.forward_to(C)
     assert np.allclose(dr.grad(C).numpy(), dC_ref, atol=1e-3)
+
+
+@pytest.test_arrays('is_tensor,jit,float32,is_diff')
+@pytest.mark.parametrize('A_shape,B_shape', [
+    ((3, 2),    (2,)),           # matrix-vector, 1-D output
+    ((3, 2),    (2, 4)),         # full 2-D GEMM
+    ((4, 3, 5), (4, 5, 2)),      # batched 2-D GEMM
+    ((3, 5),    (2, 4, 5, 7)),   # broadcast on A: backward has n_rdims > 0
+])
+def test23_matmul_scalar_loss_grad(t, A_shape, B_shape):
+    """Reverse AD with a scalar loss seeded from ``dr.backward``. The
+    output's ``grad`` is a size-1 literal, which the backward GEMM must
+    broadcast up to ``target->size`` before dispatching the kernel --
+    otherwise ``jit_var_batched_gemm`` reads past a 1-element buffer and
+    only the first row/column of the operand gradient gets populated.
+    Exercises the 1-D output path, the 2-D fast path, a batched GEMM,
+    and a broadcast case (``n_rdims > 0`` on the A-edge backward)."""
+    np = pytest.importorskip("numpy")
+    rng = np.random.default_rng(seed=_seed(A_shape, B_shape))
+
+    A_np = rng.standard_normal(A_shape).astype(np.float32)
+    B_np = rng.standard_normal(B_shape).astype(np.float32)
+
+    def _sum_to(x, target_shape):
+        ndim_extra = x.ndim - len(target_shape)
+        if ndim_extra > 0:
+            x = x.sum(axis=tuple(range(ndim_extra)))
+        for i, ti in enumerate(target_shape):
+            if ti == 1 and x.shape[i] != 1:
+                x = x.sum(axis=i, keepdims=True)
+        return x
+
+    # Promote 1-D operands to the 2-D form numpy-matmul uses internally,
+    # compute the gradient in that form, and demote the inserted axis.
+    A2 = A_np[None, :]     if A_np.ndim == 1 else A_np
+    B2 = B_np[:, None]     if B_np.ndim == 1 else B_np
+    C2 = np.matmul(A2, B2)
+    dC2 = np.ones_like(C2)
+    grad_A_ref = _sum_to(np.matmul(dC2, np.swapaxes(B2, -1, -2)), A2.shape)
+    grad_B_ref = _sum_to(np.matmul(np.swapaxes(A2, -1, -2), dC2), B2.shape)
+    if A_np.ndim == 1:
+        grad_A_ref = grad_A_ref[0]
+    if B_np.ndim == 1:
+        grad_B_ref = grad_B_ref[:, 0]
+
+    A, B = t(A_np), t(B_np)
+    dr.enable_grad(A, B)
+    C = dr.matmul(A, B)
+    dr.backward(dr.sum(C))
+    assert np.allclose(dr.grad(A).numpy(), grad_A_ref, atol=1e-3)
+    assert np.allclose(dr.grad(B).numpy(), grad_B_ref, atol=1e-3)
