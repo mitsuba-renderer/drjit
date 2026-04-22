@@ -530,6 +530,7 @@ public:
            ad_loop_body body_cb, ad_loop_delete delete_cb,
            const index64_vector &state,
            const dr::vector<uint32_t> &implicit_in,
+           const dr::vector<bool> &invariant_mask,
            long long max_iterations)
         : m_backend(backend), m_name(name), m_payload(payload),
           m_read_cb(read_cb), m_write_cb(write_cb), m_cond_cb(cond_cb),
@@ -545,6 +546,7 @@ public:
             VarType vt = jit_var_type(jit_index);
             Input input{};
             input.index = jit_index;
+            input.is_invariant = i < invariant_mask.size() && invariant_mask[i];
 
             if (vt == VarType::Float16 || vt == VarType::Float32 ||
                 vt == VarType::Float64) {
@@ -737,13 +739,16 @@ public:
     // -------------------------------------------------------------------
 
     void backward() override {
-        if (m_max_iterations == -1) {
+        if (m_max_iterations == -1)
             backward_simple();
-        } else {
-            jit_raise("CustomOp::backward(): the reverse-mode derivative of a "
-                      "complex loop (with max_iterations != -1) is not yet "
-                      "implemented!");
-        }
+        else if (m_max_iterations > 0)
+            backward_general();
+        else
+            jit_raise("LoopOp::backward(): reverse-mode differentiation of "
+                      "this loop requires a 'max_iterations' hint (either "
+                      "-1 for the sum-style fast path, or a positive upper "
+                      "bound on the iteration count to enable trajectory "
+                      "storage).");
     }
 
     // -------------------------------------------------------------------
@@ -862,7 +867,10 @@ public:
             if (in.has_grad_in && in.has_grad_out)
                 jit_raise("LoopOp::backward_simple(): unsupported "
                           "configuration. Variable %u (r%u) is marked both as a "
-                          "differentiable output and an input.", index, (uint32_t) in.index);
+                          "differentiable output and an input. Pass an "
+                          "'max_iterations' hint to the loop to enable the "
+                          "general-purpose reverse-mode implementation.",
+                          index, (uint32_t) in.index);
 
             if (in.has_grad_in) {
                 uint64_t zero = 0;
@@ -909,12 +917,282 @@ public:
         m_state.release();
     }
 
+    // -------------------------------------------------------------------
+
+    /* The backward_general() implementation stores the per-iteration state
+       of each differentiable (and non-differentiable) loop variable in a
+       per-thread variable array during a first forward-replay pass. A second
+       reverse replay then walks the recorded states in reverse, rebuilds a
+       one-iteration AD subgraph, and propagates gradients back through it.
+
+       The layout of 'm_state' during the two passes is:
+
+         pass 1 ("trajectory"):
+            [0 .. N)         : current (non-AD) loop state
+            [N .. 2*N)       : per-state-var trajectory arrays
+            [2*N]            : iteration counter 'it' (starts at 0)
+
+         pass 2 ("replay"):
+            [0 .. N)         : trajectory arrays (read-only)
+            [N]              : iteration counter 'it' (starts at pass-1 final)
+            [N+1 .. N+1+D)   : per-diff-state gradient accumulators
+
+       where N = m_inputs.size() and D = m_diff_count. */
+
+    uint32_t bwd_gen_p1_cond() {
+        size_t N = m_inputs.size();
+
+        m_state2.release();
+        for (size_t i = 0; i < N; ++i)
+            m_state2.push_back_borrow(m_state[i]);
+        m_write_cb(m_payload, m_state2, m_reset);
+        m_reset = false;
+        m_state2.release();
+
+        uint32_t user_cond = m_cond_cb(m_payload);
+
+        // In debug mode, return the user's condition unaltered. Overflow
+        // past m_max_iterations then trips jit_array_write()'s bounds check
+        // inside bwd_gen_p1_body(), logging a warning per overrun iteration.
+        if (jit_flag(JitFlag::Debug))
+            return user_cond;
+
+        // Release mode: cap the loop at m_max_iterations to keep trajectory
+        // writes in bounds.
+        uint32_t max_u32 = jit_var_u32(m_backend, (uint32_t) m_max_iterations);
+        uint32_t lt = jit_var_lt((uint32_t) m_state[2 * N], max_u32);
+        jit_var_dec_ref(max_u32);
+        uint32_t combined = jit_var_and(user_cond, lt);
+        jit_var_dec_ref(lt);
+        return combined;
+    }
+
+    void bwd_gen_p1_body() {
+        size_t N = m_inputs.size();
+        uint32_t iter = (uint32_t) m_state[2 * N];
+        uint32_t true_mask = jit_var_bool(m_backend, true);
+
+        // Record the pre-iteration state of each variable
+        for (size_t i = 0; i < N; ++i) {
+            if (m_inputs[i].is_invariant)
+                continue;
+            uint32_t arr = (uint32_t) m_state[N + i];
+            uint32_t value = (uint32_t) m_state[i];
+            uint32_t arr_new = jit_array_write(arr, iter, value, true_mask);
+            jit_var_dec_ref(arr);
+            m_state[N + i] = arr_new;
+        }
+        jit_var_dec_ref(true_mask);
+
+        // Execute the user body, discarding side effects
+        {
+            scoped_record record_guard(m_backend);
+            m_body_cb(m_payload);
+        }
+
+        // Read back the updated state (strip any AD that may have appeared)
+        m_state2.release();
+        m_read_cb(m_payload, m_state2);
+        for (size_t i = 0; i < N; ++i) {
+            uint32_t new_jit = (uint32_t) m_state2[i];
+            jit_var_inc_ref(new_jit);
+            jit_var_dec_ref((uint32_t) m_state[i]);
+            m_state[i] = new_jit;
+        }
+        m_state2.release();
+
+        // Advance the iteration counter
+        uint32_t one = jit_var_u32(m_backend, 1);
+        uint32_t iter_new = jit_var_add(iter, one);
+        jit_var_dec_ref(one);
+        jit_var_dec_ref(iter);
+        m_state[2 * N] = iter_new;
+    }
+
+    uint32_t bwd_gen_p2_cond() {
+        size_t N = m_inputs.size();
+        uint32_t iter = (uint32_t) m_state[N];
+        uint32_t zero = jit_var_u32(m_backend, 0);
+        uint32_t gt = jit_var_gt(iter, zero);
+        jit_var_dec_ref(zero);
+        return gt;
+    }
+
+    void bwd_gen_p2_body() {
+        size_t N = m_inputs.size();
+
+        // Decrement 'it' to the iteration we're about to backprop through
+        uint32_t iter = (uint32_t) m_state[N];
+        uint32_t one = jit_var_u32(m_backend, 1);
+        uint32_t iter_new = jit_var_sub(iter, one);
+        jit_var_dec_ref(one);
+        jit_var_dec_ref(iter);
+        m_state[N] = iter_new;
+
+        // Rebuild the per-iteration pre-body state from the trajectory.
+        // Invariants skip the trajectory (their value is constant, cached
+        // in in.index) but still get a fresh Symbolic AD wrap each iteration.
+        uint32_t true_mask = jit_var_bool(m_backend, true);
+        m_state2.release();
+        for (size_t i = 0; i < N; ++i) {
+            const Input &in = m_inputs[i];
+            uint64_t index;
+            uint32_t val;
+            if (in.is_invariant) {
+                val = in.index;
+                jit_var_inc_ref(val);
+            } else {
+                uint32_t arr = (uint32_t) m_state[i];
+                val = jit_array_read(arr, iter_new, true_mask);
+            }
+            if (in.is_diff) {
+                index = ad_var_new(val);
+                jit_var_dec_ref(val);
+            } else {
+                index = val;
+            }
+            m_state2.push_back_steal(index);
+        }
+        jit_var_dec_ref(true_mask);
+
+        // Push to Python, run the body with side effects suppressed
+        m_write_cb(m_payload, m_state2, true);
+        {
+            scoped_record record_guard(m_backend);
+            m_body_cb(m_payload);
+        }
+
+        // Read back the body's outputs (AD-equipped)
+        index64_vector out;
+        m_read_cb(m_payload, out);
+
+        // Seed gradients on the outputs from the running accumulators
+        size_t diff_off = N + 1;
+        for (size_t i = 0; i < N; ++i) {
+            const Input &in = m_inputs[i];
+            if (!in.is_diff)
+                continue;
+            if (out[i] >> 32) {
+                ad_accum_grad(out[i], (uint32_t) m_state[diff_off]);
+                ad_enqueue(dr::ADMode::Backward, out[i]);
+            }
+            diff_off++;
+        }
+
+        ad_traverse(dr::ADMode::Backward, (uint32_t) dr::ADFlag::ClearNone);
+
+        // New accumulator values = gradient of the fresh per-iteration inputs
+        diff_off = N + 1;
+        for (size_t i = 0; i < N; ++i) {
+            const Input &in = m_inputs[i];
+            if (!in.is_diff)
+                continue;
+            uint32_t new_grad = ad_grad(m_state2[i]);
+            jit_var_dec_ref((uint32_t) m_state[diff_off]);
+            m_state[diff_off] = new_grad;
+            diff_off++;
+        }
+
+        out.release();
+        m_state2.release();
+    }
+
+    void backward_general() {
+        size_t N = m_inputs.size();
+        size_t max_iter = (size_t) m_max_iterations;
+
+        // Pass 1: record the trajectory
+        std::string name_p1 = m_name + " [ad, bwd, record]";
+
+        m_state.release();
+        for (const Input &in : m_inputs)
+            m_state.push_back_borrow(in.index);
+        for (const Input &in : m_inputs) {
+            // Invariants get a unit-capacity placeholder (never written);
+            // pass 2 substitutes in.index directly without touching it.
+            size_t capacity = in.is_invariant ? 1 : max_iter;
+            uint32_t arr = jit_array_create(m_backend, jit_var_type(in.index), 1,
+                                            capacity);
+            m_state.push_back_steal(arr);
+        }
+        m_state.push_back_steal(jit_var_u32(m_backend, 0));
+
+        ad_loop(
+            m_backend, 1, 0, 0, name_p1.c_str(), this,
+            [](void *p, dr::vector<uint64_t> &i) { ((LoopOp *) p)->read(i); },
+            [](void *p, const dr::vector<uint64_t> &i, bool reset) { ((LoopOp *) p)->write(i, reset); },
+            [](void *p) { return ((LoopOp *) p)->bwd_gen_p1_cond(); },
+            [](void *p) { ((LoopOp *) p)->bwd_gen_p1_body(); },
+            nullptr, false);
+
+        // Reshape m_state for pass 2: [traj] + [it] + [grad accumulators].
+        // Copy out the entries we want to keep (with +1 ref), release
+        // m_state, then push them back. m_state contains jit-only indices
+        // throughout both passes, so jit_var_inc_ref is enough.
+        dr::vector<uint32_t> keep(N + 1);
+        for (size_t i = 0; i < N; ++i) {
+            keep[i] = (uint32_t) m_state[N + i];  // trajectory arrays
+            jit_var_inc_ref(keep[i]);
+        }
+        keep[N] = (uint32_t) m_state[2 * N];      // final iteration counter
+        jit_var_inc_ref(keep[N]);
+        m_state.release();
+
+        for (uint32_t idx : keep)
+            m_state.push_back_steal(idx);
+
+        size_t loop_size = jit_var_size(keep[N]);
+        for (const Input &in : m_inputs) {
+            if (!in.is_diff)
+                continue;
+            uint32_t grad;
+            if (in.has_grad_out) {
+                grad = ad_grad(combine(m_output_indices[in.grad_out_offset]));
+            } else {
+                uint64_t zero = 0;
+                grad = jit_var_literal(m_backend, jit_var_type(in.index),
+                                       &zero, loop_size);
+            }
+            m_state.push_back_steal(grad);
+        }
+
+        // Pass 2: replay the trajectory in reverse, propagating gradients
+        std::string name_p2 = m_name + " [ad, bwd, replay]";
+
+        ad_loop(
+            m_backend, 1, 0, 0, name_p2.c_str(), this,
+            [](void *p, dr::vector<uint64_t> &i) { ((LoopOp *) p)->read(i); },
+            [](void *p, const dr::vector<uint64_t> &i, bool reset) { ((LoopOp *) p)->write(i, reset); },
+            [](void *p) { return ((LoopOp *) p)->bwd_gen_p2_cond(); },
+            [](void *p) { ((LoopOp *) p)->bwd_gen_p2_body(); },
+            nullptr, false);
+
+        // Accumulate final gradients into the loop's differentiable inputs
+        size_t diff_off = N + 1;
+        for (size_t i = 0; i < N; ++i) {
+            const Input &in = m_inputs[i];
+            if (!in.is_diff)
+                continue;
+            if (in.has_grad_in)
+                ad_accum_grad(combine(m_input_indices[in.grad_in_index]),
+                              (uint32_t) m_state[diff_off]);
+            diff_off++;
+        }
+
+        m_state.release();
+    }
+
 private:
     struct Input {
         uint32_t index;
 
         /// Is this variable differentiable in principle?
         bool is_diff;
+
+        /// Same JIT index pre/post: value is constant across iterations.
+        /// Invariants skip trajectory storage in reverse-mode trajectory
+        /// replay and substitute the constant value directly instead.
+        bool is_invariant;
 
         /// Does the loop op. receive gradients for this variable?
         bool has_grad_in;
@@ -984,8 +1262,14 @@ bool ad_loop(JitBackend backend, int symbolic, int compress,
     if (compress != 0 && compress != 1)
         jit_raise("'compress' must equal 0, 1, or -1.");
 
-    if (max_iterations < -1)
-        jit_raise("'max_iterations' must be >= -1.");
+    if (max_iterations < -1 || max_iterations > (long long) UINT32_MAX)
+        jit_raise("'max_iterations' must be in [-1, 2^32 - 1].");
+
+    if (compress == 1 && max_iterations > 0)
+        jit_raise("'compress=True' and 'max_iterations > 0' cannot be "
+                  "combined. The reverse-mode trajectory replay requires "
+                  "a stable mapping between iteration number and trajectory "
+                  "slot, which compression breaks.");
 
     if (symbolic) {
         index64_vector indices_in;
@@ -1021,10 +1305,16 @@ bool ad_loop(JitBackend backend, int symbolic, int compress,
             index64_vector indices_out;
             read_cb(payload, indices_out);
 
+            // Detect loop-invariant state variables (same JIT index pre/post)
+            dr::vector<bool> invariant_mask(indices_out.size(), false);
+            for (size_t i = 0; i < indices_out.size(); ++i)
+                invariant_mask[i] =
+                    (uint32_t) indices_in[i] == (uint32_t) indices_out[i];
+
             nanobind::ref<LoopOp> op =
                 new LoopOp(backend, name, payload, read_cb, write_cb,
                            cond_cb, body_cb, delete_cb, indices_in,
-                           implicit_in, max_iterations);
+                           implicit_in, invariant_mask, max_iterations);
 
             for (size_t i = 0; i < indices_out.size(); ++i) {
                 VarType vt = jit_var_type((uint32_t) indices_out[i]);
@@ -1032,7 +1322,7 @@ bool ad_loop(JitBackend backend, int symbolic, int compress,
                     vt != VarType::Float64)
                     continue;
 
-                if ((uint32_t) indices_in[i] == (uint32_t) indices_out[i]) {
+                if (invariant_mask[i]) {
                     // Keep unchanged variables out of the AD system
                     if (indices_in[i] != indices_out[i]) {
                         ad_var_inc_ref(indices_in[i]);
