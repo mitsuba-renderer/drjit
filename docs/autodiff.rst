@@ -551,23 +551,45 @@ Please review the following AD-related functions for more details:
   <resume_grad>`, :py:func:`dr.isolate_grad() <isolate_grad>`.
 - Interfacing with other AD frameworks: :py:func:`dr.wrap() <wrap>`.
 
+.. _diff_loops:
+
 Differentiating loops
 ---------------------
 
-(Most of this section still needs to be written)
+Dr.Jit supports two reverse-mode differentiation strategies for
+:py:func:`dr.while_loop() <while_loop>`, selected via the
+``max_iterations`` hint. The two strategies have very different
+computational and memory costs, so it is worth understanding which one
+applies to a given loop.
+
+- **Sum loops** (``max_iterations=-1``). When the differentiable outputs
+  are accumulated sums of per-iteration contributions, the adjoint
+  collapses into a single loop pass with no trajectory storage.
+
+- **General loops** (``max_iterations=N`` with ``N > 0``). For any
+  other loop, Dr.Jit records the loop trajectory during a forward pass
+  and replays it in reverse. The hint provides an upper bound on the
+  iteration count so that trajectory buffers can be pre-allocated.
+
+Forward-mode differentiation of loops requires no hint, since
+derivatives propagate alongside primal values in a single pass.
+
+Reverse-mode differentiation of a loop always requires an explicit
+``max_iterations`` hint (either ``-1`` or a positive integer); omitting
+it raises an error. Dr.Jit does not pick a default, since the two
+strategies differ substantially in cost and correctness domain.
 
 
-Simple loops
-^^^^^^^^^^^^
+Sum loops
+^^^^^^^^^
 
-Dr.Jit provides a specialized reverse-mode differentiation strategy for certain
-types of loops that is more efficient than the default, in particular to avoid
-potentially significant storage overheads. It can be used to handle simple
-summation loops such as
+Sum loops admit a specialized reverse-mode strategy that is dramatically
+more efficient than the general path below, both in compute and in
+memory. It can be used to handle simple summation loops such as
 
 .. code-block:: python
 
-   from drjit.auto.ad import Float, Int
+   from drjit.auto.ad import Float, UInt
 
    @dr.syntax
    def loop(x: Float, n: int):
@@ -646,4 +668,81 @@ wrap the loop condition into a :py:func:`dr.hint(..., max_iterations=-1)
            i += 1
 
        return y
+
+
+General loops
+^^^^^^^^^^^^^
+
+Many loops are not reducible to a plain sum. For example, the snippet
+below repeatedly squares its input, so that after :math:`n` iterations
+:math:`y = x^{2^n}`:
+
+.. code-block:: python
+
+   @dr.syntax
+   def iterated_square(x: Float, n: int):
+       y, i = Float(x), UInt(0)
+       while dr.hint(i < n, max_iterations=n):
+           y = y * y
+           i += 1
+       return y
+
+Here, the per-iteration contribution to :math:`\partial y/\partial x`
+depends on the running value of :math:`y`, so the sum-loop optimization
+does not apply.
+
+For loops of this kind, pass a **positive integer** ``max_iterations=N``
+that bounds the iteration count. Dr.Jit then differentiates the loop in
+two symbolic passes:
+
+1. A forward pass runs the loop and writes the pre-iteration value of
+   every loop state variable into per-thread arrays of length
+   :math:`N`.
+2. A reverse pass decrements an iteration counter from the final value
+   back to zero. At each step, it reconstructs the per-iteration inputs
+   from the recorded trajectory, wraps the differentiable slots in
+   fresh AD variables, re-runs the body, and lets reverse-mode AD walk
+   the resulting one-iteration subgraph to accumulate gradients.
+
+This strategy imposes no structural constraints on the loop body: state
+variables may couple in arbitrary ways, iteration counts may vary
+per-lane, and gradients to implicit inputs (e.g., values read via
+:py:func:`dr.gather() <gather>` from an external grad-enabled buffer)
+flow naturally through the replayed subgraph. Nested loops are also
+supported; both levels simply need their own ``max_iterations`` hint.
+
+The general path is correct for sum loops as well, but it is strictly
+more expensive than ``max_iterations=-1``, which should therefore be
+preferred whenever it applies.
+
+**Choosing the bound.** The hint must be an upper bound on the
+iteration count of every lane (equality is fine). Trajectory storage
+scales linearly with ``max_iterations``, allocating one entry per
+thread per *non-invariant* loop state variable (including
+non-differentiable ones such as the iteration counter), so the bound
+should be set as tight as the application allows. If the bound is
+exceeded at runtime, the trajectory is silently truncated in release
+builds and the resulting gradients are incorrect. Enable
+:py:attr:`dr.JitFlag.Debug <drjit.JitFlag>` to surface a warning of
+the form
+
+.. code-block:: text
+
+   drjit.Local.write(): out-of-bounds write to position 3 in an array of size 3.
+
+where the reported array size equals the ``max_iterations`` value
+passed to the loop. This warning is purely diagnostic: the gradient
+computed for that run is still wrong, and the fix is to raise the
+bound and re-run.
+
+**Loop-invariant state variables.** The general path strips
+loop-invariant state variables and does not allocate trajectory
+storage for them, so users do not have to manually prune such
+variables from the loop state.
+
+**Incompatibility with compression.** The ``compress=True`` option of
+:py:func:`dr.while_loop() <while_loop>` removes inactive lanes between
+iterations and therefore breaks the fixed iteration-to-slot mapping
+that trajectory replay relies on. Combining it with ``max_iterations > 0``
+is rejected at loop-construction time.
 

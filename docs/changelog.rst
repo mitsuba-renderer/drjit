@@ -95,6 +95,12 @@ DrJit 1.4.0 (TBA)
   (Dr.Jit commit `6c69ec <https://github.com/mitsuba-renderer/drjit/commit/6c69ecb75cfc605063502747e9c9264bc739ead9>`__,
   Dr.Jit-Core commit `d4f1a6 <https://github.com/mitsuba-renderer/drjit-core/commit/d4f1a62c6b175af295e857069b1401c36bcf6caa>`__).
 
+- **Reverse-mode differentiation of symbolic loops**:
+  :py:func:`@dr.syntax <syntax>` ``while`` loops and symbolic
+  :py:func:`dr.while_loop() <while_loop>` calls are now differentiable in
+  reverse mode via a trajectory-replay strategy. See
+  :ref:`diff_loops` for details.
+
 **Performance Improvements**
 
 - **ndarray Cleanup**: ndarray reclamation previously always went through an

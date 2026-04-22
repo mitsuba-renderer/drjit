@@ -263,3 +263,375 @@ def test32_simple_loop(t, mode):
 
     dr.backward(q)
     assert dr.all(x.grad == [1]*10)
+
+
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+@dr.syntax
+def test33_general_bwd_scaling(t):
+    # y_out = y_in * 2^N. Straight reverse-mode case that backward_simple
+    # cannot handle (iterations compose multiplicatively, not additively).
+    UInt = dr.uint32_array_t(t)
+
+    x = t(1.0, 2.0, 3.0, 4.0)
+    dr.enable_grad(x)
+    y = t(x)
+    i = UInt(0)
+
+    while dr.hint(i < 3, mode='symbolic', max_iterations=3):
+        y = y * 2
+        i += 1
+
+    dr.backward_from(y)
+    assert dr.allclose(x.grad, [8, 8, 8, 8])
+    assert dr.allclose(y, [8, 16, 24, 32])
+
+
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+@dr.syntax
+def test34_general_bwd_fwd_cross_check(t):
+    # Non-sum loop: each step is y_new = (y + 1) * x, so after N iterations
+    # starting from y=0, y = x + x^2 + ... + x^N. Compare reverse-mode
+    # through backward_general against forward-mode AD (which is independent
+    # of the new code path).
+    UInt = dr.uint32_array_t(t)
+
+    def run(x_in):
+        y = t(0.0)
+        i = UInt(0)
+        while dr.hint(i < 4, mode='symbolic', max_iterations=4):
+            y = (y + 1) * x_in
+            i += 1
+        return y
+
+    x_fwd = t(1.1, 1.3, 1.7, 2.1)
+    dr.enable_grad(x_fwd)
+    dr.set_grad(x_fwd, 1.0)
+    y_fwd = run(x_fwd)
+    dr.forward_to(y_fwd)
+    fwd_grad = t(y_fwd.grad)
+
+    x_bwd = t(1.1, 1.3, 1.7, 2.1)
+    dr.enable_grad(x_bwd)
+    y_bwd = run(x_bwd)
+    dr.backward_from(y_bwd)
+    assert dr.allclose(x_bwd.grad, fwd_grad)
+
+
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+@dr.syntax
+def test35_general_bwd_per_thread_iter_count(t):
+    # Per-lane iteration count: lane k runs k+1 iterations of y = y * 2,
+    # driven by an int state var. backward_general must back off per lane.
+    UInt = dr.uint32_array_t(t)
+
+    x = t(1.0, 2.0, 3.0, 4.0)
+    dr.enable_grad(x)
+    y = t(x)
+    i = UInt(0)
+    n = UInt(1, 2, 3, 4)
+
+    while dr.hint(i < n, mode='symbolic', max_iterations=4):
+        y = y * 2
+        i += 1
+
+    dr.backward_from(y)
+    # dy/dx per lane = 2^n[k]
+    assert dr.allclose(x.grad, [2.0, 4.0, 8.0, 16.0])
+
+
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+@dr.syntax
+def test36_general_bwd_fibonacci(t):
+    # Non-additive coupling between state variables (Fibonacci-style).
+    # a_{k+1} = b_k,  b_{k+1} = a_k + b_k. After 3 iterations:
+    #   a_3 = 1*a_0 + 2*b_0,  b_3 = 2*a_0 + 3*b_0.
+    # Therefore ∂(a_3 + b_3)/∂a_0 = 3, ∂(a_3 + b_3)/∂b_0 = 5.
+    UInt = dr.uint32_array_t(t)
+
+    a = t(1.0, 2.0)
+    b = t(3.0, 5.0)
+    dr.enable_grad(a, b)
+    a0, b0 = t(a), t(b)
+    i = UInt(0)
+
+    while dr.hint(i < 3, mode='symbolic', max_iterations=3):
+        a, b = b, a + b
+        i += 1
+
+    dr.backward_from(a + b)
+    assert dr.allclose(a0.grad, [3.0, 3.0])
+    assert dr.allclose(b0.grad, [5.0, 5.0])
+
+
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+@dr.syntax
+def test37_general_bwd_matches_simple(t):
+    # Sum-loop pattern: both backward_simple (max_iterations=-1) and
+    # backward_general (max_iterations=10) should produce the same gradient.
+    UInt = dr.uint32_array_t(t)
+
+    def run(max_it):
+        x = dr.linspace(t, 0.25, 1, 4)
+        dr.enable_grad(x)
+        y = t(0.0)
+        i = UInt(0)
+        while dr.hint(i < 10, mode='symbolic', max_iterations=max_it):
+            y += x ** i
+            i += 1
+        dr.backward_from(y)
+        return x.grad
+
+    g_simple = run(-1)
+    g_general = run(10)
+    assert dr.allclose(g_simple, g_general)
+
+
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+@dr.syntax
+def test38_general_bwd_compress_rejected(t):
+    # compress=True + max_iterations>0 combination is rejected by ad_loop.
+    UInt = dr.uint32_array_t(t)
+
+    x = t(1.0, 2.0)
+    dr.enable_grad(x)
+    y = t(x)
+    i = UInt(0)
+
+    with pytest.raises(RuntimeError, match='compress'):
+        while dr.hint(i < 2, mode='symbolic', max_iterations=2, compress=True):
+            y = y * 2
+            i += 1
+        dr.backward_from(y)
+
+
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+@dr.syntax
+def test39_general_bwd_nested(t):
+    # Nested differentiable loops, both with positive max_iterations. Verifies
+    # that an inner symbolic loop within a trajectory-recording outer backward
+    # pass composes cleanly.  a_final = x^2 * (x+1)^2 in closed form, so
+    # dx/da_final = 2*x*(x+1)*(2*x+1).
+    UInt = dr.uint32_array_t(t)
+
+    x = t(2.0, 1.5)
+    dr.enable_grad(x)
+
+    a = t(1.0, 1.0)
+    b = t(x)
+    j = UInt(0)
+    while dr.hint(j < 2, mode='symbolic', max_iterations=2):
+        i = UInt(0)
+        while dr.hint(i < 2, mode='symbolic', max_iterations=2):
+            a = a * b
+            i += 1
+        b = b + 1.0
+        j += 1
+
+    dr.backward_from(a)
+    xv = t(2.0, 1.5)
+    expected = 2 * xv * (xv + 1) * (2 * xv + 1)
+    assert dr.allclose(x.grad, expected)
+
+
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+@dr.syntax
+def test40_general_bwd_missing_hint_rejected(t):
+    # A loop with non-sum-pattern reverse-mode AD and no max_iterations hint
+    # must raise a clear error rather than silently producing wrong gradients.
+    UInt = dr.uint32_array_t(t)
+
+    x = t(1.0, 2.0)
+    dr.enable_grad(x)
+    y = t(x)
+    i = UInt(0)
+
+    with pytest.raises(RuntimeError, match='max_iterations'):
+        while dr.hint(i < 2, mode='symbolic'):
+            y = y * 2
+            i += 1
+        dr.backward_from(y)
+
+
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+def test41_general_bwd_gather(t):
+    # gather() from an external grad-enabled buffer inside a non-sum loop
+    # (max_iterations>0). Gradients to the external buffer flow via the AD
+    # graph walked by pass 2's ad_traverse(Backward); no special handling
+    # in backward_general is required because gradient reaches implicit
+    # inputs naturally through graph connectivity.
+    #
+    # Body: y = y * table[i]; i += 1
+    # After 3 iters: y_3 = table[0] * table[1] * table[2]
+    # Loss = sum(y_3) over 4 lanes (each lane produces the same y_3 = 24)
+    # dL/dtable[k] = (lanes) * product of other table entries
+    #
+    # Note: the loop is written without @dr.syntax so that `table` stays a
+    # closure capture (implicit input) rather than being promoted into the
+    # loop state, which is what we want to exercise here.
+    UInt = dr.uint32_array_t(t)
+
+    table = t(2.0, 3.0, 4.0, 5.0)
+    dr.enable_grad(table)
+
+    y = t(1.0, 1.0, 1.0, 1.0)
+    i = UInt(0)
+
+    def cond(i, y):
+        return i < 3
+    def body(i, y):
+        return i + 1, y * dr.gather(t, table, i)
+
+    i, y = dr.while_loop((i, y), cond, body,
+                         mode='symbolic', max_iterations=3)
+
+    dr.backward_from(dr.sum(y))
+    # dL/dtable[0] = 4 * 3*4 = 48
+    # dL/dtable[1] = 4 * 2*4 = 32
+    # dL/dtable[2] = 4 * 2*3 = 24
+    # dL/dtable[3] = 0
+    assert dr.allclose(table.grad, [48, 32, 24, 0])
+
+
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+def test42_general_bwd_overflow_debug_warns(t, capsys):
+    # When the user underestimates max_iterations, backward_general silently
+    # truncates in release mode (accepted behavior). In debug mode the
+    # trajectory-array-write bounds check fires and logs a warning, so the
+    # user can spot the undersized hint.
+    UInt = dr.uint32_array_t(t)
+
+    # The body must produce a gradient that actually references the trajectory
+    # values (here: y_new = y*z), otherwise the trajectory write chain isn't
+    # reached during AD evaluation and no warning is needed.
+    y = t(1.0, 2.0)
+    z = t(3.0, 4.0)
+    dr.enable_grad(y, z)
+    i = UInt(0)
+
+    with dr.scoped_set_flag(dr.JitFlag.Debug, True):
+        def cond(i, y, z):
+            return i < 5
+        def body(i, y, z):
+            return i + 1, y * z, z
+        # The user's condition wants 5 iterations but max_iterations=3.
+        i, y, z = dr.while_loop((i, y, z), cond, body,
+                                 mode='symbolic', max_iterations=3)
+        dr.backward_from(y)
+        dr.eval(z.grad)  # force eval so the bounds-check callback fires
+
+    transcript = capsys.readouterr().err
+    assert 'out-of-bounds write' in transcript
+    assert 'array of size 3' in transcript
+
+
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+def test43_general_bwd_invariant_passengers(t, drjit_verbose, capsys):
+    # Many differentiable "passenger" state variables that never change in the
+    # body. They should not trigger max_iterations-sized trajectory storage,
+    # yet gradients through them must still be correct. The verbose log is
+    # used to count per-iteration trajectory writes: only the two non-invariant
+    # state variables (i, y) must appear in `array_write` operations.
+    UInt = dr.uint32_array_t(t)
+
+    N_PASSENGERS = 32
+    MAX_ITER = 4
+
+    size = 3
+    x = dr.linspace(t, 1.5, 2.5, size)
+    dr.enable_grad(x)
+
+    passengers = tuple(dr.full(t, float(k + 1), size) for k in range(N_PASSENGERS))
+    for p in passengers:
+        dr.enable_grad(p)
+    passengers_in = tuple(t(p) for p in passengers)
+
+    y = dr.ones(t, size)
+    i = dr.zeros(UInt, size)
+
+    def cond(i, y, x, *ps):
+        return i < MAX_ITER
+
+    def body(i, y, x, *ps):
+        # Body uses only x and ps[0]; ps[1:] are pure ballast invariants.
+        return (i + 1, y * x * ps[0], x) + ps
+
+    capsys.readouterr()  # drop setup log
+    state_out = dr.while_loop((i, y, x) + passengers, cond, body,
+                              mode='symbolic', max_iterations=MAX_ITER)
+    y_out = state_out[1]
+    dr.backward_from(dr.sum(y_out))
+    dr.eval(x.grad)
+
+    # Only (i, y) change during the loop body. The other 1+N_PASSENGERS state
+    # variables are JIT-invariant and must be excised from trajectory storage.
+    # The pass-1 body is recorded twice (the symbolic loop re-records once),
+    # so each non-invariant contributes 2 array_writes.
+    log = capsys.readouterr().out
+    assert log.count('array_write') == 2 * 2  # (i, y) * 2 passes
+
+    # dL/dx and dL/dpassengers[0] should be nonzero; ps[1:] receive zero grad.
+    assert dr.all(x.grad != 0)
+    assert dr.all(passengers_in[0].grad != 0)
+    for k in range(1, N_PASSENGERS):
+        assert dr.all(passengers_in[k].grad == 0)
+
+
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+def test44_general_bwd_matrix_sqrt_newton(t):
+    # Newton iteration for the matrix square root:
+    #   Y_{k+1} = 0.5 * (Y_k + A @ Y_k^-1),  Y_0 = A.
+    # Converges quadratically to sqrt(A) for positive-definite A. A matrix
+    # inverse in every step makes this a strongly nonlinear loop body. We
+    # check that the loop converges to sqrt(A), and that reverse-mode AD
+    # agrees with forward-mode AD along a random symmetric probe direction.
+    mod = sys.modules[t.__module__]
+    M4 = mod.Matrix4f
+    UInt = dr.uint32_array_t(t)
+
+    NUM_ITER = 6
+
+    def sqrt_loop(A):
+        Y = M4(A)
+        i = UInt(0)
+        def cond(Y, i, A):
+            return i < NUM_ITER
+        def body(Y, i, A):
+            return (0.5 * (Y + A @ dr.rcp(Y)), i + 1, A)
+        Y, _, _ = dr.while_loop((Y, i, A), cond, body,
+                                mode='symbolic', max_iterations=NUM_ITER)
+        return Y
+
+    # Positive-definite A = M M^T for a well-conditioned M.
+    M_base = M4([[1.0, 0.1, 0.2, 0.0],
+                 [0.1, 1.2, 0.1, 0.1],
+                 [0.2, 0.1, 1.3, 0.1],
+                 [0.0, 0.1, 0.1, 1.1]])
+    A_base = M_base @ M_base.T
+
+    # Primal: Y @ Y should recover A.
+    Y = sqrt_loop(A_base)
+    dr.assert_allclose(Y @ Y, A_base, atol=1e-5)
+
+    # Symmetric probe direction for the Jacobian check.
+    dA = M4([[ 0.30, -0.10,  0.20,  0.05],
+             [-0.10,  0.20,  0.00,  0.15],
+             [ 0.20,  0.00,  0.10, -0.10],
+             [ 0.05,  0.15, -0.10,  0.25]])
+    dA = 0.5 * (dA + dA.T)
+
+    # Reverse mode: gradient of L = trace(Y) with respect to every entry of A.
+    A_bwd = M4(A_base)
+    dr.enable_grad(A_bwd)
+    L_bwd = dr.trace(sqrt_loop(A_bwd))
+    dr.backward_from(L_bwd)
+    bwd_probe = dr.trace(dr.grad(A_bwd).T @ dA)
+
+    # Forward mode: seed A.grad = dA, compute dL/d(epsilon).
+    A_fwd = M4(A_base)
+    dr.enable_grad(A_fwd)
+    dr.set_grad(A_fwd, dA)
+    L_fwd = dr.trace(sqrt_loop(A_fwd))
+    dr.forward_to(L_fwd)
+    fwd_probe = dr.grad(L_fwd)
+
+    dr.assert_allclose(bwd_probe, fwd_probe, rtol=1e-4)
