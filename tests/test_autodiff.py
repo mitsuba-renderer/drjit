@@ -1979,6 +1979,7 @@ def test124_packet_gather_fwd(t, enabled):
 
 
 @pytest.mark.parametrize("enabled", [True, False])
+@pytest.skip_on(RuntimeError, "backend does not support the requested type of atomic reduction")
 @pytest.test_arrays('is_diff,float,shape=(4, *),-quat')
 def test125_packet_gather_bwd(t, enabled):
     if not enabled and dr.backend_v(t) == dr.JitBackend.LLVM and dr.type_v(t) == dr.VarType.Float16:
@@ -1994,6 +1995,7 @@ def test125_packet_gather_bwd(t, enabled):
 
 
 @pytest.mark.parametrize("enabled", [True, False])
+@pytest.skip_on(RuntimeError, "backend does not support the requested type of atomic reduction")
 @pytest.test_arrays('is_diff,float,shape=(4, *),-quat')
 def test126_packet_scatter_fwd(t, enabled):
     with dr.scoped_set_flag(dr.JitFlag.PacketOps, enabled):
@@ -2013,6 +2015,7 @@ def test126_packet_scatter_fwd(t, enabled):
 
 
 @pytest.mark.parametrize("enabled", [True, False])
+@pytest.skip_on(RuntimeError, "backend does not support the requested type of atomic reduction")
 @pytest.test_arrays('is_diff,float,shape=(4, *),-quat')
 def test127_packet_scatter_bwd(t, enabled):
     with dr.scoped_set_flag(dr.JitFlag.PacketOps, enabled):
@@ -2032,6 +2035,7 @@ def test127_packet_scatter_bwd(t, enabled):
 
 
 @pytest.mark.parametrize("enabled", [True, False])
+@pytest.skip_on(RuntimeError, "backend does not support the requested type of atomic reduction")
 @pytest.test_arrays('is_diff,float,shape=(4, *),-quat')
 def test128_packet_scatter_add_fwd(t, enabled):
     if not enabled and dr.backend_v(t) == dr.JitBackend.LLVM and dr.type_v(t) == dr.VarType.Float16:
@@ -2053,6 +2057,7 @@ def test128_packet_scatter_add_fwd(t, enabled):
 
 
 @pytest.mark.parametrize("enabled", [True, False])
+@pytest.skip_on(RuntimeError, "backend does not support the requested type of atomic reduction")
 @pytest.test_arrays('is_diff,float,shape=(4, *),-quat')
 def test129_packet_scatter_add_bwd(t, enabled):
     if not enabled and dr.backend_v(t) == dr.JitBackend.LLVM and dr.type_v(t) == dr.VarType.Float16:
@@ -2074,6 +2079,7 @@ def test129_packet_scatter_add_bwd(t, enabled):
 
 
 @pytest.mark.parametrize("enabled", [True, False])
+@pytest.skip_on(RuntimeError, "backend does not support the requested type of atomic reduction")
 @pytest.test_arrays('is_diff,float,shape=(4, *),-quat')
 def test130_packet_scatter_fwd_target_disabled(t, enabled):
     with dr.scoped_set_flag(dr.JitFlag.PacketOps, enabled):
