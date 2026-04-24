@@ -255,7 +255,9 @@ void export_dlpack(nb::module_ &) {
 
     ab.def("__dlpack__",
            [](nb::handle_t<ArrayBase> h, nb::handle stream) {
-               return dlpack(h, false, stream);
+               const ArraySupplement &s = supp(h.type());
+               bool force_cpu = (JitBackend) s.backend == JitBackend::Metal;
+               return dlpack(h, force_cpu, stream);
            }, "stream"_a = nb::none(), doc_dlpack)
       .def("__dlpack_device__",
            [](nb::handle_t<ArrayBase> h) {

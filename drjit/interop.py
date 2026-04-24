@@ -150,7 +150,10 @@ def to_drjit(value, source, value_tp = None, enable_grad = None):
             else:
                 r = dr.detail.import_tensor(h, True)
             if type(r) is not tp and dr.is_array_v(tp):
-                r = tp(r)
+                if dr.backend_v(tp) != dr.backend_v(r):
+                    r = tp(r.numpy())
+                else:
+                    r = tp(r)
             if source == 'torch' and enable_grad:
                 if h.requires_grad:
                     dr.enable_grad(r)
@@ -388,6 +391,32 @@ def find_first_tf_tensor(value):
         return None
 
 
+def _migrate_backend(value, target_backend):
+    """Migrate a drjit array from one backend to another via numpy."""
+    if not dr.is_array_v(value) or not dr.is_jit_v(value):
+        return value
+    if dr.backend_v(value) == target_backend:
+        return value
+
+    src_name = type(value).__module__ + '.' + type(value).__name__
+    if target_backend == dr.JitBackend.Metal:
+        dst_name = src_name.replace('.llvm.', '.metal.').replace('.cuda.', '.metal.')
+    elif target_backend == dr.JitBackend.CUDA:
+        dst_name = src_name.replace('.llvm.', '.cuda.').replace('.metal.', '.cuda.')
+    else:
+        dst_name = src_name.replace('.cuda.', '.llvm.').replace('.metal.', '.llvm.')
+
+    import importlib
+    parts = dst_name.rsplit('.', 1)
+    mod = importlib.import_module(parts[0])
+    dst_tp = getattr(mod, parts[1])
+
+    if dr.is_tensor_v(value):
+        arr_tp = dr.array_t(dst_tp)
+        return dst_tp(arr_tp(value.array.numpy()), value.shape)
+    return dst_tp(value.numpy())
+
+
 class WrapADOp(dr.CustomOp):
     '''
     Dr.Jit custom operation that wraps differentiable computation performed
@@ -414,7 +443,21 @@ class WrapADOp(dr.CustomOp):
             self.out = func(*self.args, **self.kwargs)
 
         # Convert the out PyTree to Dr.Jit
-        return to_drjit(self.out, target)
+        result = to_drjit(self.out, target)
+
+        # Migrate output to the input backend if they differ (e.g., Metal
+        # inputs produce LLVM outputs via CPU torch round-trip)
+        input_backend = None
+        for tp_entry in self.args_tp:
+            if tp_entry is not None and dr.is_jit_v(tp_entry):
+                input_backend = dr.backend_v(tp_entry)
+                break
+
+        if input_backend is not None and input_backend != dr.JitBackend.LLVM and \
+           dr.is_jit_v(result) and dr.backend_v(result) != input_backend:
+            result = _migrate_backend(result, input_backend)
+
+        return result
 
     def forward(self):
         target = self.target
