@@ -72,6 +72,11 @@ NB_MODULE(if_stmt_ext, m) {
     bind<JitBackend::CUDA>(cuda);
 #endif
 
+#if defined(DRJIT_ENABLE_METAL)
+    nb::module_ metal = m.def_submodule("metal");
+    bind<JitBackend::Metal>(metal);
+#endif
+
     m.def("scalar_cond", &simple_cond<uint32_t>);
     m.def("packet_cond", &packet_cond);
 }

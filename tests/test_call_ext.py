@@ -11,12 +11,15 @@ def get_pkg(t):
         return m.llvm
     elif backend == dr.JitBackend.CUDA:
         return m.cuda
+    elif backend == dr.JitBackend.Metal:
+        return m.metal
 
 def cleanup(s):
     """Remove memory addresses and backend names from a string """
     s = re.sub(r' at 0x[a-fA-F0-9]*',r'', s)
     s = re.sub(r'\.llvm\.',r'.', s)
     s = re.sub(r'\.cuda\.',r'.', s)
+    s = re.sub(r'\.metal\.',r'.', s)
     return s
 
 @pytest.fixture(autouse=True)
