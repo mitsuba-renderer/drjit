@@ -655,11 +655,11 @@ def test26_elide_scatter(t, variant):
     hist = dr.kernel_history((dr.KernelType.JIT,))
     if variant == 0:
         assert len(hist) == 0
-    elif dr.backend_v(t) is not dr.JitBackend.Metal:
+    else:
         ir = hist[0]['ir'].getvalue()
         if dr.backend_v(t) is dr.JitBackend.CUDA:
             assert ir.count('st.global.b32') == 1
-        else:
+        elif dr.backend_v(t) is dr.JitBackend.LLVM:
             assert ir.count('call void @llvm.masked.scatter') == 1
 
 
@@ -684,13 +684,12 @@ def test27_elide_scatter_in_call(t, variant):
         dr.eval()
 
     hist = dr.kernel_history((dr.KernelType.JIT,))
-    if dr.backend_v(t) is not dr.JitBackend.Metal:
-        assert len(hist) == 1
-        ir = hist[0]['ir'].getvalue()
-        if dr.backend_v(t) is dr.JitBackend.CUDA:
-            assert ir.count('st.global.b32') == variant
-        else:
-            assert ir.count('call void @llvm.masked.scatter') == variant
+    assert len(hist) == 1
+    ir = hist[0]['ir'].getvalue()
+    if dr.backend_v(t) is dr.JitBackend.CUDA:
+        assert ir.count('st.global.b32') == variant
+    elif dr.backend_v(t) is dr.JitBackend.LLVM:
+        assert ir.count('call void @llvm.masked.scatter') == variant
 
 @pytest.test_arrays('-bool, -diff, shape=(*)')
 def test28_scalar_reductions(t):

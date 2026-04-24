@@ -93,7 +93,7 @@ def test04_sum_loop_rev(t, mode, make_copy):
 
 
 @pytest.mark.parametrize('variant', ['fwd', 'bwd'])
-@pytest.test_arrays('float32,is_diff,shape=(*),-backend=metal')
+@pytest.test_arrays('float32,is_diff,shape=(*)')
 def test05_evaluated_ad_kernel_launch_count(t, variant):
     # Check that the forward/reverse-mode derivative of an
     # evaluated loop launches a similar number of kernels
