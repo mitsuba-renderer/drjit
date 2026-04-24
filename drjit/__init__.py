@@ -1940,7 +1940,8 @@ def convolve(
     source: ArrayT,
     filter: Union[Literal["box", "linear", "hamming", "cubic", "lanczos", "gaussian"], Callable[[float], float]],
     filter_radius: float,
-    axis: Union[int, Tuple[int, ...], None] = None
+    axis: Union[int, Tuple[int, ...], None] = None,
+    normalize: Literal["l1", "l2"] = "l1"
 ) -> ArrayT:
     """
     Convolve one or more axes of an input array/tensor with a 1D filter
@@ -1959,8 +1960,10 @@ def convolve(
            filter_radius=10
        )
 
-    The filter weights are renormalized to reduce edge effects near the
-    boundary of the array.
+    By default, the filter weights are renormalized to sum to one
+    (``normalize="l1"``) to reduce edge effects near the boundary of the array.
+    Setting ``normalize="l2"`` instead scales the sampled filter weights to
+    unit L2 norm.
 
     The function supports a set of provided filters, and custom filters
     can also be specified. This works analogously to the :py:func:`resample`
@@ -1980,6 +1983,10 @@ def convolve(
         axis (int | tuple[int, ...] | ... | None): The axis or set of axes
           along which to convolve. The default argument ``axis=None`` causes all
           axes to be convolved. Negative values count from the last dimension.
+
+        normalize (str): How to normalize the sampled filter weights. Supported
+          values are ``"l1"`` for unit sum and ``"l2"`` for unit L2 norm. The
+          default is ``"l1"``.
 
     Returns:
         drjit.ArrayBase: The resampled output array. Its type matches ``source``.
@@ -2002,7 +2009,7 @@ def convolve(
         res = shape[i]
 
         # Cache resampler in case it can be reused
-        key = (res, res, filter, filter_radius)
+        key = (res, res, filter, filter_radius, normalize)
 
         resampler = _resample_cache.get(key, None)
         if resampler is None:
@@ -2011,7 +2018,8 @@ def convolve(
                 target_res=res,
                 filter=filter,
                 filter_radius=filter_radius,
-                convolve=True
+                convolve=True,
+                normalize=normalize
             )
             _resample_cache[key] = resampler
 

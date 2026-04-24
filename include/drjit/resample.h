@@ -29,6 +29,10 @@ NAMESPACE_BEGIN(drjit)
 class DRJIT_EXTRA_EXPORT Resampler {
 public:
     using Filter = double (*)(double x, const void *payload);
+    enum class FilterNormalization {
+        L1,
+        L2
+    };
 
     /**
      * Create a Resampler that uses a predefined reconstruction filter to
@@ -66,7 +70,8 @@ public:
      * filter kernel radius.
      */
     Resampler(uint32_t source_res, uint32_t target_res, const char *filter,
-              double radius_scale = 1.0);
+              double radius_scale = 1.0,
+              FilterNormalization normalize = FilterNormalization::L1);
 
     /**
      * \brief Construct a Resampler using a custom filter kernel.
@@ -80,7 +85,8 @@ public:
      * zero for positions ``x`` outside of the interval ``[-radius, radius]``.
      */
     Resampler(uint32_t source_res, uint32_t target_res, Filter filter,
-              const void *payload, double radius);
+              const void *payload, double radius,
+              FilterNormalization normalize = FilterNormalization::L1);
 
     /// Free the resampler object
     ~Resampler();

@@ -1,4 +1,5 @@
 import drjit as dr
+import math
 import pytest
 
 # Test simple upsampling with a box filter (1D array)
@@ -113,3 +114,24 @@ def test07_convolve(t):
     y = dr.convolve(x, 'linear', 2)
     z = t((1+2*.5)/1.5, (1*.5+2+10*.5)/2, (2*.5+10+100*.5)/2, (100+10*.5)/1.5)
     assert dr.allclose(y, z)
+
+
+# Test L2-normalized convolution weights sampled from a custom continuous filter
+@pytest.test_arrays('float, -jit, shape=(*)')
+def test08_convolve_normalize(t):
+    x = t([0, 0, 0, 0, 1, 0, 0, 0, 0])
+
+    def filt(x):
+        return max(2.0 - abs(x), 0.0)
+
+    y = dr.convolve(x, filt, 2)
+    z = t([0, 0, 0, .25, .5, .25, 0, 0, 0])
+    assert dr.allclose(y, z)
+
+    y = dr.convolve(x, filt, 2, normalize="l2")
+    s = 1.0 / math.sqrt(6.0)
+    z = t([0, 0, 0, s, 2.0 * s, s, 0, 0, 0])
+    assert dr.allclose(y, z)
+
+    with pytest.raises(RuntimeError, match="'normalize' must be either"):
+        dr.convolve(x, filt, 2, normalize="bad")
