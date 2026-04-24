@@ -611,7 +611,7 @@ nb::object import_ndarray(ArrayMeta m, PyObject *arg, vector<size_t> *shape_out,
     VarType vt = (VarType) m.type;
 
     if (backend != JitBackend::None) {
-        int32_t device_type = backend == JitBackend::CUDA
+        int32_t device_type = (backend == JitBackend::CUDA || backend == JitBackend::Metal)
                                   ? nb::device::cuda::value
                                   : nb::device::cpu::value;
 
@@ -734,7 +734,7 @@ static void ndarray_free_cb(uint32_t, int free, void *p) {
         return;
 
     // Decode packed pointer + backend ID created in ndarray_keep_alive
-    uintptr_t msg = (uintptr_t) p, mask = 3;
+    uintptr_t msg = (uintptr_t) p, mask = 7;
     JitBackend backend = (JitBackend) (msg & mask);
     void *p2 = (void *) (msg & ~mask);
 
@@ -747,7 +747,7 @@ static void ndarray_keep_alive(JitBackend backend, uint32_t index, nb::detail::n
     if (!index)
         return;
 
-    if ((int) backend > 3)
+    if ((int) backend > 7)
         jit_raise("ndarray_keep_alive(): internal error, backend index too large.");
 
     nb::detail::ndarray_inc_ref(p);
