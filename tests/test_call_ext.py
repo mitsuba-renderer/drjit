@@ -446,6 +446,8 @@ def test14_array_call_self(t, symbolic, drjit_verbose, capsys):
     if symbolic:
         if dr.backend_v(t) == dr.JitBackend.LLVM:
             assert transcript.count('%self') > 0
+        elif dr.backend_v(t) == dr.JitBackend.Metal:
+            assert transcript.count('= self;') > 0
         else:
             assert transcript.count(', self;') > 0
     else:

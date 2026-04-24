@@ -183,8 +183,8 @@ static void ad_call_getter(JitBackend backend, const char *variant,
         size_t tsize = jit_type_size(type);
 
         void *ptr =
-            jit_malloc(backend == JitBackend::CUDA ? AllocType::Device
-                                                   : AllocType::HostAsync,
+            jit_malloc((backend == JitBackend::CUDA || backend == JitBackend::Metal) ? AllocType::Device
+                                                      : AllocType::HostAsync,
                        tsize * (callable_count + 1));
 
         JitVar buf = JitVar::steal(
