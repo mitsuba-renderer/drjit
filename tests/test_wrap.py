@@ -1050,6 +1050,7 @@ def test28_flipped_exception(t, config):
 @pytest.mark.parametrize('config', configs_torch + configs_tf)
 @pytest.test_arrays('is_diff,float,shape=(*)')
 @pytest.skip_on(RuntimeError, "backend does not support the requested type of atomic reduction")
+@pytest.skip_on(TypeError, "unsupported dtype")
 def test29_flipped_non_tensor_output_bwd(t, config):
     skip_if_unsupported(config, t)
     @wrap_flipped(config)

@@ -126,7 +126,8 @@ def from_drjit(value, target, enable_grad = False, /):
     return apply(fn, value), value_tp
 
 
-def to_drjit(value, source, value_tp = None, enable_grad = None):
+def to_drjit(value, source, value_tp = None, enable_grad = None,
+             target_backend = None):
     '''
     Convert a PyTree containing tensors from another array programming
     framework identified by ``source`` into Dr.Jit tensors.
@@ -154,6 +155,9 @@ def to_drjit(value, source, value_tp = None, enable_grad = None):
                     r = tp(r.numpy())
                 else:
                     r = tp(r)
+            if target_backend is not None and dr.is_jit_v(r) and \
+               dr.backend_v(r) != target_backend:
+                r = _migrate_backend(r, target_backend)
             if source == 'torch' and enable_grad:
                 if h.requires_grad:
                     dr.enable_grad(r)
@@ -423,6 +427,24 @@ class WrapADOp(dr.CustomOp):
     using another AD framework (e.g., PyTorch, TensorFlow)
     '''
     def eval(self, func, target, *args, **kwargs):
+        # Detect input backend for cross-backend migration
+        self._target_backend = None
+        def _find_backend(x):
+            if self._target_backend is not None:
+                return
+            if dr.is_jit_v(x):
+                self._target_backend = dr.backend_v(x)
+            elif isinstance(x, (list, tuple)):
+                for item in x:
+                    _find_backend(item)
+            elif isinstance(x, dict):
+                for item in x.values():
+                    _find_backend(item)
+        for a in args:
+            _find_backend(a)
+            if self._target_backend is not None:
+                break
+
         # Convert input PyTrees from Dr.Jit
         self.args,   self.args_tp   = from_drjit(args,   target, True)
         self.kwargs, self.kwargs_tp = from_drjit(kwargs, target, True)
@@ -443,21 +465,7 @@ class WrapADOp(dr.CustomOp):
             self.out = func(*self.args, **self.kwargs)
 
         # Convert the out PyTree to Dr.Jit
-        result = to_drjit(self.out, target)
-
-        # Migrate output to the input backend if they differ (e.g., Metal
-        # inputs produce LLVM outputs via CPU torch round-trip)
-        input_backend = None
-        for tp_entry in self.args_tp:
-            if tp_entry is not None and dr.is_jit_v(tp_entry):
-                input_backend = dr.backend_v(tp_entry)
-                break
-
-        if input_backend is not None and input_backend != dr.JitBackend.LLVM and \
-           dr.is_jit_v(result) and dr.backend_v(result) != input_backend:
-            result = _migrate_backend(result, input_backend)
-
-        return result
+        return to_drjit(self.out, target, target_backend=self._target_backend)
 
     def forward(self):
         target = self.target
@@ -496,7 +504,8 @@ class WrapADOp(dr.CustomOp):
                 grad_out = acc.jvp(wrap_into_tf_tensor(out))
         else:
             raise RuntimeError('WrapADOp.forward(): unsupported framework!')
-        self.set_grad_out(to_drjit(grad_out, target))
+        self.set_grad_out(to_drjit(grad_out, target,
+                                    target_backend=self._target_backend))
 
     def backward(self):
         target = self.target
@@ -527,8 +536,10 @@ class WrapADOp(dr.CustomOp):
                                                             output_gradients=grad_out)
         else:
             raise RuntimeError('WrapADOp.backward(): unsupported framework!')
-        self.set_grad_in('args',   to_drjit(grad_args,   target, self.args_tp))
-        self.set_grad_in('kwargs', to_drjit(grad_kwargs, target, self.kwargs_tp))
+        self.set_grad_in('args',   to_drjit(grad_args,   target, self.args_tp,
+                                            target_backend=self._target_backend))
+        self.set_grad_in('kwargs', to_drjit(grad_kwargs, target, self.kwargs_tp,
+                                            target_backend=self._target_backend))
 
 torch_wrapper = None
 
