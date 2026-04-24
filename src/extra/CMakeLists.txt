@@ -37,3 +37,7 @@ if (DRJIT_ENABLE_CUDA)
   target_compile_definitions(drjit-extra PRIVATE -DDRJIT_ENABLE_CUDA)
 endif()
 
+if (DRJIT_ENABLE_METAL)
+  target_compile_definitions(drjit-extra PRIVATE -DDRJIT_ENABLE_METAL)
+endif()
+

@@ -1038,10 +1038,13 @@ class Adam(Optimizer[Tuple[int, dr.ArrayBase, dr.ArrayBase, Optional[dr.ArrayBas
         # - EMA debiasing factor
         # - Adaptive/parameter-specific scaling
         Base = dr.leaf_t(grad)
-        Float64 = dr.float64_array_t(dr.leaf_t(grad))
+        if dr.backend_v(Base) == dr.JitBackend.Metal:
+            HighPrec = Base
+        else:
+            HighPrec = dr.float64_array_t(dr.leaf_t(grad))
         ema_factor = Base(
-            -dr.sqrt(1 - Float64(self.beta_2) ** t) /
-                    (1 - Float64(self.beta_1) ** t)
+            -dr.sqrt(1 - HighPrec(self.beta_2) ** t) /
+                    (1 - HighPrec(self.beta_1) ** t)
         )
         scale = cache.product(
             dr.leaf_t(grad),  # Desired type

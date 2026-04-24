@@ -7,7 +7,9 @@ import sys
 
 def skip_if_coopvec_not_supported(t):
     backend = dr.backend_v(t)
-    if backend == dr.JitBackend.CUDA:
+    if backend == dr.JitBackend.Metal:
+        pytest.skip("Metal does not support cooperative vectors")
+    elif backend == dr.JitBackend.CUDA:
         if dr.detail.cuda_version() < (12, 8):
             pytest.skip("CUDA driver does not support cooperative vectors (Driver R570) or later is required")
     elif backend == dr.JitBackend.LLVM:
@@ -3086,6 +3088,8 @@ def test78_hash_id_fallback(t, auto_opaque):
 @pytest.test_arrays("float32, jit, shape=(*)")
 @pytest.mark.parametrize("auto_opaque", [False, True])
 def test79_empty(t, auto_opaque):
+    if auto_opaque and dr.backend_v(t) == dr.JitBackend.Metal:
+        pytest.skip("Metal: auto_opaque with dr.empty creates untrackable allocations")
 
     n = 5
 
