@@ -127,6 +127,8 @@ def test09_inplace_numpy(t):
 @pytest.test_arrays('tensor, -bool, -float16, -uint64, -uint32')
 def test10_inplace_torch(t):
     pytest.importorskip("torch")
+    if dr.backend_v(t) == dr.JitBackend.Metal:
+        pytest.skip("Metal .torch() copies to CPU (no zero-copy sharing)")
     a = dr.empty(t, shape=(3, 3, 3))
     x = a.torch()
     x[0,0,0] = 1
