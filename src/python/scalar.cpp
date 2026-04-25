@@ -12,12 +12,7 @@
 #include "random.h"
 #include "texture.h"
 
-void export_scalar(nb::module_& m) {
-    ArrayBinding b;
-    dr::bind_all<float>(b);
-    bind_rng<float>(m);
-    bind_texture_all<float>(m);
-
+static void bind_scalar_types(nb::module_& m) {
     m.attr("Bool") = nb::borrow(&PyBool_Type);
     m.attr("Float16") = nb::borrow(&PyFloat_Type);
     m.attr("Float32") = nb::borrow(&PyFloat_Type);
@@ -33,4 +28,14 @@ void export_scalar(nb::module_& m) {
     m.attr("UInt32") = nb::borrow(&PyLong_Type);
     m.attr("UInt64") = nb::borrow(&PyLong_Type);
     m.attr("UInt") = nb::borrow(&PyLong_Type);
+}
+
+void export_scalar(nb::module_& m) {
+    ArrayBinding b;
+    dr::bind_all<float>(b);
+    bind_rng<float>(m);
+    bind_texture_all<float>(m);
+
+    bind_scalar_types(m);
+
 }
