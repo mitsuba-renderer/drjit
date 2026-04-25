@@ -266,3 +266,13 @@ def test13_evaluated_print(t):
     b = AppendBuffer()
     foo(i, b, j < 2)
     assert b.value == '[2]'
+
+@pytest.test_arrays('uint32,jit,shape=(*)')
+def test14_symbolic_print_empty_capture(t):
+    """Symbolic print with always-false active mask should not crash (bug A1)."""
+    i = t(5)
+    def body(i):
+        dr.print('x', active=~(i > 0))
+        return (i - 1,)
+    i = dr.while_loop((i,), lambda i: i > 0, body, mode='symbolic')
+    dr.eval(i)

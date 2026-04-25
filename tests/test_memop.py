@@ -1380,3 +1380,14 @@ def test42_masked_gather_loop(t, mode):
     # Lane 2: outputs 0 because the gather on buf_1 masked it
 
     assert dr.all(out == [0, 5, 0], axis=None)
+
+
+@pytest.test_arrays('float32,jit,shape=(*)')
+def test43_gather_size1_literal(t):
+    """Size-1 literal gather should return the correct element (bug A6)."""
+    import numpy as np
+    source = t(10, 20, 30)
+    UInt32 = dr.uint32_array_t(t)
+    for i in range(3):
+        result = dr.gather(t, source, UInt32(i))
+        assert result[0] == source.numpy()[i]

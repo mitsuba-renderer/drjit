@@ -1133,3 +1133,18 @@ def test30_nested(t, config):
             assert tf.reduce_all(out == tf.constant([0, 5, 20], dtype=dt))
             assert tf.reduce_all(grad[0] == tf.constant([0, 12, 36], dtype=dt))
             assert tf.reduce_all(grad[1] == tf.constant([0, 2, 6], dtype=dt))
+
+
+@pytest.test_arrays('float32,is_diff,jit,shape=(*)')
+def test31_wrap_backend_preservation(t):
+    """dr.wrap output should stay on the same backend as input (bug A21)."""
+    torch = pytest.importorskip("torch")
+
+    @dr.wrap(source='drjit', target='torch')
+    def f(x):
+        return x * 2
+
+    x = t(1, 2, 3)
+    dr.enable_grad(x)
+    y = f(x)
+    assert dr.backend_v(y) == dr.backend_v(x)

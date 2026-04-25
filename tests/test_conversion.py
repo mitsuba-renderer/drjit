@@ -147,3 +147,12 @@ def test11_conversion_ad(t):
     assert dr.grad_enabled(x)
     assert i != 0
     assert i == x.index_ad
+
+
+@pytest.test_arrays('float32,jit,shape=(*)')
+def test12_gpu_to_numpy(t):
+    """GPU arrays should be convertible to numpy without crash (bug A4)."""
+    import numpy as np
+    v = t(1, 2, 3)
+    n = np.array(v)
+    assert np.allclose(n, [1, 2, 3])

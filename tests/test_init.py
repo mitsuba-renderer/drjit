@@ -703,3 +703,15 @@ def test31_init_arrayx_from_tensor_and_ndarray(t):
 
     check(t(x))
     check(t(TensorXf(x)))
+
+
+@pytest.test_arrays('float32, shape=(*), jit')
+def test32_gpu_ndarray_is_copy(t):
+    """GPU backends should copy ndarray data, not map it (bug A3/A5)."""
+    import numpy as np
+    if dr.backend_v(t) not in (dr.JitBackend.CUDA, dr.JitBackend.Metal):
+        pytest.skip("GPU-only test")
+    a = np.array([1, 2, 3], dtype=np.float32)
+    v = t(a)
+    a[0] = 999  # modify source
+    assert v[0] == 1  # drjit array should be unchanged
