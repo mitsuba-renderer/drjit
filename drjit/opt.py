@@ -1478,7 +1478,7 @@ def _newton_schulz(X, steps: int):
     # and @YouJiacheng.
     a, b, c = 3.4445, -4.7750, 2.0315
     tall = X.shape[-2] > X.shape[-1]
-    X = X * dr.rcp(dr.norm(X.array) + 1e-7)
+    X = X * dr.rcp(dr.norm(X, axis=(-2, -1), keepdims=True) + 1e-7)
     for _ in range(steps):
         if tall:
             A = dr.matmul(X, X, At=True)
@@ -1597,33 +1597,84 @@ class Muon(Optimizer):
         super().__init__(lr, params, mask_updates=mask_updates,
                          promote_fp16=promote_fp16)
 
-    def _step(self, cache, value, grad, lr, extra):
-        m, shape = extra
+    def step(self, *, eval=True, grad_scale=None, active=None):
+        """
+        Overrides :py:meth:`Optimizer.step` to share the Newton-Schulz
+        iterations across parameters of the same shape: matching updates
+        are stacked into a ``(B, M, N)`` tensor and orthogonalized with
+        one batched GEMM per product instead of ``B`` separate ones.
+        Per-parameter momentum, learning-rate scaling, weight decay, and
+        masking are otherwise identical to the base implementation.
+        """
 
-        beta = self.momentum
-        m_next = dr.fma(beta, m, grad)
-        if self.nesterov:
-            u_flat = dr.fma(beta, m_next, grad)
-        else:
-            u_flat = m_next
+        with dr.profile_range('Muon.step()'):
+            cache = _LRCache()
+            beta = self.momentum
 
-        Tensor = dr.tensor_t(type(value))
-        U = Tensor(u_flat, shape)
-        U = _newton_schulz(U, self.ns_steps)
-        u_flat = U.array
+            # Compute the momentum / Nesterov update for each parameter
+            # and bucket it by shape for the batched Newton-Schulz pass.
+            groups: dict = {}
+            for key, (value, _, _, (m, shape)) in self.state.items():
+                grad = value.grad.array
+                if grad_scale is not None:
+                    grad *= grad_scale
+                m_next = dr.fma(beta, m, grad)
+                u = dr.fma(beta, m_next, grad) if self.nesterov else m_next
+                groups.setdefault(shape, []).append((key, u, m_next, grad))
 
-        # Get opaque step scale
-        leaf = dr.leaf_t(value)
-        ns_scale = max(1.0, shape[-2] / shape[-1]) ** 0.5
-        neg_lr = cache.product(leaf, lr, -ns_scale)
+            # Per shape: one batched NS, then finish each parameter's update.
+            for shape, items in groups.items():
+                M, N = shape
+                Tensor = dr.tensor_t(type(items[0][1]))
+                batch = _newton_schulz(
+                    dr.concat([Tensor(u, (1, M, N)) for _, u, _, _ in items],
+                              axis=0),
+                    self.ns_steps
+                )
 
-        retained = value
-        if self.weight_decay != 0.0:
-            neg_lr_wd = cache.product(leaf, lr, self.weight_decay, -1.0)
-            retained = dr.fma(neg_lr_wd, value, value)
-        new_value = dr.fma(neg_lr, u_flat, retained)
+                leaf = dr.leaf_t(items[0][1])
+                ns_scale = max(1.0, M / N) ** 0.5
 
-        return new_value, (m_next, shape)
+                for i, (key, _, m_next, grad) in enumerate(items):
+                    u_ns = batch[i].array
+                    value, promoted, lr, extra = self.state[key]
+
+                    lr_v = lr if lr is not None else self.lr
+                    neg_lr = cache.product(leaf, lr_v, -ns_scale)
+
+                    value_flat = dr.detach(value).array
+                    retained = value_flat
+                    if self.weight_decay != 0.0:
+                        neg_lr_wd = cache.product(leaf, lr_v,
+                                                  self.weight_decay, -1.0)
+                        retained = dr.fma(neg_lr_wd, value_flat, value_flat)
+                    new_value = dr.fma(neg_lr, u_ns, retained)
+
+                    new_extra = (m_next, shape)
+
+                    mask = False
+                    if self.mask_updates:
+                        mask |= grad == 0
+                    if active is not None:
+                        mask |= ~active
+                    if mask is not False:
+                        new_value = dr.select(mask, value_flat, new_value)
+                        new_extra = self._select(mask, extra, new_extra)
+
+                    value_tp = type(value)
+                    if type(new_value) is not value_tp:
+                        if dr.is_tensor_v(value_tp):
+                            new_value = value_tp(new_value, value.shape)
+                        else:
+                            new_value = value_tp(new_value)
+                    dr.enable_grad(new_value)
+
+                    new_state = new_value, promoted, lr, new_extra
+                    dr.schedule(new_state)
+                    self.state[key] = new_state
+
+            if eval:
+                dr.eval()
 
     def _filter(self, params):
         # Muon is only meaningful on 2D weight matrices; drop scalar, 1D
