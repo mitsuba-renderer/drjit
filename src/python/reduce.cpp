@@ -127,7 +127,7 @@ static_assert(
 static_assert(sizeof(reductions) == sizeof(Reduction) * (size_t) ReduceOpExt::OpCount);
 
 // Forward declaration
-nb::object reduce(uint32_t op, nb::handle h, nb::handle axis, nb::handle mode);
+nb::object reduce(uint32_t op, nb::handle h, nb::handle axis, nb::handle mode, bool keepdims);
 
 nb::object reduce_seq(uint32_t op, nb::handle h, nb::handle axis, nb::handle mode) {
     Reduction red = reductions[(size_t) op];
@@ -152,7 +152,7 @@ nb::object reduce_seq(uint32_t op, nb::handle h, nb::handle axis, nb::handle mod
     for (nb::handle h2 : it) {
         nb::object o = nb::borrow(h2);
         if (axis.is_none())
-            o = reduce(op, o, axis, mode);
+            o = reduce(op, o, axis, mode, false);
 
         if (i++ == 0)
             result = std::move(o);
@@ -198,7 +198,7 @@ nb::object prefix_reduce_seq(ReduceOp op, nb::handle h, int axis, bool exclusive
     return std::move(result);
 }
 
-nb::object reduce(uint32_t op, nb::handle h, nb::handle axis_, nb::handle mode) {
+nb::object reduce(uint32_t op, nb::handle h, nb::handle axis_, nb::handle mode, bool keepdims) {
     nb::handle tp = h.type();
     if (axis_.type().is(&PyEllipsis_Type)) {
         if (!is_drjit_type(tp) || !supp(tp).is_tensor)
@@ -213,8 +213,12 @@ nb::object reduce(uint32_t op, nb::handle h, nb::handle axis_, nb::handle mode) 
     const Reduction &red = reductions[op];
 
     try {
-        if (!is_drjit_type(tp))
+        if (!is_drjit_type(tp)) {
+            if (keepdims)
+                nb::raise("'keepdims=True' is only supported for Dr.Jit "
+                          "arrays and tensors.");
             return reduce_seq(op, h, axis_, mode);
+        }
 
         const ArraySupplement &s = supp(tp);
 
@@ -233,8 +237,9 @@ nb::object reduce(uint32_t op, nb::handle h, nb::handle axis_, nb::handle mode) 
         // First axis along which to reduce
         int red_axis;
 
-        // Set in case the 'axis' parameter doesn't make sense
-        bool axis_type_failure = false;
+        const char *axis_type_msg =
+            "'axis' argument must be of type 'int', 'tuple[int, ...]', "
+            "or None.";
 
         nb::object axis = nb::borrow(axis_);
         if (axis.is_none()) {
@@ -253,37 +258,26 @@ nb::object reduce(uint32_t op, nb::handle h, nb::handle axis_, nb::handle mode) 
                 axis = nb::make_tuple(red_axis);
             }
         } else if (nb::isinstance<nb::tuple>(axis)) {
-            nb::tuple t = nb::borrow<nb::tuple>(axis);
+            // Normalize the axis tuple: convert negative indices,
+            // bounds-check, then deduplicate and sort. Sorting is
+            // required by the recursive reduction below, which assumes
+            // ascending order; dedup avoids reducing a remapped axis.
             nb::list new_axis;
-
-            int prev = -1;
-            bool sort = false;
-            axis_len = 0;
-            for (nb::handle h2: t) {
+            for (nb::handle h2 : nb::borrow<nb::tuple>(axis)) {
                 int value;
-                if (!nb::try_cast(h2, value)) {
-                    axis_type_failure = true;
-                    break;
-                }
-                int adjusted = value;
-                if (adjusted < 0)
-                    adjusted = adjusted + ndim;
-                if (adjusted < 0 || adjusted >= ndim)
-                    nb::raise("out-of-bounds axis (got %i, ndim=%i)", adjusted, ndim);
-                if (prev >= adjusted)
-                    sort = true;
-                prev = adjusted;
-                new_axis.append(adjusted);
-                axis_len++;
+                if (!nb::try_cast(h2, value))
+                    nb::raise("%s", axis_type_msg);
+                if (value < 0)
+                    value += ndim;
+                if (value < 0 || value >= ndim)
+                    nb::raise("out-of-bounds axis (got %i, ndim=%i)",
+                              value, ndim);
+                new_axis.append(value);
             }
-            if (!axis_type_failure && sort) {
-                // If needed, process the axes list to remove duplicates
-                // and sort them in increasing order.
-                nb::list l = nb::list(nb::set(new_axis));
-                l.sort();
-                axis = nb::tuple(l);
-                axis_len = (int)nb::len(axis);
-            }
+            nb::list l = nb::list(nb::set(new_axis));
+            l.sort();
+            axis = nb::tuple(l);
+            axis_len = (int) nb::len(axis);
 
             if (axis_len == 0) {
                 // Nothing to do
@@ -297,24 +291,22 @@ nb::object reduce(uint32_t op, nb::handle h, nb::handle axis_, nb::handle mode) 
                 red_axis = nb::cast<int>(axis[0]);
             }
         } else {
-            axis_type_failure = true;
-            red_axis = axis_len = 0;
+            nb::raise("%s", axis_type_msg);
         }
-
-        if (axis_type_failure)
-            nb::raise("'axis' argument must be of type 'int', 'tuple[int, "
-                      "...]', or None.");
 
         if (s.is_tensor) {
             if (axis_len == -1) {
                 // Directly process the underlying 1D array
                 nb::object value = nb::steal(s.tensor_array(h.ptr()));
-                value = reduce(op, value, axis, mode);
+                value = reduce(op, value, axis, mode, false);
                 if (op == (uint32_t) ReduceOpExt::Count) {
                     ArrayMeta m = s;
                     m.type = (uint16_t) VarType::UInt32;
                     tp = meta_get_type(m);
                 }
+
+                if (keepdims && ndim > 0)
+                    return tp(value, cast_shape(dr::vector<size_t>(ndim, 1)));
 
                 return tp(value, nb::tuple());
             } else {
@@ -326,7 +318,8 @@ nb::object reduce(uint32_t op, nb::handle h, nb::handle axis_, nb::handle mode) 
                 }
                 // Complex case, defer to a separate Python implementation
                 return nb::module_::import_("drjit._reduce")
-                    .attr("tensor_reduce")(ReduceOp(op), h, axis, mode);
+                    .attr("tensor_reduce")(ReduceOp(op), h, axis, mode,
+                                            nb::bool_(keepdims));
             }
         }
 
@@ -341,6 +334,20 @@ nb::object reduce(uint32_t op, nb::handle h, nb::handle axis_, nb::handle mode) 
             }
             if (symbolic == -1)
                 nb::raise("'mode' must be \'symbolic\", \"evaluated\", or None.");
+        }
+
+        // 'keepdims=True' on a non-tensor is only supported when the
+        // existing reduction already preserves a size-1 stub at the
+        // reduced axis -- which happens iff the trailing axis is dynamic
+        // and is the (only) reduced axis.
+        if (keepdims) {
+            bool only_trailing_reduced =
+                (axis_len == 1 && red_axis == s.ndim - 1) ||
+                (axis_len == -1 && s.ndim == 1);
+            if (!only_trailing_reduced ||
+                s.shape[s.ndim - 1] != DRJIT_DYNAMIC)
+                nb::raise("'keepdims=True' is only supported for tensor "
+                          "types or reductions of a trailing dynamic axis.");
         }
 
         // Reduce along the first specified axis
@@ -442,16 +449,24 @@ nb::object reduce(uint32_t op, nb::handle h, nb::handle axis_, nb::handle mode) 
 
             size_t i = 0;
             for (nb::handle h2 : h)
-                result[i++] = reduce(op, h2, nb::int_(red_axis - 1), mode);
+                result[i++] = reduce(op, h2, nb::int_(red_axis - 1), mode, false);
         }
 
         if (ndim == 1 || axis_len == 1)
             return result; // All done!
 
-        if (axis_len != -1)
-            axis = axis[nb::slice(nb::int_(1), nb::none(), nb::none())];
+        if (axis_len != -1) {
+            // Drop the just-reduced axis, then decrement the remaining
+            // ones since their positions in ``result`` have shifted by
+            // one. Axes are sorted ascending, so all entries beyond
+            // index 0 are strictly greater than the reduced axis.
+            nb::list shifted;
+            for (size_t i = 1; i < nb::len(axis); ++i)
+                shifted.append(nb::int_(nb::cast<int>(axis[i]) - 1));
+            axis = nb::tuple(shifted);
+        }
 
-        return reduce(op, result, axis, mode);
+        return reduce(op, result, axis, mode, false);
     } catch (nb::python_error &e) {
         nb::str tp_name = nb::type_name(tp);
         e.restore();
@@ -467,40 +482,41 @@ nb::object reduce(uint32_t op, nb::handle h, nb::handle axis_, nb::handle mode) 
     return nb::object();
 }
 
-nb::object sum(nb::handle value, nb::handle axis, nb::handle mode) {
-    return reduce((uint32_t) ReduceOp::Add, value, axis, mode);
+nb::object sum(nb::handle value, nb::handle axis, nb::handle mode, bool keepdims) {
+    return reduce((uint32_t) ReduceOp::Add, value, axis, mode, keepdims);
 }
 
-nb::object prod(nb::handle value, nb::handle axis, nb::handle mode) {
-    return reduce((uint32_t) ReduceOp::Mul, value, axis, mode);
+nb::object prod(nb::handle value, nb::handle axis, nb::handle mode, bool keepdims) {
+    return reduce((uint32_t) ReduceOp::Mul, value, axis, mode, keepdims);
 }
 
-nb::object min(nb::handle value, nb::handle axis, nb::handle mode) {
-    return reduce((uint32_t) ReduceOp::Min, value, axis, mode);
+nb::object min(nb::handle value, nb::handle axis, nb::handle mode, bool keepdims) {
+    return reduce((uint32_t) ReduceOp::Min, value, axis, mode, keepdims);
 }
 
-nb::object max(nb::handle value, nb::handle axis, nb::handle mode) {
-    return reduce((uint32_t) ReduceOp::Max, value, axis, mode);
+nb::object max(nb::handle value, nb::handle axis, nb::handle mode, bool keepdims) {
+    return reduce((uint32_t) ReduceOp::Max, value, axis, mode, keepdims);
 }
 
-nb::object all(nb::handle value, nb::handle axis) {
-    return reduce((uint32_t) ReduceOpExt::All, value, axis, nb::none());
+nb::object all(nb::handle value, nb::handle axis, bool keepdims) {
+    return reduce((uint32_t) ReduceOpExt::All, value, axis, nb::none(), keepdims);
 }
 
-nb::object any(nb::handle value, nb::handle axis) {
-    return reduce((uint32_t) ReduceOpExt::Any, value, axis, nb::none());
+nb::object any(nb::handle value, nb::handle axis, bool keepdims) {
+    return reduce((uint32_t) ReduceOpExt::Any, value, axis, nb::none(), keepdims);
 }
 
-nb::object count(nb::handle value, nb::handle axis) {
-    return reduce((uint32_t) ReduceOpExt::Count, value, axis, nb::none());
+nb::object count(nb::handle value, nb::handle axis, bool keepdims) {
+    return reduce((uint32_t) ReduceOpExt::Count, value, axis, nb::none(), keepdims);
 }
 
-nb::object reduce_py(ReduceOp op, nb::handle value, nb::handle axis, nb::handle mode) {
-    return reduce((uint32_t) op, value, axis, mode);
+nb::object reduce_py(ReduceOp op, nb::handle value, nb::handle axis,
+                     nb::handle mode, bool keepdims) {
+    return reduce((uint32_t) op, value, axis, mode, keepdims);
 }
 
-nb::object none(nb::handle h, nb::handle axis) {
-    nb::object result = any(h, axis);
+nb::object none(nb::handle h, nb::handle axis, bool keepdims) {
+    nb::object result = any(h, axis, keepdims);
 
     if (!result.ptr()) {
         nb::chain_error(PyExc_RuntimeError,
@@ -514,8 +530,8 @@ nb::object none(nb::handle h, nb::handle axis) {
         return ~result;
 }
 
-nb::object mean(nb::handle value, nb::handle axis, nb::handle mode) {
-    nb::object out = sum(value, axis, mode);
+nb::object mean(nb::handle value, nb::handle axis, nb::handle mode, bool keepdims) {
+    nb::object out = sum(value, axis, mode, keepdims);
 
     if (!out.ptr()) {
         nb::chain_error(PyExc_RuntimeError,
@@ -530,13 +546,14 @@ nb::object mean(nb::handle value, nb::handle axis, nb::handle mode) {
         // therefore use the functions ``jit_opaque_width`` to compute the
         // number of elements.
         auto num_input  = opaque_n_elements(value);
-        auto num_output = prod(shape(out), nb::none());
+        auto num_output = prod(shape(out), nb::none(), nb::none(), false);
 
         return (out * num_output) / num_input;
     }
 
     // mean = sum / (num_input/num_output)
-    return (out * prod(shape(out), nb::none())) / prod(shape(value), nb::none());
+    return (out * prod(shape(out), nb::none(), nb::none(), false))
+         / prod(shape(value), nb::none(), nb::none(), false);
 }
 
 nb::object dot(nb::handle h0, nb::handle h1) {
@@ -592,7 +609,7 @@ nb::object dot(nb::handle h0, nb::handle h1) {
             ad_var_dec_ref(index);
             return result;
         } else {
-            return sum(h0 * h1, nb::int_(0));
+            return sum(h0 * h1, nb::int_(0), nb::none(), false);
         }
     } catch (nb::python_error &e) {
         nb::str tp0_name = nb::inst_name(h0),
@@ -730,28 +747,128 @@ static nb::object block_sum(nb::handle h, uint32_t block_size,
     return block_reduce(ReduceOp::Add, h, block_size, mode);
 }
 
+/// Returns the shape that ``sum(x, axis, keepdims)`` would produce for an
+/// input of shape ``in_shape``. The default ellipsis resolves to all axes
+/// for tensors and to axis 0 otherwise. Returns ``std::nullopt`` for
+/// malformed axis specs or for ranks outside [1, 63].
+static std::optional<dr::vector<size_t>> reduction_output_shape(
+    nb::handle axis, const dr::vector<size_t> &in_shape, bool is_tensor,
+    bool keepdims) {
+    int n = (int) in_shape.size();
+    if (n <= 0 || n >= 64) return std::nullopt;
+    uint64_t full = ((uint64_t) 1 << n) - 1;
+    uint64_t reduced;
+
+    if (axis.type().is(&PyEllipsis_Type)) {
+        reduced = is_tensor ? full : (uint64_t) 1;
+    } else if (axis.is_none()) {
+        reduced = full;
+    } else {
+        reduced = 0;
+        auto add = [n, &reduced](int v) {
+            if (v < 0) v += n;
+            if (v < 0 || v >= n) return false;
+            reduced |= (uint64_t) 1 << v;
+            return true;
+        };
+        int v;
+        if (nb::isinstance<nb::tuple>(axis)) {
+            for (auto a : nb::cast<nb::tuple>(axis))
+                if (!nb::try_cast(a, v) || !add(v)) return std::nullopt;
+        } else if (!nb::try_cast(axis, v) || !add(v)) {
+            return std::nullopt;
+        }
+    }
+
+    dr::vector<size_t> out;
+    out.reserve(n);
+    for (int i = 0; i < n; ++i) {
+        if ((reduced >> i) & 1) {
+            if (keepdims) out.push_back(1);
+        } else {
+            out.push_back(in_shape[i]);
+        }
+    }
+    return out;
+}
+
+/// Shared implementation for ``norm`` and ``squared_norm``. We route
+/// through ``dot()`` whenever the reduction effectively collapses the
+/// input to a scalar -- detected by asking ``reduction_output_shape``
+/// what shape ``sum`` would produce and checking that it is "all ones"
+/// (i.e., the result has a single element). For tensors this routes via
+/// the underlying 1D buffer to engage the fused dot kernel. For non-
+/// tensor inputs ``dot(h, h)`` itself only reduces axis 0, so we use it
+/// when the default axis is requested *or* when ``shape[1:]`` is
+/// trivial.
+static nb::object norm_impl(nb::handle h, nb::handle axis, nb::handle mode,
+                            bool keepdims, bool sqrt_wrap) {
+    auto wrap = [sqrt_wrap](nb::object v) -> nb::object {
+        return sqrt_wrap ? array_module.attr("sqrt")(v) : v;
+    };
+
+    auto all_ones = [](auto begin, auto end) {
+        for (auto it = begin; it != end; ++it)
+            if (*it != 1) return false;
+        return true;
+    };
+
+    if (!keepdims && mode.is_none()) {
+        nb::handle tp = h.type();
+        bool default_axis = axis.type().is(&PyEllipsis_Type);
+
+        if (!is_drjit_type(tp)) {
+            // Python sequences: ``square`` fails on plain lists, so only
+            // the iterating dot fallback applies.
+            if (default_axis)
+                return wrap(array_module.attr("dot")(h, h));
+        } else {
+            const ArraySupplement &s = supp(tp);
+            dr::vector<size_t> shape;
+            shape_impl(h, shape);
+
+            auto out = reduction_output_shape(axis, shape, s.is_tensor,
+                                                /* keepdims = */ false);
+            bool whole = out.has_value() && all_ones(out->begin(), out->end());
+
+            if (whole && s.is_tensor) {
+                nb::object flat = nb::steal(s.tensor_array(h.ptr()));
+                return tp(wrap(array_module.attr("dot")(flat, flat)),
+                          nb::tuple());
+            }
+            if (!s.is_tensor &&
+                (default_axis ||
+                 (whole && all_ones(shape.begin() + 1, shape.end()))))
+                return wrap(array_module.attr("dot")(h, h));
+        }
+    }
+
+    nb::object sq = array_module.attr("square")(h);
+    return wrap(sum(sq, axis, mode, keepdims));
+}
+
 
 void export_reduce(nb::module_ & m) {
-    m.def("reduce", &reduce_py, "op"_a, "value"_a, "axis"_a.none() = nb::ellipsis(), "mode"_a = nb::none(), doc_reduce,
-          nb::sig("def reduce(op: ReduceOp, value: object, axis: int | tuple[int, ...] | ... | None = ..., mode: str | None = None) -> object"))
-     .def("all", &all, "value"_a, "axis"_a.none() = nb::ellipsis(), doc_all,
-          nb::sig("def all(value: object, axis: int | tuple[int, ...] | ... | None = ...) -> object"))
-     .def("any", &any, "value"_a, "axis"_a.none() = nb::ellipsis(), doc_any,
-          nb::sig("def any(value: object, axis: int | tuple[int, ...] | ... | None = ...) -> object"))
-     .def("none", &none, "value"_a, "axis"_a.none() = nb::ellipsis(), doc_none,
-          nb::sig("def none(value: object, axis: int | tuple[int, ...] | ... | None = ...) -> object"))
-     .def("count", &count, "value"_a, "axis"_a.none() = nb::ellipsis(), doc_count,
-          nb::sig("def count(value: object, axis: int | tuple[int, ...] | ... | None = ...) -> object"))
-     .def("sum", &sum, "value"_a, "axis"_a.none() = nb::ellipsis(), "mode"_a = nb::none(), doc_sum,
-          nb::sig("def sum(value: object, axis: int | tuple[int, ...] | ... | None = ..., mode: str | None = None) -> object"))
-     .def("prod", &prod, "value"_a, "axis"_a.none() = nb::ellipsis(), "mode"_a = nb::none(), doc_prod,
-          nb::sig("def prod(value: object, axis: int | tuple[int, ...] | ... | None = ..., mode: str | None = None) -> object"))
-     .def("min", &min, "value"_a, "axis"_a.none() = nb::ellipsis(), "mode"_a = nb::none(), doc_min,
-          nb::sig("def min(value: object, axis: int | tuple[int, ...] | ... | None = ..., mode: str | None = None) -> object"))
-     .def("max", &max, "value"_a, "axis"_a.none() = nb::ellipsis(), "mode"_a = nb::none(), doc_max,
-          nb::sig("def max(value: object, axis: int | tuple[int, ...] | ... | None = ..., mode: str | None = None) -> object"))
-     .def("mean", &mean, "value"_a, "axis"_a.none() = nb::ellipsis(), "mode"_a = nb::none(), doc_mean,
-          nb::sig("def mean(value: object, axis: int | tuple[int, ...] | ... | None = ..., mode: str | None = None) -> object"))
+    m.def("reduce", &reduce_py, "op"_a, "value"_a, "axis"_a.none() = nb::ellipsis(), "mode"_a = nb::none(), "keepdims"_a = false, doc_reduce,
+          nb::sig("def reduce(op: ReduceOp, value: object, axis: int | tuple[int, ...] | ... | None = ..., mode: str | None = None, keepdims: bool = False) -> object"))
+     .def("all", &all, "value"_a, "axis"_a.none() = nb::ellipsis(), "keepdims"_a = false, doc_all,
+          nb::sig("def all(value: object, axis: int | tuple[int, ...] | ... | None = ..., keepdims: bool = False) -> object"))
+     .def("any", &any, "value"_a, "axis"_a.none() = nb::ellipsis(), "keepdims"_a = false, doc_any,
+          nb::sig("def any(value: object, axis: int | tuple[int, ...] | ... | None = ..., keepdims: bool = False) -> object"))
+     .def("none", &none, "value"_a, "axis"_a.none() = nb::ellipsis(), "keepdims"_a = false, doc_none,
+          nb::sig("def none(value: object, axis: int | tuple[int, ...] | ... | None = ..., keepdims: bool = False) -> object"))
+     .def("count", &count, "value"_a, "axis"_a.none() = nb::ellipsis(), "keepdims"_a = false, doc_count,
+          nb::sig("def count(value: object, axis: int | tuple[int, ...] | ... | None = ..., keepdims: bool = False) -> object"))
+     .def("sum", &sum, "value"_a, "axis"_a.none() = nb::ellipsis(), "mode"_a = nb::none(), "keepdims"_a = false, doc_sum,
+          nb::sig("def sum(value: object, axis: int | tuple[int, ...] | ... | None = ..., mode: str | None = None, keepdims: bool = False) -> object"))
+     .def("prod", &prod, "value"_a, "axis"_a.none() = nb::ellipsis(), "mode"_a = nb::none(), "keepdims"_a = false, doc_prod,
+          nb::sig("def prod(value: object, axis: int | tuple[int, ...] | ... | None = ..., mode: str | None = None, keepdims: bool = False) -> object"))
+     .def("min", &min, "value"_a, "axis"_a.none() = nb::ellipsis(), "mode"_a = nb::none(), "keepdims"_a = false, doc_min,
+          nb::sig("def min(value: object, axis: int | tuple[int, ...] | ... | None = ..., mode: str | None = None, keepdims: bool = False) -> object"))
+     .def("max", &max, "value"_a, "axis"_a.none() = nb::ellipsis(), "mode"_a = nb::none(), "keepdims"_a = false, doc_max,
+          nb::sig("def max(value: object, axis: int | tuple[int, ...] | ... | None = ..., mode: str | None = None, keepdims: bool = False) -> object"))
+     .def("mean", &mean, "value"_a, "axis"_a.none() = nb::ellipsis(), "mode"_a = nb::none(), "keepdims"_a = false, doc_mean,
+          nb::sig("def mean(value: object, axis: int | tuple[int, ...] | ... | None = ..., mode: str | None = None, keepdims: bool = False) -> object"))
      .def("prefix_reduce", &prefix_reduce, "op"_a, "value"_a, "axis"_a = 0, "exclusive"_a = true, "reverse"_a = false, doc_prefix_reduce,
           nb::sig("def prefix_reduce(op: ReduceOp, value: T, axis: int | tuple[int, ...] = 0, exclusive: bool = True, reverse: bool = False) -> T"))
      .def("dot", &dot, doc_dot)
@@ -761,14 +878,15 @@ void export_reduce(nb::module_ & m) {
                   array_module.attr("dot")(h0, h1));
           }, doc_abs_dot)
      .def("norm",
-          [](nb::handle h) -> nb::object {
-              return array_module.attr("sqrt")(
-                  array_module.attr("dot")(h, h));
-          }, doc_norm)
+          [](nb::handle h, nb::handle axis, nb::handle mode, bool keepdims) -> nb::object {
+              return norm_impl(h, axis, mode, keepdims, /* sqrt_wrap = */ true);
+          }, "value"_a, "axis"_a.none() = nb::ellipsis(), "mode"_a = nb::none(), "keepdims"_a = false, doc_norm,
+          nb::sig("def norm(value: object, axis: int | tuple[int, ...] | ... | None = ..., mode: str | None = None, keepdims: bool = False) -> object"))
      .def("squared_norm",
-          [](nb::handle h) -> nb::object {
-              return array_module.attr("dot")(h, h);
-          }, doc_squared_norm)
+          [](nb::handle h, nb::handle axis, nb::handle mode, bool keepdims) -> nb::object {
+              return norm_impl(h, axis, mode, keepdims, /* sqrt_wrap = */ false);
+          }, "value"_a, "axis"_a.none() = nb::ellipsis(), "mode"_a = nb::none(), "keepdims"_a = false, doc_squared_norm,
+          nb::sig("def squared_norm(value: object, axis: int | tuple[int, ...] | ... | None = ..., mode: str | None = None, keepdims: bool = False) -> object"))
      .def("block_prefix_reduce", &block_prefix_reduce, "op"_a, "value"_a, "block_size"_a, "exclusive"_a = true, "reverse"_a = false,
           doc_block_prefix_reduce,
           nb::sig("def block_prefix_reduce(op: ReduceOp, value: ArrayT, block_size: int, exclusive: bool = True, reverse: bool = False) -> ArrayT"))

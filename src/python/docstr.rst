@@ -856,6 +856,9 @@
         mode (str | None): optional parameter to force an evaluation strategy.
           Must equal ``"evaluated"``, ``"symbolic"``, or ``None``.
 
+        keepdims (bool): if ``True``, the reduced axes are retained in the
+          output as size-1 dimensions. Defaults to ``False``.
+
     Returns:
         The reduced array or tensor as specified above.
 
@@ -880,6 +883,9 @@
         mode (str | None): optional parameter to force an evaluation strategy.
           Must equal ``"evaluated"``, ``"symbolic"``, or ``None``.
 
+        keepdims (bool): if ``True``, the reduced axes are retained in the
+          output as size-1 dimensions. Defaults to ``False``.
+
     Returns:
         object: The reduced array or tensor as specified above.
 
@@ -903,6 +909,9 @@
 
         mode (str | None): optional parameter to force an evaluation strategy.
           Must equal ``"evaluated"``, ``"symbolic"``, or ``None``.
+
+        keepdims (bool): if ``True``, the reduced axes are retained in the
+          output as size-1 dimensions. Defaults to ``False``.
 
     Returns:
         object: The reduced array or tensor as specified above.
@@ -932,6 +941,9 @@
         mode (str | None): optional parameter to force an evaluation strategy.
           Must equal ``"evaluated"``, ``"symbolic"``, or ``None``.
 
+        keepdims (bool): if ``True``, the reduced axes are retained in the
+          output as size-1 dimensions. Defaults to ``False``.
+
     Returns:
         object: The reduced array or tensor as specified above.
 
@@ -960,6 +972,9 @@
         mode (str | None): optional parameter to force an evaluation strategy.
           Must equal ``"evaluated"``, ``"symbolic"``, or ``None``.
 
+        keepdims (bool): if ``True``, the reduced axes are retained in the
+          output as size-1 dimensions. Defaults to ``False``.
+
     Returns:
         The reduced array or tensor as specified above.
 
@@ -985,6 +1000,9 @@
 
         mode (str | None): optional parameter to force an evaluation strategy.
           Must equal ``"evaluated"``, ``"symbolic"``, or ``None``.
+
+        keepdims (bool): if ``True``, the reduced axes are retained in the
+          output as size-1 dimensions. Defaults to ``False``.
 
     Returns:
         The reduced array or tensor as specified above.
@@ -1056,6 +1074,9 @@
           reduction over all axes. The default ``axis=...`` applies a
           reduction over all axes for tensor types and index ``0`` otherwise.
 
+        keepdims (bool): if ``True``, the reduced axes are retained in the
+          output as size-1 dimensions. Defaults to ``False``.
+
     Returns:
         object: The reduced array or tensor as specified above.
 
@@ -1126,6 +1147,9 @@
           reduction over all axes. The default ``axis=...`` applies a
           reduction over all axes for tensor types and index ``0`` otherwise.
 
+        keepdims (bool): if ``True``, the reduced axes are retained in the
+          output as size-1 dimensions. Defaults to ``False``.
+
     Returns:
         bool | drjit.ArrayBase: Result of the reduction operation
 
@@ -1192,6 +1216,9 @@
           reduction over all axes. The default ``axis=...`` applies a
           reduction over all axes for tensor types and index ``0`` otherwise.
 
+        keepdims (bool): if ``True``, the reduced axes are retained in the
+          output as size-1 dimensions. Defaults to ``False``.
+
     Returns:
         bool | drjit.ArrayBase: Result of the reduction operation
 
@@ -1235,41 +1262,72 @@
 
 .. topic:: norm
 
-    Computes the 2-norm of a Dr.Jit array, tensor, or Python sequence.
+    Computes the 2-norm of a Dr.Jit array, tensor, or Python sequence along
+    the specified axis/axes.
 
     The operation is equivalent to
 
     .. code-block:: python
 
-       dr.sqrt(dr.dot(arg, arg))
+       dr.sqrt(dr.sum(value*value, axis=axis, keepdims=keepdims, mode=mode))
+
+    For the default arguments, the implementation routes through
+    ``dr.sqrt(dr.dot(value, value))`` to use the specialized dot-product
+    kernels (e.g., the fused dot reduction for 1D Jit arrays).
 
     The :py:func:`norm` operation performs a horizontal reduction. See the
     discussion of :py:func:`dr.reduce() <reduce>` for important general
     information about their properties.
 
-
     Args:
-        arg (Sequence | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+        value (Sequence | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+
+        axis (int | tuple[int, ...] | ... | None): The axis/axes along which
+          to reduce. The special argument ``axis=None`` causes a simultaneous
+          reduction over all axes. The default ``axis=...`` applies a
+          reduction over all axes for tensor types and index ``0`` otherwise.
+
+        mode (str | None): optional parameter to force an evaluation strategy.
+          Must equal ``"evaluated"``, ``"symbolic"``, or ``None``.
+
+        keepdims (bool): if ``True``, the reduced axes are retained in the
+          output as size-1 dimensions. Defaults to ``False``.
 
     Returns:
         float | int | drjit.ArrayBase: 2-norm of the input
 
 .. topic:: squared_norm
 
-    Computes the squared 2-norm of a Dr.Jit array, tensor, or Python sequence.
+    Computes the squared 2-norm of a Dr.Jit array, tensor, or Python sequence
+    along the specified axis/axes.
 
     The operation is equivalent to
 
     .. code-block:: python
 
-       dr.dot(arg, arg)
+       dr.sum(value*value, axis=axis, keepdims=keepdims, mode=mode)
+
+    For the default arguments, the implementation routes through
+    ``dr.dot(value, value)`` to use the specialized dot-product kernels
+    (e.g., the fused dot reduction for 1D Jit arrays).
 
     The :py:func:`squared_norm` operation performs a horizontal reduction.
     See the discussion of :py:func:`dr.reduce() <reduce>` for important general
     information about their properties.
 
     Args:
-        arg (Sequence | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+        value (Sequence | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+
+        axis (int | tuple[int, ...] | ... | None): The axis/axes along which
+          to reduce. The special argument ``axis=None`` causes a simultaneous
+          reduction over all axes. The default ``axis=...`` applies a
+          reduction over all axes for tensor types and index ``0`` otherwise.
+
+        mode (str | None): optional parameter to force an evaluation strategy.
+          Must equal ``"evaluated"``, ``"symbolic"``, or ``None``.
+
+        keepdims (bool): if ``True``, the reduced axes are retained in the
+          output as size-1 dimensions. Defaults to ``False``.
 
     Returns:
         float | int | drjit.ArrayBase: squared 2-norm of the input
@@ -7885,6 +7943,9 @@
           to reduce. The special argument ``axis=None`` causes a simultaneous
           reduction over all axes. The default ``axis=...`` applies a
           reduction over all axes for tensor types and index ``0`` otherwise.
+
+        keepdims (bool): if ``True``, the reduced axes are retained in the
+          output as size-1 dimensions. Defaults to ``False``.
 
     Returns:
         int | drjit.ArrayBase: Result of the reduction operation

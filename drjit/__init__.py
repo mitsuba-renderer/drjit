@@ -1460,6 +1460,92 @@ def sphdir(theta, phi):
 
     return Array3f(cp * st, sp * st, ct)
 
+def var(value, axis = ..., mode = None, keepdims: bool = False, ddof: int = 0):
+    '''
+    Compute the variance of the input along the specified axis/axes.
+
+    This is the *population* variance by default. Set ``ddof=1`` to
+    obtain the (Bessel-corrected) *sample* variance, which divides by
+    ``N - 1`` instead of ``N``.
+
+    The implementation uses the standard two-pass algorithm
+
+    .. code-block:: python
+
+       m = dr.mean(value, axis=axis, keepdims=True)
+       dr.sum((value - m) ** 2, axis=axis) / (N - ddof)
+
+    where ``N`` is the number of input elements that contribute to each
+    output element. The two-pass form avoids the catastrophic
+    cancellation of the algebraically-equivalent ``E[X^2] - E[X]^2``
+    expression when the mean is large compared to the variance.
+
+    See :py:func:`dr.reduce() <reduce>` for the meaning of the ``axis``,
+    ``mode``, and ``keepdims`` arguments.
+
+    Args:
+        value (ArrayBase | Iterable | float | int): An input Dr.Jit
+          array, tensor, iterable, or scalar Python type.
+
+        axis (int | tuple[int, ...] | ... | None): The axis/axes along
+          which to reduce. The special argument ``axis=None`` causes a
+          simultaneous reduction over all axes. The default ``axis=...``
+          applies a reduction over all axes for tensor types and
+          index ``0`` otherwise.
+
+        mode (str | None): optional parameter to force an evaluation
+          strategy. Must equal ``"evaluated"``, ``"symbolic"``, or
+          ``None``.
+
+        keepdims (bool): if ``True``, the reduced axes are retained as
+          size-1 dimensions in the output. Defaults to ``False``.
+
+        ddof (int): "delta degrees of freedom"; the divisor used is
+          ``N - ddof``. Defaults to ``0`` (population variance).
+
+    Returns:
+        The variance along the specified axis/axes.
+    '''
+    if not is_array_v(value):
+        items = list(value) if hasattr(value, '__iter__') else [value]
+        m = mean(items)
+        return sum([(x - m) ** 2 for x in items]) / (len(items) - ddof)
+    m = mean(value, axis=axis, mode=mode, keepdims=True)
+    s = sum((value - m) ** 2, axis=axis, mode=mode, keepdims=keepdims)
+    n = prod(shape(value)) // prod(shape(m))
+    return s / (n - ddof)
+
+
+def std(value, axis = ..., mode = None, keepdims: bool = False, ddof: int = 0):
+    '''
+    Compute the standard deviation of the input along the specified
+    axis/axes.
+
+    Equivalent to ``dr.sqrt(dr.var(value, ...))`` -- see
+    :py:func:`dr.var` for details on the algorithm and the meaning of
+    the ``ddof`` parameter, and :py:func:`dr.reduce` for ``axis``,
+    ``mode``, and ``keepdims``.
+
+    Args:
+        value (ArrayBase | Iterable | float | int): An input Dr.Jit
+          array, tensor, iterable, or scalar Python type.
+
+        axis (int | tuple[int, ...] | ... | None): The axis/axes along
+          which to reduce.
+
+        mode (str | None): optional evaluation strategy.
+
+        keepdims (bool): if ``True``, the reduced axes are retained as
+          size-1 dimensions in the output.
+
+        ddof (int): delta degrees of freedom (default ``0``).
+
+    Returns:
+        The standard deviation along the specified axis/axes.
+    '''
+    return sqrt(var(value, axis=axis, mode=mode, keepdims=keepdims, ddof=ddof))
+
+
 def normalize(arg: T, /) -> T:
     '''
     Normalize the input vector so that it has unit length and return the

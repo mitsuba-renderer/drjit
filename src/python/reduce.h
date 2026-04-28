@@ -14,11 +14,11 @@
 
 extern void export_reduce(nb::module_ &);
 
-extern nb::object all (nb::handle, nb::handle axis);
-extern nb::object any (nb::handle, nb::handle axis);
-extern nb::object sum (nb::handle, nb::handle axis, nb::handle mode = Py_None);
-extern nb::object prod(nb::handle, nb::handle axis, nb::handle mode = Py_None);
-extern nb::object min (nb::handle, nb::handle axis, nb::handle mode = Py_None);
-extern nb::object max (nb::handle, nb::handle axis, nb::handle mode = Py_None);
+extern nb::object all (nb::handle, nb::handle axis, bool keepdims = false);
+extern nb::object any (nb::handle, nb::handle axis, bool keepdims = false);
+extern nb::object sum (nb::handle, nb::handle axis, nb::handle mode = Py_None, bool keepdims = false);
+extern nb::object prod(nb::handle, nb::handle axis, nb::handle mode = Py_None, bool keepdims = false);
+extern nb::object min (nb::handle, nb::handle axis, nb::handle mode = Py_None, bool keepdims = false);
+extern nb::object max (nb::handle, nb::handle axis, nb::handle mode = Py_None, bool keepdims = false);
 extern nb::object compress(nb::handle_t<dr::ArrayBase> h);
 extern nb::object dot(nb::handle h0, nb::handle h1);
