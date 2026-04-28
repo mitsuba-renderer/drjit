@@ -63,6 +63,7 @@ def tensor_reduce(
     value: ArrayT,
     axis: Tuple[int, ...],
     mode: Literal["symbolic", "evaluated", None],
+    keepdims: bool = False,
 ) -> ArrayT:
     """
     This function uses the operation ``op`` to reduce the tensor ``value``
@@ -216,7 +217,13 @@ def tensor_reduce(
             offset=offset,
         )
 
-    return Tensor(out_array, out_shape)
+    if keepdims:
+        # Re-introduce reduced axes as size-1 dimensions in the result shape.
+        final_shape = tuple(1 if i in axis else s for i, s in enumerate(in_shape))
+    else:
+        final_shape = out_shape
+
+    return Tensor(out_array, final_shape)
 
 class PrefixRedOp(dr.CustomOp):
     op: dr.ReduceOp

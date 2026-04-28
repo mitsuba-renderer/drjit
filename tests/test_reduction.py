@@ -146,6 +146,20 @@ def test04_sum(t):
     with pytest.raises(RuntimeError, match="out-of-bounds axis"):
         a = dr.sum(dr.scalar.Matrix2f([1, 2], [3, 4]), axis=-3)
 
+    # 'keepdims' is allowed when the type system already produces a size-1
+    # output (1D dynamic array, or a trailing dynamic axis).
+    a = dr.sum(m.Float([1, 2, 3]), keepdims=True)
+    assert dr.allclose(a, 6) and type(a) is m.Float
+    a = dr.sum(m.Array3f([1, 2, 3], [2, 3, 4], [3, 4, 5]), axis=1, keepdims=True)
+    assert dr.allclose(a, [[6], [9], [12]]) and type(a) is m.Array3f
+
+    # Reducing a fixed axis on a Dr.Jit array would change the type, so
+    # 'keepdims=True' is rejected with a hint to convert to a tensor.
+    with pytest.raises(RuntimeError, match="keepdims=True"):
+        dr.sum(m.Array3f([1, 2, 3], [2, 3, 4], [3, 4, 5]), axis=0, keepdims=True)
+    with pytest.raises(RuntimeError, match="keepdims=True"):
+        dr.sum([1.0, 2.0, 3.0], keepdims=True)
+
 
 @pytest.test_arrays('shape=(*), float, -float64, jit')
 def test05_prod(t):
@@ -320,6 +334,38 @@ def test07_norm(t):
     assert dr.allclose(a, 3.74166)
     assert type(a) is m.Float
 
+    # Per-column norm of an Array3f, and matching squared_norm
+    v = m.Array3f([3, 1, 0], [4, 1, 0], [0, 1, 0])
+    assert dr.allclose(dr.norm(v, axis=0), [5, 3 ** 0.5, 0])
+    assert dr.allclose(dr.squared_norm(v, axis=0), dr.sum(v * v, axis=0))
+
+    # Any axis spec that effectively reduces the whole array should
+    # collapse to a scalar (0-dim tensor): default, axis=None, tuples
+    # covering every dim (including reordered / negative indices), and
+    # single-axis specs on shapes whose other dims happen to be size 1.
+    tens = m.TensorXf(dr.arange(m.Float, 12), shape=(3, 4))
+    expected = dr.sqrt(dr.sum(tens * tens))
+    for axis in (..., None, (0, 1), (1, 0), (-2, -1)):
+        a = dr.norm(tens, axis=axis)
+        assert a.shape == () and dr.allclose(a, expected)
+
+    # Single non-trivial axis -- shape (1,1,1,N) reducing axis=3 is a
+    # whole-array reduction.
+    sparse = m.TensorXf(dr.arange(m.Float, 5), shape=(1, 1, 1, 5))
+    assert dr.allclose(dr.norm(sparse, axis=3), dr.sqrt(dr.sum(sparse * sparse)))
+    assert dr.norm(sparse, axis=3).shape == ()
+
+    # 1D Jit-array full reduction across spellings.
+    x = m.Float([1, 2, 3, 4])
+    expected = dr.sqrt(dr.sum(x * x))
+    for axis in (..., 0, None, (0,), (-1,)):
+        assert dr.allclose(dr.norm(x, axis=axis), expected)
+
+    # Tensor norm with keepdims still matches sum-of-squares
+    a = dr.norm(tens, axis=1, keepdims=True)
+    assert a.shape == (3, 1)
+    assert dr.allclose(a, dr.sqrt(dr.sum(tens * tens, axis=1, keepdims=True)))
+
 
 @pytest.test_arrays('shape=(*), float32')
 def test08_prefix_sum(t):
@@ -370,24 +416,83 @@ def test11_count(t):
     assert dr.count(m.Array3b([True, False, True])) == 2
 
 
+@pytest.test_arrays('shape=(*), float32, jit, -is_diff')
+def test11b_var_std(t):
+    """``dr.var`` and ``dr.std`` should match NumPy's two-pass formulation
+    across 1D arrays, tensors with various axis specs, ``keepdims``, and
+    ``ddof``. For fixed-shape Dr.Jit arrays only the trailing-dynamic-axis
+    case (with ``keepdims=True``) is supported -- the rest inherits
+    ``mean``'s keepdims restriction."""
+    import numpy as np
+    m = sys.modules[t.__module__]
+
+    # 1D Float full reduction, with and without ddof
+    x = m.Float([1, 2, 3, 4, 5])
+    xnp = x.numpy()
+    assert dr.allclose(dr.var(x), np.var(xnp))
+    assert dr.allclose(dr.std(x), np.std(xnp))
+    assert dr.allclose(dr.var(x, ddof=1), np.var(xnp, ddof=1))
+    assert dr.allclose(dr.std(x, ddof=1), np.std(xnp, ddof=1))
+
+    # Tensor: various axis specs, with and without keepdims
+    tens = m.TensorXf(dr.arange(m.Float, 24), shape=(2, 3, 4))
+    tnp = tens.numpy()
+    for axis in (None, 0, 1, 2, -1, (0, 1), (1, 2)):
+        for keepdims in (False, True):
+            a = dr.var(tens, axis=axis, keepdims=keepdims)
+            e = np.var(tnp, axis=axis, keepdims=keepdims)
+            assert a.shape == e.shape, f'var shape mismatch for axis={axis}, keepdims={keepdims}'
+            assert dr.allclose(a, e), f'var value mismatch for axis={axis}, keepdims={keepdims}'
+
+            a = dr.std(tens, axis=axis, keepdims=keepdims)
+            e = np.std(tnp, axis=axis, keepdims=keepdims)
+            assert dr.allclose(a, e), f'std mismatch for axis={axis}, keepdims={keepdims}'
+
+    # ddof on tensors
+    assert dr.allclose(dr.var(tens, ddof=1), np.var(tnp, ddof=1))
+    assert dr.allclose(dr.std(tens, axis=1, ddof=1), np.std(tnp, axis=1, ddof=1))
+
+    # Fixed-shape Dr.Jit array: only axis=-1 with keepdims=True is
+    # supported (per-component variance over the trailing dynamic axis).
+    v = m.Array3f([1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12])
+    vnp = v.numpy()
+    a = dr.var(v, axis=-1, keepdims=True)
+    e = np.var(vnp, axis=-1, keepdims=True)
+    assert a.shape == e.shape and dr.allclose(a, e)
+
+    # Other axis specs on Array3f inherit mean's keepdims restriction.
+    # The error is chained through mean -> sum -> reduce, so check the
+    # full cause chain for the keepdims hint.
+    def has_keepdims_cause(exc):
+        while exc is not None:
+            if "keepdims=True" in str(exc):
+                return True
+            exc = exc.__cause__
+        return False
+    for bad_axis in (..., 0):
+        with pytest.raises(RuntimeError) as exc_info:
+            dr.var(v, axis=bad_axis)
+        assert has_keepdims_cause(exc_info.value)
+
+
+@pytest.mark.parametrize('keepdims', [False, True])
 @pytest.mark.parametrize('op', [dr.ReduceOp.Add, dr.ReduceOp.Max, dr.ReduceOp.Min])
 @pytest.skip_on(RuntimeError, "backend does not support the requested type of atomic reduction")
 @pytest.test_arrays('int, tensor, -is_diff, -int8')
-def test12_tensor_reduce(t, op):
+def test12_tensor_reduce(t, op, keepdims):
     def check(y, axis, mode):
         import numpy as np
 
-        #print(f"{axis=}: ", end="")
         ynp = y.numpy()
         if op is dr.ReduceOp.Add:
-            a0 = ynp.sum(axis=axis)
+            a0 = ynp.sum(axis=axis, keepdims=keepdims)
         elif op is dr.ReduceOp.Min:
-            a0 = ynp.min(axis=axis)
+            a0 = ynp.min(axis=axis, keepdims=keepdims)
         elif op is dr.ReduceOp.Max:
-            a0 = ynp.max(axis=axis)
-        a1 = dr.reduce(op, y, axis, mode)
-        match = np.all(a1.numpy() == a0, axis=None)
-        #print(f"{'OK' if match else 'FAIL'}")
+            a0 = ynp.max(axis=axis, keepdims=keepdims)
+        a1 = dr.reduce(op, y, axis, mode, keepdims=keepdims)
+        assert a1.shape == a0.shape
+        assert np.all(a1.numpy() == a0)
 
 
     def check_all(y):
@@ -413,6 +518,7 @@ def test12_tensor_reduce(t, op):
         y = dr.reshape(t, x, (3, 5, 7, 11))
 
         check_all(y)
+
 
 @pytest.mark.parametrize('reverse', [False, True])
 @pytest.mark.parametrize('exclusive', [False, True])

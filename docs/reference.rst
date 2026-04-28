@@ -79,6 +79,8 @@ Reductions
 .. autofunction:: min
 .. autofunction:: max
 .. autofunction:: mean
+.. autofunction:: var
+.. autofunction:: std
 
 .. autofunction:: all
 .. autofunction:: any
