@@ -32,6 +32,7 @@ else:
 from .ast import syntax, hint
 from .interop import wrap
 from . import random
+import builtins as _builtins
 import warnings as _warnings
 
 from functools import wraps
@@ -2085,6 +2086,103 @@ def dstack(arrays: Sequence[ArrayT], /) -> ArrayT:
             a = reshape(tp, a, a.shape + (1,))
         fixed.append(a)
     return concat(fixed, axis=2)
+
+
+def split(value: ArrayT, indices_or_sections: Union[int, Sequence[int]], /,
+          axis: int = 0) -> list:
+    """
+    Split a tensor into multiple parts along an axis.
+
+    When ``indices_or_sections`` is an integer *N*, the tensor is divided into
+    *N* equal parts along ``axis``. The axis size must be divisible by *N*;
+    use :py:func:`array_split` to allow unequal parts.
+
+    When ``indices_or_sections`` is a sequence of indices ``[i, j, ...]``, the
+    splits occur before those positions along the given axis, producing
+    sections ``[:i]``, ``[i:j]``, ``[j:]``, etc.
+
+    Args:
+        value: Input tensor.
+
+        indices_or_sections (int | Sequence[int]): Either the number of
+            equal-sized sections or a sequence of split points.
+
+        axis (int): The axis along which to split. Negative values count
+            backwards from the last dimension.
+
+    Returns:
+        list: A list of tensors.
+    """
+    if not is_tensor_v(value):
+        raise TypeError(
+            f"drjit.split(): expected a tensor input "
+            f"(got {type(value).__module__}.{type(value).__qualname__}).")
+
+    ndim = len(value.shape)
+    if axis < 0:
+        axis += ndim
+
+    n = value.shape[axis]
+    _slice = _builtins.slice
+
+    if isinstance(indices_or_sections, int):
+        if n % indices_or_sections != 0:
+            raise RuntimeError(
+                f"drjit.split(): tensor of size {n} along axis {axis} "
+                f"cannot be equally split into {indices_or_sections} parts. "
+                f"Use drjit.array_split() for unequal splits.")
+        step = n // indices_or_sections
+        indices = range(0, n, step)
+    else:
+        indices = [0] + list(indices_or_sections)
+
+    result = []
+    for i, start in enumerate(indices):
+        end = indices[i + 1] if i + 1 < len(indices) else n
+        s = [_slice(None)] * ndim
+        s[axis] = _slice(start, end)
+        result.append(value[tuple(s)])
+    return result
+
+
+def array_split(value: ArrayT, sections: int, /,
+                axis: int = 0) -> list:
+    """
+    Split a tensor into approximately equal parts along an axis.
+
+    Like :py:func:`split`, but allows the axis size to not be evenly
+    divisible by ``sections``. The first ``n % sections`` chunks have one
+    extra element.
+
+    Args:
+        value: Input tensor.
+
+        sections (int): Number of output sections.
+
+        axis (int): The axis along which to split. Negative values count
+            backwards from the last dimension.
+
+    Returns:
+        list: A list of tensors.
+    """
+    if not is_tensor_v(value):
+        raise TypeError(
+            f"drjit.array_split(): expected a tensor input "
+            f"(got {type(value).__module__}.{type(value).__qualname__}).")
+
+    ndim = len(value.shape)
+    if axis < 0:
+        axis += ndim
+
+    n = value.shape[axis]
+    size, extra = divmod(n, sections)
+    indices = []
+    pos = 0
+    for i in range(sections - 1):
+        pos += size + (1 if i < extra else 0)
+        indices.append(pos)
+
+    return split(value, indices, axis=axis)
 
 
 def squeeze(value: ArrayT, /, axis: Union[int, Tuple[int, ...], None] = None) -> ArrayT:
