@@ -1823,35 +1823,29 @@ def concat(arr: Sequence[ArrayT], /, axis: Optional[int] = 0) -> ArrayT:
 
     out_shape = list(ref_shape)
     out_shape[axis] = axis_size
-    out_strides = _compute_strides(out_shape)
 
     result = empty(ref_tp, out_shape)
     result_array = result.array
     Index = uint32_array_t(type(result_array))
 
-    axis_size = 0
-    for i, arg in enumerate(arr):
+    out_inner = prod(out_shape[axis:])
+    stride = prod(out_shape[axis + 1:])
+
+    offset = 0
+    for arg in arr:
         arg_shape = arg.shape
-        arg_strides = _compute_strides(arg_shape)
         arg_size = prod(arg_shape)
         arg_array = arg.array
-        index_in = arange(Index, arg_size)
-        index_out = zeros(Index, arg_size)
+        i = arange(Index, arg_size)
 
-        for j in range(ref_ndim):
-            pos_in = index_in // arg_strides[j]
-            pos_out = pos_in
+        if axis == 0:
+            index_out = i + offset * stride
+        else:
+            inner = prod(arg_shape[axis:])
+            index_out = (i // inner) * out_inner + \
+                        (offset * stride) + (i % inner)
 
-            if j == axis:
-                pos_out = pos_out + axis_size
-                axis_size += arg_shape[j]
-
-            index_in -= pos_in * arg_strides[j]
-            index_out += pos_out * out_strides[j]
-
-            if j == axis:
-                index_out += index_in
-                break
+        offset += arg_shape[axis]
 
         scatter(
             target=result_array,
