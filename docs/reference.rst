@@ -117,8 +117,11 @@ Rearranging array contents
 .. autofunction:: column_stack
 .. autofunction:: dstack
 .. autofunction:: expand_dims
+.. autofunction:: squeeze
 .. autofunction:: reverse
 .. autofunction:: moveaxis
+.. autofunction:: transpose
+.. autofunction:: swapaxes
 .. autofunction:: take
 .. autofunction:: take_interp
 .. autofunction:: compress
