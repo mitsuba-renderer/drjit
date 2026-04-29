@@ -673,6 +673,8 @@ def get_pkg(t):
         return m.llvm
     elif backend == dr.JitBackend.CUDA:
         return m.cuda
+    elif backend == dr.JitBackend.Metal:
+        return getattr(m, "metal", None)
 
 
 @pytest.mark.parametrize("symbolic", [True])
