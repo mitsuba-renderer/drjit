@@ -2087,6 +2087,64 @@ def dstack(arrays: Sequence[ArrayT], /) -> ArrayT:
     return concat(fixed, axis=2)
 
 
+def squeeze(value: ArrayT, /, axis: Union[int, Tuple[int, ...], None] = None) -> ArrayT:
+    """
+    Remove length-one axes from a tensor.
+
+    When ``axis`` is ``None`` (the default), all length-one axes are removed.
+    When ``axis`` is an integer or tuple of integers, only those axes are
+    removed, and an error is raised if any of them does not have length one.
+
+    Negative axis values count backwards from the last dimension.
+
+    This is the inverse of :py:func:`expand_dims`.
+
+    Args:
+        value: Input tensor.
+
+        axis (int | tuple[int, ...] | None): The axis or axes to remove.
+            If ``None``, all length-one axes are removed.
+
+    Returns:
+        object: A tensor with the specified length-one dimensions removed.
+    """
+    if not is_tensor_v(value):
+        raise TypeError(
+            f"drjit.squeeze(): expected a tensor input "
+            f"(got {type(value).__module__}.{type(value).__qualname__}).")
+
+    shape = value.shape
+    ndim = len(shape)
+
+    if axis is None:
+        new_shape = tuple(s for s in shape if s != 1)
+    else:
+        if isinstance(axis, int):
+            axis = (axis,)
+
+        normalized = []
+        for a in axis:
+            if a < 0:
+                a += ndim
+            if a < 0 or a >= ndim:
+                raise RuntimeError(
+                    f"drjit.squeeze(): axis {a} is out of bounds "
+                    f"for a {ndim}-dimensional tensor.")
+            if shape[a] != 1:
+                raise RuntimeError(
+                    f"drjit.squeeze(): axis {a} has size {shape[a]}, "
+                    f"not 1.")
+            normalized.append(a)
+
+        if len(set(normalized)) != len(normalized):
+            raise RuntimeError("drjit.squeeze(): duplicate axes are not allowed.")
+
+        new_shape = tuple(s for i, s in enumerate(shape)
+                          if i not in normalized)
+
+    return reshape(type(value), value, new_shape)
+
+
 class _ResampleOp(CustomOp):
     """Implementation detail of the function drjit.resample()"""
     def eval(self, resampler, source, stride):
@@ -2411,6 +2469,89 @@ def moveaxis(arg: ArrayBase, /, source: Union[int, Tuple[int, ...]], destination
     index_in += index_out
 
     return type(arg)(gather(type(arr), arr, index_in, mode=ReduceMode.Permute), shape_out)
+
+
+def transpose(value: ArrayT, /, axes: Optional[Tuple[int, ...]] = None) -> ArrayT:
+    """
+    Permute the axes of a tensor.
+
+    When ``axes`` is ``None``, the axis order is reversed (the default). When
+    ``axes`` is a tuple, it must be a permutation of ``(0, 1, ..., ndim-1)``
+    specifying the new axis order.
+
+    For example, given a tensor of shape ``(2, 3, 4)``:
+
+    - ``transpose(a)`` produces shape ``(4, 3, 2)``
+    - ``transpose(a, (2, 0, 1))`` produces shape ``(4, 2, 3)``
+
+    Args:
+        value: Input tensor.
+
+        axes (tuple[int, ...] | None): The desired axis order. If ``None``,
+            reverses all axes.
+
+    Returns:
+        object: A tensor with permuted axes.
+    """
+    if not is_tensor_v(value):
+        raise TypeError(
+            f"drjit.transpose(): expected a tensor input "
+            f"(got {type(value).__module__}.{type(value).__qualname__}).")
+
+    ndim = len(value.shape)
+    if axes is None:
+        axes = tuple(reversed(range(ndim)))
+    else:
+        axes = tuple(axes)
+        if len(axes) != ndim:
+            raise RuntimeError(
+                f"drjit.transpose(): 'axes' must have length {ndim} "
+                f"(got {len(axes)}).")
+        normalized = []
+        for a in axes:
+            if a < 0:
+                a += ndim
+            if a < 0 or a >= ndim:
+                raise RuntimeError(
+                    f"drjit.transpose(): axis {a} is out of bounds "
+                    f"for a {ndim}-dimensional tensor.")
+            normalized.append(a)
+        if len(set(normalized)) != len(normalized):
+            raise RuntimeError(
+                "drjit.transpose(): 'axes' must be a permutation "
+                f"of (0, 1, ..., {ndim - 1}).")
+        axes = tuple(normalized)
+
+    return moveaxis(value, axes, tuple(range(ndim)))
+
+
+def swapaxes(value: ArrayT, /, axis1: int, axis2: int) -> ArrayT:
+    """
+    Swap two axes of a tensor.
+
+    For example, given a tensor of shape ``(2, 3, 4)``:
+
+    - ``swapaxes(a, 0, 2)`` produces shape ``(4, 3, 2)``
+    - ``swapaxes(a, 0, 1)`` produces shape ``(3, 2, 4)``
+
+    Negative axis values count backwards from the last dimension.
+
+    Args:
+        value: Input tensor.
+
+        axis1 (int): First axis.
+
+        axis2 (int): Second axis.
+
+    Returns:
+        object: A tensor with the two axes exchanged.
+    """
+    if not is_tensor_v(value):
+        raise TypeError(
+            f"drjit.swapaxes(): expected a tensor input "
+            f"(got {type(value).__module__}.{type(value).__qualname__}).")
+
+    return moveaxis(value, (axis1, axis2), (axis2, axis1))
 
 
 def take(value: ArrayT, index: Union[int, ArrayBase], axis: int = 0) -> ArrayT:

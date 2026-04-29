@@ -955,3 +955,115 @@ def test33_vstack_hstack_column_stack_dstack(t):
         with pytest.raises(TypeError, match="expected tensor"):
             fn([a, a])
 
+
+@pytest.test_arrays('is_tensor, jit, uint32')
+def test34_squeeze(t):
+    np = pytest.importorskip("numpy")
+
+    configs = [
+        ((1, 2, 1, 3, 1), None),
+        ((1, 2, 1, 3, 1), 0),
+        ((1, 2, 1, 3, 1), 2),
+        ((1, 2, 1, 3, 1), -1),
+        ((1, 2, 1, 3, 1), (0, 2)),
+        ((1, 2, 1, 3, 1), (0, 2, 4)),
+        ((1, 3),           0),
+        ((3, 1),           1),
+        ((3, 1),          -1),
+        ((1, 1, 3),        None),
+        ((1,),             0),
+    ]
+
+    for shape, axis in configs:
+        size = dr.prod(shape)
+        v_dr = t(dr.arange(dr.array_t(t), size), shape)
+        v_np = np.arange(size).reshape(shape)
+
+        out_dr = dr.squeeze(v_dr) if axis is None else dr.squeeze(v_dr, axis=axis)
+        out_np = np.squeeze(v_np) if axis is None else np.squeeze(v_np, axis=axis)
+
+        assert out_dr.shape == out_np.shape, \
+            f"shape mismatch for input {shape}, axis={axis}"
+        assert np.allclose(out_np, out_dr.numpy())
+
+    # squeeze to 0-d
+    assert dr.squeeze(t(dr.array_t(t)(42), (1, 1, 1))).shape == ()
+
+    # error cases
+    v = t(dr.arange(dr.array_t(t), 6), (2, 3))
+    with pytest.raises(RuntimeError, match="not 1"):
+        dr.squeeze(v, axis=0)
+    with pytest.raises(RuntimeError, match="out of bounds"):
+        dr.squeeze(v, axis=3)
+    with pytest.raises(TypeError, match="expected a tensor"):
+        dr.squeeze(dr.array_t(t)(1, 2, 3), axis=0)
+
+
+@pytest.test_arrays('is_tensor, jit, uint32')
+def test35_transpose(t):
+    np = pytest.importorskip("numpy")
+
+    configs = [
+        ((3, 4),          None),
+        ((3, 4),          (1, 0)),
+        ((2, 3, 4),       None),
+        ((2, 3, 4),       (2, 0, 1)),
+        ((2, 3, 4),       (1, 0, 2)),
+        ((2, 3, 4),       (0, 2, 1)),
+        ((2, 3, 4),       (-1, -2, -3)),
+        ((2, 3, 4, 5),    None),
+        ((2, 3, 4, 5),    (3, 1, 0, 2)),
+    ]
+
+    for shape, axes in configs:
+        size = dr.prod(shape)
+        v_dr = t(dr.arange(dr.array_t(t), size), shape)
+        v_np = np.arange(size).reshape(shape)
+
+        out_dr = dr.transpose(v_dr) if axes is None else dr.transpose(v_dr, axes)
+        out_np = np.transpose(v_np) if axes is None else np.transpose(v_np, axes)
+
+        assert out_dr.shape == out_np.shape, \
+            f"shape mismatch for input {shape}, axes={axes}"
+        assert np.allclose(out_np, out_dr.numpy())
+
+    # error cases
+    v = t(dr.arange(dr.array_t(t), 6), (2, 3))
+    with pytest.raises(TypeError, match="expected a tensor"):
+        dr.transpose(dr.array_t(t)(1, 2, 3))
+    with pytest.raises(RuntimeError, match="must have length 2"):
+        dr.transpose(v, (0,))
+    with pytest.raises(RuntimeError, match="out of bounds"):
+        dr.transpose(v, (0, 5))
+    with pytest.raises(RuntimeError, match="must be a permutation"):
+        dr.transpose(v, (0, 0))
+
+
+@pytest.test_arrays('is_tensor, jit, uint32')
+def test36_swapaxes(t):
+    np = pytest.importorskip("numpy")
+
+    configs = [
+        ((3, 4),       0,  1),
+        ((2, 3, 4),    0,  1),
+        ((2, 3, 4),    0,  2),
+        ((2, 3, 4),    1,  2),
+        ((2, 3, 4),    0, -1),
+        ((2, 3, 4),   -1, -2),
+        ((2, 3, 4, 5), 1,  3),
+    ]
+
+    for shape, ax1, ax2 in configs:
+        size = dr.prod(shape)
+        v_dr = t(dr.arange(dr.array_t(t), size), shape)
+        v_np = np.arange(size).reshape(shape)
+
+        out_dr = dr.swapaxes(v_dr, ax1, ax2)
+        out_np = np.swapaxes(v_np, ax1, ax2)
+
+        assert out_dr.shape == out_np.shape, \
+            f"shape mismatch for input {shape}, axes=({ax1},{ax2})"
+        assert np.allclose(out_np, out_dr.numpy())
+
+    with pytest.raises(TypeError, match="expected a tensor"):
+        dr.swapaxes(dr.array_t(t)(1, 2, 3), 0, 1)
