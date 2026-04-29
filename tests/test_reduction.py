@@ -580,3 +580,64 @@ def test21_clip(t):
 
     a = dr.clip(t([1, 2, 3]), 0, 2)
     assert dr.allclose(a, [1, 2, 2])
+
+
+@pytest.test_arrays('jit, float32, shape=(*)')
+def test22_argmin_argmax_1d(t):
+    np = pytest.importorskip("numpy")
+
+    for vals in [[3, 1, 4, 1, 5, 9, 2, 6], [-3, -1, -4, -1, 5],
+                 [1, 0, 0, 1], [42]]:
+        a_np = np.array(vals, dtype=np.float32)
+        assert dr.argmin(t(vals))[0] == np.argmin(a_np)
+        assert dr.argmax(t(vals))[0] == np.argmax(a_np)
+
+    # signed integer path
+    i32 = dr.int32_array_t(t)
+    a_np = np.array([-5, 3, -8, 1, 0], dtype=np.int32)
+    assert dr.argmin(i32(-5, 3, -8, 1, 0))[0] == np.argmin(a_np)
+    assert dr.argmax(i32(-5, 3, -8, 1, 0))[0] == np.argmax(a_np)
+
+    # unsigned integer path
+    u32 = dr.uint32_array_t(t)
+    a_np = np.array([5, 3, 8, 1, 7], dtype=np.uint32)
+    assert dr.argmin(u32(5, 3, 8, 1, 7))[0] == np.argmin(a_np)
+    assert dr.argmax(u32(5, 3, 8, 1, 7))[0] == np.argmax(a_np)
+
+
+@pytest.test_arrays('is_tensor, jit, float')
+def test23_argmin_argmax_tensor(t):
+    np = pytest.importorskip("numpy")
+    ta = dr.array_t(t)
+    np_dtype = np.float32 if dr.itemsize_v(ta) <= 4 else np.float64
+
+    # 2D
+    v = t(ta(3, 1, 4, 1, 5, 9), (2, 3))
+    v_np = np.array([[3, 1, 4], [1, 5, 9]], dtype=np_dtype)
+    for axis in [0, 1, -1, None]:
+        r_dr = dr.argmin(v, axis=axis)
+        r_np = np.argmin(v_np, axis=axis)
+        if axis is None:
+            assert r_dr[0] == r_np
+        else:
+            assert np.array_equal(r_dr.numpy(), r_np)
+
+        r_dr = dr.argmax(v, axis=axis)
+        r_np = np.argmax(v_np, axis=axis)
+        if axis is None:
+            assert r_dr[0] == r_np
+        else:
+            assert np.array_equal(r_dr.numpy(), r_np)
+
+    # 3D
+    v3 = t(dr.arange(ta, 24) * ta(7) - ta(40), (2, 3, 4))
+    v3_np = (np.arange(24) * 7 - 40).astype(np_dtype).reshape(2, 3, 4)
+    for axis in [0, 1, 2]:
+        assert np.array_equal(dr.argmin(v3, axis=axis).numpy(), np.argmin(v3_np, axis=axis))
+        assert np.array_equal(dr.argmax(v3, axis=axis).numpy(), np.argmax(v3_np, axis=axis))
+
+    # keepdims
+    r = dr.argmin(v, axis=1, keepdims=True)
+    r_np = np.argmin(v_np, axis=1, keepdims=True)
+    assert r.shape == r_np.shape
+    assert np.array_equal(r.numpy(), r_np)
