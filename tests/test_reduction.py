@@ -580,3 +580,180 @@ def test21_clip(t):
 
     a = dr.clip(t([1, 2, 3]), 0, 2)
     assert dr.allclose(a, [1, 2, 2])
+
+
+@pytest.test_arrays('jit, float32, shape=(*)')
+def test22_argmin_argmax_1d(t):
+    np = pytest.importorskip("numpy")
+
+    for vals in [[3, 1, 4, 1, 5, 9, 2, 6], [-3, -1, -4, -1, 5],
+                 [1, 0, 0, 1], [42]]:
+        a_np = np.array(vals, dtype=np.float32)
+        assert dr.argmin(t(vals))[0] == np.argmin(a_np)
+        assert dr.argmax(t(vals))[0] == np.argmax(a_np)
+
+    # signed integer path
+    i32 = dr.int32_array_t(t)
+    a_np = np.array([-5, 3, -8, 1, 0], dtype=np.int32)
+    assert dr.argmin(i32(-5, 3, -8, 1, 0))[0] == np.argmin(a_np)
+    assert dr.argmax(i32(-5, 3, -8, 1, 0))[0] == np.argmax(a_np)
+
+    # unsigned integer path
+    u32 = dr.uint32_array_t(t)
+    a_np = np.array([5, 3, 8, 1, 7], dtype=np.uint32)
+    assert dr.argmin(u32(5, 3, 8, 1, 7))[0] == np.argmin(a_np)
+    assert dr.argmax(u32(5, 3, 8, 1, 7))[0] == np.argmax(a_np)
+
+
+@pytest.test_arrays('is_tensor, jit, float')
+def test23_argmin_argmax_tensor(t):
+    np = pytest.importorskip("numpy")
+    ta = dr.array_t(t)
+    np_dtype = np.float32 if dr.itemsize_v(ta) <= 4 else np.float64
+
+    # 2D
+    v = t(ta(3, 1, 4, 1, 5, 9), (2, 3))
+    v_np = np.array([[3, 1, 4], [1, 5, 9]], dtype=np_dtype)
+    for axis in [0, 1, -1, None]:
+        r_dr = dr.argmin(v, axis=axis)
+        r_np = np.argmin(v_np, axis=axis)
+        if axis is None:
+            assert r_dr[0] == r_np
+        else:
+            assert np.array_equal(r_dr.numpy(), r_np)
+
+        r_dr = dr.argmax(v, axis=axis)
+        r_np = np.argmax(v_np, axis=axis)
+        if axis is None:
+            assert r_dr[0] == r_np
+        else:
+            assert np.array_equal(r_dr.numpy(), r_np)
+
+    # 3D
+    v3 = t(dr.arange(ta, 24) * ta(7) - ta(40), (2, 3, 4))
+    v3_np = (np.arange(24) * 7 - 40).astype(np_dtype).reshape(2, 3, 4)
+    for axis in [0, 1, 2]:
+        assert np.array_equal(dr.argmin(v3, axis=axis).numpy(), np.argmin(v3_np, axis=axis))
+        assert np.array_equal(dr.argmax(v3, axis=axis).numpy(), np.argmax(v3_np, axis=axis))
+
+    # keepdims
+    r = dr.argmin(v, axis=1, keepdims=True)
+    r_np = np.argmin(v_np, axis=1, keepdims=True)
+    assert r.shape == r_np.shape
+    assert np.array_equal(r.numpy(), r_np)
+
+
+@pytest.test_arrays('jit, float32, shape=(*)')
+def test24_sort_argsort_1d(t):
+    np = pytest.importorskip("numpy")
+
+    def check(arr_t, x_np):
+        x_dr = arr_t(x_np)
+        s_np = np.sort(x_np, kind='stable')
+        assert np.array_equal(dr.sort(x_dr).numpy(), s_np)
+        assert np.array_equal(dr.sort(x_dr, descending=True).numpy(), s_np[::-1])
+        idx = dr.argsort(x_dr)
+        assert np.array_equal(dr.gather(arr_t, x_dr, idx).numpy(), s_np)
+        idx_d = dr.argsort(x_dr, descending=True)
+        assert np.array_equal(dr.gather(arr_t, x_dr, idx_d).numpy(), s_np[::-1])
+
+    f32 = t
+    f16 = dr.float16_array_t(t)
+    f64 = dr.float64_array_t(t)
+    i32 = dr.int32_array_t(t)
+    u32 = dr.uint32_array_t(t)
+    i64 = dr.int64_array_t(t)
+    u64 = dr.uint64_array_t(t)
+
+    check(f32, np.array([42.0], dtype=np.float32))              # n=1
+    check(f32, np.array([2.0, 1.0], dtype=np.float32))          # n=2, must swap
+    check(f32, np.array([1.0, 1.0, 1.0], dtype=np.float32))     # all equal
+    check(f32, np.array([3, 1, 4, 1, 5, 9, 2, 6], dtype=np.float32))
+    check(f32, np.array([-3.5, 1.0, -0.5, 2.0, 0.0], dtype=np.float32))
+
+    check(f16, np.array([3, 1, 4, 1, 5, 9], dtype=np.float16))
+    check(f16, np.array([-1.5, 0.5, -0.5, 2.0], dtype=np.float16))
+
+    check(f64, np.array([3.0, 1.0, 4.0, 1.0, 5.0], dtype=np.float64))
+    check(f64, np.array([-1e300, 1e300, 0.0, -1.0], dtype=np.float64))
+
+    check(i32, np.array([-5, 3, -8, 1, 0], dtype=np.int32))
+    check(i32, np.array([-(2**31), 2**31 - 1, 0], dtype=np.int32))   # int32 boundary
+
+    check(u32, np.array([5, 3, 8, 1, 7], dtype=np.uint32))
+    check(u32, np.array([2**32 - 1, 0, 2**16, 1], dtype=np.uint32))  # uint32 boundary
+
+    check(i64, np.array([-5, 3, -8, 1, 0], dtype=np.int64))
+    check(i64, np.array([-(2**63), 2**63 - 1, 0], dtype=np.int64))   # int64 boundary
+
+    check(u64, np.array([5, 3, 8, 1, 7], dtype=np.uint64))
+    check(u64, np.array([2**64 - 1, 0, 2**32, 1], dtype=np.uint64))  # uint64 boundary
+
+
+@pytest.test_arrays('is_tensor, jit, float32')
+def test25_sort_argsort_tensor(t):
+    np = pytest.importorskip("numpy")
+    rng = np.random.default_rng(42)
+
+    def check_tensor(shape, axis):
+        x_np = rng.integers(0, 100, size=shape).astype(np.float32)
+        x_dr = t(x_np)
+        s_np = np.sort(x_np, axis=axis, kind='stable')
+
+        # ascending sort: shape and values must match
+        s_dr = dr.sort(x_dr, axis=axis)
+        assert s_dr.shape == s_np.shape, f'shape mismatch shape={shape} axis={axis}'
+        assert np.array_equal(s_dr.numpy(), s_np), f'sort mismatch shape={shape} axis={axis}'
+
+        # descending sort
+        s_np_d = np.flip(s_np, axis=axis)
+        assert np.array_equal(dr.sort(x_dr, axis=axis, descending=True).numpy(), s_np_d), \
+            f'descending sort mismatch shape={shape} axis={axis}'
+
+        # argsort ascending: np.take_along_axis must reproduce the sorted values
+        idx_np = dr.argsort(x_dr, axis=axis).numpy()
+        assert np.array_equal(np.take_along_axis(x_np, idx_np, axis=axis), s_np), \
+            f'argsort mismatch shape={shape} axis={axis}'
+
+        # argsort descending
+        idx_np_d = dr.argsort(x_dr, axis=axis, descending=True).numpy()
+        assert np.array_equal(np.take_along_axis(x_np, idx_np_d, axis=axis), s_np_d), \
+            f'argsort descending mismatch shape={shape} axis={axis}'
+
+    for shape, axis in [
+        # 2D: standard shapes
+        ((4, 6),  0), ((4, 6),  1), ((4, 6), -1),
+        # 2D: prime dimensions
+        ((7, 11), 0), ((7, 11), 1),
+        ((13, 5), 0), ((13, 5), 1),
+        # 2D: degenerate (single row/column)
+        ((1, 10), 0), ((1, 10), 1),
+        ((10, 1), 0), ((10, 1), 1),
+        # 3D: standard shapes and all axes
+        ((3, 4, 5), 0), ((3, 4, 5), 1), ((3, 4, 5), 2), ((3, 4, 5), -1),
+        # 3D: prime last dimension
+        ((2, 3, 7), 0), ((2, 3, 7), 1), ((2, 3, 7), 2),
+        # 3D: prime middle dimension
+        ((2, 7, 3), 0), ((2, 7, 3), 1), ((2, 7, 3), 2),
+    ]:
+        check_tensor(shape, axis)
+
+
+@pytest.test_arrays('jit, float32, shape=(*)')
+def test26_sort_stress(t):
+    np = pytest.importorskip("numpy")
+    rng = np.random.default_rng(0)
+    u64 = dr.uint64_array_t(t)
+
+    for n in [97, 512, 2049, 10007, 100003]:
+        # 32-bit path (Float32)
+        x32 = rng.random(n).astype(np.float32)
+        assert np.array_equal(dr.sort(t(x32)).numpy(), np.sort(x32)), \
+            f'float32 stress sort failed n={n}'
+
+        # 64-bit path (UInt64, values spanning full 64 bits)
+        lo = rng.integers(0, 2**32, size=n, dtype=np.uint64)
+        hi = rng.integers(0, 2**32, size=n, dtype=np.uint64)
+        x64 = (hi << 32) | lo
+        assert np.array_equal(dr.sort(u64(x64)).numpy(), np.sort(x64)), \
+            f'uint64 stress sort failed n={n}'

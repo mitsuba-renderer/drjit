@@ -32,6 +32,7 @@ else:
 from .ast import syntax, hint
 from .interop import wrap
 from . import random
+import builtins as _builtins
 import warnings as _warnings
 
 from functools import wraps
@@ -1546,6 +1547,367 @@ def std(value, axis = ..., mode = None, keepdims: bool = False, ddof: int = 0):
     return sqrt(var(value, axis=axis, mode=mode, keepdims=keepdims, ddof=ddof))
 
 
+def _to_ordinal_32(value):
+    """Convert an array with <=32-bit elements to order-preserving UInt32."""
+    tp = type(value)
+    vt = type_v(tp)
+    UInt32 = uint32_array_t(tp)
+
+    if vt == VarType.Float16:
+        return _to_ordinal_32(float32_array_t(tp)(value))
+    elif vt == VarType.Float32:
+        u = reinterpret_array(UInt32, value)
+        mask = UInt32(0) - (u >> 31)
+        return u ^ (mask | UInt32(0x80000000))
+    elif is_signed_v(tp):
+        bits = itemsize_v(tp) * 8
+        uint_tp = uint_array_t(tp)
+        u = reinterpret_array(uint_tp, value)
+        return UInt32(u ^ (uint_tp(1) << (bits - 1)))
+    else:
+        return UInt32(value)
+
+
+def _to_ordinal_64(value):
+    """Convert an array with 64-bit elements to order-preserving UInt64."""
+    tp = type(value)
+    vt = type_v(tp)
+    UInt64 = uint64_array_t(tp)
+
+    if vt == VarType.Float64:
+        u = reinterpret_array(UInt64, value)
+        mask = UInt64(0) - (u >> 63)
+        return u ^ (mask | UInt64(0x8000000000000000))
+    elif is_signed_v(tp):
+        uint_tp = uint_array_t(tp)
+        u = reinterpret_array(uint_tp, value)
+        return UInt64(u ^ (uint_tp(1) << 63))
+    else:
+        return UInt64(value)
+
+
+def _from_ordinal_32(ordinal, target_tp):
+    """Invert _to_ordinal_32: convert order-preserving UInt32 back to the original type."""
+    vt = type_v(target_tp)
+    UInt32 = type(ordinal)
+
+    if vt == VarType.Float16:
+        f32_tp = float32_array_t(target_tp)
+        return target_tp(_from_ordinal_32(ordinal, f32_tp))
+    elif vt == VarType.Float32:
+        sign = 1 - (ordinal >> 31)
+        mask = UInt32(0) - sign
+        u = ordinal ^ (mask | UInt32(0x80000000))
+        return reinterpret_array(target_tp, u)
+    elif is_signed_v(target_tp):
+        bits = itemsize_v(target_tp) * 8
+        uint_tp = uint_array_t(target_tp)
+        u = uint_tp(ordinal) ^ (uint_tp(1) << (bits - 1))
+        return reinterpret_array(target_tp, u)
+    else:
+        return target_tp(ordinal)
+
+
+def _from_ordinal_64(ordinal, target_tp):
+    """Invert _to_ordinal_64: convert order-preserving UInt64 back to the original type."""
+    vt = type_v(target_tp)
+    UInt64 = type(ordinal)
+
+    if vt == VarType.Float64:
+        sign = 1 - (ordinal >> 63)
+        mask = UInt64(0) - sign
+        u = ordinal ^ (mask | UInt64(0x8000000000000000))
+        return reinterpret_array(target_tp, u)
+    elif is_signed_v(target_tp):
+        uint_tp = uint_array_t(target_tp)
+        u = uint_tp(ordinal) ^ (uint_tp(1) << 63)
+        return reinterpret_array(target_tp, u)
+    else:
+        return target_tp(ordinal)
+
+
+def _argminmax(value, axis, keepdims, find_max):
+    """
+    Shared implementation of argmin/argmax.
+
+    Uses a packed uint64 reduction for types with <=32-bit elements: the
+    value's order-preserving ordinal occupies the upper 32 bits and the
+    element index the lower 32 bits, so a single min reduction yields both
+    the extremal value and the smallest index among ties.
+
+    Falls back to a two-pass approach (reduce, then find matching index)
+    for 64-bit element types that cannot be packed into 64 bits.
+    """
+    is_tens = is_tensor_v(value)
+
+    if is_tens and axis is None:
+        value = ravel(value)
+        is_tens = False
+
+    tp = type(value)
+    arr = value.array if is_tens else value
+    arr_tp = type(arr)
+    UInt32 = uint32_array_t(arr_tp)
+    UInt64 = uint64_array_t(arr_tp)
+    bits = itemsize_v(arr_tp) * 8
+
+    if is_tens:
+        shape = value.shape
+        ndim = len(shape)
+        if axis < 0:
+            axis += ndim
+        stride = prod(shape[axis + 1:])
+        n = prod(shape)
+        idx = (arange(UInt32, n) // stride) % shape[axis]
+    else:
+        n = len(arr)
+        idx = arange(UInt32, n)
+
+    if bits <= 32:
+        ordinal = _to_ordinal_32(arr)
+        if find_max:
+            ordinal = ~ordinal
+        packed = (UInt64(ordinal) << 32) | UInt64(idx)
+
+        if is_tens:
+            TU64 = tensor_t(UInt64)
+            result = min(TU64(packed, shape), axis=axis, keepdims=keepdims)
+            TU32 = tensor_t(UInt32)
+            return TU32(UInt32(result.array & UInt64(0xFFFFFFFF)), result.shape)
+        else:
+            result = min(packed)
+            return UInt32(result & UInt64(0xFFFFFFFF))
+    else:
+        reduce_fn = max if find_max else min
+        if is_tens:
+            m = reduce_fn(value, axis=axis, keepdims=True)
+            m_arr = m.array
+            m_stride = prod(m.shape[axis + 1:])
+            flat_idx = arange(uint32_array_t(type(m_arr)), n)
+            m_idx = (flat_idx // (stride * shape[axis])) * m_stride + \
+                    (flat_idx % stride)
+            m_expanded = gather(type(m_arr), m_arr, m_idx)
+
+            if find_max:
+                is_ext = arr >= m_expanded
+            else:
+                is_ext = arr <= m_expanded
+
+            idx = select(is_ext, idx, UInt32(0xFFFFFFFF))
+            TU32 = tensor_t(UInt32)
+            return min(TU32(idx, shape), axis=axis, keepdims=keepdims)
+        else:
+            m = reduce_fn(arr)
+            if find_max:
+                is_ext = arr >= m
+            else:
+                is_ext = arr <= m
+            idx = select(is_ext, idx, UInt32(0xFFFFFFFF))
+            return min(idx)
+
+
+def argmin(value, /, axis=None, keepdims: bool = False):
+    """
+    Return the indices of the minimum values along an axis.
+
+    When ``axis`` is ``None``, the index refers to the flattened input. When
+    ``axis`` is an integer, the reduction operates along that axis and the
+    result has the same number of dimensions as the input (minus one, unless
+    ``keepdims`` is ``True``).
+
+    When multiple elements share the minimum value, the smallest index is
+    returned.
+
+    Args:
+        value: Input array or tensor.
+
+        axis (int | None): Axis along which to operate. ``None`` reduces
+            over all elements.
+
+        keepdims (bool): If ``True``, the reduced axis is retained as a
+            length-one dimension.
+
+    Returns:
+        object: An unsigned 32-bit integer array or tensor containing the
+        indices of the minimum values.
+    """
+    return _argminmax(value, axis, keepdims, find_max=False)
+
+
+def argmax(value, /, axis=None, keepdims: bool = False):
+    """
+    Return the indices of the maximum values along an axis.
+
+    When ``axis`` is ``None``, the index refers to the flattened input. When
+    ``axis`` is an integer, the reduction operates along that axis and the
+    result has the same number of dimensions as the input (minus one, unless
+    ``keepdims`` is ``True``).
+
+    When multiple elements share the maximum value, the smallest index is
+    returned.
+
+    Args:
+        value: Input array or tensor.
+
+        axis (int | None): Axis along which to operate. ``None`` reduces
+            over all elements.
+
+        keepdims (bool): If ``True``, the reduced axis is retained as a
+            length-one dimension.
+
+    Returns:
+        object: An unsigned 32-bit integer array or tensor containing the
+        indices of the maximum values.
+    """
+    return _argminmax(value, axis, keepdims, find_max=True)
+
+
+def _radix_sort(arr, block_size, descending, return_indices):
+    """
+    Multi-pass radix sort using block_mkperm.
+
+    Operates on the flat inner array. When block_size < len(arr),
+    independently sorts contiguous groups of block_size elements.
+    """
+    arr_tp = type(arr)
+    bits = itemsize_v(arr_tp) * 8
+    n = len(arr)
+
+    if n <= 1 or block_size <= 1:
+        if return_indices:
+            UInt32 = uint32_array_t(arr_tp)
+            return arange(UInt32, n)
+        else:
+            return arr_tp(arr)
+
+    if bits <= 32:
+        ordinal = _to_ordinal_32(arr)
+    else:
+        ordinal = _to_ordinal_64(arr)
+
+    if descending:
+        ordinal = ~ordinal
+
+    Ordinal = type(ordinal)
+    ordinal_bits = itemsize_v(Ordinal) * 8
+    UInt32 = uint32_array_t(arr_tp)
+
+    # 11-bit radix (3 passes for 32-bit) is faster on CPU; 8-bit radix
+    # (4 passes) is better on GPU where shared memory is limited.
+    radix_bits = 11 if backend_v(arr_tp) == JitBackend.LLVM else 8
+
+    if return_indices:
+        index = arange(UInt32, n)
+
+    shift = 0
+    bits_remaining = ordinal_bits
+    while bits_remaining > 0:
+        bits_this_pass = min(radix_bits, bits_remaining)
+        bucket_count = 1 << bits_this_pass
+        mask = bucket_count - 1
+
+        digit = UInt32((ordinal >> shift) & Ordinal(mask))
+
+        eval(digit, ordinal)
+        perm = detail.block_mkperm(digit, block_size, bucket_count)
+
+        ordinal = gather(Ordinal, ordinal, perm)
+        if return_indices:
+            index = gather(UInt32, index, perm)
+
+        shift += bits_this_pass
+        bits_remaining -= bits_this_pass
+
+    if return_indices:
+        return index
+    else:
+        if descending:
+            ordinal = ~ordinal
+        if bits <= 32:
+            return _from_ordinal_32(ordinal, arr_tp)
+        else:
+            return _from_ordinal_64(ordinal, arr_tp)
+
+
+def _sort_tensor_prep(value, axis):
+    """Normalize axis and rotate the target axis to the last position."""
+    shape = value.shape
+    ndim = len(shape)
+    if axis < 0:
+        axis += ndim
+    if axis != ndim - 1:
+        value = moveaxis(value, axis, -1)
+    return value, value.shape, axis
+
+
+def sort(value, /, axis=-1, descending=False):
+    '''
+    Sort the elements of an array or tensor.
+
+    For 1D arrays, returns a sorted copy. For tensors, sorts along the
+    specified axis (default: last axis). The sort is stable: elements with
+    equal values preserve their original relative order.
+
+    Uses a multi-pass radix sort internally (3 passes for 32-bit types on
+    CPU, 4 on GPU).
+
+    Args:
+        value: Input array or tensor.
+
+        axis (int): Axis along which to sort. Only ``-1`` (last axis) and
+            ``0`` are currently supported for tensors.
+
+        descending (bool): If ``True``, sort in descending order.
+
+    Returns:
+        object: A sorted copy of the input with the same type and shape.
+    '''
+    if is_tensor_v(value):
+        value, shape, axis = _sort_tensor_prep(value, axis)
+        result = type(value)(
+            _radix_sort(value.array, shape[-1], descending, return_indices=False), shape)
+        if axis != len(shape) - 1:
+            result = moveaxis(result, -1, axis)
+        return result
+    else:
+        return _radix_sort(value, len(value), descending, return_indices=False)
+
+
+def argsort(value, /, axis=-1, descending=False):
+    '''
+    Return the indices that would sort an array or tensor.
+
+    For 1D arrays, returns index array such that ``dr.gather(type(value),
+    value, result)`` is sorted. For tensors, returns indices along the
+    specified axis.
+
+    The sort is stable: among equal elements, the original index order
+    is preserved.
+
+    Args:
+        value: Input array or tensor.
+
+        axis (int): Axis along which to sort. Only ``-1`` (last axis) and
+            ``0`` are currently supported for tensors.
+
+        descending (bool): If ``True``, sort in descending order.
+
+    Returns:
+        object: An unsigned 32-bit integer array or tensor containing the
+        sorting indices.
+    '''
+    if is_tensor_v(value):
+        value, shape, axis = _sort_tensor_prep(value, axis)
+        UInt32 = uint32_array_t(type(value.array))
+        raw = _radix_sort(value.array, shape[-1], descending, return_indices=True)
+        result = tensor_t(UInt32)(raw % shape[-1], shape)
+        if axis != len(shape) - 1:
+            result = moveaxis(result, -1, axis)
+        return result
+    else:
+        return _radix_sort(value, len(value), descending, return_indices=True)
+
+
 def normalize(arg: T, /) -> T:
     '''
     Normalize the input vector so that it has unit length and return the
@@ -1823,35 +2185,29 @@ def concat(arr: Sequence[ArrayT], /, axis: Optional[int] = 0) -> ArrayT:
 
     out_shape = list(ref_shape)
     out_shape[axis] = axis_size
-    out_strides = _compute_strides(out_shape)
 
     result = empty(ref_tp, out_shape)
     result_array = result.array
     Index = uint32_array_t(type(result_array))
 
-    axis_size = 0
-    for i, arg in enumerate(arr):
+    out_inner = prod(out_shape[axis:])
+    stride = prod(out_shape[axis + 1:])
+
+    offset = 0
+    for arg in arr:
         arg_shape = arg.shape
-        arg_strides = _compute_strides(arg_shape)
         arg_size = prod(arg_shape)
         arg_array = arg.array
-        index_in = arange(Index, arg_size)
-        index_out = zeros(Index, arg_size)
+        i = arange(Index, arg_size)
 
-        for j in range(ref_ndim):
-            pos_in = index_in // arg_strides[j]
-            pos_out = pos_in
+        if axis == 0:
+            index_out = i + offset * stride
+        else:
+            inner = prod(arg_shape[axis:])
+            index_out = (i // inner) * out_inner + \
+                        (offset * stride) + (i % inner)
 
-            if j == axis:
-                pos_out = pos_out + axis_size
-                axis_size += arg_shape[j]
-
-            index_in -= pos_in * arg_strides[j]
-            index_out += pos_out * out_strides[j]
-
-            if j == axis:
-                index_out += index_in
-                break
+        offset += arg_shape[axis]
 
         scatter(
             target=result_array,
@@ -1861,6 +2217,392 @@ def concat(arr: Sequence[ArrayT], /, axis: Optional[int] = 0) -> ArrayT:
         )
 
     return result
+
+
+def _validate_tensor_sequence(arrays, name: str):
+    if is_array_v(arrays):
+        raise TypeError(f"drjit.{name}(): input should be a Python sequence of tensors, not a single array.")
+    if len(arrays) == 0:
+        raise RuntimeError(f"drjit.{name}(): at least one input tensor is required!")
+    ref_tp = type(arrays[0])
+    if not is_tensor_v(ref_tp):
+        raise TypeError(f"drjit.{name}(): expected tensor inputs (got {ref_tp.__module__}.{ref_tp.__qualname__}).")
+    for i, a in enumerate(arrays):
+        if type(a) is not ref_tp:
+            raise TypeError(f"drjit.{name}(): all inputs must have the same type "
+                            f"(input 0 has type {ref_tp.__module__}.{ref_tp.__qualname__}, "
+                            f"input {i} has type {type(a).__module__}.{type(a).__qualname__}).")
+
+
+def expand_dims(value: ArrayT, /, axis: Union[int, Tuple[int, ...]]) -> ArrayT:
+    """
+    Expand the shape of a tensor by inserting new length-one axes.
+
+    The ``axis`` parameter specifies where new axes are placed in the output
+    shape. For example, given a tensor of shape ``(3, 4)``:
+
+    - ``axis=0`` produces shape ``(1, 3, 4)``
+    - ``axis=1`` produces shape ``(3, 1, 4)``
+    - ``axis=-1`` produces shape ``(3, 4, 1)``
+
+    When ``axis`` is a tuple, multiple axes are inserted simultaneously. The
+    axis positions refer to the output shape, and negative values count
+    backwards from the last output dimension.
+
+    This operation does not copy data; it returns a view of the input with a
+    different shape.
+
+    Args:
+        value: Input tensor.
+
+        axis (int | tuple[int, ...]): Position(s) in the output shape where
+            new length-one axes should be inserted.
+
+    Returns:
+        object: A tensor with the same underlying data and one or more
+        additional length-one dimensions.
+    """
+    if not is_tensor_v(value):
+        raise TypeError(
+            f"drjit.expand_dims(): expected a tensor input "
+            f"(got {type(value).__module__}.{type(value).__qualname__}).")
+
+    shape = value.shape
+    ndim = len(shape)
+
+    if isinstance(axis, int):
+        axis = (axis,)
+
+    out_ndim = ndim + len(axis)
+
+    normalized = []
+    for a in axis:
+        if a < 0:
+            a += out_ndim
+        if a < 0 or a >= out_ndim:
+            raise RuntimeError(
+                f"drjit.expand_dims(): axis {a} is out of bounds "
+                f"for a {out_ndim}-dimensional output.")
+        normalized.append(a)
+
+    if len(set(normalized)) != len(normalized):
+        raise RuntimeError("drjit.expand_dims(): duplicate axes are not allowed.")
+
+    new_shape = list(shape)
+    for a in sorted(normalized):
+        new_shape.insert(a, 1)
+
+    return reshape(type(value), value, new_shape)
+
+
+def stack(arrays: Sequence[ArrayT], /, axis: int = 0) -> ArrayT:
+    """
+    Join a sequence of tensors along a new axis.
+
+    All input tensors must have the same type and shape. The result has one
+    more dimension than the inputs: a new axis of size ``len(arrays)`` is
+    inserted at position ``axis``.
+
+    For example, stacking two tensors of shape ``(M, N)`` with ``axis=0``
+    produces shape ``(2, M, N)``, while ``axis=1`` produces ``(M, 2, N)``.
+
+    Unlike :py:func:`concat`, which joins arrays along an *existing* axis,
+    ``stack`` always creates a *new* one.
+
+    Args:
+        arrays: Sequence of tensors. All must have the same type and shape.
+
+        axis (int): The position of the new axis in the result. Negative
+            values count backwards from the last dimension.
+
+    Returns:
+        object: A tensor with ``ndim + 1`` dimensions.
+    """
+    _validate_tensor_sequence(arrays, 'stack')
+
+    ref_shape = arrays[0].shape
+    ndim = len(ref_shape)
+
+    for i, a in enumerate(arrays):
+        if a.shape != ref_shape:
+            raise TypeError(
+                f"drjit.stack(): all inputs must have the same shape "
+                f"(input 0 has shape {ref_shape}, "
+                f"input {i} has shape {a.shape}).")
+
+    if axis < 0:
+        axis += ndim + 1
+    if axis < 0 or axis > ndim:
+        raise RuntimeError(
+            f"drjit.stack(): axis {axis} is out of bounds "
+            f"for tensors with {ndim} dimensions.")
+
+    expanded = [expand_dims(a, axis=axis) for a in arrays]
+    return concat(expanded, axis=axis)
+
+
+def vstack(arrays: Sequence[ArrayT], /) -> ArrayT:
+    """
+    Stack tensors vertically (row-wise).
+
+    Concatenates tensors along the first axis. 1D tensors of shape ``(N,)``
+    are first reshaped to ``(1, N)`` so that they become rows. The result is
+    always at least 2D.
+
+    The inputs must have the same shape along all but the first axis.
+
+    ``row_stack`` is an alias for this function.
+
+    Args:
+        arrays: Sequence of tensors to stack.
+
+    Returns:
+        object: A tensor with at least two dimensions formed by vertical
+        concatenation.
+    """
+    _validate_tensor_sequence(arrays, 'vstack')
+    tp = type(arrays[0])
+    fixed = [reshape(tp, a, (1,) + a.shape) if len(a.shape) == 1
+             else a for a in arrays]
+    return concat(fixed, axis=0)
+
+
+row_stack = vstack
+
+
+def hstack(arrays: Sequence[ArrayT], /) -> ArrayT:
+    """
+    Stack tensors horizontally (column-wise).
+
+    For tensors with two or more dimensions, this concatenates along the
+    second axis. For 1D tensors, it concatenates along the first (and only)
+    axis.
+
+    The inputs must have the same shape along all but the concatenation axis.
+
+    Args:
+        arrays: Sequence of tensors to stack.
+
+    Returns:
+        object: A tensor formed by horizontal concatenation.
+    """
+    _validate_tensor_sequence(arrays, 'hstack')
+    if len(arrays[0].shape) == 1:
+        return concat(arrays, axis=0)
+    return concat(arrays, axis=1)
+
+
+def column_stack(arrays: Sequence[ArrayT], /) -> ArrayT:
+    """
+    Stack 1D tensors as columns into a 2D tensor.
+
+    Takes a sequence of 1D tensors and stacks them as columns to produce a
+    2D result. Each 1D tensor of shape ``(N,)`` is first reshaped to
+    ``(N, 1)``, then all inputs are concatenated along axis 1.
+
+    2D (or higher) tensors are concatenated along axis 1 as-is, like
+    :py:func:`hstack`.
+
+    All inputs must have the same first dimension.
+
+    Args:
+        arrays: Sequence of tensors to stack.
+
+    Returns:
+        object: A tensor formed by column-wise concatenation.
+    """
+    _validate_tensor_sequence(arrays, 'column_stack')
+    tp = type(arrays[0])
+    fixed = [reshape(tp, a, a.shape + (1,)) if len(a.shape) == 1
+             else a for a in arrays]
+    return concat(fixed, axis=1)
+
+
+def dstack(arrays: Sequence[ArrayT], /) -> ArrayT:
+    """
+    Stack tensors depth-wise (along the third axis).
+
+    Concatenates tensors along the third axis after reshaping them to at least
+    3D. 1D tensors of shape ``(N,)`` become ``(1, N, 1)`` and 2D tensors of
+    shape ``(M, N)`` become ``(M, N, 1)`` before concatenation. The result is
+    always at least 3D.
+
+    The inputs must have the same shape along all but the third axis.
+
+    Args:
+        arrays: Sequence of tensors to stack.
+
+    Returns:
+        object: A tensor with at least three dimensions formed by depth-wise
+        concatenation.
+    """
+    _validate_tensor_sequence(arrays, 'dstack')
+    tp = type(arrays[0])
+    fixed = []
+    for a in arrays:
+        ndim = len(a.shape)
+        if ndim == 1:
+            a = reshape(tp, a, (1,) + a.shape + (1,))
+        elif ndim == 2:
+            a = reshape(tp, a, a.shape + (1,))
+        fixed.append(a)
+    return concat(fixed, axis=2)
+
+
+def split(value: ArrayT, indices_or_sections: Union[int, Sequence[int]], /,
+          axis: int = 0) -> list:
+    """
+    Split a tensor into multiple parts along an axis.
+
+    When ``indices_or_sections`` is an integer *N*, the tensor is divided into
+    *N* equal parts along ``axis``. The axis size must be divisible by *N*;
+    use :py:func:`array_split` to allow unequal parts.
+
+    When ``indices_or_sections`` is a sequence of indices ``[i, j, ...]``, the
+    splits occur before those positions along the given axis, producing
+    sections ``[:i]``, ``[i:j]``, ``[j:]``, etc.
+
+    Args:
+        value: Input tensor.
+
+        indices_or_sections (int | Sequence[int]): Either the number of
+            equal-sized sections or a sequence of split points.
+
+        axis (int): The axis along which to split. Negative values count
+            backwards from the last dimension.
+
+    Returns:
+        list: A list of tensors.
+    """
+    if not is_tensor_v(value):
+        raise TypeError(
+            f"drjit.split(): expected a tensor input "
+            f"(got {type(value).__module__}.{type(value).__qualname__}).")
+
+    ndim = len(value.shape)
+    if axis < 0:
+        axis += ndim
+
+    n = value.shape[axis]
+    _slice = _builtins.slice
+
+    if isinstance(indices_or_sections, int):
+        if n % indices_or_sections != 0:
+            raise RuntimeError(
+                f"drjit.split(): tensor of size {n} along axis {axis} "
+                f"cannot be equally split into {indices_or_sections} parts. "
+                f"Use drjit.array_split() for unequal splits.")
+        step = n // indices_or_sections
+        indices = range(0, n, step)
+    else:
+        indices = [0] + list(indices_or_sections)
+
+    result = []
+    for i, start in enumerate(indices):
+        end = indices[i + 1] if i + 1 < len(indices) else n
+        s = [_slice(None)] * ndim
+        s[axis] = _slice(start, end)
+        result.append(value[tuple(s)])
+    return result
+
+
+def array_split(value: ArrayT, sections: int, /,
+                axis: int = 0) -> list:
+    """
+    Split a tensor into approximately equal parts along an axis.
+
+    Like :py:func:`split`, but allows the axis size to not be evenly
+    divisible by ``sections``. The first ``n % sections`` chunks have one
+    extra element.
+
+    Args:
+        value: Input tensor.
+
+        sections (int): Number of output sections.
+
+        axis (int): The axis along which to split. Negative values count
+            backwards from the last dimension.
+
+    Returns:
+        list: A list of tensors.
+    """
+    if not is_tensor_v(value):
+        raise TypeError(
+            f"drjit.array_split(): expected a tensor input "
+            f"(got {type(value).__module__}.{type(value).__qualname__}).")
+
+    ndim = len(value.shape)
+    if axis < 0:
+        axis += ndim
+
+    n = value.shape[axis]
+    size, extra = divmod(n, sections)
+    indices = []
+    pos = 0
+    for i in range(sections - 1):
+        pos += size + (1 if i < extra else 0)
+        indices.append(pos)
+
+    return split(value, indices, axis=axis)
+
+
+def squeeze(value: ArrayT, /, axis: Union[int, Tuple[int, ...], None] = None) -> ArrayT:
+    """
+    Remove length-one axes from a tensor.
+
+    When ``axis`` is ``None`` (the default), all length-one axes are removed.
+    When ``axis`` is an integer or tuple of integers, only those axes are
+    removed, and an error is raised if any of them does not have length one.
+
+    Negative axis values count backwards from the last dimension.
+
+    This is the inverse of :py:func:`expand_dims`.
+
+    Args:
+        value: Input tensor.
+
+        axis (int | tuple[int, ...] | None): The axis or axes to remove.
+            If ``None``, all length-one axes are removed.
+
+    Returns:
+        object: A tensor with the specified length-one dimensions removed.
+    """
+    if not is_tensor_v(value):
+        raise TypeError(
+            f"drjit.squeeze(): expected a tensor input "
+            f"(got {type(value).__module__}.{type(value).__qualname__}).")
+
+    shape = value.shape
+    ndim = len(shape)
+
+    if axis is None:
+        new_shape = tuple(s for s in shape if s != 1)
+    else:
+        if isinstance(axis, int):
+            axis = (axis,)
+
+        normalized = []
+        for a in axis:
+            if a < 0:
+                a += ndim
+            if a < 0 or a >= ndim:
+                raise RuntimeError(
+                    f"drjit.squeeze(): axis {a} is out of bounds "
+                    f"for a {ndim}-dimensional tensor.")
+            if shape[a] != 1:
+                raise RuntimeError(
+                    f"drjit.squeeze(): axis {a} has size {shape[a]}, "
+                    f"not 1.")
+            normalized.append(a)
+
+        if len(set(normalized)) != len(normalized):
+            raise RuntimeError("drjit.squeeze(): duplicate axes are not allowed.")
+
+        new_shape = tuple(s for i, s in enumerate(shape)
+                          if i not in normalized)
+
+    return reshape(type(value), value, new_shape)
+
 
 class _ResampleOp(CustomOp):
     """Implementation detail of the function drjit.resample()"""
@@ -2157,16 +2899,28 @@ def moveaxis(arg: ArrayBase, /, source: Union[int, Tuple[int, ...]], destination
     strides_in = _compute_strides(shape_in)
     strides_out = _compute_strides(shape_out)
 
+    # Smallest moving range [first_axis, last_axis): outside it
+    # order[i] == i and strides agree, so those coords contribute the
+    # same offset to the input and output flat index.
+    first_axis = ndim
     last_axis = 0
     for i, j in enumerate(order):
         if i != j:
+            if i < first_axis:
+                first_axis = i
             last_axis = i + 1
 
     arr = arg.array
     index_out = arange(uint32_array_t(arr), prod(shape_in))
     index_in = 0
 
-    for i in range(last_axis):
+    if first_axis > 0:
+        head_stride = strides_out[first_axis - 1]
+        residue = index_out % head_stride
+        index_in = index_out - residue
+        index_out = residue
+
+    for i in range(first_axis, last_axis):
         pos = index_out // strides_out[i]
         index_out -= pos * strides_out[i]
         index_in += pos * strides_in[order[i]]
@@ -2174,6 +2928,89 @@ def moveaxis(arg: ArrayBase, /, source: Union[int, Tuple[int, ...]], destination
     index_in += index_out
 
     return type(arg)(gather(type(arr), arr, index_in, mode=ReduceMode.Permute), shape_out)
+
+
+def transpose(value: ArrayT, /, axes: Optional[Tuple[int, ...]] = None) -> ArrayT:
+    """
+    Permute the axes of a tensor.
+
+    When ``axes`` is ``None``, the axis order is reversed (the default). When
+    ``axes`` is a tuple, it must be a permutation of ``(0, 1, ..., ndim-1)``
+    specifying the new axis order.
+
+    For example, given a tensor of shape ``(2, 3, 4)``:
+
+    - ``transpose(a)`` produces shape ``(4, 3, 2)``
+    - ``transpose(a, (2, 0, 1))`` produces shape ``(4, 2, 3)``
+
+    Args:
+        value: Input tensor.
+
+        axes (tuple[int, ...] | None): The desired axis order. If ``None``,
+            reverses all axes.
+
+    Returns:
+        object: A tensor with permuted axes.
+    """
+    if not is_tensor_v(value):
+        raise TypeError(
+            f"drjit.transpose(): expected a tensor input "
+            f"(got {type(value).__module__}.{type(value).__qualname__}).")
+
+    ndim = len(value.shape)
+    if axes is None:
+        axes = tuple(reversed(range(ndim)))
+    else:
+        axes = tuple(axes)
+        if len(axes) != ndim:
+            raise RuntimeError(
+                f"drjit.transpose(): 'axes' must have length {ndim} "
+                f"(got {len(axes)}).")
+        normalized = []
+        for a in axes:
+            if a < 0:
+                a += ndim
+            if a < 0 or a >= ndim:
+                raise RuntimeError(
+                    f"drjit.transpose(): axis {a} is out of bounds "
+                    f"for a {ndim}-dimensional tensor.")
+            normalized.append(a)
+        if len(set(normalized)) != len(normalized):
+            raise RuntimeError(
+                "drjit.transpose(): 'axes' must be a permutation "
+                f"of (0, 1, ..., {ndim - 1}).")
+        axes = tuple(normalized)
+
+    return moveaxis(value, axes, tuple(range(ndim)))
+
+
+def swapaxes(value: ArrayT, /, axis1: int, axis2: int) -> ArrayT:
+    """
+    Swap two axes of a tensor.
+
+    For example, given a tensor of shape ``(2, 3, 4)``:
+
+    - ``swapaxes(a, 0, 2)`` produces shape ``(4, 3, 2)``
+    - ``swapaxes(a, 0, 1)`` produces shape ``(3, 2, 4)``
+
+    Negative axis values count backwards from the last dimension.
+
+    Args:
+        value: Input tensor.
+
+        axis1 (int): First axis.
+
+        axis2 (int): Second axis.
+
+    Returns:
+        object: A tensor with the two axes exchanged.
+    """
+    if not is_tensor_v(value):
+        raise TypeError(
+            f"drjit.swapaxes(): expected a tensor input "
+            f"(got {type(value).__module__}.{type(value).__qualname__}).")
+
+    return moveaxis(value, (axis1, axis2), (axis2, axis1))
 
 
 def take(value: ArrayT, index: Union[int, ArrayBase], axis: int = 0) -> ArrayT:

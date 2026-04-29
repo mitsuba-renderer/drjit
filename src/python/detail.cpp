@@ -473,6 +473,48 @@ void export_detail(nb::module_ &) {
     d.def("traverse_py_cb_rw", &traverse_py_cb_rw_impl);
     d.def("freeze_discard", jit_freeze_discard);
 
+    d.def("block_mkperm",
+          [](nb::handle_t<dr::ArrayBase> values, uint32_t block_size,
+             uint32_t bucket_count) -> nb::object {
+              const ArraySupplement &s = supp(values.type());
+              if (s.type != (uint16_t) VarType::UInt32 || s.ndim != 1 ||
+                  (JitBackend) s.backend == JitBackend::None)
+                  nb::raise("drjit.detail.block_mkperm(): 'values' must be "
+                            "a flat JIT-compiled UInt32 array.");
+
+              uint32_t idx = (uint32_t) s.index(inst_ptr(values));
+              jit_var_eval(idx);
+
+              void *data_ptr = nullptr;
+              uint32_t data_idx = jit_var_data(idx, &data_ptr);
+              uint32_t size = (uint32_t) jit_var_size(idx);
+
+              JitBackend backend = (JitBackend) s.backend;
+              AllocType at = (backend == JitBackend::CUDA)
+                  ? AllocType::Device : AllocType::HostAsync;
+              uint32_t *perm = (uint32_t *) jit_malloc(at,
+                  (size_t) size * sizeof(uint32_t));
+
+              jit_block_mkperm(backend, (const uint32_t *) data_ptr,
+                                 size, block_size, bucket_count,
+                                 perm, nullptr);
+
+              jit_var_dec_ref(data_idx);
+
+              uint32_t perm_idx = jit_var_mem_map(backend, VarType::UInt32,
+                                                  perm, size, 1);
+
+              ArrayMeta m = s;
+              nb::handle tp = meta_get_type(m);
+              nb::object result = nb::inst_alloc(tp);
+              s.init_index(perm_idx, inst_ptr(result));
+              jit_var_dec_ref(perm_idx);
+              nb::inst_mark_ready(result);
+              return result;
+          },
+          "values"_a, "block_size"_a, "bucket_count"_a, doc_block_mkperm,
+          nb::sig("def block_mkperm(values: drjit.llvm.UInt32 | drjit.cuda.UInt32, block_size: int, bucket_count: int) -> drjit.llvm.UInt32 | drjit.cuda.UInt32"));
+
     nb::enum_<AllocType>(d, "AllocType")
         .value("Host", AllocType::Host)
         .value("HostAsync", AllocType::HostAsync)

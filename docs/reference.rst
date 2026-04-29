@@ -81,6 +81,10 @@ Reductions
 .. autofunction:: mean
 .. autofunction:: var
 .. autofunction:: std
+.. autofunction:: argmin
+.. autofunction:: argmax
+.. autofunction:: sort
+.. autofunction:: argsort
 
 .. autofunction:: all
 .. autofunction:: any
@@ -111,8 +115,19 @@ Rearranging array contents
 --------------------------
 
 .. autofunction:: concat
+.. autofunction:: stack
+.. autofunction:: vstack
+.. autofunction:: hstack
+.. autofunction:: column_stack
+.. autofunction:: dstack
+.. autofunction:: expand_dims
+.. autofunction:: squeeze
+.. autofunction:: split
+.. autofunction:: array_split
 .. autofunction:: reverse
 .. autofunction:: moveaxis
+.. autofunction:: transpose
+.. autofunction:: swapaxes
 .. autofunction:: take
 .. autofunction:: take_interp
 .. autofunction:: compress
