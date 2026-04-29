@@ -1067,3 +1067,60 @@ def test36_swapaxes(t):
 
     with pytest.raises(TypeError, match="expected a tensor"):
         dr.swapaxes(dr.array_t(t)(1, 2, 3), 0, 1)
+
+
+@pytest.test_arrays('is_tensor, jit, uint32')
+def test37_split(t):
+    np = pytest.importorskip("numpy")
+
+    def check_split(dr_parts, np_parts):
+        assert len(dr_parts) == len(np_parts)
+        for d, n in zip(dr_parts, np_parts):
+            assert d.shape == n.shape
+            assert np.allclose(d.numpy(), n)
+
+    # equal split by count
+    configs_equal = [
+        ((12,),     4,    0),
+        ((3, 4),    3,    0),
+        ((3, 4),    2,    1),
+        ((3, 4),    2,   -1),
+        ((2, 3, 4), 2,    0),
+        ((2, 3, 4), 3,    1),
+        ((2, 3, 4), 4,    2),
+    ]
+    for shape, sections, axis in configs_equal:
+        size = dr.prod(shape)
+        v_dr = t(dr.arange(dr.array_t(t), size), shape)
+        v_np = np.arange(size).reshape(shape)
+        check_split(dr.split(v_dr, sections, axis=axis),
+                     np.split(v_np, sections, axis=axis))
+
+    # split by index list
+    configs_indices = [
+        ((10,),     [3, 7],    0),
+        ((3, 6),    [1, 4],    1),
+        ((2, 6, 4), [2, 5],    1),
+    ]
+    for shape, indices, axis in configs_indices:
+        size = dr.prod(shape)
+        v_dr = t(dr.arange(dr.array_t(t), size), shape)
+        v_np = np.arange(size).reshape(shape)
+        check_split(dr.split(v_dr, indices, axis=axis),
+                     np.split(v_np, indices, axis=axis))
+
+    # array_split (unequal)
+    for n, sections in [(10, 3), (7, 3), (11, 4)]:
+        v_dr = t(dr.arange(dr.array_t(t), n), (n,))
+        v_np = np.arange(n)
+        check_split(dr.array_split(v_dr, sections),
+                     np.array_split(v_np, sections))
+
+    # error cases
+    v = t(dr.arange(dr.array_t(t), 10), (10,))
+    with pytest.raises(RuntimeError, match="cannot be equally split"):
+        dr.split(v, 3)
+    with pytest.raises(TypeError, match="expected a tensor"):
+        dr.split(dr.array_t(t)(1, 2, 3), 3)
+    with pytest.raises(TypeError, match="expected a tensor"):
+        dr.array_split(dr.array_t(t)(1, 2, 3), 3)

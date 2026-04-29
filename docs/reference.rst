@@ -118,6 +118,8 @@ Rearranging array contents
 .. autofunction:: dstack
 .. autofunction:: expand_dims
 .. autofunction:: squeeze
+.. autofunction:: split
+.. autofunction:: array_split
 .. autofunction:: reverse
 .. autofunction:: moveaxis
 .. autofunction:: transpose
