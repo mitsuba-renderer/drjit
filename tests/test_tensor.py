@@ -83,6 +83,37 @@ def test01_slice_index(t):
     check(shape=(3, 7), indices=(None, ..., None, 1, None),
           shape_out=(1, 3, 1, 1), index_out=t(1, 8, 15))
 
+    # Higher-dim cases that exercise the generalized passthrough-run
+    # coalesce, multi-run patterns, and the length-1 fancy-gather guard.
+
+    # 3D: trailing 2-passthrough collapse
+    check(shape=(3, 4, 5), indices=(2, slice(None), slice(None)),
+          shape_out=(4, 5), index_out=dr.arange(t, 20) + 40)
+    # 3D: leading 2-passthrough collapse (only reachable via the
+    # generalized coalesce -- a trailing-only collapse would miss it)
+    check(shape=(3, 4, 5), indices=(slice(None), slice(None), 2),
+          shape_out=(3, 4), index_out=dr.arange(t, 12) * 5 + 2)
+    # 3D: passthrough between two integer indices (middle live axis)
+    check(shape=(3, 4, 5), indices=(1, slice(None), 2),
+          shape_out=(4,), index_out=dr.arange(t, 4) * 5 + 22)
+    # 3D: length-1 fancy gather between passthroughs (regression for
+    # the coalesce self-move guard, which would otherwise null the
+    # gather array's nb::object on the first iteration)
+    check(shape=(3, 4, 5), indices=(slice(None), t(0), slice(None)),
+          shape_out=(3, 1, 5),
+          index_out=t(0, 1, 2, 3, 4, 20, 21, 22, 23, 24,
+                      40, 41, 42, 43, 44))
+    # 3D: size-1 input dim collapses to a slice_size==1 synthetic axis
+    # that the main loop must skip (is_skippable)
+    check(shape=(3, 1, 5), indices=(1, slice(None), 2),
+          shape_out=(1,), index_out=t(7))
+    # 4D: two separate passthrough runs split by integer indices
+    check(shape=(2, 3, 4, 5), indices=(1, slice(None), 2, slice(None)),
+          shape_out=(3, 5),
+          index_out=t(70, 71, 72, 73, 74,
+                      90, 91, 92, 93, 94,
+                      110, 111, 112, 113, 114))
+
 
 @pytest.test_arrays('is_tensor, -bool')
 def test02_construct(t):

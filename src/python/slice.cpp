@@ -172,41 +172,97 @@ slice_index(const nb::type_object_t<ArrayBase> &dtype,
         size_out *= size;
     }
 
-    nb::object index = arange(dtype, 0, size_out, 1),
-               index_out;
+    if (size_out == 0)
+        return { nb::tuple(shape_out), dtype() };
 
+    // A "passthrough" axis is a full `:` slice over a dim of its full
+    // input size, e.g. axes 1 and 2 in `t[a, :, :]`. Such an axis is the
+    // identity: its input and output strides agree, so within a run of
+    // passthrough axes a slab of the linear output index maps directly
+    // to the input. Coalesce each run into one synthetic axis so the
+    // main loop below handles it as one ordinary iteration.
+    auto is_passthrough = [](const Component &c) {
+        return !c.object.is_valid() && c.start == 0 && c.step == 1 &&
+               c.slice_size == c.size;
+    };
+    {
+        size_t out = 0;
+        for (size_t k = 0; k < components.size();) {
+            if (!is_passthrough(components[k])) {
+                if (out != k)
+                    components[out] = std::move(components[k]);
+                ++out; ++k;
+                continue;
+            }
+            size_t run_size = 1;
+            while (k < components.size() && is_passthrough(components[k]))
+                run_size *= components[k++].size;
+            components[out++] = Component(0, 1, (Py_ssize_t) run_size,
+                                          (Py_ssize_t) run_size);
+        }
+        components.erase(components.begin() + out, components.end());
+    }
+
+    // A "skippable" axis has output size 1 *and* a fixed input position,
+    // so its contribution is a single constant we fold into `base`. Two
+    // forms qualify: a literal integer index `t[i]`, and a `:` slice on
+    // a size-1 input dim. (An index-array `t[arr]` with len(arr) == 1
+    // also has output size 1, but reads `arr[0]` at runtime, so it
+    // requires a gather and is NOT skippable.)
+    auto is_skippable = [](const Component &c) {
+        return !c.object.is_valid() && c.slice_size == 1;
+    };
+
+    // Walk `components` once to compute:
+    //   `base`  -- the total constant input offset, summing
+    //              `start * input_stride` over every non-gather axis.
+    //              Seeded into `index_out` so the main loop's per-axis
+    //              fma absorbs it for free (one fewer add per axis).
+    //   `first` -- index of the outermost non-skippable axis. The main
+    //              loop terminates there: at that point `index` already
+    //              holds the axis's output coordinate, so no further
+    //              divmod is needed.
+    uint32_t base = 0;
+    size_t in_stride = 1, first = components.size();
+    for (size_t k = components.size(); k-- > 0;) {
+        const Component &c = components[k];
+        if (!c.object.is_valid())
+            base += uint32_t(c.start * in_stride);
+        if (!is_skippable(c))
+            first = k;
+        in_stride *= c.size;
+    }
+
+    nb::object index = arange(dtype, 0, size_out, 1);
     nb::object active = nb::borrow(Py_True);
-    if (size_out) {
-        size_out = 1;
-        index_out = dtype(0);
+    nb::object index_out = dtype(base);
 
-        for (auto it = components.rbegin(); it != components.rend(); ++it) {
-            const Component &c = *it;
-            nb::object index_next, index_rem;
-
-            if (it + 1 != components.rend()) {
-                index_next = index.floor_div(dtype(c.slice_size));
-                index_rem = fma(index_next, dtype(uint32_t(-c.slice_size)), index);
+    // Process axes from innermost to outermost, peeling one output
+    // coordinate off `index` at each step.
+    in_stride = 1;
+    for (size_t k = components.size(); k-- > first;) {
+        const Component &c = components[k];
+        if (!is_skippable(c)) {
+            nb::object rem;
+            if (k == first) {
+                rem = std::move(index);
             } else {
-                index_rem = index;
+                nb::object next = index.floor_div(dtype(c.slice_size));
+                rem = fma(next, dtype(uint32_t(-c.slice_size)), index);
+                index = std::move(next);
             }
 
-            nb::object index_val;
-            if (!c.object.is_valid())
-                index_val = fma(index_rem, dtype(uint32_t(c.step * size_out)),
-                                dtype(uint32_t(c.start * size_out)));
+            // Add this axis's contribution to the input linear index:
+            //   slice:  (step * rem) * in_stride   (start * in_stride is in `base`)
+            //   gather: arr[rem]    * in_stride
+            uint32_t coef = uint32_t(in_stride);
+            if (c.object.is_valid())
+                rem = gather(dtype, c.object, rem, active, ReduceMode::Auto);
             else
-                index_val = gather(dtype, c.object, index_rem, active,
-                                   ReduceMode::Auto) *
-                            dtype(uint32_t(size_out));
-
-            index_out += index_val;
-
-            index = std::move(index_next);
-            size_out *= c.size;
+                coef *= uint32_t(c.step);
+            index_out = fma(rem, dtype(coef), index_out);
         }
-    } else {
-        index_out = dtype();
+        in_stride *= c.size;
     }
 
     return { nb::tuple(shape_out), index_out };
