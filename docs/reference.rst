@@ -111,6 +111,12 @@ Rearranging array contents
 --------------------------
 
 .. autofunction:: concat
+.. autofunction:: stack
+.. autofunction:: vstack
+.. autofunction:: hstack
+.. autofunction:: column_stack
+.. autofunction:: dstack
+.. autofunction:: expand_dims
 .. autofunction:: reverse
 .. autofunction:: moveaxis
 .. autofunction:: take
