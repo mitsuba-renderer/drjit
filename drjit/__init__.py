@@ -2151,16 +2151,28 @@ def moveaxis(arg: ArrayBase, /, source: Union[int, Tuple[int, ...]], destination
     strides_in = _compute_strides(shape_in)
     strides_out = _compute_strides(shape_out)
 
+    # Smallest moving range [first_axis, last_axis): outside it
+    # order[i] == i and strides agree, so those coords contribute the
+    # same offset to the input and output flat index.
+    first_axis = ndim
     last_axis = 0
     for i, j in enumerate(order):
         if i != j:
+            if i < first_axis:
+                first_axis = i
             last_axis = i + 1
 
     arr = arg.array
     index_out = arange(uint32_array_t(arr), prod(shape_in))
     index_in = 0
 
-    for i in range(last_axis):
+    if first_axis > 0:
+        head_stride = strides_out[first_axis - 1]
+        residue = index_out % head_stride
+        index_in = index_out - residue
+        index_out = residue
+
+    for i in range(first_axis, last_axis):
         pos = index_out // strides_out[i]
         index_out -= pos * strides_out[i]
         index_in += pos * strides_in[order[i]]
