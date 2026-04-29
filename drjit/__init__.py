@@ -1568,6 +1568,64 @@ def _to_ordinal_32(value):
         return UInt32(value)
 
 
+def _to_ordinal_64(value):
+    """Convert an array with 64-bit elements to order-preserving UInt64."""
+    tp = type(value)
+    vt = type_v(tp)
+    UInt64 = uint64_array_t(tp)
+
+    if vt == VarType.Float64:
+        u = reinterpret_array(UInt64, value)
+        mask = UInt64(0) - (u >> 63)
+        return u ^ (mask | UInt64(0x8000000000000000))
+    elif is_signed_v(tp):
+        uint_tp = uint_array_t(tp)
+        u = reinterpret_array(uint_tp, value)
+        return UInt64(u ^ (uint_tp(1) << 63))
+    else:
+        return UInt64(value)
+
+
+def _from_ordinal_32(ordinal, target_tp):
+    """Invert _to_ordinal_32: convert order-preserving UInt32 back to the original type."""
+    vt = type_v(target_tp)
+    UInt32 = type(ordinal)
+
+    if vt == VarType.Float16:
+        f32_tp = float32_array_t(target_tp)
+        return target_tp(_from_ordinal_32(ordinal, f32_tp))
+    elif vt == VarType.Float32:
+        sign = 1 - (ordinal >> 31)
+        mask = UInt32(0) - sign
+        u = ordinal ^ (mask | UInt32(0x80000000))
+        return reinterpret_array(target_tp, u)
+    elif is_signed_v(target_tp):
+        bits = itemsize_v(target_tp) * 8
+        uint_tp = uint_array_t(target_tp)
+        u = uint_tp(ordinal) ^ (uint_tp(1) << (bits - 1))
+        return reinterpret_array(target_tp, u)
+    else:
+        return target_tp(ordinal)
+
+
+def _from_ordinal_64(ordinal, target_tp):
+    """Invert _to_ordinal_64: convert order-preserving UInt64 back to the original type."""
+    vt = type_v(target_tp)
+    UInt64 = type(ordinal)
+
+    if vt == VarType.Float64:
+        sign = 1 - (ordinal >> 63)
+        mask = UInt64(0) - sign
+        u = ordinal ^ (mask | UInt64(0x8000000000000000))
+        return reinterpret_array(target_tp, u)
+    elif is_signed_v(target_tp):
+        uint_tp = uint_array_t(target_tp)
+        u = uint_tp(ordinal) ^ (uint_tp(1) << 63)
+        return reinterpret_array(target_tp, u)
+    else:
+        return target_tp(ordinal)
+
+
 def _argminmax(value, axis, keepdims, find_max):
     """
     Shared implementation of argmin/argmax.
@@ -1702,6 +1760,152 @@ def argmax(value, /, axis=None, keepdims: bool = False):
         indices of the maximum values.
     """
     return _argminmax(value, axis, keepdims, find_max=True)
+
+
+def _radix_sort(arr, block_size, descending, return_indices):
+    """
+    Multi-pass radix sort using block_mkperm.
+
+    Operates on the flat inner array. When block_size < len(arr),
+    independently sorts contiguous groups of block_size elements.
+    """
+    arr_tp = type(arr)
+    bits = itemsize_v(arr_tp) * 8
+    n = len(arr)
+
+    if n <= 1 or block_size <= 1:
+        if return_indices:
+            UInt32 = uint32_array_t(arr_tp)
+            return arange(UInt32, n)
+        else:
+            return arr_tp(arr)
+
+    if bits <= 32:
+        ordinal = _to_ordinal_32(arr)
+    else:
+        ordinal = _to_ordinal_64(arr)
+
+    if descending:
+        ordinal = ~ordinal
+
+    Ordinal = type(ordinal)
+    ordinal_bits = itemsize_v(Ordinal) * 8
+    UInt32 = uint32_array_t(arr_tp)
+
+    # 11-bit radix (3 passes for 32-bit) is faster on CPU; 8-bit radix
+    # (4 passes) is better on GPU where shared memory is limited.
+    radix_bits = 11 if backend_v(arr_tp) == JitBackend.LLVM else 8
+
+    if return_indices:
+        index = arange(UInt32, n)
+
+    shift = 0
+    bits_remaining = ordinal_bits
+    while bits_remaining > 0:
+        bits_this_pass = min(radix_bits, bits_remaining)
+        bucket_count = 1 << bits_this_pass
+        mask = bucket_count - 1
+
+        digit = UInt32((ordinal >> shift) & Ordinal(mask))
+
+        eval(digit, ordinal)
+        perm = detail.block_mkperm(digit, block_size, bucket_count)
+
+        ordinal = gather(Ordinal, ordinal, perm)
+        if return_indices:
+            index = gather(UInt32, index, perm)
+
+        shift += bits_this_pass
+        bits_remaining -= bits_this_pass
+
+    if return_indices:
+        return index
+    else:
+        if descending:
+            ordinal = ~ordinal
+        if bits <= 32:
+            return _from_ordinal_32(ordinal, arr_tp)
+        else:
+            return _from_ordinal_64(ordinal, arr_tp)
+
+
+def _sort_tensor_prep(value, axis):
+    """Normalize axis and rotate the target axis to the last position."""
+    shape = value.shape
+    ndim = len(shape)
+    if axis < 0:
+        axis += ndim
+    if axis != ndim - 1:
+        value = moveaxis(value, axis, -1)
+    return value, value.shape, axis
+
+
+def sort(value, /, axis=-1, descending=False):
+    '''
+    Sort the elements of an array or tensor.
+
+    For 1D arrays, returns a sorted copy. For tensors, sorts along the
+    specified axis (default: last axis). The sort is stable: elements with
+    equal values preserve their original relative order.
+
+    Uses a multi-pass radix sort internally (3 passes for 32-bit types on
+    CPU, 4 on GPU).
+
+    Args:
+        value: Input array or tensor.
+
+        axis (int): Axis along which to sort. Only ``-1`` (last axis) and
+            ``0`` are currently supported for tensors.
+
+        descending (bool): If ``True``, sort in descending order.
+
+    Returns:
+        object: A sorted copy of the input with the same type and shape.
+    '''
+    if is_tensor_v(value):
+        value, shape, axis = _sort_tensor_prep(value, axis)
+        result = type(value)(
+            _radix_sort(value.array, shape[-1], descending, return_indices=False), shape)
+        if axis != len(shape) - 1:
+            result = moveaxis(result, -1, axis)
+        return result
+    else:
+        return _radix_sort(value, len(value), descending, return_indices=False)
+
+
+def argsort(value, /, axis=-1, descending=False):
+    '''
+    Return the indices that would sort an array or tensor.
+
+    For 1D arrays, returns index array such that ``dr.gather(type(value),
+    value, result)`` is sorted. For tensors, returns indices along the
+    specified axis.
+
+    The sort is stable: among equal elements, the original index order
+    is preserved.
+
+    Args:
+        value: Input array or tensor.
+
+        axis (int): Axis along which to sort. Only ``-1`` (last axis) and
+            ``0`` are currently supported for tensors.
+
+        descending (bool): If ``True``, sort in descending order.
+
+    Returns:
+        object: An unsigned 32-bit integer array or tensor containing the
+        sorting indices.
+    '''
+    if is_tensor_v(value):
+        value, shape, axis = _sort_tensor_prep(value, axis)
+        UInt32 = uint32_array_t(type(value.array))
+        raw = _radix_sort(value.array, shape[-1], descending, return_indices=True)
+        result = tensor_t(UInt32)(raw % shape[-1], shape)
+        if axis != len(shape) - 1:
+            result = moveaxis(result, -1, axis)
+        return result
+    else:
+        return _radix_sort(value, len(value), descending, return_indices=True)
 
 
 def normalize(arg: T, /) -> T:
