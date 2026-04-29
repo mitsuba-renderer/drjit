@@ -1856,6 +1856,237 @@ def concat(arr: Sequence[ArrayT], /, axis: Optional[int] = 0) -> ArrayT:
 
     return result
 
+
+def _validate_tensor_sequence(arrays, name: str):
+    if is_array_v(arrays):
+        raise TypeError(f"drjit.{name}(): input should be a Python sequence of tensors, not a single array.")
+    if len(arrays) == 0:
+        raise RuntimeError(f"drjit.{name}(): at least one input tensor is required!")
+    ref_tp = type(arrays[0])
+    if not is_tensor_v(ref_tp):
+        raise TypeError(f"drjit.{name}(): expected tensor inputs (got {ref_tp.__module__}.{ref_tp.__qualname__}).")
+    for i, a in enumerate(arrays):
+        if type(a) is not ref_tp:
+            raise TypeError(f"drjit.{name}(): all inputs must have the same type "
+                            f"(input 0 has type {ref_tp.__module__}.{ref_tp.__qualname__}, "
+                            f"input {i} has type {type(a).__module__}.{type(a).__qualname__}).")
+
+
+def expand_dims(value: ArrayT, /, axis: Union[int, Tuple[int, ...]]) -> ArrayT:
+    """
+    Expand the shape of a tensor by inserting new length-one axes.
+
+    The ``axis`` parameter specifies where new axes are placed in the output
+    shape. For example, given a tensor of shape ``(3, 4)``:
+
+    - ``axis=0`` produces shape ``(1, 3, 4)``
+    - ``axis=1`` produces shape ``(3, 1, 4)``
+    - ``axis=-1`` produces shape ``(3, 4, 1)``
+
+    When ``axis`` is a tuple, multiple axes are inserted simultaneously. The
+    axis positions refer to the output shape, and negative values count
+    backwards from the last output dimension.
+
+    This operation does not copy data; it returns a view of the input with a
+    different shape.
+
+    Args:
+        value: Input tensor.
+
+        axis (int | tuple[int, ...]): Position(s) in the output shape where
+            new length-one axes should be inserted.
+
+    Returns:
+        object: A tensor with the same underlying data and one or more
+        additional length-one dimensions.
+    """
+    if not is_tensor_v(value):
+        raise TypeError(
+            f"drjit.expand_dims(): expected a tensor input "
+            f"(got {type(value).__module__}.{type(value).__qualname__}).")
+
+    shape = value.shape
+    ndim = len(shape)
+
+    if isinstance(axis, int):
+        axis = (axis,)
+
+    out_ndim = ndim + len(axis)
+
+    normalized = []
+    for a in axis:
+        if a < 0:
+            a += out_ndim
+        if a < 0 or a >= out_ndim:
+            raise RuntimeError(
+                f"drjit.expand_dims(): axis {a} is out of bounds "
+                f"for a {out_ndim}-dimensional output.")
+        normalized.append(a)
+
+    if len(set(normalized)) != len(normalized):
+        raise RuntimeError("drjit.expand_dims(): duplicate axes are not allowed.")
+
+    new_shape = list(shape)
+    for a in sorted(normalized):
+        new_shape.insert(a, 1)
+
+    return reshape(type(value), value, new_shape)
+
+
+def stack(arrays: Sequence[ArrayT], /, axis: int = 0) -> ArrayT:
+    """
+    Join a sequence of tensors along a new axis.
+
+    All input tensors must have the same type and shape. The result has one
+    more dimension than the inputs: a new axis of size ``len(arrays)`` is
+    inserted at position ``axis``.
+
+    For example, stacking two tensors of shape ``(M, N)`` with ``axis=0``
+    produces shape ``(2, M, N)``, while ``axis=1`` produces ``(M, 2, N)``.
+
+    Unlike :py:func:`concat`, which joins arrays along an *existing* axis,
+    ``stack`` always creates a *new* one.
+
+    Args:
+        arrays: Sequence of tensors. All must have the same type and shape.
+
+        axis (int): The position of the new axis in the result. Negative
+            values count backwards from the last dimension.
+
+    Returns:
+        object: A tensor with ``ndim + 1`` dimensions.
+    """
+    _validate_tensor_sequence(arrays, 'stack')
+
+    ref_shape = arrays[0].shape
+    ndim = len(ref_shape)
+
+    for i, a in enumerate(arrays):
+        if a.shape != ref_shape:
+            raise TypeError(
+                f"drjit.stack(): all inputs must have the same shape "
+                f"(input 0 has shape {ref_shape}, "
+                f"input {i} has shape {a.shape}).")
+
+    if axis < 0:
+        axis += ndim + 1
+    if axis < 0 or axis > ndim:
+        raise RuntimeError(
+            f"drjit.stack(): axis {axis} is out of bounds "
+            f"for tensors with {ndim} dimensions.")
+
+    expanded = [expand_dims(a, axis=axis) for a in arrays]
+    return concat(expanded, axis=axis)
+
+
+def vstack(arrays: Sequence[ArrayT], /) -> ArrayT:
+    """
+    Stack tensors vertically (row-wise).
+
+    Concatenates tensors along the first axis. 1D tensors of shape ``(N,)``
+    are first reshaped to ``(1, N)`` so that they become rows. The result is
+    always at least 2D.
+
+    The inputs must have the same shape along all but the first axis.
+
+    ``row_stack`` is an alias for this function.
+
+    Args:
+        arrays: Sequence of tensors to stack.
+
+    Returns:
+        object: A tensor with at least two dimensions formed by vertical
+        concatenation.
+    """
+    _validate_tensor_sequence(arrays, 'vstack')
+    tp = type(arrays[0])
+    fixed = [reshape(tp, a, (1,) + a.shape) if len(a.shape) == 1
+             else a for a in arrays]
+    return concat(fixed, axis=0)
+
+
+row_stack = vstack
+
+
+def hstack(arrays: Sequence[ArrayT], /) -> ArrayT:
+    """
+    Stack tensors horizontally (column-wise).
+
+    For tensors with two or more dimensions, this concatenates along the
+    second axis. For 1D tensors, it concatenates along the first (and only)
+    axis.
+
+    The inputs must have the same shape along all but the concatenation axis.
+
+    Args:
+        arrays: Sequence of tensors to stack.
+
+    Returns:
+        object: A tensor formed by horizontal concatenation.
+    """
+    _validate_tensor_sequence(arrays, 'hstack')
+    if len(arrays[0].shape) == 1:
+        return concat(arrays, axis=0)
+    return concat(arrays, axis=1)
+
+
+def column_stack(arrays: Sequence[ArrayT], /) -> ArrayT:
+    """
+    Stack 1D tensors as columns into a 2D tensor.
+
+    Takes a sequence of 1D tensors and stacks them as columns to produce a
+    2D result. Each 1D tensor of shape ``(N,)`` is first reshaped to
+    ``(N, 1)``, then all inputs are concatenated along axis 1.
+
+    2D (or higher) tensors are concatenated along axis 1 as-is, like
+    :py:func:`hstack`.
+
+    All inputs must have the same first dimension.
+
+    Args:
+        arrays: Sequence of tensors to stack.
+
+    Returns:
+        object: A tensor formed by column-wise concatenation.
+    """
+    _validate_tensor_sequence(arrays, 'column_stack')
+    tp = type(arrays[0])
+    fixed = [reshape(tp, a, a.shape + (1,)) if len(a.shape) == 1
+             else a for a in arrays]
+    return concat(fixed, axis=1)
+
+
+def dstack(arrays: Sequence[ArrayT], /) -> ArrayT:
+    """
+    Stack tensors depth-wise (along the third axis).
+
+    Concatenates tensors along the third axis after reshaping them to at least
+    3D. 1D tensors of shape ``(N,)`` become ``(1, N, 1)`` and 2D tensors of
+    shape ``(M, N)`` become ``(M, N, 1)`` before concatenation. The result is
+    always at least 3D.
+
+    The inputs must have the same shape along all but the third axis.
+
+    Args:
+        arrays: Sequence of tensors to stack.
+
+    Returns:
+        object: A tensor with at least three dimensions formed by depth-wise
+        concatenation.
+    """
+    _validate_tensor_sequence(arrays, 'dstack')
+    tp = type(arrays[0])
+    fixed = []
+    for a in arrays:
+        ndim = len(a.shape)
+        if ndim == 1:
+            a = reshape(tp, a, (1,) + a.shape + (1,))
+        elif ndim == 2:
+            a = reshape(tp, a, a.shape + (1,))
+        fixed.append(a)
+    return concat(fixed, axis=2)
+
+
 class _ResampleOp(CustomOp):
     """Implementation detail of the function drjit.resample()"""
     def eval(self, resampler, source, stride):

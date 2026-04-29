@@ -819,3 +819,139 @@ def test30_transpose_matrix(t):
     m_T = t(*vals_T)
     assert dr.all(m.T == m_T, axis=None)
     assert dr.all(m.mT == m_T, axis=None)
+
+
+@pytest.test_arrays('is_tensor, jit, uint32')
+def test31_expand_dims(t):
+    np = pytest.importorskip("numpy")
+
+    configs = [
+        ((5,),      0),
+        ((5,),      1),
+        ((5,),     -1),
+        ((5,),     -2),
+        ((3, 4),    0),
+        ((3, 4),    1),
+        ((3, 4),    2),
+        ((3, 4),   -1),
+        ((2, 3, 4), 0),
+        ((2, 3, 4), 2),
+        ((2, 3, 4), 3),
+        ((2, 3, 4), -1),
+        # tuple axis
+        ((3, 4),  (0, 2)),
+        ((3, 4),  (0, -1)),
+        ((3, 4),  (0, 1)),
+        ((5,),    (0, 2)),
+        ((2, 3),  (0, 1, 4)),
+    ]
+
+    for shape, axis in configs:
+        size = dr.prod(shape)
+        v_dr = t(dr.arange(dr.array_t(t), size), shape)
+        v_np = np.arange(size).reshape(shape)
+
+        out_dr = dr.expand_dims(v_dr, axis=axis)
+        out_np = np.expand_dims(v_np, axis=axis)
+
+        assert out_dr.shape == out_np.shape, \
+            f"shape mismatch for input {shape}, axis={axis}"
+        assert np.allclose(out_np, out_dr.numpy())
+
+    v = t(dr.arange(dr.array_t(t), 6), (2, 3))
+    with pytest.raises(RuntimeError, match="out of bounds"):
+        dr.expand_dims(v, axis=4)
+    with pytest.raises(RuntimeError, match="duplicate"):
+        dr.expand_dims(v, axis=(0, 0))
+    with pytest.raises(TypeError, match="expected a tensor"):
+        dr.expand_dims(dr.array_t(t)(1, 2, 3), axis=0)
+
+
+@pytest.test_arrays('is_tensor, jit, uint32')
+def test32_stack(t):
+    np = pytest.importorskip("numpy")
+
+    configs = [
+        (0,  (3,),       (3,)),
+        (1,  (3,),       (3,)),
+        (-1, (3,),       (3,)),
+        (0,  (2, 3),     (2, 3)),
+        (1,  (2, 3),     (2, 3)),
+        (2,  (2, 3),     (2, 3)),
+        (-1, (2, 3),     (2, 3)),
+        (0,  (2, 3),     (2, 3), (2, 3)),
+        (0,  (2, 3, 4),  (2, 3, 4)),
+        (2,  (2, 3, 4),  (2, 3, 4)),
+        (-1, (2, 3, 4),  (2, 3, 4)),
+    ]
+
+    for axis, *shapes in configs:
+        in_drjit = []
+        in_numpy = []
+        for i, shape in enumerate(shapes):
+            size = dr.prod(shape)
+            in_drjit.append(t(dr.arange(dr.array_t(t), size) + i * 100, shape))
+            in_numpy.append(np.arange(size).reshape(shape) + i * 100)
+
+        out_np = np.stack(in_numpy, axis=axis)
+        out_dr = dr.stack(in_drjit, axis=axis)
+
+        assert out_dr.shape == out_np.shape, \
+            f"shape mismatch for axis={axis}, shapes={shapes}"
+        assert np.allclose(out_np, out_dr.numpy())
+
+    # single-element input
+    v_dr = t(dr.arange(dr.array_t(t), 6), (2, 3))
+    v_np = np.arange(6).reshape(2, 3)
+    assert dr.stack([v_dr]).shape == np.stack([v_np]).shape
+
+    # error cases
+    a = t(dr.arange(dr.array_t(t), 6), (2, 3))
+    b = t(dr.arange(dr.array_t(t), 12), (3, 4))
+    with pytest.raises(TypeError, match="same shape"):
+        dr.stack([a, b])
+    with pytest.raises(RuntimeError, match="out of bounds"):
+        dr.stack([a, a], axis=3)
+    with pytest.raises(TypeError, match="expected tensor"):
+        dr.stack([dr.array_t(t)(1, 2)])
+    with pytest.raises(RuntimeError, match="at least one"):
+        dr.stack([])
+
+
+@pytest.test_arrays('is_tensor, jit, uint32')
+def test33_vstack_hstack_column_stack_dstack(t):
+    np = pytest.importorskip("numpy")
+
+    def check(dr_fn, np_fn, shapes):
+        in_drjit, in_numpy = [], []
+        for i, shape in enumerate(shapes):
+            size = dr.prod(shape)
+            in_drjit.append(t(dr.arange(dr.array_t(t), size) + i * 100, shape))
+            in_numpy.append(np.arange(size).reshape(shape) + i * 100)
+        out_dr = dr_fn(in_drjit)
+        out_np = np_fn(in_numpy)
+        assert out_dr.shape == out_np.shape, \
+            f"shape mismatch for {dr_fn.__name__}, shapes={shapes}"
+        assert np.allclose(out_np, out_dr.numpy())
+
+    for shapes in [((3,), (3,)), ((3,), (3,), (3,)), ((2,3), (2,3)),
+                   ((2,3), (1,3)), ((2,3,4), (3,3,4))]:
+        check(dr.vstack, np.vstack, shapes)
+
+    for shapes in [((3,), (4,)), ((3,), (4,), (2,)), ((2,3), (2,4)),
+                   ((2,3), (2,4), (2,1)), ((2,3,4), (2,5,4))]:
+        check(dr.hstack, np.hstack, shapes)
+
+    for shapes in [((3,), (3,)), ((3,), (3,), (3,)),
+                   ((2,3), (2,4)), ((2,1), (2,3))]:
+        check(dr.column_stack, np.column_stack, shapes)
+
+    for shapes in [((3,), (3,)), ((2,3), (2,3)), ((2,3,4), (2,3,5))]:
+        check(dr.dstack, np.dstack, shapes)
+
+    # non-tensor rejection
+    a = dr.array_t(t)(1, 2, 3)
+    for fn in [dr.vstack, dr.hstack, dr.column_stack, dr.dstack]:
+        with pytest.raises(TypeError, match="expected tensor"):
+            fn([a, a])
+
