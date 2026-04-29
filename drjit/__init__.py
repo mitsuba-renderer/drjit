@@ -1547,6 +1547,163 @@ def std(value, axis = ..., mode = None, keepdims: bool = False, ddof: int = 0):
     return sqrt(var(value, axis=axis, mode=mode, keepdims=keepdims, ddof=ddof))
 
 
+def _to_ordinal_32(value):
+    """Convert an array with <=32-bit elements to order-preserving UInt32."""
+    tp = type(value)
+    vt = type_v(tp)
+    UInt32 = uint32_array_t(tp)
+
+    if vt == VarType.Float16:
+        return _to_ordinal_32(float32_array_t(tp)(value))
+    elif vt == VarType.Float32:
+        u = reinterpret_array(UInt32, value)
+        mask = UInt32(0) - (u >> 31)
+        return u ^ (mask | UInt32(0x80000000))
+    elif is_signed_v(tp):
+        bits = itemsize_v(tp) * 8
+        uint_tp = uint_array_t(tp)
+        u = reinterpret_array(uint_tp, value)
+        return UInt32(u ^ (uint_tp(1) << (bits - 1)))
+    else:
+        return UInt32(value)
+
+
+def _argminmax(value, axis, keepdims, find_max):
+    """
+    Shared implementation of argmin/argmax.
+
+    Uses a packed uint64 reduction for types with <=32-bit elements: the
+    value's order-preserving ordinal occupies the upper 32 bits and the
+    element index the lower 32 bits, so a single min reduction yields both
+    the extremal value and the smallest index among ties.
+
+    Falls back to a two-pass approach (reduce, then find matching index)
+    for 64-bit element types that cannot be packed into 64 bits.
+    """
+    is_tens = is_tensor_v(value)
+
+    if is_tens and axis is None:
+        value = ravel(value)
+        is_tens = False
+
+    tp = type(value)
+    arr = value.array if is_tens else value
+    arr_tp = type(arr)
+    UInt32 = uint32_array_t(arr_tp)
+    UInt64 = uint64_array_t(arr_tp)
+    bits = itemsize_v(arr_tp) * 8
+
+    if is_tens:
+        shape = value.shape
+        ndim = len(shape)
+        if axis < 0:
+            axis += ndim
+        stride = prod(shape[axis + 1:])
+        n = prod(shape)
+        idx = (arange(UInt32, n) // stride) % shape[axis]
+    else:
+        n = len(arr)
+        idx = arange(UInt32, n)
+
+    if bits <= 32:
+        ordinal = _to_ordinal_32(arr)
+        if find_max:
+            ordinal = ~ordinal
+        packed = (UInt64(ordinal) << 32) | UInt64(idx)
+
+        if is_tens:
+            TU64 = tensor_t(UInt64)
+            result = min(TU64(packed, shape), axis=axis, keepdims=keepdims)
+            TU32 = tensor_t(UInt32)
+            return TU32(UInt32(result.array & UInt64(0xFFFFFFFF)), result.shape)
+        else:
+            result = min(packed)
+            return UInt32(result & UInt64(0xFFFFFFFF))
+    else:
+        reduce_fn = max if find_max else min
+        if is_tens:
+            m = reduce_fn(value, axis=axis, keepdims=True)
+            m_arr = m.array
+            m_stride = prod(m.shape[axis + 1:])
+            flat_idx = arange(uint32_array_t(type(m_arr)), n)
+            m_idx = (flat_idx // (stride * shape[axis])) * m_stride + \
+                    (flat_idx % stride)
+            m_expanded = gather(type(m_arr), m_arr, m_idx)
+
+            if find_max:
+                is_ext = arr >= m_expanded
+            else:
+                is_ext = arr <= m_expanded
+
+            idx = select(is_ext, idx, UInt32(0xFFFFFFFF))
+            TU32 = tensor_t(UInt32)
+            return min(TU32(idx, shape), axis=axis, keepdims=keepdims)
+        else:
+            m = reduce_fn(arr)
+            if find_max:
+                is_ext = arr >= m
+            else:
+                is_ext = arr <= m
+            idx = select(is_ext, idx, UInt32(0xFFFFFFFF))
+            return min(idx)
+
+
+def argmin(value, /, axis=None, keepdims: bool = False):
+    """
+    Return the indices of the minimum values along an axis.
+
+    When ``axis`` is ``None``, the index refers to the flattened input. When
+    ``axis`` is an integer, the reduction operates along that axis and the
+    result has the same number of dimensions as the input (minus one, unless
+    ``keepdims`` is ``True``).
+
+    When multiple elements share the minimum value, the smallest index is
+    returned.
+
+    Args:
+        value: Input array or tensor.
+
+        axis (int | None): Axis along which to operate. ``None`` reduces
+            over all elements.
+
+        keepdims (bool): If ``True``, the reduced axis is retained as a
+            length-one dimension.
+
+    Returns:
+        object: An unsigned 32-bit integer array or tensor containing the
+        indices of the minimum values.
+    """
+    return _argminmax(value, axis, keepdims, find_max=False)
+
+
+def argmax(value, /, axis=None, keepdims: bool = False):
+    """
+    Return the indices of the maximum values along an axis.
+
+    When ``axis`` is ``None``, the index refers to the flattened input. When
+    ``axis`` is an integer, the reduction operates along that axis and the
+    result has the same number of dimensions as the input (minus one, unless
+    ``keepdims`` is ``True``).
+
+    When multiple elements share the maximum value, the smallest index is
+    returned.
+
+    Args:
+        value: Input array or tensor.
+
+        axis (int | None): Axis along which to operate. ``None`` reduces
+            over all elements.
+
+        keepdims (bool): If ``True``, the reduced axis is retained as a
+            length-one dimension.
+
+    Returns:
+        object: An unsigned 32-bit integer array or tensor containing the
+        indices of the maximum values.
+    """
+    return _argminmax(value, axis, keepdims, find_max=True)
+
+
 def normalize(arg: T, /) -> T:
     '''
     Normalize the input vector so that it has unit length and return the

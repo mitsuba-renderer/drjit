@@ -81,6 +81,8 @@ Reductions
 .. autofunction:: mean
 .. autofunction:: var
 .. autofunction:: std
+.. autofunction:: argmin
+.. autofunction:: argmax
 
 .. autofunction:: all
 .. autofunction:: any
