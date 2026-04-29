@@ -83,6 +83,8 @@ Reductions
 .. autofunction:: std
 .. autofunction:: argmin
 .. autofunction:: argmax
+.. autofunction:: sort
+.. autofunction:: argsort
 
 .. autofunction:: all
 .. autofunction:: any

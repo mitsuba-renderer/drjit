@@ -1384,6 +1384,62 @@
     Returns:
         The block-reduced array or PyTree as specified above.
 
+.. topic:: block_mkperm
+
+    Compute a stable permutation that groups elements by bucket, independently
+    within each contiguous block of ``block_size`` elements.
+
+    Given a flat :py:class:`drjit.llvm.UInt32` or :py:class:`drjit.cuda.UInt32`
+    array ``values`` whose entries are bucket indices in the range
+    ``[0, bucket_count)``, this function returns a permutation array ``perm``
+    of the same size and type such that gathering ``values`` through ``perm``
+    yields elements in non-decreasing bucket order. Elements with the same
+    bucket value keep their original relative order (stable sort).
+
+    When ``block_size < len(values)``, the array is treated as a sequence of
+    contiguous blocks of ``block_size`` elements that are sorted independently.
+    Set ``block_size = len(values)`` to sort the entire array as a single block.
+
+    .. note::
+
+       This is a low-level primitive primarily meant for internal use.
+       It underlies several higher-level Dr.Jit operations:
+
+       - :py:func:`drjit.sort` and :py:func:`drjit.argsort`: each radix pass
+         extracts one digit into a ``UInt32`` array and calls ``block_mkperm``
+         to produce the pass permutation.
+
+       - :py:func:`drjit.switch` and :py:func:`drjit.dispatch` in evaluated
+         mode: the callable index array is bucketed by ``block_mkperm`` so that
+         each callable receives a contiguous slice of the work items.
+
+    **Example.** Two blocks of 3, three buckets:
+
+    .. code-block:: python
+
+        digits = jit.UInt32([2, 0, 1,  0, 1, 2])
+        perm   = dr.detail.block_mkperm(digits, block_size=3, bucket_count=3)
+        # perm                           == [1, 2, 0,  3, 4, 5]
+        # dr.gather(jit.UInt32, digits, perm) == [0, 1, 2,  0, 1, 2]
+
+    Block 0 (``[2, 0, 1]``) is reordered to ``[0, 1, 2]`` via local indices
+    ``[1, 2, 0]``; block 1 (``[0, 1, 2]``) is already sorted so its global
+    indices ``[3, 4, 5]`` are unchanged.
+
+    Args:
+        values (drjit.llvm.UInt32 | drjit.cuda.UInt32): Flat 1-D integer
+          array of bucket indices. Every element must satisfy
+          ``0 <= values[i] < bucket_count``.
+
+        block_size (int): Number of elements per independent sorting block.
+
+        bucket_count (int): Number of distinct buckets. Must be a power of two
+          and match the range of ``values``.
+
+    Returns:
+        drjit.llvm.UInt32 | drjit.cuda.UInt32: Permutation index array of the
+        same size as ``values``.
+
 .. topic:: sqrt
 
     Evaluate the square root of the provided input.
