@@ -117,6 +117,114 @@ class Generator:
         """
         raise NotImplementedError("normal(): use a subclass that implements this function")
 
+    @typing.overload
+    def permutation(self, dtype: typing.Type[ArrayT], n: int, /) -> ArrayT: ...
+    @typing.overload
+    def permutation(self, x: ArrayT, /, axis: int = 0) -> ArrayT: ...
+
+    def permutation(self, x, /, *args, **kwargs):
+        """
+        Generate a random permutation of elements.
+
+        If ``x`` is a type and ``n`` is an integer, return a random
+        permutation of ``dr.arange(dtype, n)``.
+
+        If ``x`` is a 1D Dr.Jit array, return a new array containing the
+        same elements in a uniformly random order.
+
+        If ``x`` is a tensor, shuffle along the given ``axis`` (default
+        ``0``): each slice along that axis is kept intact, but their order
+        is randomized.
+
+        The implementation generates uniform random float keys and calls
+        :py:func:`drjit.argsort` to obtain a permutation using an
+        efficient parallel radix sort on both CPU and GPU backends.
+
+        Overloaded signatures:
+
+        .. py:function:: permutation(dtype, n, /)
+           :noindex:
+
+           Return a random permutation of indices ``[0, n)``.
+
+           :param type dtype: A Dr.Jit array type (e.g., ``dr.cuda.UInt32``)
+               that selects the backend. The return type is the corresponding
+               ``UInt32`` type for that backend.
+           :param int n: Length of the permutation (must be non-negative).
+
+        .. py:function:: permutation(x, /, axis=0)
+           :noindex:
+
+           Return a shuffled copy of an array or tensor.
+
+           :param drjit.ArrayBase x: Input array or tensor to shuffle.
+           :param int axis: Axis along which to shuffle (tensors only,
+               default: ``0``). Negative indices are supported.
+        """
+        if isinstance(x, type):
+            n = args[0] if args else kwargs.get('n')
+            if n is None or not isinstance(n, int):
+                raise RuntimeError(
+                    "Generator.permutation(): 'n' must be an integer when "
+                    "'dtype' is a type.")
+            if n < 0:
+                raise RuntimeError(
+                    "Generator.permutation(): 'n' must be non-negative.")
+
+            UInt32 = dr.uint32_array_t(x)
+            if n <= 1:
+                return dr.arange(UInt32, n)
+
+            Float = dr.float32_array_t(x)
+            keys = self.random(Float, n)
+            return dr.argsort(keys)
+
+        elif dr.is_tensor_v(x):
+            axis = args[0] if args else kwargs.get('axis', 0)
+
+            ndim = len(x.shape)
+            if axis < 0:
+                axis += ndim
+            if axis < 0 or axis >= ndim:
+                raise RuntimeError(
+                    f"Generator.permutation(): axis {axis} is out of bounds "
+                    f"for tensor with {ndim} dimensions.")
+
+            n = x.shape[axis]
+            if n <= 1:
+                return type(x)(x)
+
+            Float = dr.float32_array_t(type(x.array))
+            keys = self.random(Float, n)
+            perm = dr.argsort(keys)
+
+            idx = tuple(
+                perm if i == axis else slice(None)
+                for i in range(ndim)
+            )
+            return x[idx]
+
+        elif dr.is_array_v(x):
+            axis = args[0] if args else kwargs.get('axis', 0)
+            if axis not in (0, -1):
+                raise RuntimeError(
+                    "Generator.permutation(): axis must be 0 for "
+                    "1D arrays.")
+
+            n = len(x)
+            if n <= 1:
+                return type(x)(x)
+
+            Float = dr.float32_array_t(type(x))
+            keys = self.random(Float, n)
+            perm = dr.argsort(keys)
+            return dr.gather(type(x), x, perm)
+
+        else:
+            raise RuntimeError(
+                "Generator.permutation(): first argument must be a Dr.Jit "
+                "array type, array, or tensor.")
+
     def clone(self) -> 'Generator':
         raise NotImplementedError("clone(): use a subclass that implements this function")
 

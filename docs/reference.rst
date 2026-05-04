@@ -157,6 +157,7 @@ Random number generation
    .. automethod:: uniform
    .. automethod:: normal
    .. automethod:: integers
+   .. automethod:: permutation
    .. automethod:: clone
 
 .. py:module:: drjit

@@ -757,3 +757,65 @@ def test26_sort_stress(t):
         x64 = (hi << 32) | lo
         assert np.array_equal(dr.sort(u64(x64)).numpy(), np.sort(x64)), \
             f'uint64 stress sort failed n={n}'
+
+
+@pytest.test_arrays('jit, float32, shape=(*)')
+def test27_permutation_1d(t):
+    np = pytest.importorskip("numpy")
+
+    u32 = dr.uint32_array_t(t)
+
+    # Integer input: returns a permutation of arange(n)
+    for n in [0, 1, 10, 1000]:
+        perm = dr.rng(seed=42).permutation(u32, n)
+        perm_np = perm.numpy()
+        assert perm_np.shape == (n,)
+        assert np.array_equal(np.sort(perm_np), np.arange(n, dtype=np.uint32))
+
+    # Different seeds produce different permutations
+    p1 = dr.rng(seed=0).permutation(u32, 100).numpy()
+    p2 = dr.rng(seed=1).permutation(u32, 100).numpy()
+    assert not np.array_equal(p1, p2)
+
+    # Same seed produces the same permutation
+    p3 = dr.rng(seed=0).permutation(u32, 100).numpy()
+    assert np.array_equal(p1, p3)
+
+    # 1D array input: returns a shuffled copy
+    x = t([10, 20, 30, 40, 50, 60, 70, 80])
+    shuffled = dr.rng(seed=7).permutation(x)
+    assert type(shuffled) is type(x)
+    assert np.array_equal(np.sort(shuffled.numpy()), np.sort(x.numpy()))
+    assert not np.array_equal(shuffled.numpy(), x.numpy())
+
+
+@pytest.test_arrays('is_tensor, jit, float32')
+def test28_permutation_tensor(t):
+    np = pytest.importorskip("numpy")
+
+    def check(shape, axis, seed=42):
+        x_np = np.arange(np.prod(shape), dtype=np.float32).reshape(shape)
+        x_dr = t(x_np)
+
+        result = dr.rng(seed=seed).permutation(x_dr, axis=axis)
+        r_np = result.numpy()
+
+        assert result.shape == x_dr.shape, \
+            f'shape mismatch for shape={shape} axis={axis}'
+
+        n = shape[axis]
+        orig = set()
+        shuf = set()
+        for i in range(n):
+            idx = tuple(i if d == axis else slice(None) for d in range(len(shape)))
+            orig.add(x_np[idx].tobytes())
+            shuf.add(r_np[idx].tobytes())
+        assert orig == shuf, \
+            f'slices differ for shape={shape} axis={axis}'
+
+    for shape, axis in [
+        ((4, 3), 0), ((4, 3), 1), ((4, 3), -1), ((4, 3), -2),
+        ((2, 3, 4), 0), ((2, 3, 4), 1), ((2, 3, 4), 2), ((2, 3, 4), -1),
+        ((3, 5, 2, 4), 0), ((3, 5, 2, 4), 1), ((3, 5, 2, 4), 2), ((3, 5, 2, 4), 3),
+    ]:
+        check(shape, axis)
