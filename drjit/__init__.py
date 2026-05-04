@@ -1706,7 +1706,7 @@ def _argminmax(value, axis, keepdims, find_max):
             return min(idx)
 
 
-def argmin(value, /, axis=None, keepdims: bool = False):
+def argmin(value: ArrayBase, /, axis: Optional[int] = None, keepdims: bool = False) -> ArrayBase:
     """
     Return the indices of the minimum values along an axis.
 
@@ -1734,7 +1734,7 @@ def argmin(value, /, axis=None, keepdims: bool = False):
     return _argminmax(value, axis, keepdims, find_max=False)
 
 
-def argmax(value, /, axis=None, keepdims: bool = False):
+def argmax(value: ArrayBase, /, axis: Optional[int] = None, keepdims: bool = False) -> ArrayBase:
     """
     Return the indices of the maximum values along an axis.
 
@@ -1840,7 +1840,7 @@ def _sort_tensor_prep(value, axis):
     return value, value.shape, axis
 
 
-def sort(value, /, axis=-1, descending=False):
+def sort(value: ArrayT, /, axis: int = -1, descending: bool = False) -> ArrayT:
     '''
     Sort the elements of an array or tensor.
 
@@ -1873,7 +1873,7 @@ def sort(value, /, axis=-1, descending=False):
         return _radix_sort(value, len(value), descending, return_indices=False)
 
 
-def argsort(value, /, axis=-1, descending=False):
+def argsort(value: ArrayBase, /, axis: int = -1, descending: bool = False) -> ArrayBase:
     '''
     Return the indices that would sort an array or tensor.
 
@@ -2450,7 +2450,7 @@ def dstack(arrays: Sequence[ArrayT], /) -> ArrayT:
 
 
 def split(value: ArrayT, indices_or_sections: Union[int, Sequence[int]], /,
-          axis: int = 0) -> list:
+          axis: int = 0) -> List[ArrayT]:
     """
     Split a tensor into multiple parts along an axis.
 
@@ -2507,7 +2507,7 @@ def split(value: ArrayT, indices_or_sections: Union[int, Sequence[int]], /,
 
 
 def array_split(value: ArrayT, sections: int, /,
-                axis: int = 0) -> list:
+                axis: int = 0) -> List[ArrayT]:
     """
     Split a tensor into approximately equal parts along an axis.
 
