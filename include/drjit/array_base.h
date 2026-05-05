@@ -120,8 +120,11 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT {
     /// Are elements of this array implemented using the CUDA backend?
     static constexpr bool IsCUDA = is_cuda_v<Value_>;
 
+    /// Are elements of this array implemented using the Metal backend?
+    static constexpr bool IsMetal = is_metal_v<Value_>;
+
     /// Are elements of this array implemented using a JIT-compiled backend?
-    static constexpr bool IsJIT = IsLLVM || IsCUDA;
+    static constexpr bool IsJIT = IsLLVM || IsCUDA || IsMetal;
 
     /// Are elements of this array dynamic?
     static constexpr bool IsDynamic = is_dynamic_v<Value_>;

@@ -128,6 +128,7 @@ struct Tensor
     static constexpr bool IsJIT  = is_jit_v<Array_>;
     static constexpr bool IsCUDA = is_cuda_v<Array_>;
     static constexpr bool IsLLVM = is_llvm_v<Array_>;
+    static constexpr bool IsMetal = is_metal_v<Array_>;
     static constexpr size_t Size = Dynamic;
     static constexpr size_t Depth = 0; // meaningless parameter for tensors
 

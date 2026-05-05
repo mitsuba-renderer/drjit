@@ -167,7 +167,7 @@ def tensor_reduce(
         # No-op
         out_array = in_array
     elif len(block_strides) == 1 and block_strides[0] == 1 and \
-        (dr.backend_v(in_array) is not dr.JitBackend.CUDA or
+        (dr.backend_v(in_array) not in (dr.JitBackend.CUDA, dr.JitBackend.Metal) or
          block_size & (block_size - 1) == 0):
         # The requested reduction is also doable via dr.block_reduce(), which
         # is going to be more optimized than the other strategies in this file.

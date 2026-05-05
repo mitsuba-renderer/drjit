@@ -308,8 +308,8 @@ drjit.detail.bind:
 
 # ------------------- Backend-specific part -------------------
 #
-drjit\.(cuda|llvm|auto)(\.ad|).Array[0-4]([^0-4].*)\.__(set|del)item__:
-drjit\.(cuda|llvm|auto)(\.ad|).Array[0-4]([^0-4].*)\.__getitem__:
+drjit\.(cuda|llvm|metal|auto)(\.ad|).Array[0-4]([^0-4].*)\.__(set|del)item__:
+drjit\.(cuda|llvm|metal|auto)(\.ad|).Array[0-4]([^0-4].*)\.__getitem__:
     xx: Array2\3
     xy: Array2\3
     xz: Array2\3
@@ -648,8 +648,8 @@ drjit\.(cuda|llvm|auto)(\.ad|).Array[0-4]([^0-4].*)\.__getitem__:
     wwww: Array4\3
 
 # Typed versions of these are already provided by drjit.ArrayBase
-drjit.(cuda|llvm|auto).*__(set|del)item__:
-drjit.(cuda|llvm|auto).*__getitem__:
+drjit.(cuda|llvm|metal|auto).*__(set|del)item__:
+drjit.(cuda|llvm|metal|auto).*__getitem__:
     pass
 
 PCG32.__isub__:

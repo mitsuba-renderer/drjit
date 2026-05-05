@@ -89,4 +89,9 @@ void export_quat(nb::module_ &m) {
     export_t<dr::LLVMArray<float>>(m);
     export_t<dr::LLVMArray<double>>(m);
 #endif
+
+#if defined(DRJIT_ENABLE_METAL)
+    export_t<dr::MetalDiffArray<float>>(m);
+    export_t<dr::MetalArray<float>>(m);
+#endif
 }

@@ -57,3 +57,41 @@ program execution so that they can be more easily identified.
 
 - :py:func:`drjit.profile_mark`
 - :py:func:`drjit.profile_range`
+
+High-level helpers
+------------------
+
+The :py:mod:`drjit.bench` submodule wraps the patterns above into three
+ready-made entry points. All three honour the global
+:py:func:`drjit.log_level` — at ``Info`` they print a one-block summary, at
+``Debug`` they also print one line per iteration, and at ``Warn`` or below
+they stay silent.
+
+:py:func:`drjit.bench.repeat` is a decorator that runs a function ``runs``
+times with synchronous launches (so the codegen / backend / execution split
+is accurate) and, optionally, ``runs`` more times with asynchronous launches
+to expose the async speed-up. Per-call timings are appended to an optional
+``records`` list so multiple benchmarks can be compared side-by-side:
+
+.. code-block:: python
+
+   records = []
+
+   @dr.bench.repeat(label='Render', runs=8, records=records)
+   def render(spp):
+       return mi.render(scene, spp=spp, seed=0)
+
+   img = render(32, label='@32 spp')
+
+:py:func:`drjit.bench.measure` is a context manager for one-shot timing of a
+single block:
+
+.. code-block:: python
+
+   with dr.bench.measure(label='Rendering'):
+       img = mi.render(scene, spp=512, seed=0)
+
+:py:func:`drjit.bench.reset` drops in-process JIT state (kernel history,
+malloc cache, allocator stats) and, when ``clear_cache=True``, also wipes
+the on-disk kernel cache so that the next run measures backend-compile
+time from scratch.

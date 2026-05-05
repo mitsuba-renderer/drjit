@@ -105,6 +105,11 @@ NB_MODULE(while_loop_ext, m) {
     bind<JitBackend::CUDA>(cuda);
 #endif
 
+#if defined(DRJIT_ENABLE_METAL)
+    nb::module_ metal = m.def_submodule("metal");
+    bind<JitBackend::Metal>(metal);
+#endif
+
     m.def("scalar_loop", &simple_loop<uint32_t>);
     m.def("packet_loop", &packet_loop);
 }

@@ -20,6 +20,7 @@
 #include "scalar.h"
 #include "llvm.h"
 #include "cuda.h"
+#include "metal.h"
 #include "reduce.h"
 #include "eval.h"
 #include "freeze.h"
@@ -79,6 +80,13 @@ NB_MODULE(_drjit_ext, m_) {
     nb::module_ cuda    = nb::module_::import_("drjit.cuda"),
                 cuda_ad = nb::module_::import_("drjit.cuda.ad");
 #endif
+
+#if defined(DRJIT_ENABLE_METAL)
+    backends |= (uint32_t) JitBackend::Metal;
+
+    nb::module_ metal    = nb::module_::import_("drjit.metal"),
+                metal_ad = nb::module_::import_("drjit.metal.ad");
+#endif
     nb::module_ detail = m.attr("detail"),
                 scalar = nb::module_::import_("drjit.scalar");
 
@@ -87,7 +95,8 @@ NB_MODULE(_drjit_ext, m_) {
     nb::enum_<JitBackend>(m, "JitBackend", doc_JitBackend)
         .value("Invalid", JitBackend::None, doc_JitBackend_Invalid)
         .value("CUDA", JitBackend::CUDA, doc_JitBackend_CUDA)
-        .value("LLVM", JitBackend::LLVM, doc_JitBackend_LLVM);
+        .value("LLVM", JitBackend::LLVM, doc_JitBackend_LLVM)
+        .value("Metal", JitBackend::Metal, doc_JitBackend_Metal);
 
     nb::enum_<JitFlag>(m, "JitFlag", doc_JitFlag, nb::is_arithmetic())
         .value("Debug", JitFlag::Debug, doc_JitFlag_Debug)
@@ -115,6 +124,12 @@ NB_MODULE(_drjit_ext, m_) {
         .value("FreezingScope", JitFlag::FreezingScope, doc_JitFlag_FreezingScope)
         .value("EnableObjectTraversal", JitFlag::EnableObjectTraversal, doc_JitFlag_EnableObjectTraversal)
         .value("SpillToSharedMemory", JitFlag::SpillToSharedMemory, doc_JitFlag_SpillToSharedMemory)
+        .value("MetalEmulateFloat64", JitFlag::MetalEmulateFloat64,
+               "Emulate Float64 on the Metal backend using double-double "
+               "arithmetic (a pair of float32 values per scalar). When OFF "
+               "(default), Metal silently demotes Float64 to Float32 and "
+               "warns once per process. When ON, Float64 is preserved at a "
+               "~10x performance cost.")
         .value("Default", JitFlag::Default, doc_JitFlag_Default)
 
         // Deprecated aliases
@@ -281,6 +296,11 @@ NB_MODULE(_drjit_ext, m_) {
     export_cuda_ad(cuda_ad);
 #endif
 
+#if defined(DRJIT_ENABLE_METAL)
+    export_metal(metal);
+    export_metal_ad(metal_ad);
+#endif
+
     /// Automatic backend selection
     auto set_backend = [](JitBackend backend) {
         const char *key = nullptr;
@@ -291,6 +311,7 @@ NB_MODULE(_drjit_ext, m_) {
             case JitBackend::None: key = "scalar"; break;
             case JitBackend::CUDA: key = "cuda"; break;
             case JitBackend::LLVM: key = "llvm"; break;
+            case JitBackend::Metal: key = "metal"; break;
             default: nb::raise("Unknown backend");
         }
 
@@ -314,13 +335,15 @@ NB_MODULE(_drjit_ext, m_) {
                   backend = JitBackend::CUDA;
               else if (strcmp(name, "llvm") == 0)
                   backend = JitBackend::LLVM;
+              else if (strcmp(name, "metal") == 0)
+                  backend = JitBackend::Metal;
               else if (strcmp(name, "scalar") == 0)
                   backend = JitBackend::None;
               else
-                  nb::raise("set_backend(): argument must equal 'cuda', 'llvm', or 'scalar'!");
+                  nb::raise("set_backend(): argument must equal 'cuda', 'llvm', 'metal', or 'scalar'!");
               set_backend(backend);
           },
-          nb::sig("def set_backend(arg: Literal['cuda', 'llvm', 'scalar'], /)"), doc_set_backend);
+          nb::sig("def set_backend(arg: Literal['cuda', 'llvm', 'metal', 'scalar'], /)"), doc_set_backend);
 
     m.def("set_backend", set_backend);
 
@@ -329,7 +352,9 @@ NB_MODULE(_drjit_ext, m_) {
                 auto_ad = auto_.def_submodule("ad");
 
     auto_.def("__getattr__", [=](nb::handle key) -> nb::object {
-        if (jit_has_backend(JitBackend::CUDA))
+        if (jit_has_backend(JitBackend::Metal))
+            set_backend(JitBackend::Metal);
+        else if (jit_has_backend(JitBackend::CUDA))
             set_backend(JitBackend::CUDA);
         else if (jit_has_backend(JitBackend::LLVM))
             set_backend(JitBackend::LLVM);
@@ -340,7 +365,9 @@ NB_MODULE(_drjit_ext, m_) {
     });
 
     auto_ad.def("__getattr__", [=](nb::handle key) -> nb::object {
-        if (jit_has_backend(JitBackend::CUDA)) {
+        if (jit_has_backend(JitBackend::Metal)) {
+            set_backend(JitBackend::Metal);
+        } else if (jit_has_backend(JitBackend::CUDA)) {
             set_backend(JitBackend::CUDA);
         } else if (jit_has_backend(JitBackend::LLVM)) {
             set_backend(JitBackend::LLVM);
