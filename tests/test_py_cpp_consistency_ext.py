@@ -17,6 +17,8 @@ def get_pkg(t):
         return m.llvm
     elif backend == dr.JitBackend.CUDA:
         return m.cuda
+    elif backend == dr.JitBackend.Metal:
+        return m.metal
 
 
 @pytest.test_arrays('float32,is_diff,shape=(*)')

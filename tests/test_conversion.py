@@ -127,6 +127,8 @@ def test09_inplace_numpy(t):
 @pytest.test_arrays('tensor, -bool, -float16, -uint64, -uint32')
 def test10_inplace_torch(t):
     pytest.importorskip("torch")
+    if dr.backend_v(t) == dr.JitBackend.Metal:
+        pytest.skip("Metal .torch() copies to CPU (no zero-copy sharing)")
     a = dr.empty(t, shape=(3, 3, 3))
     x = a.torch()
     x[0,0,0] = 1
@@ -145,3 +147,12 @@ def test11_conversion_ad(t):
     assert dr.grad_enabled(x)
     assert i != 0
     assert i == x.index_ad
+
+
+@pytest.test_arrays('float32,jit,shape=(*)')
+def test12_gpu_to_numpy(t):
+    """GPU arrays should be convertible to numpy without crash (bug A4)."""
+    import numpy as np
+    v = t(1, 2, 3)
+    n = np.array(v)
+    assert np.allclose(n, [1, 2, 3])

@@ -183,8 +183,8 @@ static void ad_call_getter(JitBackend backend, const char *variant,
         size_t tsize = jit_type_size(type);
 
         void *ptr =
-            jit_malloc(backend == JitBackend::CUDA ? AllocType::Device
-                                                   : AllocType::HostAsync,
+            jit_malloc((backend == JitBackend::CUDA || backend == JitBackend::Metal) ? AllocType::Device
+                                                      : AllocType::HostAsync,
                        tsize * (callable_count + 1));
 
         JitVar buf = JitVar::steal(
@@ -193,7 +193,11 @@ static void ad_call_getter(JitBackend backend, const char *variant,
         AggregationEntry *agg = nullptr;
         size_t agg_size = sizeof(AggregationEntry) * callable_count;
 
-        if (backend == JitBackend::CUDA) {
+        if (backend == JitBackend::CUDA || backend == JitBackend::Metal) {
+            // GPU backends always free ``agg`` via ``jit_free`` (so the
+            // recording/replay machinery can substitute its own allocator).
+            // The aggregate operation needs to stage entries on the host
+            // before the GPU copies them; HostPinned is the right pool.
             agg = (AggregationEntry *) jit_malloc(AllocType::HostPinned, agg_size);
         } else {
             agg = (AggregationEntry *) malloc(agg_size);

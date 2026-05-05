@@ -123,6 +123,15 @@ DRJIT_EXTRA_EXPORT uint32_t jit_var_exp(uint32_t i0) {
             return dr::exp<Float32, false>(Float32::borrow(i0)).release();
 
         case VarType::Float64:
+            // Metal DD: route through exp2(x * log2(e)) so that the Exp2
+            // primitive (which has a DD codegen branch) does the heavy work.
+            // The CEPHES expansion would otherwise use bit-twiddling ldexp,
+            // which is invalid on a `dd_t = float2` representation.
+            if (info.backend == JitBackend::Metal &&
+                jit_flag(JitFlag::MetalEmulateFloat64)) {
+                Float64 value = Float64::borrow(i0) * dr::InvLogTwo<double>;
+                return jit_var_exp2_intrinsic(value.index());
+            }
             return dr::exp<Float64, false>(Float64::borrow(i0)).release();
 
         default:
@@ -144,6 +153,10 @@ DRJIT_EXTRA_EXPORT uint32_t jit_var_exp2(uint32_t i0) {
             return dr::exp2<Float32, false>(Float32::borrow(i0)).release();
 
         case VarType::Float64:
+            // Metal DD: lower directly to the Exp2 primitive (DD codegen).
+            if (info.backend == JitBackend::Metal &&
+                jit_flag(JitFlag::MetalEmulateFloat64))
+                return jit_var_exp2_intrinsic(i0);
             return dr::exp2<Float64, false>(Float64::borrow(i0)).release();
 
         default:
@@ -166,6 +179,12 @@ DRJIT_EXTRA_EXPORT uint32_t jit_var_log(uint32_t i0) {
             return dr::log<Float32, false>(Float32::borrow(i0)).release();
 
         case VarType::Float64:
+            // Metal DD: log(x) = log2(x) * log(2). The CEPHES expansion uses
+            // bit-twiddling frexp which is invalid on dd_t.
+            if (info.backend == JitBackend::Metal &&
+                jit_flag(JitFlag::MetalEmulateFloat64))
+                return (Float64::steal(jit_var_log2_intrinsic(i0)) *
+                        dr::LogTwo<double>).release();
             return dr::log<Float64, false>(Float64::borrow(i0)).release();
 
         default:
@@ -187,6 +206,10 @@ DRJIT_EXTRA_EXPORT uint32_t jit_var_log2(uint32_t i0) {
             return dr::log2<Float32, false>(Float32::borrow(i0)).release();
 
         case VarType::Float64:
+            // Metal DD: lower directly to the Log2 primitive.
+            if (info.backend == JitBackend::Metal &&
+                jit_flag(JitFlag::MetalEmulateFloat64))
+                return jit_var_log2_intrinsic(i0);
             return dr::log2<Float64, false>(Float64::borrow(i0)).release();
 
         default:
@@ -208,6 +231,10 @@ DRJIT_EXTRA_EXPORT uint32_t jit_var_sin(uint32_t i0) {
             return dr::sin<Float32, false>(Float32::borrow(i0)).release();
 
         case VarType::Float64:
+            // Metal DD: lower directly to the Sin primitive.
+            if (info.backend == JitBackend::Metal &&
+                jit_flag(JitFlag::MetalEmulateFloat64))
+                return jit_var_sin_intrinsic(i0);
             return dr::sin<Float64, false>(Float64::borrow(i0)).release();
 
         default:
@@ -229,6 +256,10 @@ DRJIT_EXTRA_EXPORT uint32_t jit_var_cos(uint32_t i0) {
             return dr::cos<Float32, false>(Float32::borrow(i0)).release();
 
         case VarType::Float64:
+            // Metal DD: lower directly to the Cos primitive.
+            if (info.backend == JitBackend::Metal &&
+                jit_flag(JitFlag::MetalEmulateFloat64))
+                return jit_var_cos_intrinsic(i0);
             return dr::cos<Float64, false>(Float64::borrow(i0)).release();
         default:
             jit_fail("jit_var_cos(): invalid operand!");
@@ -249,6 +280,10 @@ DRJIT_EXTRA_EXPORT uint32_t jit_var_tanh(uint32_t i0) {
             return dr::tanh<Float32, false>(Float32::borrow(i0)).release();
 
         case VarType::Float64:
+            // Metal DD: lower directly to the Tanh primitive.
+            if (info.backend == JitBackend::Metal &&
+                jit_flag(JitFlag::MetalEmulateFloat64))
+                return jit_var_tanh_intrinsic(i0);
             return dr::tanh<Float64, false>(Float64::borrow(i0)).release();
         default:
             jit_fail("jit_var_tanh(): invalid operand!");

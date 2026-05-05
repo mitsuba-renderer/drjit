@@ -659,7 +659,7 @@ def test26_elide_scatter(t, variant):
         ir = hist[0]['ir'].getvalue()
         if dr.backend_v(t) is dr.JitBackend.CUDA:
             assert ir.count('st.global.b32') == 1
-        else:
+        elif dr.backend_v(t) is dr.JitBackend.LLVM:
             assert ir.count('call void @llvm.masked.scatter') == 1
 
 
@@ -688,7 +688,7 @@ def test27_elide_scatter_in_call(t, variant):
     ir = hist[0]['ir'].getvalue()
     if dr.backend_v(t) is dr.JitBackend.CUDA:
         assert ir.count('st.global.b32') == variant
-    else:
+    elif dr.backend_v(t) is dr.JitBackend.LLVM:
         assert ir.count('call void @llvm.masked.scatter') == variant
 
 @pytest.test_arrays('-bool, -diff, shape=(*)')
@@ -812,6 +812,7 @@ def test30_packet_scatter(t, psize):
             assert ir.count(f"st.global.v{n_regs}.b64") == n_inst
 
 @pytest.mark.parametrize('psize', [2, 4, 8, 16])
+@pytest.skip_on(RuntimeError, "backend does not support the requested type of atomic reduction")
 @pytest.test_arrays('-diff, jit, int, shape=(*, *), -int8')
 def test31_packet_scatter_add(t, psize):
     np = pytest.importorskip("numpy")
@@ -860,8 +861,9 @@ def test32_packet_ravel_unravel(t, capsys, drjit_verbose):
     dr.eval(q3)
     assert dr.all(q == q3, axis=None)
     transcript = capsys.readouterr().out
-    assert transcript.count('jit_var_gather_packet') != 0
-    assert transcript.count('jit_var_scatter_packet') != 0
+    if dr.backend_v(t) is not dr.JitBackend.Metal:
+        assert transcript.count('jit_var_gather_packet') != 0
+        assert transcript.count('jit_var_scatter_packet') != 0
 
 
 @pytest.mark.parametrize('mode', [dr.ReduceMode.Local, dr.ReduceMode.Expand,
@@ -1028,6 +1030,8 @@ def test35_scatter_packet_reduce(t, reduce_op, packet_size, force_optix):
     assert dr.allclose(target, ref)
 
     # Test that we are actually using vector instructions on CUDA and LLVM
+    if dr.backend_v(t) is dr.JitBackend.Metal:
+        return
     ir = history[0]["ir"].getvalue()
     if dr.backend_v(t) is dr.JitBackend.CUDA:
         compute_capability = dr.detail.cuda_compute_capability()
@@ -1134,6 +1138,8 @@ def test36_gather_packet(t, packet_size, force_optix):
 
     assert dr.allclose(result, ref)
 
+    if dr.backend_v(t) is dr.JitBackend.Metal:
+        return
     ir = history[0]["ir"].getvalue()
 
     if dr.backend_v(t) is dr.JitBackend.CUDA:
@@ -1374,3 +1380,14 @@ def test42_masked_gather_loop(t, mode):
     # Lane 2: outputs 0 because the gather on buf_1 masked it
 
     assert dr.all(out == [0, 5, 0], axis=None)
+
+
+@pytest.test_arrays('float32,jit,shape=(*)')
+def test43_gather_size1_literal(t):
+    """Size-1 literal gather should return the correct element (bug A6)."""
+    import numpy as np
+    source = t(10, 20, 30)
+    UInt32 = dr.uint32_array_t(t)
+    for i in range(3):
+        result = dr.gather(t, source, UInt32(i))
+        assert result[0] == source.numpy()[i]
