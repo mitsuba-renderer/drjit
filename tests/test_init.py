@@ -518,7 +518,7 @@ def test23_init_from_ndarray_various_cases(t):
     v = tv(a)
     assert dr.all(v == [1, 2, 3])
 
-    if dr.backend_v(t) != dr.JitBackend.CUDA:
+    if dr.backend_v(t) not in (dr.JitBackend.CUDA, dr.JitBackend.Metal):
         a[1] = 5 # Should affect 'v' as well
         assert dr.any(v != [1, 2, 3])
         assert dr.all(v == [1, 5, 3])
@@ -556,7 +556,7 @@ def test24_init_tensor_from_ndarray(t):
     a = np.array([1, 2], dtype=np.float32)
     v = t(a)
     assert v.shape == (2,) and dr.all(v.array == (1, 2))
-    if dr.is_jit_v(t) and dr.backend_v(t) != dr.JitBackend.CUDA:
+    if dr.is_jit_v(t) and dr.backend_v(t) not in (dr.JitBackend.CUDA, dr.JitBackend.Metal):
         a[0] = 5
         assert dr.any(v.array != (1, 2)) and dr.all(v.array == (5, 2))
 
@@ -703,3 +703,15 @@ def test31_init_arrayx_from_tensor_and_ndarray(t):
 
     check(t(x))
     check(t(TensorXf(x)))
+
+
+@pytest.test_arrays('float32, shape=(*), jit')
+def test32_gpu_ndarray_is_copy(t):
+    """GPU backends should copy ndarray data, not map it (bug A3/A5)."""
+    import numpy as np
+    if dr.backend_v(t) not in (dr.JitBackend.CUDA, dr.JitBackend.Metal):
+        pytest.skip("GPU-only test")
+    a = np.array([1, 2, 3], dtype=np.float32)
+    v = t(a)
+    a[0] = 999  # modify source
+    assert v[0] == 1  # drjit array should be unchanged

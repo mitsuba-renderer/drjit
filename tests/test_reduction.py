@@ -392,6 +392,25 @@ def test09_compress(t):
     assert dr.all(dr.compress(t()) == [])
 
 
+# Sizes chosen to cover both the single-threadgroup ("small") and the multi-
+# threadgroup ("large") backend paths, plus block-boundary edge cases.
+@pytest.test_arrays('shape=(*), bool')
+@pytest.mark.parametrize('size', [1, 4095, 4096, 4097, 8192, 100000, 200001])
+@pytest.mark.parametrize('density', [0.0, 0.01, 0.5, 0.99, 1.0])
+def test10_compress_large(t, size, density):
+    import numpy as np
+    rng = np.random.default_rng(seed=0xC0FFEE ^ size)
+    mask_np = rng.uniform(0.0, 1.0, size) < density
+    expected = np.flatnonzero(mask_np).astype(np.uint32)
+
+    mask = t(mask_np.tolist())
+    result = dr.compress(mask)
+
+    assert len(result) == int(mask_np.sum())
+    if len(result) > 0:
+        assert dr.all(result == expected.tolist())
+
+
 @pytest.test_arrays('shape=(3, *), float32')
 def test10_sum_avg_mixed_size(t):
     assert dr.all(dr.sum(t([1,2],2,3)) == [6, 7])

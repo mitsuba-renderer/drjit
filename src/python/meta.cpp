@@ -51,6 +51,8 @@ dr::string meta_str(ArrayMeta m) {
             result += "  backend=cuda,\n";
         else if (m.backend == (uint16_t) JitBackend::LLVM)
             result += "  backend=llvm,\n";
+        else if (m.backend == (uint16_t) JitBackend::Metal)
+            result += "  backend=metal,\n";
         else
             result += "  backend=invalid,\n";
 
@@ -400,8 +402,9 @@ void promote(nb::object *o, size_t n, bool select) {
 nb::handle meta_get_module(ArrayMeta meta) noexcept {
     int index = 0;
     switch ((JitBackend) meta.backend) {
-        case JitBackend::CUDA: index = 1; break;
-        case JitBackend::LLVM: index = 3; break;
+        case JitBackend::CUDA:  index = 1; break;
+        case JitBackend::LLVM:  index = 3; break;
+        case JitBackend::Metal: index = 5; break;
         default: break;
     }
     if ((JitBackend) meta.backend != JitBackend::None)

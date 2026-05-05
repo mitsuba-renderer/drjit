@@ -30,6 +30,11 @@ NB_MODULE(local_ext, m) {
     bind<dr::CUDAArray<float>>(cuda);
 #endif
 
+#if defined(DRJIT_ENABLE_METAL)
+    nb::module_ metal = m.def_submodule("metal");
+    bind<dr::MetalArray<float>>(metal);
+#endif
+
     nb::module_ scalar = m.def_submodule("scalar");
     bind<float>(scalar);
 }

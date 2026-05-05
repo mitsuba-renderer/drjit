@@ -33,6 +33,7 @@ from .ast import syntax, hint
 from .interop import wrap
 from . import random
 import builtins as _builtins
+from . import bench
 import warnings as _warnings
 
 from functools import wraps
@@ -157,6 +158,16 @@ def allclose(
             a = array_t(a)(a)
         if is_special_v(b):
             b = array_t(b)(b)
+
+        # On Metal, avoid float64 promotion by casting to float32
+        if is_array_v(a) and backend_v(a) == JitBackend.Metal:
+            import numpy as np
+            if isinstance(b, np.ndarray) and b.dtype == np.float64:
+                b = b.astype(np.float32)
+        elif is_array_v(b) and backend_v(b) == JitBackend.Metal:
+            import numpy as np
+            if isinstance(a, np.ndarray) and a.dtype == np.float64:
+                a = a.astype(np.float32)
 
         if is_array_v(a):
             diff = a - b

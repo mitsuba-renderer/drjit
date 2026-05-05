@@ -28,6 +28,10 @@ def traverse(o):
 for o in dr.__dict__.values():
     traverse(o)
 
+# Metal does not support float64 — using it causes an unrecoverable abort
+array_types = [a for a in array_types
+               if not ('backend=metal' in a.__meta__ and 'type=float64' in a.__meta__)]
+
 
 def _test_arrays(*queries, name='t'):
     """

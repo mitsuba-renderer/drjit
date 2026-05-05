@@ -126,7 +126,8 @@ def from_drjit(value, target, enable_grad = False, /):
     return apply(fn, value), value_tp
 
 
-def to_drjit(value, source, value_tp = None, enable_grad = None):
+def to_drjit(value, source, value_tp = None, enable_grad = None,
+             target_backend = None):
     '''
     Convert a PyTree containing tensors from another array programming
     framework identified by ``source`` into Dr.Jit tensors.
@@ -150,7 +151,13 @@ def to_drjit(value, source, value_tp = None, enable_grad = None):
             else:
                 r = dr.detail.import_tensor(h, True)
             if type(r) is not tp and dr.is_array_v(tp):
-                r = tp(r)
+                if dr.backend_v(tp) != dr.backend_v(r):
+                    r = tp(r.numpy())
+                else:
+                    r = tp(r)
+            if target_backend is not None and dr.is_jit_v(r) and \
+               dr.backend_v(r) != target_backend:
+                r = _migrate_backend(r, target_backend)
             if source == 'torch' and enable_grad:
                 if h.requires_grad:
                     dr.enable_grad(r)
@@ -388,12 +395,56 @@ def find_first_tf_tensor(value):
         return None
 
 
+def _migrate_backend(value, target_backend):
+    """Migrate a drjit array from one backend to another via numpy."""
+    if not dr.is_array_v(value) or not dr.is_jit_v(value):
+        return value
+    if dr.backend_v(value) == target_backend:
+        return value
+
+    src_name = type(value).__module__ + '.' + type(value).__name__
+    if target_backend == dr.JitBackend.Metal:
+        dst_name = src_name.replace('.llvm.', '.metal.').replace('.cuda.', '.metal.')
+    elif target_backend == dr.JitBackend.CUDA:
+        dst_name = src_name.replace('.llvm.', '.cuda.').replace('.metal.', '.cuda.')
+    else:
+        dst_name = src_name.replace('.cuda.', '.llvm.').replace('.metal.', '.llvm.')
+
+    import importlib
+    parts = dst_name.rsplit('.', 1)
+    mod = importlib.import_module(parts[0])
+    dst_tp = getattr(mod, parts[1])
+
+    if dr.is_tensor_v(value):
+        arr_tp = dr.array_t(dst_tp)
+        return dst_tp(arr_tp(value.array.numpy()), value.shape)
+    return dst_tp(value.numpy())
+
+
 class WrapADOp(dr.CustomOp):
     '''
     Dr.Jit custom operation that wraps differentiable computation performed
     using another AD framework (e.g., PyTorch, TensorFlow)
     '''
     def eval(self, func, target, *args, **kwargs):
+        # Detect input backend for cross-backend migration
+        self._target_backend = None
+        def _find_backend(x):
+            if self._target_backend is not None:
+                return
+            if dr.is_jit_v(x):
+                self._target_backend = dr.backend_v(x)
+            elif isinstance(x, (list, tuple)):
+                for item in x:
+                    _find_backend(item)
+            elif isinstance(x, dict):
+                for item in x.values():
+                    _find_backend(item)
+        for a in args:
+            _find_backend(a)
+            if self._target_backend is not None:
+                break
+
         # Convert input PyTrees from Dr.Jit
         self.args,   self.args_tp   = from_drjit(args,   target, True)
         self.kwargs, self.kwargs_tp = from_drjit(kwargs, target, True)
@@ -414,7 +465,7 @@ class WrapADOp(dr.CustomOp):
             self.out = func(*self.args, **self.kwargs)
 
         # Convert the out PyTree to Dr.Jit
-        return to_drjit(self.out, target)
+        return to_drjit(self.out, target, target_backend=self._target_backend)
 
     def forward(self):
         target = self.target
@@ -453,7 +504,8 @@ class WrapADOp(dr.CustomOp):
                 grad_out = acc.jvp(wrap_into_tf_tensor(out))
         else:
             raise RuntimeError('WrapADOp.forward(): unsupported framework!')
-        self.set_grad_out(to_drjit(grad_out, target))
+        self.set_grad_out(to_drjit(grad_out, target,
+                                    target_backend=self._target_backend))
 
     def backward(self):
         target = self.target
@@ -484,8 +536,10 @@ class WrapADOp(dr.CustomOp):
                                                             output_gradients=grad_out)
         else:
             raise RuntimeError('WrapADOp.backward(): unsupported framework!')
-        self.set_grad_in('args',   to_drjit(grad_args,   target, self.args_tp))
-        self.set_grad_in('kwargs', to_drjit(grad_kwargs, target, self.kwargs_tp))
+        self.set_grad_in('args',   to_drjit(grad_args,   target, self.args_tp,
+                                            target_backend=self._target_backend))
+        self.set_grad_in('kwargs', to_drjit(grad_kwargs, target, self.kwargs_tp,
+                                            target_backend=self._target_backend))
 
 torch_wrapper = None
 

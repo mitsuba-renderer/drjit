@@ -116,7 +116,7 @@ static nb::ndarray<> dlpack(nb::handle_t<ArrayBase> h, bool force_cpu, nb::handl
             JitBackend backend = (JitBackend) s2.backend;
 
             JitVar value = JitVar::borrow(index);
-            if (force_cpu && backend == JitBackend::CUDA)
+            if (force_cpu && (backend == JitBackend::CUDA || backend == JitBackend::Metal))
                 value = JitVar::steal(jit_var_migrate(value.index(), AllocType::Host));
 
             value = JitVar::steal(jit_var_data(value.index(), &ptr));
@@ -156,11 +156,15 @@ static nb::ndarray<> dlpack(nb::handle_t<ArrayBase> h, bool force_cpu, nb::handl
                 s2.init_index(ad_index | new_index, inst_ptr(tmp));
                 nb::inst_mark_ready(tmp);
 
-                if (backend == JitBackend::CUDA && force_cpu)
+                if ((backend == JitBackend::CUDA || backend == JitBackend::Metal) && force_cpu)
                     owner = std::move(tmp);
                 else
                     nb::inst_replace_move(owner, tmp);
             }
+
+            // Metal DD: the migrate-to-Host path in jit_var_migrate already
+            // decodes the device-side (hi, lo) pairs into IEEE 754 doubles
+            // when MetalEmulateFloat64 is enabled. Nothing to do here.
         } else {
             nb::object arr = nb::borrow(h);
             if (s.is_tensor)
@@ -255,7 +259,9 @@ void export_dlpack(nb::module_ &) {
 
     ab.def("__dlpack__",
            [](nb::handle_t<ArrayBase> h, nb::handle stream) {
-               return dlpack(h, false, stream);
+               const ArraySupplement &s = supp(h.type());
+               bool force_cpu = (JitBackend) s.backend == JitBackend::Metal;
+               return dlpack(h, force_cpu, stream);
            }, "stream"_a = nb::none(), doc_dlpack)
       .def("__dlpack_device__",
            [](nb::handle_t<ArrayBase> h) {

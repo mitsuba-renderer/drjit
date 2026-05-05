@@ -59,4 +59,9 @@ NB_MODULE(py_cpp_consistency_ext, m) {
     nb::module_ cuda = m.def_submodule("cuda");
     bind<JitBackend::CUDA>(cuda);
 #endif
+
+#if defined(DRJIT_ENABLE_METAL)
+    nb::module_ metal = m.def_submodule("metal");
+    bind<JitBackend::Metal>(metal);
+#endif
 }

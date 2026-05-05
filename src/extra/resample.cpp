@@ -406,4 +406,11 @@ template LLVMArray<float> Resampler::resample_bwd(const LLVMArray<float> &, uint
 template LLVMArray<double> Resampler::resample_bwd(const LLVMArray<double> &, uint32_t) const;
 #endif
 
+#if defined(DRJIT_ENABLE_METAL)
+template DRJIT_EXTRA_EXPORT MetalArray<half> Resampler::resample_fwd(const MetalArray<half> &, uint32_t) const;
+template DRJIT_EXTRA_EXPORT MetalArray<float> Resampler::resample_fwd(const MetalArray<float> &, uint32_t) const;
+template DRJIT_EXTRA_EXPORT MetalArray<half> Resampler::resample_bwd(const MetalArray<half> &, uint32_t) const;
+template DRJIT_EXTRA_EXPORT MetalArray<float> Resampler::resample_bwd(const MetalArray<float> &, uint32_t) const;
+#endif
+
 NAMESPACE_END(drjit)

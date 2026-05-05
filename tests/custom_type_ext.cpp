@@ -181,6 +181,11 @@ NB_MODULE(custom_type_ext, m) {
     bind<JitBackend::CUDA>(cuda);
 #endif
 
+#if defined(DRJIT_ENABLE_METAL)
+    nb::module_ metal = m.def_submodule("metal");
+    bind<JitBackend::Metal>(metal);
+#endif
+
     // Tests: DRJIT_STRUCT, traversal mechanism, array/struct stringification
     m.def("struct_to_string", []{
         using Float = dr::Packet<float, 4>;

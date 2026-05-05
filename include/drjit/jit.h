@@ -40,6 +40,7 @@ struct DRJIT_TRIVIAL_ABI JitArray
     static constexpr bool IsJIT = true;
     static constexpr bool IsCUDA = Backend == JitBackend::CUDA;
     static constexpr bool IsLLVM = Backend == JitBackend::LLVM;
+    static constexpr bool IsMetal = Backend == JitBackend::Metal;
     static constexpr bool IsDynamic = true;
     static constexpr size_t Size = Dynamic;
 
@@ -734,6 +735,7 @@ protected:
 
 template <typename Value> using CUDAArray = JitArray<JitBackend::CUDA, Value>;
 template <typename Value> using LLVMArray = JitArray<JitBackend::LLVM, Value>;
+template <typename Value> using MetalArray = JitArray<JitBackend::Metal, Value>;
 
 template <typename T> T tile(const T &value, size_t count) {
     if constexpr (is_traversable_v<T>) {
