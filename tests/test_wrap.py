@@ -797,6 +797,7 @@ def test28_flipped_exception(t, config):
 @pytest.mark.parametrize('config', configs_torch)
 @pytest.test_arrays('is_diff,float,shape=(*)')
 @pytest.skip_on(RuntimeError, "backend does not support the requested type of atomic reduction")
+@pytest.skip_on(TypeError, "unsupported dtype")
 def test29_flipped_non_tensor_output_bwd(t, config):
     @wrap_flipped(config)
     def test_fn(x):
@@ -842,3 +843,18 @@ def test30_nested(t, config):
     torch.autograd.backward(out, torch.tensor([1, 2, 3], dtype=dt))
     assert torch.all(x.grad == torch.tensor([0, 12, 36], dtype=dt))
     assert torch.all(y.grad == torch.tensor([0, 2, 6], dtype=dt))
+
+
+@pytest.test_arrays('float32,is_diff,jit,shape=(*)')
+def test31_wrap_backend_preservation(t):
+    """dr.wrap output should stay on the same backend as input (bug A21)."""
+    torch = pytest.importorskip("torch")
+
+    @dr.wrap(source='drjit', target='torch')
+    def f(x):
+        return x * 2
+
+    x = t(1, 2, 3)
+    dr.enable_grad(x)
+    y = f(x)
+    assert dr.backend_v(y) == dr.backend_v(x)

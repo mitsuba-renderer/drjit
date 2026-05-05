@@ -5,11 +5,16 @@ import sys
 # Work around a refleak in @pytest.mark.parameterize
 wrap_modes = [dr.WrapMode.Repeat, dr.WrapMode.Clamp, dr.WrapMode.Mirror]
 
+def _skip_metal_f64(t, texture_type):
+    if dr.backend_v(t) == dr.JitBackend.Metal and 'f64' in texture_type:
+        pytest.skip("Metal does not support float64")
+
 @pytest.mark.parametrize("wrap_mode", wrap_modes)
 @pytest.mark.parametrize("force_optix", [True, False])
 @pytest.mark.parametrize("texture_type", ['Texture1f64', 'Texture1f', 'Texture1f16'])
 @pytest.test_arrays("is_jit, float32, shape=(*)")
 def test01_interp_1d(t, wrap_mode, force_optix, texture_type):
+    _skip_metal_f64(t, texture_type)
     with dr.scoped_set_flag(dr.JitFlag.ForceOptiX, force_optix):
         mod = sys.modules[t.__module__]
         TexType = getattr(mod, texture_type)
@@ -84,6 +89,7 @@ def test01_interp_1d(t, wrap_mode, force_optix, texture_type):
 @pytest.mark.parametrize("texture_type", ['Texture1f64', 'Texture1f', 'Texture1f16'])
 @pytest.test_arrays("is_jit, float32, shape=(*)")
 def test02_interp_1d(t, wrap_mode, texture_type):
+    _skip_metal_f64(t, texture_type)
     mod = sys.modules[t.__module__]
     Array1f = getattr(mod, 'Array1f')
     TexType = getattr(mod, texture_type)
@@ -116,6 +122,7 @@ def test02_interp_1d(t, wrap_mode, texture_type):
 @pytest.mark.parametrize("texture_type", ['Texture2f64', 'Texture2f', 'Texture2f16'])
 @pytest.test_arrays("is_jit, float32, shape=(*)")
 def test03_interp_2d(t, wrap_mode, texture_type):
+    _skip_metal_f64(t, texture_type)
     mod = sys.modules[t.__module__]
     Array2f = getattr(mod, 'Array2f')
     TexType = getattr(mod, texture_type)
@@ -146,6 +153,7 @@ def test03_interp_2d(t, wrap_mode, texture_type):
 @pytest.mark.parametrize("texture_type", ['Texture3f64', 'Texture3f', 'Texture3f16'])
 @pytest.test_arrays("is_jit, float32, shape=(*)")
 def test04_interp_3d(t, wrap_mode, texture_type):
+    _skip_metal_f64(t, texture_type)
     mod = sys.modules[t.__module__]
     Array3f = getattr(mod, 'Array3f')
     TexType = getattr(mod, texture_type)
@@ -177,6 +185,7 @@ def test04_interp_3d(t, wrap_mode, texture_type):
 @pytest.test_arrays("is_diff, float32, shape=(*)")
 @pytest.skip_on(RuntimeError, "backend does not support the requested type of atomic reduction")
 def test05_grad(t, migrate, texture_type):
+    _skip_metal_f64(t, texture_type)
     mod = sys.modules[t.__module__]
     Float = getattr(mod, 'Float')
     Array1f = getattr(mod, 'Array1f')
@@ -207,6 +216,7 @@ def test05_grad(t, migrate, texture_type):
 @pytest.mark.parametrize("texture_type", ['Texture1f64', 'Texture1f', 'Texture1f16'])
 @pytest.test_arrays("is_jit, float32, shape=(*)")
 def test_06_nearest(t, texture_type):
+    _skip_metal_f64(t, texture_type)
     mod = sys.modules[t.__module__]
     TexType = getattr(mod, texture_type)
 
@@ -228,6 +238,7 @@ def test_06_nearest(t, texture_type):
 @pytest.mark.parametrize("texture_type", ['Texture1f', 'Texture1f64'])
 @pytest.test_arrays("is_diff, float32, shape=(*)")
 def test07_cubic_analytic(t, texture_type):
+    _skip_metal_f64(t, texture_type)
     mod = sys.modules[t.__module__]
     Array1f = getattr(mod, 'Array1f')
     TexType = getattr(mod, texture_type)
@@ -263,6 +274,7 @@ def test07_cubic_analytic(t, texture_type):
 @pytest.mark.parametrize("texture_type", ['Texture1f', 'Texture1f64'])
 @pytest.test_arrays("is_jit, float32, shape=(*)")
 def test08_cubic_interp_1d(t, texture_type, wrap_mode):
+    _skip_metal_f64(t, texture_type)
     mod = sys.modules[t.__module__]
     TexType = getattr(mod, texture_type)
 
@@ -336,6 +348,7 @@ def test08_cubic_interp_1d(t, texture_type, wrap_mode):
 @pytest.mark.parametrize("wrap_mode", wrap_modes)
 @pytest.test_arrays("is_jit, float32, shape=(*)")
 def test09_cubic_interp_2d(t, texture_type, wrap_mode):
+    _skip_metal_f64(t, texture_type)
     mod = sys.modules[t.__module__]
     TexType = getattr(mod, texture_type)
     PCG32 = getattr(mod, 'PCG32')
@@ -356,6 +369,7 @@ def test09_cubic_interp_2d(t, texture_type, wrap_mode):
 @pytest.mark.parametrize("texture_type", ['Texture3f', 'Texture3f64'])
 @pytest.test_arrays("is_jit, float32, shape=(*)")
 def test10_cubic_interp_3d(t, texture_type):
+    _skip_metal_f64(t, texture_type)
     mod = sys.modules[t.__module__]
     TexType = getattr(mod, texture_type)
     Array2f = getattr(mod, 'Array2f')
@@ -394,6 +408,7 @@ def test10_cubic_interp_3d(t, texture_type):
 @pytest.test_arrays("is_diff, float32, shape=(*)")
 @pytest.mark.skipif(sys.platform == "win32", reason="FIXME: Non-deterministic crashes on Windows")
 def test11_cubic_grad_pos(t, texture_type):
+    _skip_metal_f64(t, texture_type)
     mod = sys.modules[t.__module__]
     TexType = getattr(mod, texture_type)
     Array3f = getattr(mod, 'Array3f')
@@ -437,6 +452,7 @@ def test11_cubic_grad_pos(t, texture_type):
 @pytest.mark.parametrize("texture_type", ['Texture3f', 'Texture3f64'])
 @pytest.test_arrays("is_diff, float32, shape=(*)")
 def test12_cubic_hessian_pos(t, texture_type):
+    _skip_metal_f64(t, texture_type)
     mod = sys.modules[t.__module__]
     TexType = getattr(mod, texture_type)
     Array3f = getattr(mod, 'Array3f')
@@ -482,6 +498,7 @@ def test12_cubic_hessian_pos(t, texture_type):
 @pytest.mark.parametrize("migrate", [True, False])
 @pytest.test_arrays("is_jit, float32, shape=(*)")
 def test15_tensor_value_1d(t, texture_type, migrate):
+    _skip_metal_f64(t, texture_type)
     mod = sys.modules[t.__module__]
     TexType = getattr(mod, texture_type)
     PCG32 = getattr(mod, 'PCG32')
@@ -503,6 +520,7 @@ def test15_tensor_value_1d(t, texture_type, migrate):
 @pytest.mark.parametrize("migrate", [True, False])
 @pytest.test_arrays("is_jit, float32, shape=(*)")
 def test16_tensor_value_2d(t, texture_type, migrate):
+    _skip_metal_f64(t, texture_type)
     mod = sys.modules[t.__module__]
     TexType = getattr(mod, texture_type)
     PCG32 = getattr(mod, 'PCG32')
@@ -524,6 +542,7 @@ def test16_tensor_value_2d(t, texture_type, migrate):
 @pytest.mark.parametrize("migrate", [True, False])
 @pytest.test_arrays("is_jit, float32, shape=(*)")
 def test17_tensor_value_3d(t, texture_type, migrate):
+    _skip_metal_f64(t, texture_type)
     mod = sys.modules[t.__module__]
     TexType = getattr(mod, texture_type)
     PCG32 = getattr(mod, 'PCG32')
@@ -544,6 +563,7 @@ def test17_tensor_value_3d(t, texture_type, migrate):
 @pytest.mark.parametrize("texture_type", ['Texture1f64', 'Texture1f', 'Texture1f16'])
 @pytest.test_arrays("is_jit, float32, shape=(*)")
 def test18_fetch_1d(t, texture_type):
+    _skip_metal_f64(t, texture_type)
     mod = sys.modules[t.__module__]
     TexType = getattr(mod, texture_type)
     Array1f = getattr(mod, 'Array1f')
@@ -577,6 +597,7 @@ def test18_fetch_1d(t, texture_type):
 @pytest.mark.parametrize("texture_type", ['Texture2f64', 'Texture2f', 'Texture2f16'])
 @pytest.test_arrays("is_jit, float32, shape=(*)")
 def test19_fetch_2d(t, texture_type):
+    _skip_metal_f64(t, texture_type)
     mod = sys.modules[t.__module__]
     TexType = getattr(mod, texture_type)
     Array2f = getattr(mod, 'Array2f')
@@ -614,6 +635,7 @@ def test19_fetch_2d(t, texture_type):
 @pytest.mark.parametrize("texture_type", ['Texture3f64', 'Texture3f', 'Texture3f16'])
 @pytest.test_arrays("is_jit, float32, shape=(*)")
 def test20_fetch_3d(t, texture_type):
+    _skip_metal_f64(t, texture_type)
     mod = sys.modules[t.__module__]
     TexType = getattr(mod, texture_type)
     Array3f = getattr(mod, 'Array3f')
@@ -660,6 +682,7 @@ def test20_fetch_3d(t, texture_type):
 @pytest.mark.parametrize("migrate", [True, False])
 @pytest.test_arrays("is_jit, float32, shape=(*)")
 def test21_fetch_migrate(t, texture_type, migrate):
+    _skip_metal_f64(t, texture_type)
     mod = sys.modules[t.__module__]
     TexType = getattr(mod, texture_type)
     Array1f = getattr(mod, 'Array1f')
@@ -683,6 +706,7 @@ def test21_fetch_migrate(t, texture_type, migrate):
 @pytest.test_arrays("is_diff, float32, shape=(*)")
 @pytest.skip_on(RuntimeError, "backend does not support the requested type of atomic reduction")
 def test22_fetch_grad(t, texture_type):
+    _skip_metal_f64(t, texture_type)
     mod = sys.modules[t.__module__]
     TexType = getattr(mod, texture_type)
     Array2f = getattr(mod, 'Array2f')
@@ -726,6 +750,7 @@ def test22_fetch_grad(t, texture_type):
 @pytest.mark.parametrize("texture_type", ['Texture2f64', 'Texture2f', 'Texture2f16'])
 @pytest.test_arrays("is_jit, float32, shape=(*)")
 def test23_set_tensor(t, texture_type):
+    _skip_metal_f64(t, texture_type)
     mod = sys.modules[t.__module__]
     TexType = getattr(mod, texture_type)
     Array2f = getattr(mod, 'Array2f')
@@ -775,6 +800,7 @@ def test23_set_tensor(t, texture_type):
 @pytest.mark.parametrize("texture_type", ['Texture2f64', 'Texture2f', 'Texture2f16'])
 @pytest.test_arrays("is_jit, float32, diff, shape=(*)")
 def test24_set_tensor_ad(t, texture_type):
+    _skip_metal_f64(t, texture_type)
     mod = sys.modules[t.__module__]
     TexType = getattr(mod, texture_type)
     UInt32 = dr.uint32_array_t(t)
@@ -832,6 +858,7 @@ def test24_set_tensor_ad(t, texture_type):
 @pytest.mark.parametrize("init", ['constructor', 'set_tensor'])
 @pytest.test_arrays("is_jit, float32, diff, shape=(*)")
 def test25_eval_ad_migrated(t, texture_type, init):
+    _skip_metal_f64(t, texture_type)
     # Test only makes sense for configurations where the texture can be migrated
     can_migrate = dr.backend_v(t) is dr.JitBackend.CUDA and texture_type != "Texture2f64"
     if not can_migrate:
@@ -873,6 +900,7 @@ def test25_eval_ad_migrated(t, texture_type, init):
 @pytest.mark.parametrize("migrate", [True, False])
 @pytest.test_arrays("is_jit, float32, diff, shape=(*)")
 def test26_tensor_getter_does_not_drop_gradient_tracking(t, texture_type, init, migrate):
+    _skip_metal_f64(t, texture_type)
     # Regression test to insure that `Texture::tensor() doesn't accidentlly drop
     # gradient tracking on its internal members when called in a `suspend_grad`
     # scope.

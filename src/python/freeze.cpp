@@ -411,10 +411,22 @@ void FlatVariables::schedule_jit_variables(
         if (backend == info.backend || this->backend == JitBackend::None) {
             backend = info.backend;
         } else {
+            const char *info_name = "scalar", *bk_name = "scalar";
+            switch (info.backend) {
+                case JitBackend::CUDA:  info_name = "CUDA";  break;
+                case JitBackend::LLVM:  info_name = "LLVM";  break;
+                case JitBackend::Metal: info_name = "Metal"; break;
+                default: break;
+            }
+            switch (backend) {
+                case JitBackend::CUDA:  bk_name = "CUDA";  break;
+                case JitBackend::LLVM:  bk_name = "LLVM";  break;
+                case JitBackend::Metal: bk_name = "Metal"; break;
+                default: break;
+            }
             jit_raise("freeze(): backend mismatch error (backend of this "
                       "variable %s does not match backend of others %s)!",
-                      info.backend == JitBackend::CUDA ? "CUDA" : "LLVM",
-                      backend == JitBackend::CUDA ? "CUDA" : "LLVM");
+                      info_name, bk_name);
         }
 
         if (info.state == VarState::Literal) {

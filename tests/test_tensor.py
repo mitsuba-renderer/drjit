@@ -250,12 +250,15 @@ def test07_cast(t, drjit_verbose, capsys):
     v = t(dr.array_t(t)(1, 2, 3))
     assert dr.all(ti(v) == ti(dr.array_t(ti)(1, 2, 3)))
     assert dr.all(tu(v) == tu(dr.array_t(tu)(1, 2, 3)))
-    assert dr.all(td(v) == td(dr.array_t(td)(1, 2, 3)))
+
+    if dr.backend_v(t) != dr.JitBackend.Metal:
+        assert dr.all(td(v) == td(dr.array_t(td)(1, 2, 3)))
 
     msg = capsys.readouterr().out
-    assert msg.count("= cast(") == 3
-    assert msg.count("jit_all") == 3
-    assert msg.count("jit_var_mem_copy") == 4
+    expected_casts = 2 if dr.backend_v(t) == dr.JitBackend.Metal else 3
+    assert msg.count("= cast(") == expected_casts
+    assert msg.count("jit_all") == expected_casts
+    assert msg.count("jit_var_mem_copy") == expected_casts + 1
 
 
 @pytest.test_arrays('is_tensor, uint32')

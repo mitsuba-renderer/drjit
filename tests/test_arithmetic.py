@@ -572,3 +572,12 @@ def test24_mul_hi_wide(t, opaque):
     e_s = dr.mul_wide(a_s, b_s)
 
     assert dr.all(e == e_s)
+
+
+@pytest.test_arrays('float32,jit,shape=(*)')
+def test25_allclose_mixed_precision(t):
+    """allclose should work when comparing JIT float32 with numpy float64 (bug A20)."""
+    np = pytest.importorskip("numpy")
+    a = t(1.0, 2.0, 3.0)
+    b = np.array([1.0, 2.0, 3.0], dtype=np.float64)
+    assert dr.allclose(a, b)

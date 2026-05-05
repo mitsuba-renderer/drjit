@@ -9,8 +9,10 @@ project(drjit
 
 if (APPLE)
   set(DRJIT_ENABLE_CUDA_DEFAULT OFF)
+  set(DRJIT_ENABLE_METAL_DEFAULT ON)
 else()
   set(DRJIT_ENABLE_CUDA_DEFAULT ON)
+  set(DRJIT_ENABLE_METAL_DEFAULT OFF)
 endif()
 
 if (SKBUILD)
@@ -21,6 +23,7 @@ endif()
 
 option(DRJIT_ENABLE_LLVM          "Build the Dr.Jit LLVM backend?" ON)
 option(DRJIT_ENABLE_CUDA          "Build the Dr.Jit CUDA backend?" ${DRJIT_ENABLE_CUDA_DEFAULT})
+option(DRJIT_ENABLE_METAL         "Build the Dr.Jit Metal backend? (Apple Silicon GPUs)" ${DRJIT_ENABLE_METAL_DEFAULT})
 option(DRJIT_ENABLE_AUTODIFF      "Build Dr.Jit automatic differentation library?" ON)
 option(DRJIT_ENABLE_PYTHON        "Build Python extension library?" ON)
 option(DRJIT_ENABLE_TESTS         "Build Dr.Jit test suite? (Warning, this takes *very* long to compile)" OFF)
@@ -108,6 +111,13 @@ if (DRJIT_ENABLE_LLVM)
   message(STATUS "Dr.Jit: building the LLVM backend.")
 else()
   message(STATUS "Dr.Jit: *not* building the LLVM backend.")
+endif()
+
+if (DRJIT_ENABLE_METAL)
+  set(DRJIT_ENABLE_JIT TRUE)
+  message(STATUS "Dr.Jit: building the Metal backend.")
+else()
+  message(STATUS "Dr.Jit: *not* building the Metal backend.")
 endif()
 
 if (DRJIT_ENABLE_JIT)
@@ -216,6 +226,7 @@ if (DRJIT_MASTER_PROJECT)
       ${CMAKE_CURRENT_BINARY_DIR}/drjit/detail.py
       ${CMAKE_CURRENT_BINARY_DIR}/drjit/hashgrid.pyi
       ${CMAKE_CURRENT_BINARY_DIR}/drjit/hashgrid.py
+      ${CMAKE_CURRENT_BINARY_DIR}/drjit/bench.py
       ${CMAKE_CURRENT_BINARY_DIR}/drjit/interop.pyi
       ${CMAKE_CURRENT_BINARY_DIR}/drjit/interop.py
       ${CMAKE_CURRENT_BINARY_DIR}/drjit/nn.pyi
@@ -247,6 +258,16 @@ if (DRJIT_MASTER_PROJECT)
         ${CMAKE_CURRENT_BINARY_DIR}/drjit/cuda/ad.pyi
         ${CMAKE_CURRENT_BINARY_DIR}/drjit/cuda/ad.py
         DESTINATION drjit/cuda
+      )
+    endif()
+    if (DRJIT_ENABLE_METAL)
+      install(FILES
+        ${CMAKE_CURRENT_BINARY_DIR}/drjit/metal/py.typed
+        ${CMAKE_CURRENT_BINARY_DIR}/drjit/metal/__init__.pyi
+        ${CMAKE_CURRENT_BINARY_DIR}/drjit/metal/__init__.py
+        ${CMAKE_CURRENT_BINARY_DIR}/drjit/metal/ad.pyi
+        ${CMAKE_CURRENT_BINARY_DIR}/drjit/metal/ad.py
+        DESTINATION drjit/metal
       )
     endif()
     install(FILES

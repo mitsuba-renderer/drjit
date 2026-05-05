@@ -93,6 +93,7 @@ namespace detail {
     template <typename T> using is_recursive_array_det = std::enable_if_t<T::IsDrJit && T::Derived::IsRecursive>;
     template <typename T> using is_cuda_det            = std::enable_if_t<T::IsDrJit && T::Derived::IsCUDA>;
     template <typename T> using is_llvm_det            = std::enable_if_t<T::IsDrJit && T::Derived::IsLLVM>;
+    template <typename T> using is_metal_det           = std::enable_if_t<T::IsDrJit && T::Derived::IsMetal>;
     template <typename T> using is_jit_det             = std::enable_if_t<T::IsDrJit && T::Derived::IsJIT>;
     template <typename T> using is_diff_det            = std::enable_if_t<T::IsDrJit && T::Derived::IsDiff>;
     template <typename T> using is_mask_det            = std::enable_if_t<T::IsDrJit && T::Derived::IsMask>;
@@ -141,6 +142,10 @@ template <typename T> using enable_if_cuda_array_t = enable_if_t<is_cuda_v<T>>;
 template <typename T>
 constexpr bool is_llvm_v = is_detected_v<detail::is_llvm_det, T>;
 template <typename T> using enable_if_llvm_array_t = enable_if_t<is_llvm_v<T>>;
+
+template <typename T>
+constexpr bool is_metal_v = is_detected_v<detail::is_metal_det, T>;
+template <typename T> using enable_if_metal_array_t = enable_if_t<is_metal_v<T>>;
 
 template <typename T>
 constexpr bool is_jit_v = is_detected_v<detail::is_jit_det, T>;
@@ -296,6 +301,10 @@ namespace detail {
 
     template <typename T> struct backend<T, enable_if_llvm_array_t<T>> {
         static constexpr JitBackend value = JitBackend::LLVM;
+    };
+
+    template <typename T> struct backend<T, enable_if_metal_array_t<T>> {
+        static constexpr JitBackend value = JitBackend::Metal;
     };
 }
 

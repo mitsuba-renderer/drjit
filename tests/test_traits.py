@@ -21,7 +21,7 @@ def test01_traits(t):
             size = int(c)
             break
 
-    is_jit = "llvm" in tm or "cuda" in tm
+    is_jit = "llvm" in tm or "cuda" in tm or "metal" in tm
     if is_jit and "Int" in tn or "Float" in tn or "X" in tn:
         size = dr.Dynamic
 

@@ -4553,6 +4553,10 @@
 
     Dr.Jit backend targeting NVIDIA GPUs using PTX ("Parallel Thread Execution") IR.
 
+.. topic:: JitBackend_Metal
+
+    Dr.Jit backend targeting Apple Silicon GPUs using Metal Shading Language (MSL).
+
 .. topic:: VarType
 
     List of possible scalar array types (not all of them are supported).
@@ -6371,8 +6375,8 @@
     Enable spilling of excess registers into shared memory.
 
     This flag activates an optimization that stores registers in shared memory
-    when register pressure is high, reducing the need to spill to slower 
-    local memory. This can improve performance by lowering memory latency on 
+    when register pressure is high, reducing the need to spill to slower
+    local memory. This can improve performance by lowering memory latency on
     register-intensive kernels. This flag only applies to the CUDA backend.
 
     This flag is *enabled* by default.

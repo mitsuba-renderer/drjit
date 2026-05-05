@@ -6,14 +6,21 @@ import pytest
 def test01_pcg32_basic(t):
     m = sys.modules[t.__module__]
     f32 = m.PCG32().next_float32()
-    f64 = m.PCG32().next_float64()
     assert f32 == 0.10837864875793457
-    assert f64 == 0.10837870510295033
 
     f32_n = m.PCG32().next_float32_normal()
-    f64_n = m.PCG32().next_float64_normal()
     assert f32_n == -1.2351967096328735
-    assert f64_n == -1.235196513088357
+
+    # next_float64 builds the double via 64-bit bit-pattern manipulation,
+    # which only produces correct results when Float64 is real FP64. The
+    # Metal backend silently demotes Float64 to Float32 (unless
+    # JitFlag::MetalEmulateFloat64 is set), so skip the f64 checks there.
+    has_real_f64 = hasattr(m, 'Float64') and 'metal' not in m.__name__
+    if has_real_f64:
+        f64 = m.PCG32().next_float64()
+        f64_n = m.PCG32().next_float64_normal()
+        assert f64 == 0.10837870510295033
+        assert f64_n == -1.235196513088357
 
     if dr.is_jit_v(t):
         f = m.PCG32().next_float(t)
@@ -49,9 +56,10 @@ def test02_pcg32_prev_sample(t):
     f32_prev = pcg.prev_float32()
     assert f32 == f32_prev
 
-    f64 = pcg.next_float64()
-    f64_prev = pcg.prev_float64()
-    assert f64 == f64_prev
+    if dr.backend_v(t) != dr.JitBackend.Metal:
+        f64 = pcg.next_float64()
+        f64_prev = pcg.prev_float64()
+        assert f64 == f64_prev
 
     f16 = pcg.next_float16()
     f16_prev = pcg.prev_float16()
@@ -65,9 +73,10 @@ def test02_pcg32_prev_sample(t):
     f32_n_prev = pcg.prev_float32_normal()
     assert f32_n == f32_n_prev
 
-    f64_n = pcg.next_float64_normal()
-    f64_n_prev = pcg.prev_float64_normal()
-    assert f64_n == f64_n_prev
+    if dr.backend_v(t) != dr.JitBackend.Metal:
+        f64_n = pcg.next_float64_normal()
+        f64_n_prev = pcg.prev_float64_normal()
+        assert f64_n == f64_n_prev
 
     mask = m.Bool([True, False])
     uint32_masked = pcg.next_uint32(mask)
@@ -86,9 +95,10 @@ def test02_pcg32_prev_sample(t):
     f32_masked_prev = pcg.prev_float32(mask)
     assert dr.all(f32_masked == f32_masked_prev)
 
-    f64_masked = pcg.next_float64(mask)
-    f64_masked_prev = pcg.prev_float64(mask)
-    assert dr.all(f64_masked == f64_masked_prev)
+    if dr.backend_v(t) != dr.JitBackend.Metal:
+        f64_masked = pcg.next_float64(mask)
+        f64_masked_prev = pcg.prev_float64(mask)
+        assert dr.all(f64_masked == f64_masked_prev)
 
     f16_n_masked = pcg.next_float16_normal(mask)
     f16_n_masked_prev = pcg.prev_float16_normal(mask)
@@ -98,9 +108,10 @@ def test02_pcg32_prev_sample(t):
     f32_n_masked_prev = pcg.prev_float32_normal(mask)
     assert dr.all(f32_n_masked == f32_n_masked_prev)
 
-    f64_n_masked = pcg.next_float64_normal(mask)
-    f64_n_masked_prev = pcg.prev_float64_normal(mask)
-    assert dr.all(f64_n_masked == f64_n_masked_prev)
+    if dr.backend_v(t) != dr.JitBackend.Metal:
+        f64_n_masked = pcg.next_float64_normal(mask)
+        f64_n_masked_prev = pcg.prev_float64_normal(mask)
+        assert dr.all(f64_n_masked == f64_n_masked_prev)
 
     if dr.is_jit_v(t):
         f = pcg.next_float(t)

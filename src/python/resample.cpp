@@ -72,6 +72,20 @@ void export_resample(nb::module_ &) {
               (dr::LLVMArray<double>(Resampler::*)(const dr::LLVMArray<double> &, uint32_t) const) &Resampler::resample_bwd,
               "target"_a.noconvert(), "stride"_a)
 #endif
+#if defined(DRJIT_ENABLE_METAL)
+         .def("resample_fwd",
+              (dr::MetalArray<dr::half>(Resampler::*)(const dr::MetalArray<dr::half> &, uint32_t) const) &Resampler::resample_fwd,
+              "source"_a.noconvert(), "stride"_a)
+         .def("resample_fwd",
+              (dr::MetalArray<float>(Resampler::*)(const dr::MetalArray<float> &, uint32_t) const) &Resampler::resample_fwd,
+              "source"_a.noconvert(), "stride"_a)
+         .def("resample_bwd",
+              (dr::MetalArray<dr::half>(Resampler::*)(const dr::MetalArray<dr::half> &, uint32_t) const) &Resampler::resample_bwd,
+              "target"_a.noconvert(), "stride"_a)
+         .def("resample_bwd",
+              (dr::MetalArray<float>(Resampler::*)(const dr::MetalArray<float> &, uint32_t) const) &Resampler::resample_bwd,
+              "target"_a.noconvert(), "stride"_a)
+#endif
          .def("resample_fwd",
               (dr::DynamicArray<dr::half>(Resampler::*)(const dr::DynamicArray<dr::half> &, uint32_t) const) &Resampler::resample_fwd,
               "source"_a.noconvert(), "stride"_a)

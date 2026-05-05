@@ -2,6 +2,7 @@ import drjit as dr
 import pytest
 import sys
 
+@pytest.skip_on(RuntimeError, "jit_event_create(): invalid backend")
 @pytest.test_arrays("is_jit, float32, shape=(*)")
 def test01_event_basic(t):
     """Test basic event creation, recording, and synchronization"""
@@ -21,6 +22,7 @@ def test01_event_basic(t):
     assert event.query() == True
 
 
+@pytest.skip_on(RuntimeError, "jit_event_create(): invalid backend")
 @pytest.test_arrays("is_jit, float32, shape=(*)")
 def test02_event_timing(t):
     """Test event timing functionality"""
@@ -43,6 +45,7 @@ def test02_event_timing(t):
     assert elapsed >= 0
 
 
+@pytest.skip_on(RuntimeError, "jit_event_create(): invalid backend")
 @pytest.test_arrays("is_jit, float32, shape=(*)")
 def test03_event_timing_disabled(t):
     """Test that elapsed_time fails when timing is disabled"""

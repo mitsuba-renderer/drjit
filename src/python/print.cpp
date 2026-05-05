@@ -302,6 +302,11 @@ struct DelayedPrint {
                    max_size = nb::len(tid_o),
                    size     = std::min(max_size, ctr_size);
 
+            if (size == 0) {
+                d->success = true;
+                return;
+            }
+
             void *ptr = nullptr;
             uint32_t tid_index =
                 jit_var_data((uint32_t) s.index(inst_ptr(tid_o)), &ptr);
