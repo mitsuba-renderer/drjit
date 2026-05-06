@@ -803,11 +803,13 @@ def test28_permutation_tensor(t):
         assert result.shape == x_dr.shape, \
             f'shape mismatch for shape={shape} axis={axis}'
 
-        n = shape[axis]
+        axis_n = axis if axis >= 0 else axis + len(shape)
+        n = shape[axis_n]
         orig = set()
         shuf = set()
         for i in range(n):
-            idx = tuple(i if d == axis else slice(None) for d in range(len(shape)))
+            idx = tuple(i if d == axis_n else slice(None)
+                        for d in range(len(shape)))
             orig.add(x_np[idx].tobytes())
             shuf.add(r_np[idx].tobytes())
         assert orig == shuf, \
