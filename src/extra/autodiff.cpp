@@ -4040,46 +4040,61 @@ uint32_t ad_record_implicit_dependence(LocalState &ls, ReleaseHelper &rh,
     if (scopes.empty())
         ad_raise("ad_record_implicit_dependence(): no scope found!");
 
-    if (v_source->size != 1)
-        ad_raise(
-            "ad_var_new(): You performed a differentiable operation that mixes symbolic\n"
-            "and non-symbolic variables in a non-permissible way. The reason is likely\n"
-            "one of the following factors:\n"
-            "\n"
-            "1. Your program performed a *symbolic* operation such as a\n"
-            "\n"
-            "   - conditional (via drjit.if_stmt())\n"
-            "   - loop (via drjit.while_loop())\n"
-            "   - call (via drjit.switch(), drjit.dispatch(), C++ method)\n"
-            "\n"
-            "   (this potentially involved the @drjit.syntax decorator, which\n"
-            "    rewrites scalar Python code to make use of these operations)\n"
-            "\n"
-            "2. The body of this operation accesses a variable *implicitly*, meaning\n"
-            "   that the variable wasn't listed as part of 'args' (for conditionals),\n"
-            "   'state' (for loops), or as a function argument (for calls).\n"
-            "\n"
-            "   If you executed a symbolic call, the variable might, e.g., be a field\n"
-            "   of an instance targeted by the call. This is fine.\n"
-            "\n"
-            "3. Dr.Jit then tried to convert the implicit read into a drjit.gather()\n"
-            "   operation to legalize this behavior.\n"
-            "\n"
-            "   However, the problem is that the variable in question (a%u) has size %zu,\n"
-            "   and the conversion to drjit.gather() only makes sense for scalar (size 1)\n"
-            "   variables.\n"
-            "\n"
-            "There are two possible solutions:\n"
-            "\n"
-            "1. \"Pipe\" the variable to the code in question, by explicitly listing it\n"
-            "   as part of conditional inputs, loop state varibles, and function inputs.\n"
-            "\n"
-            "2. Is this potentially a bug in your code? Did you mean to gather an\n"
-            "   element from the variable instead of reading it directly? In that case,\n"
-            "   please fix the operation referenced in the stack trace.",
-            source, v_source->size);
+    if (v_source->size != 1) {
+        /* Non-scalar implicit reads mean different things depending on the
+           symbolic construct that is currently being recorded. Symbolic loops
+           and conditionals still execute vectorized code, so lane t reading a
+           size-N outer variable can be legalized as gather(counter(N)). By
+           contrast, symbolic calls/dr.dispatch()/dr.switch() record one
+           scalarized callable body at a time, and there is no meaningful
+           "current lane" to use as a gather index there. We therefore only
+           query jit_var_self() on this size>1 ambiguity path to distinguish
+           call recording from the vectorized loop/cond case. */
+        uint32_t self_value = 0, self_index = 0;
+        jit_var_self(backend, &self_value, &self_index);
+        (void) self_value;
 
-    auto [ad_index, v] = ad_var_new(backend, 1, (VarType) v_source->type,
+        if (self_index != 0)
+            ad_raise(
+                "ad_var_new(): You performed a differentiable operation that mixes symbolic\n"
+                "and non-symbolic variables in a non-permissible way. The reason is likely\n"
+                "one of the following factors:\n"
+                "\n"
+                "1. Your program performed a *symbolic* operation such as a\n"
+                "\n"
+                "   - conditional (via drjit.if_stmt())\n"
+                "   - loop (via drjit.while_loop())\n"
+                "   - call (via drjit.switch(), drjit.dispatch(), C++ method)\n"
+                "\n"
+                "   (this potentially involved the @drjit.syntax decorator, which\n"
+                "    rewrites scalar Python code to make use of these operations)\n"
+                "\n"
+                "2. The body of this operation accesses a variable *implicitly*, meaning\n"
+                "   that the variable wasn't listed as part of 'args' (for conditionals),\n"
+                "   'state' (for loops), or as a function argument (for calls).\n"
+                "\n"
+                "   If you executed a symbolic call, the variable might, e.g., be a field\n"
+                "   of an instance targeted by the call. This is fine.\n"
+                "\n"
+                "3. Dr.Jit then tried to convert the implicit read into a drjit.gather()\n"
+                "   operation to legalize this behavior.\n"
+                "\n"
+                "   However, the problem is that the variable in question (a%u) has size %zu,\n"
+                "   and the conversion to drjit.gather() only makes sense for scalar (size 1)\n"
+                "   variables.\n"
+                "\n"
+                "There are two possible solutions:\n"
+                "\n"
+                "1. \"Pipe\" the variable to the code in question, by explicitly listing it\n"
+                "   as part of conditional inputs, loop state varibles, and function inputs.\n"
+                "\n"
+                "2. Is this potentially a bug in your code? Did you mean to gather an\n"
+                "   element from the variable instead of reading it directly? In that case,\n"
+                "   please fix the operation referenced in the stack trace.",
+                source, v_source->size);
+    }
+
+    auto [ad_index, v] = ad_var_new(backend, v_source->size, (VarType) v_source->type,
                                     true, reuse_indices, "gather");
     v_source = state[source];
     EdgeIndex edge_index_new = ad_edge_new();
@@ -4090,11 +4105,15 @@ uint32_t ad_record_implicit_dependence(LocalState &ls, ReleaseHelper &rh,
     v->next_bwd = edge_index_new;
     v_source->next_fwd = edge_index_new;
     edge.next_bwd = 0;
-    edge.special = dr::make_unique<Gather>(GenericArray<uint32_t>(0), JitMask(true));
+    JitVar offset = v_source->size == 1 ? JitVar()
+                                        : JitVar::steal(jit_var_counter(backend, v_source->size));
+    edge.special = dr::make_unique<Gather>(
+        v_source->size == 1 ? GenericArray<uint32_t>(0)
+                            : GenericArray<uint32_t>::borrow(offset.index()),
+        JitMask(true));
     ad_var_inc_ref_int(source, v_source);
-    ad_log(
-        "ad_var_new(): a%u = gather(a%u) [converted from scalar read].",
-        ad_index, source);
+    ad_log("ad_var_new(): a%u = gather(a%u) [converted from %s read].",
+           ad_index, source, v_source->size == 1 ? "scalar" : "vector");
 
     auto [it, success] = scopes.back().implicit_in.insert(source);
     if (success) {

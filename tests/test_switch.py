@@ -341,6 +341,30 @@ def test06_invalid_implicit_dependence(t):
     assert "You performed a differentiable operation that mixes symbolic" in str(e.value.__cause__)
 
 
+@pytest.test_arrays('float,shape=(*),jit,is_diff')
+def test06_invalid_implicit_dependence_symbolic_call(t):
+    UInt32 = dr.uint32_array_t(t)
+
+    data = t(3.0, 4.0)
+    dr.enable_grad(data)
+
+    def f(a, i):
+        return data
+
+    def g(a, i):
+        return a + 4 * data
+
+    idx = UInt32(0, 0, 1, 1)
+    a = t(1.0, 2.0, 3.0, 4.0)
+    i = UInt32(3, 2, 1, 0)
+
+    with dr.scoped_set_flag(dr.JitFlag.SymbolicCalls, True):
+        with pytest.raises(RuntimeError) as e:
+            dr.switch(idx, [f, g], a, i)
+
+    assert "You performed a differentiable operation that mixes symbolic" in str(e.value.__cause__)
+
+
 @pytest.test_arrays('float,shape=(*),jit')
 def test07_uninitialized_array_in(t):
     idx = dr.uint32_array_t(t)(0, 0, 1, 1)

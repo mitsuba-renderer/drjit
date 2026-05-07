@@ -247,6 +247,104 @@ def test09_sum_loop_extra(t, mode):
         dr.backward(loss)
 
 
+@pytest.test_arrays('float32,diff,shape=(*)')
+def test10_bwd_inside_symbolic_loop_direct_scalar_read(t):
+    Float = t
+    flags = dr.ADFlag.Default | dr.ADFlag.AllowNoGrad
+
+    @dr.syntax
+    def buggy(x):
+        UInt32 = dr.uint32_array_t(x)
+        i = UInt32(0)
+        while dr.hint(i < 1, mode='symbolic'):
+            y = x + type(x)(0.0)
+            dr.backward_from(y, flags=dr.ADFlag.Default | dr.ADFlag.AllowNoGrad)
+            i += 1
+
+    @dr.syntax
+    def fixed(x):
+        UInt32 = dr.uint32_array_t(x)
+        i = UInt32(0)
+        while dr.hint(i < 1, mode='symbolic', exclude=[x]):
+            y = x + type(x)(0.0)
+            dr.backward_from(y, flags=dr.ADFlag.Default | dr.ADFlag.AllowNoGrad)
+            i += 1
+
+    def baseline(x):
+        y = x + Float(0.0)
+        dr.backward_from(y, flags=flags)
+
+    def run(fn):
+        x = dr.opaque(Float, 3.0, 1)
+        dr.enable_grad(x)
+        fn(x)
+        return dr.grad(x)
+
+    assert dr.allclose(run(baseline), [1.0])
+    assert dr.allclose(run(buggy),    [1.0])
+    assert dr.allclose(run(fixed),    [1.0])
+
+
+@pytest.test_arrays('float32,diff,shape=(*)')
+def test11_bwd_inside_symbolic_loop_explicit_gather(t):
+    Float = t
+    flags = dr.ADFlag.Default | dr.ADFlag.AllowNoGrad
+
+    @dr.syntax
+    def buggy(x):
+        UInt32 = dr.uint32_array_t(x)
+        i = UInt32(0)
+        while dr.hint(i < 1, mode='symbolic'):
+            y = dr.gather(type(x), x, UInt32(0)) + type(x)(0.0)
+            dr.backward_from(y, flags=dr.ADFlag.Default | dr.ADFlag.AllowNoGrad)
+            i += 1
+
+    @dr.syntax
+    def fixed(x):
+        UInt32 = dr.uint32_array_t(x)
+        i = UInt32(0)
+        while dr.hint(i < 1, mode='symbolic', exclude=[x]):
+            y = dr.gather(type(x), x, UInt32(0)) + type(x)(0.0)
+            dr.backward_from(y, flags=dr.ADFlag.Default | dr.ADFlag.AllowNoGrad)
+            i += 1
+
+    def baseline(x):
+        y = dr.gather(Float, x, dr.uint32_array_t(x)(0)) + Float(0.0)
+        dr.backward_from(y, flags=flags)
+
+    def run(fn):
+        x = Float([1.0, 2.0, 3.0])
+        dr.enable_grad(x)
+        fn(x)
+        return dr.grad(x)
+
+    assert dr.allclose(run(baseline), [1.0, 0.0, 0.0])
+    assert dr.allclose(run(buggy),    [1.0, 0.0, 0.0])
+    assert dr.allclose(run(fixed),    [1.0, 0.0, 0.0])
+
+
+@pytest.test_arrays('float32,diff,shape=(*)')
+def test12_symbolic_loop_direct_non_scalar_state_read(t):
+    @dr.syntax
+    def probe(x):
+        UInt32 = dr.uint32_array_t(x)
+        i = UInt32(0)
+        z = type(x)(0.0)
+        while dr.hint(i < 1, mode='symbolic', max_iterations=1):
+            z = x + type(x)(0.0)
+            i += 1
+        return z
+
+    x = t([10.0, 20.0, 30.0, 40.0])
+    dr.enable_grad(x)
+
+    z = probe(x)
+    dr.backward_from(z)
+
+    assert dr.allclose(z, [10.0, 20.0, 30.0, 40.0])
+    assert dr.allclose(x.grad, [1.0, 1.0, 1.0, 1.0])
+
+
 @pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
 @pytest.test_arrays('float32,is_diff,shape=(*)')
 @dr.syntax

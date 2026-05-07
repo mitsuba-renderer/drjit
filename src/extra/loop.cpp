@@ -41,6 +41,15 @@ static bool ad_loop_symbolic(JitBackend backend, const char *name,
     }
     bool symbolic = jit_flag(JitFlag::SymbolicScope);
 
+    /* Preserve the input AD indices across loop recording. They are
+       recombined with the fresh JIT loop inputs below so the symbolic body
+       still sees AD-tracked state. 'ad_state' owns the saved references for
+       the duration of this function; combined indices take their own refs. */
+    dr::detail::ad_index32_vector ad_state;
+    ad_state.reserve(indices1.size());
+    for (uint64_t i : indices1)
+        ad_state.push_back_borrow((uint32_t) (i >> 32));
+
     try {
         /* Postponed operations captured by the isolation scope should only
          * be executed once we've exited the symbolic scope. We therefore
@@ -52,10 +61,18 @@ static bool ad_loop_symbolic(JitBackend backend, const char *name,
         JitVar loop = JitVar::steal(jit_var_loop_start(
             name, symbolic, indices2.size(), indices2.data()));
 
-        // Propagate these changes
+        /* Recombine the saved AD indices with the freshly-created JIT inputs
+           and propagate these AD-aware indices to the payload. We inc_ref
+           each AD index since 'ad_state' keeps its own references for later
+           re-record passes. */
         indices1.release();
-        for (uint32_t i : indices2)
-            indices1.push_back_steal(i);
+        for (size_t i = 0; i < indices2.size(); ++i) {
+            if (ad_state[i])
+                ad_var_inc_ref(uint64_t(ad_state[i]) << 32);
+            uint64_t combined =
+                (uint64_t(ad_state[i]) << 32) | uint64_t(indices2[i]);
+            indices1.push_back_steal(combined);
+        }
         write_cb(payload, indices1, false);
         indices1.release();
         indices2.clear();
@@ -110,8 +127,25 @@ static bool ad_loop_symbolic(JitBackend backend, const char *name,
                                       indices2.data(), record_guard.checkpoint);
 
             indices1.release();
-            for (uint32_t i : indices2)
-                indices1.push_back_steal(i);
+            if (rv) {
+                /* Final iteration: hand off plain JIT indices. The downstream
+                   LoopOp construction in ad_loop() detects loop-invariant
+                   variables and re-attaches AD itself, so we keep the existing
+                   AD=0 convention here to avoid double-tracking. */
+                for (uint32_t i : indices2)
+                    indices1.push_back_steal(i);
+            } else {
+                /* Re-record requested. Recombine the saved AD indices with the
+                   re-initialized JIT inputs so the next body invocation sees
+                   AD-tracked state, just like the initial setup did. */
+                for (size_t i = 0; i < indices2.size(); ++i) {
+                    if (ad_state[i])
+                        ad_var_inc_ref(uint64_t(ad_state[i]) << 32);
+                    uint64_t combined =
+                        (uint64_t(ad_state[i]) << 32) | uint64_t(indices2[i]);
+                    indices1.push_back_steal(combined);
+                }
+            }
             write_cb(payload, indices1, rv == false);
             indices1.release();
             indices2.clear();
