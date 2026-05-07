@@ -29,7 +29,8 @@ struct Resampler::Impl {
     mutable std::any weights_cache;
 
     Impl(uint32_t source_res, uint32_t target_res, Resampler::Filter filter,
-         const void *payload, double radius, double radius_scale)
+         const void *payload, double radius, double radius_scale,
+         Resampler::FilterNormalization normalization)
         : source_res(source_res), target_res(target_res) {
         if (source_res == 0 || target_res == 0)
             drjit_raise("drjit.Resampler(): source/target resolution cannot be zero!");
@@ -58,11 +59,12 @@ struct Resampler::Impl {
             double center = (i + 0.5) * scale;
 
             // Index of the first original sample that might contribute
-            uint32_t offset_i =
-                (uint32_t) std::max(0, (int) (center - radius + .5));
+            int offset_unclamped = (int) (center - radius + .5);
+            uint32_t offset_i = (uint32_t) std::max(0, offset_unclamped);
             offset[i] = offset_i;
 
-            double sum = 0.0;
+            double sum = 0.0,
+                   sum_full = 0.0;
             for (uint32_t l = 0; l < taps; l++) {
                 // Relative position of sample in the filter frame
                 double rel = (offset_i - center + l + .5) * filter_scale;
@@ -72,18 +74,28 @@ struct Resampler::Impl {
                     weight = filter(rel, payload);
                 weights[i * taps + l] = weight;
                 sum += weight;
+
+                if (normalization == Resampler::FilterNormalization::Boundary) {
+                    double rel_full =
+                        (offset_unclamped - center + l + .5) * filter_scale;
+                    sum_full += filter(rel_full, payload);
+                }
             }
 
-            if (sum == 0)
+            if (sum == 0 && normalization != Resampler::FilterNormalization::None)
                 drjit_raise(
                     "drjit.Resampler(): the filter footprint is too small; the "
                     "support of some output samples does not contain any input "
                     "samples!");
 
-            // Normalize the weights for each output sample
-            double normalization = 1.0 / sum;
+            double normalization_value = 1.0;
+            if (normalization == Resampler::FilterNormalization::Unit)
+                normalization_value = 1.0 / sum;
+            else if (normalization == Resampler::FilterNormalization::Boundary)
+                normalization_value = sum_full / sum;
+
             for (uint32_t l = 0; l < taps; l++)
-                weights[i * taps + l] *= normalization;
+                weights[i * taps + l] *= normalization_value;
         }
     }
 
@@ -129,7 +141,9 @@ static inline double sinc(double x) {
     return std::sin(x) / x;
 }
 
-Resampler::Resampler(uint32_t source_res, uint32_t target_res, const char *filter, double radius_scale) {
+Resampler::Resampler(uint32_t source_res, uint32_t target_res,
+                     const char *filter, double radius_scale,
+                     Resampler::FilterNormalization normalization) {
     Resampler::Filter filter_cb = nullptr;
     double radius = 0.0;
 
@@ -191,13 +205,16 @@ Resampler::Resampler(uint32_t source_res, uint32_t target_res, const char *filte
                     "'hamming', 'cubic', and 'lanczos' are supported).");
     }
 
-    d = new Impl(source_res, target_res, filter_cb, nullptr, radius, radius_scale);
+    d = new Impl(source_res, target_res, filter_cb, nullptr, radius,
+                 radius_scale, normalization);
 }
 
 Resampler::Resampler(uint32_t source_res, uint32_t target_res,
                      Resampler::Filter filter, const void *payload,
-                     double radius)
-    : d(new Impl(source_res, target_res, filter, payload, radius, 1.0)) {
+                     double radius,
+                     Resampler::FilterNormalization normalization)
+    : d(new Impl(source_res, target_res, filter, payload, radius, 1.0,
+                 normalization)) {
 }
 
 Resampler::~Resampler() { }

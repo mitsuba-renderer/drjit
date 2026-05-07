@@ -2764,18 +2764,137 @@ def resample(
     else:
         return value
 
+def _convolve_discrete(source: ArrayT, kernel: ArrayBase,
+                       axis: Union[int, Tuple[int, ...], None],
+                       boundary: Literal["normalize", "zero"]) -> ArrayT:
+    """Implementation detail of drjit.convolve() for discrete 1D kernels."""
+
+    shape = source.shape
+    strides = _compute_strides(shape)
+    ndim = len(shape)
+    source_tp = type(source)
+    value = source.array
+
+    if is_tensor_v(kernel) or not is_array_v(kernel) or depth_v(type(kernel)) != 1:
+        raise TypeError(
+            "drjit.convolve(): a discrete 'filter' must be a 1D Dr.Jit "
+            "array.")
+
+    kernel_shape = kernel.shape
+    if len(kernel_shape) != 1:
+        raise RuntimeError(
+            "drjit.convolve(): a discrete 'filter' must be one-dimensional.")
+
+    kernel_size = kernel_shape[0]
+    if kernel_size == 0:
+        raise RuntimeError(
+            "drjit.convolve(): a discrete 'filter' cannot be empty.")
+
+    if axis is None:
+        axis = tuple(range(ndim))
+    else:
+        axis = _normalize_axis_tuple(axis, ndim, 'axis')
+
+    total = prod(shape)
+    center = kernel_size // 2
+
+    for i in axis:
+        res = shape[i]
+        if res == 0:
+            raise RuntimeError(
+                "drjit.convolve(): source resolution cannot be zero.")
+
+        stride = strides[i]
+        Array = type(value)
+        Accum = float32_array_t(Array) if itemsize_v(Array) <= 4 else Array
+        Index = uint32_array_t(Array)
+        KernelArray = type(kernel)
+        KernelIndex = uint32_array_t(KernelArray)
+        kernel_dynamic = is_dynamic_v(KernelArray)
+
+        index_out = arange(Index, total)
+        axis_index = (index_out // stride) % res
+        target = zeros(Accum, total)
+        kernel_sum = zeros(Accum, total)
+        valid_sum = zeros(Accum, total)
+        right_radius = kernel_size - center - 1
+
+        renormalize = None
+        if center > 0:
+            renormalize = axis_index < center
+        if right_radius > 0:
+            right_boundary = axis_index + right_radius >= res
+            renormalize = (
+                right_boundary if renormalize is None
+                else renormalize | right_boundary
+            )
+
+        for k in range(kernel_size):
+            if kernel_dynamic:
+                weight = Accum(gather(
+                    KernelArray,
+                    kernel,
+                    full(KernelIndex, k, total)
+                ))
+            else:
+                weight = Accum(kernel[k])
+            offset = k - center
+
+            if offset < 0:
+                active = axis_index >= -offset
+                source_index = index_out - (-offset) * stride
+                source_index = select(active, source_index, Index(0))
+            elif offset > 0:
+                active = axis_index + offset < res
+                source_index = index_out + offset * stride
+                source_index = select(active, source_index, Index(0))
+            else:
+                active = None
+                source_index = index_out
+
+            active_weight = (
+                weight != Accum(0) if active is None
+                else active & (weight != Accum(0))
+            )
+            sample = gather(Array, value, source_index, active_weight)
+            target = fma(weight, Accum(sample), target)
+            kernel_sum += weight
+            valid_sum += (
+                weight if active is None
+                else select(active, weight, Accum(0))
+            )
+
+        if boundary == "normalize" and renormalize is not None:
+            valid = renormalize & (valid_sum != Accum(0))
+            scale = select(
+                valid,
+                kernel_sum / select(valid, valid_sum, Accum(1)),
+                Accum(1)
+            )
+            target *= scale
+
+        value = Array(target)
+
+    if is_tensor_v(source_tp):
+        return source_tp(value, shape)
+    else:
+        return value
+
+
 def convolve(
     source: ArrayT,
-    filter: Union[Literal["box", "linear", "hamming", "cubic", "lanczos", "gaussian"], Callable[[float], float]],
-    filter_radius: float,
-    axis: Union[int, Tuple[int, ...], None] = None
+    filter: Union[Literal["box", "linear", "hamming", "cubic", "lanczos", "gaussian"], Callable[[float], float], ArrayBase],
+    filter_radius: Optional[float] = None,
+    axis: Union[int, Tuple[int, ...], None] = None,
+    boundary: Literal["normalize", "zero"] = "normalize"
 ) -> ArrayT:
     """
     Convolve one or more axes of an input array/tensor with a 1D filter
 
     This function filters one or more axes of a Dr.Jit array or tensor, for
     example to convolve an image with a 2D Gaussian filter to blur spatial
-    detail.
+    detail. The filter can be either a continuous kernel specified by name or
+    callable, or a discrete 1D Dr.Jit array kernel.
 
     .. code-block:: python
 
@@ -2787,8 +2906,10 @@ def convolve(
            filter_radius=10
        )
 
-    The filter weights are renormalized to reduce edge effects near the
-    boundary of the array.
+    Near the boundary of the array, the ``boundary`` parameter controls whether
+    out-of-bounds samples are treated as zero or the remaining in-bounds weights
+    are rescaled to preserve the full filter footprint's weight sum. Away from
+    boundaries, filter weights are used as provided/sampled.
 
     The function supports a set of provided filters, and custom filters
     can also be specified. This works analogously to the :py:func:`resample`
@@ -2797,21 +2918,50 @@ def convolve(
     Args:
         source (dr.ArrayBase): The Dr.Jit tensor or 1D array to be resampled.
 
-        filter (str | Callable[[float], float])
+        filter (str | Callable[[float], float] | dr.ArrayBase)
           The desired reconstruction filter, see the above text for an overview.
-          Alternatively, a custom reconstruction filter function can also be
-          specified.
+          Alternatively, a custom reconstruction filter function or a discrete
+          1D Dr.Jit array kernel can also be specified.
 
-        filter_radius (float)
-          The radius of the continous function to be used in the convolution.
+        filter_radius (float | None)
+          The radius of the continuous function to be used in the convolution.
+          This must be specified for continuous filters and must not be
+          specified for discrete kernels.
 
         axis (int | tuple[int, ...] | ... | None): The axis or set of axes
           along which to convolve. The default argument ``axis=None`` causes all
           axes to be convolved. Negative values count from the last dimension.
 
+        boundary ("normalize" | "zero"): Boundary handling mode. The default
+          ``"normalize"`` rescales clipped kernel weights near boundaries so
+          that their sum matches the full kernel sum. ``"zero"`` uses zero
+          padding and does not rescale clipped kernel weights. If a
+          unit-normalized discrete kernel is desired, normalize the kernel
+          before passing it to ``dr.convolve()``.
+
     Returns:
         drjit.ArrayBase: The resampled output array. Its type matches ``source``.
     """
+
+    if boundary not in ("normalize", "zero"):
+        raise ValueError(
+            "drjit.convolve(): 'boundary' must be 'normalize' or 'zero'.")
+
+    if is_array_v(filter) and not is_tensor_v(filter):
+        if filter_radius is not None:
+            raise TypeError(
+                "drjit.convolve(): 'filter_radius' cannot be specified when "
+                "using a discrete filter.")
+        return _convolve_discrete(source, filter, axis, boundary)
+
+    if is_tensor_v(filter) or not (isinstance(filter, str) or callable(filter)):
+        raise TypeError(
+            "drjit.convolve(): a discrete 'filter' must be a 1D Dr.Jit array.")
+
+    if filter_radius is None:
+        raise TypeError(
+            "drjit.convolve(): 'filter_radius' must be specified when using "
+            "a continuous filter.")
 
     shape = source.shape
     strides = _compute_strides(shape)
@@ -2830,7 +2980,7 @@ def convolve(
         res = shape[i]
 
         # Cache resampler in case it can be reused
-        key = (res, res, filter, filter_radius)
+        key = (res, res, filter, filter_radius, boundary)
 
         resampler = _resample_cache.get(key, None)
         if resampler is None:
@@ -2839,7 +2989,8 @@ def convolve(
                 target_res=res,
                 filter=filter,
                 filter_radius=filter_radius,
-                convolve=True
+                convolve=True,
+                boundary=boundary
             )
             _resample_cache[key] = resampler
 

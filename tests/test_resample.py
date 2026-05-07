@@ -111,5 +111,44 @@ def test07_convolve(t):
     assert dr.allclose(x, y)
 
     y = dr.convolve(x, 'linear', 2)
-    z = t((1+2*.5)/1.5, (1*.5+2+10*.5)/2, (2*.5+10+100*.5)/2, (100+10*.5)/1.5)
+    z = t((1+2*.5)*2/1.5, 1*.5+2+10*.5, 2*.5+10+100*.5, (100+10*.5)*2/1.5)
     assert dr.allclose(y, z)
+
+    y = dr.convolve(x, 'linear', 2, boundary='zero')
+    z = t(1+2*.5, 1*.5+2+10*.5, 2*.5+10+100*.5, 100+10*.5)
+    assert dr.allclose(y, z)
+
+
+# Test convolution with a discrete 1D kernel
+@pytest.test_arrays('float, -jit, shape=(*)')
+def test08_convolve_discrete_1d(t):
+    x = t(1, 2, 10, 100)
+    kernel = t(1, 2, 1)
+
+    y = dr.convolve(x, kernel, boundary='zero')
+    assert dr.allclose(y, t(4, 15, 122, 210))
+
+    y = dr.convolve(x, kernel)
+    assert dr.allclose(y, t(16/3, 15, 122, 280))
+
+    kernel_t = dr.tensor_t(t)([1, 2, 1])
+    with pytest.raises(TypeError, match="must be a 1D Dr.Jit array"):
+        dr.convolve(x, kernel_t)
+
+    with pytest.raises(TypeError, match="must be a 1D Dr.Jit array"):
+        dr.convolve(x, [1, 2, 1])
+
+
+# Test discrete convolution over selected tensor axes
+@pytest.test_arrays('float, -jit, tensor')
+def test09_convolve_discrete_tensor_axis(t):
+    x = t([[1, 2, 3], [4, 5, 6]])
+    kernel = dr.array_t(t)(1, 2, 1)
+
+    y = dr.convolve(x, kernel, axis=1)
+    z = t([[16/3, 8, 32/3], [52/3, 20, 68/3]])
+    assert dr.all(dr.allclose(y, z), axis=None)
+
+    y = dr.convolve(x, kernel, axis=0, boundary='zero')
+    z = t([[6, 9, 12], [9, 12, 15]])
+    assert dr.all(dr.allclose(y, z), axis=None)
