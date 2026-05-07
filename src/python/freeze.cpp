@@ -2060,7 +2060,7 @@ nb::object FrozenFunction::operator()(nb::dict input) {
                     lru_it        = it2;
                 }
             }
-            recordings.erase(lru_it);
+            recordings.erase_fast(lru_it);
 
             it = this->recordings.find(in_variables);
         }

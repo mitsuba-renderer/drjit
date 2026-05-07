@@ -595,6 +595,19 @@ struct Scope {
     Scope& operator=(Scope&&) = default;
     Scope& operator=(const Scope&) = default;
 
+    /// Inherit configuration from a parent scope while leaving the runtime
+    /// state (postponed edges, implicit input/output sets) freshly empty.
+    void inherit(const Scope &parent) {
+        type         = parent.type;
+        symbolic     = parent.symbolic;
+        complement   = parent.complement;
+        isolate      = parent.isolate;
+        force_grad   = parent.force_grad;
+        counter      = parent.counter;
+        indices      = parent.indices;
+        variable_map = parent.variable_map;
+    }
+
     /// Check if a variable has gradients enabled
     bool enabled(ADIndex index) const {
         return (indices.find(index) != indices.end()) != complement || force_grad;
@@ -1709,16 +1722,13 @@ void ad_scope_enter(ADScope type, size_t size, const Index *indices, int symboli
     Scope scope;
 
     if (!scopes.empty())
-        scope = scopes.back();
+        scope.inherit(scopes.back());
 
     if (symbolic == -1)
         scope.symbolic = jit_flag(JitFlag::SymbolicScope);
     else
         scope.symbolic = (symbolic != 0);
 
-    scope.postponed.clear();
-    scope.implicit_in.clear();
-    scope.implicit_out.clear();
     scope.type = type;
 
     switch (type) {
@@ -1730,7 +1740,7 @@ void ad_scope_enter(ADScope type, size_t size, const Index *indices, int symboli
                     scope.disable(ad_index(indices[i]));
             } else {
                 scope.complement = false;
-                scope.indices.clear();
+                scope.indices = {};
             }
             break;
 
@@ -1744,7 +1754,7 @@ void ad_scope_enter(ADScope type, size_t size, const Index *indices, int symboli
                     scope.indices.insert(0);
             } else {
                 scope.complement = true;
-                scope.indices.clear();
+                scope.indices = {};
             }
             break;
 
@@ -5130,12 +5140,8 @@ bool ad_custom_op(dr::detail::CustomOpBase *op) {
     const std::vector<Scope> &scopes = local_state.scopes;
     Scope scope;
 
-    if (!scopes.empty()) {
-        scope = scopes.back();
-        scope.postponed.clear();
-        scope.implicit_in.clear();
-        scope.implicit_out.clear();
-    }
+    if (!scopes.empty())
+        scope.inherit(scopes.back());
 
     ad_add_special(v0i, v1i, true,
                    dr::make_unique<CustomOp>(op, std::move(scope)));
