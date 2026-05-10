@@ -2817,11 +2817,12 @@ def _convolve_discrete(source: ArrayT, kernel: ArrayBase,
         target = zeros(Accum, total)
         kernel_sum = zeros(Accum, total)
         valid_sum = zeros(Accum, total)
-        right_radius = kernel_size - center - 1
+        left_radius = kernel_size - center - 1
+        right_radius = center
 
         renormalize = None
-        if center > 0:
-            renormalize = axis_index < center
+        if left_radius > 0:
+            renormalize = axis_index < left_radius
         if right_radius > 0:
             right_boundary = axis_index + right_radius >= res
             renormalize = (
@@ -2838,7 +2839,7 @@ def _convolve_discrete(source: ArrayT, kernel: ArrayBase,
                 ))
             else:
                 weight = Accum(kernel[k])
-            offset = k - center
+            offset = center - k
 
             if offset < 0:
                 active = axis_index >= -offset
@@ -2881,9 +2882,37 @@ def _convolve_discrete(source: ArrayT, kernel: ArrayBase,
         return value
 
 
+_ConvolveContinuousFilter = Union[
+    Literal["box", "linear", "hamming", "cubic", "lanczos", "gaussian"],
+    Callable[[float], float]
+]
+
+
+@overload
 def convolve(
     source: ArrayT,
-    filter: Union[Literal["box", "linear", "hamming", "cubic", "lanczos", "gaussian"], Callable[[float], float], ArrayBase],
+    filter: _ConvolveContinuousFilter,
+    filter_radius: float,
+    axis: Union[int, Tuple[int, ...], None] = None,
+    boundary: Literal["normalize", "zero"] = "normalize"
+) -> ArrayT:
+    ...
+
+
+@overload
+def convolve(
+    source: ArrayT,
+    filter: ArrayBase,
+    *,
+    axis: Union[int, Tuple[int, ...], None] = None,
+    boundary: Literal["normalize", "zero"] = "normalize"
+) -> ArrayT:
+    ...
+
+
+def convolve(
+    source: ArrayT,
+    filter: Union[_ConvolveContinuousFilter, ArrayBase],
     filter_radius: Optional[float] = None,
     axis: Union[int, Tuple[int, ...], None] = None,
     boundary: Literal["normalize", "zero"] = "normalize"
