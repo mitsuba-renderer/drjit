@@ -3922,3 +3922,27 @@ def test105_batched_gemm_varying_batch(t, auto_opaque):
         assert tuple(res.shape) == tuple(ref.shape)
         assert dr.allclose(res, ref, atol=1e-3)
 
+@pytest.mark.parametrize("auto_opaque", [False, True])
+@pytest.test_arrays("float32, jit, shape=(*)")
+def test106_literal_resizing(t, auto_opaque):
+    """
+    Tests that literal outputs in a frozen function are correctly resized on replay
+    when input sizes change.
+    """
+    x = t(1.5)
+
+    @dr.freeze(auto_opaque=auto_opaque)
+    def func(x, y):
+        return x * y, 0.0 * y
+
+    y0 = t(10.0, 20.0)
+    res0 = func(x, y0)
+    ref0 = (x * y0, 0.0 * y0)
+    assert dr.allclose(res0[0], ref0[0])
+    assert dr.allclose(res0[1], ref0[1])
+
+    y1 = t(10.0, 20.0, 30.0)
+    res1 = func(x, y1)
+    ref1 = (x * y1, 0.0 * y1)
+    assert dr.allclose(res1[0], ref1[0])
+    assert dr.allclose(res1[1], ref1[1])
