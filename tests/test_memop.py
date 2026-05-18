@@ -577,12 +577,121 @@ def test22_tile(t):
     x = t(1, 2)
     y = dr.tile(x, 3)
     assert dr.all(y == [1, 2, 1, 2, 1, 2])
+    # Length-1 tuple is equivalent to an int.
+    assert dr.all(dr.tile(x, (3,)) == [1, 2, 1, 2, 1, 2])
+    # count == 1 returns the input unchanged.
+    assert dr.tile(x, 1) is x
+
 
 @pytest.test_arrays('jit,float32,shape=(*)')
 def test22_repeat(t):
     x = t(1, 2)
     y = dr.repeat(x, 3)
     assert dr.all(y == [1, 1, 1, 2, 2, 2])
+    # Per-element repetition counts.
+    UInt32 = dr.uint32_array_t(t)
+    y = dr.repeat(t(10, 20, 30), UInt32(1, 2, 3))
+    assert dr.all(y == [10, 20, 20, 30, 30, 30])
+    # count == 1 returns the input unchanged.
+    assert dr.repeat(x, 1) is x
+
+
+@pytest.test_arrays('jit,tensor,float32')
+def test22b_tile_tensor(t):
+    # NumPy-style multi-axis tile on a 2D tensor.
+    x = t([[1, 2, 3], [4, 5, 6]])
+
+    y = dr.tile(x, 2)
+    assert y.shape == (2, 6)
+    assert dr.all(y.array == [1, 2, 3, 1, 2, 3, 4, 5, 6, 4, 5, 6])
+
+    y = dr.tile(x, (2, 1))
+    assert y.shape == (4, 3)
+    assert dr.all(y.array == [1, 2, 3, 4, 5, 6, 1, 2, 3, 4, 5, 6])
+
+    y = dr.tile(x, (2, 2))
+    assert y.shape == (4, 6)
+
+    # Padding ``reps`` with leading 1s.
+    y = dr.tile(x, (2, 1, 2))
+    assert y.shape == (2, 2, 6)
+
+
+@pytest.test_arrays('jit,float32,shape=(*)')
+def test22b_tile_promote_to_tensor(t):
+    # A 1D dynamic array with a multi-element ``reps`` is promoted to a tensor.
+    x = t(1, 2, 3)
+    y = dr.tile(x, (2, 3))
+    assert dr.is_tensor_v(y)
+    assert y.shape == (2, 9)
+    assert dr.all(y.array == [1, 2, 3, 1, 2, 3, 1, 2, 3,
+                              1, 2, 3, 1, 2, 3, 1, 2, 3])
+
+
+@pytest.test_arrays('jit,tensor,float32')
+def test22b_repeat_tensor(t):
+    # NumPy-style ``axis`` for tensor inputs.
+    x = t([[1, 2, 3], [4, 5, 6]])
+
+    # axis=None flattens, matching NumPy.
+    y = dr.repeat(x, 2)
+    assert y.shape == (12,)
+    assert dr.all(y.array == [1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6])
+
+    y = dr.repeat(x, 2, axis=0)
+    assert y.shape == (4, 3)
+    assert dr.all(y.array == [1, 2, 3, 1, 2, 3, 4, 5, 6, 4, 5, 6])
+
+    y = dr.repeat(x, 2, axis=1)
+    assert y.shape == (2, 6)
+    assert dr.all(y.array == [1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6])
+
+    # Negative axis.
+    y = dr.repeat(x, 2, axis=-1)
+    assert y.shape == (2, 6)
+
+    # Per-element repetition counts along an axis.
+    UInt32 = dr.uint32_array_t(dr.array_t(t))
+    y = dr.repeat(x, UInt32(1, 2), axis=0)
+    assert y.shape == (3, 3)
+    assert dr.all(y.array == [1, 2, 3, 4, 5, 6, 4, 5, 6])
+
+
+@pytest.test_arrays('jit,float32,shape=(*)')
+def test22b_tile_repeat_pytree(t):
+    # PyTree inputs are recursed leaf-wise for an integer count.
+    a = t(1, 2)
+    b = t(3, 4)
+
+    y = dr.tile({'x': a, 'y': b}, 2)
+    assert dr.all(y['x'] == [1, 2, 1, 2])
+    assert dr.all(y['y'] == [3, 4, 3, 4])
+
+    y = dr.repeat([a, b], 2)
+    assert dr.all(y[0] == [1, 1, 2, 2])
+    assert dr.all(y[1] == [3, 3, 4, 4])
+
+
+@pytest.test_arrays('jit,float32,shape=(*)')
+def test22b_tile_repeat_validation(t):
+    x = t(1, 2)
+    UInt32 = dr.uint32_array_t(t)
+
+    # Negative counts.
+    with pytest.raises(ValueError):
+        dr.tile(x, -1)
+    with pytest.raises(ValueError):
+        dr.repeat(x, -1)
+
+    # ``repeats`` length must match input size.
+    with pytest.raises(RuntimeError):
+        dr.repeat(x, UInt32(1, 2, 3))
+
+    # Multi-element ``reps`` propagates through PyTrees and promotes 1D
+    # leaves to tensors.
+    r = dr.tile({'x': x}, (2, 3))
+    assert dr.is_tensor_v(r['x']) and r['x'].shape == (2, 6)
+
 
 @pytest.test_arrays('shape=(*),-bool,-int8')
 def test23_block_sum(t):

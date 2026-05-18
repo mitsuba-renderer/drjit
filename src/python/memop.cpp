@@ -1169,48 +1169,6 @@ static nb::object reshape_same_dtype_2(nb::handle value, Py_ssize_t shape,
     return reshape_2(nb::borrow<nb::type_object>(value.type()), value, shape, order, shrink);
 }
 
-static nb::object repeat_or_tile(nb::handle h, size_t count, bool tile) {
-    struct RepeatOrTileOp : TransformCallback {
-        size_t count;
-        bool tile;
-
-        RepeatOrTileOp(size_t count, bool tile) : count(count), tile(tile) { }
-        void operator()(nb::handle h1, nb::handle h2) override {
-            const ArraySupplement &s = supp(h1.type());
-            if (!s.index)
-                nb::raise("Unsupported input type!");
-            size_t size     = s.len(inst_ptr(h1)),
-                   combined = count * size;
-
-            if (combined) {
-                ArrayMeta m = s;
-                m.type = (uint16_t) VarType::UInt32;
-
-                nb::object index = arange(
-                    nb::borrow<nb::type_object_t<ArrayBase>>(meta_get_type(m)),
-                    0, (Py_ssize_t) combined, 1),
-                    divisor_o = nb::int_(tile ? size : count);
-
-                nb::object result = gather(
-                    nb::borrow<nb::type_object>(h1.type()),
-                    nb::borrow(h1),
-                    tile ? (index % divisor_o) : index.floor_div(divisor_o),
-                    nb::bool_(true),
-                    ReduceMode::Auto
-                );
-
-                nb::inst_replace_move(h2, result);
-            }
-        }
-    };
-
-    if (count == 1)
-        return nb::borrow(h);
-
-    RepeatOrTileOp r(count, tile);
-    return transform(tile ? "drjit.tile" : "drjit.repeat", r, h);
-}
-
 void export_memop(nb::module_ &m) {
     m.def("gather", &gather, "dtype"_a, "source"_a, "index"_a,
           "active"_a = true, "mode"_a = ReduceMode::Auto,
@@ -1262,15 +1220,5 @@ void export_memop(nb::module_ &m) {
      .def("reshape", &reshape_same_dtype, "value"_a,
           "shape"_a, "order"_a = 'A', "shrink"_a = false, doc_reshape)
      .def("reshape", &reshape_same_dtype_2, "value"_a,
-          "shape"_a, "order"_a = 'A', "shrink"_a = false)
-     .def("tile",
-          [](nb::handle h, size_t count) {
-              return repeat_or_tile(h, count, true);
-          }, "value"_a, "count"_a, doc_tile,
-          nb::sig("def tile(value: T, count: int) -> T"))
-     .def("repeat",
-          [](nb::handle h, size_t count) {
-              return repeat_or_tile(h, count, false);
-          }, "value"_a, "count"_a, doc_repeat,
-          nb::sig("def repeat(value: T, count: int) -> T"));
+          "shape"_a, "order"_a = 'A', "shrink"_a = false);
 }

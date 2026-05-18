@@ -3172,6 +3172,293 @@ def take_interp(value: ArrayT, pos: Union[float, ArrayBase], axis: int = 0) -> A
     return type(value)(fma(v0, w0, v1 * w1), new_shape)
 
 
+def _map_arrays(value: T, fn: Callable[[ArrayBase], ArrayBase]) -> T:
+    """
+    Walk a Dr.Jit :ref:`PyTree <pytrees>` and apply ``fn`` at every leaf.
+    Tensors and 1D dynamic Dr.Jit arrays are treated as leaves; nested
+    arrays (e.g., ``Array3f`` containing ``Float``) are entered recursively.
+    """
+    tp = type(value)
+
+    if is_array_v(tp):
+        if is_tensor_v(tp) or (depth_v(tp) == 1 and is_dynamic_v(tp)):
+            return fn(value)
+        return tp([_map_arrays(value[i], fn) for i in range(len(value))])
+
+    if tp is tuple:
+        return tuple(_map_arrays(v, fn) for v in value)
+    if tp is list:
+        return [_map_arrays(v, fn) for v in value]
+    if tp is dict:
+        return {k: _map_arrays(v, fn) for k, v in value.items()}
+
+    struct = getattr(tp, 'DRJIT_STRUCT', None)
+    if type(struct) is dict:
+        out = tp()
+        for k in struct:
+            setattr(out, k, _map_arrays(getattr(value, k), fn))
+        return out
+
+    if hasattr(tp, '__dataclass_fields__'):
+        return tp(**{k: _map_arrays(getattr(value, k), fn)
+                     for k in tp.__dataclass_fields__})
+
+    return value
+
+
+def _gather_remap(arr: 'ArrayBase',
+                  out_shape: Tuple[int, ...],
+                  in_shape: Tuple[int, ...],
+                  axis_remap: Sequence[Optional[Callable]]) -> 'ArrayBase':
+    """
+    Gather from ``arr`` (a row-major tensor of shape ``in_shape``) to
+    produce a flat output describing a row-major tensor of shape
+    ``out_shape``. For every output element, the per-axis output
+    coordinate ``o_i`` is passed through ``axis_remap[i]`` (if given,
+    else identity) — this is where the per-operation logic lives
+    (e.g. ``p % size`` for tile, ``p // repeats`` for repeat). The
+    remapped coordinates are then dotted with the row-major strides of
+    ``in_shape`` to obtain the flat source index; axes with ``in_shape[i]
+    == 1`` are broadcast and contribute nothing.
+    """
+    Array = type(arr)
+    Int = int32_array_t(Array)
+    UInt = uint32_array_t(Array)
+
+    out_size = 1
+    for s in out_shape:
+        out_size *= s
+    if out_size == 0:
+        return Array()
+
+    out_strides = _compute_strides(out_shape)
+    in_strides = _compute_strides(in_shape)
+    rem = arange(UInt, out_size)
+    src_index: Optional['ArrayBase'] = None
+    ndim = len(out_shape)
+    for i in range(ndim):
+        if i < ndim - 1:
+            pos = rem // out_strides[i]
+            rem = fma(pos, UInt(-Int(out_strides[i])), rem)
+        else:
+            pos = rem
+        if axis_remap[i] is not None:
+            pos = axis_remap[i](pos)
+        if in_shape[i] != 1:
+            src_index = pos * in_strides[i] if src_index is None \
+                else fma(pos, in_strides[i], src_index)
+
+    if src_index is None:
+        src_index = zeros(UInt, out_size)
+    return gather(Array, arr, src_index)
+
+
+def _repeat_axis_remap(in_size: int,
+                       repeats: Union[int, 'ArrayBase'],
+                       Index: type) -> Tuple[int, Optional[Callable]]:
+    """
+    Build ``(out_size, remap_fn)`` for :py:func:`drjit.repeat` along one
+    axis. ``remap_fn=None`` denotes the identity.
+    """
+    if isinstance(repeats, int):
+        out_size = in_size * repeats
+        remap_fn = (lambda p: p // repeats) if repeats != 1 else None
+        return out_size, remap_fn
+
+    repeats_arr = Index(repeats)
+    if len(repeats_arr) != in_size:
+        raise RuntimeError(
+            f"drjit.repeat(): 'repeats' array of size "
+            f"{len(repeats_arr)} does not match input size {in_size}.")
+    if in_size == 0:
+        return 0, None
+    cum = cumsum(repeats_arr)
+    out_size = int(cum[in_size - 1])
+    remap_fn = lambda p: binary_search(
+        0, in_size, lambda j: gather(Index, cum, j) <= p)
+    return out_size, remap_fn
+
+
+def _tile_leaf(value: 'ArrayBase', reps: Tuple[int, ...]) -> 'ArrayBase':
+    """Apply ``drjit.tile`` to a single 1D-array or tensor leaf."""
+    is_tensor = is_tensor_v(value)
+    if is_tensor:
+        shape_in, arr = tuple(value.shape), value.array
+    elif len(reps) > 1:
+        # Multi-axis tile on a 1D array → promote to a tensor first.
+        ttp = tensor_t(type(value))
+        if ttp is None:
+            raise TypeError(f"drjit.tile(): cannot derive a tensor type "
+                            f"for input of type {type(value).__name__}.")
+        return _tile_leaf(ttp(value), reps)
+    else:
+        shape_in, arr = (len(value),), value
+
+    n, d = len(shape_in), len(reps)
+    out_ndim = n if n > d else d
+    shape_p = (1,) * (out_ndim - n) + shape_in
+    reps_p = (1,) * (out_ndim - d) + reps
+    out_shape = tuple(s * r for s, r in zip(shape_p, reps_p))
+    if out_shape == shape_in:
+        return value
+
+    # ``p % s`` only where the source has >1 element AND we're widening;
+    # size-1 input axes are handled implicitly by ``_gather_remap``.
+    remap = [(lambda p, s=shape_p[i]: p % s)
+             if shape_p[i] > 1 and reps_p[i] > 1 else None
+             for i in range(out_ndim)]
+    out = _gather_remap(arr, out_shape, shape_p, remap)
+    return type(value)(out, out_shape) if is_tensor else out
+
+
+def _repeat_leaf(value: 'ArrayBase',
+                 repeats: Union[int, 'ArrayBase'],
+                 axis: Optional[int]) -> 'ArrayBase':
+    """Apply ``drjit.repeat`` to a single 1D-array or tensor leaf."""
+    is_tensor = is_tensor_v(value)
+    if is_tensor:
+        if axis is None:  # flatten, repeat, rewrap
+            return type(value)(_repeat_leaf(value.array, repeats, None))
+        shape_in = tuple(value.shape)
+        ndim = len(shape_in)
+        if axis < 0:
+            axis += ndim
+        if not 0 <= axis < ndim:
+            raise RuntimeError(f"drjit.repeat(): axis {axis} is out of "
+                               f"bounds for a tensor of dimension {ndim}.")
+        arr = value.array
+    else:
+        if axis not in (None, 0, -1):
+            raise RuntimeError(f"drjit.repeat(): axis {axis} is out of "
+                               f"bounds for a 1D input.")
+        shape_in, ndim, axis, arr = (len(value),), 1, 0, value
+
+    Index = uint32_array_t(type(arr))
+    out_size, remap_fn = _repeat_axis_remap(shape_in[axis], repeats, Index)
+    if out_size == shape_in[axis] and remap_fn is None:
+        return value  # identity (e.g. ``repeats == 1``)
+
+    out_shape = shape_in[:axis] + (out_size,) + shape_in[axis + 1:]
+    remap: List[Optional[Callable]] = [None] * ndim
+    remap[axis] = remap_fn
+    out = _gather_remap(arr, out_shape, shape_in, remap)
+    return type(value)(out, out_shape) if is_tensor else out
+
+
+def tile(value: T, reps: Union[int, Sequence[int]]) -> T:
+    """
+    Lay out copies of ``value`` in a regular tiled pattern.
+
+    With an integer ``reps``, ``value`` is concatenated with itself
+    ``reps`` times along its trailing dynamic dimension:
+
+    .. code-block:: pycon
+
+       >>> from drjit.cuda import Float
+       >>> dr.tile(Float(1, 2), 3)
+       [1, 2, 1, 2, 1, 2]
+
+    The operation threads through :ref:`PyTrees <pytrees>` and through
+    nested static Dr.Jit arrays, tiling every leaf independently.
+
+    When ``reps`` is a sequence of length ``d``, ``value`` is tiled along
+    ``d`` axes. Let ``n`` be the number of dimensions of ``value``: if
+    ``n < d``, the input is treated as having ``d - n`` extra leading
+    axes of length one; if ``n > d``, ``reps`` is left-padded with ones,
+    leaving the leading input axes untouched. The output then has
+    ``max(n, d)`` axes, and along each one its size is the (broadcast)
+    input size times the matching entry of ``reps``. This multi-axis
+    form requires a Dr.Jit tensor; a 1D dynamic array is automatically
+    promoted to one.
+
+    .. code-block:: pycon
+
+       >>> from drjit.cuda import TensorXf
+       >>> dr.tile(TensorXf([[1, 2], [3, 4]]), (2, 1))
+       [[1, 2], [3, 4], [1, 2], [3, 4]]
+
+    Args:
+        value: A Dr.Jit array, tensor, or :ref:`PyTree <pytrees>`.
+
+        reps (int | Sequence[int]): A non-negative integer or sequence of
+          non-negative integers giving the per-axis repetition counts.
+
+    Returns:
+        The tiled output. With a scalar ``reps`` and a non-tensor input
+        the return type is preserved; otherwise affected leaves become
+        Dr.Jit tensors.
+    """
+    if isinstance(reps, int):
+        reps_t: Tuple[int, ...] = (reps,)
+    else:
+        try:
+            reps_t = tuple(int(r) for r in reps)
+        except (TypeError, ValueError):
+            raise TypeError("drjit.tile(): 'reps' must be an int or a "
+                            "sequence of ints.")
+    if any(r < 0 for r in reps_t):
+        raise ValueError(
+            "drjit.tile(): all entries of 'reps' must be non-negative.")
+
+    return _map_arrays(value, lambda leaf: _tile_leaf(leaf, reps_t))
+
+
+def repeat(value: T,
+           repeats: Union[int, 'ArrayBase'],
+           axis: Optional[int] = None) -> T:
+    """
+    Repeat each element of ``value`` one or more times in place.
+
+    Unlike :py:func:`drjit.tile`, which replicates the *whole* input as a
+    pattern, this function replicates each entry *individually*: the
+    ``i``-th input element produces a contiguous run of identical output
+    entries.
+
+    With an integer ``repeats`` and ``axis=None``, each entry is replicated
+    ``repeats`` times along the trailing dynamic dimension:
+
+    .. code-block:: pycon
+
+       >>> from drjit.cuda import Float
+       >>> dr.repeat(Float(1, 2), 3)
+       [1, 1, 1, 2, 2, 2]
+
+    The operation threads through :ref:`PyTrees <pytrees>` and through
+    nested static Dr.Jit arrays, repeating every leaf independently.
+    For tensor inputs, ``axis`` selects which axis to repeat along;
+    ``axis=None`` first flattens the tensor and returns a 1D result.
+
+    ``repeats`` may also be a 1D integer array of per-element counts. Its
+    length must match the input size along ``axis``, and the output then
+    has size ``sum(repeats)`` along that axis. This form uses a binary
+    search over the prefix sum of ``repeats`` and therefore evaluates
+    that prefix sum eagerly.
+
+    .. code-block:: pycon
+
+       >>> from drjit.cuda import Float, UInt32
+       >>> dr.repeat(Float(10, 20, 30), UInt32(1, 2, 3))
+       [10, 20, 20, 30, 30, 30]
+
+    Args:
+        value: A Dr.Jit array, tensor, or :ref:`PyTree <pytrees>`.
+
+        repeats (int | drjit.ArrayBase): Non-negative integer or 1D
+          integer array of per-element repetition counts.
+
+        axis (int | None): Axis along which to repeat (tensor inputs only).
+          ``None`` flattens the input first.
+
+    Returns:
+        The repeated output. With an integer ``repeats``, ``axis=None``,
+        and a non-tensor input, the return type matches ``value``.
+    """
+    if isinstance(repeats, int) and repeats < 0:
+        raise ValueError("drjit.repeat(): 'repeats' must be non-negative.")
+
+    return _map_arrays(value, lambda leaf: _repeat_leaf(leaf, repeats, axis))
+
+
 def upsample(t, shape=None, scale_factor=None):
     '''
     upsample(source, shape=None, scale_factor=None)
