@@ -72,9 +72,17 @@ struct KMaskBase : StaticArrayBase<Value_, Size_, true, Derived_> {
             value = _mm_loadu_si128((__m128i *) data);
         else if constexpr (Size == 8)
             value = _mm_loadl_epi64((const __m128i *) data);
-        else if constexpr (Size == 4 || Size == 3)
+        else if constexpr (Size == 4 || Size == 3) {
+            // Size==3 over-reads 1 byte; masked off below. GCC false positive.
+#if defined(__GNUC__) && !defined(__clang__)
+#  pragma GCC diagnostic push
+#  pragma GCC diagnostic ignored "-Warray-bounds"
+#endif
             value = _mm_cvtsi32_si128(*((const int *) data));
-        else if constexpr (Size == 2)
+#if defined(__GNUC__) && !defined(__clang__)
+#  pragma GCC diagnostic pop
+#endif
+        } else if constexpr (Size == 2)
             value = _mm_cvtsi32_si128((int) *((const short *) data));
         else
             drjit_fail("KMaskBase: unsupported number of elements!");

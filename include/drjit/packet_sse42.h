@@ -391,7 +391,15 @@ template <bool IsMask_, typename Derived_> struct alignas(16)
     }
 
     static DRJIT_INLINE Derived load_(const void *ptr, size_t) {
+        // Reads 16 bytes; upper lanes discarded by caller. GCC false positive.
+#if defined(__GNUC__) && !defined(__clang__)
+#  pragma GCC diagnostic push
+#  pragma GCC diagnostic ignored "-Warray-bounds"
+#endif
         return _mm_loadu_ps((const Value *) ptr);
+#if defined(__GNUC__) && !defined(__clang__)
+#  pragma GCC diagnostic pop
+#endif
     }
 
     static DRJIT_INLINE Derived empty_(size_t) { return _mm_undefined_ps(); }
