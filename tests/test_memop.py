@@ -1140,10 +1140,12 @@ def test37_take_multiple(t):
 
 @pytest.mark.parametrize("packet_size", [1, 2, 3, 4, 5, 6, 12, 16])
 @pytest.mark.parametrize("reduce_op", ["Add", "Mul", "Max", "Min"])
+@pytest.mark.parametrize("mode", [dr.ReduceMode.Local, dr.ReduceMode.Direct,
+                                  dr.ReduceMode.Auto])
 @pytest.skip_on(RuntimeError, "backend does not support the requested type of atomic reduction")
 @pytest.test_arrays("is_jit, float, shape=(*)")
 @pytest.mark.parametrize("force_optix", [True, False])
-def test35_scatter_packet_reduce(t, reduce_op, packet_size, force_optix):
+def test35_scatter_packet_reduce(t, reduce_op, packet_size, force_optix, mode):
     """
     Tests that packeted scatter reduce operations behave correctly.
     """
@@ -1189,7 +1191,7 @@ def test35_scatter_packet_reduce(t, reduce_op, packet_size, force_optix):
 
             op = getattr(dr.ReduceOp, reduce_op)
 
-            dr.scatter_reduce(op, target, src, index, active=active)
+            dr.scatter_reduce(op, target, src, index, mode=mode, active=active)
 
             dr.kernel_history_clear()
             dr.eval(target)
@@ -1219,6 +1221,12 @@ def test35_scatter_packet_reduce(t, reduce_op, packet_size, force_optix):
             )
 
     assert dr.allclose(target, ref)
+
+    # On LLVM, explicit Local/Direct fall back to per-element atomic scatter
+    # (no packet IR to assert against).
+    if (dr.backend_v(t) is dr.JitBackend.LLVM and
+            mode != dr.ReduceMode.Auto):
+        return
 
     # Test that we are actually using vector instructions on CUDA and LLVM
     if dr.backend_v(t) is dr.JitBackend.Metal:
