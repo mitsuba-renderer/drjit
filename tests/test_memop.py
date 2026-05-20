@@ -817,6 +817,7 @@ def test29_packet_gather(t, psize):
     pcg = mod.PCG32(size*psize)
     tp = dr.type_v(t)
     vt = dr.value_t(t)
+    UInt32 = dr.uint32_array_t(vt)
 
     if tp == dr.VarType.Bool:
         buf = pcg.next_uint32() & 1 == 0
@@ -831,13 +832,16 @@ def test29_packet_gather(t, psize):
 
     dr.eval(buf)
     i = mod.PCG32(1024*1024).next_uint32_bounded(size)
+    # Mask every second lane and OOB on inactive ones to also test masked gather.
+    active = dr.arange(UInt32, dr.width(i)) & 1 == 0
+    i = dr.select(active, i, UInt32(0xFFFFFFF0))
 
     with dr.scoped_set_flag(dr.JitFlag.PacketOps, False):
-        y1 = dr.gather(t, source=buf, index=i, active = i & 128 != 0, shape=(psize, size))
+        y1 = dr.gather(t, source=buf, index=i, active=active, shape=(psize, size))
         dr.eval(y1)
 
     with dr.scoped_set_flag(dr.JitFlag.PacketOps, True):
-        y2 = dr.gather(t, source=buf, index=i, active = i & 128 != 0, shape=(psize, size))
+        y2 = dr.gather(t, source=buf, index=i, active=active, shape=(psize, size))
         dr.eval(y2)
 
     assert dr.all(y1 == y2, axis=None)
@@ -871,17 +875,20 @@ def test30_packet_scatter(t, psize):
 
     value_arr = t(value)
     perm = UInt32(np.random.permutation(1024))
-    target_1 = dr.empty(vt, size*psize)
-    target_2 = dr.empty(vt, size*psize)
+    # Mask every second lane and OOB on inactive ones to also test masked scatter.
+    active = dr.arange(UInt32, dr.width(perm)) & 1 == 0
+    perm = dr.select(active, perm, UInt32(0xFFFFFFF0))
+    target_1 = dr.zeros(vt, size*psize)
+    target_2 = dr.zeros(vt, size*psize)
 
     with dr.scoped_set_flag(dr.JitFlag.PacketOps, False):
-        dr.scatter(target_1, value_arr, perm)
+        dr.scatter(target_1, value_arr, perm, active=active)
     dr.eval(target_1)
 
     with dr.scoped_set_flag(dr.JitFlag.PacketOps, True):
         with dr.scoped_set_flag(dr.JitFlag.KernelHistory, True):
             dr.kernel_history_clear()
-            dr.scatter(target_2, value_arr, perm)
+            dr.scatter(target_2, value_arr, perm, active=active)
             dr.eval(target_2)
             history = dr.kernel_history((dr.KernelType.JIT,))
 
@@ -1103,11 +1110,14 @@ def test35_scatter_packet_reduce(t, reduce_op, packet_size, force_optix):
 
             target = dr.zeros(t, n * packet_size)
             index = mod.UInt32(0, 1, 1, 2)
+            # Mask one lane and OOB on it to also test masked scatter_reduce.
+            active = mod.Bool(True, True, True, False)
+            index = dr.select(active, index, mod.UInt32(0xFFFFFFF0))
             src = dr.rng().uniform(ArrayXf, (packet_size, dr.width(index)))
 
             op = getattr(dr.ReduceOp, reduce_op)
 
-            dr.scatter_reduce(op, target, src, index)
+            dr.scatter_reduce(op, target, src, index, active=active)
 
             dr.kernel_history_clear()
             dr.eval(target)
@@ -1116,6 +1126,8 @@ def test35_scatter_packet_reduce(t, reduce_op, packet_size, force_optix):
     # Manually construct a reference, by scattering into a python list.
     ref = dr.zeros(t, n * packet_size)
     for i in range(dr.width(index)):
+        if not active[i]:
+            continue
         for j in range(packet_size):
             if reduce_op == "Add":
                 def op(x, y):
