@@ -1146,6 +1146,8 @@ def test35_scatter_packet_reduce(t, reduce_op, packet_size, force_optix):
         # CC 120+ supports wide vector reductions (red.global.vX.f16 and red.global.vX.f32)
         supports_wide_vector_reduction = compute_capability >= 120 and \
             (not force_optix or cuda_version >= (13, 2))
+        if force_optix and tp == dr.VarType.Float16:
+            supports_wide_vector_reduction = False
         if supports_wide_vector_reduction:
             if tp == dr.VarType.Float16:
                 n_regs = {1: 0, 2: 2, 3: 0, 4: 4, 5: 0, 6: 2, 12: 4, 16: 8}[packet_size]
