@@ -1485,3 +1485,153 @@ def test42_masked_gather_loop(t, mode):
     # Lane 2: outputs 0 because the gather on buf_1 masked it
 
     assert dr.all(out == [0, 5, 0], axis=None)
+
+
+@pytest.mark.parametrize("packet_size", [1, 2, 3, 4, 5, 6, 12, 16])
+@pytest.test_arrays('-diff, jit, shape=(*, *), -bool, -int8, -uint8')
+@pytest.mark.parametrize("force_optix", [True, False])
+def test43_packet_scatter_masked(t, packet_size, force_optix):
+    vt = dr.value_t(t)
+    UInt32 = dr.uint32_array_t(vt)
+    Bool = dr.mask_t(vt)
+
+    n_lanes = 4
+    n_packets = 8
+    target_size = n_packets * packet_size
+    OOB_INDEX = 0xFFFFFFF0
+
+    src = t([vt([k * 100 + lane + 1 for lane in range(n_lanes)])
+             for k in range(packet_size)])
+    active = Bool(True, False, True, False)
+
+    with dr.scoped_set_flag(dr.JitFlag.ForceOptiX, force_optix):
+        index_oob = UInt32(0, OOB_INDEX, 1, OOB_INDEX)
+        target_1 = dr.zeros(vt, target_size)
+        target_2 = dr.zeros(vt, target_size)
+        with dr.scoped_set_flag(dr.JitFlag.PacketOps, False):
+            dr.scatter(target_1, src, index_oob, active=active)
+        dr.eval(target_1)
+        with dr.scoped_set_flag(dr.JitFlag.PacketOps, True):
+            dr.scatter(target_2, src, index_oob, active=active)
+        dr.eval(target_2)
+        assert dr.all(target_1 == target_2)
+
+        index_ok = UInt32(0, 5, 1, 6)
+        target_1 = dr.full(vt, 7, target_size)
+        target_2 = dr.full(vt, 7, target_size)
+        with dr.scoped_set_flag(dr.JitFlag.PacketOps, False):
+            dr.scatter(target_1, src, index_ok, active=active)
+        dr.eval(target_1)
+        with dr.scoped_set_flag(dr.JitFlag.PacketOps, True):
+            dr.scatter(target_2, src, index_ok, active=active)
+        dr.eval(target_2)
+        assert dr.all(target_1 == target_2)
+        for inactive_packet in (5, 6):
+            for k in range(packet_size):
+                assert target_2[inactive_packet * packet_size + k] == 7
+
+
+@pytest.mark.parametrize("packet_size", [1, 2, 3, 4, 5, 6, 12, 16])
+@pytest.mark.parametrize("reduce_op", ["Add", "Mul", "Max", "Min"])
+@pytest.mark.parametrize("mode", [dr.ReduceMode.Local, dr.ReduceMode.Direct,
+                                  dr.ReduceMode.Auto])
+@pytest.skip_on(RuntimeError, "backend does not support the requested type of atomic reduction")
+@pytest.test_arrays('-diff, jit, shape=(*, *), -bool, -int8, -uint8')
+@pytest.mark.parametrize("force_optix", [True, False])
+def test44_packet_scatter_reduce_masked(t, reduce_op, packet_size, force_optix, mode):
+    vt = dr.value_t(t)
+    tp = dr.type_v(vt)
+    UInt32 = dr.uint32_array_t(vt)
+    Bool = dr.mask_t(vt)
+
+    if (dr.backend_v(t) == dr.JitBackend.LLVM
+            and dr.detail.llvm_version()[0] < 16
+            and tp == dr.VarType.Float16):
+        pytest.skip("Half precision atomics too spotty on LLVM before v16.0.0")
+
+    if (dr.backend_v(t) == dr.JitBackend.CUDA
+            and force_optix
+            and tp == dr.VarType.Float16
+            and reduce_op != "Add"):
+        pytest.skip("Only scatter add reductions are supported for Float16 types on the OptiX backend")
+
+    n_lanes = 4
+    n_packets = 8
+    target_size = n_packets * packet_size
+    OOB_INDEX = 0xFFFFFFF0
+
+    src = t([vt([k * 100 + lane + 1 for lane in range(n_lanes)])
+             for k in range(packet_size)])
+    active = Bool(True, False, True, False)
+    op = getattr(dr.ReduceOp, reduce_op)
+
+    with dr.scoped_set_flag(dr.JitFlag.ForceOptiX, force_optix):
+        index_oob = UInt32(0, OOB_INDEX, 1, OOB_INDEX)
+        target_1 = dr.zeros(vt, target_size)
+        target_2 = dr.zeros(vt, target_size)
+        with dr.scoped_set_flag(dr.JitFlag.PacketOps, False):
+            dr.scatter_reduce(op, target_1, src, index_oob, active=active, mode=mode)
+        dr.eval(target_1)
+        with dr.scoped_set_flag(dr.JitFlag.PacketOps, True):
+            dr.scatter_reduce(op, target_2, src, index_oob, active=active, mode=mode)
+        dr.eval(target_2)
+        assert dr.all(target_1 == target_2)
+
+        index_ok = UInt32(0, 5, 1, 6)
+        target_1 = dr.full(vt, 7, target_size)
+        target_2 = dr.full(vt, 7, target_size)
+        with dr.scoped_set_flag(dr.JitFlag.PacketOps, False):
+            dr.scatter_reduce(op, target_1, src, index_ok, active=active, mode=mode)
+        dr.eval(target_1)
+        with dr.scoped_set_flag(dr.JitFlag.PacketOps, True):
+            dr.scatter_reduce(op, target_2, src, index_ok, active=active, mode=mode)
+        dr.eval(target_2)
+        assert dr.all(target_1 == target_2)
+        for inactive_packet in (5, 6):
+            for k in range(packet_size):
+                assert target_2[inactive_packet * packet_size + k] == 7
+
+
+@pytest.mark.parametrize("packet_size", [1, 2, 3, 4, 5, 6, 12, 16])
+@pytest.test_arrays('-diff, jit, shape=(*, *), -bool, -int8, -uint8')
+@pytest.mark.parametrize("force_optix", [True, False])
+def test45_packet_gather_masked(t, packet_size, force_optix):
+    vt = dr.value_t(t)
+    UInt32 = dr.uint32_array_t(vt)
+    Bool = dr.mask_t(vt)
+
+    n_lanes = 4
+    n_packets = 8
+    source_size = n_packets * packet_size
+    OOB_INDEX = 0xFFFFFFF0
+
+    source = dr.arange(vt, source_size)
+    active = Bool(True, False, True, False)
+
+    with dr.scoped_set_flag(dr.JitFlag.ForceOptiX, force_optix):
+        index_oob = UInt32(0, OOB_INDEX, 1, OOB_INDEX)
+        with dr.scoped_set_flag(dr.JitFlag.PacketOps, False):
+            out_1 = dr.gather(t, source=source, index=index_oob, active=active,
+                              shape=(packet_size, n_lanes))
+        dr.eval(out_1)
+        with dr.scoped_set_flag(dr.JitFlag.PacketOps, True):
+            out_2 = dr.gather(t, source=source, index=index_oob, active=active,
+                              shape=(packet_size, n_lanes))
+        dr.eval(out_2)
+        for k in range(packet_size):
+            assert dr.all(out_1[k] == out_2[k])
+
+        index_ok = UInt32(0, 5, 1, 6)
+        with dr.scoped_set_flag(dr.JitFlag.PacketOps, False):
+            out_1 = dr.gather(t, source=source, index=index_ok, active=active,
+                              shape=(packet_size, n_lanes))
+        dr.eval(out_1)
+        with dr.scoped_set_flag(dr.JitFlag.PacketOps, True):
+            out_2 = dr.gather(t, source=source, index=index_ok, active=active,
+                              shape=(packet_size, n_lanes))
+        dr.eval(out_2)
+        for k in range(packet_size):
+            assert dr.all(out_1[k] == out_2[k])
+        for k in range(packet_size):
+            assert out_2[k][1] == 0
+            assert out_2[k][3] == 0
