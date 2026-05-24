@@ -833,3 +833,20 @@ def test36_aliased_state_ad_fwd(t, mode):
     dr.forward_to(acc)
     assert dr.allclose(acc, 16)
     assert dr.allclose(dr.grad(acc), 32)
+
+@pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
+@pytest.test_arrays('uint32,is_jit,shape=(*)')
+@dr.syntax
+def test37_loop_multi_size_side_effects(t, mode):
+    big   = dr.zeros(t, 200)
+    small = dr.zeros(t, 4)
+    dr.make_opaque(big, small)
+
+    i = t(0)
+    while dr.hint(i < 1, mode=mode):
+        dr.scatter(big,   dr.arange(t, 100) + 1, dr.arange(t, 100))  # size 100
+        dr.scatter(small, t(42), t(0))                               # size 1
+        i += 1
+
+    assert dr.sum(big)[0] == 5050
+    assert small[0] == 42
