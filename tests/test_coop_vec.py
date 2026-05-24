@@ -57,6 +57,19 @@ def test03_add_min_max_fma(t, size):
     dr.schedule(r0, r1)
     assert r0 == 36 and r1 == 49
 
+    # FMA literal shortcuts.
+    a = nn.CoopVec(t(2), t(3))
+    b = nn.CoopVec(t(5), t(7))
+    c = nn.CoopVec(t(11), t(13))
+    ones = nn.CoopVec(t(1), t(1))
+    zeros = nn.CoopVec(t(0), t(0))
+
+    r0, r1 = dr.fma(ones, b, c)          # b + c
+    assert r0 == 16 and r1 == 20
+    r0, r1 = dr.fma(a, b, zeros)         # a * b
+    assert r0 == 10 and r1 == 21
+    r0, r1 = dr.fma(a, zeros, c)         # c
+    assert r0 == 11 and r1 == 13
 
 @pytest.mark.parametrize('sub_slice', [False, True])
 @pytest.test_arrays('jit,float16,shape=(*),-diff')
