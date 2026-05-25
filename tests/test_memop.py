@@ -1498,18 +1498,19 @@ def test42_masked_gather_loop(t, mode):
 
     assert dr.all(out == [0, 5, 0], axis=None)
 
-@pytest.test_arrays('uint32,shape=(*),jit')
+@pytest.test_arrays('uint32,-diff,shape=(*),jit')
 def test43_scatter_gather_power_of_two_indices(t):
-    N = 1 << 30
-    K = 30
+    N = (1 << 28) + 1
 
-    idx = t([1 << i for i in range(K)])
-    idx = dr.repeat(idx, 2)
-    value = dr.arange(t, 1, K + 1)
-    value = dr.repeat(value, 2)
+    idx_list = [0] + [1 << (2 * i) for i in range(15)]
+    K = len(idx_list)
+
+    idx = dr.tile(t(idx_list), 2)
+    value = dr.tile(dr.arange(t, 1, K + 1), 2)
+
+    buf = dr.empty(t, N)
 
     # dr.scatter / dr.gather round-trip
-    buf = dr.empty(t, N)
     dr.scatter(buf, value=0, index=idx)
     dr.eval(buf)
 
@@ -1518,43 +1519,39 @@ def test43_scatter_gather_power_of_two_indices(t):
     result = dr.gather(t, buf, idx)
     assert dr.all(result == value)
 
-    # # dr.scatter_reduce(Add)
-    buf_red = dr.empty(t, N)
-    dr.scatter(buf_red, value=0, index=idx)
-    dr.eval(buf_red)
+    # dr.scatter_reduce(Add)
+    dr.scatter(buf, value=0, index=idx)
+    dr.eval(buf)
 
-    dr.scatter_reduce(dr.ReduceOp.Add, buf_red, value=value, index=idx)
-    dr.eval(buf_red)
-    result = dr.gather(t, buf_red, idx)
+    dr.scatter_reduce(dr.ReduceOp.Add, buf, value=value, index=idx)
+    dr.eval(buf)
+    result = dr.gather(t, buf, idx)
     assert dr.all(result == 2 * value)
 
     # dr.scatter_inc
-    buf_inc = dr.empty(t, N)
-    dr.scatter(buf_inc, value=0, index=idx)
-    dr.eval(buf_inc)
+    dr.scatter(buf, value=0, index=idx)
+    dr.eval(buf)
 
-    offs = dr.scatter_inc(buf_inc, idx)
+    offs = dr.scatter_inc(buf, idx)
     assert dr.sum(offs) == K
-    result = dr.gather(t, buf_inc, idx)
+    result = dr.gather(t, buf, idx)
     assert dr.all(result == 2)
 
     # dr.scatter_exch
-    buf_exch = dr.empty(t, N)
-    dr.scatter(buf_exch, value=idx, index=idx)
-    dr.eval(buf_exch)
+    dr.scatter(buf, value=idx, index=idx)
+    dr.eval(buf)
 
-    old = dr.scatter_exch(buf_exch, value=42, index=idx)
-    dr.eval(old, buf_exch)
+    old = dr.scatter_exch(buf, value=42, index=idx)
+    dr.eval(old, buf)
     assert dr.all((old == idx) | (old == 42))
-    assert dr.all(dr.gather(t, buf_exch, idx) == 42)
+    assert dr.all(dr.gather(t, buf, idx) == 42)
 
     # dr.scatter_cas
-    buf_cas = dr.empty(t, N)
-    dr.scatter(buf_cas, value=value, index=idx)
-    dr.eval(buf_cas)
+    dr.scatter(buf, value=value, index=idx)
+    dr.eval(buf)
 
-    old, swapped = dr.scatter_cas(buf_cas, compare=value, value=42, index=idx)
-    dr.eval(old, swapped, buf_cas)
+    old, swapped = dr.scatter_cas(buf, compare=value, value=42, index=idx)
+    dr.eval(old, swapped, buf)
     assert dr.all((old == value) | (old == 42))
     assert dr.sum(t(swapped)) == K
-    assert dr.all(dr.gather(t, buf_cas, idx) == 42)
+    assert dr.all(dr.gather(t, buf, idx) == 42)
