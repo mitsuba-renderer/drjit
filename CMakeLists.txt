@@ -226,7 +226,6 @@ if (DRJIT_MASTER_PROJECT)
       ${CMAKE_CURRENT_BINARY_DIR}/drjit/detail.py
       ${CMAKE_CURRENT_BINARY_DIR}/drjit/hashgrid.pyi
       ${CMAKE_CURRENT_BINARY_DIR}/drjit/hashgrid.py
-      ${CMAKE_CURRENT_BINARY_DIR}/drjit/bench.py
       ${CMAKE_CURRENT_BINARY_DIR}/drjit/interop.pyi
       ${CMAKE_CURRENT_BINARY_DIR}/drjit/interop.py
       ${CMAKE_CURRENT_BINARY_DIR}/drjit/nn.pyi

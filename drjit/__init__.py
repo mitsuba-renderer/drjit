@@ -33,7 +33,6 @@ from .ast import syntax, hint
 from .interop import wrap
 from . import random
 import builtins as _builtins
-from . import bench
 import warnings as _warnings
 
 from functools import wraps
