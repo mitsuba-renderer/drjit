@@ -115,12 +115,12 @@ struct DRJIT_TRIVIAL_ABI JitArray
     JitArray(Ts&&... ts) {
         if constexpr (!IsClass) {
             Value data[] = { (Value) ts... };
-            m_index = jit_var_mem_copy(Backend, AllocType::Host, Type, data,
-                                       sizeof...(Ts));
+            m_index = jit_var_mem_copy(Backend, Type, data, sizeof...(Ts),
+                                       /*from_host=*/1);
         } else {
             uint32_t data[] = { jit_registry_id(ts)... };
-            m_index = jit_var_mem_copy(Backend, AllocType::Host, Type, data,
-                                       sizeof...(Ts));
+            m_index = jit_var_mem_copy(Backend, Type, data, sizeof...(Ts),
+                                       /*from_host=*/1);
         }
     }
 
@@ -424,14 +424,14 @@ struct DRJIT_TRIVIAL_ABI JitArray
 
     static JitArray load_(const void *ptr, size_t size) {
         if constexpr (!IsClass) {
-            return steal(jit_var_mem_copy(Backend, AllocType::Host, Type, ptr,
-                                          (uint32_t) size));
+            return steal(jit_var_mem_copy(Backend, Type, ptr, (uint32_t) size,
+                                          /*from_host=*/1));
         } else {
             uint32_t *temp = new uint32_t[size];
             for (uint32_t i = 0; i < size; i++)
                 temp[i] = jit_registry_id(((const void **) ptr)[i]);
-            JitArray result = steal(
-                jit_var_mem_copy(Backend, AllocType::Host, Type, temp, (uint32_t) size));
+            JitArray result = steal(jit_var_mem_copy(
+                Backend, Type, temp, (uint32_t) size, /*from_host=*/1));
             delete[] temp;
             return result;
         }
@@ -657,20 +657,31 @@ struct DRJIT_TRIVIAL_ABI JitArray
     VarState state() const { return jit_var_state(m_index); }
 
     Value entry(size_t offset) const {
-        ActualValue out;
-        jit_var_read(m_index, offset, &out);
+        if constexpr (IsMetal && !IsClass && Type == VarType::Float64) {
+            // Apple silicon lack FP64 ALUs. Implicitly cast from FP32.
+            float tmp;
+            jit_var_read(m_index, offset, &tmp);
+            return (Value) tmp;
+        } else {
+            ActualValue out;
+            jit_var_read(m_index, offset, &out);
 
-        if constexpr (!IsClass)
-            return out;
-        else
-            return (Value) jit_registry_ptr(CallSupport::Variant,
-                                            CallSupport::Domain, out);
+            if constexpr (!IsClass)
+                return out;
+            else
+                return (Value) jit_registry_ptr(CallSupport::Variant,
+                                                CallSupport::Domain, out);
+        }
     }
 
     template <typename T, enable_if_t<!std::is_void_v<T> && std::is_same_v<T, Value>> = 0>
     void set_entry(size_t offset, T value) {
         Index index;
-        if constexpr (!IsClass) {
+        if constexpr (IsMetal && !IsClass && Type == VarType::Float64) {
+            // Apple silicon lack FP64 ALUs. Implicitly cast to FP32.
+            float tmp = (float) value;
+            index = jit_var_write(m_index, offset, &tmp);
+        } else if constexpr (!IsClass) {
             index = jit_var_write(m_index, offset, &value);
         } else {
             uint32_t av = jit_registry_id(value);
@@ -686,8 +697,8 @@ struct DRJIT_TRIVIAL_ABI JitArray
         m_index = index;
     }
 
-    JitArray migrate_(AllocType type) const {
-        return steal(jit_var_migrate(m_index, type));
+    JitArray migrate_(JitBackend backend) const {
+        return steal(jit_var_migrate(m_index, backend));
     }
 
     static auto counter(size_t size) {

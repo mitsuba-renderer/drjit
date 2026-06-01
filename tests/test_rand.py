@@ -13,8 +13,8 @@ def test01_pcg32_basic(t):
 
     # next_float64 builds the double via 64-bit bit-pattern manipulation,
     # which only produces correct results when Float64 is real FP64. The
-    # Metal backend silently demotes Float64 to Float32 (unless
-    # JitFlag::MetalEmulateFloat64 is set), so skip the f64 checks there.
+    # Metal backend promotes Float64 to Float32 (Apple GPUs lack hardware
+    # FP64), so skip the f64 checks there.
     has_real_f64 = hasattr(m, 'Float64') and 'metal' not in m.__name__
     if has_real_f64:
         f64 = m.PCG32().next_float64()

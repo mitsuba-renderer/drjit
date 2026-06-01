@@ -68,21 +68,21 @@ NB_MODULE(_drjit_ext, m_) {
     uint32_t backends = 0;
 
 #if defined(DRJIT_ENABLE_LLVM)
-    backends |= (uint32_t) JitBackend::LLVM;
+    backends |= 1u << (uint32_t) JitBackend::LLVM;
 
     nb::module_ llvm    = nb::module_::import_("drjit.llvm"),
                 llvm_ad = nb::module_::import_("drjit.llvm.ad");
 #endif
 
 #if defined(DRJIT_ENABLE_CUDA)
-    backends |= (uint32_t) JitBackend::CUDA;
+    backends |= 1u << (uint32_t) JitBackend::CUDA;
 
     nb::module_ cuda    = nb::module_::import_("drjit.cuda"),
                 cuda_ad = nb::module_::import_("drjit.cuda.ad");
 #endif
 
 #if defined(DRJIT_ENABLE_METAL)
-    backends |= (uint32_t) JitBackend::Metal;
+    backends |= 1u << (uint32_t) JitBackend::Metal;
 
     nb::module_ metal    = nb::module_::import_("drjit.metal"),
                 metal_ad = nb::module_::import_("drjit.metal.ad");
@@ -124,12 +124,6 @@ NB_MODULE(_drjit_ext, m_) {
         .value("FreezingScope", JitFlag::FreezingScope, doc_JitFlag_FreezingScope)
         .value("EnableObjectTraversal", JitFlag::EnableObjectTraversal, doc_JitFlag_EnableObjectTraversal)
         .value("SpillToSharedMemory", JitFlag::SpillToSharedMemory, doc_JitFlag_SpillToSharedMemory)
-        .value("MetalEmulateFloat64", JitFlag::MetalEmulateFloat64,
-               "Emulate Float64 on the Metal backend using double-double "
-               "arithmetic (a pair of float32 values per scalar). When OFF "
-               "(default), Metal silently demotes Float64 to Float32 and "
-               "warns once per process. When ON, Float64 is preserved at a "
-               "~10x performance cost.")
         .value("Default", JitFlag::Default, doc_JitFlag_Default)
 
         // Deprecated aliases

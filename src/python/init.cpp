@@ -629,14 +629,15 @@ nb::object import_ndarray(ArrayMeta m, PyObject *arg, vector<size_t> *shape_out,
             // Hold a reference to the ndarray while Dr.Jit is using it
             ndarray_keep_alive(backend, index, th);
         } else {
-            AllocType at;
+            JitBackend src_backend;
             switch (ndarr.device_type()) {
-                case nb::device::cuda::value: at = AllocType::Device; break;
-                case nb::device::cpu::value:  at = AllocType::Host; break;
+                case nb::device::cuda::value: src_backend = JitBackend::CUDA; break;
+                case nb::device::cpu::value:  src_backend = JitBackend::None; break;
                 default: nb::raise("Unsupported source device!");
             }
 
-            index = jit_var_mem_copy(backend, at, vt, ndarr.data(), size);
+            index = jit_var_mem_copy(backend, vt, ndarr.data(), size,
+                                     src_backend == JitBackend::None);
         }
 
         supp(temp_t).init_index(index, inst_ptr(temp));

@@ -77,6 +77,7 @@ def test01_matmul_2d(t, dims, At, Bt):
 
 @pytest.test_arrays('is_tensor,jit,int32,-is_diff',
                     'is_tensor,jit,uint32,-is_diff')
+@pytest.skip_on(RuntimeError, "integer GEMM unsupported on the Metal backend")
 def test02_matmul_int(t):
     """Integer matmul. int32 dispatches to the uint32 kernel (identical
     bit pattern under two's-complement multiply/add); bounded operands
@@ -320,6 +321,7 @@ def test12_broadcast_matmul_transpose(t, At, Bt):
 
 @pytest.test_arrays('is_tensor,jit,int32,-is_diff',
                     'is_tensor,jit,uint32,-is_diff')
+@pytest.skip_on(RuntimeError, "integer GEMM unsupported on the Metal backend")
 def test13_batched_matmul_int(t):
     """Batched integer matmul -- dispatches the uint32 kernel through
     the batched (``GemmBatch``) path rather than the 2-D fast path."""
