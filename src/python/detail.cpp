@@ -490,9 +490,7 @@ void export_detail(nb::module_ &) {
               uint32_t size = (uint32_t) jit_var_size(idx);
 
               JitBackend backend = (JitBackend) s.backend;
-              AllocType at = (backend == JitBackend::CUDA)
-                  ? AllocType::Device : AllocType::HostAsync;
-              uint32_t *perm = (uint32_t *) jit_malloc(at,
+              uint32_t *perm = (uint32_t *) jit_malloc(backend,
                   (size_t) size * sizeof(uint32_t));
 
               jit_block_mkperm(backend, (const uint32_t *) data_ptr,
@@ -515,14 +513,9 @@ void export_detail(nb::module_ &) {
           "values"_a, "block_size"_a, "bucket_count"_a, doc_block_mkperm,
           nb::sig("def block_mkperm(values: drjit.llvm.UInt32 | drjit.cuda.UInt32, block_size: int, bucket_count: int) -> drjit.llvm.UInt32 | drjit.cuda.UInt32"));
 
-    nb::enum_<AllocType>(d, "AllocType")
-        .value("Host", AllocType::Host)
-        .value("HostAsync", AllocType::HostAsync)
-        .value("HostPinned", AllocType::HostPinned)
-        .value("Device", AllocType::Device);
-
     d.def("malloc_watermark", &jit_malloc_watermark,
-          "Return the peak memory usage (watermark) for a given allocation type");
+          "backend"_a,
+          "Return the peak memory usage (watermark) for a given backend");
     d.def("malloc_clear_statistics", &jit_malloc_clear_statistics,
           "Clear memory allocation statistics");
     d.def("launch_stats", []() {

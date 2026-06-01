@@ -117,7 +117,8 @@ static nb::ndarray<> dlpack(nb::handle_t<ArrayBase> h, bool force_cpu, nb::handl
 
             JitVar value = JitVar::borrow(index);
             if (force_cpu && (backend == JitBackend::CUDA || backend == JitBackend::Metal))
-                value = JitVar::steal(jit_var_migrate(value.index(), AllocType::Host));
+                value = JitVar::steal(jit_var_migrate(value.index(),
+                                                      JitBackend::None));
 
             value = JitVar::steal(jit_var_data(value.index(), &ptr));
 
@@ -162,9 +163,24 @@ static nb::ndarray<> dlpack(nb::handle_t<ArrayBase> h, bool force_cpu, nb::handl
                     nb::inst_replace_move(owner, tmp);
             }
 
-            // Metal DD: the migrate-to-Host path in jit_var_migrate already
-            // decodes the device-side (hi, lo) pairs into IEEE 754 doubles
-            // when MetalEmulateFloat64 is enabled. Nothing to do here.
+            // Apple GPUs lack FP64: a Metal Float64 array is backed by a
+            // Float32 variable. ``ptr`` therefore points at single-precision
+            // data, but the advertised dtype is double. Widen the values into
+            // a host double buffer so consumers see correct IEEE 754 doubles.
+            if (backend == JitBackend::Metal && (VarType) s.type == VarType::Float64) {
+                size_t n = 1;
+                for (size_t d : shape)
+                    n *= d;
+                const float *src = (const float *) ptr;
+                nb::bytearray buf;
+                buf.resize(n * sizeof(double));
+                double *dst = (double *) buf.data();
+                for (size_t i = 0; i < n; ++i)
+                    dst[i] = (double) src[i];
+                ptr = buf.data();
+                owner = std::move(buf);
+            }
+
         } else {
             nb::object arr = nb::borrow(h);
             if (s.is_tensor)

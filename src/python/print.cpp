@@ -325,8 +325,8 @@ struct DelayedPrint {
                 [&ids](uint32_t i0, uint32_t i1) { return ids[i0] < ids[i1]; });
 
             uint32_t perm_index =
-                jit_var_mem_copy((JitBackend) s.backend, AllocType::Host,
-                                 VarType::UInt32, perm.get(), size);
+                jit_var_mem_copy((JitBackend) s.backend, VarType::UInt32,
+                                 perm.get(), size, /*from_host=*/1);
 
             nb::object perm_o = nb::inst_alloc(tp);
             s.init_index(perm_index, inst_ptr(perm_o));

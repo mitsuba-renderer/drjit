@@ -770,8 +770,8 @@ struct DRJIT_TRIVIAL_ABI DiffArray
             return steal(jit_var_copy(m_index));
     }
 
-    DiffArray migrate_(AllocType type) const {
-        return steal(jit_var_migrate((uint32_t) m_index, type));
+    DiffArray migrate_(JitBackend backend) const {
+        return steal(jit_var_migrate((uint32_t) m_index, backend));
     }
 
     void set_grad_enabled_(bool value) {
@@ -801,14 +801,21 @@ struct DRJIT_TRIVIAL_ABI DiffArray
     }
 
     Value entry(size_t offset) const {
-        ActualValue out;
-        jit_var_read((uint32_t) m_index, offset, &out);
+        if constexpr (IsMetal && !IsClass && Type == VarType::Float64) {
+            // Apple silicon lack FP64 ALUs. Implicitly cast from FP32.
+            float tmp;
+            jit_var_read((uint32_t) m_index, offset, &tmp);
+            return (Value) tmp;
+        } else {
+            ActualValue out;
+            jit_var_read((uint32_t) m_index, offset, &out);
 
-        if constexpr (!IsClass)
-            return out;
-        else
-            return (Value) jit_registry_ptr(
-                CallSupport::Variant, CallSupport::Domain, out);
+            if constexpr (!IsClass)
+                return out;
+            else
+                return (Value) jit_registry_ptr(
+                    CallSupport::Variant, CallSupport::Domain, out);
+        }
     }
 
     bool schedule_() const { return jit_var_schedule((uint32_t) m_index); }
@@ -826,7 +833,11 @@ struct DRJIT_TRIVIAL_ABI DiffArray
             jit_raise("DiffArray::set_entry(): not permitted on attached variables!");
 
         uint32_t index;
-        if constexpr (!IsClass) {
+        if constexpr (IsMetal && !IsClass && Type == VarType::Float64) {
+            // Apple silicon lack FP64 ALUs. Implicitly cast to FP32.
+            float tmp = (float) value;
+            index = jit_var_write((uint32_t) m_index, offset, &tmp);
+        } else if constexpr (!IsClass) {
             index = jit_var_write((uint32_t) m_index, offset, &value);
         } else {
             ActualValue av = jit_registry_id(value);
