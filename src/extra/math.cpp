@@ -26,6 +26,11 @@ using Float16 = GenericArray<dr::half>;
 using Float32 = GenericArray<float>;
 using Float64 = GenericArray<double>;
 
+/// Is the given backend a GPU backend with hardware transcendentals?
+static bool is_gpu(JitBackend backend) {
+    return backend == JitBackend::CUDA || backend == JitBackend::Metal;
+}
+
 #define DEFINE_MATH_OP(name)                                                   \
     DRJIT_EXTRA_EXPORT uint32_t jit_var_##name(uint32_t i0) {                  \
         VarInfo info = jit_set_backend(i0);                                    \
@@ -115,7 +120,7 @@ DRJIT_EXTRA_EXPORT uint32_t jit_var_exp(uint32_t i0) {
             return dr::exp<Float16, false>(Float16::borrow(i0)).release();
 
         case VarType::Float32:
-            if (info.backend == JitBackend::CUDA) {
+            if (is_gpu(info.backend)) {
                 Float32 value = Float32::borrow(i0) * dr::InvLogTwo<float>;
                 return jit_var_exp2_intrinsic(value.index());
             }
@@ -139,7 +144,7 @@ DRJIT_EXTRA_EXPORT uint32_t jit_var_exp2(uint32_t i0) {
             return dr::exp2<Float16, false>(Float16::borrow(i0)).release();
 
         case VarType::Float32:
-            if (info.backend == JitBackend::CUDA)
+            if (is_gpu(info.backend))
                 return jit_var_exp2_intrinsic(i0);
             return dr::exp2<Float32, false>(Float32::borrow(i0)).release();
 
@@ -160,7 +165,7 @@ DRJIT_EXTRA_EXPORT uint32_t jit_var_log(uint32_t i0) {
             return dr::log<Float16, false>(Float16::borrow(i0)).release();
 
         case VarType::Float32:
-            if (info.backend == JitBackend::CUDA)
+            if (is_gpu(info.backend))
                 return (Float32::steal(jit_var_log2_intrinsic(i0)) *
                         dr::LogTwo<float>).release();
             return dr::log<Float32, false>(Float32::borrow(i0)).release();
@@ -182,7 +187,7 @@ DRJIT_EXTRA_EXPORT uint32_t jit_var_log2(uint32_t i0) {
             return dr::log2<Float16, false>(Float16::borrow(i0)).release();
 
         case VarType::Float32:
-            if (info.backend == JitBackend::CUDA)
+            if (is_gpu(info.backend))
                 return jit_var_log2_intrinsic(i0);
             return dr::log2<Float32, false>(Float32::borrow(i0)).release();
 
@@ -203,7 +208,7 @@ DRJIT_EXTRA_EXPORT uint32_t jit_var_sin(uint32_t i0) {
             return dr::sin<Float16, false>(Float16::borrow(i0)).release();
 
         case VarType::Float32:
-            if (info.backend == JitBackend::CUDA)
+            if (is_gpu(info.backend))
                 return jit_var_sin_intrinsic(i0);
             return dr::sin<Float32, false>(Float32::borrow(i0)).release();
 
@@ -224,7 +229,7 @@ DRJIT_EXTRA_EXPORT uint32_t jit_var_cos(uint32_t i0) {
             return dr::cos<Float16, false>(Float16::borrow(i0)).release();
 
         case VarType::Float32:
-            if (info.backend == JitBackend::CUDA)
+            if (is_gpu(info.backend))
                 return jit_var_cos_intrinsic(i0);
             return dr::cos<Float32, false>(Float32::borrow(i0)).release();
 
@@ -244,7 +249,7 @@ DRJIT_EXTRA_EXPORT uint32_t jit_var_tanh(uint32_t i0) {
             return dr::tanh<Float16, false>(Float16::borrow(i0)).release();
 
         case VarType::Float32:
-            if (info.backend == JitBackend::CUDA)
+            if (is_gpu(info.backend))
                 return jit_var_tanh_intrinsic(i0);
             return dr::tanh<Float32, false>(Float32::borrow(i0)).release();
 
