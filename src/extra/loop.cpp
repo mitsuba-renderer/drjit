@@ -998,7 +998,8 @@ public:
         jit_var_dec_ref(max_u32);
         uint32_t combined = jit_var_and(user_cond, lt);
         jit_var_dec_ref(lt);
-        return combined;
+        m_bwd_cond = JitVar::steal(combined); // retain ownership
+        return m_bwd_cond.index();
     }
 
     void bwd_gen_p1_body() {
@@ -1049,7 +1050,8 @@ public:
         uint32_t zero = jit_var_u32(m_backend, 0);
         uint32_t gt = jit_var_gt(iter, zero);
         jit_var_dec_ref(zero);
-        return gt;
+        m_bwd_cond = JitVar::steal(gt); // retain ownership
+        return m_bwd_cond.index();
     }
 
     void bwd_gen_p2_body() {
@@ -1214,6 +1216,7 @@ public:
         }
 
         m_state.release();
+        m_bwd_cond = JitVar();
     }
 
 private:
@@ -1253,6 +1256,7 @@ private:
     index64_vector m_state;
     /// Scratch array to call nested loop body/condition
     index64_vector m_state2;
+    JitVar m_bwd_cond;
     /// Total number of differentiable state variables
     size_t m_diff_count;
     // Offset of implicit indices in m_input_indices
