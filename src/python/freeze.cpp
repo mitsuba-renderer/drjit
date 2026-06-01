@@ -267,11 +267,11 @@ bool VarLayout::operator==(const VarLayout &rhs) const {
 /**
  * \brief Add a variant domain pair to be traversed using the registry.
  *
- * When traversing a jit variable, that references a pointer to a class,
- * such as a BSDF or Shape in Mitsuba, we have to traverse all objects
- * registered with that variant-domain pair in the registry. This function
- * adds the variant-domain pair, deduplicating the domain. Whether a
- * variable references a class is represented by its ``IsClass`` const
+ * When traversing a jit variable that references a pointer to a class, we
+ * have to traverse all objects registered with that variant-domain pair in
+ * the registry. This function adds the variant-domain pair, deduplicating
+ * the domain. Whether a variable references a class is represented by its
+ * ``IsClass`` const
  * attribute. If the domain is an empty string (""), this function skips
  * adding the variant-domain pair.
  */
