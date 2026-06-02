@@ -65,9 +65,17 @@ void export_history(nb::module_ &m) {
 
     nb::enum_<KernelType>(m, "KernelType")
         .value("JIT", KernelType::JIT)
-        .value("Reduce", KernelType::Reduce)
-        .value("CallReduce", KernelType::CallReduce)
-        .value("Other", KernelType::Other);
+        .value("BlockReduce", KernelType::BlockReduce)
+        .value("BlockPrefixReduce", KernelType::BlockPrefixReduce)
+        .value("Dot", KernelType::Dot)
+        .value("BatchedGemm", KernelType::BatchedGemm)
+        .value("Compress", KernelType::Compress)
+        .value("MkPerm", KernelType::MkPerm)
+        .value("Memcpy", KernelType::Memcpy)
+        .value("Memset", KernelType::Memset)
+        .value("Poke", KernelType::Poke)
+        .value("Aggregate", KernelType::Aggregate)
+        .value("LLVMHostFunc", KernelType::LLVMHostFunc);
 
     nb::enum_<KernelRecordingMode>(m, "KernelRecordingMode")
         .value("Inactive", KernelRecordingMode::Inactive)
