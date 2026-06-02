@@ -717,6 +717,7 @@ def test24_block_prefix_sum(t):
     [dr.ReduceOp.Add, dr.ReduceOp.Min, dr.ReduceOp.Max,
      dr.ReduceOp.And, dr.ReduceOp.Or])
 @pytest.skip_on(RuntimeError, "backend does not support the requested type of atomic reduction")
+@pytest.skip_on(RuntimeError, "'Or'/'And' reductions are not supported on the Metal backend")
 @pytest.test_arrays('shape=(*), uint32, jit')
 def test25_block_reduce_intense(t, op):
     size = 4096*1024
@@ -808,6 +809,27 @@ def test28_scalar_reductions(t):
     assert dr.all(dr.block_reduce(dr.ReduceOp.Add, x, 2) == [6, 6])
     assert dr.all(dr.block_reduce(dr.ReduceOp.Mul, x, 2) == [9, 9])
 
+def metal_packet_chunk_count(tp, psize):
+    """Number of vectorized loads/stores (``_base[..]`` accesses) the Metal
+    backend emits for a packet of ``psize`` elements of type ``tp``. Odd-sized
+    packets are lowered to scalar ops, so they produce none."""
+    if psize % 2 != 0:
+        return 0
+    tsize = {
+        dr.VarType.Bool: 1, dr.VarType.Int8: 1, dr.VarType.UInt8: 1,
+        dr.VarType.Float16: 2,
+        dr.VarType.Int32: 4, dr.VarType.UInt32: 4, dr.VarType.Float32: 4,
+        dr.VarType.Float64: 4,  # Metal demotes double to single precision
+        dr.VarType.Int64: 8, dr.VarType.UInt64: 8,
+    }[tp]
+    total = psize * tsize
+    chunk = 16
+    while chunk > 4 * tsize:
+        chunk //= 2
+    while total % chunk:
+        chunk //= 2
+    return total // chunk
+
 @pytest.mark.parametrize('psize', [2, 4, 8, 16])
 @pytest.test_arrays('-diff, jit, shape=(*, *)')
 def test29_packet_gather(t, psize):
@@ -894,6 +916,11 @@ def test30_packet_scatter(t, psize):
 
     assert dr.all(target_1 == target_2)
 
+    if dr.backend_v(t) is dr.JitBackend.Metal and history:
+        # Check that vectorized stores are emitted (not a scalar fallback).
+        ir = "".join(h["ir"].getvalue() for h in history)
+        assert ir.count("_base[") == metal_packet_chunk_count(tp, psize)
+
     if dr.backend_v(t) is dr.JitBackend.CUDA and tp in (dr.VarType.Float16, dr.VarType.Float32, dr.VarType.Float64) and history:
         compute_capability = dr.detail.cuda_compute_capability()
         supports_256bit = compute_capability >= 120
@@ -977,9 +1004,8 @@ def test32_packet_ravel_unravel(t, capsys, drjit_verbose):
     dr.eval(q3)
     assert dr.all(q == q3, axis=None)
     transcript = capsys.readouterr().out
-    if dr.backend_v(t) is not dr.JitBackend.Metal:
-        assert transcript.count('jit_var_gather_packet') != 0
-        assert transcript.count('jit_var_scatter_packet') != 0
+    assert transcript.count('jit_var_gather_packet') != 0
+    assert transcript.count('jit_var_scatter_packet') != 0
 
 
 @pytest.mark.parametrize('mode', [dr.ReduceMode.Local, dr.ReduceMode.Expand,
@@ -1262,6 +1288,9 @@ def test36_gather_packet(t, packet_size, force_optix):
     assert dr.allclose(result, ref)
 
     if dr.backend_v(t) is dr.JitBackend.Metal:
+        # Check that vectorized loads are emitted (not a scalar fallback).
+        ir = "".join(h["ir"].getvalue() for h in history)
+        assert ir.count("_base[") == metal_packet_chunk_count(tp, packet_size)
         return
     ir = history[0]["ir"].getvalue()
 

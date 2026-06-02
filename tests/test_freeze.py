@@ -325,6 +325,42 @@ def test10_scatter(t, auto_opaque):
     assert dr.all(t(0, 1, 2) == w)
 
 
+@pytest.test_arrays("float16, jit, -is_diff, shape=(*)")
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test10b_scatter_reduce_f16(t, auto_opaque):
+    """
+    Tests frozen float16 scatter-reductions, including several bundled
+    scatter-adds to the same buffer. On Metal these are emulated by
+    accumulating into a float32 shadow that is narrowed back after the kernel
+    (jit_var_scatter / jitc_var_narrow_promoted); this exercises the
+    record/replay path of that narrow (RecordThreadState::narrow_f32_to_f16).
+    """
+    UInt = dr.uint32_array_t(t)
+
+    @dr.freeze(auto_opaque=auto_opaque)
+    def func(target, value, index):
+        # Two bundled scatter-adds into the same (promoted) buffer.
+        dr.scatter_reduce(dr.ReduceOp.Add, target, value, index)
+        dr.scatter_reduce(dr.ReduceOp.Add, target, value * t(2), index)
+        return target
+
+    def ref(value, index):
+        target = dr.zeros(t, 8)
+        dr.scatter_reduce(dr.ReduceOp.Add, target, value, index)
+        dr.scatter_reduce(dr.ReduceOp.Add, target, value * t(2), index)
+        dr.eval(target)
+        return target
+
+    for run in range(3):
+        b = 10 * run
+        value = t(1 + b, 2 + b, 3 + b, 4 + b)
+        index = UInt(1, 3, 5, 7)  # odd indices (regression: float16 CAS rounding)
+        out = func(dr.zeros(t, 8), value, index)
+        assert dr.all(out == ref(t(1 + b, 2 + b, 3 + b, 4 + b), UInt(1, 3, 5, 7)))
+
+    assert func.n_recordings == 1
+
+
 @pytest.test_arrays("float32, jit, is_diff, shape=(*)")
 @pytest.mark.parametrize("auto_opaque", [False, True])
 def test11_optimization(t, auto_opaque):
