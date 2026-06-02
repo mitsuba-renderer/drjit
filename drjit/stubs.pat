@@ -672,7 +672,7 @@ drjit.scalar.__prefix__:
     \from builtins import int as UInt64
 
 drjit.__prefix__:
-    \from typing import Iterable, TypeAlias, Union, Optional, Type, Callable, Generic, TypeVar, Literal, Tuple
+    \from typing import Iterable, TypeAlias, Union, Optional, Type, Callable, Generic, TypeVar, Literal, Tuple, List
     \from collections.abc import Callable as _Callable, Sequence as Sequence
     \from drjit.nn import CoopVec as CoopVec
     Axis: TypeAlias = int | tuple[int, ...] | None
@@ -686,7 +686,9 @@ drjit.hashgrid.__prefix__:
     \from drjit import ArrayBase
 
 drjit.nn.__prefix__:
-    \from drjit import SelfT, SelfCpT, ValT, ValCpT, T, PlainT, MaskT, ArrayT
+    \from typing import Iterator, TypeVar
+    \from drjit import SelfT, SelfCpT, ValT, ValCpT, T, PlainT, MaskT, ArrayT, ArrayBase
+    _InputT = TypeVar('_InputT', CoopVec, drjit.ArrayBase)
     PyTree = object
 
 # Correct the type hint for memview
