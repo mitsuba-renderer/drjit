@@ -509,9 +509,8 @@ static nb::object repack(const char *name, const char *layout_str, nb::handle ar
                 s.index(inst_ptr(buffer)),
                 out.data()
             );
-            // Promote buffer's AD index when ad_coop_vec_pack_matrices wraps
-            // the in-place pack in a fresh AD variable.
             s.reset_index(new_out, inst_ptr(buffer));
+            ad_var_dec_ref(new_out);
         };
 
         for (size_t i = 0; i < items.size(); ++i) {

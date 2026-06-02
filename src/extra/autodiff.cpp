@@ -4397,7 +4397,7 @@ Index ad_coop_vec_pack_matrices(uint32_t count, Index in,
                                 const MatrixDescr *in_descr, Index out,
                                 const MatrixDescr *out_descr) {
     if (count == 0)
-        return out;
+        return ad_var_inc_ref(out);
 
     JitIndex in_j  = jit_index(in),
              out_j = jit_index(out);
@@ -4408,7 +4408,7 @@ Index ad_coop_vec_pack_matrices(uint32_t count, Index in,
             out_a = ad_index(out);
 
     if (in_a == 0 && out_a == 0)
-        return out;
+        return ad_var_inc_ref(out);
 
     VarInfo vi = jit_set_backend(out_j);
 
@@ -4425,7 +4425,7 @@ Index ad_coop_vec_pack_matrices(uint32_t count, Index in,
         return ad_result;
 
     ad_var_dec_ref(ad_result);
-    return out;
+    return ad_var_inc_ref(out);
 }
 
 class CoopVecUnpack : public dr::detail::CustomOpBase {
