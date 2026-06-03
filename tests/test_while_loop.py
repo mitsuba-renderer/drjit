@@ -771,3 +771,65 @@ def test33_tensor_loop_ad(t, mode):
     dr.backward(y)
     assert x.grad.shape == (3,)
     assert dr.allclose(x.grad, t([10, 10, 10]))
+
+
+@pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
+@pytest.mark.parametrize("optimize", [True, False])
+@pytest.test_arrays('float32,is_jit,shape=(*)')
+@dr.syntax
+def test34_aliased_state(t, mode, optimize):
+    # Check that aliases between loop state variables are handled correctly
+    UInt32 = dr.uint32_array_t(t)
+
+    with dr.scoped_set_flag(dr.JitFlag.OptimizeLoops, optimize):
+        x = dr.arange(t, 5) + 1
+        acc = x
+        i = UInt32(0)
+        while dr.hint(i < 3, mode=mode):
+            acc = acc * x
+            i += 1
+
+        dr.eval(acc, x)
+        assert dr.all(acc == x*x*x*x)
+        assert dr.all(x == dr.arange(t, 5) + 1)
+
+@pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+@dr.syntax
+def test35_aliased_state_ad_bwd(t, mode):
+    # Test the same thing for reverse-mode AD
+    UInt32 = dr.uint32_array_t(dr.detached_t(t))
+
+    x = t(2)
+    dr.enable_grad(x)
+
+    acc = x
+    i = UInt32(0)
+    while dr.hint(i < 3, mode=mode, max_iterations=3):
+        acc = acc * x
+        i += 1
+
+    dr.backward(acc)
+    assert dr.allclose(acc, 16)
+    assert dr.allclose(dr.grad(x), 32)
+
+@pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+@dr.syntax
+def test36_aliased_state_ad_fwd(t, mode):
+    # Test the same thing for forward-mode AD
+    UInt32 = dr.uint32_array_t(dr.detached_t(t))
+
+    x = t(2)
+    dr.enable_grad(x)
+    dr.set_grad(x, 1)
+
+    acc = x
+    i = UInt32(0)
+    while dr.hint(i < 3, mode=mode):
+        acc = acc * x
+        i += 1
+
+    dr.forward_to(acc)
+    assert dr.allclose(acc, 16)
+    assert dr.allclose(dr.grad(acc), 32)
