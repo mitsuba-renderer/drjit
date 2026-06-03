@@ -14,6 +14,7 @@
 #include "detail.h"
 #include "tracker.h"
 #include "shape.h"
+#include "apply.h"
 #include <nanobind/stl/optional.h>
 
 /**
@@ -36,6 +37,8 @@ struct LoopState {
     VariableTracker tracker;
 
     size_t active_size;
+    /// Has the alias-free working copy of 'state' been built yet?
+    bool dealiased = false;
 
     LoopState(nb::tuple &&state, nb::callable &&cond, nb::callable &&body,
               dr::vector<dr::string> &&labels, bool strict, bool check_size)
@@ -96,6 +99,26 @@ static void while_loop_read_cb(void *p, dr::vector<uint64_t> &indices) {
     nb::gil_scoped_acquire guard;
     LoopState *ls = (LoopState *) p;
     ls->tracker.read(ls->state, indices, ls->labels);
+
+    // On the first read, replace the live state with an alias-free working copy.
+    // (sharing the same indices). We will later revert this copy for state fields
+    // that have not been modified.
+    if (!ls->dealiased) {
+        struct DealiasShareOp : TransformCallback {
+            void operator()(nb::handle h1, nb::handle h2) override {
+                const ArraySupplement &s = supp(h1.type());
+                if ((JitBackend) s.backend == JitBackend::None)
+                    nb::inst_replace_copy(h2, h1);
+                else
+                    s.reset_index(s.index(inst_ptr(h1)), inst_ptr(h2));
+            }
+        };
+
+        DealiasShareOp op;
+        ls->state = nb::borrow<nb::tuple>(transform("drjit.while_loop.dealias", op, ls->state));
+        ls->dealiased = true;
+    }
+
     ls->tracker.verify_size(ls->active_size);
 }
 
