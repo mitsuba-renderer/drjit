@@ -199,7 +199,7 @@ static void ad_cond_symbolic(JitBackend backend, const char *label,
     // Execute 'true_fn'
     {
         uint32_t mask =
-            backend == JitBackend::CUDA ? true_mask.index() : cond_t;
+            backend == JitBackend::LLVM ? cond_t : true_mask.index();
         scoped_push_mask guard(backend, mask);
         body_cb(payload, true, args_t, rv_t);
     }
@@ -229,7 +229,7 @@ static void ad_cond_symbolic(JitBackend backend, const char *label,
     // Execute 'false_fn'
     {
         uint32_t mask =
-            backend == JitBackend::CUDA ? true_mask.index() : cond_f;
+            backend == JitBackend::LLVM ? cond_f : true_mask.index();
         scoped_push_mask guard(backend, mask);
         body_cb(payload, false, args_f, rv_f);
     }
