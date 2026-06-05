@@ -99,7 +99,7 @@ static bool ad_loop_symbolic(JitBackend backend, const char *name,
 
             // Evolve the loop state
             {
-                if (backend == JitBackend::CUDA)
+                if (backend != JitBackend::LLVM)
                     active = JitVar::steal(jit_var_bool(backend, true));
 
                 scoped_push_mask m(backend, active.index());
