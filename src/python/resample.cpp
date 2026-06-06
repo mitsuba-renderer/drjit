@@ -11,7 +11,20 @@
 #include <drjit/resample.h>
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/optional.h>
+#include <nanobind/stl/vector.h>
 #include "common.h"
+#include <cstring>
+
+static dr::Boundary parse_boundary(const char *s) {
+    using dr::Boundary;
+    if (strcmp(s, "zero") == 0)    return Boundary::Zero;
+    if (strcmp(s, "nearest") == 0) return Boundary::Nearest;
+    if (strcmp(s, "wrap") == 0)    return Boundary::Wrap;
+    if (strcmp(s, "reflect") == 0) return Boundary::Reflect;
+    if (strcmp(s, "mirror") == 0)  return Boundary::Mirror;
+    nb::raise("drjit.Resampler(): invalid boundary mode \"%s\" (expected one of "
+              "\"zero\", \"nearest\", \"wrap\", \"reflect\", \"mirror\").", s);
+}
 
 void export_resample(nb::module_ &) {
     nb::object detail = nb::module_::import_("drjit").attr("detail");
@@ -19,19 +32,37 @@ void export_resample(nb::module_ &) {
 
     auto resampler = nb::class_<Resampler>(detail, "Resampler")
         .def("__init__", [](Resampler *self, uint32_t source_res, uint32_t target_res,
-                            const char *filter, std::optional<double> filter_radius, bool convolve) {
+                            const char *filter, std::optional<double> filter_radius,
+                            bool convolve, const char *boundary, bool normalize,
+                            bool symbolic) {
                  if (filter_radius.has_value() && !convolve)
                      nb::raise("drjit.Resampler(): 'filter_radius' must be None when using a filter preset.");
-                 new (self) Resampler(source_res, target_res, filter, filter_radius.has_value() ? filter_radius.value() : 1.0);
-             }, "source_res"_a, "target_res"_a, "filter"_a, "filter_radius"_a = nb::none(), "convolve"_a = false)
+                 new (self) Resampler(source_res, target_res, filter,
+                                      filter_radius.has_value() ? filter_radius.value() : 1.0,
+                                      parse_boundary(boundary), normalize, symbolic);
+             }, "source_res"_a, "target_res"_a, "filter"_a, "filter_radius"_a = nb::none(),
+                "convolve"_a = false, "boundary"_a = "zero", "normalize"_a = true,
+                "symbolic"_a = false)
         .def("__init__", [](Resampler *self, uint32_t source_res, uint32_t target_res,
-                            nb::typed<nb::callable, float, float> filter, double filter_radius, bool) {
+                            nb::typed<nb::callable, float, float> filter, double filter_radius,
+                            bool convolve, const char *boundary, bool normalize,
+                            bool symbolic) {
                  Resampler::Filter filter_cb = [](double v, const void *ptr) -> double {
                      return nb::cast<double>(nb::handle((PyObject *) ptr)(v));
                  };
                  new (self) Resampler(source_res, target_res, filter_cb,
-                                      filter.ptr(), filter_radius);
-             }, "source_res"_a, "target_res"_a, "filter"_a, "filter_radius"_a, "convolve"_a = false)
+                                      filter.ptr(), filter_radius,
+                                      parse_boundary(boundary), normalize, convolve, symbolic);
+             }, "source_res"_a, "target_res"_a, "filter"_a, "filter_radius"_a,
+                "convolve"_a = false, "boundary"_a = "zero", "normalize"_a = true,
+                "symbolic"_a = false)
+        .def("__init__", [](Resampler *self, uint32_t res, std::vector<double> kernel,
+                            int origin, const char *boundary, bool normalize, bool flip,
+                            bool symbolic) {
+                 new (self) Resampler(res, kernel.data(), kernel.size(), origin,
+                                      parse_boundary(boundary), normalize, flip, symbolic);
+             }, "res"_a, "kernel"_a, "origin"_a, "boundary"_a = "zero",
+                "normalize"_a = true, "flip"_a = true, "symbolic"_a = false)
 #if defined(DRJIT_ENABLE_CUDA)
          .def("resample_fwd",
               (dr::CUDAArray<dr::half>(Resampler::*)(const dr::CUDAArray<dr::half> &, uint32_t) const) &Resampler::resample_fwd,

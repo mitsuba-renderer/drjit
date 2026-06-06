@@ -2644,11 +2644,31 @@ class _ResampleOp(CustomOp):
 
 _resample_cache = {}
 
+def _get_resampler(key, **kwargs):
+    """Return a cached ``detail.Resampler`` for ``key``, building it on a miss."""
+    resampler = _resample_cache.get(key, None)
+    if resampler is None:
+        resampler = detail.Resampler(**kwargs)
+        _resample_cache[key] = resampler
+    return resampler
+
+def _resample_symbolic(mode, fn_name):
+    """Map the ``mode`` argument to the ``Resampler``'s ``symbolic`` flag."""
+    if mode is None or mode == "evaluated":
+        return False
+    if mode == "symbolic":
+        return True
+    raise RuntimeError(
+        f"drjit.{fn_name}(): 'mode' must be None, 'evaluated', or 'symbolic' "
+        f"(got {mode!r}).")
+
 def resample(
     source: ArrayT,
     shape: Sequence[int],
     filter: Union[Literal["box", "linear", "hamming", "cubic", "lanczos", "gaussian"], Callable[[float], float]] = "cubic",
-    filter_radius: Optional[float] = None
+    filter_radius: Optional[float] = None,
+    boundary: Literal["zero", "nearest", "wrap", "reflect", "mirror"] = "zero",
+    mode: Optional[Literal["evaluated", "symbolic"]] = None
 ) -> ArrayT:
     """
     Resample an input array/tensor to increase or decrease its resolution along
@@ -2714,6 +2734,12 @@ def resample(
     support for JIT tracing / GPU evaluation, differentiability, and
     compatibility with higher-dimensional tensors.
 
+    The operation is differentiable. Because resampling changes the resolution
+    (the transpose is not a resampling of the same kind), its reverse-mode
+    derivative is evaluated with an atomic scatter-add. (The gather-based
+    transpose path applies only to same-resolution convolutions; see
+    :py:func:`convolve`.)
+
     .. warning::
 
        When using ``filter="hamming"``, ``"cubic"``, or ``"lanczos"``, the
@@ -2736,6 +2762,20 @@ def resample(
           The radius of the pixel filter in the output sample space. Should
           only be specified when using a custom reconstruction filter.
 
+        boundary (str): Selects how filter taps that reach past the edge of the
+          array are handled. The names match those of ``scipy.ndimage``:
+          ``"zero"`` (the default) pads with zeros and renormalizes the affected
+          weights; ``"nearest"`` clamps to the edge sample; ``"wrap"`` is
+          periodic; ``"reflect"`` reflects with the edge sample duplicated; and
+          ``"mirror"`` reflects without duplicating the edge sample. See
+          :py:func:`convolve` for an illustration of each mode.
+
+        mode (str | None): Selects how the resampling kernel is generated.
+          ``"evaluated"`` (the default, also selected by ``None``) fully unrolls
+          the per-output tap loop and explicitly evaluates the result, which is
+          typically faster. ``"symbolic"`` instead traces a symbolic loop over
+          the taps, producing a smaller kernel with deferred evaluation.
+
     Returns:
         drjit.ArrayBase: The resampled output array. Its type matches
         ``source``, and its shape matches ``shape``.
@@ -2746,6 +2786,7 @@ def resample(
     ndim = len(source_shape)
     tp = type(source)
     value = source.array
+    symbolic = _resample_symbolic(mode, "resample")
 
     if len(shape) != ndim:
         raise RuntimeError(
@@ -2760,17 +2801,15 @@ def resample(
             continue
 
         # Cache resampler in case it can be reused
-        key = (source_res, target_res, filter, filter_radius)
-
-        resampler = _resample_cache.get(key, None)
-        if resampler is None:
-            resampler = detail.Resampler(
-                source_res=source_res,
-                target_res=target_res,
-                filter=filter,
-                filter_radius=filter_radius,
-            )
-            _resample_cache[key] = resampler
+        key = (source_res, target_res, filter, filter_radius, boundary, symbolic)
+        resampler = _get_resampler(
+            key,
+            source_res=source_res,
+            target_res=target_res,
+            filter=filter,
+            filter_radius=filter_radius,
+            boundary=boundary,
+            symbolic=symbolic)
 
         value = custom(_ResampleOp,
             resampler=resampler,
@@ -2782,53 +2821,152 @@ def resample(
     else:
         return value
 
+@overload
 def convolve(
     source: ArrayT,
     filter: Union[Literal["box", "linear", "hamming", "cubic", "lanczos", "gaussian"], Callable[[float], float]],
-    filter_radius: float,
-    axis: Union[int, Tuple[int, ...], None] = None
+    filter_radius: Optional[float] = None,
+    *,
+    axis: Union[int, Tuple[int, ...], None] = None,
+    boundary: Literal["zero", "nearest", "wrap", "reflect", "mirror"] = "zero",
+    normalize: bool = True,
+    mode: Optional[Literal["evaluated", "symbolic"]] = None
+) -> ArrayT:
+    ...
+
+
+@overload
+def convolve(
+    source: ArrayT,
+    filter: Sequence[float],
+    *,
+    axis: Union[int, Tuple[int, ...], None] = None,
+    boundary: Literal["zero", "nearest", "wrap", "reflect", "mirror"] = "zero",
+    normalize: bool = True,
+    mode: Optional[Literal["evaluated", "symbolic"]] = None
+) -> ArrayT:
+    ...
+
+
+def convolve(
+    source: ArrayT,
+    filter: Union[Literal["box", "linear", "hamming", "cubic", "lanczos", "gaussian"], Callable[[float], float], Sequence[float]],
+    filter_radius: Optional[float] = None,
+    *,
+    axis: Union[int, Tuple[int, ...], None] = None,
+    boundary: Literal["zero", "nearest", "wrap", "reflect", "mirror"] = "zero",
+    normalize: bool = True,
+    mode: Optional[Literal["evaluated", "symbolic"]] = None
 ) -> ArrayT:
     """
-    Convolve one or more axes of an input array/tensor with a 1D filter
+    Convolve one or more axes of an input array/tensor with a 1D filter.
 
-    This function filters one or more axes of a Dr.Jit array or tensor, for
-    example to convolve an image with a 2D Gaussian filter to blur spatial
-    detail.
+    This function filters one or more axes of a Dr.Jit array or tensor. The
+    filter can either be a *continuous* reconstruction filter (a preset or a
+    callable, sampled at integer offsets) or a *discrete* kernel (a sequence of
+    coefficients). The resolution of the array is left unchanged.
+
+    A typical use of a continuous filter is to blur an image, e.g. by
+    convolving it with a 2D Gaussian:
 
     .. code-block:: python
 
        image: TensorXf = ...  # a RGB image
 
-       blured_image = dr.convolve(
+       blurred_image = dr.convolve(
            image,
            filter='gaussian',
            filter_radius=10
        )
 
-    The filter weights are renormalized to reduce edge effects near the
-    boundary of the array.
+    The set of supported presets and the meaning of ``filter_radius`` for
+    custom continuous filters are identical to :py:func:`resample`, please refer
+    to its documentation for details.
 
-    The function supports a set of provided filters, and custom filters
-    can also be specified. This works analogously to the :py:func:`resample`
-    function, please refer to its documentation for detail.
+    **Discrete kernels and the relation to** ``numpy.convolve``\\ **.** When
+    ``filter`` is a sequence of numbers, it is interpreted as a discrete
+    convolution kernel that is applied directly. The kernel is flipped and
+    aligned so that the result matches the central part of a full convolution
+    (the alignment of :py:func:`numpy.convolve` with ``mode='same'``). Unlike
+    :py:func:`numpy.convolve`, which returns a longer array, ``dr.convolve``
+    always preserves the input shape. The following two computations therefore
+    agree:
+
+    .. code-block:: python
+
+       import numpy as np
+
+       x = np.array([1, 2, 3, 4, 5], dtype=np.float32)
+       k = np.array([1, 0, -1],      dtype=np.float32)
+
+       ref = np.convolve(x, k, mode='same')
+       out = dr.convolve(dr.scalar.ArrayXf(x), list(k),
+                         boundary='zero', normalize=False)
+
+       assert np.allclose(ref, out.numpy())
+
+    The two arguments that reproduce ``numpy.convolve`` are ``boundary='zero'``
+    (which zero-pads the boundary) and ``normalize=False`` (which applies the
+    raw kernel coefficients). These differ from the defaults, which renormalize
+    the weights so that filtering a signal does not alter its overall magnitude.
+
+    **Boundary handling.** The ``boundary`` argument selects how filter taps
+    that reach past the edge of the array are treated. The names match those of
+    ``scipy.ndimage``. Given an array ``[a b c d]``, the left boundary is
+    extended as follows:
+
+    - ``"zero"``: ``0 0 0 | a b c d`` (taps outside the array contribute zero).
+    - ``"nearest"``: ``a a a | a b c d`` (clamp to the edge sample).
+    - ``"wrap"``: ``b c d | a b c d`` (periodic, with period equal to the array
+      size).
+    - ``"reflect"``: ``c b a | a b c d`` (reflect; the edge sample is
+      duplicated).
+    - ``"mirror"``: ``d c b | a b c d`` (reflect; the edge sample is not
+      duplicated).
+
+    **Normalization.** When ``normalize`` is set, the effective per-output
+    weights are rescaled to sum to one. For the ``"zero"`` boundary this also
+    compensates for taps that fall outside the array, reducing darkening near
+    the edges. Set ``normalize=False`` to apply the raw filter coefficients (as
+    needed to reproduce ``numpy.convolve``).
+
+    **Differentiability.** The operation is differentiable. For the ``"zero"``
+    and ``"wrap"`` boundaries its reverse-mode derivative is the transpose of the
+    convolution, which is itself a convolution and is evaluated as a gather
+    (reusing the forward implementation). For the remaining boundaries the
+    adjoint is evaluated with an atomic scatter-add instead.
 
     Args:
-        source (dr.ArrayBase): The Dr.Jit tensor or 1D array to be resampled.
+        source (dr.ArrayBase): The Dr.Jit tensor or 1D array to be filtered.
 
-        filter (str | Callable[[float], float])
-          The desired reconstruction filter, see the above text for an overview.
-          Alternatively, a custom reconstruction filter function can also be
-          specified.
+        filter (str | Callable[[float], float] | Sequence[float]):
+          Either the name of a filter preset, a custom continuous filter
+          function, or a sequence of discrete kernel coefficients.
 
-        filter_radius (float)
-          The radius of the continous function to be used in the convolution.
+        filter_radius (float | None):
+          The radius of the continuous function to be used in the convolution.
+          This must be specified for a custom continuous filter and must be
+          ``None`` for a discrete kernel.
 
-        axis (int | tuple[int, ...] | ... | None): The axis or set of axes
-          along which to convolve. The default argument ``axis=None`` causes all
-          axes to be convolved. Negative values count from the last dimension.
+        axis (int | tuple[int, ...] | None): The axis or set of axes along which
+          to convolve. The default argument ``axis=None`` causes all axes to be
+          convolved. Negative values count from the last dimension.
+
+        boundary (str): The boundary handling mode, see the above text for an
+          overview. The default is ``"zero"``.
+
+        normalize (bool): Whether to renormalize the filter weights, see the
+          above text. The default is ``True``.
+
+        mode (str | None): Selects how the convolution kernel is generated.
+          ``"evaluated"`` (the default, also selected by ``None``) fully unrolls
+          the per-output tap loop and explicitly evaluates the result, which is
+          typically faster. ``"symbolic"`` instead traces a symbolic loop over
+          the taps, producing a smaller kernel with deferred evaluation.
 
     Returns:
-        drjit.ArrayBase: The resampled output array. Its type matches ``source``.
+        drjit.ArrayBase: The filtered output array. Its type and shape match
+        ``source``.
     """
 
     shape = source.shape
@@ -2837,10 +2975,32 @@ def convolve(
     tp = type(source)
     value = source.array
 
+    symbolic = _resample_symbolic(mode, "convolve")
+
     if axis is None:
         axis = tuple(range(ndim))
     elif isinstance(axis, int):
         axis = (axis, )
+
+    # A discrete kernel is anything that is neither a preset nor a callable
+    discrete = not (isinstance(filter, str) or callable(filter))
+
+    if discrete:
+        if filter_radius is not None:
+            raise RuntimeError(
+                "drjit.convolve(): 'filter_radius' must be None when using a "
+                "discrete filter kernel.")
+        kernel = [float(v) for v in filter]
+        if len(kernel) == 0:
+            raise RuntimeError("drjit.convolve(): the filter kernel is empty.")
+        # Align the kernel like numpy.convolve(mode='same') (matters for even
+        # kernel sizes; coincides with 'len // 2' for odd sizes)
+        origin = (len(kernel) - 1) // 2
+        kernel_key = tuple(kernel)
+    elif callable(filter) and filter_radius is None:
+        raise RuntimeError(
+            "drjit.convolve(): 'filter_radius' must be specified when using a "
+            "custom (continuous) filter function.")
 
     for i in axis:
         if i < 0:
@@ -2848,18 +3008,29 @@ def convolve(
         res = shape[i]
 
         # Cache resampler in case it can be reused
-        key = (res, res, filter, filter_radius)
-
-        resampler = _resample_cache.get(key, None)
-        if resampler is None:
-            resampler = detail.Resampler(
+        if discrete:
+            key = (res, kernel_key, origin, boundary, normalize, symbolic, 'disc')
+            resampler = _get_resampler(
+                key,
+                res=res,
+                kernel=kernel,
+                origin=origin,
+                boundary=boundary,
+                normalize=normalize,
+                flip=True,
+                symbolic=symbolic)
+        else:
+            key = (res, res, filter, filter_radius, boundary, normalize, symbolic, 'conv')
+            resampler = _get_resampler(
+                key,
                 source_res=res,
                 target_res=res,
                 filter=filter,
                 filter_radius=filter_radius,
-                convolve=True
-            )
-            _resample_cache[key] = resampler
+                convolve=True,
+                boundary=boundary,
+                normalize=normalize,
+                symbolic=symbolic)
 
         value = custom(_ResampleOp,
             resampler=resampler,

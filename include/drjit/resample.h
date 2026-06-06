@@ -15,13 +15,31 @@
 NAMESPACE_BEGIN(drjit)
 
 /**
- * \brief Helper data structure to increase or decrease the resolution of an
- * array/tensor along a set of axes.
+ * \brief Boundary handling mode used by \ref Resampler.
  *
- * The ``Resampler`` class represents a precomputed transformation that
- * resamples a signal from one resolution to another. It can be used to
- * downsample/upsample images or volumes, or to filter data while leaving the
- * input resolution unchanged.
+ * The mode determines how filter taps that reach beyond the array bounds are
+ * treated. The names mirror those of ``scipy.ndimage``. Given an array
+ * ``[a b c d]``, the left boundary is extended as follows:
+ *
+ * - ``Zero``:    ``0 0 0 | a b c d`` (out-of-bounds taps contribute nothing)
+ * - ``Nearest``: ``a a a | a b c d`` (clamp to the edge sample)
+ * - ``Wrap``:    ``b c d | a b c d`` (periodic, period equal to the array size)
+ * - ``Reflect``: ``c b a | a b c d`` (reflect, the edge sample is duplicated)
+ * - ``Mirror``:  ``d c b | a b c d`` (reflect, the edge sample is not duplicated)
+ */
+enum class Boundary : uint32_t {
+    Zero, Nearest, Wrap, Reflect, Mirror
+};
+
+/**
+ * \brief Helper data structure to increase or decrease the resolution of an
+ * array/tensor or convolve it along a set of axes.
+ *
+ * The ``Resampler`` class represents a precomputed windowed transformation. It
+ * serves two purposes: *resampling* a signal to a different resolution
+ * (``source_res != target_res``, e.g. up-/downsampling images or volumes), and
+ * *convolution* at the same resolution (``source_res == target_res``, e.g.
+ * filtering with a discrete kernel or a continuous filter).
  *
  * Constructing a ``Resampler`` object incurs a one-time cost. It is
  * advantageous to reuse the sampler a number of times when possible.
@@ -62,14 +80,20 @@ public:
      *    standard deviation of 0.5 and is truncated after 4 standard
      *    deviations. This filter is mainly useful when intending to blur a signal.
      *
-     * The optional ``radius_scale`` parameter can be used to scale the
-     * filter kernel radius.
+     * The optional ``radius_scale`` scales the filter kernel radius.
+     *
+     * See \ref Boundary and the discrete-kernel constructor for ``boundary`` and
+     * ``normalize``. In traced modes, ``symbolic`` generates a symbolic loop over
+     * the taps, while the default unrolls the loop and evaluates the result at
+     * the end (usually faster). The built-in filters are symmetric, so there is
+     * no ``flip`` parameter.
      */
     Resampler(uint32_t source_res, uint32_t target_res, const char *filter,
-              double radius_scale = 1.0);
+              double radius_scale = 1.0, Boundary boundary = Boundary::Zero,
+              bool normalize = true, bool symbolic = false);
 
     /**
-     * \brief Construct a Resampler using a custom filter kernel.
+     * \brief Construct a Resampler using a custom (continuous) filter kernel.
      *
      * The filter radius on the target domain must be specified. The payload
      * parameter will be passed to the provided filter callback and can contain
@@ -78,9 +102,44 @@ public:
      * The implementation will invoke ``filter(x, payload)`` a number of times
      * to precompute internal tables used for resampling. The filter must return
      * zero for positions ``x`` outside of the interval ``[-radius, radius]``.
+     *
+     * See \ref Boundary and the discrete-kernel constructor for ``boundary``,
+     * ``normalize``, and ``flip`` (unlike the preset filters, a custom filter may
+     * be asymmetric, so ``flip`` is meaningful here). ``symbolic`` selects the
+     * traced codegen as above.
      */
     Resampler(uint32_t source_res, uint32_t target_res, Filter filter,
-              const void *payload, double radius);
+              const void *payload, double radius,
+              Boundary boundary = Boundary::Zero, bool normalize = true,
+              bool flip = false, bool symbolic = false);
+
+    /**
+     * \brief Construct a Resampler using a discrete filter kernel.
+     *
+     * This constructor builds a resampler that convolves a signal with the
+     * provided sequence of ``kernel_size`` discrete coefficients while leaving
+     * the resolution unchanged (``source_res == target_res == res``).
+     *
+     * The ``origin`` parameter specifies which kernel entry is aligned with the
+     * output sample (typically ``kernel_size / 2``). The ``boundary`` parameter
+     * selects how out-of-bounds accesses are handled (see \ref Boundary).
+     *
+     * When ``normalize`` is set, the effective per-output weights are rescaled
+     * to sum to one (this is the behavior needed to filter a signal without
+     * affecting its overall magnitude). When it is unset, the raw kernel
+     * coefficients are used, matching the convention of ``numpy.convolve``.
+     *
+     * When ``flip`` is set, the kernel is reversed prior to application,
+     * realizing a true convolution (:math:`\\sum_l k[l]\\,x[i-l+o]`) as opposed
+     * to a correlation (:math:`\\sum_l k[l]\\,x[i+l-o]`).
+     *
+     * ``symbolic`` selects the traced codegen: it generates a symbolic loop over
+     * the taps, while the default unrolls and evaluates the result (usually
+     * faster).
+     */
+    Resampler(uint32_t res, const double *kernel, size_t kernel_size,
+              int origin, Boundary boundary, bool normalize, bool flip,
+              bool symbolic = false);
 
     /// Free the resampler object
     ~Resampler();
@@ -144,7 +203,7 @@ public:
      * It resamples the input array with the stride ``stride``.
      *
      * The main difference is that this version *traces* the resampling step.
-     * It is usable with LLVM and CUDA arrays.
+     * It is usable with LLVM, CUDA, and Metal arrays.
      */
     template <typename Array>
     Array resample_fwd(const Array &source, uint32_t stride) const;
@@ -152,9 +211,8 @@ public:
     /**
      * \brief Backward derivative of \ref resample_fwd()
      *
-     * This function computes the backward derivative of \ref resample_fwd().
-     * Given the drivative of the resampled output array, it computes the
-     * derivative of the input. The function is usable with LLVM and CUDA arrays.
+     * This function computes the backward derivative of \ref resample_fwd()
+     * and traces the computation.
      */
     template <typename Array>
     Array resample_bwd(const Array &target, uint32_t stride) const;

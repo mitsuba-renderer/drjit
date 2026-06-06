@@ -77,6 +77,18 @@ DrJit 1.4.0 (TBA)
   `4b8864 <https://github.com/mitsuba-renderer/drjit-core/commit/4b88649668c2a91f257e91b9ef4eb9ec7a2947b1>`__,
   `9e5335 <https://github.com/mitsuba-renderer/drjit-core/commit/9e533522035a4c00950553d8c0677b92d780f3b0>`__).
 
+- **Generalized convolution / resampling**: The :py:func:`dr.convolve()
+  <convolve>` function now additionally handles discrete filter kernels besides
+  continuous ones, making it a Dr.Jit substitute for :py:func:`numpy.convolve`.
+  A new ``boundary`` parameter generalizes edge handling (``"zero"``,
+  ``"nearest"``, ``"wrap"``, ``"reflect"``, or ``"mirror"``). A ``normalize``
+  flag toggles the renormalization of filter weights. Efficiency of both the
+  forward and reverse-mode derivative was improved. In particular, the
+  generated code now uses a fast path for non-boundary outputs, and the
+  reverse-mode derivative uses a fast transpose convolution instead of atomic
+  scatters whenever possible. The new ``boundary`` argument is also available
+  on :py:func:`dr.resample() <resample>`.
+
 - **Tensor Transpose**: Added :py:attr:`dr.ArrayBase.T <ArrayBase.T>` (rank-2
   transpose) and :py:attr:`dr.ArrayBase.mT <ArrayBase.mT>` (swap last two
   dimensions), matching PyTorch's semantics. Both are differentiable and also
