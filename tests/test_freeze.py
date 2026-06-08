@@ -2884,6 +2884,42 @@ def test71_texture(t, auto_opaque, force_optix):
 
 
 @pytest.test_arrays("float32, jit, shape=(*)")
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test71b_texture_write(t, auto_opaque):
+    # Frozen capture of a *writable* texture: the sub-texture handles (and, on
+    # CUDA, the per-sub-texture surface handles exposed via jit_tex_get_indices)
+    # must be captured and rebound on replay, and the hardware read-back must
+    # not depend on host-side migration state that replay does not re-run.
+    if dr.backend_v(t) not in (dr.JitBackend.CUDA, dr.JitBackend.Metal):
+        pytest.skip("hardware texture writes require the CUDA or Metal backend")
+    mod = sys.modules[t.__module__]
+    Texture2f = mod.Texture2f
+    Float = mod.Float32
+    UInt32 = dr.uint32_array_t(t)
+    Array2u = getattr(mod, 'Array2u')
+
+    H, W, ch = 4, 8, 4
+    idx = dr.arange(UInt32, H * W)
+    px, py = idx % W, idx // W
+
+    def func(tex, scale):
+        vals = [Float(idx * ch + c) * scale for c in range(ch)]
+        tex.write(Array2u(px, py), vals)
+
+    frozen = dr.freeze(func, auto_opaque=auto_opaque)
+
+    n = 4
+    for i in range(n):
+        tex = Texture2f([H, W], ch, writable=True)
+        s = 0.01 * (i + 1)
+        frozen(tex, Float(s))
+        ref = dr.arange(Float, H * W * ch) * s
+        assert dr.allclose(tex.value(), ref, atol=5e-3)
+
+    assert frozen.n_recordings < n
+
+
+@pytest.test_arrays("float32, jit, shape=(*)")
 def test72_no_input(t):
     mod = sys.modules[t.__module__]
 

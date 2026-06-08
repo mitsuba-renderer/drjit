@@ -408,6 +408,13 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
+   .. automethod:: writable
+   .. automethod:: external
+   .. automethod:: write
+   .. automethod:: from_native_handle
+   .. automethod:: map
+   .. automethod:: unmap
+   .. automethod:: native_handle
    .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
@@ -428,6 +435,13 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
+   .. automethod:: writable
+   .. automethod:: external
+   .. automethod:: write
+   .. automethod:: from_native_handle
+   .. automethod:: map
+   .. automethod:: unmap
+   .. automethod:: native_handle
    .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
@@ -448,6 +462,13 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
+   .. automethod:: writable
+   .. automethod:: external
+   .. automethod:: write
+   .. automethod:: from_native_handle
+   .. automethod:: map
+   .. automethod:: unmap
+   .. automethod:: native_handle
    .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
@@ -468,6 +489,13 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
+   .. automethod:: writable
+   .. automethod:: external
+   .. automethod:: write
+   .. automethod:: from_native_handle
+   .. automethod:: map
+   .. automethod:: unmap
+   .. automethod:: native_handle
    .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
@@ -488,6 +516,13 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
+   .. automethod:: writable
+   .. automethod:: external
+   .. automethod:: write
+   .. automethod:: from_native_handle
+   .. automethod:: map
+   .. automethod:: unmap
+   .. automethod:: native_handle
    .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
@@ -508,6 +543,13 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
+   .. automethod:: writable
+   .. automethod:: external
+   .. automethod:: write
+   .. automethod:: from_native_handle
+   .. automethod:: map
+   .. automethod:: unmap
+   .. automethod:: native_handle
    .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
@@ -528,6 +570,13 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
+   .. automethod:: writable
+   .. automethod:: external
+   .. automethod:: write
+   .. automethod:: from_native_handle
+   .. automethod:: map
+   .. automethod:: unmap
+   .. automethod:: native_handle
    .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
@@ -548,6 +597,13 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
+   .. automethod:: writable
+   .. automethod:: external
+   .. automethod:: write
+   .. automethod:: from_native_handle
+   .. automethod:: map
+   .. automethod:: unmap
+   .. automethod:: native_handle
    .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
@@ -568,6 +624,13 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
+   .. automethod:: writable
+   .. automethod:: external
+   .. automethod:: write
+   .. automethod:: from_native_handle
+   .. automethod:: map
+   .. automethod:: unmap
+   .. automethod:: native_handle
    .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
@@ -1013,6 +1076,13 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
+   .. automethod:: writable
+   .. automethod:: external
+   .. automethod:: write
+   .. automethod:: from_native_handle
+   .. automethod:: map
+   .. automethod:: unmap
+   .. automethod:: native_handle
    .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
@@ -1032,6 +1102,13 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
+   .. automethod:: writable
+   .. automethod:: external
+   .. automethod:: write
+   .. automethod:: from_native_handle
+   .. automethod:: map
+   .. automethod:: unmap
+   .. automethod:: native_handle
    .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
@@ -1051,6 +1128,13 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
+   .. automethod:: writable
+   .. automethod:: external
+   .. automethod:: write
+   .. automethod:: from_native_handle
+   .. automethod:: map
+   .. automethod:: unmap
+   .. automethod:: native_handle
    .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
@@ -1070,6 +1154,13 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
+   .. automethod:: writable
+   .. automethod:: external
+   .. automethod:: write
+   .. automethod:: from_native_handle
+   .. automethod:: map
+   .. automethod:: unmap
+   .. automethod:: native_handle
    .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
@@ -1089,6 +1180,13 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
+   .. automethod:: writable
+   .. automethod:: external
+   .. automethod:: write
+   .. automethod:: from_native_handle
+   .. automethod:: map
+   .. automethod:: unmap
+   .. automethod:: native_handle
    .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
@@ -1108,6 +1206,13 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
+   .. automethod:: writable
+   .. automethod:: external
+   .. automethod:: write
+   .. automethod:: from_native_handle
+   .. automethod:: map
+   .. automethod:: unmap
+   .. automethod:: native_handle
    .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
@@ -1127,6 +1232,13 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
+   .. automethod:: writable
+   .. automethod:: external
+   .. automethod:: write
+   .. automethod:: from_native_handle
+   .. automethod:: map
+   .. automethod:: unmap
+   .. automethod:: native_handle
    .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
@@ -1146,6 +1258,13 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
+   .. automethod:: writable
+   .. automethod:: external
+   .. automethod:: write
+   .. automethod:: from_native_handle
+   .. automethod:: map
+   .. automethod:: unmap
+   .. automethod:: native_handle
    .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
@@ -1165,6 +1284,13 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
+   .. automethod:: writable
+   .. automethod:: external
+   .. automethod:: write
+   .. automethod:: from_native_handle
+   .. automethod:: map
+   .. automethod:: unmap
+   .. automethod:: native_handle
    .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
@@ -1604,6 +1730,13 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
+   .. automethod:: writable
+   .. automethod:: external
+   .. automethod:: write
+   .. automethod:: from_native_handle
+   .. automethod:: map
+   .. automethod:: unmap
+   .. automethod:: native_handle
    .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
@@ -1623,6 +1756,13 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
+   .. automethod:: writable
+   .. automethod:: external
+   .. automethod:: write
+   .. automethod:: from_native_handle
+   .. automethod:: map
+   .. automethod:: unmap
+   .. automethod:: native_handle
    .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
@@ -1642,6 +1782,13 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
+   .. automethod:: writable
+   .. automethod:: external
+   .. automethod:: write
+   .. automethod:: from_native_handle
+   .. automethod:: map
+   .. automethod:: unmap
+   .. automethod:: native_handle
    .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
@@ -1661,6 +1808,13 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
+   .. automethod:: writable
+   .. automethod:: external
+   .. automethod:: write
+   .. automethod:: from_native_handle
+   .. automethod:: map
+   .. automethod:: unmap
+   .. automethod:: native_handle
    .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
@@ -1680,6 +1834,13 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
+   .. automethod:: writable
+   .. automethod:: external
+   .. automethod:: write
+   .. automethod:: from_native_handle
+   .. automethod:: map
+   .. automethod:: unmap
+   .. automethod:: native_handle
    .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
@@ -1699,6 +1860,13 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
+   .. automethod:: writable
+   .. automethod:: external
+   .. automethod:: write
+   .. automethod:: from_native_handle
+   .. automethod:: map
+   .. automethod:: unmap
+   .. automethod:: native_handle
    .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
@@ -1718,6 +1886,13 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
+   .. automethod:: writable
+   .. automethod:: external
+   .. automethod:: write
+   .. automethod:: from_native_handle
+   .. automethod:: map
+   .. automethod:: unmap
+   .. automethod:: native_handle
    .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
@@ -1737,6 +1912,13 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
+   .. automethod:: writable
+   .. automethod:: external
+   .. automethod:: write
+   .. automethod:: from_native_handle
+   .. automethod:: map
+   .. automethod:: unmap
+   .. automethod:: native_handle
    .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
@@ -1756,6 +1938,13 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
+   .. automethod:: writable
+   .. automethod:: external
+   .. automethod:: write
+   .. automethod:: from_native_handle
+   .. automethod:: map
+   .. automethod:: unmap
+   .. automethod:: native_handle
    .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
@@ -3071,6 +3260,13 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
+   .. automethod:: writable
+   .. automethod:: external
+   .. automethod:: write
+   .. automethod:: from_native_handle
+   .. automethod:: map
+   .. automethod:: unmap
+   .. automethod:: native_handle
    .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
@@ -3090,6 +3286,13 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
+   .. automethod:: writable
+   .. automethod:: external
+   .. automethod:: write
+   .. automethod:: from_native_handle
+   .. automethod:: map
+   .. automethod:: unmap
+   .. automethod:: native_handle
    .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
@@ -3109,6 +3312,13 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
+   .. automethod:: writable
+   .. automethod:: external
+   .. automethod:: write
+   .. automethod:: from_native_handle
+   .. automethod:: map
+   .. automethod:: unmap
+   .. automethod:: native_handle
    .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
@@ -3128,6 +3338,13 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
+   .. automethod:: writable
+   .. automethod:: external
+   .. automethod:: write
+   .. automethod:: from_native_handle
+   .. automethod:: map
+   .. automethod:: unmap
+   .. automethod:: native_handle
    .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
@@ -3147,6 +3364,13 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
+   .. automethod:: writable
+   .. automethod:: external
+   .. automethod:: write
+   .. automethod:: from_native_handle
+   .. automethod:: map
+   .. automethod:: unmap
+   .. automethod:: native_handle
    .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
@@ -3166,6 +3390,13 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
+   .. automethod:: writable
+   .. automethod:: external
+   .. automethod:: write
+   .. automethod:: from_native_handle
+   .. automethod:: map
+   .. automethod:: unmap
+   .. automethod:: native_handle
    .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
@@ -3185,6 +3416,13 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
+   .. automethod:: writable
+   .. automethod:: external
+   .. automethod:: write
+   .. automethod:: from_native_handle
+   .. automethod:: map
+   .. automethod:: unmap
+   .. automethod:: native_handle
    .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
@@ -3204,6 +3442,13 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
+   .. automethod:: writable
+   .. automethod:: external
+   .. automethod:: write
+   .. automethod:: from_native_handle
+   .. automethod:: map
+   .. automethod:: unmap
+   .. automethod:: native_handle
    .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
@@ -3223,6 +3468,13 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
+   .. automethod:: writable
+   .. automethod:: external
+   .. automethod:: write
+   .. automethod:: from_native_handle
+   .. automethod:: map
+   .. automethod:: unmap
+   .. automethod:: native_handle
    .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
@@ -3678,6 +3930,13 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
+   .. automethod:: writable
+   .. automethod:: external
+   .. automethod:: write
+   .. automethod:: from_native_handle
+   .. automethod:: map
+   .. automethod:: unmap
+   .. automethod:: native_handle
    .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
@@ -3697,6 +3956,13 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
+   .. automethod:: writable
+   .. automethod:: external
+   .. automethod:: write
+   .. automethod:: from_native_handle
+   .. automethod:: map
+   .. automethod:: unmap
+   .. automethod:: native_handle
    .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
@@ -3716,6 +3982,13 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
+   .. automethod:: writable
+   .. automethod:: external
+   .. automethod:: write
+   .. automethod:: from_native_handle
+   .. automethod:: map
+   .. automethod:: unmap
+   .. automethod:: native_handle
    .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
@@ -3735,6 +4008,13 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
+   .. automethod:: writable
+   .. automethod:: external
+   .. automethod:: write
+   .. automethod:: from_native_handle
+   .. automethod:: map
+   .. automethod:: unmap
+   .. automethod:: native_handle
    .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
@@ -3754,6 +4034,13 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
+   .. automethod:: writable
+   .. automethod:: external
+   .. automethod:: write
+   .. automethod:: from_native_handle
+   .. automethod:: map
+   .. automethod:: unmap
+   .. automethod:: native_handle
    .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
@@ -3773,6 +4060,13 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
+   .. automethod:: writable
+   .. automethod:: external
+   .. automethod:: write
+   .. automethod:: from_native_handle
+   .. automethod:: map
+   .. automethod:: unmap
+   .. automethod:: native_handle
    .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
@@ -3792,6 +4086,13 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
+   .. automethod:: writable
+   .. automethod:: external
+   .. automethod:: write
+   .. automethod:: from_native_handle
+   .. automethod:: map
+   .. automethod:: unmap
+   .. automethod:: native_handle
    .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
@@ -3811,6 +4112,13 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
+   .. automethod:: writable
+   .. automethod:: external
+   .. automethod:: write
+   .. automethod:: from_native_handle
+   .. automethod:: map
+   .. automethod:: unmap
+   .. automethod:: native_handle
    .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
@@ -3830,6 +4138,13 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
+   .. automethod:: writable
+   .. automethod:: external
+   .. automethod:: write
+   .. automethod:: from_native_handle
+   .. automethod:: map
+   .. automethod:: unmap
+   .. automethod:: native_handle
    .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch

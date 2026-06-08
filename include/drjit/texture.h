@@ -38,23 +38,16 @@ enum class WrapMode : uint32_t {
     Mirror = 2  /// Mirrors the texture wrt. each edge
 };
 
-/// Texture data type
-enum class CudaTextureFormat : uint32_t {
-    Float32 = 0, /// Single precision storage format
-    Float16 = 1, /// Half precision storage format
-};
-
 template <typename Storage_, size_t Dimension> class Texture : TraversableBase {
 public:
     static constexpr bool IsCUDA = is_cuda_v<Storage_>;
+    static constexpr bool IsMetal = is_metal_v<Storage_>;
     static constexpr bool IsDiff = is_diff_v<Storage_>;
     static constexpr bool IsDynamic = is_dynamic_v<Storage_>;
-    // Only half/single-precision floating-point CUDA textures are supported
+    // Only half/single-precision floating-point hardware textures are supported
     static constexpr bool IsHalf = std::is_same_v<scalar_t<Storage_>, drjit::half>;
     static constexpr bool IsSingle = std::is_same_v<scalar_t<Storage_>, float>;
-    static constexpr bool HasCudaTexture = (IsHalf || IsSingle) && IsCUDA;
-    static constexpr int CudaFormat = HasCudaTexture ?
-        IsHalf ? (int) CudaTextureFormat::Float16 : (int) CudaTextureFormat::Float32 : -1;
+    static constexpr bool HasGPUTexture = (IsHalf || IsSingle) && (IsCUDA || IsMetal);
 
     using Int32 = int32_array_t<Storage_>;
     using UInt32 = uint32_array_t<Storage_>;
@@ -62,6 +55,19 @@ public:
     using Packet = std::conditional_t<is_jit_v<Storage_>,
         DynamicArray<Storage_>, Storage_*>;
     using TensorXf = Tensor<Storage>;
+
+    // Backend that ``jit_tex_*`` dispatches on (only meaningful if HasGPUTexture)
+    static constexpr JitBackend Backend = backend_v<Storage_>;
+
+    // Number of JIT variables backing the texture: the sub-textures, plus the
+    // Metal sampler, plus (for writable CUDA textures) surface handles.
+    uint32_t tex_n_indices() const {
+        uint32_t n_textures = 1 + ((uint32_t(m_channels) - 1) / 4);
+        uint32_t extra = IsMetal ? 1u : 0u;
+        if (IsCUDA && m_writable)
+            extra += n_textures;
+        return n_textures + extra;
+    }
 
     #define DR_TEX_ALLOC_PACKET(name, size)                     \
         Packet _packet;                                         \
@@ -81,48 +87,50 @@ public:
     /**
      * \brief Create a new texture with the specified size and channel count
      *
-     * On CUDA, this is a slow operation that synchronizes the GPU pipeline, so
-     * texture objects should be reused/updated via \ref set_value() and \ref
-     * set_tensor() as much as possible.
+     * On GPU backends, this is a slow operation that synchronizes the pipeline
+     * to rewrite the device memory map. Therefore, prefer reusing and updating
+     * texture objects via \ref set_value() and \ref set_tensor() over creating
+     * new ones.
      *
-     * When \c use_accel is set to \c false on CUDA mode, the texture will not
-     * use the hardware acceleration (allocation and evaluation). In other modes
+     * When \c use_accel is set to \c false, GPU backends will emulate the
+     * texture API instead of using the hardware texture units. In other modes,
      * this argument has no effect.
      *
      * The \c filter_mode parameter defines the interpolation method to be used
      * in all evaluation routines. By default, the texture is linearly
      * interpolated. Besides nearest/linear filtering, the implementation also
      * provides a clamped cubic B-spline interpolation scheme in case a
-     * higher-order interpolation is needed. In CUDA mode, this is done using a
-     * series of linear lookups to optimally use the hardware (hence, linear
-     * filtering must be enabled to use this feature).
+     * higher-order interpolation is needed. On the CUDA and Metal backends,
+     * this is done using a series of linear lookups to optimally use the
+     * hardware (hence, linear filtering must be enabled to use this feature).
      *
      * When evaluating the texture outside of its boundaries, the \c wrap_mode
-     * defines the wrapping method. The default behavior is \ref WrapMode::Clamp,
-     * which indefinitely extends the colors on the boundary along each dimension.
+     * defines the wrapping method. The default behavior is \ref
+     * WrapMode::Clamp, which indefinitely extends the colors on the boundary
+     * along each dimension.
      */
     Texture(const size_t shape[Dimension], size_t channels,
             bool use_accel = true,
             FilterMode filter_mode = FilterMode::Linear,
-            WrapMode wrap_mode = WrapMode::Clamp) {
-        init(shape, channels, use_accel, filter_mode, wrap_mode);
+            WrapMode wrap_mode = WrapMode::Clamp,
+            bool writable = false) {
+        init(shape, channels, use_accel, filter_mode, wrap_mode,
+             /* init_tensor = */ true, writable);
     }
 
     /**
      * \brief Construct a new texture from a given tensor
      *
      * This constructor allocates texture memory just like the previous
-     * constructor, though shape information is instead extracted from \c
-     * tensor. It then also invokes <tt>set_tensor(tensor)</tt> to fill
-     * the texture memory with the provided tensor.
+     * constructor, extracting shape information from \c tensor. It then also
+     * invokes <tt>set_tensor(tensor)</tt> to fill the texture memory with the
+     * provided tensor.
      *
-     * When \c migrate is set to \c true on CUDA mode, the texture information
-     * is *fully* migrated to GPU texture memory to avoid redundant storage. In
-     * this case, the fallback evaluation routine \ref eval_nonaccel() is not
-     * usable anymore (it will return zero) and only \ref eval() or \ref
-     * eval_cuda() should be used. Note that the texture is still
-     * differentiable even when migrated. The \ref value() and \ref tensor()
-     * operations will perform a reverse migration in this case.
+     * When \c migrate is set to \c true on a GPU backend, the texture is
+     * *fully* migrated to GPU texture memory to avoid redundant storage. Note
+     * that the texture is still differentiable even when migrated. The \ref
+     * value() and \ref tensor() operations will perform a reverse migration in
+     * this case.
      *
      * Both the \c filter_mode and \c wrap_mode have the same defaults and
      * behaviors as for the previous constructor.
@@ -137,6 +145,30 @@ public:
         init(tensor.shape().data(), tensor.shape(Dimension), use_accel,
              filter_mode, wrap_mode);
         set_tensor(std::forward<TensorT>(tensor), migrate);
+    }
+
+    /**
+     * \brief Wrap an existing native texture as a Dr.Jit texture
+     *
+     * Builds a texture that *wraps* an externally-owned native texture rather
+     * than allocating its own storage. The \c handle encodes an
+     * ``id<MTLTexture>`` pointer on Metal or an OpenGL texture ID on CUDA.
+     * Shape and channel count are inferred from the texture; its dimensionality
+     * and component type must match this texture type.
+     *
+     * If \c writable is \c false the texture is wrapped for sampling (\ref
+     * eval()). If \c true it is wrapped for *rendering into* via \ref write(),
+     * and the native texture must allow shader writes / surface stores. On CUDA
+     * such a wrap is bound as a surface and cannot also be sampled.
+     *
+     * A texture wrapping a cross-API handle (OpenGL on CUDA) requires a \ref
+     * map() / \ref unmap() pair around each use; on Metal those are no-ops. The
+     * native handle can be recovered with \ref native_handle().
+     */
+    static Texture from_native_handle(uintptr_t handle, bool writable = false,
+                                      FilterMode filter_mode = FilterMode::Linear,
+                                      WrapMode wrap_mode = WrapMode::Clamp) {
+        return Texture(handle, writable, filter_mode, wrap_mode);
     }
 
     Texture(Texture &&other) noexcept {
@@ -155,13 +187,14 @@ public:
         m_filter_mode = other.m_filter_mode;
         m_wrap_mode = other.m_wrap_mode;
         m_use_accel = other.m_use_accel;
+        m_writable = other.m_writable;
         m_migrated = other.m_migrated;
         m_tensor_dirty = other.m_tensor_dirty;
     }
 
     Texture &operator=(Texture &&other) noexcept {
-        if constexpr (IsCUDA)
-            jit_cuda_tex_destroy(m_handle);
+        if constexpr (HasGPUTexture)
+            jit_tex_destroy(m_handle);
         m_handle = other.m_handle;
         other.m_handle = nullptr;
         m_size = other.m_size;
@@ -177,6 +210,7 @@ public:
         m_filter_mode = other.m_filter_mode;
         m_wrap_mode = other.m_wrap_mode;
         m_use_accel = other.m_use_accel;
+        m_writable = other.m_writable;
         m_migrated = other.m_migrated;
         m_tensor_dirty = other.m_tensor_dirty;
         return *this;
@@ -186,13 +220,43 @@ public:
     Texture &operator=(const Texture &) = delete;
 
     ~Texture() {
-        if constexpr (HasCudaTexture) {
+        if constexpr (HasGPUTexture) {
             if (m_use_accel)
-                jit_cuda_tex_destroy(m_handle);
+                jit_tex_destroy(m_handle);
         }
     }
 
-    /// Return the CUDA handle (Dr.JitCudaTexture*). NULL on all other backends
+private:
+    /// Private constructor for \ref from_native_handle()
+    Texture(uintptr_t handle, bool writable, FilterMode filter_mode,
+            WrapMode wrap_mode) {
+        if constexpr (HasGPUTexture) {
+            void *h = jit_tex_wrap(Backend, handle, Dimension,
+                                   (int) type_v<scalar_t<Storage_>>,
+                                   (int) writable, (int) filter_mode,
+                                   (int) wrap_mode);
+
+            // The native shape is innermost-first (+channels); reverse it into
+            // the tensor order that init() expects.
+            size_t shape_tex[Dimension + 1];
+            jit_tex_get_shape(h, shape_tex);
+            size_t channels = shape_tex[Dimension];
+            size_t tensor_shape[Dimension];
+            for (size_t i = 0; i < Dimension; ++i)
+                tensor_shape[i] = shape_tex[Dimension - 1 - i];
+
+            init(tensor_shape, channels, /* use_accel = */ true, filter_mode,
+                 wrap_mode, /* init_tensor = */ true, writable,
+                 /* external = */ h);
+        } else {
+            (void) handle; (void) writable; (void) filter_mode; (void) wrap_mode;
+            jit_raise("Texture::from_native_handle() requires the CUDA or Metal "
+                      "backend.");
+        }
+    }
+
+public:
+    /// Opaque texture handle on GPU backends, nullptr elsewhere
     const void *handle() const { return m_handle; }
 
     /// Return the texture dimension plus one (for the "channel dimension")
@@ -206,11 +270,40 @@ public:
     bool migrated() const { return m_migrated; }
     bool use_accel() const { return m_use_accel; }
 
+    /// Was this texture created so that kernels may store into it via \ref write()?
+    bool writable() const { return m_writable; }
+
+    /// Map a \ref from_native_handle() texture for use by Dr.Jit (no-op on
+    /// Metal, required for CUDA/OpenGL).
+    void map() {
+        if constexpr (HasGPUTexture)
+            jit_tex_map(m_handle);
+    }
+
+    /// Release a mapping established by \ref map().
+    void unmap() {
+        if constexpr (HasGPUTexture)
+            jit_tex_unmap(m_handle);
+    }
+
+    /// Return the native texture handle (as an integer), e.g. to display it in a
+    /// GUI. On Metal this is the ``id<MTLTexture>`` of sub-texture \c sub_index;
+    /// on CUDA it is the wrapped OpenGL texture id (\c sub_index is ignored, and
+    /// the result is 0 unless the texture wraps an OpenGL handle).
+    uintptr_t native_handle(size_t sub_index = 0) const {
+        if constexpr (HasGPUTexture)
+            return jit_tex_native_handle(m_handle, sub_index);
+        else
+            return 0;
+    }
+
     /**
-     * \brief Override the texture contents with the provided linearized 1D array
+     * \brief Overwrite the texture contents with the provided linearized 1D
+     * array
      *
-     * When \c migrate is set to \c true on CUDA mode, the texture information
-     * is *fully* migrated to GPU texture memory to avoid redundant storage.
+     * When \c migrate is set to \c true on the CUDA and Metal backends, the
+     * texture information is *fully* migrated to GPU texture memory to avoid
+     * redundant storage.
      */
     template <typename StorageT>
     void set_value(StorageT &&value, bool migrate = false) {
@@ -254,12 +347,9 @@ public:
                         replace_grad(m_unpadded_value.array(), value);
             }
 
-            if constexpr (HasCudaTexture) {
+            if constexpr (HasGPUTexture) {
                 if (m_use_accel) {
-                    size_t tex_shape[Dimension + 1];
-                    reverse_tensor_shape(tex_shape, true);
-                    jit_cuda_tex_memcpy_d2t(Dimension, tex_shape,
-                                            padded_value.data(), m_handle);
+                    jit_tex_memcpy_d2t(padded_value.data(), m_handle);
 
                     if (migrate) {
                         // Fully migrate to texture memory, set m_value to zero
@@ -284,15 +374,16 @@ public:
     }
 
     /**
-     * \brief Override the texture contents with the provided tensor
+     * \brief Overwrite the texture contents with the provided tensor
      *
      * This method updates the values of all texels. Changing the texture
-     * resolution or its number of channels is also supported. However, on CUDA,
-     * such operations have a significantly larger overhead (the GPU pipeline
-     * needs to be synchronized for new texture objects to be created).
+     * resolution or its number of channels is also supported. However, on the CUDA
+     * and Metal backends, such operations have a significantly larger overhead
+     * (new hardware texture objects must be created; on CUDA this also
+     * synchronizes the GPU pipeline).
      *
-     * When \c migrate is set to \c true on CUDA mode, the texture information
-     * is *fully* migrated to GPU texture memory to avoid redundant storage.
+     * When \c migrate is set to \c true on the CUDA and Metal backends, the
+     * texture information is *fully* migrated to GPU texture memory to avoid redundant storage.
      */
     template <typename TensorT>
     void set_tensor(TensorT &&tensor, bool migrate = false) {
@@ -332,14 +423,15 @@ public:
      * \brief Update the texture after applying an indirect update to its tensor
      * representation (obtained with \ref tensor()).
      *
-     * A tensor representation of this texture object can be retrived with
+     * A tensor representation of this texture object can be retrieved with
      * \ref tensor(). That representation can be modified, but in order to apply
-     * it succesfuly to the texture, this method must also be called. In short,
+     * it successfully to the texture, this method must also be called. In short,
      * this method will use the tensor representation to update the texture's
      * internal state.
      *
-     * When \c migrate is set to \c true on CUDA mode, the texture information
-     * is *fully* migrated to GPU texture memory to avoid redundant storage.
+     * When \c migrate is set to \c true on the CUDA and Metal backends, the
+     * texture information is *fully* migrated to GPU texture memory to avoid
+     * redundant storage.
      */
     void update_inplace(bool migrate = false) {
         if (m_unpadded_value.ndim() != Dimension + 1)
@@ -379,9 +471,7 @@ public:
 
     const Storage &value() const { return tensor().array(); }
 
-    /**
-     * \brief Return the texture data as a tensor object
-     */
+    /// Return the texture data as a tensor object
     const TensorXf &tensor() const {
         if constexpr (!is_jit_v<Storage_>) {
             return m_value;
@@ -447,7 +537,7 @@ public:
 
         PosF32 pos(pos_);
 
-        if constexpr (HasCudaTexture) {
+        if constexpr (HasGPUTexture) {
             if (m_use_accel) {
                 uint32_t pos_idx[Dimension];
                 uint32_t *out_idx =
@@ -456,8 +546,8 @@ public:
                     pos_idx[i] = pos[i].index();
 
                 // Query coordinates and output values are always single precision
-                jit_cuda_tex_lookup(Dimension, m_handle, pos_idx,
-                                    active.index(), out_idx);
+                jit_tex_lookup(m_handle, pos_idx,
+                               active.index(), out_idx);
 
                 for (size_t ch = 0; ch < m_channels_storage; ++ch) {
                     Float32 v = Float32::steal(out_idx[ch]);
@@ -479,6 +569,10 @@ public:
      *
      * This is an implementation detail, please use \ref eval() that may
      * dispatch to this function depending on its inputs.
+     *
+     * This routine returns zero when the texture has been fully migrated to GPU
+     * texture memory (see the \c migrate argument of the constructors), as no
+     * host-side copy then remains to read from.
      */
     template <typename Value>
     void eval_nonaccel(const Array<Value, Dimension> &pos, Value *out,
@@ -574,7 +668,7 @@ public:
               mask_t<Value> active = true) const {
         using ArrayX = DynamicArray<Value>;
 
-        if constexpr (HasCudaTexture) {
+        if constexpr (HasGPUTexture) {
             if (m_use_accel) {
                 eval_cuda(pos, out, active);
 
@@ -604,6 +698,50 @@ public:
     }
 
     /**
+     * \brief Store values into a writable hardware texture
+     *
+     * The per-channel values in \c value are written to the texel addressed by
+     * the integer coordinates \c pos. The texture must have been created with
+     * <tt>writable = true</tt>.
+     *
+     * This is a hardware texture store (a side effect): it is not
+     * differentiable, and the written texture is meant for display / external
+     * sampling rather than \ref eval().
+     */
+    template <typename Value>
+    void write(const Array<uint32_array_t<Value>, Dimension> &pos,
+               const Value *value, mask_t<Value> active = true) {
+        static_assert(HasGPUTexture,
+                      "Texture::write() requires the CUDA or Metal backend.");
+        if (!m_writable)
+            jit_raise("Texture::write(): texture was not created with "
+                      "writable=true.");
+
+        using Float32 = float32_array_t<Value>;
+
+        uint32_t pos_idx[Dimension];
+        for (size_t i = 0; i < Dimension; ++i)
+            pos_idx[i] = pos[i].index();
+
+        // Convert + zero-pad the channels to the texture's storage width.
+        dr::vector<Float32> vals;
+        vals.reserve(m_channels_storage);
+        uint32_t *val_idx =
+            (uint32_t *) alloca(m_channels_storage * sizeof(uint32_t));
+        for (size_t ch = 0; ch < m_channels_storage; ++ch) {
+            vals.push_back(ch < m_channels ? Float32(value[ch])
+                                           : zeros<Float32>());
+            val_idx[ch] = vals[ch].index();
+        }
+
+        jit_tex_write(m_handle, pos_idx, val_idx, active.index());
+
+        // The GPU texture object is now the authoritative copy
+        m_migrated = true;
+        m_tensor_dirty = true;
+    }
+
+    /**
      * \brief Fetch the texels that would be referenced in a CUDA texture lookup
      * with linear interpolation without actually performing this interpolation.
      *
@@ -616,7 +754,7 @@ public:
                          mask_t<Value> active = true) const {
         using PosF = Array<Value, Dimension>;
 
-        if constexpr (HasCudaTexture) {
+        if constexpr (HasGPUTexture) {
             if (m_use_accel) {
                 if constexpr (Dimension == 1) {
                     PosF pos(pos_);
@@ -644,8 +782,8 @@ public:
                     for (size_t i = 0; i < Dimension; ++i)
                         pos_idx[i] = pos[i].index();
 
-                    jit_cuda_tex_bilerp_fetch(Dimension, m_handle, pos_idx,
-                                              active.index(), out_idx);
+                    jit_tex_bilerp_fetch(m_handle, pos_idx,
+                                         active.index(), out_idx);
 
                     for (size_t ch = 0; ch < m_channels_storage; ++ch) {
                         Float32 v1 = Float32::steal(out_idx[ch*4 + 0]),
@@ -748,7 +886,7 @@ public:
                     mask_t<Value> active = true) const {
         using ArrayX = DynamicArray<Value>;
 
-        if constexpr (HasCudaTexture) {
+        if constexpr (HasGPUTexture) {
             if (m_use_accel) {
                 eval_fetch_cuda(pos, out, active);
 
@@ -880,9 +1018,10 @@ public:
      *
      * Instead of interpolating the texture via B-Spline basis functions, the
      * implementation transforms this calculation into an equivalent weighted
-     * sum of several linear interpolant evaluations. In CUDA mode, this can
-     * then be accelerated by hardware texture units, which runs faster than
-     * a naive implementation. More information can be found in
+     * sum of several linear interpolant evaluations. On the CUDA and Metal
+     * backends, these steps can then be accelerated by hardware texture units,
+     * which runs faster than a naive implementation. More information can be
+     * found in
      *
      *   GPU Gems 2, Chapter 20, "Fast Third-Order Texture Filtering"
      *   by Christian Sigg.
@@ -906,11 +1045,11 @@ public:
         if constexpr (!is_array_v<Mask>)
             active = true;
 
-        if constexpr (HasCudaTexture) {
+        if constexpr (HasGPUTexture) {
             if (m_migrated && force_nonaccel)
                 jit_log(::LogLevel::Warn,
                         "\"force_nonaccel\" is used while the data has been fully "
-                        "migrated to CUDA texture memory");
+                        "migrated to GPU texture memory");
         }
 
         PosF res_f = PosF(m_resolution_opaque);
@@ -946,7 +1085,7 @@ public:
         auto eval_helper = [&](const PosF &pos,
                                const Mask &active) -> ArrayX {
             ArrayX out = empty<ArrayX>(m_channels);
-            if constexpr (HasCudaTexture) {
+            if constexpr (HasGPUTexture) {
                 if (m_use_accel && !force_nonaccel) {
                     eval_cuda(pos, out.data(), active);
                     return out;
@@ -1400,10 +1539,12 @@ public:
 protected:
     void init(const size_t *shape, size_t channels, bool use_accel,
               FilterMode filter_mode, WrapMode wrap_mode,
-              bool init_tensor = true) {
+              bool init_tensor = true, bool writable = false,
+              void *external = nullptr) {
         if (channels == 0)
             jit_raise("Texture::Texture(): must have at least 1 channel!");
 
+        m_writable = writable;
         m_channels = channels;
 
         // Determine padding used for channels depending on backend
@@ -1448,17 +1589,22 @@ protected:
             }
         }
 
-        if constexpr (HasCudaTexture) {
+        if constexpr (HasGPUTexture) {
             if (m_use_accel && init_tensor) {
-                size_t tex_shape[Dimension];
-                reverse_tensor_shape(tex_shape, false);
-
                 if (m_handle)
-                    jit_cuda_tex_destroy(m_handle);
+                    jit_tex_destroy(m_handle);
 
-                m_handle = jit_cuda_tex_create(
-                    Dimension, tex_shape, m_channels_storage, (int) CudaFormat,
-                    (int) filter_mode, (int) wrap_mode);
+                if (external) {
+                    // Wrap an externally-owned native texture (\ref from_native_handle).
+                    m_handle = external;
+                } else {
+                    size_t tex_shape[Dimension];
+                    reverse_tensor_shape(tex_shape, false);
+                    m_handle = jit_tex_create(
+                        Backend, Dimension, tex_shape, m_channels_storage,
+                        (int) type_v<scalar_t<Storage_>>, (int) filter_mode,
+                        (int) wrap_mode, (int) m_writable);
+                }
             }
         }
     }
@@ -1468,8 +1614,12 @@ protected:
 private:
     /// Updates the device-side padded tensor
     void sync_device_data() const {
-        if constexpr (HasCudaTexture) {
-            if (m_use_accel && m_migrated) {
+        if constexpr (HasGPUTexture) {
+            // Writable textures always read back: the hardware holds the
+            // authoritative copy. We can't rely on write()'s m_migrated flag
+            // alone, as that host-side assignment is skipped when a frozen
+            // function is replayed.
+            if (m_use_accel && (m_migrated || m_writable)) {
                 Storage primal = empty<Storage>(m_size);
 
                 /* The CUDA texture here is already padded with respect to the
@@ -1479,10 +1629,7 @@ private:
                  * and moreover the padded storage allows us to leverage
                  * PacketOps when performing gathers/scatters.
                  */
-                size_t tex_shape[Dimension + 1];
-                reverse_tensor_shape(tex_shape, true);
-                jit_cuda_tex_memcpy_t2d(Dimension, tex_shape, m_handle,
-                                        primal.data());
+                jit_tex_memcpy_t2d(m_handle, primal.data());
 
                 if constexpr (IsDiff)
                     m_value.array() = replace_grad(primal, m_value.array());
@@ -1490,6 +1637,7 @@ private:
                     m_value.array() = primal;
 
                 m_migrated = false;
+                m_tensor_dirty = true; // the unpadded view must be refreshed
             }
         }
     }
@@ -1596,7 +1744,9 @@ private:
     FilterMode m_filter_mode;
     WrapMode m_wrap_mode;
     bool m_use_accel = false;
-    mutable bool m_migrated = false;        /* CUDA backend flag to indicate
+    bool m_writable = false;                /* Texture was created so kernels
+                                               may store into it via write() */
+    mutable bool m_migrated = false;        /* Hardware-texture backend flag to indicate
                                                whether texture data is
                                                exclusively on the device */
     mutable bool m_tensor_dirty = false;    /* Flag to indicate whether
@@ -1615,11 +1765,11 @@ public:
 
         DRJIT_MAP(DR_TRAVERSE_MEMBER_RO, m_value, m_unpadded_value,
                   m_resolution_opaque, m_inv_resolution);
-        if constexpr (HasCudaTexture) {
-            uint32_t n_textures = 1 + ((uint32_t(m_channels) - 1) / 4);
-            std::vector<uint32_t> indices(n_textures);
-            jit_cuda_tex_get_indices(m_handle, indices.data());
-            for (uint32_t i = 0; i < n_textures; i++)
+        if constexpr (HasGPUTexture) {
+            uint32_t n_indices = tex_n_indices();
+            std::vector<uint32_t> indices(n_indices);
+            jit_tex_get_indices(m_handle, indices.data());
+            for (uint32_t i = 0; i < n_indices; i++)
                 fn(payload, indices[i], "", "");
         }
     }
@@ -1633,11 +1783,11 @@ public:
 
         DRJIT_MAP(DR_TRAVERSE_MEMBER_RW, m_value, m_unpadded_value,
                   m_resolution_opaque, m_inv_resolution);
-        if constexpr (HasCudaTexture) {
-            uint32_t n_textures = 1 + ((uint32_t(m_channels) - 1) / 4);
-            std::vector<uint32_t> indices(n_textures);
-            jit_cuda_tex_get_indices(m_handle, indices.data());
-            for (uint32_t i = 0; i < n_textures; i++) {
+        if constexpr (HasGPUTexture) {
+            uint32_t n_indices = tex_n_indices();
+            std::vector<uint32_t> indices(n_indices);
+            jit_tex_get_indices(m_handle, indices.data());
+            for (uint32_t i = 0; i < n_indices; i++) {
                 uint64_t new_index = fn(payload, indices[i], "", "");
                 if (new_index != indices[i])
                     jit_raise("A texture was changed by traversing it. This is "
