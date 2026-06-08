@@ -12,12 +12,18 @@
 
 void export_profile(nb::module_ &m) {
     struct profile_enable {
+        bool active;
+
+        profile_enable(bool active = true) : active(active) { }
+
         void __enter__() {
-            jit_profile_start();
+            if (active)
+                jit_profile_start();
         }
 
         void __exit__(nb::handle, nb::handle, nb::handle) {
-            jit_profile_stop();
+            if (active)
+                jit_profile_stop();
         }
     };
 
@@ -40,7 +46,7 @@ void export_profile(nb::module_ &m) {
              nb::arg().none(), nb::arg().none());
 
     nb::class_<profile_enable>(m, "profile_enable", doc_profile_enable)
-        .def(nb::init<>())
+        .def(nb::init<bool>(), "active"_a = true)
         .def("__enter__", &profile_enable::__enter__)
         .def("__exit__", &profile_enable::__exit__, nb::arg().none(),
              nb::arg().none(), nb::arg().none());
