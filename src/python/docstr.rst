@@ -717,8 +717,8 @@
     competitive with PyTorch.
 
     Supported element types are :py:attr:`drjit.VarType.Float16`,
-    :py:attr:`drjit.VarType.Float32`, :py:attr:`drjit.VarType.Float64`,
-    :py:attr:`drjit.VarType.Int32`, and :py:attr:`drjit.VarType.UInt32`.
+    :py:attr:`drjit.VarType.Float32`, and :py:attr:`drjit.VarType.Float64`.
+    The Metal backend supports the former two (Apple GPUs lack FP64).
 
     .. note::
 
@@ -729,7 +729,7 @@
        ``V``, where
 
        - ``V = 8`` for ``Float16``,
-       - ``V = 4`` for ``Float32`` / ``Int32`` / ``UInt32``,
+       - ``V = 4`` for ``Float32``,
        - ``V = 2`` for ``Float64``.
 
        When this divisibility doesn't hold the kernel falls back to a

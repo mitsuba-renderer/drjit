@@ -1780,6 +1780,14 @@ def _radix_sort(arr, block_size, descending, return_indices):
     independently sorts contiguous groups of block_size elements.
     """
     arr_tp = type(arr)
+
+    # Metal demotes Float64 to a Float32 backing variable, sort that directly.
+    if (backend_v(arr_tp) == JitBackend.Metal and
+            type_v(arr_tp) == VarType.Float64):
+        result = _radix_sort(float32_array_t(arr_tp)(arr), block_size,
+                             descending, return_indices)
+        return result if return_indices else arr_tp(result)
+
     bits = itemsize_v(arr_tp) * 8
     n = len(arr)
 
