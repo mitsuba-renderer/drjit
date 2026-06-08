@@ -694,7 +694,10 @@ def test24_sort_argsort_1d(t):
     check(f16, np.array([-1.5, 0.5, -0.5, 2.0], dtype=np.float16))
 
     check(f64, np.array([3.0, 1.0, 4.0, 1.0, 5.0], dtype=np.float64))
-    check(f64, np.array([-1e300, 1e300, 0.0, -1.0], dtype=np.float64))
+    # The Metal backend demotes float64 to float32 and lacks the exponent
+    # range for this step.
+    if dr.backend_v(t) != dr.JitBackend.Metal:
+        check(f64, np.array([-1e300, 1e300, 0.0, -1.0], dtype=np.float64))
 
     check(i32, np.array([-5, 3, -8, 1, 0], dtype=np.int32))
     check(i32, np.array([-(2**31), 2**31 - 1, 0], dtype=np.int32))   # int32 boundary

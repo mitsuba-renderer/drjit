@@ -3,12 +3,13 @@ Tests for the batched GEMM path behind ``dr.matmul`` on Dr.Jit tensors.
 
 Organized into six sections, each with a specific focus:
 
-- **A** (01-02): baseline 2-D correctness across every supported dtype.
+- **A** (01-02): baseline 2-D correctness across the float dtypes, plus
+                 rejection of unsupported (integer) element types.
 - **B** (03):    empty / degenerate shapes; edge handling in the launchers.
 - **C** (04):    large-matrix smoke test -- exercises CUDA tile selection
                  and edge handling at scale.
 - **D** (05-06): ``@`` operator binding and input-validation errors.
-- **E** (10-13): N-D and broadcast correctness via ``GemmBatch``.
+- **E** (10-12, 14): N-D and broadcast correctness via ``GemmBatch``.
 - **F** (20-21): automatic differentiation (forward + reverse).
 
 Each test documents which kernel / dispatch path it exists to cover so
@@ -77,24 +78,18 @@ def test01_matmul_2d(t, dims, At, Bt):
 
 @pytest.test_arrays('is_tensor,jit,int32,-is_diff',
                     'is_tensor,jit,uint32,-is_diff')
-@pytest.skip_on(RuntimeError, "integer GEMM unsupported on the Metal backend")
-def test02_matmul_int(t):
-    """Integer matmul. int32 dispatches to the uint32 kernel (identical
-    bit pattern under two's-complement multiply/add); bounded operands
-    keep the exact result inside the 32-bit range."""
+def test02_matmul_int_unsupported(t):
+    """Integer matmul is unsupported on every backend and must raise an
+    informative error naming the floating point types that are allowed."""
     np = pytest.importorskip("numpy")
     vt = dr.type_v(t)
     dtype = np.int32 if vt == dr.VarType.Int32 else np.uint32
-    low, high = (-8, 8) if vt == dr.VarType.Int32 else (0, 16)
-    rng = np.random.default_rng(seed=1)
-
     M, K, N = 12, 7, 9
-    A_np = rng.integers(low, high, size=(M, K), dtype=dtype)
-    B_np = rng.integers(low, high, size=(K, N), dtype=dtype)
+    A = t(np.ones((M, K), dtype=dtype))
+    B = t(np.ones((K, N), dtype=dtype))
 
-    C = dr.matmul(t(A_np), t(B_np))
-    assert C.shape == (M, N)
-    assert np.array_equal(C.numpy(), A_np @ B_np)
+    with pytest.raises(RuntimeError, match="Float16, Float32, and Float64"):
+        dr.matmul(A, B)
 
 
 # =========================================================================
@@ -317,26 +312,6 @@ def test12_broadcast_matmul_transpose(t, At, Bt):
     C = dr.matmul(t(A_np), t(B_np), At=At, Bt=Bt)
     assert C.shape == (Bat, M, N)
     assert np.allclose(C.numpy(), ref, atol=1e-4)
-
-
-@pytest.test_arrays('is_tensor,jit,int32,-is_diff',
-                    'is_tensor,jit,uint32,-is_diff')
-@pytest.skip_on(RuntimeError, "integer GEMM unsupported on the Metal backend")
-def test13_batched_matmul_int(t):
-    """Batched integer matmul -- dispatches the uint32 kernel through
-    the batched (``GemmBatch``) path rather than the 2-D fast path."""
-    np = pytest.importorskip("numpy")
-    vt = dr.type_v(t)
-    dtype = np.int32 if vt == dr.VarType.Int32 else np.uint32
-    low, high = (-8, 8) if vt == dr.VarType.Int32 else (0, 16)
-    Bat, M, K, N = 4, 5, 3, 6
-    rng = np.random.default_rng(seed=7)
-    A_np = rng.integers(low, high, size=(Bat, M, K), dtype=dtype)
-    B_np = rng.integers(low, high, size=(Bat, K, N), dtype=dtype)
-
-    C = dr.matmul(t(A_np), t(B_np))
-    assert C.shape == (Bat, M, N)
-    assert np.array_equal(C.numpy(), A_np @ B_np)
 
 
 @pytest.test_arrays('is_tensor,jit,float32,-is_diff')

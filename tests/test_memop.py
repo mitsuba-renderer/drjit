@@ -506,6 +506,51 @@ def test18_scatter_reduce(t, op):
         assert dr.all(buf_1 == buf_2)
 
 
+@pytest.mark.parametrize('op',
+    [dr.ReduceOp.Add, dr.ReduceOp.Min, dr.ReduceOp.Max,
+     dr.ReduceOp.And, dr.ReduceOp.Or])
+@pytest.test_arrays('-bool,jit,-diff,shape=(2, *)', '-bool,jit,-diff,shape=(4, *)')
+def test18b_scatter_reduce_packet(t, op):
+    # Scattering an even-width vector into a flat buffer takes the *packet* code
+    # path (jitc_var_scatter_packet), which on the GPU backends performs SIMD-local
+    # pre-aggregation across lanes sharing a target. The common 3-channel color
+    # case is odd and falls back to scalar scatters, so it would not cover this.
+    # Verify ReduceMode.Local (packet aggregation) agrees with the plain
+    # ReduceMode.Direct atomics.
+    vt = dr.value_t(t)
+    if not dr.detail.can_scatter_reduce(vt, op):
+        pytest.skip(f"Unsupported scatter combination: backend={dr.backend_v(t)}, "
+                    f"type={dr.type_v(vt)}, op={op}")
+
+    n = dr.size_v(t)            # packet width (2 or 4)
+    size = 100000
+    if dr.type_v(vt) == dr.VarType.Float16:
+        size = 100
+    identity = dr.detail.reduce_identity(vt, op)[0]
+    mod = sys.modules[t.__module__]
+
+    for k in (1, 16, 1024):
+        rng = mod.PCG32(size)
+        i = rng.next_uint32_bounded(k)
+        if dr.type_v(vt) == dr.VarType.Float16:
+            cols = [dr.full(vt, 1, size) for _ in range(n)]
+        else:
+            cols = [vt(rng.next_uint32()) for _ in range(n)]
+        val = t(*cols)
+
+        buf_local = dr.full(vt, identity, k * n)
+        dr.scatter_reduce(op, buf_local, value=val, index=i, mode=dr.ReduceMode.Local)
+
+        buf_direct = dr.full(vt, identity, k * n)
+        dr.scatter_reduce(op, buf_direct, value=val, index=i, mode=dr.ReduceMode.Direct)
+
+        dr.eval(buf_local, buf_direct)
+        if dr.is_float_v(vt):
+            assert dr.allclose(buf_local, buf_direct)
+        else:
+            assert dr.all(buf_local == buf_direct)
+
+
 @pytest.test_arrays('jit,tensor,float32')
 def test19_reshape_tensor(t):
     value = dr.arange(t, 6)

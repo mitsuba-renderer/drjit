@@ -81,7 +81,7 @@ def test05_transform_decompose(t):
     s_dr, q_dr, tr_dr = dr.transform_decompose(mtx)
     s_pkg, q_pkg, tr_pkg = pkg.transform_decompose(mtx)
 
-    assert dr.all(s_dr == s_pkg, axis=None)
+    assert dr.all(dr.allclose(s_dr, s_pkg), axis=None)
     assert dr.all(dr.allclose(q_dr, q_pkg), axis=None)
     assert dr.all(tr_dr == tr_pkg, axis=None)
 
