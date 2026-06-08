@@ -1,3 +1,4 @@
+import os
 import warnings
 
 import drjit as dr
@@ -31,6 +32,8 @@ except ImportError:
     pass
 
 try:
+    # Disable jax's greedy preallocation of the GPU memory
+    os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
     import jax
     from jax import config
     config.update("jax_enable_x64", True) # Enable double precision
