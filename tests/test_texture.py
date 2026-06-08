@@ -9,6 +9,10 @@ def _skip_metal_f64(t, texture_type):
     if dr.backend_v(t) == dr.JitBackend.Metal and 'f64' in texture_type:
         pytest.skip("Metal does not support float64")
 
+def _skip_non_hw_write(t):
+    if dr.backend_v(t) not in (dr.JitBackend.CUDA, dr.JitBackend.Metal):
+        pytest.skip("hardware texture writes require the CUDA or Metal backend")
+
 @pytest.mark.parametrize("wrap_mode", wrap_modes)
 @pytest.mark.parametrize("force_optix", [True, False])
 @pytest.mark.parametrize("texture_type", ['Texture1f64', 'Texture1f', 'Texture1f16'])
@@ -686,7 +690,8 @@ def test21_fetch_migrate(t, texture_type, migrate):
     mod = sys.modules[t.__module__]
     TexType = getattr(mod, texture_type)
     Array1f = getattr(mod, 'Array1f')
-    can_migrate = dr.backend_v(t) is dr.JitBackend.CUDA and texture_type != "Texture1f64"
+    can_migrate = dr.backend_v(t) in (dr.JitBackend.CUDA, dr.JitBackend.Metal) \
+        and texture_type != "Texture1f64"
 
     N = 2
     tex = TexType([N], 1, True)
@@ -860,7 +865,8 @@ def test24_set_tensor_ad(t, texture_type):
 def test25_eval_ad_migrated(t, texture_type, init):
     _skip_metal_f64(t, texture_type)
     # Test only makes sense for configurations where the texture can be migrated
-    can_migrate = dr.backend_v(t) is dr.JitBackend.CUDA and texture_type != "Texture2f64"
+    can_migrate = dr.backend_v(t) in (dr.JitBackend.CUDA, dr.JitBackend.Metal) \
+        and texture_type != "Texture2f64"
     if not can_migrate:
         return
 
@@ -918,7 +924,8 @@ def test26_tensor_getter_does_not_drop_gradient_tracking(t, texture_type, init, 
     elif init == 'set_tensor':
         tex.set_tensor(tensor, migrate=migrate)
 
-    if dr.backend_v(t) == dr.JitBackend.CUDA and texture_type != "Texture1f64":
+    if dr.backend_v(t) in (dr.JitBackend.CUDA, dr.JitBackend.Metal) \
+            and texture_type != "Texture1f64":
         assert tex.migrated() == migrate
     else:
         assert tex.migrated() == False
@@ -926,3 +933,217 @@ def test26_tensor_getter_does_not_drop_gradient_tracking(t, texture_type, init, 
     with dr.suspend_grad():
         tex.tensor() # Might mutate some internal state
     assert dr.grad_enabled(tex.tensor())
+
+
+@pytest.mark.parametrize("texture_type", ['Texture2f64', 'Texture2f', 'Texture2f16'])
+@pytest.test_arrays("is_jit, float32, shape=(*)")
+def test27_masked(t, texture_type):
+    # A masked lookup / fetch must return the unmasked value on active lanes and
+    # zero on inactive ones. Covers the accelerated TexLookup (eval) and
+    # TexFetchBilerp (eval_fetch) paths with a *mixed* per-lane mask.
+    _skip_metal_f64(t, texture_type)
+    mod = sys.modules[t.__module__]
+    TexType = getattr(mod, texture_type)
+    Array2f = getattr(mod, 'Array2f')
+    PCG32 = getattr(mod, 'PCG32')
+    UInt32 = dr.uint32_array_t(t)
+
+    N, M, n = 4, 4, 64
+    for ch in range(1, 9):
+        tex = TexType([N, M], ch, True, dr.FilterMode.Linear, dr.WrapMode.Clamp)
+        StorageType = dr.array_t(tex.value())
+        tex.set_value(StorageType(PCG32(N * M * ch).next_float32()))
+
+        rng = PCG32(n)
+        pos = Array2f(rng.next_float32(), rng.next_float32())
+
+        # Alternating active / inactive lanes; non-literal, so the masked
+        # codegen path is exercised.
+        active = (dr.arange(UInt32, n) & 1) == 0
+
+        # eval -> hardware TexLookup
+        ref = tex.eval(pos)
+        out = tex.eval(pos, active=active)
+        assert dr.allclose(out, dr.select(active, ref, 0))
+
+        # eval_fetch -> hardware TexFetchBilerp
+        ref_f = tex.eval_fetch(pos)
+        out_f = tex.eval_fetch(pos, active=active)
+        for corner in range(4):
+            assert dr.allclose(out_f[corner], dr.select(active, ref_f[corner], 0))
+
+
+@pytest.mark.parametrize("texture_type", ['Texture2f', 'Texture2f16'])
+@pytest.test_arrays("is_jit, float32, shape=(*)")
+def test28_write_flag(t, texture_type):
+    # Writable textures expose write(); a non-writable one rejects it; and a
+    # writable texture can be *both* written and sampled.
+    _skip_non_hw_write(t)
+    mod = sys.modules[t.__module__]
+    TexType = getattr(mod, texture_type)
+    UInt32 = dr.uint32_array_t(t)
+    Array2u = getattr(mod, 'Array2u')
+    Array2f = getattr(mod, 'Array2f')
+    StorageType = getattr(mod, 'Float16' if texture_type.endswith('f16') else 'Float')
+
+    tex = TexType([4, 8], 4, writable=True)
+    assert tex.writable()
+
+    ro = TexType([4, 8], 4)
+    assert not ro.writable()
+    px = dr.arange(UInt32, 8)
+
+    # Writing to a non-writable texture is rejected.
+    with pytest.raises(Exception):
+        ro.write(Array2u(px, px), [StorageType(1)] * 4)
+
+    # A writable texture can be both written and sampled: store a constant per
+    # channel, then sample it back (constant -> independent of filtering/wrap).
+    H, W = 4, 8
+    idx = dr.arange(UInt32, H * W)
+    wx, wy = idx % W, idx // W
+    tex.write(Array2u(wx, wy), [dr.full(StorageType, 0.1 * (c + 1), H * W)
+                                for c in range(4)])
+    dr.eval()
+    rng = mod.PCG32(16)
+    out = tex.eval(Array2f(rng.next_float32(), rng.next_float32()))
+    for c in range(4):
+        assert dr.allclose(out[c], 0.1 * (c + 1), 5e-3, 5e-3)
+
+
+@pytest.mark.parametrize("texture_type", ['Texture2f', 'Texture2f16'])
+@pytest.test_arrays("is_jit, float32, shape=(*)")
+def test29_write_read(t, texture_type):
+    # Per-pixel hardware stores round-trip through the texture for every channel
+    # count (exercises the 1/2/4-channel sub-texture split and padding). The
+    # value written at pixel `idx`, channel `c` is `(idx*ch + c)*0.01`, so the
+    # interleaved read-back tensor must equal `arange(H*W*ch)*0.01`.
+    _skip_non_hw_write(t)
+    mod = sys.modules[t.__module__]
+    TexType = getattr(mod, texture_type)
+    UInt32 = dr.uint32_array_t(t)
+    Array2u = getattr(mod, 'Array2u')
+    StorageType = getattr(mod, 'Float16' if texture_type.endswith('f16') else 'Float')
+
+    H, W = 4, 8
+    for ch in range(1, 9):
+        tex = TexType([H, W], ch, writable=True)
+        idx = dr.arange(UInt32, H * W)
+        px, py = idx % W, idx // W
+        vals = [StorageType(idx * ch + c) * 0.01 for c in range(ch)]
+        tex.write(Array2u(px, py), vals)
+        dr.eval()
+        ref = dr.arange(StorageType, H * W * ch) * 0.01
+        assert dr.allclose(tex.value(), ref, atol=5e-3)
+
+
+@pytest.mark.parametrize("texture_type", ['Texture2f', 'Texture2f16'])
+@pytest.test_arrays("is_jit, float32, shape=(*)")
+def test30_write_masked(t, texture_type):
+    # A masked store updates only the active lanes.
+    _skip_non_hw_write(t)
+    mod = sys.modules[t.__module__]
+    TexType = getattr(mod, texture_type)
+    UInt32 = dr.uint32_array_t(t)
+    Array2u = getattr(mod, 'Array2u')
+    StorageType = getattr(mod, 'Float16' if texture_type.endswith('f16') else 'Float')
+
+    H, W = 4, 8
+    tex = TexType([H, W], 1, writable=True)
+    idx = dr.arange(UInt32, H * W)
+    px, py = idx % W, idx // W
+
+    tex.write(Array2u(px, py), [dr.zeros(StorageType, H * W)])
+    dr.eval()
+    tex.write(Array2u(px, py), [dr.full(StorageType, 1, H * W)], px < 4)
+    dr.eval()
+
+    ref = dr.select(px < 4, StorageType(1), StorageType(0))
+    assert dr.allclose(tex.value(), ref, atol=5e-3)
+
+
+@pytest.mark.parametrize("texture_type", ['Texture3f', 'Texture3f16'])
+@pytest.test_arrays("is_jit, float32, shape=(*)")
+def test31_write_3d(t, texture_type):
+    # 3D hardware stores round-trip.
+    _skip_non_hw_write(t)
+    mod = sys.modules[t.__module__]
+    TexType = getattr(mod, texture_type)
+    UInt32 = dr.uint32_array_t(t)
+    Array3u = getattr(mod, 'Array3u')
+    StorageType = getattr(mod, 'Float16' if texture_type.endswith('f16') else 'Float')
+
+    D, H, W, ch = 2, 4, 4, 4
+    tex = TexType([D, H, W], ch, writable=True)
+    idx = dr.arange(UInt32, D * H * W)
+    px = idx % W
+    py = (idx // W) % H
+    pz = idx // (W * H)
+    vals = [StorageType(idx * ch + c) * 0.01 for c in range(ch)]
+    tex.write(Array3u(px, py, pz), vals)
+    dr.eval()
+    ref = dr.arange(StorageType, D * H * W * ch) * 0.01
+    assert dr.allclose(tex.value(), ref, atol=5e-3)
+
+
+@pytest.mark.parametrize("texture_type", ['Texture2f', 'Texture2f16'])
+@pytest.test_arrays("is_jit, float32, shape=(*)")
+def test32_from_native_handle(t, texture_type):
+    # Wrap a native texture handle: build a texture, recover its native handle,
+    # wrap that as a new texture, and confirm it samples identically. On Metal
+    # native_handle() and from_native_handle() share the id<MTLTexture> type, so the
+    # round-trip closes; on CUDA native_handle() is a CUtexObject while
+    # from_native_handle() takes a GL id, so this is Metal-specific.
+    if dr.backend_v(t) != dr.JitBackend.Metal:
+        pytest.skip("native_handle/from_native_handle round-trip is Metal-specific")
+    mod = sys.modules[t.__module__]
+    TexType = getattr(mod, texture_type)
+    Array2f = getattr(mod, 'Array2f')
+    PCG32 = getattr(mod, 'PCG32')
+    StorageType = getattr(mod, 'Float16' if texture_type.endswith('f16') else 'Float')
+
+    H, W, C = 5, 7, 4
+    data = mod.TensorXf(StorageType(PCG32(H * W * C).next_float32()),
+                        shape=(H, W, C))
+    src = TexType(data, migrate=False)
+
+    h = src.native_handle()
+    assert h != 0
+
+    wrapped = TexType.from_native_handle(h)
+    assert not wrapped.writable()
+    assert wrapped.shape == (H, W, C)
+
+    wrapped.map()  # no-op on Metal
+    rng = PCG32(64)
+    pos = Array2f(rng.next_float32(), rng.next_float32())
+    ref = src.eval(pos)
+    out = wrapped.eval(pos)
+    wrapped.unmap()
+    for ch in range(C):
+        assert dr.allclose(ref[ch], out[ch], 5e-3, 5e-3)
+
+    # Dimensionality must match the texture type.
+    with pytest.raises(Exception):
+        getattr(mod, 'Texture3f').from_native_handle(h)
+
+    # Wrap for *writing* (render into an app texture): write through a wrapped
+    # handle, then read it back via the source texture (same native texture).
+    UInt = getattr(mod, 'UInt')
+    Array2u = getattr(mod, 'Array2u')
+    wsrc = TexType([H, W], C, writable=True)
+    wtex = TexType.from_native_handle(wsrc.native_handle(), writable=True)
+    assert wtex.writable()
+    wtex.map()
+    idx = dr.arange(UInt, H * W)
+    px, py = idx % W, idx // W
+    wtex.write(Array2u(px, py),
+               [StorageType(idx * C + c) * 0.01 for c in range(C)])
+    dr.eval()
+    wtex.unmap()
+    assert dr.allclose(wsrc.value(),
+                       dr.arange(StorageType, H * W * C) * 0.01, 5e-3, 5e-3)
+
+    # A non-writable texture cannot be wrapped for writing.
+    with pytest.raises(Exception):
+        TexType.from_native_handle(src.native_handle(), writable=True)

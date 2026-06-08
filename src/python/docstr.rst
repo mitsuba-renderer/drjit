@@ -7022,21 +7022,22 @@
 
     Create a new texture with the specified size and channel count
 
-    On CUDA, this is a slow operation that synchronizes the GPU pipeline, so
-    texture objects should be reused/updated via :py:func:`set_value()` and
-    :py:func:`set_tensor()` as much as possible.
+    On GPU backends, this is a slow operation that synchronizes the pipeline to
+    rewrite the device memory map. Therefore, prefer reusing and updating
+    texture objects via :py:func:`set_value()` and :py:func:`set_tensor()` over
+    creating new ones.
 
-    When ``use_accel`` is set to ``False`` on CUDA mode, the texture will not
-    use hardware acceleration (allocation and evaluation). In other modes
+    When ``use_accel`` is set to ``False``, GPU backends will emulate the
+    texture API instead of using the hardware texture units. In other modes,
     this argument has no effect.
 
     The ``filter_mode`` parameter defines the interpolation method to be used
     in all evaluation routines. By default, the texture is linearly
     interpolated. Besides nearest/linear filtering, the implementation also
     provides a clamped cubic B-spline interpolation scheme in case a
-    higher-order interpolation is needed. In CUDA mode, this is done using a
-    series of linear lookups to optimally use the hardware (hence, linear
-    filtering must be enabled to use this feature).
+    higher-order interpolation is needed. On the CUDA and Metal backends, this
+    is done using a series of linear lookups to optimally use the hardware
+    (hence, linear filtering must be enabled to use this feature).
 
     When evaluating the texture outside of its boundaries, the ``wrap_mode``
     defines the wrapping method. The default behavior is ``drjit.WrapMode.Clamp``,
@@ -7044,50 +7045,58 @@
 
 .. topic:: Texture_init_tensor
 
-    Construct a new texture from a given tensor.
+    Construct a new texture from a given tensor
 
-    This constructor allocates texture memory with the shape information
-    deduced from ``tensor``. It subsequently invokes :py:func:`set_tensor(tensor)`
-    to fill the texture memory with the provided tensor.
+    This constructor allocates texture memory just like the previous
+    constructor, extracting shape information from ``tensor``. It then also
+    invokes ``set_tensor(tensor)`` to fill the texture memory with the provided
+    tensor.
 
-    When both ``migrate`` and ``use_accel`` are set to ``True`` in CUDA mode, the texture
-    exclusively stores a copy of the input data as a CUDA texture to avoid
-    redundant storage. Note that the texture is still differentiable even when migrated.
+    When ``migrate`` is set to ``True`` on a GPU backend, the texture is *fully*
+    migrated to GPU texture memory to avoid redundant storage. Note that the
+    texture is still differentiable even when migrated. The :py:func:`value()`
+    and :py:func:`tensor()` operations will perform a reverse migration in this
+    case.
+
+    Both the ``filter_mode`` and ``wrap_mode`` have the same defaults and
+    behaviors as for the previous constructor.
 
 .. topic:: Texture_set_value
 
-    Override the texture contents with the provided linearized 1D array.
+    Overwrite the texture contents with the provided linearized 1D array
 
-    In CUDA mode, when both the argument ``migrate`` and :py:func:`use_accel()` are ``True``,
-    the texture exclusively stores a copy of the input data as a CUDA texture to avoid
-    redundant storage.Note that the texture is still differentiable even when migrated.
+    When ``migrate`` is set to ``True`` on the CUDA and Metal backends, the
+    texture information is *fully* migrated to GPU texture memory to avoid
+    redundant storage.
 
 .. topic:: Texture_set_tensor
 
-    Override the texture contents with the provided tensor.
+    Overwrite the texture contents with the provided tensor
 
     This method updates the values of all texels. Changing the texture
-    resolution or its number of channels is also supported. However, on CUDA,
-    such operations have a significantly larger overhead (the GPU pipeline
-    needs to be synchronized for new texture objects to be created).
+    resolution or its number of channels is also supported. However, on the
+    CUDA and Metal backends, such operations have a significantly larger
+    overhead (new hardware texture objects must be created; on CUDA this also
+    synchronizes the GPU pipeline).
 
-    In CUDA mode, when both the argument ``migrate`` and :py:func:`use_accel()` are ``True``,
-    the texture exclusively stores a copy of the input data as a CUDA texture to avoid
-    redundant storage.Note that the texture is still differentiable even when migrated.
+    When ``migrate`` is set to ``True`` on the CUDA and Metal backends, the
+    texture information is *fully* migrated to GPU texture memory to avoid
+    redundant storage.
 
 .. topic:: Texture_update_inplace
+
     Update the texture after applying an indirect update to its tensor
-    representation (obtained with py:func:`tensor()`).
+    representation (obtained with :py:func:`tensor()`).
 
-    A tensor representation of this texture object can be retrived with
-    py:func:`tensor()`. That representation can be modified, but in order to apply
-    it succesfuly to the texture, this method must also be called. In short,
-    this method will use the tensor representation to update the texture's
-    internal state.
+    A tensor representation of this texture object can be retrieved with
+    :py:func:`tensor()`. That representation can be modified, but in order to
+    apply it successfully to the texture, this method must also be called. In
+    short, this method will use the tensor representation to update the
+    texture's internal state.
 
-    In CUDA mode, when both the argument ``migrate`` and :py:func:`use_accel()` are ``True``,
-    the texture exclusively stores a copy of the input data as a CUDA texture to avoid
-    redundant storage.)
+    When ``migrate`` is set to ``True`` on the CUDA and Metal backends, the
+    texture information is *fully* migrated to GPU texture memory to avoid
+    redundant storage.
 
 .. topic:: Texture_value
 
@@ -7112,7 +7121,7 @@
 .. topic:: Texture_migrated
 
     Return whether textures with :py:func:`use_accel()` set to ``True`` only store
-    the data as a hardware-accelerated CUDA texture.
+    the data as a hardware-accelerated GPU texture.
 
     If ``False`` then a copy of the array data will additionally be retained .
 
@@ -7143,9 +7152,10 @@
 
     Instead of interpolating the texture via B-Spline basis functions, the
     implementation transforms this calculation into an equivalent weighted
-    sum of several linear interpolant evaluations. In CUDA mode, this can
-    then be accelerated by hardware texture units, which runs faster than
-    a naive implementation. More information can be found in:
+    sum of several linear interpolant evaluations. On the CUDA and Metal
+    backends, these steps can then be accelerated by hardware texture units,
+    which runs faster than a naive implementation. More information can be found
+    in:
 
         GPU Gems 2, Chapter 20, "Fast Third-Order Texture Filtering"
         by Christian Sigg.
@@ -7189,6 +7199,59 @@
     :py:func:`eval_cubic()` function to construct an AD graph. When only the cubic
     evaluation result is desired, the :py:func:`eval_cubic()` function is faster
     than this simple implementation
+
+.. topic:: Texture_writable
+
+    Was this texture created so that kernels may store into it via
+    :py:func:`write()`?
+
+.. topic:: Texture_write
+
+    Store values into a writable hardware texture
+
+    The per-channel values in ``value`` are written to the texel addressed by
+    the integer coordinates ``pos``. The texture must have been created with
+    ``writable=True``.
+
+    This is a hardware texture store (a side effect): it is not differentiable,
+    and the written texture is meant for display / external sampling rather than
+    :py:func:`eval()`.
+
+.. topic:: Texture_from_native_handle
+
+    Wrap an existing native texture as a Dr.Jit texture
+
+    Builds a texture that *wraps* an externally-owned native texture rather than
+    allocating its own storage. The ``handle`` encodes an ``id<MTLTexture>``
+    pointer on Metal or an OpenGL texture ID on CUDA. Shape and channel count are
+    inferred from the texture; its dimensionality and component type must match
+    this texture type.
+
+    If ``writable`` is ``False`` the texture is wrapped for sampling
+    (:py:func:`eval()`). If ``True`` it is wrapped for *rendering into* via
+    :py:func:`write()`, and the native texture must allow shader writes / surface
+    stores. On CUDA such a wrap is bound as a surface and cannot also be sampled.
+
+    A texture wrapping a cross-API handle (OpenGL on CUDA) requires a
+    :py:func:`map()` / :py:func:`unmap()` pair around each use; on Metal those
+    are no-ops. The native handle can be recovered with
+    :py:func:`native_handle()`.
+
+.. topic:: Texture_map
+
+    Map a :py:func:`from_native_handle()` texture for use by Dr.Jit (no-op on
+    Metal, required for CUDA/OpenGL).
+
+.. topic:: Texture_unmap
+
+    Release a mapping established by :py:func:`map()`.
+
+.. topic:: Texture_native_handle
+
+    Return the native texture handle (as an integer), e.g. to display it in a
+    GUI. On Metal this is the ``id<MTLTexture>`` of sub-texture ``sub_index``; on
+    CUDA it is the wrapped OpenGL texture id (``sub_index`` is ignored, and the
+    result is 0 unless the texture wraps an OpenGL handle).
 
 .. topic:: scatter_inc
 

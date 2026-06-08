@@ -156,6 +156,61 @@ the primal lookup operation is hardware-accelerated, a subsequent
 non-accelerated lookup is additionally performed *solely* to record each
 individual operation into the AD graph.
 
+Writing to textures
+-------------------
+
+Hardware textures can also be *written* from within a kernel, turning a texture
+into a render target. Create the texture with ``writable=True`` and store
+per-texel values with :py:func:`.write() <drjit.auto.Texture2f.write>`, which
+takes *integer* texel coordinates (one unsigned-integer array per dimension) and
+a list of per-channel values:
+
+.. code-block:: python
+
+   tex = Texture2f([height, width], channels=4, writable=True)
+
+   idx = dr.arange(UInt, width * height)
+   x, y = idx % width, idx // width
+   tex.write([x, y], [r, g, b, a])
+   dr.eval()
+
+The access mode follows the *operation*, so a ``writable`` texture may be both
+written and sampled (a texture rendered in one kernel can be looked up in
+another). Its contents can be read back into a tensor via :py:func:`.tensor()
+<drjit.auto.Texture2f.tensor>` / :py:func:`.value()
+<drjit.auto.Texture2f.value>` as usual. On Metal the underlying texture is
+created with shader-write usage; on CUDA it is backed by a surface object.
+
+This feature requires the CUDA or Metal backend (it is unavailable for
+``llvm``/``scalar`` textures, and for double-precision textures).
+
+Wrapping native textures
+------------------------
+
+To share textures with a GUI or another GPU API, an *existing* native texture
+can be wrapped as a Dr.Jit texture with :py:func:`.from_native_handle()
+<drjit.auto.Texture2f.from_native_handle>`. The handle is an ``id<MTLTexture>`` pointer
+on the Metal backend or an OpenGL texture id on the CUDA backend; the shape,
+channel count, and component type are inferred from it (the dimensionality and
+precision must match the texture type used):
+
+.. code-block:: python
+
+   tex = dr.metal.Texture2f.from_native_handle(mtl_texture)                 # sample it
+   tex = dr.metal.Texture2f.from_native_handle(mtl_texture, writable=True)  # render into it
+
+Pass ``writable=True`` to render into the application's texture via
+:py:func:`.write() <drjit.auto.Texture2f.write>`. The inverse,
+:py:func:`.native_handle() <drjit.auto.Texture2f.native_handle>`, returns a
+Dr.Jit-allocated texture's native handle to hand to a GUI for display: the
+``id<MTLTexture>`` on Metal, or the wrapped OpenGL texture id on CUDA (``0`` if
+the texture has no OpenGL identity).
+
+A texture wrapping a cross-API handle (an OpenGL texture on the CUDA backend) is
+only usable between :py:func:`.map() <drjit.auto.Texture2f.map>` and
+:py:func:`.unmap() <drjit.auto.Texture2f.unmap>`, which must bracket each use;
+on Metal both are no-ops.
+
 C++ interface
 -------------
 
