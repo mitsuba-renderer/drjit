@@ -3701,24 +3701,6 @@
        programs combining multiple frameworks. Take a look at the function
        :py:func:`drjit.wrap` for further information on how to accomplish this.
 
-.. topic:: tf
-
-    Returns a TensorFlow tensor representing the data in this array.
-
-    For :ref:`flat arrays <flat_arrays>` and :ref:`tensors <tensors>`, Dr.Jit
-    performs a *zero-copy* conversion, which means that the created tensor provides
-    a *view* of the same data that will reflect later modifications to the Dr.Jit
-    array. :ref:`Nested arrays <nested_arrays>` require a temporary copy to rearrange
-    data into a compatible form.
-
-    .. warning::
-
-       This operation converts the numerical representation but does *not* embed the
-       resulting tensor into the automatic differentiation graph of the other
-       framework. This means that gradients won't correctly propagate through
-       programs combining multiple frameworks. Take a look at the function
-       :py:func:`drjit.wrap` for further information on how to accomplish this.
-
 .. topic:: memview
 
     Returns a ``memoryview`` representing the data in this array.

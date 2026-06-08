@@ -627,7 +627,6 @@ Array base class
     .. automethod:: numpy
     .. automethod:: torch
     .. automethod:: jax
-    .. automethod:: tf
     .. automethod:: memview
 
 

@@ -257,6 +257,17 @@ DrJit 1.4.0 (TBA)
      net = nn.pack(net, layout='training')
      dr.enable_grad(net['weights'])
 
+- ⚠️ **Removed TensorFlow interoperability**. The ``ArrayBase.tf()`` conversion
+  method and the ``'tf'`` source/target of :py:func:`@dr.wrap <wrap>` no longer
+  exist. Use PyTorch or JAX, which remain supported, to bridge Dr.Jit with an
+  external automatic differentiation framework.
+
+  TensorFlow now appears largely unmaintained: more than a year after their
+  launch in early 2025, it still does not support NVIDIA Blackwell GPUs
+  (compute capability ``sm_120``). Our CI machine uses this hardware, and
+  TensorFlow testing has caused numerous issues even in pure CPU mode, so we
+  decided to cut support completely from Dr.Jit.
+
 **Bug Fixes**
 
 - Fixed a bug in :py:meth:`dr.rng().integers() <random.Generator.integers>`

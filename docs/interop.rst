@@ -10,8 +10,7 @@ Currently, the following ones are officially supported:
 
 - `NumPy <https://numpy.org>`__,
 - `PyTorch <https://pytorch.org>`__,
-- `JAX <https://jax.readthedocs.io/en/latest/installation.html>`__,
-- `TensorFlow <https://tensorflow.org>`__. 
+- `JAX <https://jax.readthedocs.io/en/latest/installation.html>`__.
 
 There isn't much to it: given an input array from another framework, simply
 pass it to the constructor of the Dr.Jit array or tensor type you wish to
@@ -37,9 +36,8 @@ existing data using a different type. This is possible thanks to the `DLPack
 The reverse direction is in principle analogous, though not all frameworks
 correctly detect that Dr.Jit arrays implements the DLPack specification. To
 avoid unnecessary copies, use the :py:func:`.numpy() <ArrayBase.numpy>`,
-:py:func:`.torch() <ArrayBase.torch>`, :py:func:`.jax() <ArrayBase.jax>`, or
-:py:func:`.tf() <ArrayBase.tf>` members that always do the right thing for each
-target.
+:py:func:`.torch() <ArrayBase.torch>`, or :py:func:`.jax() <ArrayBase.jax>`
+members that always do the right thing for each target.
 
 .. code-block:: python
 
@@ -137,15 +135,6 @@ early 2024:
 
   before importing JAX.
 
-- TensorFlow preallocates `"nearly all" of the GPU memory
-  <https://www.tensorflow.org/guide/gpu>`__ visible to the process,
-  which will likely prevent Dr.Jit from functioning correctly.
-
-  To disable this behavior, you must call the `set_memory_growth
-  <https://www.tensorflow.org/api_docs/python/tf/config/experimental/set_memory_growth>`__
-  function before using any other TensorFlow API, which will cause it to
-  use a less aggressive on-demand allocation policy.
-
 Once they allocate memory, these frameworks also *keep it to themselves*: for
 example, if your program temporarily creates a huge PyTorch tensor that uses
 nearly all GPU memory, then that memory is blocked from further use in Dr.Jit.
@@ -166,14 +155,6 @@ manually freed if necessary. Here is how this can be accomplished:
   the Jupyter notebook* or setting the variable via ``os.environ`` at
   the beginning of the program/Jupyter notebook. This disables the JAX
   memory cache, which may have a negative impact on performance.
-
-- TensorFlow: there is `no way to do it
-  <https://github.com/tensorflow/tensorflow/issues/36465>`__ besides
-  setting ``TF_GPU_ALLOCATOR=cuda_malloc_async`` *before launching
-  Python or the Jupyter notebook* or setting the variable via
-  ``os.environ`` at the beginning of the program/Jupyter notebook. This
-  disables the TensorFlow memory cache, which may have a negative impact
-  on performance.
 
 A side remark is that clearing such allocations caches is an expensive
 operation in any of these frameworks. You likely don't want to do so within a

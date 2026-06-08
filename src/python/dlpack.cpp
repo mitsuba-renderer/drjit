@@ -291,11 +291,6 @@ void export_dlpack(nb::module_ &) {
                 nb::module_ jax = nb::module_::import_("jax.dlpack");
                 return jax.attr("from_dlpack")(h);
            }, doc_jax)
-      .def("tf",
-           [](nb::handle_t<ArrayBase> h) {
-                nb::module_ tf = nb::module_::import_("tensorflow.experimental.dlpack");
-                return tf.attr("from_dlpack")(dlpack(h, false));
-           }, doc_tf)
       .def("memview",
            [](nb::handle_t<ArrayBase> h) {
                 return nb::ndarray<nb::memview>(dlpack(h, true).handle());

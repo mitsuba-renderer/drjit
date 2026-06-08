@@ -2,16 +2,6 @@ import drjit as dr
 import pytest
 
 
-def skip_tf_if_not_available(t):
-    # Skip overall if TF is not available
-    pytest.importorskip("tensorflow.config")
-    # Skip CUDA backend roundtrip if TensorFlow doesn't support
-    # CUDA, e.g. on native Windows since version 2.11.
-    from tensorflow.config import list_physical_devices
-    if (dr.backend_v(t) == dr.JitBackend.CUDA) and not list_physical_devices("GPU"):
-        pytest.skip("TensorFlow didn't detect a CUDA device, skipping.")
-
-
 # Test conversions to/from numpy (tensors & dynamic arrays)
 @pytest.test_arrays('is_tensor, -bool, -float16')
 def test01_roundtrip_dynamic_numpy(t):
@@ -56,30 +46,6 @@ def test04_roundtrip_vector_torch(t):
     pytest.importorskip("torch")
     a = t([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
     roundtrip = t(a.torch())
-
-    assert roundtrip.shape == (3, 3) and roundtrip.shape == a.shape
-    assert dr.all(a == roundtrip, axis=None)
-
-# Test conversions to/from tf (tensors & dynamic array)
-@pytest.test_arrays('tensor, -bool, -float16')
-def test05_roundtrip_dynamic_tf(t):
-    skip_tf_if_not_available(t)
-    a = t([[[1, 2, 3], [4, 5, 6]], [[7, 8, 9], [10, 11, 12]]])
-    roundtrip = t(a.tf())
-
-    assert roundtrip.shape == (2, 2, 3) and roundtrip.shape == a.shape
-    assert dr.all(a == roundtrip, axis=None)
-
-    flat_t = type(a.array)
-    roundtrip = flat_t(a.array.numpy())
-    assert dr.all(a.array == roundtrip, axis=None)
-
-# Test conversions to/from tf (vectors)
-@pytest.test_arrays('vector, shape=(3, *), -bool, -float16')
-def test06_roundtrip_vector_tf(t):
-    skip_tf_if_not_available(t)
-    a = t([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
-    roundtrip = t(a.tf())
 
     assert roundtrip.shape == (3, 3) and roundtrip.shape == a.shape
     assert dr.all(a == roundtrip, axis=None)
