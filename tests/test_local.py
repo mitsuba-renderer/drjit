@@ -263,6 +263,15 @@ def test14_read_mask_conditional(t):
     x = dr.zeros(t, 3)
 
     if i > 0:
-        x += s.read(t(0), active=mask) 
+        x += s.read(t(0), active=mask)
 
     assert dr.all(x == [0, 0, 1])
+
+@pytest.test_arrays('jit,uint32,shape=(*)')
+def test15_zero_init_dynamic_readback(t):
+    # Exercise the LLVM memset code path that hasn't been covered by other tests
+    idx = dr.arange(t, 16)
+    s = dr.alloc_local(t, 8, dr.zeros(t))
+    s[idx % 4] = idx + 1
+    assert dr.all(s[idx % 4] == idx + 1)     # written slots (dynamic gather)
+    assert dr.all(s[(idx % 4) + 4] == 0)     # never-written slots -> zero-init
