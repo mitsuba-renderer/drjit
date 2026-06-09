@@ -368,7 +368,7 @@ bool FlatVariables::fill_opaque_mask(FlatVariables &prev,
             (layout_.flags & (uint32_t) LayoutFlag::Literal) &&
             (prev_layout.flags & (uint32_t) LayoutFlag::Literal) &&
             (layout_.literal != prev_layout.literal ||
-             layout_.literal_size != prev_layout.literal_size);
+             this->sizes[layout_.literal_size] != prev.sizes[prev_layout.literal_size]);
 
         opaque_mask[i] |= requires_opaque;
         new_opaques |= requires_opaque;
@@ -432,16 +432,16 @@ void FlatVariables::schedule_jit_variables(
         if (info.state == VarState::Literal) {
             // Special case, where the variable is a literal.
             layout_.literal = info.literal;
-            // Store size in index variable, as this is not used for literals.
-            layout_.literal_size  = (uint32_t) info.size;
+            // Store size index, as this is not used for literals.
+            layout_.literal_size  = this->add_size((uint32_t) info.size);
             layout_.vt            = (uint32_t) info.type;
             layout_.literal_index = index;
 
             layout_.flags |= (uint32_t) LayoutFlag::Literal;
         } else if (info.state == VarState::Undefined) {
             // Special case, where the variable is a literal.
-            // Store size in index variable, as this is not used for literals.
-            layout_.literal_size  = (uint32_t) info.size;
+            // Store size index, as this is not used for literals.
+            layout_.literal_size  = this->add_size((uint32_t) info.size);
             layout_.vt            = (uint32_t) info.type;
             layout_.literal_index = index;
 
@@ -564,6 +564,13 @@ uint32_t FlatVariables::construct_jit_index(uint32_t prev_index) {
         index = layout_.literal_index;
         jit_var_inc_ref(index);
         vt = (VarType) layout_.vt;
+
+        uint32_t target_size = this->sizes[layout_.literal_size];
+        if (jit_var_size(index) != target_size) {
+            uint32_t new_index = jit_var_resize(index, target_size);
+            jit_var_dec_ref(index);
+            index = new_index;
+        }
     } else {
         VarLayout &var_layout_ = this->var_layout[layout_.index];
         index                  = this->variables[layout_.index];
@@ -1914,6 +1921,11 @@ nb::object FunctionRecording::replay(nb::callable func,
             nb::gil_scoped_release guard2;
             jit_freeze_replay(recording, in_variables.variables.data(),
                               out_variables.variables.data());
+        }
+        // Update the size equivalence classes of the output variables
+        for (uint32_t i = 0; i < out_variables.variables.size(); i++) {
+            uint32_t size_index = out_variables.var_layout[i].size_index;
+            out_variables.sizes[size_index] = (uint32_t) jit_var_size(out_variables.variables[i]);
         }
     }
     jit_log(LogLevel::Info, "Replaying done:");
