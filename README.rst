@@ -37,9 +37,10 @@ of embarrassingly parallel computation.
   that an addition will be needed at some later point by recording it into a
   graph representation (this is called *tracing*). Eventually, it will
   *just-in-time* (JIT) compile the recorded operations into a *fused* kernel
-  using either `LLVM <https://en.wikipedia.org/wiki/LLVM>`_ (when targeting the
-  CPU) or `CUDA <https://en.wikipedia.org/wiki/CUDA>`_ (when targeting the
-  GPU). The values ``a`` and ``b`` will typically be arrays with many elements,
+  using `LLVM <https://en.wikipedia.org/wiki/LLVM>`_ (when targeting the CPU),
+  `CUDA <https://en.wikipedia.org/wiki/CUDA>`_ (when targeting NVIDIA GPUs), or
+  `Metal <https://developer.apple.com/metal/>`_ (when targeting Apple Silicon
+  GPUs). The values ``a`` and ``b`` will typically be arrays with many elements,
   and the system parallelizes their evaluation using multi-core parallelism and
   vector instruction sets like `AVX512
   <https://en.wikipedia.org/wiki/AVX-512>`_ or `ARM Neon

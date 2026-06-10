@@ -27,12 +27,14 @@ the various available array types.
 Backends
 --------
 
-Dr.Jit types are organized into five different *backend*-specific Python
+Dr.Jit types are organized into seven different *backend*-specific Python
 packages named
 
 - :py:mod:`drjit.scalar`,
 - :py:mod:`drjit.cuda`,
 - :py:mod:`drjit.cuda.ad`,
+- :py:mod:`drjit.metal`,
+- :py:mod:`drjit.metal.ad`,
 - :py:mod:`drjit.llvm`, and
 - :py:mod:`drjit.llvm.ad`.
 
@@ -44,7 +46,7 @@ one of the above depending on the backends detected at runtime.
 - :py:mod:`drjit.auto`, and
 - :py:mod:`drjit.auto.ad`.
 
-Any given array type (e.g. ``Array3f``) actually exists in *all five* of these
+Any given array type (e.g. ``Array3f``) actually exists in *all seven* of these
 packages (e.g., :py:class:`drjit.scalar.Array3f`, :py:class:`drjit.llvm.ad.Array3f`). However,
 there are notable differences between them:
 
@@ -77,6 +79,13 @@ there are notable differences between them:
   <https://docs.nvidia.com/cuda/parallel-thread-execution/index.html>`__. This
   backend only depends on users having a suitable graphics card and driver
   (notably, users do not need to install the CUDA SDK.)
+
+  The Metal backend launches parallel kernels on Apple Silicon GPUs (M1 or
+  newer) by generating `Metal Shading Language
+  <https://developer.apple.com/metal/Metal-Shading-Language-Specification.pdf>`__
+  source code. It only requires a recent version of macOS. Apple GPUs have no
+  hardware double-precision support, so ``Float64`` is transparently
+  computed in single precision on this backend.
 
 - **Automatic differentiation**: types within packages having the ``.ad`` suffix
   additionally track differentiable operations to enable subsequent forward- or

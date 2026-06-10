@@ -245,14 +245,20 @@ very general programs to a given task or dataset to improve performance.
 Backends
 --------
 
-Dr.Jit provides two backends with feature parity:
+Dr.Jit provides three backends with feature parity:
 
 1. The `CUDA <https://en.wikipedia.org/wiki/CUDA>`__ backend targets `NVIDIA
    <https://www.nvidia.com>`__ GPUs with compute capability 5.0 or newer.
    You can explicitly request this backend by importing types from
    ``drjit.cuda`` or ``drjit.cuda.ad`` (add ``.ad`` if derivative computation is needed).
 
-2. The `LLVM <https://llvm.org>`__ backend targets Intel (``x86_64``) and ARM
+2. The `Metal <https://developer.apple.com/metal/>`__ backend targets Apple
+   Silicon GPUs (M1 or newer) using the Metal Shading Language. You can
+   explicitly request this backend by importing types from ``drjit.metal`` or
+   ``drjit.metal.ad`` (add ``.ad`` if derivative computation is needed). This
+   backend only requires a recent version of macOS.
+
+3. The `LLVM <https://llvm.org>`__ backend targets Intel (``x86_64``) and ARM
    (``aarch64``) CPUs. It parallelizes the program using the available CPU
    cores and vector instruction set extensions such as AVX, AVX512, NEON, etc.
    You can explicitly request this backend by importing types from
@@ -280,8 +286,8 @@ Dr.Jit provides two backends with feature parity:
      <https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.6/LLVM-18.1.6-win64.exe>`__.
 
 The previously mentioned ``drjit.auto`` and ``drjit.auto.ad`` backends redirect
-to the CUDA backend if a compatible GPU was found, otherwise they fall back to
-the LLVM backend.
+to a GPU backend if a compatible device was found (Metal on Apple Silicon, CUDA
+on NVIDIA hardware), otherwise they fall back to the LLVM backend.
 
 Other backends may be added in the future.
 

@@ -43,10 +43,10 @@ You can use the functions :py:func:`drjit.thread_count`,
 :py:func:`drjit.set_thread_count` to specify the number of threads used for
 parallel processing.
 
-On the CUDA backend, the system automatically determines a number of *threads*
-that maximize occupancy along with a suitable number of *blocks* and then
-launches a parallel program that spreads out over the entire GPU (assuming that
-there is enough work to do so).
+On the GPU backends (CUDA and Metal), the system automatically determines a
+number of *threads* that maximize occupancy along with a suitable number of
+*blocks* and then launches a parallel program that spreads out over the entire
+GPU (assuming that there is enough work to do so).
 
 .. _cow:
 
