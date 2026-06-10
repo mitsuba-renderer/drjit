@@ -21,7 +21,7 @@ within larger programs while fully *fusing* all steps of the process into a
 single kernel. Other workloads that heavily rely on matrix-vector products may
 benefit as well.
 
-Dr.Jit supports cooperative vectors on both of its backends:
+Dr.Jit supports cooperative vectors on all of its backends:
 
 - On **NVIDIA GPUs (Turing or newer)**, cooperative vectors map to the OptiX
   `cooperative vector API
@@ -29,6 +29,12 @@ Dr.Jit supports cooperative vectors on both of its backends:
   leveraging built-in `tensor cores
   <https://www.nvidia.com/en-us/data-center/tensor-cores/>`__ for acceleration.
   Driver version R570 or newer is required to use this feature.
+
+- On **Apple Silicon GPUs (M1 or newer)**, cooperative vectors are evaluated by
+  the Metal backend. Both half- and single-precision matrices are supported.
+  Dedicated matrix-multiplication hardware (available on M5 and newer GPUs in
+  combination with Metal 4) only accelerates half precision; single-precision
+  products and earlier hardware run on the GPU's general-purpose pipeline.
 
 - On the **CPU (LLVM) backend**, compilation of cooperative vector operations
   targets the available instruction set extensions (AVX512, NEON, etc.).
@@ -159,8 +165,9 @@ Cooperative vectors support a restricted set of arithmetic operations:
 - :py:func:`dr.step() <step>`.
 - :py:func:`nn.matvec() <drjit.nn.matvec>`
 
-These operations directly map to hardware-optimized operations on CUDA/OptiX.
-Operations outside of this set can be realized via unpacking/repacking, e.g.:
+These operations directly map to hardware-optimized operations on the
+CUDA/OptiX and Metal backends. Operations outside of this set can be realized
+via unpacking/repacking, e.g.:
 
 .. code-block::
 
@@ -314,6 +321,11 @@ Performance considerations
 
     Unpacking cooperative vectors may degrade performance. It is best to keep
     them in their opaque layout whenever possible.
+
+- **Metal** backend:
+
+  - Matrices passed to :py:func:`nn.matvec() <drjit.nn.matvec>` must be in the
+    densely-packed layout produced by :py:func:`nn.pack() <drjit.nn.pack>`.
 
 - **LLVM** backend:
 

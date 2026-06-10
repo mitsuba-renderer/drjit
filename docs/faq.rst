@@ -36,8 +36,8 @@ using the decorator discussed in the section on :ref:`interoperability
 <interop>`. It is worth noting that this isn't a great solution since evaluated
 mode comes at a significant additional cost.
 
-Will you add a Metal/ROCm/.. backend?
--------------------------------------
+Will you add a Vulkan/DirectX/ROCm/.. backend?
+----------------------------------------------
 
 We may add further backends in the future, but doing so currently does not have
 a high priority on our TODO list---external contributions are welcome!

@@ -273,6 +273,10 @@ to the user's home directory):
    - **Linux**: ``~/.drjit/optix7cache.db``
    - **Windows**: ``~\AppData\Local\Temp\drjit\optix7cache.db``
 
+The Metal backend does not currently persist compiled kernels to disk. Its
+kernels are retained in an in-memory cache that benefits repeated computation
+within a session, but a new session always recompiles them from scratch.
+
 Analyzing JIT behavior
 ----------------------
 
