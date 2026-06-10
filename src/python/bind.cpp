@@ -178,11 +178,15 @@ nb::object bind(const ArrayBinding &b) {
         d.destruct = b.destruct;
     }
 
+    // Stash deallocated instances in a small pool to accelerate Dr.Jit array construction.
+    d.flags |= (uint32_t) nb::detail::type_flags::pooled;
+    d.pool_capacity = 128;
+
     d.align = b.talign;
     d.size = b.tsize_rel * b.talign;
     d.name = name.c_str();
     d.type = b.array_type;
-    d.supplement = (uint32_t) sizeof(ArraySupplement);
+    d.supplement_size = sizeof(ArraySupplement);
     d.scope = scope.ptr();
 
     PyType_Slot slots [] = {
