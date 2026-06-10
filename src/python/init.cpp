@@ -159,17 +159,15 @@ int tp_init_array(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
                         // Always broadcast when the element type is one of the sub-elements
                         // or its AD/non-AD counterpart
                         PyTypeObject *cur_tp = (PyTypeObject *) s.value;
-                        while (cur_tp) {
-                            ArrayMeta m_curr =  supp(cur_tp);
+                        while (cur_tp && is_drjit_type(cur_tp)) {
+                            const ArraySupplement &s_cur = supp(cur_tp);
+                            ArrayMeta m_curr = s_cur;
                             m_curr.is_diff = m_arg.is_diff;
-                            m_curr.talign = m_arg.talign;
                             if (m_curr == m_arg) {
                                 try_sequence_import = false;
                                 break;
                             }
-                            if (!is_drjit_type(cur_tp))
-                                break;
-                            cur_tp = (PyTypeObject *) supp(cur_tp).value;
+                            cur_tp = (PyTypeObject *) s_cur.value;
                         }
                     }
                 }
