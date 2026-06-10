@@ -85,7 +85,7 @@ NAMESPACE_BEGIN(drjit)
  * representation.
  */
 struct ArrayMeta {
-    uint32_t backend       : 3; // 3 bits to accommodate JitBackend::Metal (= 4)
+    uint32_t backend       : 2;
     uint32_t type          : 4;
     uint32_t ndim          : 3;
     uint32_t is_vector     : 1;
@@ -102,10 +102,7 @@ struct ArrayMeta {
     uint8_t shape[4];
 };
 
-// 33 bits of bit-fields span two uint32_t storage units (8 bytes), plus 4
-// bytes of 'shape' = 12 bytes total. Bumped from 8 bytes when 'backend' was
-// widened from 2 to 3 bits to accommodate JitBackend::Metal (= 4).
-static_assert(sizeof(ArrayMeta) == 12, "Structure packing issue");
+static_assert(sizeof(ArrayMeta) == 8, "Structure packing issue");
 
 /// A large set of Dr.Jit operations are handled generically. This
 /// enumeration encodes indices into the ArraySupplement::op field
