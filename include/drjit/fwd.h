@@ -86,7 +86,15 @@
 #  endif
 #endif
 
-#if defined(__x86_64__) || defined(_M_X64)
+#if defined(__riscv)
+#  if defined(__riscv_xlen) && (__riscv_xlen == 64)
+#    define DRJIT_RISCV_64 1
+#  else
+#    define DRJIT_RISCV_32 1
+#  endif
+#endif
+
+#if (defined(__x86_64__) || defined(_M_X64)) && !defined(DRJIT_RISCV_64) && !defined(DRJIT_RISCV_32)
 #  define DRJIT_X86_64 1
 #endif
 
@@ -94,9 +102,9 @@
 #  define DRJIT_X86_32 1
 #endif
 
-#if defined(__aarch64__)
+#if defined(__aarch64__) && !defined(DRJIT_RISCV_64) && !defined(DRJIT_RISCV_32)
 #  define DRJIT_ARM_64 1
-#elif defined(__arm__)
+#elif defined(__arm__) && !defined(DRJIT_RISCV_64) && !defined(DRJIT_RISCV_32)
 #  define DRJIT_ARM_32 1
 #endif
 
