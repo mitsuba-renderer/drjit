@@ -4236,7 +4236,7 @@ Index ad_coop_vec_pack(uint32_t n, const Index *in) {
     for (uint32_t i = 0; i < n; ++i) {
         Index index = in[i];
         tmp[i] = jit_index(index);
-        attached |= ad_grad_enabled(index);
+        attached |= (bool) ad_grad_enabled(index);
     }
 
     JitVar result = JitVar::steal(jit_coop_vec_pack(n, tmp));

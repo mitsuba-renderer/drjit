@@ -291,7 +291,8 @@ Array<Value, 3> quat_to_euler(const Quaternion<Value> &q) {
     // https://en.wikipedia.org/wiki/Conversion_between_quaternions_and_Euler_angles
 
     // Clamp the result to stay in the valid range for asin
-    Value sinp = clip(2 * fmsub(q.w(), q.y(), q.z() * q.x()), -1.0, 1.0);
+    Value sinp = clip(2 * fmsub(q.w(), q.y(), q.z() * q.x()),
+                      Value(-1.f), Value(1.f));
     mask_t<Value> gimbal_lock = abs(sinp) > (1.f - 5e-8f);
 
     // roll (x-axis rotation)

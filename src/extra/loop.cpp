@@ -195,7 +195,7 @@ static size_t ad_loop_evaluated_mask(JitBackend backend, const char *name,
 
         // Push the mask onto mask stack and execute the loop body
         {
-            uint32_t size = jit_var_size(active.index());
+            uint32_t size = (uint32_t) jit_var_size(active.index());
 
             JitVar it_mask;
             if (size != 1) {

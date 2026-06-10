@@ -124,7 +124,7 @@ ArrayMeta meta_promote(ArrayMeta a, ArrayMeta b) noexcept {
 
         r.ndim = ndim_max;
 
-        for (int i = 0; i < r.ndim; ++i) {
+        for (int i = 0; i < (int) r.ndim; ++i) {
             int size_a = (i < ndim_a) ? a.shape[i] : 1,
                 size_b = (i < ndim_b) ? b.shape[i] : 1;
 
@@ -188,7 +188,7 @@ ArrayMeta meta_get(nb::handle h) noexcept {
                     break;
                 }
 
-                for (int j = 0; j < m2.ndim; ++j)
+                for (int j = 0; j < (int) m2.ndim; ++j)
                     m2.shape[j + 1] = m2.shape[j];
                 m2.shape[0] = len > 4 ? DRJIT_DYNAMIC : (uint8_t) len;
                 m2.ndim++;

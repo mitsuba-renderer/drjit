@@ -292,7 +292,7 @@ void export_traits(nb::module_ &m) {
                   const ArraySupplement &s = supp(tp);
                   if (s.is_tensor)
                       return true;
-                  for (int i = 0; i < s.ndim; ++i) {
+                  for (int i = 0; i < (int) s.ndim; ++i) {
                       if (s.shape[i] == DRJIT_DYNAMIC)
                           return true;
                   }
