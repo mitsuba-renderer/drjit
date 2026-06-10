@@ -197,21 +197,21 @@ static void ad_call_getter(JitBackend backend, const char *variant,
 
             uint32_t rv3_i = rv3[i+j*rv2.size()];
             if (!rv3_i) {
-                p->size = (int) tsize;
+                p->size = (int16_t) tsize;
                 p->src = 0;
             } else {
                 VarState state = jit_var_state(rv3_i);
 
                 switch (state) {
                     case VarState::Literal:
-                        p->size = (int) tsize;
+                        p->size = (int16_t) tsize;
                         p->src = 0;
                         jit_var_read(rv3_i, 0, &p->src);
                         break;
 
                     case VarState::Unevaluated:
                     case VarState::Evaluated:
-                        p->size = -(int) tsize;
+                        p->size = (int16_t) -(int) tsize;
                         cleanup.push_back(jit_var_data(rv3_i, (void **) &p->src));
                         break;
 

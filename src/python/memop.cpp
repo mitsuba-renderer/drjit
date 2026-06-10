@@ -856,7 +856,7 @@ nb::object unravel(const nb::type_object_t<ArrayBase> &dtype,
             if (shape_hint && (size_t) i < shape_hint->size()) {
                 // Use the provided shape hint for this dynamic dimension
                 shape[i] = (Py_ssize_t) (*shape_hint)[i];
-            } else if (i != s.ndim - 1) {
+            } else if (i != (int) s.ndim - 1) {
                 throw nb::type_error("drjit.unravel(): only the last dimension "
                                      "of 'dtype' may be dynamic!");
             } else {

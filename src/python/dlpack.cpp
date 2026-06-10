@@ -94,7 +94,7 @@ static nb::ndarray<> dlpack(nb::handle_t<ArrayBase> h, bool force_cpu, nb::handl
     if (s.is_tensor) {
         is_dynamic = true;
     } else {
-        for (int i = 0; i < s.ndim; ++i)
+        for (int i = 0; i < (int) s.ndim; ++i)
             is_dynamic |= s.shape[i] == DRJIT_DYNAMIC;
     }
 
@@ -198,7 +198,7 @@ static nb::ndarray<> dlpack(nb::handle_t<ArrayBase> h, bool force_cpu, nb::handl
             stride *= s.shape[i];
 
             // Special case: array containing 3D SIMD arrays which are 4D-aligned
-            if (i == s.ndim - 1 && s.talign == 16 && s.shape[i] == 3)
+            if (i == (int) s.ndim - 1 && s.talign == 16 && s.shape[i] == 3)
                 stride++;
 
             if (i == 0)

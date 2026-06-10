@@ -342,7 +342,7 @@ nb::object reduce(uint32_t op, nb::handle h, nb::handle axis_, nb::handle mode, 
         // and is the (only) reduced axis.
         if (keepdims) {
             bool only_trailing_reduced =
-                (axis_len == 1 && red_axis == s.ndim - 1) ||
+                (axis_len == 1 && red_axis == (int) s.ndim - 1) ||
                 (axis_len == -1 && s.ndim == 1);
             if (!only_trailing_reduced ||
                 s.shape[s.ndim - 1] != DRJIT_DYNAMIC)
@@ -436,7 +436,7 @@ nb::object reduce(uint32_t op, nb::handle h, nb::handle axis_, nb::handle mode, 
                 shape[red_axis] = 1;
             } else {
                 m.is_matrix = m.is_quaternion = m.is_complex = false;
-                for (int i = red_axis; i < m.ndim - 1; ++i) {
+                for (int i = red_axis; i < (int) m.ndim - 1; ++i) {
                     m.shape[i] = m.shape[i + 1];
                     shape[i] = shape[i + 1];
                 }

@@ -549,8 +549,8 @@ Array Resampler::Impl::forward(const Array &source, uint32_t stride) const {
     using UInt32 = uint32_array_t<Array>;
     using Int32  = int32_array_t<Array>;
 
-    const Accum &weights = get_weights<Accum>();
-    const Int32 &offset = get_offset<Int32>();
+    const Accum &weights_v = get_weights<Accum>();
+    const Int32 &offset_v = get_offset<Int32>();
 
     uint32_t source_size = (uint32_t) source.size(),
              n_passes = source_size / (source_res * stride),
@@ -559,12 +559,12 @@ Array Resampler::Impl::forward(const Array &source, uint32_t stride) const {
     UInt32 j, k, i_base;
     decompose(target_size, stride, j, k, i_base);
 
-    Boundary boundary = this->boundary;
+    Boundary boundary_v = this->boundary;
     int32_t R = (int32_t) source_res;
 
     Accum target = zeros<Accum>(target_size);
 
-    uint32_t taps = this->taps;
+    uint32_t taps_v = this->taps;
 
     if (!symbolic) {
         // Table-driven per-output accumulation (handles any boundary). Unrolled
@@ -573,15 +573,15 @@ Array Resampler::Impl::forward(const Array &source, uint32_t stride) const {
         // the interior branch.
         auto accum = [&](const UInt32 &ibase, const UInt32 &kk,
                          const UInt32 &jj) -> Accum {
-            Int32  offj = gather<Int32>(offset, jj);
-            UInt32 woff = jj * taps;
+            Int32  offj = gather<Int32>(offset_v, jj);
+            UInt32 woff = jj * taps_v;
             UInt32 soff = UInt32(
                 (Int32(ibase) + offj) * (int32_t) stride + Int32(kk));
             Accum acc = zeros<Accum>(target_size);
-            for (uint32_t l = 0; l < taps; ++l) {
-                Accum weight = gather<Accum>(weights, woff + l);
+            for (uint32_t l = 0; l < taps_v; ++l) {
+                Accum weight = gather<Accum>(weights_v, woff + l);
                 mask_t<UInt32> active;
-                UInt32 addr = tap_address(boundary, offj, l, soff, ibase, kk,
+                UInt32 addr = tap_address(boundary_v, offj, l, soff, ibase, kk,
                                           stride, R, active);
                 acc = fmadd(weight,
                             Accum(gather<Array>(source, addr, active)), acc);
@@ -603,7 +603,7 @@ Array Resampler::Impl::forward(const Array &source, uint32_t stride) const {
                     const UInt32 &jj) -> Accum {
                     UInt32 base = (ibase + UInt32(Int32(jj) - corg)) * stride + kk;
                     Accum acc = zeros<Accum>(target_size);
-                    for (uint32_t l = 0; l < taps; ++l)
+                    for (uint32_t l = 0; l < taps_v; ++l)
                         acc = fmadd(
                             Accum((scalar_t<Accum>) interior_weights[l]),
                             Accum(gather<Array>(source, base + l * stride)), acc);
@@ -618,8 +618,8 @@ Array Resampler::Impl::forward(const Array &source, uint32_t stride) const {
             target = accum(i_base, k, j);
         }
     } else {
-        Int32  offset_j = gather<Int32>(offset, j);
-        UInt32 weight_offset = j * taps;
+        Int32  offset_j = gather<Int32>(offset_v, j);
+        UInt32 weight_offset = j * taps_v;
         UInt32 source_offset = UInt32(
             (Int32(i_base) + offset_j) * (int32_t) stride + Int32(k));
 
@@ -627,15 +627,15 @@ Array Resampler::Impl::forward(const Array &source, uint32_t stride) const {
         tie(l, target) = while_loop(
             make_tuple(l, target),
             // Loop condition
-            [taps](const UInt32 &l, const Accum &) {
-                return l < taps;
+            [taps_v](const UInt32 &l, const Accum &) {
+                return l < taps_v;
             },
             // Loop body
-            [source_offset, source, weight_offset, weights, stride, boundary,
+            [source_offset, source, weight_offset, weights_v, stride, boundary_v,
              offset_j, i_base, k, R](UInt32 &l, Accum &target) {
-                Accum weight = gather<Accum>(weights, weight_offset + l);
+                Accum weight = gather<Accum>(weights_v, weight_offset + l);
                 mask_t<UInt32> active;
-                UInt32 addr = tap_address(boundary, offset_j, l, source_offset,
+                UInt32 addr = tap_address(boundary_v, offset_j, l, source_offset,
                                           i_base, k, stride, R, active);
                 target = fmadd(weight,
                                Accum(gather<Array>(source, addr, active)),
