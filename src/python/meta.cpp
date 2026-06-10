@@ -12,6 +12,10 @@
 #include "base.h"
 #include "../ext/nanobind/src/buffer.h"
 #include <nanobind/ndarray.h>
+#include <tsl/robin_map.h>
+#include <drjit-core/hash.h>
+#include <xxh3.h>
+#include <cstring>
 
 /// Check if the given metadata record is valid
 bool meta_check(ArrayMeta m) noexcept {
@@ -291,6 +295,41 @@ ArrayMeta meta_get_general(nb::handle h) noexcept {
     return m;
 }
 
+// Type promotion and type resolution accounts for a significant portion of
+// tracing cost in Dr.Jit Python code. Since this is a pure function of its
+// inputs, we can memoize the result into a cache to skip it in most cases.
+// The data structures below are protected by the GIL.
+struct PromoteKey {
+    PyTypeObject *tp[3];
+    uint32_t flags;
+    bool operator==(const PromoteKey &o) const {
+        return tp[0] == o.tp[0] && tp[1] == o.tp[1] &&
+               tp[2] == o.tp[2] && flags == o.flags;
+    }
+};
+struct PromoteKeyHasher {
+    size_t operator()(const PromoteKey &k) const {
+        // Specialized hash function for type promotion keys. See VariableKeyHasher
+        // in drjit-core for more details on the particular construction used here.
+        auto mix = [](uint64_t a, uint64_t b) -> uint64_t {
+            XXH128_hash_t r = XXH_mult64to128(a, b);
+            return r.low64 ^ r.high64;
+        };
+
+        uint64_t a = mix((uint64_t) (uintptr_t) k.tp[0] ^ PRIME64_1,
+                         (uint64_t) (uintptr_t) k.tp[1] ^ PRIME64_2);
+        uint64_t b = mix((uint64_t) (uintptr_t) k.tp[2] ^ PRIME64_3,
+                         (uint64_t) k.flags             ^ PRIME64_4);
+
+        return (size_t) mix(a ^ b, PRIME64_5);
+    }
+};
+struct PromoteVal { nb::handle h[3]; };
+
+static tsl::robin_map<PromoteKey, PromoteVal, PromoteKeyHasher,
+                      std::equal_to<PromoteKey>,
+                      std::allocator<std::pair<PromoteKey, PromoteVal>>,
+                      /* StoreHash = */ true> promote_cache;
 
 /**
  * \brief Given a list of Dr.Jit arrays and scalars, determine the flavor and
@@ -307,76 +346,132 @@ ArrayMeta meta_get_general(nb::handle h) noexcept {
  *    first operand will be promoted to a mask array
  */
 void promote(nb::object *o, size_t n, bool select) {
-    ArrayMeta m{}, mi[3];
-
     if (n > 3)
         nb::raise("promote(): too many arguments!");
 
-    nb::handle h;
+    PromoteKey key{};
+    bool cacheable = true;
     for (size_t i = 0; i < n; ++i) {
-        nb::handle o_i = o[i];
-        ArrayMeta m2 = meta_get(o_i);
+        nb::handle tp = o[i].type();
+        key.tp[i] = (PyTypeObject *) tp.ptr();
+        if (!is_drjit_type(tp) && key.tp[i] != &PyLong_Type &&
+            key.tp[i] != &PyFloat_Type && key.tp[i] != &PyBool_Type)
+            cacheable = false;
+    }
+    key.flags = (uint32_t) n | ((uint32_t) select << 8);
 
-        if (!m2.is_valid) {
-            nb::raise(
-                "Encountered an unsupported argument of type '%s' (must be a "
-                "Dr.Jit array or a type that can be converted into one)",
-                nb::inst_name(o_i).c_str());
+    nb::handle target[3];
+    bool have_targets = false;
+
+    if (NB_LIKELY(cacheable)) {
+        auto it = promote_cache.find(key);
+        if (it != promote_cache.end()) {
+            for (size_t i = 0; i < n; ++i)
+                target[i] = it->second.h[i];
+            have_targets = true;
+        }
+    }
+
+    if (NB_UNLIKELY(!have_targets)) {
+        ArrayMeta m{}, mi[3];
+        nb::handle h;
+
+        for (size_t i = 0; i < n; ++i) {
+            nb::handle o_i = o[i];
+            ArrayMeta m2 = meta_get(o_i);
+
+            if (!m2.is_valid) {
+                nb::raise(
+                    "Encountered an unsupported argument of type '%s' (must be a "
+                    "Dr.Jit array or a type that can be converted into one)",
+                    nb::inst_name(o_i).c_str());
+            }
+
+            if (i == 0)
+                m = m2;
+            else
+                m = meta_promote(m, m2);
+
+            mi[i] = m2;
         }
 
-        if (i == 0)
-            m = m2;
-        else
-            m = meta_promote(m, m2);
+        if (!meta_check(m))
+            nb::raise("Incompatible arguments.");
 
-        mi[i] = m2;
+        if ((VarType) m.type == VarType::BaseFloat)
+            m.type = (uint32_t) VarType::Float32;
+        if ((VarType) m.type == VarType::BaseInt)
+            m.type = (uint32_t) VarType::Int32;
+
+        for (size_t i = 0; i < n; ++i) {
+            // if this is a compatible Dr.Jit array
+            if (m == mi[i] && mi[i].talign)
+                h = o[i];
+        }
+
+        if (h.is_valid()) {
+            h = h.type();
+        } else {
+            if (!m.is_class) {
+                h = meta_get_type(m);
+            } else {
+                for (size_t i = 0; i < n; ++i) {
+                    ArrayMeta m2 = meta_get(o[i]);
+                    if (m2.is_class && m2.ndim == 1) {
+                        h = o[i].type();
+                        break;
+                    }
+                }
+
+                if (!h.is_valid())
+                    nb::raise("Incompatible arguments.");
+            }
+        }
+
+        for (size_t i = 0; i < n; ++i) {
+            if (select && i == 0) {
+                ArrayMeta mm = m;
+                mm.type = (uint16_t) VarType::Bool;
+                mm.is_quaternion = 0;
+                mm.is_matrix = 0;
+                mm.is_complex = 0;
+                target[i] = meta_get_type(mm);
+            } else {
+                target[i] = h;
+            }
+        }
+
+        if (cacheable) {
+            PromoteVal v;
+            for (size_t i = 0; i < n; ++i)
+                v.h[i] = target[i];
+            promote_cache.insert({ key, v });
+        }
     }
-
-    if (!meta_check(m))
-        nb::raise("Incompatible arguments.");
-
-    if ((VarType) m.type == VarType::BaseFloat)
-        m.type = (uint32_t) VarType::Float32;
-    if ((VarType) m.type == VarType::BaseInt)
-        m.type = (uint32_t) VarType::Int32;
 
     for (size_t i = 0; i < n; ++i) {
-        // if this is a compatible Dr.Jit array
-        if (m == mi[i] && mi[i].talign)
-            h = o[i];
-    }
+        nb::handle h2 = target[i];
 
-    if (h.is_valid()) {
-        h = h.type();
-    } else {
-        if (!m.is_class) {
-            h = meta_get_type(m);
-        } else {
-            for (size_t i = 0; i < n; ++i) {
-                ArrayMeta m2 = meta_get(o[i]);
-                if (m2.is_class && m2.ndim == 1) {
-                    h = o[i].type();
-                    break;
+        if (!o[i].type().is(h2)) {
+            // Fast path to broadcast a plain Python scalar (int/float/bool)
+            // into a Int/Float/Bool Dr.Jit array. flat, dynamically-sized
+            // arithmetic Dr.Jit array.
+            PyTypeObject *o_tp = (PyTypeObject *) o[i].type().ptr();
+            if (o_tp == &PyLong_Type || o_tp == &PyFloat_Type ||
+                o_tp == &PyBool_Type) {
+                const ArraySupplement &s2 = supp(h2);
+                if (s2.init_const && s2.ndim == 1 &&
+                    s2.shape[0] == DRJIT_DYNAMIC && !s2.is_complex &&
+                    !s2.is_quaternion && !s2.is_matrix && !s2.is_tensor &&
+                    !s2.is_class) {
+                    nb::object arr = nb::inst_alloc(h2);
+                    s2.init_const(1, false, o[i].ptr(), inst_ptr(arr));
+                    nb::inst_mark_ready(arr);
+                    o[i] = std::move(arr);
+                    continue;
                 }
             }
 
-            if (!h.is_valid())
-                nb::raise("Incompatible arguments.");
-        }
-    }
-
-    for (size_t i = 0; i < n; ++i) {
-        nb::handle h2 = h;
-
-        if (select && i == 0) {
-            m.type = (uint16_t) VarType::Bool;
-            m.is_quaternion = 0;
-            m.is_matrix = 0;
-            m.is_complex = 0;
-            h2 = meta_get_type(m);
-        }
-
-        if (!o[i].type().is(h2)) {
             PyObject *args[2];
             args[0] = nullptr;
             args[1] = o[i].ptr();
@@ -461,11 +556,35 @@ const char *meta_get_name(ArrayMeta meta) noexcept {
     return buffer.get();
 }
 
+// Resolving types is relatively costly. This map provides a cache to sidestep
+// the cost of constructing the string and then performing an attribute lookup.
+// The data structure is protected by the GIL.
+static tsl::robin_map<uint64_t, nb::handle, UInt64Hasher> meta_type_cache;
+
 /// Look up the nanobind type associated with the given array metadata
 nb::handle meta_get_type(ArrayMeta meta, bool fail_if_missing) {
+    static_assert(sizeof(ArrayMeta) == sizeof(uint64_t),
+                  "ArrayMeta is expected to occupy exactly 8 bytes");
+
+    // 'talign'/'tsize_rel' aren't part of type identity
+    ArrayMeta key = meta;
+    key.tsize_rel = key.talign = 0;
+
+    uint64_t cache_key;
+    memcpy(&cache_key, &key, sizeof(cache_key));
+
+    auto it = meta_type_cache.find(cache_key);
+    if (it != meta_type_cache.end())
+        return it->second;
+
     const char *name = meta_get_name(meta);
     nb::handle result = getattr(meta_get_module(meta), name, nb::handle());
-    if (!result.is_valid() && fail_if_missing)
-        nb::raise("Operation references type \"%s\", which lacks bindings", name);
+    if (!result.is_valid()) {
+        if (fail_if_missing)
+            nb::raise("Operation references type \"%s\", which lacks bindings", name);
+        return result;
+    }
+
+    meta_type_cache.insert({ cache_key, result });
     return result;
 }
