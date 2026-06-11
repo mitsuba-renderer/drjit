@@ -227,7 +227,7 @@ struct state_unlock_guard {
 using namespace detail;
 
 bool Layout::operator==(const Layout &rhs) const {
-    if (((bool) this->type != (bool) rhs.type) || !(this->type.equal(rhs.type)))
+    if (!this->type.is(rhs.type))
         return false;
 
     if (this->num != rhs.num)
@@ -237,7 +237,8 @@ bool Layout::operator==(const Layout &rhs) const {
         return false;
 
     for (uint32_t i = 0; i < this->fields.size(); ++i) {
-        if (!(this->fields[i].equal(rhs.fields[i])))
+        if (this->fields[i].ptr() != rhs.fields[i].ptr() &&
+            !(this->fields[i].equal(rhs.fields[i])))
             return false;
     }
 
@@ -253,8 +254,9 @@ bool Layout::operator==(const Layout &rhs) const {
     if (this->vt != rhs.vt)
         return false;
 
-    if (((bool) this->py_object != (bool) rhs.py_object) ||
-        !this->py_object.equal(rhs.py_object))
+    if (this->py_object.ptr() != rhs.py_object.ptr() &&
+        (((bool) this->py_object != (bool) rhs.py_object) ||
+         !this->py_object.equal(rhs.py_object)))
         return false;
 
     return true;
@@ -905,12 +907,12 @@ struct scoped_path {
  * about the drjit variable in the layout. Therefore, the layout can be used
  * as an identifier to the recording of the frozen function.
  */
+// NOTE: callers of this function (from outside of its recursion) have to set
+// the ``JitFlag::EnableObjectTraversal`` flag (see ``traverse_with_registry``)
 void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
     if (recursion_level == 0)
         m_log_enabled = log_enabled(LogLevel::Debug);
     recursion_guard guard(this);
-
-    scoped_set_flag traverse_scope(JitFlag::EnableObjectTraversal, true);
 
     ProfilerPhase profiler("traverse");
     nb::handle tp = h.type();
@@ -993,9 +995,10 @@ void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
 
             layout_.num = (uint32_t) dict.size();
             layout_.fields.reserve(layout_.num);
-            for (auto k : dict.keys()) {
+            // Note: these loops look mergeable but are not. traverse() may
+            // leave layout_ dangling.
+            for (auto [k, v] : dict)
                 layout_.fields.push_back(nb::borrow(k));
-            }
 
             for (auto [k, v] : dict) {
                 scoped_path ps(ctx, nb::str(k).c_str(), true);
@@ -1154,23 +1157,20 @@ nb::object FlatVariables::construct() {
             return std::move(list);
         } else if (layout_.type.is(&PyDict_Type)) {
             nb::dict dict;
-            for (auto k : layout_.fields) {
+            for (auto k : layout_.fields)
                 dict[k] = construct();
-            }
             return std::move(dict);
         } else if (nb::dict ds = get_drjit_struct(layout_.type); ds.is_valid()) {
             nb::object tmp = layout_.type();
             // TODO: validation against `ds`
-            for (auto k : layout_.fields) {
+            for (auto k : layout_.fields)
                 nb::setattr(tmp, k, construct());
-            }
             return tmp;
         } else if (nb::object df = get_dataclass_fields(layout_.type);
                    df.is_valid()) {
             nb::dict dict;
-            for (auto k : layout_.fields) {
+            for (auto k : layout_.fields)
                 dict[k] = construct();
-            }
             return layout_.type(**dict);
         } else if (layout_.py_object) {
             return layout_.py_object;
@@ -1199,11 +1199,12 @@ nb::object FlatVariables::construct() {
  * Assigns the flattened variables to an already existing PyTree.
  * This is used when input variables have changed.
  */
+// NOTE: callers of this function (from outside of its recursion) have to set
+// the ``JitFlag::EnableObjectTraversal`` flag (see ``assign_with_registry``)
 void FlatVariables::assign(nb::handle dst, TraverseContext &ctx) {
     if (recursion_level == 0)
         m_log_enabled = log_enabled(LogLevel::Debug);
     recursion_guard guard(this);
-    scoped_set_flag traverse_scope(JitFlag::EnableObjectTraversal, true);
 
     nb::handle tp  = dst.type();
     Layout &layout_ = this->layout[layout_index++];
@@ -1272,8 +1273,9 @@ void FlatVariables::assign(nb::handle dst, TraverseContext &ctx) {
             nb::dict dict = nb::borrow<nb::dict>(dst);
             for (auto &k : layout_.fields) {
                 scoped_path ps(ctx, nb::str(k).c_str(), true);
-                if (dict.contains(&k))
-                    assign(dict[k], ctx);
+                nb::object value = dict.get(k, nb::handle());
+                if (value.is_valid())
+                    assign(value, ctx);
                 else
                     dst[k] = construct();
             }
@@ -1655,9 +1657,8 @@ size_t FlatVariablesHasher::operator()(
     ProfilerPhase profiler("hash");
     // Hash the layout
 
-    // TODO: Maybe we can use xxh by first collecting in vector<uint64_t>?
-
-    drjit::vector<uint64_t> data;
+    drjit::vector<uint64_t> &data = scratch;
+    data.clear();
     data.reserve(2 + key->layout.size() * 4 + key->var_layout.size());
 
     data.push_back(key->flags);
@@ -1812,6 +1813,8 @@ nb::object FunctionRecording::record(nb::callable func,
         ADScopeContext ad_scope(drjit::ADScope::Resume, 0, nullptr, -1, false);
 
         {
+            scoped_set_flag traverse_scope(JitFlag::EnableObjectTraversal,
+                                           true);
             TraverseContext ctx;
             ctx.postponed          = &postponed;
             ctx.deduplicate_pytree = false;
@@ -1891,6 +1894,8 @@ nb::object FunctionRecording::record(nb::callable func,
         }
         // NOTE: temporarily disable this to not enqueue twice
         try {
+            scoped_set_flag traverse_scope(JitFlag::EnableObjectTraversal,
+                                           true);
             TraverseContext ctx;
             out_variables.assign(input, ctx);
         } catch (std::exception &) {

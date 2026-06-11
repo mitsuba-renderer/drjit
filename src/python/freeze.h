@@ -526,6 +526,9 @@ struct FlatVariables {
 /// Helper struct to hash input variables
 struct FlatVariablesHasher {
     size_t operator()(const std::shared_ptr<FlatVariables> &key) const;
+
+    /// Scratch space for the layout description hash input
+    mutable drjit::vector<uint64_t> scratch;
 };
 
 /// Helper struct to compare input variables
