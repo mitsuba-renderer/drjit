@@ -237,6 +237,9 @@ struct FlatVariables {
 
     uint32_t recursion_level = 0;
 
+    /// Caches whether Debug-level log messages are enabled
+    bool m_log_enabled = false;
+
     struct recursion_guard {
         FlatVariables *flat_variables;
         recursion_guard(FlatVariables *flat_variables)

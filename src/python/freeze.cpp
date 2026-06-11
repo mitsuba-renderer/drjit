@@ -148,13 +148,22 @@
 
 using Buffer = nanobind::detail::Buffer;
 
+/// Cheap check, used to skip construction of expensive log messages in hot
+/// paths when they would be discarded anyway.
+static bool log_enabled(LogLevel level) {
+    return level <= jit_log_level_callback() || level <= jit_log_level_stderr();
+}
+
 /**
  * \brief Helper struct to profile and log frozen functions.
  */
 struct ProfilerPhase {
     std::string m_message;
-    ProfilerPhase(const char *message) : m_message(message) {
-        jit_log(LogLevel::Debug, "profiler start: %s", message);
+    ProfilerPhase(const char *message) {
+        if (log_enabled(LogLevel::Debug)) {
+            m_message = message;
+            jit_log(LogLevel::Debug, "profiler start: %s", message);
+        }
 #if defined(DRJIT_ENABLE_NVTX)
         jit_profile_range_push(message);
 #endif
@@ -165,16 +174,19 @@ struct ProfilerPhase {
         const char *name   = typeid(*traversable).name();
         snprintf(message, 1024, "traverse_cb %s", name);
 
-        jit_log(LogLevel::Debug, "profiler start: %s", message);
+        if (log_enabled(LogLevel::Debug)) {
+            m_message = message;
+            jit_log(LogLevel::Debug, "profiler start: %s", message);
+        }
         jit_profile_range_push(message);
-        m_message = message;
     }
 
     ~ProfilerPhase() {
 #if defined(DRJIT_ENABLE_NVTX)
         jit_profile_range_pop();
 #endif
-        jit_log(LogLevel::Debug, "profiler end: %s", m_message.c_str());
+        if (!m_message.empty())
+            jit_log(LogLevel::Debug, "profiler end: %s", m_message.c_str());
     }
 };
 
@@ -567,8 +579,9 @@ uint32_t FlatVariables::construct_jit_index(uint32_t prev_index) {
     } else {
         VarLayout &var_layout_ = this->var_layout[layout_.index];
         index                  = this->variables[layout_.index];
-        jit_log(LogLevel::Debug, "    uses output[%u] = r%u", layout_.index,
-                index);
+        if (m_log_enabled)
+            jit_log(LogLevel::Debug, "    uses output[%u] = r%u",
+                    layout_.index, index);
 
         jit_var_inc_ref(index);
         vt = var_layout_.vt;
@@ -668,7 +681,8 @@ uint64_t FlatVariables::construct_ad_index(uint64_t prev_index) {
         } else
             index = ad_var_new(val);
 
-        jit_log(LogLevel::Debug, " -> ad_var r%zu", index);
+        if (m_log_enabled)
+            jit_log(LogLevel::Debug, " -> ad_var r%zu", index);
         jit_var_dec_ref(val);
 
         // Equivalent to set_grad
@@ -745,8 +759,10 @@ void FlatVariables::assign_ad_var(Layout &layout_, nb::handle dst) {
         index = construct_ad_index();
 
     s.reset_index(index, inst_ptr(dst));
-    jit_log(LogLevel::Debug, "index=%zu, grad_enabled=%u, ad_grad_enabled=%u",
-            index, grad_enabled(dst), ad_grad_enabled(index));
+    if (m_log_enabled)
+        jit_log(LogLevel::Debug,
+                "index=%zu, grad_enabled=%u, ad_grad_enabled=%u", index,
+                grad_enabled(dst), ad_grad_enabled(index));
 
     // Release reference, since ``construct_ad_index`` returns owning
     // reference and ``s.reset_index`` borrows from it.
@@ -853,18 +869,24 @@ struct scoped_path {
     scoped_path(TraverseContext &ctx, const char *suffix, bool dict = false)
         : m_ctx(ctx), m_size((uint32_t) ctx.path.size()) {
         if (dict) {
-            if (ctx.recursion_level == 0)
-                ctx.path.fmt("%s", suffix);
-            else
-                ctx.path.fmt("[\"%s\"]", suffix);
+            if (ctx.recursion_level == 0) {
+                ctx.path.put_dstr(suffix);
+            } else {
+                ctx.path.put("[\"");
+                ctx.path.put_dstr(suffix);
+                ctx.path.put("\"]");
+            }
         } else {
-            ctx.path.fmt(".%s", suffix);
+            ctx.path.put('.');
+            ctx.path.put_dstr(suffix);
         }
         ctx.recursion_level++;
     }
     scoped_path(TraverseContext &ctx, uint32_t suffix)
         : m_ctx(ctx), m_size((uint32_t) ctx.path.size()) {
-        ctx.path.fmt("[%u]", suffix);
+        ctx.path.put('[');
+        ctx.path.put_uint32(suffix);
+        ctx.path.put(']');
         ctx.recursion_level++;
     }
     ~scoped_path() {
@@ -884,6 +906,8 @@ struct scoped_path {
  * as an identifier to the recording of the frozen function.
  */
 void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
+    if (recursion_level == 0)
+        m_log_enabled = log_enabled(LogLevel::Debug);
     recursion_guard guard(this);
 
     scoped_set_flag traverse_scope(JitFlag::EnableObjectTraversal, true);
@@ -891,8 +915,9 @@ void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
     ProfilerPhase profiler("traverse");
     nb::handle tp = h.type();
 
-    auto tp_name = nb::type_name(tp).c_str();
-    jit_log(LogLevel::Debug, "FlatVariables::traverse(): %s {", tp_name);
+    if (m_log_enabled)
+        jit_log(LogLevel::Debug, "FlatVariables::traverse(): %s {",
+                nb::type_name(tp).c_str());
 
     uint32_t layout_index_ = (uint32_t) this->layout.size();
     Layout &layout_        = this->layout.emplace_back();
@@ -1052,7 +1077,8 @@ void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
     if (!ctx.deduplicate_pytree)
         ctx.visited.erase(key);
 
-    jit_log(LogLevel::Debug, "}");
+    if (m_log_enabled)
+        jit_log(LogLevel::Debug, "}");
 }
 
 /**
@@ -1061,6 +1087,8 @@ void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
  * re-constructs the PyTree.
  */
 nb::object FlatVariables::construct() {
+    if (recursion_level == 0)
+        m_log_enabled = log_enabled(LogLevel::Debug);
     recursion_guard guard(this);
 
     if (this->layout.size() == 0) {
@@ -1069,8 +1097,9 @@ nb::object FlatVariables::construct() {
 
     const Layout &layout_ = this->layout[layout_index++];
 
-    auto tp_name = nb::type_name(layout_.type).c_str();
-    jit_log(LogLevel::Debug, "FlatVariables::construct(): %s {", tp_name);
+    if (m_log_enabled)
+        jit_log(LogLevel::Debug, "FlatVariables::construct(): %s {",
+                nb::type_name(layout_.type).c_str());
 
     if (layout_.type.is(nb::none().type())) {
         return nb::none();
@@ -1171,6 +1200,8 @@ nb::object FlatVariables::construct() {
  * This is used when input variables have changed.
  */
 void FlatVariables::assign(nb::handle dst, TraverseContext &ctx) {
+    if (recursion_level == 0)
+        m_log_enabled = log_enabled(LogLevel::Debug);
     recursion_guard guard(this);
     scoped_set_flag traverse_scope(JitFlag::EnableObjectTraversal, true);
 
@@ -1180,8 +1211,10 @@ void FlatVariables::assign(nb::handle dst, TraverseContext &ctx) {
     if (layout_.flags & (uint32_t) LayoutFlag::RecursiveRef)
         return;
 
-    jit_log(LogLevel::Debug, "FlatVariables::assign(): %s with %s {",
-            nb::type_name(tp).c_str(), nb::type_name(layout_.type).c_str());
+    if (m_log_enabled)
+        jit_log(LogLevel::Debug, "FlatVariables::assign(): %s with %s {",
+                nb::type_name(tp).c_str(),
+                nb::type_name(layout_.type).c_str());
 
     if (!layout_.type.equal(tp))
         jit_raise("Type mismatch! Type of the object at location %s when "
@@ -1308,7 +1341,8 @@ void FlatVariables::assign(nb::handle dst, TraverseContext &ctx) {
         nb::raise_python_error();
     }
 
-    jit_log(LogLevel::Debug, "}");
+    if (m_log_enabled)
+        jit_log(LogLevel::Debug, "}");
 }
 
 /**
