@@ -1737,9 +1737,7 @@ size_t FlatVariablesHasher::operator()(
                        ((uint64_t) layout_.vs << 4) | ((uint64_t) layout_.vt));
     }
 
-    uint64_t hash = XXH3_64bits(data.data(), data.size());
-
-    return hash;
+    return (size_t) XXH3_64bits(data.data(), data.size() * sizeof(uint64_t));
 }
 
 /*
@@ -2022,6 +2020,8 @@ nb::object FrozenFunction::operator()(nb::dict input) {
             ProfilerPhase profiler2("traverse input");
 
             TraverseContext ctx;
+            // Preallocate based on the number of layout entries
+            ctx.visited.reserve(in_heuristics.layout);
             in_variables->traverse_with_registry(input, ctx);
 
             // If this is the first time the frozen function has been called or
