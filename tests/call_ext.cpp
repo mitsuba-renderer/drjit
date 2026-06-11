@@ -55,8 +55,7 @@ template <typename Float> struct Base : drjit::TraversableBase {
 
     virtual ~Base() override { jit_registry_remove(this); }
 
-    static constexpr const char *Variant =
-        Float::Backend == JitBackend::CUDA ? "cuda" : "llvm";
+    static constexpr const char *Variant = jit_backend_name_v<Float::Backend>;
     static constexpr const char *Domain = "Base";
 
     DR_TRAVERSE_CB(drjit::TraversableBase)
@@ -191,10 +190,6 @@ template <typename Float> struct B : Base<Float> {
     DR_TRAVERSE_CB(Base<Float>, value, opaque)
 };
 
-template <typename Float> constexpr const char *get_variant() {
-    return Float::Backend == JitBackend::CUDA ? "cuda" : "llvm";
-}
-
 DRJIT_CALL_TEMPLATE_BEGIN(Base)
     DRJIT_CALL_METHOD(f)
     DRJIT_CALL_METHOD(f_masked)
@@ -213,7 +208,9 @@ DRJIT_CALL_TEMPLATE_BEGIN(Base)
     DRJIT_CALL_GETTER(constant_getter)
     DRJIT_CALL_METHOD(get_self)
 public:
-    static constexpr const char *variant_() { return get_variant<Ts...>(); }
+    static constexpr const char *variant_() {
+        return jit_backend_name_v<dr::backend_v<Ts...>>;
+    }
 DRJIT_CALL_END()
 
 
