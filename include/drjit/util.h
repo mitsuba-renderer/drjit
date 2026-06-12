@@ -353,4 +353,43 @@ void gather_packet_dynamic(size_t packet_size, Source &&source, const Index &ind
     }
 }
 
+/// Special handling of packet scatter-reductions when packet size is only known at runtime
+template <typename Target, typename Value, typename Index, typename Mask>
+void scatter_reduce_packet_dynamic(ReduceOp op, size_t packet_size, Target &target,
+    const Value *values, const Index &index, const Mask &mask_ = true,
+    ReduceMode mode = ReduceMode::Auto) {
+
+    // Broadcast mask to match shape of Index
+    mask_t<plain_t<Index>> mask = mask_;
+
+    auto default_scatter = [&]{
+        for (size_t i = 0; i < packet_size; ++i)
+            scatter_reduce(op, target, values[i],
+                fmadd(index, (uint32_t) packet_size, (uint32_t) i), mask, mode);
+    };
+
+    if constexpr (is_jit_v<Value>) {
+        if ((packet_size & (packet_size - 1)) == 0 && packet_size > 1) {
+            uint64_t *src_indices = (uint64_t *) alloca(
+                sizeof(uint64_t) * packet_size);
+            for (size_t i = 0; i < packet_size; ++i)
+                src_indices[i] = values[i].index_combined();
+
+            uint64_t new_index = ad_var_scatter_packet(packet_size,
+                target.index_combined(),
+                src_indices,
+                index.index(),
+                mask.index(),
+                op,
+                mode);
+
+            target = Target::steal((typename Target::Index) new_index);
+        } else {
+            default_scatter();
+        }
+    } else {
+        default_scatter();
+    }
+}
+
 NAMESPACE_END(drjit)
