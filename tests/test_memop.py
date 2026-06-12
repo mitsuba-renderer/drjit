@@ -762,7 +762,6 @@ def test24_block_prefix_sum(t):
     [dr.ReduceOp.Add, dr.ReduceOp.Min, dr.ReduceOp.Max,
      dr.ReduceOp.And, dr.ReduceOp.Or])
 @pytest.skip_on(RuntimeError, "backend does not support the requested type of atomic reduction")
-@pytest.skip_on(RuntimeError, "'Or'/'And' reductions are not supported on the Metal backend")
 @pytest.test_arrays('shape=(*), uint32, jit')
 def test25_block_reduce_intense(t, op):
     size = 4096*1024
