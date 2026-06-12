@@ -850,3 +850,104 @@ def test37_loop_multi_size_side_effects(t, mode):
 
     assert dr.sum(big)[0] == 5050
     assert small[0] == 42
+
+@pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
+@pytest.test_arrays('float32,is_jit,shape=(*)')
+@dr.syntax
+def test38_aliased_state_in_body(t, mode):
+    # Check that aliases created by the loop body are handled correctly
+    UInt32 = dr.uint32_array_t(t)
+
+    x = dr.arange(t, 4)
+    a, b, c = x + 1, x + 2, x + 3
+    i = UInt32(0)
+    while dr.hint(i < 1, mode=mode):
+        a, b, c = b, b, a
+        i += 1
+
+    assert dr.all(a == x + 2)
+    assert dr.all(b == x + 2)
+    assert dr.all(c == x + 1)
+
+@pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
+@pytest.test_arrays('float32,is_jit,shape=(*)')
+@dr.syntax
+def test39_aliased_state_partial_exit(t, mode):
+    # Aliases created by the loop body must not disturb lanes that already
+    # finished the loop
+    UInt32 = dr.uint32_array_t(t)
+
+    k = dr.arange(UInt32, 4)
+    a = dr.arange(t, 4) * 100
+    b = a + 1
+    i = UInt32(0)
+    while dr.hint(i < k, mode=mode):
+        a = b
+        i += 1
+
+    assert dr.all(b == dr.arange(t, 4) * 100 + 1)
+    assert dr.all(a == dr.select(k == 0, dr.arange(t, 4) * 100, b))
+
+@pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
+@pytest.test_arrays('float32,is_jit,shape=(*)')
+@dr.syntax
+def test40_aliased_state_shared_update(t, mode):
+    # Two state variables receiving their update from the same (also updated)
+    # state variable exercise the temporaries of the loop's backedge copy
+    UInt32 = dr.uint32_array_t(t)
+
+    x = dr.arange(t, 3)
+    a, b, c = x + 1, x + 2, x + 3
+    i = UInt32(0)
+    while dr.hint(i < 5, mode=mode):
+        a, b, c = c, c, a + b
+        i += 1
+
+    assert dr.all(a == t(12, 16, 20))
+    assert dr.all(b == t(12, 16, 20))
+    assert dr.all(c == t(12, 20, 28))
+
+@pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+@dr.syntax
+def test41_aliased_state_in_body_ad_bwd(t, mode):
+    # Test the same thing for reverse-mode AD
+    UInt32 = dr.uint32_array_t(dr.detached_t(t))
+
+    x = t(2)
+    dr.enable_grad(x)
+
+    a, b, c = x + 1, x * x, x - 1
+    i = UInt32(0)
+    while dr.hint(i < 1, mode=mode, max_iterations=1):
+        a, b, c = b, b, a
+        i += 1
+
+    dr.backward(c)
+    assert dr.allclose(a, 4)
+    assert dr.allclose(b, 4)
+    assert dr.allclose(c, 3)
+    assert dr.allclose(dr.grad(x), 1)
+
+@pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+@dr.syntax
+def test42_aliased_state_in_body_ad_fwd(t, mode):
+    # Test the same thing for forward-mode AD
+    UInt32 = dr.uint32_array_t(dr.detached_t(t))
+
+    x = t(2)
+    dr.enable_grad(x)
+    dr.set_grad(x, 1)
+
+    a, b, c = x + 1, x * x, x - 1
+    i = UInt32(0)
+    while dr.hint(i < 1, mode=mode):
+        a, b, c = b, b, a
+        i += 1
+
+    dr.forward_to(c)
+    assert dr.allclose(a, 4)
+    assert dr.allclose(b, 4)
+    assert dr.allclose(c, 3)
+    assert dr.allclose(dr.grad(c), 1)
