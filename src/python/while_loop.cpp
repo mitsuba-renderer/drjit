@@ -16,6 +16,8 @@
 #include "shape.h"
 #include "apply.h"
 #include <nanobind/stl/optional.h>
+#include <tsl/robin_set.h>
+#include <drjit-core/hash.h>
 
 /**
  * \brief This data structure is responsible for capturing and updating the
@@ -100,10 +102,25 @@ static void while_loop_read_cb(void *p, dr::vector<uint64_t> &indices) {
     LoopState *ls = (LoopState *) p;
     ls->tracker.read(ls->state, indices, ls->labels);
 
-    // On the first read, replace the live state with an alias-free working copy.
+    // On the first read, replace the live state with an alias-free working copy
     // (sharing the same indices). We will later revert this copy for state fields
-    // that have not been modified.
-    if (!ls->dealiased) {
+    // that have not been modified. This step is repeated whenever the loop body
+    // returns the same array object in several state entries.
+    bool aliased = false;
+    if (ls->dealiased) {
+        tsl::robin_set<uint64_t, UInt64Hasher> seen;
+        seen.reserve(indices.size());
+        for (uint64_t index : indices) {
+            if (!(uint32_t) index)
+                continue;
+            if (!seen.insert(index).second) {
+                aliased = true;
+                break;
+            }
+        }
+    }
+
+    if (!ls->dealiased || aliased) {
         struct DealiasShareOp : TransformCallback {
             void operator()(nb::handle h1, nb::handle h2) override {
                 const ArraySupplement &s = supp(h1.type());
