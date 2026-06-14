@@ -10,7 +10,9 @@ Currently, the following ones are officially supported:
 
 - `NumPy <https://numpy.org>`__,
 - `PyTorch <https://pytorch.org>`__,
-- `JAX <https://jax.readthedocs.io/en/latest/installation.html>`__.
+- `JAX <https://jax.readthedocs.io/en/latest/installation.html>`__,
+- `SymPy <https://www.sympy.org>`__ (symbolic computation, see :ref:`below
+  <interop_sympy>`).
 
 There isn't much to it: given an input array from another framework, simply
 pass it to the constructor of the Dr.Jit array or tensor type you wish to
@@ -102,6 +104,130 @@ larger PyTorch program:
    tensor([1.0000e+00, 8.0000e+00, 2.5600e+02, 1.3107e+05])
 
 See the documentation of :py:func:`@drjit.wrap <wrap>` for further details.
+
+.. _interop_sympy:
+
+SymPy
+-----
+
+Dr.Jit can also interoperate with `SymPy <https://www.sympy.org>`__, a
+computer algebra system. This integration works differently from the
+PyTorch/JAX/TensorFlow targets described above: rather than exchanging *data*
+at runtime, the SymPy target operates at *compile time*. It converts Dr.Jit
+types into SymPy symbols, runs the decorated function in SymPy to obtain an
+expression, and then compiles that expression into Dr.Jit code.
+
+.. code-block:: python
+
+   import sympy as sp
+   from drjit.cuda.ad import Float, Array3f
+
+   @dr.wrap(source='drjit', target='sympy')
+   def norm(v):
+       return v.norm()
+
+   result = norm(Array3f(3, 4, 0))  # Float(5.0)
+
+The key idea is that the compiled result consists of *ordinary Dr.Jit
+operations*. All of the usual Dr.Jit semantics apply: the code is traced,
+parallelized, and—if AD-enabled types are used—automatically differentiable:
+
+.. code-block:: pycon
+
+   >>> x = Float(3.0)
+   >>> dr.enable_grad(x)
+   >>> @dr.wrap(source='drjit', target='sympy')
+   ... def f(x):
+   ...     return x**2 + 2*x + 1
+   >>> y = f(x)
+   >>> dr.backward(y)
+   >>> x.grad
+   [8]
+
+Parallelism
+^^^^^^^^^^^
+
+Recall that every Dr.Jit type is inherently an *array* of the concept it
+represents: a :py:class:`Float <drjit.auto.ad.Float>` is a dynamically sized
+array of floats, a :py:class:`Matrix4f <drjit.auto.ad.Matrix4f>` is an array
+of 4×4 matrices, and so on. Operations on these types are applied to all
+elements in parallel.
+
+The SymPy wrapper preserves this property. The SymPy expression is compiled
+into Dr.Jit code that processes all elements simultaneously. For example,
+applying a ``@dr.wrap(source='drjit', target='sympy')``-decorated function to
+a :py:class:`Matrix4f <drjit.auto.ad.Matrix4f>` that contains 1000 matrices
+will compute the result for all 1000 matrices in a single kernel. The
+expression is compiled only once and then evaluated in parallel across all
+elements.
+
+Type promotion
+^^^^^^^^^^^^^^
+
+Dr.Jit array types are automatically mapped to their natural SymPy equivalents
+when they enter the decorated function:
+
+- Scalar types (:py:class:`Float <drjit.auto.ad.Float>`,
+  :py:class:`UInt32 <drjit.auto.ad.UInt32>`, …) become ``sp.Symbol(real=True)``.
+  Note that SymPy does not distinguish integer and floating-point symbols—both
+  map to the same kind of symbol. Integer-specific operations like floor
+  division and modulo will produce SymPy expressions (``floor(x/2)``,
+  ``Mod(x, 3)``) that are correctly compiled to Dr.Jit code, but SymPy
+  treats all values as real numbers.
+- Static vectors (:py:class:`Array2f <drjit.auto.ad.Array2f>`,
+  :py:class:`Array3f <drjit.auto.ad.Array3f>`, …) become ``sp.Matrix``
+  column vectors. This means ``.dot()``, ``.cross()``, and ``.norm()`` work
+  immediately. Indexing (``v[0]``), slicing (``v[0:2]``), and unpacking
+  (``x, y, z = v``) also work, so existing code that treated vectors as lists
+  continues to work unchanged.
+- Dynamic arrays (:py:class:`ArrayXf <drjit.auto.ad.ArrayXf>`) also become
+  ``sp.Matrix`` column vectors. Their size is known when the function is first
+  called and used for compilation.
+- Matrix types (:py:class:`Matrix3f <drjit.auto.ad.Matrix3f>`,
+  :py:class:`Matrix4f <drjit.auto.ad.Matrix4f>`, …) become square
+  ``sp.Matrix`` objects.
+
+Caching
+^^^^^^^
+
+Compiled functions are cached at two levels. An in-memory cache, keyed by the
+argument type signature, avoids recompilation when the same function is called
+repeatedly with arguments of the same types. A disk cache in
+``$HOME/.drjit/sympy/`` persists compiled bytecode across interpreter
+restarts, following Dr.Jit's kernel cache convention (``$HOME/.drjit/``). To
+clear the cache, simply delete that directory.
+
+Nested calls
+^^^^^^^^^^^^
+
+Functions decorated with ``@dr.wrap(source='drjit', target='sympy')`` can call
+each other. When a wrapped function is invoked during another wrapped
+function's compilation, it runs in SymPy mode and its expression is inlined
+into the outer function rather than triggering a separate compilation.
+
+Limitations
+^^^^^^^^^^^
+
+The SymPy target has several limitations to be aware of:
+
+- The decorated function must be **pure** and use only SymPy operations on its
+  arguments. Since the arguments are SymPy symbols (not Dr.Jit arrays), calling
+  Dr.Jit functions like :py:func:`dr.gather() <gather>`,
+  :py:func:`dr.scatter() <scatter>` will not work.
+
+- **No control flow on arguments.** Python ``if``/``else`` statements cannot
+  branch on SymPy symbols because they are not booleans. Use ``sp.Piecewise``
+  for conditional expressions instead.
+
+- **Expression complexity.** SymPy manipulates expressions algebraically, which
+  can become slow for large expressions. Operations like matrix inversion on
+  matrices larger than about 4×4 may produce very large expressions and take a
+  long time to compile. The compiled Dr.Jit code will be fast regardless, so
+  this is purely a one-time compilation cost.
+
+- **First-call overhead.** The first call to a wrapped function traces through
+  SymPy, performs CSE optimization, and compiles the result. This can take
+  noticeably longer than subsequent calls, which hit the cache.
 
 .. _interop_caveats:
 
