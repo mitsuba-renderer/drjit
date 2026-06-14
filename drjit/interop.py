@@ -526,7 +526,7 @@ def create_sympy_wrapper():
     '''Lazily create the SympyWrapper class, importing SymPy and other
     dependencies only when first needed.'''
     import sympy as sp
-    import xxhash
+    import hashlib
     import marshal
     import inspect
     from pathlib import Path
@@ -759,7 +759,7 @@ def create_sympy_wrapper():
                 expr_key = repr(flat_exprs)
 
             key = f"{n_symbols=}; {self.simplify=}; {self.clear_derivatives=}; {expr_key=}"
-            key = xxhash.xxh64(key.encode()).hexdigest()
+            key = hashlib.sha256(key.encode()).hexdigest()
 
             cache_dir = _cache_dir()
             cache_file = cache_dir / f"{key}.pyc"
