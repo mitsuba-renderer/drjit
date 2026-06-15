@@ -715,10 +715,10 @@ void enqueue_python_cleanup(nb::detail::ndarray_handle *p) {
 
 int drjit_py_is_alive = 1;
 
-// Resolved at init time via dlsym (see export_init). Returns non-null
-// when the calling thread holds the GIL, allowing synchronous ndarray cleanup.
+// Resolved at init time via dlsym (see export_init). Returns nonzero when the
+// *calling* thread holds the GIL, allowing synchronous ndarray cleanup.
 extern "C" {
-    static PyThreadState *(*py_tstate_unchecked_get)() = nullptr;
+    static int (*py_gilstate_check)() = nullptr;
 }
 extern int disable_gc_scope;
 
@@ -727,7 +727,7 @@ static void ndarray_free_cb_2(void *p) {
         return;
 
     // If we're currently holding the GIL, then, release the array right now
-    if (!disable_gc_scope && py_tstate_unchecked_get && py_tstate_unchecked_get())
+    if (!disable_gc_scope && py_gilstate_check && py_gilstate_check())
         nb::detail::ndarray_dec_ref((nb::detail::ndarray_handle *) p);
     else
         enqueue_python_cleanup((nb::detail::ndarray_handle *) p);
@@ -1183,21 +1183,18 @@ nb::object extract_type(nb::object tp) {
 }
 
 void export_init(nb::module_ &m) {
-    // PyThreadState_GetUnchecked (or _PyThreadState_UncheckedGet on older
-    // versions) is used by ndarray_free_cb to detect whether the current
-    // thread holds the GIL, enabling synchronous cleanup. It is not part
-    // of the stable ABI, so we resolve it at runtime via dlsym.
-    for (const char *name : { "PyThreadState_GetUnchecked",
-                              "_PyThreadState_UncheckedGet" }) {
+    // PyGILState_Check() is used by ndarray_free_cb to detect whether the
+    // *calling* thread holds the GIL, enabling synchronous cleanup. It is
+    // excluded from the limited API headers but still exported by libpython,
+    // so we resolve it at runtime via dlsym.
+    {
+        const char *name = "PyGILState_Check";
 #if defined(_WIN32)
         void *h = (void *) GetProcAddress(GetModuleHandleA(nullptr), name);
 #else
         void *h = dlsym(RTLD_DEFAULT, name);
 #endif
-        if (h) {
-            py_tstate_unchecked_get = (PyThreadState *(*)()) h;
-            break;
-        }
+        py_gilstate_check = (int (*)()) h;
     }
 
     m.def("empty",
