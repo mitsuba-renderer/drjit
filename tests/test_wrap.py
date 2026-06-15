@@ -1172,3 +1172,25 @@ def test48_sympy_pytree_tuple_output(t):
     ref = f_drjit(x, y)
     assert dr.allclose(res[0], ref[0])
     assert dr.allclose(res[1]["diff"], ref[1]["diff"])
+
+
+@pytest.mark.skipif(not has_sympy, reason="sympy not available")
+@pytest.test_arrays("float,shape=(*),jit")
+def test49_sympy_second_derivative(t):
+    rng = dr.rng()
+
+    @dr.wrap(source="drjit", target="sympy")
+    def f(x):
+        return sp.sin(x) * sp.exp(x)
+
+    @dr.wrap(source="drjit", target="sympy")
+    def f_dd(x):
+        y = f(x)
+        return sp.diff(y, x, 2)
+
+    x = rng.uniform(t, 10)
+
+    # d/dx[sin(x)*exp(x)] = exp(x)*(sin(x) + cos(x))
+    # d2/dx2[sin(x)*exp(x)] = 2*exp(x)*cos(x)
+    ref = 2 * dr.exp(x) * dr.cos(x)
+    assert dr.allclose(f_dd(x), ref)

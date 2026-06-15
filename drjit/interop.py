@@ -732,10 +732,6 @@ def create_sympy_wrapper():
         def __init__(
             self,
             f_sp,
-            key_fn=None,
-            save_expr=False,
-            simplify=False,
-            clear_derivatives=True,
         ):
             self.f_sp = f_sp
             # The generated code uses ``dr.*`` calls, so ensure ``dr``
@@ -746,19 +742,12 @@ def create_sympy_wrapper():
             self.__globals__ = func_globals
             self.enabled = True
             self.sig = inspect.signature(f_sp)
-            self.key_fn = key_fn
-            self.save_expr = save_expr
-            self.simplify = simplify
-            self.clear_derivatives = clear_derivatives
             self.cache = {}
 
         def codegen(self, flat_exprs, n_symbols):
-            if self.key_fn is not None:
-                expr_key = repr(self.key_fn(flat_exprs))
-            else:
-                expr_key = repr(flat_exprs)
+            expr_key = repr(flat_exprs)
 
-            key = f"{n_symbols=}; {self.simplify=}; {self.clear_derivatives=}; {expr_key=}"
+            key = f"{n_symbols=}; {expr_key=}"
             key = hashlib.sha256(key.encode()).hexdigest()
 
             cache_dir = _cache_dir()
@@ -770,10 +759,7 @@ def create_sympy_wrapper():
             else:
                 def process(e):
                     e = e.doit(deep=True)
-                    if self.simplify:
-                        e = sp.simplify(e)
-                    if self.clear_derivatives:
-                        e = e.replace(lambda e: isinstance(e, sp.Derivative), lambda e: 0)
+                    e = e.replace(lambda e: isinstance(e, sp.Derivative), lambda e: 0)
                     e = e.replace(lambda e: isinstance(e, sp.DiracDelta), lambda e: 0)
                     return e
 

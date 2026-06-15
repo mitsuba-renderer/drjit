@@ -130,7 +130,8 @@ expression, and then compiles that expression into Dr.Jit code.
 
 The key idea is that the compiled result consists of *ordinary Dr.Jit
 operations*. All of the usual Dr.Jit semantics apply: the code is traced,
-parallelized, and—if AD-enabled types are used—automatically differentiable:
+parallelized across all array elements, and—if AD-enabled types are
+used—automatically differentiable:
 
 .. code-block:: pycon
 
@@ -143,23 +144,6 @@ parallelized, and—if AD-enabled types are used—automatically differentiable:
    >>> dr.backward(y)
    >>> x.grad
    [8]
-
-Parallelism
-^^^^^^^^^^^
-
-Recall that every Dr.Jit type is inherently an *array* of the concept it
-represents: a :py:class:`Float <drjit.auto.ad.Float>` is a dynamically sized
-array of floats, a :py:class:`Matrix4f <drjit.auto.ad.Matrix4f>` is an array
-of 4×4 matrices, and so on. Operations on these types are applied to all
-elements in parallel.
-
-The SymPy wrapper preserves this property. The SymPy expression is compiled
-into Dr.Jit code that processes all elements simultaneously. For example,
-applying a ``@dr.wrap(source='drjit', target='sympy')``-decorated function to
-a :py:class:`Matrix4f <drjit.auto.ad.Matrix4f>` that contains 1000 matrices
-will compute the result for all 1000 matrices in a single kernel. The
-expression is compiled only once and then evaluated in parallel across all
-elements.
 
 Type promotion
 ^^^^^^^^^^^^^^
@@ -174,18 +158,14 @@ when they enter the decorated function:
   division and modulo will produce SymPy expressions (``floor(x/2)``,
   ``Mod(x, 3)``) that are correctly compiled to Dr.Jit code, but SymPy
   treats all values as real numbers.
-- Static vectors (:py:class:`Array2f <drjit.auto.ad.Array2f>`,
-  :py:class:`Array3f <drjit.auto.ad.Array3f>`, …) become ``sp.Matrix``
-  column vectors. This means ``.dot()``, ``.cross()``, and ``.norm()`` work
-  immediately. Indexing (``v[0]``), slicing (``v[0:2]``), and unpacking
-  (``x, y, z = v``) also work, so existing code that treated vectors as lists
-  continues to work unchanged.
-- Dynamic arrays (:py:class:`ArrayXf <drjit.auto.ad.ArrayXf>`) also become
-  ``sp.Matrix`` column vectors. Their size is known when the function is first
-  called and used for compilation.
+- Arrays (:py:class:`Array2f <drjit.auto.ad.Array2f>`,
+  :py:class:`Array3f <drjit.auto.ad.Array3f>`, :py:class:`ArrayXf
+  <drjit.auto.ad.ArrayXf>`) become ``sp.Matrix`` column vectors.
 - Matrix types (:py:class:`Matrix3f <drjit.auto.ad.Matrix3f>`,
-  :py:class:`Matrix4f <drjit.auto.ad.Matrix4f>`, …) become square
+  :py:class:`Matrix4f <drjit.auto.ad.Matrix4f>`, ...) become square
   ``sp.Matrix`` objects.
+- Tensor types (:py:class:`TensorXf <drjit.auto.ad.TensorXf>`) cannot be used
+  in the SymPy wrapper.
 
 Caching
 ^^^^^^^
@@ -193,9 +173,9 @@ Caching
 Compiled functions are cached at two levels. An in-memory cache, keyed by the
 argument type signature, avoids recompilation when the same function is called
 repeatedly with arguments of the same types. A disk cache in
-``$HOME/.drjit/sympy/`` persists compiled bytecode across interpreter
-restarts, following Dr.Jit's kernel cache convention (``$HOME/.drjit/``). To
-clear the cache, simply delete that directory.
+``~/.drjit/sympy/`` persists compiled bytecode across interpreter restarts,
+following Dr.Jit's kernel cache convention (``~/.drjit/``). To clear the
+cache, simply delete that directory.
 
 Nested calls
 ^^^^^^^^^^^^
