@@ -15,7 +15,12 @@ void export_history(nb::module_ &m) {
     m.def(
         "kernel_history",
         [io](dr::vector<KernelType> types) {
-            KernelHistoryEntry *data = jit_kernel_history();
+            KernelHistoryEntry *data;
+            {
+                // Release the GIL while syncing
+                nb::gil_scoped_release guard;
+                data = jit_kernel_history();
+            }
             KernelHistoryEntry *entry = data;
             nb::list history;
             while (entry && (uint32_t) entry->backend) {
