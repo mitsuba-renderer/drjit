@@ -35,44 +35,75 @@
 #include "init.h"
 #include "coop_vec.h"
 
-/// Forward declaration
+/// Forward declarations
 static bool array_init_from_seq(PyObject *self, const ArraySupplement &s, PyObject *seq);
+static int tp_init_tensor_impl(PyObject *self, PyObject *array, PyObject *shape,
+                               bool do_flip_axes) noexcept;
 
 /// Convenience function to skip costly examinations of common types
 static bool is_builtin(PyTypeObject *tp) {
     return tp == &PyLong_Type || tp == &PyFloat_Type || tp == &PyBool_Type;
 }
 
-/// Constructor for all dr.ArrayBase subclasses (except tensors)
-int tp_init_array(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
+/// Can a Python scalar 'arg' be broadcast by handing it straight to init_const()?
+static bool can_broadcast_scalar(const ArraySupplement &s, PyTypeObject *arg_tp) {
+    if (s.shape[0] != DRJIT_DYNAMIC || !s.init_const || s.is_class)
+        return false;
+
+    switch ((VarType) s.type) {
+        case VarType::Float16:
+        case VarType::Float32:
+        case VarType::Float64:
+            return is_builtin(arg_tp);
+        case VarType::Bool:
+        case VarType::Pointer:
+            return false;
+        default: // signed/unsigned integers
+            return arg_tp == &PyLong_Type;
+    }
+}
+
+/// Core array initializer shared by the ``tp_init`` and ``tp_vectorcall``
+/// entry points. It operates on a flat (vectorcall-style) argument array to
+/// avoid materializing an intermediate argument tuple on the hot path.
+static int tp_init_array_impl(PyObject *self, PyObject *const *args,
+                              Py_ssize_t argc, bool do_flip_axes) noexcept {
     PyTypeObject *self_tp = Py_TYPE(self);
     const ArraySupplement &s = supp(self_tp);
-    Py_ssize_t argc = NB_TUPLE_GET_SIZE(args);
     ArraySupplement::SetItem set_item = s.set_item;
-    bool do_flip_axes = false;
 
     try {
-        if (kwds) {
-            PyObject *flip_axes = PyDict_GetItemString(kwds, "flip_axes");
-            if (!flip_axes || PyDict_Size(kwds) == 0)
-                raise_if(kwds, "Unknown keyword argument.");
-            do_flip_axes = flip_axes == Py_True;
-        }
-
         if (argc == 0) {
             // Default initialization, e.g., ``Array3f()``
             nb::detail::nb_inst_zero(self);
             return 0;
         } else if (argc > 1) {
             // Initialize from argument list, e.g., ``Array3f(1, 2, 3)``
-            raise_if(!array_init_from_seq(self, s, args),
+            nb::object args_tuple = nb::steal(PyTuple_New(argc));
+            raise_if(!args_tuple.is_valid(),
+                     "Could not allocate argument tuple.");
+            for (Py_ssize_t i = 0; i < argc; ++i) {
+                PyObject *o = args[i];
+                Py_INCREF(o);
+                NB_TUPLE_SET_ITEM(args_tuple.ptr(), i, o);
+            }
+            raise_if(!array_init_from_seq(self, s, args_tuple.ptr()),
                      "Could not initialize array from argument list.");
             return 0;
         } else {
             // Initialize from a single element, e.g., ``Array3f(other_array)``
             // or ``Array3f(1.0)``
-            PyObject *arg = NB_TUPLE_GET_ITEM(args, 0);
+            PyObject *arg = args[0];
             PyTypeObject *arg_tp = Py_TYPE(arg);
+
+            // Fast path: broadcast a Python scalar (e.g. ``dr.llvm.Float(1)``)
+            // straight through init_const().
+            if (NB_LIKELY(can_broadcast_scalar(s, arg_tp))) {
+                s.init_const(1, false, arg, inst_ptr(self));
+                nb::inst_mark_ready(self);
+                return 0;
+            }
+
             bool try_sequence_import = true,
                  is_drjit_tensor = false;
             bool arg_is_drjit = is_drjit_type(arg_tp);
@@ -108,9 +139,9 @@ int tp_init_array(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
 
                         nb::handle arg_casted_t = meta_get_type(m_temp);
                         nb::object arg_casted = arg_casted_t(nb::handle(arg));
-                        nb::object init_args = nb::make_tuple(arg_casted);
+                        PyObject *casted = arg_casted.ptr();
 
-                        return tp_init_array(self, init_args.ptr(), kwds);
+                        return tp_init_array_impl(self, &casted, 1, do_flip_axes);
                     }
 
                     // Potentially do a cast
@@ -176,8 +207,14 @@ int tp_init_array(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
             // Try to construct from an instance created by another
             // array programming framework or a Dr.Jit tensor
             nb::object converted_complex_scalar;
-            bool is_ndarray = nb::ndarray_check(arg);
-            if (is_drjit_tensor || (!arg_is_drjit && !is_builtin(arg_tp) && is_ndarray)) {
+
+            // Probing for a foreign array type is comparatively expensive, so
+            // only do so when 'arg' could plausibly be one. Builtin scalars and
+            // Dr.Jit arrays are handled above/below and never reach this check.
+            bool is_ndarray = !arg_is_drjit && !is_builtin(arg_tp) &&
+                              nb::ndarray_check(arg);
+
+            if (is_drjit_tensor || is_ndarray) {
                 bool has_dim = false;
                 if (is_drjit_tensor || PyCapsule_CheckExact(arg))
                     has_dim = true;
@@ -328,6 +365,159 @@ int tp_init_array(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
         nb::chain_error(PyExc_TypeError, "%U.__init__(): %s", tp_name.ptr(), e.what());
         return -1;
     }
+}
+
+/// Resolve the (only) recognized ``flip_axes`` keyword argument. Returns false
+/// and sets a Python error if an unknown keyword was supplied.
+static bool resolve_flip_axes_kwd(PyTypeObject *tp, PyObject *flip_axes,
+                                  bool have_kwds, bool &do_flip_axes) {
+    if (NB_LIKELY(!have_kwds)) {
+        do_flip_axes = false;
+        return true;
+    }
+    if (!flip_axes) {
+        nb::str tp_name = nb::type_name(tp);
+        nb::chain_error(PyExc_TypeError,
+                        "%U.__init__(): Unknown keyword argument.",
+                        tp_name.ptr());
+        return false;
+    }
+    do_flip_axes = flip_axes == Py_True;
+    return true;
+}
+
+/// Classic ``tp_init`` slot for non-tensor arrays (fallback for tp_vectorcall_array)
+int tp_init_array(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
+    bool do_flip_axes = false;
+    if (!resolve_flip_axes_kwd(Py_TYPE(self),
+                               kwds ? PyDict_GetItemString(kwds, "flip_axes")
+                                    : nullptr,
+                               kwds != nullptr, do_flip_axes))
+        return -1;
+
+    Py_ssize_t argc = NB_TUPLE_GET_SIZE(args);
+
+#if defined(Py_LIMITED_API)
+    dr::unique_ptr<PyObject *[]> buf;
+    PyObject **argp = nullptr;
+    if (argc) {
+        buf.reset(new PyObject *[argc]);
+        for (Py_ssize_t i = 0; i < argc; ++i)
+            buf[i] = NB_TUPLE_GET_ITEM(args, i);
+        argp = buf.get();
+    }
+    return tp_init_array_impl(self, argp, argc, do_flip_axes);
+#else
+    PyObject *const *argp = argc ? &NB_TUPLE_GET_ITEM(args, 0) : nullptr;
+    return tp_init_array_impl(self, argp, argc, do_flip_axes);
+#endif
+}
+
+/// Optimized ``tp_vectorcall`` slot for non-tensor array types.
+PyObject *tp_vectorcall_array(PyObject *type_o, PyObject *const *args,
+                              size_t nargsf, PyObject *kwnames) noexcept {
+    PyTypeObject *tp = (PyTypeObject *) type_o;
+    Py_ssize_t nargs = (Py_ssize_t) PyVectorcall_NARGS(nargsf);
+
+    bool do_flip_axes = false;
+    if (NB_UNLIKELY(kwnames)) {
+        Py_ssize_t nkw = NB_TUPLE_GET_SIZE(kwnames);
+        PyObject *flip_axes = nullptr;
+        for (Py_ssize_t i = 0; i < nkw; ++i) {
+            PyObject *key = NB_TUPLE_GET_ITEM(kwnames, i);
+            if (PyUnicode_CompareWithASCIIString(key, "flip_axes") == 0) {
+                flip_axes = args[nargs + i];
+                break;
+            }
+        }
+        if (!resolve_flip_axes_kwd(tp, flip_axes, true, do_flip_axes))
+            return nullptr;
+    }
+
+    PyObject *self;
+    try {
+        self = nb::detail::nb_inst_alloc(tp);
+    } catch (nb::python_error &e) {
+        e.restore();
+        return nullptr;
+    }
+
+    if (NB_UNLIKELY(tp_init_array_impl(self, args, nargs, do_flip_axes))) {
+        Py_DECREF(self);
+        return nullptr;
+    }
+
+    return self;
+}
+
+/// Optimized ``tp_vectorcall`` slot for tensor types.
+PyObject *tp_vectorcall_tensor(PyObject *type_o, PyObject *const *args,
+                               size_t nargsf, PyObject *kwnames) noexcept {
+    PyTypeObject *tp = (PyTypeObject *) type_o;
+    Py_ssize_t nargs = (Py_ssize_t) PyVectorcall_NARGS(nargsf);
+
+    PyObject *array = nullptr, *shape = nullptr, *flip_axes = nullptr;
+
+    if (NB_UNLIKELY(nargs > 3)) {
+        nb::chain_error(PyExc_TypeError,
+                        "%U.__init__(): takes at most 3 arguments (%zd given).",
+                        nb::type_name(tp).ptr(), nargs);
+        return nullptr;
+    }
+    if (nargs > 0) array     = args[0];
+    if (nargs > 1) shape     = args[1];
+    if (nargs > 2) flip_axes = args[2];
+
+    if (NB_UNLIKELY(kwnames)) {
+        Py_ssize_t nkw = NB_TUPLE_GET_SIZE(kwnames);
+        for (Py_ssize_t i = 0; i < nkw; ++i) {
+            PyObject *key = NB_TUPLE_GET_ITEM(kwnames, i), **slot;
+            if (PyUnicode_CompareWithASCIIString(key, "array") == 0)
+                slot = &array;
+            else if (PyUnicode_CompareWithASCIIString(key, "shape") == 0)
+                slot = &shape;
+            else if (PyUnicode_CompareWithASCIIString(key, "flip_axes") == 0)
+                slot = &flip_axes;
+            else {
+                nb::chain_error(PyExc_TypeError,
+                                "%U.__init__(): got an unexpected keyword "
+                                "argument '%U'.", nb::type_name(tp).ptr(), key);
+                return nullptr;
+            }
+            if (NB_UNLIKELY(*slot)) {
+                nb::chain_error(PyExc_TypeError,
+                                "%U.__init__(): got multiple values for "
+                                "argument '%U'.", nb::type_name(tp).ptr(), key);
+                return nullptr;
+            }
+            *slot = args[nargs + i];
+        }
+    }
+
+    // Match the type constraints of the classic tp_init_tensor() entry point.
+    if (NB_UNLIKELY(shape && !PyTuple_Check(shape)) ||
+        NB_UNLIKELY(flip_axes && !PyBool_Check(flip_axes))) {
+        nb::chain_error(PyExc_TypeError,
+                        "%U.__init__(): 'shape' must be a tuple and 'flip_axes' "
+                        "a bool.", nb::type_name(tp).ptr());
+        return nullptr;
+    }
+
+    PyObject *self;
+    try {
+        self = nb::detail::nb_inst_alloc(tp);
+    } catch (nb::python_error &e) {
+        e.restore();
+        return nullptr;
+    }
+
+    if (NB_UNLIKELY(tp_init_tensor_impl(self, array, shape,
+                                        flip_axes == Py_True))) {
+        Py_DECREF(self);
+        return nullptr;
+    }
+
+    return self;
 }
 
 static bool array_init_from_seq(PyObject *self, const ArraySupplement &s, PyObject *seq) {
@@ -795,19 +985,13 @@ nb::object view_to_tensor(nb::handle h, dr::vector<size_t> &shape) {
                                  view.descr.offset + view.descr.size, 1u)];
 }
 
-int tp_init_tensor(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
+/// Core tensor initializer shared by ``tp_init`` and ``tp_vectorcall``
+static int tp_init_tensor_impl(PyObject *self, PyObject *array, PyObject *shape,
+                               bool do_flip_axes) noexcept {
     PyTypeObject *self_tp = Py_TYPE(self);
 
     try {
-        PyObject *array = nullptr, *shape = nullptr, *flip_axes = nullptr;
-        const char *kwlist[4] = { "array", "shape", "flip_axes", nullptr };
-        raise_if(!PyArg_ParseTupleAndKeywords(
-                     args, kwds, "|OO!O!", (char **) kwlist, &array,
-                     &PyTuple_Type, &shape, &PyBool_Type, &flip_axes),
-                 "Invalid tensor constructor arguments.");
-
         const ArraySupplement &s = supp(self_tp);
-        bool do_flip_axes = flip_axes == Py_True;
 
         PyTypeObject *array_tp = array ? Py_TYPE(array) : nullptr;
         raise_if(do_flip_axes && (shape || !array_tp ||
@@ -843,9 +1027,11 @@ int tp_init_tensor(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
         nb::detail::nb_inst_zero(self);
         vector<size_t> &shape_vec = s.tensor_shape(inst_ptr(self));
 
-        nb::object args_2;
+        // Storage argument forwarded to the underlying 1D array initializer.
+        // 'flat' keeps the (possibly newly created) flattened array alive.
+        nb::object flat;
+        PyObject *storage_arg;
         if (!shape) {
-            nb::object flat;
             if (!is_drjit_type(array_tp) && !is_builtin(array_tp) && nb::ndarray_check(array)) {
                 // Try to construct from an instance created by another
                 // array programming framework
@@ -860,10 +1046,10 @@ int tp_init_tensor(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
                 if (do_flip_axes)
                     std::reverse(shape_vec.begin(), shape_vec.end());
             }
-            args_2 = nb::make_tuple(flat);
+            storage_arg = flat.ptr();
         } else {
             // Shape is given, require flat input
-            args_2 = nb::make_tuple(nb::handle(array));
+            storage_arg = array;
             shape_vec.resize((size_t) NB_TUPLE_GET_SIZE(shape));
 
             for (size_t i = 0; i < shape_vec.size(); ++i) {
@@ -875,7 +1061,7 @@ int tp_init_tensor(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
         }
 
         nb::object self_array = nb::steal(s.tensor_array(self));
-        int rv = tp_init_array(self_array.ptr(), args_2.ptr(), nullptr);
+        int rv = tp_init_array_impl(self_array.ptr(), &storage_arg, 1, false);
         auto [ready, destruct] = nb::inst_state(self_array);
         (void) destruct;
         nb::inst_set_state(self_array, ready, false);
@@ -901,6 +1087,21 @@ int tp_init_tensor(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
         nb::chain_error(PyExc_TypeError, "%U.__init__(): %s", tp_name.ptr(), e.what());
         return -1;
     }
+}
+
+/// Classic ``tp_init`` slot for tensors (fallback for tp_vectorcall_tensor).
+int tp_init_tensor(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
+    PyObject *array = nullptr, *shape = nullptr, *flip_axes = nullptr;
+    const char *kwlist[4] = { "array", "shape", "flip_axes", nullptr };
+    if (!PyArg_ParseTupleAndKeywords(args, kwds, "|OO!O!", (char **) kwlist,
+                                     &array, &PyTuple_Type, &shape,
+                                     &PyBool_Type, &flip_axes)) {
+        nb::chain_error(PyExc_TypeError,
+                        "%U.__init__(): invalid tensor constructor arguments.",
+                        nb::type_name(Py_TYPE(self)).ptr());
+        return -1;
+    }
+    return tp_init_tensor_impl(self, array, shape, flip_axes == Py_True);
 }
 
 // Forward declaration

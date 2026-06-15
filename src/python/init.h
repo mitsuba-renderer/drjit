@@ -15,6 +15,11 @@
 extern int tp_init_array(PyObject *, PyObject *, PyObject *) noexcept;
 extern int tp_init_tensor(PyObject *, PyObject *, PyObject *) noexcept;
 
+extern PyObject *tp_vectorcall_array(PyObject *, PyObject *const *, size_t,
+                                     PyObject *) noexcept;
+extern PyObject *tp_vectorcall_tensor(PyObject *, PyObject *const *, size_t,
+                                      PyObject *) noexcept;
+
 extern void export_init(nb::module_ &);
 
 extern nb::object arange(const nb::type_object_t<ArrayBase> &dtype,

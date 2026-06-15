@@ -189,10 +189,20 @@ nb::object bind(const ArrayBinding &b) {
     d.supplement_size = sizeof(ArraySupplement);
     d.scope = scope.ptr();
 
+    // Py_tp_vectorcall is missing from the limited API headers before 3.14; its
+    // value (82) is stable. nanobind processes this slot even on Python
+    // versions that officially do not support it.
+    #if !defined(Py_tp_vectorcall)
+    #  define Py_tp_vectorcall 82
+    #endif
+
     PyType_Slot slots [] = {
         { Py_tp_init, (void *) (b.is_tensor ? tp_init_tensor : tp_init_array) },
         { Py_sq_item, (void *) (b.is_tensor ? sq_item_tensor : b.item) },
         { Py_sq_ass_item, (void *) (b.is_tensor ? sq_ass_item_tensor : b.set_item) },
+        // Optimized constructor bypassing CPython's generic type_call()
+        { Py_tp_vectorcall, (void *) (b.is_tensor ? tp_vectorcall_tensor
+                                                  : tp_vectorcall_array) },
         { 0, 0 }
     };
 
