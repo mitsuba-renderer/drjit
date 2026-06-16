@@ -172,10 +172,27 @@ DrJit 1.4.0 (TBA)
 
 **Performance Improvements**
 
-- **ndarray Cleanup**: ndarray reclamation previously always went through an
-  asynchronous cleanup thread. This detour is now skipped for CUDA ndarrays
-  when the calling thread already holds the GIL.
-  (commit `c01a23 <https://github.com/mitsuba-renderer/drjit/commit/c01a235744fe22c64c9a97bc1817a9f49b6b9a78>`__).
+- **Faster tracing and array construction**: A sequence of optimizations to
+  Dr.Jit's tracing, code generation, and Python bindings substantially reduces
+  the per-operation overhead of building computation graphs. Together they
+  roughly halve the cost of tracing and code generation (a tracing microbenchmark
+  sped up by ~2.1x, and repeated tracing of ``Float(1) + Float(2)`` improved by
+  ~1.7x).
+  (Dr.Jit commits
+  `534829 <https://github.com/mitsuba-renderer/drjit/commit/534829d88af9f434b0f2da9a798732ade7256e88>`__,
+  `3fba39 <https://github.com/mitsuba-renderer/drjit/commit/3fba39d2595121fae88d59f4f47b8dd6e9a000aa>`__,
+  `6b212c <https://github.com/mitsuba-renderer/drjit/commit/6b212c235004edfad964665ade3e6f3ec9af6ecb>`__,
+  `50986a <https://github.com/mitsuba-renderer/drjit/commit/50986a050625dd88d6ec9b5ab29caaade2cf7027>`__,
+  Dr.Jit-Core PR `#194 <https://github.com/mitsuba-renderer/drjit-core/pull/194>`__).
+
+- **Lower frozen function replay overheads**: The :py:func:`@dr.freeze
+  <freeze>` replay path was profiled and optimized to reduce its per-call
+  overhead. On a microbenchmark replaying a function with a PyTree of 1K arrays,
+  these changes sped up replay by ~2.5x.
+  (Dr.Jit commits
+  `ff09ee <https://github.com/mitsuba-renderer/drjit/commit/ff09ee9e6de02d02cefcbc103a917ef02febf998>`__,
+  `c1282c <https://github.com/mitsuba-renderer/drjit/commit/c1282ca81a14145095f8be16ccd632d6fc7a5a8c>`__,
+  `13fe80 <https://github.com/mitsuba-renderer/drjit/commit/13fe80ed2142098179b32c127d0dde7eaba0a506>`__).
 
 - **Parallel runtime overhaul (nanothread)**: The underlying thread pool
   received a significant set of changes that reduce tail latency and avoid
@@ -330,6 +347,18 @@ DrJit 1.4.0 (TBA)
   (PRs `#478 <https://github.com/mitsuba-renderer/drjit/pull/478>`__,
   `#480 <https://github.com/mitsuba-renderer/drjit/pull/480>`__,
   `#483 <https://github.com/mitsuba-renderer/drjit/pull/483>`__).
+
+- **Release the GIL while waiting for kernel history**: Retrieving timing data
+  via :py:func:`dr.kernel_history() <kernel_history>` now releases the GIL while
+  waiting for the asynchronous results to arrive, allowing other Python threads
+  to make progress in the meantime.
+  (commits `766e1e <https://github.com/mitsuba-renderer/drjit/commit/766e1e9ade4c722a88d1a1dd18d7d5140115ab8f>`__,
+  `f90bfd <https://github.com/mitsuba-renderer/drjit/commit/f90bfd6a77364a1dd0fff51ff1ab5e0999ff5c8b>`__).
+
+- **ndarray Cleanup**: ndarray reclamation previously always went through an
+  asynchronous cleanup thread. This detour is now skipped for CUDA ndarrays
+  when the calling thread already holds the GIL.
+  (commit `c01a23 <https://github.com/mitsuba-renderer/drjit/commit/c01a235744fe22c64c9a97bc1817a9f49b6b9a78>`__).
 
 **Compatibility**
 
