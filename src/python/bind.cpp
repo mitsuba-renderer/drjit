@@ -200,9 +200,11 @@ nb::object bind(const ArrayBinding &b) {
         { Py_tp_init, (void *) (b.is_tensor ? tp_init_tensor : tp_init_array) },
         { Py_sq_item, (void *) (b.is_tensor ? sq_item_tensor : b.item) },
         { Py_sq_ass_item, (void *) (b.is_tensor ? sq_ass_item_tensor : b.set_item) },
-        // Optimized constructor bypassing CPython's generic type_call()
-        { Py_tp_vectorcall, (void *) (b.is_tensor ? tp_vectorcall_tensor
-                                                  : tp_vectorcall_array) },
+        // Use CPython's generic type_call() for class/pointer arrays to leverage
+        // implicit conversion in constructor calls. Prefer to install an optimized
+        // direct constructor bypassing CPython for arithmetic arrays.
+        { b.is_class ? 0 : Py_tp_vectorcall,
+          (void *) (b.is_tensor ? tp_vectorcall_tensor : tp_vectorcall_array) },
         { 0, 0 }
     };
 
