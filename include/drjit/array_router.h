@@ -1498,6 +1498,10 @@ DRJIT_INLINE void sync_thread() {
     jit_sync_thread();
 }
 
+DRJIT_INLINE void flush_thread() {
+    jit_flush_thread();
+}
+
 DRJIT_INLINE void sync_device() {
     jit_sync_device();
 }

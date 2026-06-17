@@ -21,8 +21,8 @@ def test01_basic(t):
     assert dr.allclose(result_plain, t(3, 6, 9))
     ir_plain = hist_plain[0]['ir'].getvalue()
     if dr.backend_v(t) is dr.JitBackend.LLVM:
-        assert 'call fastcc void' not in ir_plain
-        assert 'define fastcc void' not in ir_plain
+        assert '@func_' not in ir_plain
+        assert 'define fastcc' not in ir_plain
     elif dr.backend_v(t) is dr.JitBackend.CUDA:
         assert 'call.uni' not in ir_plain
 
@@ -35,8 +35,8 @@ def test01_basic(t):
     assert dr.allclose(result_wrapped, t(3, 6, 9))
     ir_wrapped = hist_wrapped[0]['ir'].getvalue()
     if dr.backend_v(t) is dr.JitBackend.LLVM:
-        assert 'call fastcc void' in ir_wrapped
-        assert ir_wrapped.count('define fastcc void') == 1
+        assert '@func_' in ir_wrapped
+        assert ir_wrapped.count('define fastcc') == 1
     elif dr.backend_v(t) is dr.JitBackend.CUDA:
         assert 'call.uni' in ir_wrapped
 
@@ -62,7 +62,7 @@ def test02_explicit_backend(t):
 
     ir = hist[0]['ir'].getvalue()
     if dr.backend_v(t) is dr.JitBackend.LLVM:
-        assert 'call fastcc void' in ir
+        assert '@func_' in ir
     elif dr.backend_v(t) is dr.JitBackend.CUDA:
         assert 'call.uni' in ir
 
@@ -87,6 +87,6 @@ def test03_pytree_input(t):
 
     ir = hist[0]['ir'].getvalue()
     if dr.backend_v(t) is dr.JitBackend.LLVM:
-        assert 'call fastcc void' in ir
+        assert '@func_' in ir
     elif dr.backend_v(t) is dr.JitBackend.CUDA:
         assert 'call.uni' in ir
