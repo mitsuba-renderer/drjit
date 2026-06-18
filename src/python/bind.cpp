@@ -189,9 +189,8 @@ nb::object bind(const ArrayBinding &b) {
     d.supplement_size = sizeof(ArraySupplement);
     d.scope = scope.ptr();
 
-    // Py_tp_vectorcall is missing from the limited API headers before 3.14; its
-    // value (82) is stable. nanobind processes this slot even on Python
-    // versions that officially do not support it.
+    // Declare Py_tp_vectorcall, which is missing from CPython<3.14. nanobind
+    // processes this slot even on Python versions that do not support it.
     #if !defined(Py_tp_vectorcall)
     #  define Py_tp_vectorcall 82
     #endif
