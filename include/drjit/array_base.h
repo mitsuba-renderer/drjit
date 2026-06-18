@@ -21,6 +21,12 @@ NAMESPACE_BEGIN(drjit)
     Name &operator=(const Name &) = default;                                   \
     Name &operator=(Name &&) = default;
 
+#define DRJIT_NON_COPYABLE(Name)                                               \
+    Name(const Name &) = delete;                                               \
+    Name(Name &&) = delete;                                                    \
+    Name &operator=(const Name &) = delete;                                    \
+    Name &operator=(Name &&) = delete;
+
 #define DRJIT_ARRAY_IMPORT(Name, Base)                                         \
     Name() = default;                                                          \
     DRJIT_ARRAY_DEFAULTS(Name)                                                 \
