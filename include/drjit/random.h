@@ -663,7 +663,8 @@ public:
     UInt64 state; //< RNG state.  All values are possible.
     UInt64 inc;   //< Controls which RNG sequence (stream) is selected. Must *always* be odd.
 
-    DRJIT_STRUCT_NODEF(PCG32, state, inc)
+    DRJIT_ARRAY_DEFAULTS(PCG32)
+    DRJIT_TRAVERSE(PCG32, state, inc)
 
 private:
     struct initialize_state { };
@@ -896,7 +897,8 @@ public:
     Array4u counter;
     uint32_t iterations;
 
-    DRJIT_STRUCT_NODEF(Philox4x32, iterations, seed, counter)
+    DRJIT_ARRAY_DEFAULTS(Philox4x32)
+    DRJIT_TRAVERSE(Philox4x32, iterations, seed, counter)
 
 private:
     static Array4u step(const Array4u &state, const Array2u &key) {

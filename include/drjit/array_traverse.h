@@ -17,11 +17,8 @@
 
 #include <type_traits>
 
-#define DRJIT_STRUCT_NODEF(Name, ...)                                          \
-    Name(const Name &) = default;                                              \
-    Name(Name &&) = default;                                                   \
-    Name &operator=(const Name &) = default;                                   \
-    Name &operator=(Name &&) = default;                                        \
+/// Emit the Dr.Jit traversal interface (fields_/name_/labels_)
+#define DRJIT_TRAVERSE(Name, ...)                                              \
     DRJIT_INLINE auto fields_() { return drjit::tie(__VA_ARGS__); }            \
     DRJIT_INLINE auto fields_() const { return drjit::tie(__VA_ARGS__); }      \
     const char *name_() const { return #Name; }                                \
@@ -31,9 +28,11 @@
             std::make_index_sequence<decltype(fields_())::Size>());            \
     }
 
+/// Default constructor + defaulted copy/move + traversal
 #define DRJIT_STRUCT(Name, ...)                                                \
     Name() = default;                                                          \
-    DRJIT_STRUCT_NODEF(Name, __VA_ARGS__)
+    DRJIT_ARRAY_DEFAULTS(Name)                                                 \
+    DRJIT_TRAVERSE(Name, __VA_ARGS__)
 
 NAMESPACE_BEGIN(drjit)
 
