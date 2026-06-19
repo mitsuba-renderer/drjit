@@ -8078,6 +8078,19 @@
     then you have found a bug. Please report it on the project's
     `GitHub issue tracker <https://github.com/mitsuba-renderer/drjit>`__.
 
+.. topic:: flush_thread
+
+    Submit all queued computation to the device without blocking.
+
+    This commits any command buffers built by the current host thread so their
+    work is ordered on the device queue. Unlike :py:func:`drjit.sync_thread`, it
+    never waits for the device, so it does not break the host/device pipeline.
+
+    This matters mainly on the Metal backend, where each host thread records into
+    its own command buffer. When enqueuing work from multiple threads, call this
+    on a thread to ensure its work is submitted before another thread consumes the
+    results.
+
 .. topic:: flush_malloc_cache
 
     Free the memory allocation cache maintained by Dr.Jit.

@@ -679,6 +679,7 @@ Low-level bits
 .. autofunction:: thread_count
 .. autofunction:: set_thread_count
 .. autofunction:: sync_thread
+.. autofunction:: flush_thread
 .. autofunction:: flush_kernel_cache
 .. autofunction:: flush_malloc_cache
 .. autofunction:: expand_threshold

@@ -189,6 +189,7 @@ NB_MODULE(_drjit_ext, m_) {
     m.def("has_backend", &jit_has_backend, doc_has_backend);
 
     m.def("sync_thread", &jit_sync_thread, doc_sync_thread, nb::call_guard<nb::gil_scoped_release>())
+     .def("flush_thread", &jit_flush_thread, doc_flush_thread)
      .def("flush_kernel_cache", &jit_flush_kernel_cache, doc_flush_kernel_cache)
      .def("flush_malloc_cache", &jit_flush_malloc_cache, doc_flush_malloc_cache)
      .def("thread_count", &jit_llvm_thread_count, doc_thread_count)
