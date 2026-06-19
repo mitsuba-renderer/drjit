@@ -9627,6 +9627,13 @@
     This enables relative time measurements, and to wait for the completion
     of prior events.
 
+    .. note::
+
+       The Metal backend only supports the synchronization functionality
+       (:py:func:`record`, :py:func:`query`, :py:func:`wait`). It does *not*
+       support timing: :py:func:`elapsed_time` always raises, and the
+       ``enable_timing`` flag is ignored.
+
 .. topic:: Event_init
 
     Create a new Event
@@ -9634,7 +9641,8 @@
     Args:
         enable_timing (bool): If True, the event can be used for timing measurements.
                               If False, timing queries will raise an error.
-                              Default: True
+                              Default: True. This flag has no effect on the Metal
+                              backend, which does not support timing.
 
 .. topic:: Event_record
 
@@ -9666,9 +9674,15 @@
     Returns:
         float: Elapsed time in milliseconds between this event and ``end_event``
 
+    .. note::
+
+       This function raises an exception on the Metal backend, which does not
+       support event timing.
+
     Raises:
-        RuntimeError: If either event doesn't have timing enabled or if events
-                      are from different contexts/backends
+        RuntimeError: If either event doesn't have timing enabled, if events
+                      are from different contexts/backends, or if the events
+                      belong to the Metal backend (which does not support timing)
 
 .. topic:: Event_handle
 
@@ -9676,6 +9690,7 @@
 
     For CUDA backend, returns the CUevent handle.
     For LLVM backend, returns the Task* pointer.
+    For Metal backend, returns the ``id<MTLSharedEvent>`` handle.
 
     This is useful for debugging and advanced interoperability.
 

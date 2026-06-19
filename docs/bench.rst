@@ -84,6 +84,53 @@ The recommended way to measure the runtime of a set of kernels is the
 :py:func:`drjit.kernel_history` API, which returns a list kernel calls with
 high-resolution timing data.
 
+Events
+------
+
+For finer-grained control over synchronization, each JIT backend provides an
+``Event`` class (:py:class:`drjit.llvm.Event`, and the analogous
+``drjit.cuda.Event`` / ``drjit.metal.Event``; also reachable through the active
+backend as ``drjit.auto.Event``). An event marks a point in the command stream
+and can be used to wait for, or poll, the completion of all work enqueued before
+it:
+
+.. code-block:: python
+
+   from drjit.auto import Event
+
+   event = Event()
+   y = f(x)
+   dr.eval(y)        # enqueue the work
+   event.record()    # mark this point in the stream
+
+   if not event.query():   # non-blocking completion check
+       event.wait()        # block until the preceding work has finished
+
+Beyond timing, events are a useful mechanism for *handing off* GPU work between
+two threads that drive the same GPU through Dr.Jit at the same time. One thread
+records an event once it has enqueued a batch of work; the other thread waits on
+that event before consuming the results, establishing the ordering without
+forcing a full :py:func:`drjit.sync_thread` (which would stall *all* outstanding
+work on the device). Because :py:func:`wait <drjit.llvm.Event.wait>` releases the
+GIL, the waiting thread does not block unrelated Python execution.
+
+On the CUDA and LLVM backends, two timing-enabled events also measure the
+elapsed device-side time between them:
+
+.. code-block:: python
+
+   start, end = Event(), Event()
+   start.record()
+   y = f(x); dr.eval(y)
+   end.record()
+   print(f"{start.elapsed_time(end):.3f} ms")   # waits for 'end', then reports
+
+.. note::
+
+   The Metal backend supports event synchronization but *not* timing:
+   ``elapsed_time()`` raises, and the ``enable_timing`` constructor flag is
+   ignored. Use :py:func:`drjit.kernel_history` for portable kernel timing.
+
 Integration
 -----------
 
