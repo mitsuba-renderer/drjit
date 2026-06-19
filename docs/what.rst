@@ -253,7 +253,7 @@ Dr.Jit provides three backends with feature parity:
    ``drjit.cuda`` or ``drjit.cuda.ad`` (add ``.ad`` if derivative computation is needed).
 
 2. The `Metal <https://developer.apple.com/metal/>`__ backend targets Apple
-   Silicon GPUs (M1 or newer) using the Metal Shading Language. You can
+   Silicon GPUs (M1 or newer). You can
    explicitly request this backend by importing types from ``drjit.metal`` or
    ``drjit.metal.ad`` (add ``.ad`` if derivative computation is needed). This
    backend only requires a recent version of macOS.

@@ -11,15 +11,13 @@ DrJit 1.4.0 (TBA)
 **New Features**
 
 - **Metal Backend**: Dr.Jit can now target Apple Silicon GPUs (M1 or newer)
-  through a new Metal backend. The backend generates `Metal Shading Language
-  <https://developer.apple.com/metal/Metal-Shading-Language-Specification.pdf>`__
-  kernels but requires no separate SDK beyond a recent version of macOS. It
-  supports the full range of Dr.Jit features including symbolic control flow,
-  automatic differentiation, hardware-accelerated and writable textures, ray
-  tracing, :ref:`cooperative vectors <coop_vec>`, and reductions. Apple GPUs
-  lack double precision ALUs, hence double precision arithmetic generates a
-  warning an is then demoted to single precision. (contributed by `Sébastien
-  Speierer <https://github.com/Speierers>`__).
+  through a new Metal backend. It supports the full range of Dr.Jit features
+  including symbolic control flow, automatic differentiation,
+  hardware-accelerated and writable textures, ray tracing, :ref:`cooperative
+  vectors <coop_vec>`, and reductions. Apple GPUs lack double precision ALUs,
+  hence double precision arithmetic generates a warning an is then demoted to
+  single precision. (contributed by `Sébastien Speierer
+  <https://github.com/Speierers>`__).
 
 - **Matrix Multiplication for Tensors**: The ``@`` operator and
   :py:func:`dr.matmul() <matmul>` now accept Dr.Jit tensors of any dimension
