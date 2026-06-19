@@ -168,20 +168,84 @@ DrJit 1.4.0 (TBA)
   reverse mode via a trajectory-replay strategy. See
   :ref:`diff_loops` for details.
 
+- **NumPy-style array/tensor manipulation and sorting**: A large set of
+  NumPy-compatible functions for reindexing, reshaping, and sorting Dr.Jit
+  arrays and tensors. Sorting is provided by :py:func:`dr.sort() <sort>` and
+  :py:func:`dr.argsort() <argsort>`, which implement a stable multi-bit radix
+  sort .
+  :py:func:`dr.argmin() <argmin>` and :py:func:`dr.argmax() <argmax>` return the
+  flat or per-axis index of the smallest/largest element. Shape manipulation
+  gains :py:func:`dr.expand_dims() <expand_dims>`, :py:func:`dr.squeeze()
+  <squeeze>`, :py:func:`dr.transpose() <transpose>`, and :py:func:`dr.swapaxes() <swapaxes>`.
+  (PR `#496 <https://github.com/mitsuba-renderer/drjit/pull/496>`__).
+
+- **NumPy-consistent reductions**: The horizontal reductions
+  (:py:func:`dr.sum() <sum>`, :py:func:`dr.prod() <prod>`,
+  :py:func:`dr.min() <min>`, :py:func:`dr.max() <max>`,
+  :py:func:`dr.mean() <mean>`, :py:func:`dr.all() <all>`,
+  :py:func:`dr.any() <any>`, :py:func:`dr.none() <none>`,
+  :py:func:`dr.count() <count>`, :py:func:`dr.reduce() <reduce>`,
+  :py:func:`dr.norm() <norm>`, :py:func:`dr.squared_norm() <squared_norm>`) now
+  mirror NumPy more closely by accepting a ``keepdims`` flag, with full tensor
+  support.  :py:func:`dr.norm() <norm>` and
+  :py:func:`dr.squared_norm() <squared_norm>` additionally gain the ``axis`` and
+  ``mode`` parameters shared by the rest of the family. Finally, this release
+  adds NumPy-compatible :py:func:`dr.var() <var>` and :py:func:`dr.std() <std>`
+  functions.
+  (PR `#493 <https://github.com/mitsuba-renderer/drjit/pull/493>`__).
+
+- **Test assertions**: Added :py:func:`dr.assert_allclose() <assert_allclose>`,
+  an assertion utility for correctness checks in test cases that complements
+  :py:func:`dr.allclose() <allclose>`.
+  (PR `#489 <https://github.com/mitsuba-renderer/drjit/pull/489>`__).
+
+- **Command queue flushing**: The new :py:func:`dr.flush_thread()
+  <flush_thread>` function flushes the calling thread's queue of enqueued work,
+  which is needed to submit pending command buffers on the Metal backend.
+  (Dr.Jit commit `c68e00 <https://github.com/mitsuba-renderer/drjit/commit/c68e00853de7957912e490245c2036196fe422ff>`__,
+  Dr.Jit-Core commit `467dd3 <https://github.com/mitsuba-renderer/drjit-core/commit/467dd3d23ed23129139dcdf557baead32b683e01>`__).
+
 **Performance Improvements**
 
 - **Faster tracing and array construction**: A sequence of optimizations to
   Dr.Jit's tracing, code generation, and Python bindings substantially reduces
   the per-operation overhead of building computation graphs. Together they
-  roughly halve the cost of tracing and code generation (a tracing microbenchmark
-  sped up by ~2.1x, and repeated tracing of ``Float(1) + Float(2)`` improved by
-  ~1.7x).
+  roughly halve the cost of tracing and code generation.
   (Dr.Jit commits
   `534829 <https://github.com/mitsuba-renderer/drjit/commit/534829d88af9f434b0f2da9a798732ade7256e88>`__,
   `3fba39 <https://github.com/mitsuba-renderer/drjit/commit/3fba39d2595121fae88d59f4f47b8dd6e9a000aa>`__,
   `6b212c <https://github.com/mitsuba-renderer/drjit/commit/6b212c235004edfad964665ade3e6f3ec9af6ecb>`__,
   `50986a <https://github.com/mitsuba-renderer/drjit/commit/50986a050625dd88d6ec9b5ab29caaade2cf7027>`__,
   Dr.Jit-Core PR `#194 <https://github.com/mitsuba-renderer/drjit-core/pull/194>`__).
+
+- **Faster Python bindings (nanobind v2.13.0)**: Dr.Jit indirectly benefits
+  from optimizations in nanobind version v2.13. It introduces instance pooling
+  to recycle short-lived objects, which accelerates Dr.Jit tracing that
+  generates large amounts of temporaries. Other optimizations target object
+  creation/destruction and nd-array exchange. (Dr.Jit commit `6b212c
+  <https://github.com/mitsuba-renderer/drjit/commit/6b212c235004edfad964665ade3e6f3ec9af6ecb>`__,
+  nanobind PRs `#1366 <https://github.com/wjakob/nanobind/pull/1366>`__, `#1374
+  <https://github.com/wjakob/nanobind/pull/1374>`__, `#1375
+  <https://github.com/wjakob/nanobind/pull/1375>`__).
+
+- **Better LLVM code generation**: Several changes reduce memory traffic in
+  generated CPU kernels. Vectorized method (vcall) inputs and outputs are now
+  passed in registers, load/store aliasing metadata was improved, and packet
+  gathers are now emitted even for compile-time constant indices. (Dr.Jit-Core
+  commits `83207d
+  <https://github.com/mitsuba-renderer/drjit-core/commit/83207d5aeeb8fab27473c606b6a71349bce4157c>`__,
+  `84c85b
+  <https://github.com/mitsuba-renderer/drjit-core/commit/84c85bd9d07a2de88a73a23dd0bf0baad53df104>`__,
+  `9f88fd
+  <https://github.com/mitsuba-renderer/drjit-core/commit/9f88fd69f299744777b7c0df801aa6b52e33d15b>`__).
+
+- **Butterfly warp-reduction for packet scatter-reduce**: On CUDA,
+  :py:func:`dr.scatter_reduce() <scatter_reduce>` on packets gains a
+  packet-aware butterfly path that processes all channels of a packet through a
+  single ``match.any.sync`` and butterfly tree, with the leader issuing either
+  scalar atomics or (on compute capability ≥ 9.0 with CUDA ≥ 13.2)
+  ``red.global.vN`` vector atomics.
+  (Dr.Jit-Core PR `#190 <https://github.com/mitsuba-renderer/drjit-core/pull/190>`__).
 
 - **Lower frozen function replay overheads**: The :py:func:`@dr.freeze
   <freeze>` replay path was profiled and optimized to reduce its per-call
@@ -334,6 +398,29 @@ DrJit 1.4.0 (TBA)
   (Dr.Jit-Core PR `#186 <https://github.com/mitsuba-renderer/drjit-core/pull/186>`__,
   Dr.Jit PR `#481 <https://github.com/mitsuba-renderer/drjit/pull/481>`__).
 
+- Fixed a loop code generation crash that occurred when two symbolic loop state
+  variables shared a single update value.
+  (Dr.Jit PR `#505 <https://github.com/mitsuba-renderer/drjit/pull/505>`__,
+  Dr.Jit-Core PR `#198 <https://github.com/mitsuba-renderer/drjit-core/pull/198>`__).
+
+- Fixed half-precision ``Min``/``Max`` reductions and the half-precision
+  infinity constant.
+  (Dr.Jit-Core PR `#199 <https://github.com/mitsuba-renderer/drjit-core/pull/199>`__).
+
+- Various smaller backend fixes: a missing mask predicate in the CUDA packet
+  ``scatter_reduce`` path, a crash in Metal cooperative-vector matrix-vector
+  products with unsupported output dimensions, a race condition under
+  multi-threaded Metal use, incorrect fast-math flag handling on ``Sqrt`` and
+  ``Div`` nodes, and more robust handling of failed ``jit_eval()`` calls.
+  (Dr.Jit-Core PRs `#191 <https://github.com/mitsuba-renderer/drjit-core/pull/191>`__,
+  `#200 <https://github.com/mitsuba-renderer/drjit-core/pull/200>`__,
+  `#196 <https://github.com/mitsuba-renderer/drjit-core/pull/196>`__,
+  `#192 <https://github.com/mitsuba-renderer/drjit-core/pull/192>`__,
+  commits
+  `368c53 <https://github.com/mitsuba-renderer/drjit-core/commit/368c539bf5659224a4ad2d9be69a3093e4fa9714>`__,
+  `37bbce <https://github.com/mitsuba-renderer/drjit-core/commit/37bbce6ccdf05910c53b4ca234b907b0dbd47845>`__,
+  Dr.Jit PR `#503 <https://github.com/mitsuba-renderer/drjit/pull/503>`__).
+
 **Other Improvements**
 
 - Improved documentation and error messages when the Dr.Jit binary fails to
@@ -358,7 +445,17 @@ DrJit 1.4.0 (TBA)
   when the calling thread already holds the GIL.
   (commit `c01a23 <https://github.com/mitsuba-renderer/drjit/commit/c01a235744fe22c64c9a97bc1817a9f49b6b9a78>`__).
 
+- Minor C++ API conveniences: the ``DRJIT_STRUCT`` traverse macros were split
+  into smaller building blocks (enabling customized traversal), and a new
+  ``DRJIT_NON_COPYABLE`` macro was added.
+  (commits `b4330d <https://github.com/mitsuba-renderer/drjit/commit/b4330d9adc0a89ec0bfc1cc064a26baab664b584>`__,
+  `45500e <https://github.com/mitsuba-renderer/drjit/commit/45500e302029c4a8346047163dca9179f00b6df6>`__).
+
 **Compatibility**
+
+- Updated the bundled `nanobind <https://github.com/wjakob/nanobind>`__
+  dependency to **v2.13.0** (see the performance notes above).
+  (commit `ad7fb4 <https://github.com/mitsuba-renderer/drjit/commit/ad7fb488200ed9623d38a244d08b3e7279e1c5a0>`__).
 
 - Dr.Jit-Core now requires CUDA compute capability **7.5 or higher** (Turing
   and later). The precompiled CC 5.0 and 7.0 PTX bundles have been replaced
