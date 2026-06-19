@@ -404,16 +404,16 @@ struct DRJIT_TRIVIAL_ABI DiffArray
 
     DiffArray tile_(size_t count) const {
         if constexpr (IsFloat)
-            return steal(ad_var_tile(m_index, count));
+            return steal(ad_var_tile(m_index, (uint32_t) count));
         else
-            return steal(jit_var_tile(m_index, count));
+            return steal(jit_var_tile((uint32_t) m_index, (uint32_t) count));
     }
 
     DiffArray repeat_(size_t count, size_t max_size = 0) const {
         if constexpr (IsFloat)
-            return steal(ad_var_repeat(m_index, count, max_size));
+            return steal(ad_var_repeat(m_index, (uint32_t) count, max_size));
         else
-            return steal(jit_var_repeat(m_index, count, max_size));
+            return steal(jit_var_repeat((uint32_t) m_index, (uint32_t) count, max_size));
     }
 
     DiffArray dot_(const DiffArray &a) const { return sum(*this * a); }
