@@ -6452,9 +6452,9 @@
     An evaluated variable backed by a device memory region. The variable
     furthermore has pending *side effects* (i.e. the user has performed a
     :py:func`:drjit.scatter`, :py:func:`drjit.scatter_reduce`
-    :py:func`:drjit.scatter_inc`, :py:func`:drjit.scatter_add`, or
-    :py:func`:drjit.scatter_add_kahan` operation, and the effect of this operation
-    has not been realized yet). The array's status will automatically change to
+    :py:func`:drjit.scatter_inc`, or :py:func`:drjit.scatter_add` operation, and
+    the effect of this operation has not been realized yet). The array's status
+    will automatically change to
     :py:attr:`Evaluated` the next time that Dr.Jit evaluates computation, e.g. via
     :py:func:`drjit.eval`.
 
@@ -7529,36 +7529,6 @@
           before any modification. Masked lanes return zero.
         - ``success`` (drjit.ArrayBase): A boolean mask indicating which
           compare-and-swap operations succeeded. Masked lanes return ``False``.
-
-.. topic:: scatter_add_kahan
-
-    Perform a Kahan-compensated atomic scatter-addition.
-
-    Atomic floating point accumulation can incur significant rounding error when
-    many values contribute to a single element. This function implements an
-    error-compensating version of :py:func:`drjit.scatter_add` based on the
-    `Kahan-BabuÅ¡ka-Neumeier algorithm <https://en.wikipedia.org/wiki/Kahan_summation_algorithm>`__
-    that simultaneously accumulates into *two* target buffers.
-
-    In particular, the operation first accumulates a values into entries of a
-    dynamic 1D array ``target_1``. It tracks the round-off error caused by this
-    operation and then accumulates this error into a *second* 1D array named
-    ``target_2``. At the end, the buffers can simply be added together to obtain
-    the error-compensated result.
-
-    This function has a few limitations: in contrast to
-    :py:func:`drjit.scatter_reduce` and :py:func:`drjit.scatter_add`, it does not
-    perform a local reduction (see flag :py:attr:`JitFlag.ScatterReduceLocal`),
-    which can be an important optimization when atomic accumulation is a
-    performance bottleneck.
-
-    Furthermore, the function currently works with flat 1D arrays. This is an
-    implementation limitation that could in principle be removed in the future.
-
-    Finally, the function is differentiable, but derivatives currently only
-    propagate into ``target_1``. This means that forward derivatives don't enjoy
-    the error compensation of the primal computation. This limitation is of no
-    relevance for backward derivatives.
 
 .. topic:: format
 

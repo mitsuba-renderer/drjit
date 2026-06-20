@@ -234,9 +234,6 @@ struct ArraySupplement : ArrayMeta {
                                    const ArrayBase *, const ArrayBase *,
                                    const ArrayBase *);
     using ScatterInc = void (*)(const ArrayBase *, ArrayBase *, ArrayBase *, ArrayBase *);
-    using ScatterAddKahan = void (*)(const ArrayBase *, const ArrayBase *,
-                                     const ArrayBase *, ArrayBase *,
-                                     ArrayBase *);
     using ScatterExch = void (*)(const ArrayBase *, const ArrayBase *,
                                  const ArrayBase *, ArrayBase *, ArrayBase *);
     using ScatterCAS = void (*)(const ArrayBase *, const ArrayBase *,
@@ -290,9 +287,6 @@ struct ArraySupplement : ArrayMeta {
 
             /// Scatter-increment operation
             ScatterInc scatter_inc;
-
-            /// Kahan-compensated scatter-addition
-            ScatterAddKahan scatter_add_kahan;
 
             /// Scatter-exchange operation
             ScatterExch scatter_exch;
@@ -849,15 +843,6 @@ template <typename T> void bind_memop(ArrayBinding &b) {
         b.scatter_inc = (ArraySupplement::ScatterInc)
             +[](const UInt32 *a, const Mask *b, UInt32 *c, UInt32 *d) {
                 new (d) T(scatter_inc(*c, *a, *b));
-            };
-    }
-
-    if constexpr ((std::is_same_v<Scalar, float> ||
-                   std::is_same_v<Scalar, double>) && is_jit_v<T>) {
-        b.scatter_add_kahan =
-            (ArraySupplement::ScatterAddKahan) +
-            [](const T *a, const UInt32 *b, const Mask *c, T *d, T *e) {
-                scatter_add_kahan(*d, *e, *a, *b, *c);
             };
     }
 

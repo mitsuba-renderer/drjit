@@ -61,7 +61,6 @@ Scatter/gather operations
 
 .. autofunction:: scatter_reduce
 .. autofunction:: scatter_add
-.. autofunction:: scatter_add_kahan
 .. autofunction:: scatter_inc
 .. autofunction:: scatter_exch
 .. autofunction:: scatter_cas

@@ -1202,22 +1202,6 @@ void scatter_add(Target &target, const Value &value, const Index &index,
     scatter_reduce(ReduceOp::Add, target, value, index, mask, mode);
 }
 
-template <typename Target, typename Value, typename Index, typename Mask = mask_t<Index>>
-void scatter_add_kahan(Target &&target_1, Target &&target_2,
-                       const Value &value, const Index &index,
-                       const Mask &mask = true) {
-    static_assert(
-        is_jit_v<Target> &&
-        is_jit_v<Value> &&
-        is_jit_v<Index> &&
-        is_floating_point_v<Value> &&
-        depth_v<Value> == depth_v<Index> &&
-        depth_v<Value> == 1,
-        "Only flat JIT arrays are supported at the moment");
-
-    value.scatter_add_kahan_(target_1, target_2, index, mask);
-}
-
 template <typename Target>
 Target scatter_exch(Target &target, const Target &value,
                     const uint32_array_t<Target> &index,

@@ -242,16 +242,17 @@ DrJit 1.4.0 (TBA)
      net = nn.pack(net, layout='training')
      dr.enable_grad(net['weights'])
 
-- ⚠️ **Removed TensorFlow interoperability**. The ``ArrayBase.tf()`` conversion
-  method and the ``'tf'`` source/target of :py:func:`@dr.wrap <wrap>` no longer
-  exist. Use PyTorch or JAX, which remain supported, to bridge Dr.Jit with an
-  external automatic differentiation framework.
+- ⚠️ **Removed TensorFlow support**.
+  TensorFlow appears largely unmaintained. Over a year after the launch of
+  NVIDIA's Blackwell GPU generation, there is still no official support in the
+  official TensorFlow packages. This is a maintenance burden as our CI
+  infrastructure uses this GPU. Consequently, we decided to drop Tensorflow
+  support (``.tf()`` conversion, support in :py:func:`@dr.wrap <wrap>`).
 
-  TensorFlow now appears largely unmaintained: more than a year after their
-  launch in early 2025, it still does not support NVIDIA Blackwell GPUs
-  (compute capability ``sm_120``). Our CI machine uses this hardware, and
-  TensorFlow testing has caused numerous issues even in pure CPU mode, so we
-  decided to cut support completely from Dr.Jit.
+- ⚠️ **Removed Kahan-compensated atomic scatter**. The
+  ``drjit.scatter_add_kahan()`` operation was removed. See commit `f6b4be
+  <https://github.com/mitsuba-renderer/drjit-core/commit/f6b4be02af6714a80fd07f970c9686ac2978e324>`__
+  for the rationale.
 
 **Minor features**
 

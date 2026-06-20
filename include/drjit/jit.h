@@ -540,15 +540,6 @@ struct DRJIT_TRIVIAL_ABI JitArray
         }
     }
 
-    template <typename Index, typename Mask>
-    void scatter_add_kahan_(JitArray &dst_1, JitArray &dst_2,
-                            const Index &index, const Mask &mask) const {
-        static_assert(
-            std::is_same_v<detached_t<Mask>, detached_t<mask_t<JitArray>>>);
-        jit_var_scatter_add_kahan(&dst_1.m_index, &dst_2.m_index,
-                                  m_index, index.index(), mask.index());
-    }
-
     template <typename Mask>
     JitArray scatter_inc_(const JitArray &index, const Mask &mask) {
         return steal(jit_var_scatter_inc(&m_index, index.index(), mask.index()));

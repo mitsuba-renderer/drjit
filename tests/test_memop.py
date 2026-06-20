@@ -328,28 +328,6 @@ def test14_out_of_bounds_scatter(t, capsys):
     transcript = capsys.readouterr().err
     assert "out-of-bounds write to position 10 in an array of size 10." in transcript
 
-@pytest.test_arrays('float,-float16,shape=(*),jit')
-def test15_scatter_add_kahan(t):
-    buf1 = dr.zeros(t, 2)
-    buf2 = dr.zeros(t, 2)
-    buf3 = dr.zeros(t, 2)
-    ti = dr.uint32_array_t(t)
-    dr.scatter_add_kahan(
-        buf1,
-        buf2,
-        t(1, dr.epsilon(t), dr.epsilon(t)),
-        dr.full(ti, 1, 3)
-    )
-    with dr.scoped_set_flag(dr.JitFlag.ScatterReduceLocal, False):
-        dr.scatter_add(
-            buf3,
-            t(1, dr.epsilon(t), dr.epsilon(t)),
-            dr.full(ti, 1, 3)
-        )
-    assert dr.all(buf1 + buf2 == [0, 1+dr.epsilon(t)*2])
-    assert dr.all(buf3 == [0, 1])
-
-
 @pytest.test_arrays('int32,shape=(*)')
 def test16_meshgrid(t):
     assert dr.all(dr.meshgrid(t(1, 2), indexing='ij') == t(1, 2))

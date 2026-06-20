@@ -450,62 +450,6 @@ nb::object scatter_inc(nb::handle_t<dr::ArrayBase> target, nb::object index,
     }
 }
 
-void scatter_add_kahan(nb::handle_t<dr::ArrayBase> target_1,
-                       nb::handle_t<dr::ArrayBase> target_2,
-                       nb::object value, nb::object index,
-                       nb::object active) {
-    nb::handle tp1 = target_1.type(),
-               tp2 = target_2.type();
-    const ArraySupplement &s = supp(tp1);
-
-    if (!tp1.is(tp2))
-        nb::raise("drjit.scatter_add_kahan(): 'target_1/2' have inconsistent types.");
-
-    if (s.ndim != 1 ||
-        (s.type != (uint8_t) VarType::Float32 &&
-         s.type != (uint8_t) VarType::Float64) ||
-        s.backend == (uint8_t) JitBackend::None)
-        nb::raise("drjit.scatter_add_kahan(): 'target_1/2' must a JIT-compiled "
-                  "single/double precision floating point array (e.g., "
-                  "'drjit.cuda.Float' or 'drjit.llvm.ad.Float64').");
-
-    ArrayMeta target_meta = s,
-              active_meta = target_meta,
-              index_meta  = target_meta;
-
-    active_meta.type = (uint16_t) VarType::Bool;
-    index_meta.type = (uint16_t) VarType::UInt32;
-
-    nb::handle active_tp = meta_get_type(active_meta),
-               index_tp = meta_get_type(index_meta);
-
-    check_type(value, tp1,
-               "drjit.scatter_add_kahan(): 'value' argument has an unsupported type, "
-               "please provide an instance that is convertible to the type of "
-               "'target_1'/'target_2'.");
-    check_type(index, index_tp,
-               "drjit.scatter_add_kahan(): 'index' argument has an unsupported type, "
-               "please provide an instance that is convertible to "
-               "drjit.uint32_array_t(target1).");
-    check_type(active, active_tp,
-               "drjit.scatter_add_kahan(): 'active' argument has an unsupported type, "
-               "please provide an instance that is convertible to "
-               "drjit.mask_t(target1).");
-
-    if (s.scatter_add_kahan) {
-        s.scatter_add_kahan(
-            inst_ptr(value),
-            inst_ptr(index),
-            inst_ptr(active),
-            inst_ptr(target_1),
-            inst_ptr(target_2)
-        );
-    } else {
-        nb::raise("drjit.scatter_add_kahan(): not unsupported for type '%s'.",
-                  nb::type_name(tp1).c_str());
-    }
-}
-
 nb::object scatter_exch(nb::handle_t<dr::ArrayBase> target, nb::object value,
                         nb::object index, nb::object active) {
     nb::handle tp = target.type();
@@ -1193,9 +1137,6 @@ void export_memop(nb::module_ &m) {
      .def("scatter_inc", &scatter_inc,
           "target"_a, "index"_a, "active"_a = true,
           doc_scatter_inc)
-     .def("scatter_add_kahan", &scatter_add_kahan,
-          "target_1"_a, "target_2"_a, "value"_a, "index"_a,
-          "active"_a = true, doc_scatter_add_kahan)
      .def("scatter_exch", &scatter_exch,
           "target"_a, "value"_a, "index"_a, "active"_a = true,
           doc_scatter_exch)

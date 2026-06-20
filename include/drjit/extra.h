@@ -272,11 +272,6 @@ extern DRJIT_EXTRA_EXPORT void ad_copy_implicit_deps(drjit::vector<uint32_t> &,
 extern DRJIT_EXTRA_EXPORT void ad_scope_postponed(drjit::vector<uint32_t> *dst);
 
 
-/// Kahan-compensated floating point atomic scatter-addition
-extern DRJIT_EXTRA_EXPORT void
-ad_var_scatter_add_kahan(uint64_t *target_1, uint64_t *target_2, uint64_t value,
-                         uint32_t index, uint32_t mask);
-
 /// Check if a variable represents an implicit dependency on a non-symbolic operand
 extern void ad_var_check_implicit(uint64_t index);
 
