@@ -12,8 +12,8 @@ DrJit 1.4.0 (TBA)
 
 - **Metal Backend**: Dr.Jit can now target Apple Silicon GPUs through a new
   Metal backend. It supports the full range of Dr.Jit features including
-  symbolic control flow, automatic differentiation, hardware-accelerated and
-  writable textures, ray tracing, :ref:`cooperative vectors <coop_vec>`, and
+  symbolic control flow, automatic differentiation, hardware-accelerated
+  ray tracing and textures, :ref:`cooperative vectors <coop_vec>`, and
   reductions. (contributed by `Sébastien Speierer
   <https://github.com/Speierers>`__).
 
@@ -23,7 +23,7 @@ DrJit 1.4.0 (TBA)
   products, broadcasting, matrix-vector products, and inner products. The
   operation is fully differentiable in both forward and reverse modes. Under
   the hood, this dispatches to efficient :ref:`block-tiled GEMM <matmul_perf>`
-  kernels shipped with nanobind.
+  kernels shipped with Dr.Jit-Core.
   (Dr.Jit commit `183dc4 <https://github.com/mitsuba-renderer/drjit/commit/183dc401a355c3190256c7948345befc2d2df41a>`__,
   Dr.Jit-Core PR `#188 <https://github.com/mitsuba-renderer/drjit-core/pull/188>`__,
   Dr.Jit-Core commits
@@ -45,22 +45,22 @@ DrJit 1.4.0 (TBA)
   new ``boundary`` argument is also available on :py:func:`dr.resample()
   <resample>`.
 
-- **Tensor Transpose**: Added :py:attr:`dr.ArrayBase.T <ArrayBase.T>` and
+- **Transpose**: Added :py:attr:`dr.ArrayBase.T <ArrayBase.T>` and
   :py:attr:`dr.ArrayBase.mT <ArrayBase.mT>`, matching PyTorch's semantics. (PR
   `#486 <https://github.com/mitsuba-renderer/drjit/pull/486>`__).
 
 - **Muon Optimizer**: Added :py:class:`dr.opt.Muon <opt.Muon>` ("MomentUm
   Orthogonalized by Newton-schulz"), an optimizer for 2D hidden weights of
-  neural networks with optional AdamW-style decoupled weight decay.
+  neural networks.
   (commit `d205c1 <https://github.com/mitsuba-renderer/drjit/commit/d205c1d4dd57870a54eff0875c2e336a99191317>`__).
 
 - **Redesign of the** :py:mod:`drjit.nn` **API**. Besides
   :ref:`cooperative vectors <coop_vec>`, the :py:mod:`drjit.nn` API now also
   accepts regular tensors as inputs.
   Cooperative vectors fuse with surrounding computation, while tensor
-  evaluation is convenient for batched evaluation of much larger networks.
-  The two modes are described in detail in the :ref:`neural network
-  documentation <neural_nets>`.
+  evaluation enables batched evaluation of large networks.
+  See the :ref:`neural network
+  documentation <neural_nets>` for details on both modes.
 
   Previously, it was necessary to extract the packed buffer copy and manually
   cast it between the working and optimizer precision.
@@ -91,23 +91,21 @@ DrJit 1.4.0 (TBA)
   to each parameter (e.g. ``'layers.0.weights'``). ``opt.update(net)`` pulls
   the parameters into the optimizer, while ``net.update(opt)`` pushes the
   updated state back.
-
-  :py:func:`nn.pack() <drjit.nn.pack>` **is now differentiable**. This make s
-  it possible to use combine Cooperative Vectors with matrix-level optimizers
-  like :py:class:`Muon <drjit.opt.Muon>`. See the :ref:`neural network
-  documentation <neural_nets>` for details.
+  The :py:func:`nn.pack() <drjit.nn.pack>` function is now differentiable. This enables
+  the use of Cooperative Vectors with matrix-level optimizers
+  like :py:class:`Muon <drjit.opt.Muon>`.
 
 - **Reverse-mode differentiation of symbolic loops**:
   :py:func:`@dr.syntax <syntax>` ``while`` loops and symbolic
   :py:func:`dr.while_loop() <while_loop>` calls are now differentiable in
-  reverse mode via a trajectory-replay strategy. See
-  :ref:`diff_loops` for details.
+  reverse mode via trajectory replay. See the
+  :ref:`documentation <diff_loops>` for details.
 
 - **NumPy-style array/tensor manipulation and sorting**: This release brings a
-  large set NumPy-compatible functions for reindexing, reshaping, and sorting
-  Dr.Jit arrays and tensors. This includes :py:func:`dr.sort() <sort>`,
+  large set NumPy-compatible functions for sorting, reshaping, and reindexing
+  arrays and tensors. This includes :py:func:`dr.sort() <sort>`,
   :py:func:`dr.argsort() <argsort>`, :py:func:`dr.argmin() <argmin>` and
-  :py:func:`dr.argmax() <argmax>`, which are all backed by an efficient
+  :py:func:`dr.argmax() <argmax>` which are backed by an efficient
   GPU-accelerated multi-bit radix sort. Other new shape manipulation functions
   include :py:func:`dr.expand_dims() <expand_dims>`, :py:func:`dr.squeeze()
   <squeeze>`, :py:func:`dr.transpose() <transpose>`, and
@@ -137,8 +135,9 @@ DrJit 1.4.0 (TBA)
 **Performance Improvements**
 
 - **Tracing and evaluation**:
-  A comprehensive optimization pass targeted many bottlenecks in Dr.Jit's tracing/code generation phases and Python bindings.
-  They are now roughly **twice as fast** compared to the previous release.
+  A comprehensive optimization pass targeted Dr.Jit's tracing/code generation
+  phases and Python bindings, making them roughly **twice as fast**. This will
+  help workloads bottlenecked on tracing/Python-related overheads.
   (Dr.Jit commits
   `534829 <https://github.com/mitsuba-renderer/drjit/commit/534829d88af9f434b0f2da9a798732ade7256e88>`__,
   `3fba39 <https://github.com/mitsuba-renderer/drjit/commit/3fba39d2595121fae88d59f4f47b8dd6e9a000aa>`__,
