@@ -45,7 +45,7 @@ To install the latest version of Dr.Jit for Python, run the following shell comm
    $ python -m pip install --upgrade drjit
 
 The binary extension requires ``libatomic`` to be installed on the system. It is
-part of most distributions, but not all. If needed, install it using your 
+part of most distributions, but not all. If needed, install it using your
 distribution's package manager.
 
 With that taken care of, let's see how Dr.Jit works in the context of a simple
@@ -253,10 +253,12 @@ Dr.Jit provides three backends with feature parity:
    ``drjit.cuda`` or ``drjit.cuda.ad`` (add ``.ad`` if derivative computation is needed).
 
 2. The `Metal <https://developer.apple.com/metal/>`__ backend targets Apple
-   Silicon GPUs (M1 or newer). You can
-   explicitly request this backend by importing types from ``drjit.metal`` or
-   ``drjit.metal.ad`` (add ``.ad`` if derivative computation is needed). This
-   backend only requires a recent version of macOS.
+   Silicon GPUs (M1 or newer). You can explicitly request this backend by
+   importing types from ``drjit.metal`` or ``drjit.metal.ad`` (add ``.ad`` if
+   derivative computation is needed). Apple GPUs do not support double
+   precision arithmetic. Double-precision types like :cpp:class:`drjit.metal.Float64`
+   are therefore demoted to single precision; the first use generates
+   a warning to inform about this.
 
 3. The `LLVM <https://llvm.org>`__ backend targets Intel (``x86_64``) and ARM
    (``aarch64``) CPUs. It parallelizes the program using the available CPU
@@ -265,11 +267,8 @@ Dr.Jit provides three backends with feature parity:
    ``drjit.llvm`` or ``drjit.llvm.ad`` (add ``.ad`` if derivative computation is needed).
 
    Note that LLVM >= 11.0 must be installed on your machine for this backend to
-   be available.  ```x86_64``` support is limited to CPUs with the ```FMA``` 
-   instruction set, like Intel Haswell (2013) and AMD Piledriver (2012) and newer. A 
-   patch to emulate ```FMA``` instructions can be found in drjit-core pull request 
-   `59 <https://github.com/mitsuba-renderer/drjit-core/pull/59>`__, but is not 
-   officially supported. 
+   be available.  ```x86_64``` support is limited to CPUs with the ```FMA```
+   instruction set, like Intel Haswell (2013) and AMD Piledriver (2012) and newer.
 
    LLVM can be installed as follows:
 

@@ -8,75 +8,22 @@ Changelog
 DrJit 1.4.0 (TBA)
 -----------------
 
-**New Features**
+**Major new Features**
 
-- **Metal Backend**: Dr.Jit can now target Apple Silicon GPUs (M1 or newer)
-  through a new Metal backend. It supports the full range of Dr.Jit features
-  including symbolic control flow, automatic differentiation,
-  hardware-accelerated and writable textures, ray tracing, :ref:`cooperative
-  vectors <coop_vec>`, and reductions. Apple GPUs lack double precision ALUs,
-  hence double precision arithmetic generates a warning an is then demoted to
-  single precision. (contributed by `Sébastien Speierer
+- **Metal Backend**: Dr.Jit can now target Apple Silicon GPUs through a new
+  Metal backend. It supports the full range of Dr.Jit features including
+  symbolic control flow, automatic differentiation, hardware-accelerated and
+  writable textures, ray tracing, :ref:`cooperative vectors <coop_vec>`, and
+  reductions. (contributed by `Sébastien Speierer
   <https://github.com/Speierers>`__).
 
 - **Matrix Multiplication for Tensors**: The ``@`` operator and
-  :py:func:`dr.matmul() <matmul>` now accept Dr.Jit tensors of any dimension
-  and shape, fully replicating NumPy / PyTorch ``matmul`` semantics including
-  batched matrix products, broadcasting of leading batch axes, matrix-vector
-  products, and inner products. Optional ``At`` / ``Bt`` flags transpose the
-  matrix dimensions on the fly. The operation is fully differentiable in both
-  forward and reverse modes. Under the hood, this dispatches to a new batched
-  GEMM entry point in Dr.Jit-Core: on CUDA, a shared-memory block matrix
-  multiplication with precomputed kernels for several tile sizes; on LLVM, a
-  GotoBLAS-style tiled microkernel parallelized via nanothread.
-
-  The design follows the same tradeoff as the other precompiled CUDA kernels
-  shipped with Dr.Jit: rather than chase the last few percent of peak
-  throughput, we aim for kernels that are small enough to ship and simple
-  enough to maintain, while staying reasonably competitive with specialized libraries.
-  On the CPU this matches or slightly exceeds OpenBLAS across the sizes we
-  benchmarked; on the GPU we reach 55%–75% of PyTorch on large single-precision
-  GEMMs without pulling in cuBLAS or cuDNN. The CUDA implementation does not use
-  the tensor cores available on recent NVIDIA GPUs, so for half-precision
-  matrix multiplies PyTorch will be more than 4x faster on GeForce-type cards.
-
-  Benchmarks below are for square single-precision GEMMs.
-  CPU measurements used an AMD Ryzen 9 7950X with NumPy linked against
-  OpenBLAS 0.3.26; GPU measurements used an NVIDIA RTX 5090 with PyTorch
-  2.10.0.
-
-  +------+--------------+--------------+-------+
-  | Size | NumPy        | Dr.Jit CPU   | Rel.  |
-  +======+==============+==============+=======+
-  |  128 |  263 GFLOP/s |  247 GFLOP/s |  94%  |
-  +------+--------------+--------------+-------+
-  |  256 |  781 GFLOP/s |  730 GFLOP/s |  93%  |
-  +------+--------------+--------------+-------+
-  |  512 | 1047 GFLOP/s | 1046 GFLOP/s | 100%  |
-  +------+--------------+--------------+-------+
-  | 1024 | 1744 GFLOP/s | 1830 GFLOP/s | 105%  |
-  +------+--------------+--------------+-------+
-  | 2048 | 2022 GFLOP/s | 2108 GFLOP/s | 104%  |
-  +------+--------------+--------------+-------+
-  | 4096 | 1890 GFLOP/s | 2134 GFLOP/s | 113%  |
-  +------+--------------+--------------+-------+
-
-  +------+---------------+---------------+------+
-  | Size | PyTorch       | Dr.Jit CUDA   | Rel. |
-  +======+===============+===============+======+
-  |  128 |   362 GFLOP/s |   767 GFLOP/s | 212% |
-  +------+---------------+---------------+------+
-  |  256 |  2979 GFLOP/s |  2811 GFLOP/s |  94% |
-  +------+---------------+---------------+------+
-  |  512 | 18725 GFLOP/s | 10331 GFLOP/s |  55% |
-  +------+---------------+---------------+------+
-  | 1024 | 47663 GFLOP/s | 31941 GFLOP/s |  67% |
-  +------+---------------+---------------+------+
-  | 2048 | 68759 GFLOP/s | 50629 GFLOP/s |  74% |
-  +------+---------------+---------------+------+
-  | 4096 | 64250 GFLOP/s | 48248 GFLOP/s |  75% |
-  +------+---------------+---------------+------+
-
+  :py:func:`dr.matmul() <matmul>` now support tensors of any size and shape,
+  fully replicating NumPy / PyTorch semantics including batched matrix
+  products, broadcasting, matrix-vector products, and inner products. The
+  operation is fully differentiable in both forward and reverse modes. Under
+  the hood, this dispatches to efficient :ref:`block-tiled GEMM <matmul_perf>`
+  kernels shipped with nanobind.
   (Dr.Jit commit `183dc4 <https://github.com/mitsuba-renderer/drjit/commit/183dc401a355c3190256c7948345befc2d2df41a>`__,
   Dr.Jit-Core PR `#188 <https://github.com/mitsuba-renderer/drjit-core/pull/188>`__,
   Dr.Jit-Core commits
@@ -86,48 +33,37 @@ DrJit 1.4.0 (TBA)
   `4b8864 <https://github.com/mitsuba-renderer/drjit-core/commit/4b88649668c2a91f257e91b9ef4eb9ec7a2947b1>`__,
   `9e5335 <https://github.com/mitsuba-renderer/drjit-core/commit/9e533522035a4c00950553d8c0677b92d780f3b0>`__).
 
-- **Generalized convolution / resampling**: The :py:func:`dr.convolve()
-  <convolve>` function now additionally handles discrete filter kernels besides
-  continuous ones, making it a Dr.Jit substitute for :py:func:`numpy.convolve`.
-  A new ``boundary`` parameter generalizes edge handling (``"zero"``,
-  ``"nearest"``, ``"wrap"``, ``"reflect"``, or ``"mirror"``). A ``normalize``
-  flag toggles the renormalization of filter weights. Efficiency of both the
-  forward and reverse-mode derivative was improved. In particular, the
-  generated code now uses a fast path for non-boundary outputs, and the
-  reverse-mode derivative uses a fast transpose convolution instead of atomic
-  scatters whenever possible. The new ``boundary`` argument is also available
-  on :py:func:`dr.resample() <resample>`.
+- **Generalized convolution and resampling**: The function
+  :py:func:`dr.convolve() <convolve>` now handles discrete filter kernels
+  besides continuous ones, making it a Dr.Jit substitute for
+  :py:func:`numpy.convolve`. A new ``boundary`` parameter generalizes edge
+  handling (``"zero"``, ``"nearest"``, ``"wrap"``, ``"reflect"``, or
+  ``"mirror"``). A ``normalize`` flag toggles the renormalization of filter
+  weights. The efficiency of both the forward pass and reverse-mode derivative
+  was improved via a fast path for non-boundary outputs, and by switching to a
+  fast transpose convolution instead of atomic scatters whenever possible. The
+  new ``boundary`` argument is also available on :py:func:`dr.resample()
+  <resample>`.
 
-- **Tensor Transpose**: Added :py:attr:`dr.ArrayBase.T <ArrayBase.T>` (rank-2
-  transpose) and :py:attr:`dr.ArrayBase.mT <ArrayBase.mT>` (swap last two
-  dimensions), matching PyTorch's semantics. Both are differentiable and also
-  apply to fixed-size matrix types.
-  (PR `#486 <https://github.com/mitsuba-renderer/drjit/pull/486>`__).
+- **Tensor Transpose**: Added :py:attr:`dr.ArrayBase.T <ArrayBase.T>` and
+  :py:attr:`dr.ArrayBase.mT <ArrayBase.mT>`, matching PyTorch's semantics. (PR
+  `#486 <https://github.com/mitsuba-renderer/drjit/pull/486>`__).
 
-- **Muon Optimizer**: Added :py:class:`dr.opt.Muon <opt.Muon>` (MomentUm
-  Orthogonalized by Newton-schulz), an optimizer for 2D hidden weights of
+- **Muon Optimizer**: Added :py:class:`dr.opt.Muon <opt.Muon>` ("MomentUm
+  Orthogonalized by Newton-schulz"), an optimizer for 2D hidden weights of
   neural networks with optional AdamW-style decoupled weight decay.
   (commit `d205c1 <https://github.com/mitsuba-renderer/drjit/commit/d205c1d4dd57870a54eff0875c2e336a99191317>`__).
 
 - **Redesign of the** :py:mod:`drjit.nn` **API**. Besides
   :ref:`cooperative vectors <coop_vec>`, the :py:mod:`drjit.nn` API now also
-  accepts regular tensors as inputs through the same ``__call__`` interface.
-  Cooperative vectors better fuse with surrounding computation, while tensor
+  accepts regular tensors as inputs.
+  Cooperative vectors fuse with surrounding computation, while tensor
   evaluation is convenient for batched evaluation of much larger networks.
   The two modes are described in detail in the :ref:`neural network
   documentation <neural_nets>`.
 
-  Every :py:class:`nn.Module <drjit.nn.Module>` is now also a
-  :py:class:`MutableMapping <collections.abc.MutableMapping>` keyed by the
-  full path to each parameter (e.g. ``'layers.0.weights'``), and the
-  optimizer integration is driven through this interface.
-  ``opt.update(net)`` pulls every parameter into the optimizer initially and
-  casts to the correct precision, and ``net.update(opt)`` pushes the updated
-  state back into the network at the start of each step.
-
-  In Dr.Jit 1.1.0, users had to manually cast the packed buffer to
-  :py:class:`Float32 <drjit.cuda.ad.Float32>` for the optimizer and write
-  it back to :py:class:`Float16 <drjit.cuda.ad.Float16>` each iteration:
+  Previously, it was necessary to extract the packed buffer copy and manually
+  cast it between the working and optimizer precision.
 
   .. code-block:: python
 
@@ -138,7 +74,7 @@ DrJit 1.4.0 (TBA)
          weights[:] = Float16(opt['weights'])
          ...
 
-  This is no longer required:
+  The new API exposes a cleaner interface that automates all of these steps:
 
   .. code-block:: python
 
@@ -150,17 +86,16 @@ DrJit 1.4.0 (TBA)
          net.update(opt)
          ...
 
-- :py:func:`nn.pack() <drjit.nn.pack>` **is now differentiable**. This
-  unlocks matrix-level optimizers such as :py:class:`Muon <drjit.opt.Muon>`
-  on cooperative-vector networks via an in-loop ``nn.pack`` pattern. See
-  the :ref:`neural network documentation <neural_nets>` for details.
+  :py:class:`nn.Module <drjit.nn.Module>` subclasses implement a
+  :py:class:`MutableMapping <collections.abc.MutableMapping>` keyed by the path
+  to each parameter (e.g. ``'layers.0.weights'``). ``opt.update(net)`` pulls
+  the parameters into the optimizer, while ``net.update(opt)`` pushes the
+  updated state back.
 
-- **CUDA Green Context API**: Added :py:class:`drjit.cuda.green_context`, a
-  context manager that isolates kernels to a subset of the GPU's streaming
-  multiprocessors. See the :ref:`green contexts documentation <green_context>`
-  for details.
-  (Dr.Jit commit `6c69ec <https://github.com/mitsuba-renderer/drjit/commit/6c69ecb75cfc605063502747e9c9264bc739ead9>`__,
-  Dr.Jit-Core commit `d4f1a6 <https://github.com/mitsuba-renderer/drjit-core/commit/d4f1a62c6b175af295e857069b1401c36bcf6caa>`__).
+  :py:func:`nn.pack() <drjit.nn.pack>` **is now differentiable**. This make s
+  it possible to use combine Cooperative Vectors with matrix-level optimizers
+  like :py:class:`Muon <drjit.opt.Muon>`. See the :ref:`neural network
+  documentation <neural_nets>` for details.
 
 - **Reverse-mode differentiation of symbolic loops**:
   :py:func:`@dr.syntax <syntax>` ``while`` loops and symbolic
@@ -168,16 +103,16 @@ DrJit 1.4.0 (TBA)
   reverse mode via a trajectory-replay strategy. See
   :ref:`diff_loops` for details.
 
-- **NumPy-style array/tensor manipulation and sorting**: A large set of
-  NumPy-compatible functions for reindexing, reshaping, and sorting Dr.Jit
-  arrays and tensors. Sorting is provided by :py:func:`dr.sort() <sort>` and
-  :py:func:`dr.argsort() <argsort>`, which implement a stable multi-bit radix
-  sort .
-  :py:func:`dr.argmin() <argmin>` and :py:func:`dr.argmax() <argmax>` return the
-  flat or per-axis index of the smallest/largest element. Shape manipulation
-  gains :py:func:`dr.expand_dims() <expand_dims>`, :py:func:`dr.squeeze()
-  <squeeze>`, :py:func:`dr.transpose() <transpose>`, and :py:func:`dr.swapaxes() <swapaxes>`.
-  (PR `#496 <https://github.com/mitsuba-renderer/drjit/pull/496>`__).
+- **NumPy-style array/tensor manipulation and sorting**: This release brings a
+  large set NumPy-compatible functions for reindexing, reshaping, and sorting
+  Dr.Jit arrays and tensors. This includes :py:func:`dr.sort() <sort>`,
+  :py:func:`dr.argsort() <argsort>`, :py:func:`dr.argmin() <argmin>` and
+  :py:func:`dr.argmax() <argmax>`, which are all backed by an efficient
+  GPU-accelerated multi-bit radix sort. Other new shape manipulation functions
+  include :py:func:`dr.expand_dims() <expand_dims>`, :py:func:`dr.squeeze()
+  <squeeze>`, :py:func:`dr.transpose() <transpose>`, and
+  :py:func:`dr.swapaxes() <swapaxes>`. (PR `#496
+  <https://github.com/mitsuba-renderer/drjit/pull/496>`__).
 
 - **NumPy-consistent reductions**: The horizontal reductions
   (:py:func:`dr.sum() <sum>`, :py:func:`dr.prod() <prod>`,
@@ -199,18 +134,11 @@ DrJit 1.4.0 (TBA)
   :py:func:`dr.allclose() <allclose>`.
   (PR `#489 <https://github.com/mitsuba-renderer/drjit/pull/489>`__).
 
-- **Command queue flushing**: The new :py:func:`dr.flush_thread()
-  <flush_thread>` function flushes the calling thread's queue of enqueued work,
-  which is needed to submit pending command buffers on the Metal backend.
-  (Dr.Jit commit `c68e00 <https://github.com/mitsuba-renderer/drjit/commit/c68e00853de7957912e490245c2036196fe422ff>`__,
-  Dr.Jit-Core commit `467dd3 <https://github.com/mitsuba-renderer/drjit-core/commit/467dd3d23ed23129139dcdf557baead32b683e01>`__).
-
 **Performance Improvements**
 
-- **Faster tracing and array construction**: A sequence of optimizations to
-  Dr.Jit's tracing, code generation, and Python bindings substantially reduces
-  the per-operation overhead of building computation graphs. Together they
-  roughly halve the cost of tracing and code generation.
+- **Tracing and evaluation**:
+  A comprehensive optimization pass targeted many bottlenecks in Dr.Jit's tracing/code generation phases and Python bindings.
+  They are now roughly **twice as fast** compared to the previous release.
   (Dr.Jit commits
   `534829 <https://github.com/mitsuba-renderer/drjit/commit/534829d88af9f434b0f2da9a798732ade7256e88>`__,
   `3fba39 <https://github.com/mitsuba-renderer/drjit/commit/3fba39d2595121fae88d59f4f47b8dd6e9a000aa>`__,
@@ -218,111 +146,67 @@ DrJit 1.4.0 (TBA)
   `50986a <https://github.com/mitsuba-renderer/drjit/commit/50986a050625dd88d6ec9b5ab29caaade2cf7027>`__,
   Dr.Jit-Core PR `#194 <https://github.com/mitsuba-renderer/drjit-core/pull/194>`__).
 
-- **Faster Python bindings (nanobind v2.13.0)**: Dr.Jit indirectly benefits
-  from optimizations in nanobind version v2.13. It introduces instance pooling
-  to recycle short-lived objects, which accelerates Dr.Jit tracing that
-  generates large amounts of temporaries. Other optimizations target object
-  creation/destruction and nd-array exchange. (Dr.Jit commit `6b212c
-  <https://github.com/mitsuba-renderer/drjit/commit/6b212c235004edfad964665ade3e6f3ec9af6ecb>`__,
-  nanobind PRs `#1366 <https://github.com/wjakob/nanobind/pull/1366>`__, `#1374
-  <https://github.com/wjakob/nanobind/pull/1374>`__, `#1375
-  <https://github.com/wjakob/nanobind/pull/1375>`__).
-
-- **Better LLVM code generation**: Several changes reduce memory traffic in
-  generated CPU kernels. Vectorized method (vcall) inputs and outputs are now
-  passed in registers, load/store aliasing metadata was improved, and packet
-  gathers are now emitted even for compile-time constant indices. (Dr.Jit-Core
-  commits `83207d
-  <https://github.com/mitsuba-renderer/drjit-core/commit/83207d5aeeb8fab27473c606b6a71349bce4157c>`__,
-  `84c85b
-  <https://github.com/mitsuba-renderer/drjit-core/commit/84c85bd9d07a2de88a73a23dd0bf0baad53df104>`__,
-  `9f88fd
-  <https://github.com/mitsuba-renderer/drjit-core/commit/9f88fd69f299744777b7c0df801aa6b52e33d15b>`__).
-
-- **Butterfly warp-reduction for packet scatter-reduce**: On CUDA,
-  :py:func:`dr.scatter_reduce() <scatter_reduce>` on packets gains a
-  packet-aware butterfly path that processes all channels of a packet through a
-  single ``match.any.sync`` and butterfly tree, with the leader issuing either
-  scalar atomics or (on compute capability ≥ 9.0 with CUDA ≥ 13.2)
-  ``red.global.vN`` vector atomics.
-  (Dr.Jit-Core PR `#190 <https://github.com/mitsuba-renderer/drjit-core/pull/190>`__).
-
-- **Lower frozen function replay overheads**: The :py:func:`@dr.freeze
-  <freeze>` replay path was profiled and optimized to reduce its per-call
-  overhead. On a microbenchmark replaying a function with a PyTree of 1K arrays,
-  these changes sped up replay by ~2.5x.
+- **Frozen function replay**: The :py:func:`@dr.freeze
+  <freeze>` replay path was thoroughly optimized, accelerating it by up to ~2.5x.
   (Dr.Jit commits
   `ff09ee <https://github.com/mitsuba-renderer/drjit/commit/ff09ee9e6de02d02cefcbc103a917ef02febf998>`__,
   `c1282c <https://github.com/mitsuba-renderer/drjit/commit/c1282ca81a14145095f8be16ccd632d6fc7a5a8c>`__,
   `13fe80 <https://github.com/mitsuba-renderer/drjit/commit/13fe80ed2142098179b32c127d0dde7eaba0a506>`__).
 
-- **Parallel runtime overhaul (nanothread)**: The underlying thread pool
-  received a significant set of changes that reduce tail latency and avoid
-  CPU oversubscription on parallel workloads:
+- **Better LLVM code generation**: Several changes reduce memory traffic in
+  generated CPU kernels. Vectorized method inputs and outputs are now
+  passed in registers, load/store aliasing metadata was improved. (Dr.Jit-Core
+  commits `83207d
+  <https://github.com/mitsuba-renderer/drjit-core/commit/83207d5aeeb8fab27473c606b6a71349bce4157c>`__,
+  `84c85b
+  <https://github.com/mitsuba-renderer/drjit-core/commit/84c85bd9d07a2de88a73a23dd0bf0baad53df104>`__).
 
-  - **Faster worker wake-up**: idle workers busy-poll for a short while
-    to keep latency low, and then go to sleep to avoid wasting power.
-    When new work arrives the runtime has to rouse all of them as quickly
-    as possible. The previous scheme woke them one at a time, each
-    acquiring a shared lock in turn, which could stall the start of a
-    parallel region by several milliseconds. The new implementation uses
-    the OS's native wait-on-address primitive (``futex`` on Linux,
-    ``WaitOnAddress`` on Windows, ``os_sync_wait_on_address`` on macOS
-    14.4+) so that a single system call wakes every parked worker in
-    parallel, directly from kernel space.
-    (`73efa1 <https://github.com/mitsuba-renderer/nanothread/commit/73efa1367ddd49aa2026b245c6857231eefbb344>`__).
+- **Warp-reduction for packet scatter-reduce**: On the CUDA and Metal backends,
+  :py:func:`dr.scatter_reduce() <scatter_reduce>` now provides a *packet-aware*
+  reduction path that jointly reduces values within the warp/simdgroup before
+  issuing scalar or packet atomics depending on hardware/driver support.
+  (Dr.Jit-Core PR `#190
+  <https://github.com/mitsuba-renderer/drjit-core/pull/190>`__).
 
-  - **More reliable idle-sleep timing**: the threshold that decides when
-    a busy-polling worker gives up and goes to sleep used to be a fixed
-    number of failed attempts, which corresponded to very different
-    amounts of real time depending on CPU speed and contention. It is
-    now a 20 ms wall-clock deadline measured with a monotonic clock.
-    In combination with a fix where a just-woken worker could immediately
-    decide it had been idle "too long" and go straight back to sleep,
-    this removes a sleep/wake ping-pong that previously caused large
-    variance in parallel runtimes.
-    (`2ddeca <https://github.com/mitsuba-renderer/nanothread/commit/2ddeca4583dfffbb3b12cd3394174414fb864ee3>`__).
+- **nanobind optimizations**: Dr.Jit benefits from optimizations introduced in
+  `nanobind v2.13
+  <https://nanobind.readthedocs.io/en/latest/changelog.html#version-2-13-0-jun-18-2026>`__.
+  This release adds *instance pooling*, which provides a cache to recycle
+  short-lived objects. Dr.Jit opts into this feature to accelerate tracing,
+  which generates large amounts of temporaries. Other optimizations target
+  object creation/destruction and nd-array exchange. (Dr.Jit commit `6b212c
+  <https://github.com/mitsuba-renderer/drjit/commit/6b212c235004edfad964665ade3e6f3ec9af6ecb>`__,
+  nanobind PRs `#1366 <https://github.com/wjakob/nanobind/pull/1366>`__, `#1374
+  <https://github.com/wjakob/nanobind/pull/1374>`__, `#1375
+  <https://github.com/wjakob/nanobind/pull/1375>`__).
 
-  - **No more CPU oversubscription**: when Dr.Jit asks the pool to run
-    work and then waits for the result, the waiting thread also pitches
-    in. The old pool still spawned one worker per core on top of that,
-    producing more runnable threads than cores and forcing the OS to
-    preempt a worker mid-task. The pool now accounts for the caller:
-    ``pool_set_size(N)`` spawns ``N - 1`` workers, and the default size
-    drops from ``core_count()`` to ``core_count() - 1``.
-    (`03cacd <https://github.com/mitsuba-renderer/nanothread/commit/03cacd084c58675bb468b08798ad5f0f11dd0608>`__,
-    `348404 <https://github.com/mitsuba-renderer/nanothread/commit/3484048050507b2c3813157b4250b85380b6df96>`__).
+- **nanothread optimizations**: The thread pool driving parallel evaluation
+  was improved as follows:
 
-  - **Better behavior on Apple Silicon**: Apple CPUs split their cores
-    into fast "performance" cores and slower "efficiency" cores. Using
-    all cores sounds appealing but is in fact counterproductive: the
-    efficiency cores become stragglers that hold up every parallel
-    region. The pool is now sized to the performance-core count, the
-    worker threads request the ``USER_INITIATED`` quality-of-service
-    class, and both the workers and the main thread register as a single
-    ``os_workgroup`` so the macOS scheduler keeps them on one cluster.
-    (`e68a4d <https://github.com/mitsuba-renderer/nanothread/commit/e68a4d827f07fa7620ae3ae235cd43fd8df725f1>`__,
+  - **Faster worker wake-up**: idle worker threads busy-poll for a short while
+    and then go to sleep to avoid wasting power. The new version of
+    nanothread is more careful to wake only the required number of threads,
+    and it does so using efficient OS primitives, such as
+    `futex <https://en.wikipedia.org/wiki/Futex>` on Linux (commits
+    `73efa1 <https://github.com/mitsuba-renderer/nanothread/commit/73efa1367ddd49aa2026b245c6857231eefbb344>`__,
+    `366774 <https://github.com/mitsuba-renderer/nanothread/commit/366774d9f92d62bba3b3c7e53503a290e42315b0>`__).
+
+  - **Worker count**: the main thread now "counts" as a member
+    of the thread pool, since it pitches in when waiting for work.
+    On Apple silicon, workers now only run on "performance cores", as
+    parallelization over "efficiency cores" tends to add tail latency
+    that slows down parallel workloads.
+    (commits `03cacd <https://github.com/mitsuba-renderer/nanothread/commit/03cacd084c58675bb468b08798ad5f0f11dd0608>`__,
+    `348404 <https://github.com/mitsuba-renderer/nanothread/commit/3484048050507b2c3813157b4250b85380b6df96>`__.
+    `e68a4d <https://github.com/mitsuba-renderer/nanothread/commit/e68a4d827f07fa7620ae3ae235cd43fd8df725f1>`__,
     `098925 <https://github.com/mitsuba-renderer/nanothread/commit/09892587087c27b46db4891fa05bf3a9774ac8c9>`__,
     `beca8c <https://github.com/mitsuba-renderer/nanothread/commit/beca8c6635d458a2db027a7ecc0659a6e32134f3>`__).
 
-  - **Nicer spin-loops on ARM**: the tight loop used while busy-polling
-    now issues an explicit ``yield`` instruction on ARM, matching the
-    ``pause`` hint already emitted on x86. This tells the hardware that
-    the thread is spinning so it can throttle execution resources.
-    (`9ca2b0 <https://github.com/mitsuba-renderer/nanothread/commit/9ca2b0712cba7de5b9edd486fd45b6658c053a76>`__).
-
-  - **Fixed a timing glitch**: timing information (as surfaced by
-    :py:func:`dr.kernel_history() <kernel_history>`) would occasionally
-    report nonsensical values close to ``2^64`` due to a race between a
-    completing worker and a waiting thread reading a not-yet-published
-    timestamp.
+  - **Fixed timing glitches**: timing information reported by
+    :py:func:`dr.kernel_history() <kernel_history>` would occasionally
+    report nonsensical values close to ``2^64`` due to a race condition
+    that is now fixed.
     (`f11692 <https://github.com/mitsuba-renderer/nanothread/commit/f1169296bb4af6ee1e553e3b331be8ec4275e399>`__).
-
-  On the Dr.Jit side, the docstrings for :py:func:`dr.thread_count()
-  <thread_count>` and :py:func:`dr.set_thread_count() <set_thread_count>`
-  were updated to match the new semantics.
-  (Dr.Jit commit `861de5 <https://github.com/mitsuba-renderer/drjit/commit/861de5c67b641c4f1ce6f5826c868809fe991416>`__,
-  Dr.Jit-Core commit `742ea7 <https://github.com/mitsuba-renderer/drjit-core/commit/742ea73963c9ab96b1fa9fa8fdf040da32e5a459>`__).
 
 **API Breaks**
 
@@ -369,6 +253,22 @@ DrJit 1.4.0 (TBA)
   (compute capability ``sm_120``). Our CI machine uses this hardware, and
   TensorFlow testing has caused numerous issues even in pure CPU mode, so we
   decided to cut support completely from Dr.Jit.
+
+**Minor features**
+
+- **CUDA Green Context API**: Added :py:class:`drjit.cuda.green_context`, a
+  context manager that isolates kernels to a subset of the GPU's streaming
+  multiprocessors. See the :ref:`green context documentation <green_context>`
+  for details.
+  (Dr.Jit commit `6c69ec <https://github.com/mitsuba-renderer/drjit/commit/6c69ecb75cfc605063502747e9c9264bc739ead9>`__,
+  Dr.Jit-Core commit `d4f1a6 <https://github.com/mitsuba-renderer/drjit-core/commit/d4f1a62c6b175af295e857069b1401c36bcf6caa>`__).
+
+- **Command queue flushing**: The new :py:func:`dr.flush_thread()
+  <flush_thread>` function flushes queued work to the GPU, which is needed for
+  multi-threaded use of Dr.Jit on the Metal backend. (Dr.Jit commit `c68e00
+  <https://github.com/mitsuba-renderer/drjit/commit/c68e00853de7957912e490245c2036196fe422ff>`__,
+  Dr.Jit-Core commit `467dd3
+  <https://github.com/mitsuba-renderer/drjit-core/commit/467dd3d23ed23129139dcdf557baead32b683e01>`__).
 
 **Bug Fixes**
 
