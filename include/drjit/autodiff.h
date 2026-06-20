@@ -567,7 +567,7 @@ struct DRJIT_TRIVIAL_ABI DiffArray
             for (uint32_t i = 0; i < N; ++i)
                 indices[i] = source[i].index_combined();
 
-            dst = steal(ad_var_scatter_packet(N, dst.index(), indices,
+            dst = steal(ad_var_scatter_packet(N, dst.index_combined(), indices,
                                               index.index(), mask.index(),
                                               ReduceOp::Identity, mode));
         } else {
@@ -608,7 +608,7 @@ struct DRJIT_TRIVIAL_ABI DiffArray
             for (uint32_t i = 0; i < N; ++i)
                 indices[i] = source[i].index_combined();
 
-            dst = steal(ad_var_scatter_packet(N, dst.index(), indices,
+            dst = steal(ad_var_scatter_packet(N, dst.index_combined(), indices,
                                               index.index(), mask.index(),
                                               op, mode));
         } else {
