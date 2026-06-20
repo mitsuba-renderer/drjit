@@ -139,6 +139,17 @@ endif()
 
 target_link_libraries(drjit-python PRIVATE drjit drjit-core drjit-extra)
 
+# Prefer linking using lld with Identical Code Folding, if available.
+# This makes the resulting binary 37% smaller.
+if (APPLE)
+  find_program(DRJIT_LLD ld64.lld
+    HINTS /opt/homebrew/opt/lld/bin /opt/homebrew/opt/llvm/bin
+          /usr/local/opt/lld/bin /usr/local/opt/llvm/bin)
+  if (DRJIT_LLD)
+    target_link_options(drjit-python PRIVATE -fuse-ld=${DRJIT_LLD} -Wl,--icf=safe)
+  endif()
+endif()
+
 if (DRJIT_ENABLE_LLVM)
   target_compile_definitions(drjit-python PRIVATE -DDRJIT_ENABLE_LLVM)
 endif()

@@ -49,6 +49,11 @@ jobs:
         with:
           version: 18.1.8
 
+      # Use ld64.lld to link on macOS (it makes smaller wheels)
+      - name: Install lld on macOS
+        if: runner.os == 'macOS'
+        run: brew install lld
+
       - name: Install cibuildwheel
         run: |
           python -m pip install cibuildwheel==3.3.1
