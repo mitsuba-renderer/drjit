@@ -7071,6 +7071,22 @@
     texture information is *fully* migrated to GPU texture memory to avoid
     redundant storage.
 
+.. topic:: Texture_set_value_2
+
+    Overwrite the texture contents with the provided linearized 1D array and
+    record a device event
+
+    This function is a convenience wrapper that simply does
+
+    .. code-block:: python
+
+       texture.set_value(value)
+       event.record()
+
+    This combination is helpful for interactive workflows, where a producer
+    renders to a texture that is then shown in an user interface. The consumer
+    must await the event before using the texture.
+
 .. topic:: Texture_set_tensor
 
     Overwrite the texture contents with the provided tensor

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "common.h"
+#include "event.h"
 #include <drjit/texture.h>
 #include <nanobind/stl/optional.h>
 
@@ -184,7 +185,16 @@ void bind_texture(nb::module_ &m, const char *name) {
              "filter_mode"_a = dr::FilterMode::Linear,
              "wrap_mode"_a = dr::WrapMode::Clamp,
              doc_Texture_init_tensor)
-        .def("set_value", &Tex::template set_value<const typename Tex::Storage &>, "value"_a, "migrate"_a = false, doc_Texture_set_value)
+        .def("set_value",
+             &Tex::template set_value<const typename Tex::Storage &>,
+             "value"_a, "migrate"_a = false, doc_Texture_set_value)
+        .def("set_value",
+             [](Tex &t, const typename Tex::Storage &value,
+                Event<Tex::Backend> &event, bool migrate) {
+                 t.set_value(value, migrate);
+                 event.record();
+             },
+             "value"_a, "event"_a, "migrate"_a = false, doc_Texture_set_value_2)
         .def("set_tensor", &Tex::template set_tensor<const typename Tex::TensorXf &>, "tensor"_a,  "migrate"_a = false, doc_Texture_set_tensor)
         .def("update_inplace", &Tex::update_inplace, "migrate"_a = false, doc_Texture_update_inplace)
         .def("value", &Tex::value, nb::rv_policy::reference_internal, doc_Texture_value)
