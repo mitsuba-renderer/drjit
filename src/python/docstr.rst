@@ -2179,7 +2179,9 @@
           :ref:`PyTree <pytrees>`.
         value (object): An instance of the underlying scalar type
           (``float``/``int``/``bool``, etc.) that will be used to initialize the
-          array contents.
+          array contents. A list/tuple may also be provided, in which case each
+          element initializes the corresponding component along the leading
+          dimension (e.g. ``dr.full(dr.cuda.Array3f, (1, 2, 3))``).
         shape (Sequence[int] | int): Shape of the desired array
 
     Returns:

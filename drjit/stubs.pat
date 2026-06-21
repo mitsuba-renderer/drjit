@@ -140,7 +140,7 @@ drjit.(empty|zeros|ones)$:
 
 drjit.(full|opaque)$:
     @overload
-    def \1(dtype: type[ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT]], value: ValCpT, shape: int | Sequence[int] = 1) -> SelfT:
+    def \1(dtype: type[ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT]], value: ValCpT | tuple | list, shape: int | Sequence[int] = 1) -> SelfT:
         \doc
     @overload
     def \1(dtype: type[T], value: T, shape: int | Sequence[int]) -> T: ...

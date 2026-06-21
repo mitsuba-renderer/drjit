@@ -1164,9 +1164,10 @@ nb::object full(const char *name, nb::handle dtype, nb::handle value,
             raise_if(fail, "the provided \"shape\" and \"dtype\" parameters are incompatible.");
 
             nb::object result = nb::inst_alloc(dtype);
+            nb::handle value_tp = value.is_valid() ? value.type() : nb::handle();
 
             if (s.init_const && value.is_valid()) {
-                if ((VarType) s.type == VarType::Bool && value.type().is(&PyLong_Type))
+                if ((VarType) s.type == VarType::Bool && value_tp.is(&PyLong_Type))
                     value = nb::cast<int>(value) ? Py_True : Py_False;
 
                 s.init_const(shape[0], opaque, value.ptr(), inst_ptr(result));
@@ -1185,14 +1186,31 @@ nb::object full(const char *name, nb::handle dtype, nb::handle value,
                 return result;
             } else {
                 ArraySupplement::SetItem set_item = s.set_item;
-                nb::object o;
-                for (size_t i = 0; i < shape[0]; ++i) {
-                    nb::object v = nb::borrow(value);
-                    if ((s.is_complex && i == 1) || (s.is_quaternion && i != 3))
-                        v = nb::int_(0);
-                    if (i == 0 || !value.is_valid() || opaque || s.is_complex || s.is_quaternion)
-                        o = full(name, s.value, v, ndim - 1, shape + 1, opaque);
-                    set_item(result.ptr(), i, o.ptr());
+
+                bool walk = value.is_valid() && (value_tp.is(&PyTuple_Type) ||
+                                                 value_tp.is(&PyList_Type));
+
+                if (walk) {
+                    size_t len = nb::len(value);
+                    if (len != shape[0])
+                        nb::raise("the provided value has %zu elements, which "
+                                  "does not match the corresponding dimension "
+                                  "of size %zu.", len, shape[0]);
+                    for (size_t i = 0; i < shape[0]; ++i) {
+                        nb::object v = value[i];
+                        nb::object o = full(name, s.value, v, ndim - 1, shape + 1, opaque);
+                        set_item(result.ptr(), i, o.ptr());
+                    }
+                } else {
+                    nb::object o;
+                    for (size_t i = 0; i < shape[0]; ++i) {
+                        nb::object v = nb::borrow(value);
+                        if ((s.is_complex && i == 1) || (s.is_quaternion && i != 3))
+                            v = nb::int_(0);
+                        if (i == 0 || !value.is_valid() || opaque || s.is_complex || s.is_quaternion)
+                            o = full(name, s.value, v, ndim - 1, shape + 1, opaque);
+                        set_item(result.ptr(), i, o.ptr());
+                    }
                 }
             }
 

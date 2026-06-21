@@ -350,6 +350,19 @@ def test14_zeros_3d(t, drjit_verbose, capsys):
         v = dr.full(t, 5, (100, 3))
 
 
+# Test dr.full with a per-component tuple/list value
+@pytest.test_arrays('float32, shape=(3, *)')
+def test14b_full_sequence(t):
+    for seq in ((1, 2, 3), [1, 2, 3]):
+        v = dr.full(t, seq, 4)
+        assert len(v) == 3 and len(v[0]) == 4
+        assert v[0][0] == 1 and v[1][0] == 2 and v[2][0] == 3
+
+    # Length mismatch is reported
+    with pytest.raises(RuntimeError):
+        dr.full(t, (1, 2), 4)
+
+
 @pytest.test_arrays('shape=(*), -bool')
 def test15_arange(t):
     assert dr.all(dr.arange(t, 5) == t(0, 1, 2, 3, 4))
