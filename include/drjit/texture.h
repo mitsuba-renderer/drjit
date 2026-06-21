@@ -56,6 +56,14 @@ public:
         DynamicArray<Storage_>, Storage_*>;
     using TensorXf = Tensor<Storage>;
 
+    /// Query position type for an evaluation returning the array type \c Output
+    template <typename Output>
+    using position_for = Array<value_t<Output>, Dimension>;
+
+    /// Active mask type for an evaluation returning the array type \c Output
+    template <typename Output>
+    using mask_for = mask_t<value_t<Output>>;
+
     // Backend that ``jit_tex_*`` dispatches on (only meaningful if HasGPUTexture)
     static constexpr JitBackend Backend = backend_v<Storage_>;
 
@@ -524,18 +532,44 @@ public:
     }
 
     /**
+     * \brief Allocate an output array sized to the texture's channel count
+     *
+     * Statically-sized outputs (e.g. ``Array<Value, 3>``) are
+     * default-constructed; dynamically-sized outputs (e.g.
+     * ``DynamicArray<Value>``) are allocated to hold \ref m_channels entries.
+     */
+    template <typename Output> Output alloc_output() const {
+        if constexpr (is_dynamic_v<Output>)
+            return empty<Output>(m_channels);
+        else
+            return Output();
+    }
+
+    /// Allocate the ``2^Dimension`` corner outputs returned by \ref eval_fetch()
+    template <typename Output> Array<Output, (1 << Dimension)>
+    alloc_fetch_output() const {
+        Array<Output, (1 << Dimension)> out;
+        if constexpr (is_dynamic_v<Output>)
+            for (size_t i = 0; i < (1 << Dimension); ++i)
+                out.set_entry(i, empty<Output>(m_channels));
+        return out;
+    }
+
+    /**
      * \brief Evaluate linear interpolant using a CUDA texture lookup
      *
      * This is an implementation detail, please use \ref eval() that may
      * dispatch to this function depending on its inputs.
      */
-    template <typename Value>
-    void eval_cuda(const Array<Value, Dimension> &pos_, Value *out,
-                   mask_t<Value> active = true) const {
+    template <typename Output>
+    Output eval_cuda(const position_for<Output> &pos_,
+                     mask_for<Output> active = true) const {
+        using Value = value_t<Output>;
         using Float32 = float32_array_t<Value>;
         using PosF32 = Array<Float32, Dimension>;
 
         PosF32 pos(pos_);
+        Output out = alloc_output<Output>();
 
         if constexpr (HasGPUTexture) {
             if (m_use_accel) {
@@ -553,15 +587,16 @@ public:
                     Float32 v = Float32::steal(out_idx[ch]);
 
                     if (ch < m_channels)
-                        out[ch] = Value(v);
+                        out.set_entry(ch, Value(v));
                 }
 
-                return;
+                return out;
             }
         }
         DRJIT_MARK_USED(pos); DRJIT_MARK_USED(active);
         for (size_t ch = 0; ch < m_channels; ++ch)
-            out[ch] = zeros<Value>();
+            out.set_entry(ch, zeros<Value>());
+        return out;
     }
 
     /**
@@ -574,15 +609,18 @@ public:
      * texture memory (see the \c migrate argument of the constructors), as no
      * host-side copy then remains to read from.
      */
-    template <typename Value>
-    void eval_nonaccel(const Array<Value, Dimension> &pos, Value *out,
-                       mask_t<Value> active = true) const {
+    template <typename Output>
+    Output eval_nonaccel(const position_for<Output> &pos,
+                         mask_for<Output> active = true) const {
+        using Value = value_t<Output>;
         using PosF = Array<Value, Dimension>;
         using PosI = int32_array_t<PosF>;
         using Mask = mask_t<Value>;
 
         if constexpr (!is_array_v<Mask>)
             active = true;
+
+        Output out = alloc_output<Output>();
 
         if (DRJIT_UNLIKELY(m_filter_mode == FilterMode::Nearest)) {
             const PosF pos_f = pos * PosF(m_resolution_opaque);
@@ -593,7 +631,7 @@ public:
             DR_TEX_ALLOC_PACKET(packet, m_channels_storage);
             gather_packet_dynamic(m_channels_storage, m_value.array(), idx, packet, active);
             for (uint32_t ch = 0; ch < m_channels; ++ch)
-                out[ch] = Value(packet[ch]);
+                out.set_entry(ch, Value(packet[ch]));
         } else {
             using InterpOffset = Array<Int32, ipow(2, Dimension)>;
             using InterpPosI = Array<InterpOffset, Dimension>;
@@ -609,7 +647,7 @@ public:
             InterpIdx idx = index(pos_i_w);
 
             for (uint32_t ch = 0; ch < m_channels; ++ch)
-                out[ch] = zeros<Value>();
+                out.set_entry(ch, zeros<Value>());
 
             #define DR_TEX_ACCUM(index, weight)                                \
                 {                                                              \
@@ -619,10 +657,10 @@ public:
                     gather_packet_dynamic(m_channels_storage, m_value.array(), \
                         index_, packet, active);                               \
                     for (uint32_t ch = 0; ch < m_channels; ++ch)               \
-                        out[ch] = fmadd(                                       \
+                        out.set_entry(ch, fmadd(                               \
                             Value(packet[ch]),                                 \
                             weight_,                                           \
-                            out[ch]);                                          \
+                            out.entry(ch)));                                   \
                 }
 
             const PosF w1 = pos_f - pos_i, w0 = 1.f - w1;
@@ -648,6 +686,7 @@ public:
 
             #undef DR_TEX_ACCUM
         }
+        return out;
     }
 
     /**
@@ -663,14 +702,12 @@ public:
      * precision of the interpolation is dictated by the floating point
      * precision of the query point type.
      */
-    template <typename Value>
-    void eval(const Array<Value, Dimension> &pos, Value *out,
-              mask_t<Value> active = true) const {
-        using ArrayX = DynamicArray<Value>;
-
+    template <typename Output>
+    Output eval(const position_for<Output> &pos,
+                mask_for<Output> active = true) const {
         if constexpr (HasGPUTexture) {
             if (m_use_accel) {
-                eval_cuda(pos, out, active);
+                Output out = eval_cuda<Output>(pos, active);
 
                 if constexpr (IsDiff) {
                     // Re-attach the computation if gradient tracking is enabled
@@ -682,19 +719,20 @@ public:
                         if (grad_enabled(pos))
                             sync_device_data();
 
-                        ArrayX out_nonaccel = empty<ArrayX>(m_channels);
-                        eval_nonaccel(pos, out_nonaccel.data(), active);
+                        Output out_nonaccel =
+                            eval_nonaccel<Output>(pos, active);
 
                         for (size_t ch = 0; ch < m_channels; ++ch)
-                            out[ch] = replace_grad(out[ch], out_nonaccel[ch]);
+                            out.set_entry(ch, replace_grad(out.entry(ch),
+                                                           out_nonaccel.entry(ch)));
                     }
                 }
 
-                return;
+                return out;
             }
         }
 
-        eval_nonaccel(pos, out, active);
+        return eval_nonaccel<Output>(pos, active);
     }
 
     /**
@@ -748,11 +786,15 @@ public:
      * This is an implementation detail, please use \ref eval_fetch() that may
      * dispatch to this function depending on its inputs.
      */
-    template <typename Value>
-    void eval_fetch_cuda(const Array<Value, Dimension> &pos_,
-                         Array<Value *, 1 << Dimension> &out,
-                         mask_t<Value> active = true) const {
+    template <typename Output>
+    Array<Output, (1 << Dimension)>
+    eval_fetch_cuda(const position_for<Output> &pos_,
+                    mask_for<Output> active = true) const {
+        using Value = value_t<Output>;
         using PosF = Array<Value, Dimension>;
+        constexpr size_t out_size = 1 << Dimension;
+
+        Array<Output, out_size> out = alloc_fetch_output<Output>();
 
         if constexpr (HasGPUTexture) {
             if (m_use_accel) {
@@ -768,7 +810,7 @@ public:
                         fetch_pos = pos_f + PosF(ix);
                         fetch_pos *= inv_shape;
 
-                        eval_cuda(fetch_pos, out[ix], active);
+                        out.set_entry(ix, eval_cuda<Output>(fetch_pos, active));
                     }
                 } else if constexpr (Dimension == 2) {
                     using Float32 = float32_array_t<Value>;
@@ -792,10 +834,10 @@ public:
                                 v4 = Float32::steal(out_idx[ch*4 + 3]);
 
                         if (ch < m_channels) {
-                            out[2][ch] = v1;
-                            out[3][ch] = v2;
-                            out[1][ch] = v3;
-                            out[0][ch] = v4;
+                            out.entry(2).set_entry(ch, Value(v1));
+                            out.entry(3).set_entry(ch, Value(v2));
+                            out.entry(1).set_entry(ch, Value(v3));
+                            out.entry(0).set_entry(ch, Value(v4));
                         }
                     }
                 } else if constexpr (Dimension == 3) {
@@ -813,19 +855,21 @@ public:
                                 fetch_pos = pos_f + PosF(ix, iy, iz);
                                 fetch_pos *= inv_shape;
 
-                                eval_cuda(fetch_pos, out[index], active);
+                                out.set_entry(index,
+                                    eval_cuda<Output>(fetch_pos, active));
                             }
                         }
                     }
                 }
-                return;
+                return out;
             }
         }
 
         DRJIT_MARK_USED(pos_); DRJIT_MARK_USED(active);
         for (size_t i = 0; i < ipow(2ul, Dimension); ++i)
             for (size_t ch = 0; ch < m_channels; ++ch)
-                out[i][ch] = zeros<Value>();
+                out.entry(i).set_entry(ch, zeros<Value>());
+        return out;
     }
 
     /**
@@ -838,10 +882,11 @@ public:
      * This is an implementation detail, please use \ref eval_fetch() that may
      * dispatch to this function depending on its inputs.
      */
-    template <typename Value>
-    void eval_fetch_nonaccel(const Array<Value, Dimension> &pos,
-                             Array<Value *, 1 << Dimension> &out,
-                             mask_t<Value> active = true) const {
+    template <typename Output>
+    Array<Output, (1 << Dimension)>
+    eval_fetch_nonaccel(const position_for<Output> &pos,
+                        mask_for<Output> active = true) const {
+        using Value = value_t<Output>;
         using PosF = Array<Value, Dimension>;
         using PosI = int32_array_t<PosF>;
         using Mask = mask_t<Value>;
@@ -851,6 +896,8 @@ public:
 
         if constexpr (!is_array_v<Mask>)
             active = true;
+
+        Array<Output, (1 << Dimension)> out = alloc_fetch_output<Output>();
 
         const PosF pos_f = fmadd(pos, PosF(m_resolution_opaque), -.5f);
         const PosI pos_i = floor2int<PosI>(pos_f);
@@ -866,8 +913,9 @@ public:
             gather_packet_dynamic(
                 m_channels_storage, m_value.array(), idx[i], packet, active);
             for (uint32_t ch = 0; ch < m_channels; ++ch)
-                out[i][ch] = Value(packet[ch]);
+                out.entry(i).set_entry(ch, Value(packet[ch]));
         }
+        return out;
     }
 
     /**
@@ -880,15 +928,16 @@ public:
      * records the AD graph of \ref eval_fetch_nonaccel() and combines it with
      * the primal result of \ref eval_fetch_cuda().
      */
-    template <typename Value>
-    void eval_fetch(const Array<Value, Dimension> &pos,
-                    Array<Value *, 1 << Dimension> &out,
-                    mask_t<Value> active = true) const {
-        using ArrayX = DynamicArray<Value>;
+    template <typename Output>
+    Array<Output, (1 << Dimension)>
+    eval_fetch(const position_for<Output> &pos,
+               mask_for<Output> active = true) const {
+        constexpr size_t out_size = 1 << Dimension;
 
         if constexpr (HasGPUTexture) {
             if (m_use_accel) {
-                eval_fetch_cuda(pos, out, active);
+                Array<Output, out_size> out =
+                    eval_fetch_cuda<Output>(pos, active);
 
                 if constexpr (IsDiff) {
                     // Re-attach the computation if gradient tracking is enabled
@@ -900,27 +949,21 @@ public:
                         if (grad_enabled(pos))
                             sync_device_data();
 
-                        constexpr size_t out_size = 1 << Dimension;
-
-                        Array<Value *, out_size> out_nonaccel;
-                        ArrayX out_nonaccel_values =
-                            empty<ArrayX>(out_size * m_channels);
-                        for (size_t i = 0; i < out_size; ++i)
-                            out_nonaccel[i] =
-                                out_nonaccel_values.data() + i * m_channels;
-                        eval_fetch_nonaccel(pos, out_nonaccel, active);
+                        Array<Output, out_size> out_nonaccel =
+                            eval_fetch_nonaccel<Output>(pos, active);
 
                         for (size_t i = 0; i < out_size; ++i)
                             for (size_t ch = 0; ch < m_channels; ++ch)
-                                out[i][ch] =
-                                    replace_grad(out[i][ch], out_nonaccel[i][ch]);
+                                out.entry(i).set_entry(ch,
+                                    replace_grad(out.entry(i).entry(ch),
+                                                 out_nonaccel.entry(i).entry(ch)));
                     }
                 }
-                return;
+                return out;
             }
         }
 
-        eval_fetch_nonaccel(pos, out, active);
+        return eval_fetch_nonaccel<Output>(pos, active);
     }
 
     /**
@@ -931,9 +974,10 @@ public:
      * evaluation result is desired, the \ref eval_cubic() function is faster
      * than this simple implementation
      */
-    template <typename Value>
-    void eval_cubic_helper(const Array<Value, Dimension> &pos, Value *out,
-                           mask_t<Value> active = true) const {
+    template <typename Output>
+    Output eval_cubic_helper(const position_for<Output> &pos,
+                             mask_for<Output> active = true) const {
+        using Value = value_t<Output>;
         using PosF = Array<Value, Dimension>;
         using PosI = int32_array_t<PosF>;
         using Mask = mask_t<Value>;
@@ -944,6 +988,8 @@ public:
 
         if constexpr (!is_array_v<Mask>)
             active = true;
+
+        Output out = alloc_output<Output>();
 
         PosF pos_(pos);
         PosF pos_f = fmadd(pos_, PosF(m_resolution_opaque), -.5f);
@@ -972,7 +1018,7 @@ public:
         };
 
         for (uint32_t ch = 0; ch < m_channels; ++ch)
-            out[ch] = zeros<Value>();
+            out.set_entry(ch, zeros<Value>());
 
         #define DR_TEX_CUBIC_ACCUM(index, weight)                              \
             {                                                                  \
@@ -982,10 +1028,10 @@ public:
                 gather_packet_dynamic(m_channels_storage, m_value.array(),     \
                     index_, packet, active);                                   \
                 for (uint32_t ch = 0; ch < m_channels; ++ch)                   \
-                    out[ch] = fmadd(                                           \
+                    out.set_entry(ch, fmadd(                                   \
                         Value(packet[ch]),                                     \
                         weight_,                                               \
-                        out[ch]);                                              \
+                        out.entry(ch)));                                       \
             }
 
         if constexpr (Dimension == 1) {
@@ -1010,6 +1056,7 @@ public:
         }
 
         #undef DR_TEX_CUBIC_ACCUM
+        return out;
     }
 
     /**
@@ -1032,18 +1079,20 @@ public:
      * calls \ref eval_cubic_helper() function to replace the AD graph with a
      * direct evaluation of the B-Spline basis functions in that case.
      */
-    template <typename Value>
-    void eval_cubic(const Array<Value, Dimension> &pos, Value *out,
-                    mask_t<Value> active = true,
-                    bool force_nonaccel  = false) const {
+    template <typename Output>
+    Output eval_cubic(const position_for<Output> &pos,
+                      mask_for<Output> active = true,
+                      bool force_nonaccel  = false) const {
+        using Value = value_t<Output>;
         using PosF = Array<Value, Dimension>;
         using PosI = int32_array_t<PosF>;
         using Mask = mask_t<Value>;
-        using ArrayX = DynamicArray<Value>;
         using Array3 = Array<Value, 3>;
 
         if constexpr (!is_array_v<Mask>)
             active = true;
+
+        Output out = alloc_output<Output>();
 
         if constexpr (HasGPUTexture) {
             if (m_migrated && force_nonaccel)
@@ -1083,48 +1132,44 @@ public:
         };
 
         auto eval_helper = [&](const PosF &pos,
-                               const Mask &active) -> ArrayX {
-            ArrayX out = empty<ArrayX>(m_channels);
+                               const Mask &active) -> Output {
             if constexpr (HasGPUTexture) {
-                if (m_use_accel && !force_nonaccel) {
-                    eval_cuda(pos, out.data(), active);
-                    return out;
-                }
+                if (m_use_accel && !force_nonaccel)
+                    return eval_cuda<Output>(pos, active);
             }
             DRJIT_MARK_USED(force_nonaccel);
-            eval_nonaccel(pos, out.data(), active);
-            return out;
+            return eval_nonaccel<Output>(pos, active);
         };
 
         using F = Value;
 
         if constexpr (Dimension == 1) {
             Array3 cx = compute_weight_coord(0);
-            ArrayX f0 = eval_helper(PosF(F(cx[1])), active),
+            Output f0 = eval_helper(PosF(F(cx[1])), active),
                    f1 = eval_helper(PosF(F(cx[2])), active);
 
             for (size_t ch = 0; ch < m_channels; ++ch)
-                out[ch] = lerp(f1[ch], f0[ch], cx[0]);
+                out.set_entry(ch, lerp(f1.entry(ch), f0.entry(ch), cx[0]));
         } else if constexpr (Dimension == 2) {
             Array3 cx = compute_weight_coord(0),
                    cy = compute_weight_coord(1);
-            ArrayX f00 = eval_helper(PosF(F(cx[1]), F(cy[1])), active),
+            Output f00 = eval_helper(PosF(F(cx[1]), F(cy[1])), active),
                    f01 = eval_helper(PosF(F(cx[1]), F(cy[2])), active),
                    f10 = eval_helper(PosF(F(cx[2]), F(cy[1])), active),
                    f11 = eval_helper(PosF(F(cx[2]), F(cy[2])), active);
 
             Value f0, f1;
             for (size_t ch = 0; ch < m_channels; ++ch) {
-                f0 = lerp(f01[ch], f00[ch], cy[0]);
-                f1 = lerp(f11[ch], f10[ch], cy[0]);
+                f0 = lerp(f01.entry(ch), f00.entry(ch), cy[0]);
+                f1 = lerp(f11.entry(ch), f10.entry(ch), cy[0]);
 
-                out[ch] = lerp(f1, f0, cx[0]);
+                out.set_entry(ch, lerp(f1, f0, cx[0]));
             }
         } else if constexpr (Dimension == 3) {
             Array3 cx = compute_weight_coord(0),
                    cy = compute_weight_coord(1),
                    cz = compute_weight_coord(2);
-            ArrayX f000 = eval_helper(PosF(F(cx[1]), F(cy[1]), F(cz[1])), active),
+            Output f000 = eval_helper(PosF(F(cx[1]), F(cy[1]), F(cz[1])), active),
                    f001 = eval_helper(PosF(F(cx[1]), F(cy[1]), F(cz[2])), active),
                    f010 = eval_helper(PosF(F(cx[1]), F(cy[2]), F(cz[1])), active),
                    f011 = eval_helper(PosF(F(cx[1]), F(cy[2]), F(cz[2])), active),
@@ -1135,14 +1180,14 @@ public:
 
             Value f00, f01, f10, f11, f0, f1;
             for (size_t ch = 0; ch < m_channels; ++ch) {
-                f00 = lerp(f001[ch], f000[ch], cz[0]);
-                f01 = lerp(f011[ch], f010[ch], cz[0]);
-                f10 = lerp(f101[ch], f100[ch], cz[0]);
-                f11 = lerp(f111[ch], f110[ch], cz[0]);
+                f00 = lerp(f001.entry(ch), f000.entry(ch), cz[0]);
+                f01 = lerp(f011.entry(ch), f010.entry(ch), cz[0]);
+                f10 = lerp(f101.entry(ch), f100.entry(ch), cz[0]);
+                f11 = lerp(f111.entry(ch), f110.entry(ch), cz[0]);
                 f0 = lerp(f01, f00, cy[0]);
                 f1 = lerp(f11, f10, cy[0]);
 
-                out[ch] = lerp(f1, f0, cx[0]);
+                out.set_entry(ch, lerp(f1, f0, cx[0]));
             }
         }
 
@@ -1156,13 +1201,22 @@ public:
                 if (grad_enabled(pos))
                     sync_device_data();
 
-                ArrayX result_diff = empty<ArrayX>(m_channels);
-                eval_cubic_helper(pos, result_diff.data(), active); // AD graph only
+                // AD graph only
+                Output result_diff = eval_cubic_helper<Output>(pos, active);
                 for (size_t ch = 0; ch < m_channels; ++ch)
-                    out[ch] = replace_grad(out[ch], result_diff[ch]);
+                    out.set_entry(ch, replace_grad(out.entry(ch),
+                                                   result_diff.entry(ch)));
             }
         }
+        return out;
     }
+
+    /// Per-channel value and positional gradient returned by \ref eval_cubic_grad()
+    template <typename Output> struct CubicGrad {
+        using Value = value_t<Output>;
+        Output value;
+        replace_value_t<Output, Array<Value, Dimension>> gradient;
+    };
 
     /**
      * \brief Evaluate the positional gradient of a cubic B-Spline
@@ -1174,14 +1228,15 @@ public:
      * to count for the transformation from the unit size volume to the size of its
      * shape.
      */
-    template <typename Value>
-    void eval_cubic_grad(const Array<Value, Dimension> &pos,
-                         Value *out_value, Array<Value, Dimension> *out_gradient,
-                         mask_t<Value> active = true) const {
+    template <typename Output>
+    CubicGrad<Output> eval_cubic_grad(const position_for<Output> &pos,
+                                      mask_for<Output> active = true) const {
+        using Value = value_t<Output>;
         using PosF = Array<Value, Dimension>;
         using PosI = int32_array_t<PosF>;
         using Mask = mask_t<Value>;
         using ArrayX = DynamicArray<Value>;
+        using Gradient = replace_value_t<Output, PosF>;
         using Array4 = Array<Value, 4>;
         using InterpOffset = Array<Int32, ipow(4, Dimension)>;
         using InterpPosI = Array<InterpOffset, Dimension>;
@@ -1223,9 +1278,11 @@ public:
             }
         };
 
+        Output out_value = alloc_output<Output>();
+        Gradient out_gradient = alloc_output<Gradient>();
         for (uint32_t ch = 0; ch < m_channels; ++ch) {
-            out_value[ch] = zeros<Value>();
-            out_gradient[ch] = zeros<PosF>();
+            out_value.set_entry(ch, zeros<Value>());
+            out_gradient.set_entry(ch, zeros<PosF>());
         }
         ArrayX values = empty<ArrayX>(m_channels);
 
@@ -1237,21 +1294,23 @@ public:
                 gather_packet_dynamic(m_channels_storage, m_value.array(),     \
                     index_, packet, active);                                   \
                 for (uint32_t ch = 0; ch < m_channels; ++ch)                   \
-                    values[ch] = Value(packet[ch]);                            \
+                    values.set_entry(ch, Value(packet[ch]));                   \
             }
         #define DR_TEX_CUBIC_ACCUM_VALUE(weight)                               \
             {                                                                  \
                 Value weight_ = weight;                                        \
                 for (uint32_t ch = 0; ch < m_channels; ++ch)                   \
-                    out_value[ch] = fmadd(values[ch], weight_, out_value[ch]); \
+                    out_value.set_entry(ch, fmadd(values.entry(ch), weight_,   \
+                                                  out_value.entry(ch)));       \
             }
         #define DR_TEX_CUBIC_ACCUM_GRAD(dim, weight)                           \
             {                                                                  \
                 uint32_t dim_ = dim;                                           \
                 Value weight_ = weight;                                        \
                 for (uint32_t ch = 0; ch < m_channels; ++ch)                   \
-                    out_gradient[ch][dim_] = fmadd(                            \
-                        values[ch], weight_, out_gradient[ch][dim_]);          \
+                    out_gradient.entry(ch).set_entry(dim_, fmadd(             \
+                        values.entry(ch), weight_,                            \
+                        out_gradient.entry(ch).entry(dim_)));                 \
             }
 
         if constexpr (Dimension == 1) {
@@ -1299,8 +1358,19 @@ public:
         // transform volume from unit size to its resolution
         for (uint32_t ch = 0; ch < m_channels; ++ch)
             for (uint32_t dim = 0; dim < Dimension; ++dim)
-                out_gradient[ch][dim] *= Value(res_f[dim]);
+                out_gradient.entry(ch).set_entry(dim,
+                    out_gradient.entry(ch).entry(dim) * Value(res_f[dim]));
+
+        return { out_value, out_gradient };
     }
+
+    /// Per-channel value, gradient, and hessian returned by \ref eval_cubic_hessian()
+    template <typename Output> struct CubicHessian {
+        using Value = value_t<Output>;
+        Output value;
+        replace_value_t<Output, Array<Value, Dimension>> gradient;
+        replace_value_t<Output, Matrix<Value, Dimension>> hessian;
+    };
 
     /**
      * \brief Evaluate the positional gradient and hessian matrix of a cubic B-Spline
@@ -1312,16 +1382,16 @@ public:
      * to count for the transformation from the unit size volume to the size of its
      * shape.
      */
-    template <typename Value>
-    void eval_cubic_hessian(const Array<Value, Dimension> &pos,
-                            Value *out_value,
-                            Array<Value, Dimension> *out_gradient,
-                            Matrix<Value, Dimension> *out_hessian,
-                            mask_t<Value> active = true) const {
+    template <typename Output>
+    CubicHessian<Output> eval_cubic_hessian(const position_for<Output> &pos,
+                                            mask_for<Output> active = true) const {
+        using Value = value_t<Output>;
         using PosF = Array<Value, Dimension>;
         using PosI = int32_array_t<PosF>;
         using Mask = mask_t<Value>;
         using ArrayX = DynamicArray<Value>;
+        using Gradient = replace_value_t<Output, PosF>;
+        using Hessian = replace_value_t<Output, Matrix<Value, Dimension>>;
         using Array4 = Array<Value, 4>;
         using InterpOffset = Array<Int32, ipow(4, Dimension)>;
         using InterpPosI = Array<InterpOffset, Dimension>;
@@ -1375,11 +1445,13 @@ public:
             );
         };
 
+        Output out_value = alloc_output<Output>();
+        Gradient out_gradient = alloc_output<Gradient>();
+        Hessian out_hessian = alloc_output<Hessian>();
         for (uint32_t ch = 0; ch < m_channels; ++ch) {
-            out_value[ch] = zeros<Value>();
-            out_gradient[ch] = zeros<Value>();
-            for (uint32_t dim1 = 0; dim1 < Dimension; ++dim1)
-                out_hessian[ch][dim1] = zeros<Value>();
+            out_value.set_entry(ch, zeros<Value>());
+            out_gradient.set_entry(ch, zeros<PosF>());
+            out_hessian.set_entry(ch, zeros<Matrix<Value, Dimension>>());
         }
         ArrayX values = empty<ArrayX>(m_channels);
 
@@ -1391,21 +1463,23 @@ public:
                 gather_packet_dynamic(m_channels_storage, m_value.array(),     \
                     index_, packet, active);                                   \
                 for (uint32_t ch = 0; ch < m_channels; ++ch)                   \
-                    values[ch] = Value(packet[ch]);                            \
+                    values.set_entry(ch, Value(packet[ch]));                   \
             }
         #define DR_TEX_CUBIC_ACCUM_VALUE(weight)                               \
             {                                                                  \
                 Value weight_ = weight;                                        \
                 for (uint32_t ch = 0; ch < m_channels; ++ch)                   \
-                    out_value[ch] = fmadd(values[ch], weight_, out_value[ch]); \
+                    out_value.set_entry(ch, fmadd(values.entry(ch), weight_,   \
+                                                  out_value.entry(ch)));       \
             }
         #define DR_TEX_CUBIC_ACCUM_GRAD(dim, weight_grad)                      \
             {                                                                  \
                 uint32_t dim_ = dim;                                           \
                 Value weight_grad_ = weight_grad;                              \
                 for (uint32_t ch = 0; ch < m_channels; ++ch)                   \
-                    out_gradient[ch][dim_] = fmadd(                            \
-                        values[ch], weight_grad_, out_gradient[ch][dim_]);     \
+                    out_gradient.entry(ch).set_entry(dim_, fmadd(              \
+                        values.entry(ch), weight_grad_,                        \
+                        out_gradient.entry(ch).entry(dim_)));                  \
             }
         #define DR_TEX_CUBIC_ACCUM_HESSIAN(dim1, dim2, weight_hessian)         \
             {                                                                  \
@@ -1413,18 +1487,17 @@ public:
                          dim2_ = dim2;                                         \
                 Value weight_hessian_ = weight_hessian;                        \
                 for (uint32_t ch = 0; ch < m_channels; ++ch)                   \
-                    out_hessian[ch][dim1_][dim2_] = fmadd(                     \
-                        values[ch],                                            \
-                        weight_hessian_,                                       \
-                        out_hessian[ch][dim1_][dim2_]);                        \
+                    out_hessian.entry(ch).entry(dim1_).set_entry(dim2_,        \
+                        fmadd(values.entry(ch), weight_hessian_,               \
+                            out_hessian.entry(ch).entry(dim1_).entry(dim2_))); \
             }
         #define DR_TEX_CUBIC_HESSIAN_SYMM(dim1, dim2)                          \
             {                                                                  \
                 uint32_t dim1_ = dim1,                                         \
                          dim2_ = dim2;                                         \
                 for (uint32_t ch = 0; ch < m_channels; ++ch)                   \
-                    out_hessian[ch][dim2_][dim1_] =                            \
-                        out_hessian[ch][dim1_][dim2_];                         \
+                    out_hessian.entry(ch).entry(dim2_).set_entry(dim1_,        \
+                        out_hessian.entry(ch).entry(dim1_).entry(dim2_));      \
             }
 
         if constexpr (Dimension == 1) {
@@ -1495,10 +1568,15 @@ public:
         // transform volume from unit size to its resolution
         for (uint32_t ch = 0; ch < m_channels; ++ch)
             for (uint32_t dim1 = 0; dim1 < Dimension; ++dim1) {
-                out_gradient[ch][dim1] *= Value(res_f[dim1]);
+                out_gradient.entry(ch).set_entry(dim1,
+                    out_gradient.entry(ch).entry(dim1) * Value(res_f[dim1]));
                 for (uint32_t dim2 = 0; dim2 < Dimension; ++dim2)
-                    out_hessian[ch][dim1][dim2] *= Value(res_f[dim1] * res_f[dim2]);
+                    out_hessian.entry(ch).entry(dim1).set_entry(dim2,
+                        out_hessian.entry(ch).entry(dim1).entry(dim2) *
+                        Value(res_f[dim1] * res_f[dim2]));
             }
+
+        return { out_value, out_gradient, out_hessian };
     }
 
     /**

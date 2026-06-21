@@ -119,6 +119,12 @@ def test02_interp_1d(t, wrap_mode, texture_type):
         result_accel = tex.eval(pos)
         dr.eval(result_no_accel, result_accel)
 
+        # Verify the return type of eval
+        expected_type = getattr(mod, f'Array{ch}f') if ch <= 4 \
+                        else getattr(mod, 'ArrayXf')
+        assert type(result_no_accel) is expected_type
+        assert type(result_accel) is expected_type
+
         assert dr.allclose(result_no_accel, result_accel, 5e-3, 5e-3)
 
 

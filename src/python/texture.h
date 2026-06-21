@@ -4,6 +4,91 @@
 #include <drjit/texture.h>
 #include <nanobind/stl/optional.h>
 
+/// Helper macro to dynamically adapt the output type to the channel count
+#define DR_TEX_DISPATCH(texture, expr)                                         \
+    switch ((texture).shape()[Dimension]) {                                    \
+        case 1:  { using Output = dr::Array<T, 1>;      return (expr); }       \
+        case 2:  { using Output = dr::Array<T, 2>;      return (expr); }       \
+        case 3:  { using Output = dr::Array<T, 3>;      return (expr); }       \
+        case 4:  { using Output = dr::Array<T, 4>;      return (expr); }       \
+        default: { using Output = dr::DynamicArray<T>;  return (expr); }       \
+    }
+
+template <typename T, size_t Dimension, typename Tex>
+static nb::object tex_eval(const Tex &texture,
+                           const dr::Array<T, Dimension> &pos,
+                           const dr::mask_t<T> &active) {
+    DR_TEX_DISPATCH(texture,
+                    nb::cast(texture.template eval<Output>(pos, active)));
+}
+
+template <typename T, size_t Dimension, typename Tex>
+static nb::object tex_eval_cubic(const Tex &texture,
+                                 const dr::Array<T, Dimension> &pos,
+                                 const dr::mask_t<T> &active,
+                                 bool force_nonaccel) {
+    DR_TEX_DISPATCH(texture, nb::cast(texture.template eval_cubic<Output>(
+                                 pos, active, force_nonaccel)));
+}
+
+template <typename T, size_t Dimension, typename Tex>
+static nb::object tex_eval_cubic_helper(const Tex &texture,
+                                        const dr::Array<T, Dimension> &pos,
+                                        const dr::mask_t<T> &active) {
+    DR_TEX_DISPATCH(texture, nb::cast(texture.template eval_cubic_helper<Output>(
+                                 pos, active)));
+}
+
+template <typename T, size_t Dimension, typename Tex>
+static nb::object tex_eval_fetch(const Tex &texture,
+                                 const dr::Array<T, Dimension> &pos,
+                                 const dr::mask_t<T> &active) {
+    constexpr size_t ResultSize = 1 << Dimension;
+    auto to_tuple = [ResultSize](auto &&corners) {
+        nb::object out = nb::steal(PyTuple_New((Py_ssize_t) ResultSize));
+        for (size_t i = 0; i < ResultSize; ++i)
+            NB_TUPLE_SET_ITEM(out.ptr(), (Py_ssize_t) i,
+                              nb::cast(corners.entry(i)).release().ptr());
+        return out;
+    };
+    DR_TEX_DISPATCH(
+        texture, to_tuple(texture.template eval_fetch<Output>(pos, active)));
+}
+
+template <typename T, size_t Dimension, typename Tex>
+static nb::object tex_eval_cubic_grad(const Tex &texture,
+                                      const dr::Array<T, Dimension> &pos,
+                                      const dr::mask_t<T> &active) {
+    size_t channels = texture.shape()[Dimension];
+    auto build = [&](auto &&res) {
+        nb::list gradient;
+        for (size_t ch = 0; ch < channels; ++ch)
+            gradient.append(nb::cast(res.gradient.entry(ch)));
+        return nb::make_tuple(nb::cast(res.value), gradient);
+    };
+    DR_TEX_DISPATCH(
+        texture, build(texture.template eval_cubic_grad<Output>(pos, active)));
+}
+
+template <typename T, size_t Dimension, typename Tex>
+static nb::object tex_eval_cubic_hessian(const Tex &texture,
+                                         const dr::Array<T, Dimension> &pos,
+                                         const dr::mask_t<T> &active) {
+    size_t channels = texture.shape()[Dimension];
+    auto build = [&](auto &&res) {
+        nb::list gradient, hessian;
+        for (size_t ch = 0; ch < channels; ++ch) {
+            gradient.append(nb::cast(res.gradient.entry(ch)));
+            hessian.append(nb::cast(res.hessian.entry(ch)));
+        }
+        return nb::make_tuple(nb::cast(res.value), gradient, hessian);
+    };
+    DR_TEX_DISPATCH(texture, build(texture.template eval_cubic_hessian<Output>(
+                                 pos, active)));
+}
+
+#undef DR_TEX_DISPATCH
+
 template <typename Type, size_t Dimension>
 void bind_texture(nb::module_ &m, const char *name) {
     using Tex = dr::Texture<Type, Dimension>;
@@ -63,13 +148,11 @@ void bind_texture(nb::module_ &m, const char *name) {
                     dr::mask_t<T> active = active_.has_value() ?               \
                                                      active_.value() :         \
                                                      true;                     \
-                                                                               \
-                    size_t channels = texture.shape()[Dimension];              \
-                    dr::vector<T> result(channels);                            \
-                    texture.eval(pos, result.data(), active);                  \
-                                                                               \
-                    return result;                                             \
-                }, "pos"_a, "active"_a.sig("Bool(True)") = nb::none(),         \
+                    return tex_eval(texture, pos, active);                     \
+                }, "pos"_a, "active"_a = nb::none(),                           \
+                nb::sig("def eval(self, pos: drjit.AnyArray, "                 \
+                        "active: drjit.AnyArray | bool = True) "               \
+                        "-> drjit.AnyArray"),                                  \
                 doc_Texture_eval)
         .def_tex_eval(Float32)
         .def_tex_eval(Float16)
@@ -108,20 +191,23 @@ void bind_texture(nb::module_ &m, const char *name) {
                     dr::mask_t<T> active = active_.has_value() ?               \
                                                      active_.value() :         \
                                                      true;                     \
-                                                                               \
-                    constexpr size_t ResultSize = 1 << Dimension;              \
-                    size_t channels = texture.shape()[Dimension];              \
-                                                                               \
-                    dr::Array<T *, ResultSize> result_ptrs;                    \
-                    dr::vector<dr::vector<T>> result(ResultSize);              \
-                    for (size_t i = 0; i < ResultSize; ++i) {                  \
-                        result[i].resize(channels);                            \
-                        result_ptrs[i] = result[i].data();                     \
-                    }                                                          \
-                    texture.eval_fetch(pos, result_ptrs, active);              \
-                                                                               \
-                    return result;                                             \
-                }, "pos"_a, "active"_a.sig("Bool(True)") = nb::none(),         \
+                    return tex_eval_fetch(texture, pos, active);               \
+                }, "pos"_a, "active"_a = nb::none(),                           \
+                nb::sig(                                                       \
+                    Dimension == 1                                             \
+                        ? "def eval_fetch(self, pos: drjit.AnyArray, "         \
+                          "active: drjit.AnyArray | bool = True) "             \
+                          "-> tuple[drjit.AnyArray, drjit.AnyArray]"           \
+                        : Dimension == 2                                       \
+                        ? "def eval_fetch(self, pos: drjit.AnyArray, "         \
+                          "active: drjit.AnyArray | bool = True) "             \
+                          "-> tuple[drjit.AnyArray, drjit.AnyArray, "          \
+                          "drjit.AnyArray, drjit.AnyArray]"                    \
+                        : "def eval_fetch(self, pos: drjit.AnyArray, "         \
+                          "active: drjit.AnyArray | bool = True) "             \
+                          "-> tuple[drjit.AnyArray, drjit.AnyArray, "          \
+                          "drjit.AnyArray, drjit.AnyArray, drjit.AnyArray, "   \
+                          "drjit.AnyArray, drjit.AnyArray, drjit.AnyArray]"),  \
                 doc_Texture_eval_fetch)
         .def_tex_eval_fetch(Float32)
         .def_tex_eval_fetch(Float16)
@@ -135,15 +221,14 @@ void bind_texture(nb::module_ &m, const char *name) {
                     dr::mask_t<T> active = active_.has_value() ?               \
                                                      active_.value() :         \
                                                      true;                     \
-                                                                               \
-                    size_t channels = texture.shape()[Dimension];              \
-                    dr::vector<T> result(channels);                            \
-                    texture.eval_cubic(                                        \
-                        pos, result.data(), active, force_nonaccel);           \
-                                                                               \
-                    return result;                                             \
-                }, "pos"_a, "active"_a.sig("Bool(True)") = nb::none(),         \
-                "force_nonaccel"_a = false, doc_Texture_eval_cubic)
+                    return tex_eval_cubic(texture, pos, active,                \
+                                          force_nonaccel);                     \
+                }, "pos"_a, "active"_a = nb::none(),                           \
+                "force_nonaccel"_a = false,                                    \
+                nb::sig("def eval_cubic(self, pos: drjit.AnyArray, "           \
+                        "active: drjit.AnyArray | bool = True, "               \
+                        "force_nonaccel: bool = False) -> drjit.AnyArray"),    \
+                doc_Texture_eval_cubic)
         .def_tex_eval_cubic(Float32)
         .def_tex_eval_cubic(Float16)
         .def_tex_eval_cubic(Float64)
@@ -155,15 +240,11 @@ void bind_texture(nb::module_ &m, const char *name) {
                     dr::mask_t<T> active = active_.has_value() ?               \
                                                      active_.value() :         \
                                                      true;                     \
-                                                                               \
-                    size_t channels = texture.shape()[Dimension];              \
-                    dr::vector<T> value(channels);                             \
-                    dr::vector<dr::Array<T, Dimension>> gradient(channels);    \
-                    texture.eval_cubic_grad(                                   \
-                        pos, value.data(), gradient.data(), active);           \
-                                                                               \
-                    return nb::make_tuple(value, gradient);                    \
-                }, "pos"_a, "active"_a.sig("Bool(True)") = nb::none(),         \
+                    return tex_eval_cubic_grad(texture, pos, active);          \
+                }, "pos"_a, "active"_a = nb::none(),                           \
+                nb::sig("def eval_cubic_grad(self, pos: drjit.AnyArray, "      \
+                        "active: drjit.AnyArray | bool = True) "               \
+                        "-> tuple[drjit.AnyArray, list[drjit.AnyArray]]"),     \
                 doc_Texture_eval_cubic_grad)
         .def_tex_eval_cubic_grad(Float32)
         .def_tex_eval_cubic_grad(Float16)
@@ -176,16 +257,12 @@ void bind_texture(nb::module_ &m, const char *name) {
                     dr::mask_t<T> active = active_.has_value() ?               \
                                                      active_.value() :         \
                                                      true;                     \
-                                                                               \
-                    size_t channels = texture.shape()[Dimension];              \
-                    dr::vector<T> value(channels);                             \
-                    dr::vector<dr::Array<T, Dimension>> gradient(channels);    \
-                    dr::vector<dr::Matrix<T, Dimension>> hessian(channels);    \
-                    texture.eval_cubic_hessian(pos, value.data(),              \
-                        gradient.data(), hessian.data(), active);              \
-                                                                               \
-                    return nb::make_tuple(value, gradient, hessian);           \
-                }, "pos"_a, "active"_a.sig("Bool(True)") = nb::none(),         \
+                    return tex_eval_cubic_hessian(texture, pos, active);       \
+                }, "pos"_a, "active"_a = nb::none(),                           \
+                nb::sig("def eval_cubic_hessian(self, pos: drjit.AnyArray, "   \
+                        "active: drjit.AnyArray | bool = True) "               \
+                        "-> tuple[drjit.AnyArray, list[drjit.AnyArray], "      \
+                        "list[drjit.AnyArray]]"),                              \
                 doc_Texture_eval_cubic_hessian)
         .def_tex_eval_cubic_hessian(Float32)
         .def_tex_eval_cubic_hessian(Float16)
@@ -198,13 +275,11 @@ void bind_texture(nb::module_ &m, const char *name) {
                     dr::mask_t<T> active = active_.has_value() ?               \
                                                      active_.value() :         \
                                                      true;                     \
-                                                                               \
-                    size_t channels = texture.shape()[Dimension];              \
-                    dr::vector<T> result(channels);                            \
-                    texture.eval_cubic_helper(pos, result.data(), active);     \
-                                                                               \
-                    return result;                                             \
-                }, "pos"_a, "active"_a.sig("Bool(True)") = nb::none(),         \
+                    return tex_eval_cubic_helper(texture, pos, active);        \
+                }, "pos"_a, "active"_a = nb::none(),                           \
+                nb::sig("def eval_cubic_helper(self, pos: drjit.AnyArray, "    \
+                        "active: drjit.AnyArray | bool = True) "               \
+                        "-> drjit.AnyArray"),                                  \
                 doc_Texture_eval_cubic_helper)
         .def_tex_eval_cubic_helper(Float32)
         .def_tex_eval_cubic_helper(Float16)
