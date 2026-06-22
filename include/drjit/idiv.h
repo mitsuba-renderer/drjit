@@ -122,9 +122,18 @@ again2:
 
 NAMESPACE_END(detail)
 
-template <typename T, typename = int> struct divisor;
+/**
+ * \brief Magic-constant integer divisor (libdivide)
+ *
+ * \c Positive should be set if the caller can guarantee that the divisor is
+ * always positive. This produces a slightly more efficient instruction
+ * sequence for signed division.
+ */
+template <typename T, bool Positive = false, typename = int> struct divisor;
 
-template <typename T> struct divisor<T, enable_if_t<std::is_unsigned_v<T>>> {
+// Partial template overload for unsigned host-side arrays
+template <typename T, bool Positive>
+struct divisor<T, Positive, enable_if_t<std::is_unsigned_v<T>>> {
     T div;
     T multiplier;
     uint8_t shift;
@@ -151,8 +160,7 @@ template <typename T> struct divisor<T, enable_if_t<std::is_unsigned_v<T>>> {
 
     template <typename Value>
     DRJIT_INLINE DRJIT_NO_UBSAN Value operator()(const Value &value) const {
-        /* Division by +/-1 is not supported by the
-           precomputation-based approach */
+        // Division by 1 is not supported by the approach below
         if (div == 1)
             return value;
 
@@ -161,15 +169,16 @@ template <typename T> struct divisor<T, enable_if_t<std::is_unsigned_v<T>>> {
                 return value >> (shift + 1);
         }
 
-        // ubsan must be locally turned off for this line (overflows)
+        // UBSAN must be locally turned off for this line (overflows)
         Value q = mul_hi(multiplier, value);
         Value t = sr<1>(value - q) + q;
         return t >> shift;
     }
 } DRJIT_PACK;
 
-template <typename T>
-struct divisor<T, enable_if_t<std::is_signed_v<T>>> {
+// Partial template overload for signed host-side arrays
+template <typename T, bool Positive>
+struct divisor<T, Positive, enable_if_t<std::is_signed_v<T>>> {
     using U = std::make_unsigned_t<T>;
 
     T div;
@@ -198,19 +207,81 @@ struct divisor<T, enable_if_t<std::is_signed_v<T>>> {
     }
 
     template <typename Value> DRJIT_INLINE DRJIT_NO_UBSAN Value operator()(const Value &value) const {
-        /* Division by +/-1 is not supported by the
-           precomputation-based approach */
+        // Fast path for the identity divisor
         if (div == 1)
             return value;
 
-        // ubsan must be locally turned off for this line (overflows)
+        // UBSAN must be locally turned off for this line (overflows)
         Value q = mul_hi(multiplier, value) + value;
         Value q_sign = sr<sizeof(T) * 8 - 1>(q);
         q = q + (q_sign & ((T(1) << shift) - (multiplier == 0 ? 1 : 0)));
+        if constexpr (Positive)
+            return q >> shift;
+
         Value sign = div < 0 ? -1 : 0;
         return ((q >> shift) ^ sign) - sign;
     }
 } DRJIT_PACK;
+
+
+// Partial template overload for unsigned host-side arrays
+template <typename T, bool Positive>
+struct divisor<T, Positive, enable_if_t<is_jit_v<T> && std::is_unsigned_v<scalar_t<T>>>> {
+    using Scalar = scalar_t<T>;
+
+    T multiplier;
+    T shift;
+    bool one = false;
+
+    divisor(Scalar div) {
+        drjit::divisor<Scalar> d(div);
+        multiplier = d.multiplier;
+        shift      = Scalar(d.shift);
+        one        = div == 1;
+    }
+
+    template <typename Value> Value operator()(const Value &value) const {
+        // Division by 1 is not supported by the approach below
+        if (one)
+            return value;
+        Value m = Value(multiplier), s = Value(shift),
+              q = mul_hi(m, value);
+        Value t = sr<1>(value - q) + q;
+        return t >> s;
+    }
+
+    DRJIT_STRUCT(divisor, multiplier, shift)
+};
+
+// Partial template overload for signed host-side arrays
+template <typename T, bool Positive>
+struct divisor<T, Positive, enable_if_t<is_jit_v<T> && std::is_signed_v<scalar_t<T>>>> {
+    using Scalar = scalar_t<T>;
+
+    T multiplier;
+    T shift;
+    bool neg = false;
+
+    divisor(Scalar div) {
+        drjit::divisor<Scalar> d(div);
+        multiplier = d.multiplier;
+        shift      = Scalar(d.shift);
+        neg        = div < 0;
+    }
+
+    template <typename Value> Value operator()(const Value &value) const {
+        Value m = Value(multiplier), s = Value(shift),
+              q = mul_hi(m, value) + value;
+        q += sr<sizeof(Scalar) * 8 - 1>(q) &
+             select(m == 0, (Value(1) << s) - 1, Value(1) << s);
+        q = q >> s;
+        if constexpr (Positive)
+            return q;
+        return neg ? -q : q;
+    }
+
+    DRJIT_STRUCT(divisor, multiplier, shift)
+};
 
 template <typename Value> DRJIT_INLINE Value idiv(const Value &a, const divisor<scalar_t<Value>> &div) {
     static_assert(std::is_integral_v<scalar_t<Value>>, "idiv(): requires integral operands!");
