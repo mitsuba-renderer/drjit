@@ -24,19 +24,6 @@
 template <typename Value>
 using GenericArray = drjit::JitArray<JitBackend::None, Value>;
 
-/// RAII helper for *unlocking* a mutex
-template <typename T> class unlock_guard {
-public:
-    unlock_guard(T &mutex) : m_mutex(mutex) { m_mutex.unlock(); }
-    ~unlock_guard() { m_mutex.lock(); }
-    unlock_guard(const unlock_guard &) = delete;
-    unlock_guard(unlock_guard &&) = delete;
-    unlock_guard &operator=(const unlock_guard &) = delete;
-    unlock_guard &operator=(unlock_guard &&) = delete;
-private:
-    T &m_mutex;
-};
-
 /// RAII AD Isolation helper
 struct scoped_isolation_guard {
     scoped_isolation_guard(int symbolic = -1) : symbolic(symbolic) {

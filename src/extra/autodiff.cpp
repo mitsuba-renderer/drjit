@@ -54,16 +54,9 @@
 #include <tsl/robin_set.h>
 #include <tsl/robin_map.h>
 #include <nanobind/intrusive/counter.inl>
-#include <queue>
 #include <string>
-
-#if defined(_WIN32)
-#include <shared_mutex>
-using Lock = std::shared_mutex; // prefer Win7 SWRLOCK API
-#else
-#include <mutex>
-using Lock = std::mutex;
-#endif
+#include "lock.h"
+#include "free_slots.h"
 
 namespace dr = drjit;
 
@@ -441,9 +434,9 @@ struct State {
     /// List of all edges (used and unused ones)
     std::vector<Edge> edges;
 
-    /// Sorted list of currently unused edges and vertices
-    std::priority_queue<ADIndex, std::vector<ADIndex>, std::greater<uint32_t>> unused_variables;
-    std::priority_queue<EdgeIndex, std::vector<EdgeIndex>, std::greater<uint32_t>> unused_edges;
+    /// Bit-packed free lists of currently unused edges and vertices
+    FreeSlots unused_variables;
+    FreeSlots unused_edges;
 
     /// Counter to establish an ordering among variables
     uint64_t counter = 0;
@@ -452,6 +445,7 @@ struct State {
     bool leak_warnings = true;
 
     State() {
+        lock_init(lock);
         variables.resize(1);
         edges.resize(1);
     }
@@ -482,6 +476,8 @@ struct State {
                 ad_warn("AD edge leak detected (%zu edges remain in use)!",
                         edges_used);
         }
+
+        lock_destroy(lock);
     }
 
     ADVariable *operator[](ADIndex index) {
@@ -780,7 +776,7 @@ Index ad_var_copy_ref_impl(Index index) JIT_NOEXCEPT {
             scopes.back().maybe_disable(ad_index);
 
         if (ad_index) {
-            std::lock_guard<Lock> guard(state.lock);
+            lock_guard guard(state.lock);
             ad_var_inc_ref_int(ad_index, state[ad_index]);
         }
     }
@@ -795,7 +791,7 @@ Index ad_var_inc_ref_impl(Index index) JIT_NOEXCEPT {
     jit_var_inc_ref(jit_index);
 
     if (unlikely(ad_index)) {
-        std::lock_guard<Lock> guard(state.lock);
+        lock_guard guard(state.lock);
         ad_var_inc_ref_int(ad_index, state[ad_index]);
     }
 
@@ -807,7 +803,7 @@ uint32_t ad_var_ref(uint64_t index) {
     uint32_t ad_index = ::ad_index(index);
     if (!ad_index)
         return 0;
-    std::lock_guard<Lock> guard(state.lock);
+    lock_guard guard(state.lock);
     return state[ad_index]->ref_count;
 }
 
@@ -818,7 +814,7 @@ void ad_var_dec_ref_impl(Index index) JIT_NOEXCEPT {
     jit_var_dec_ref(jit_index);
 
     if (unlikely(ad_index)) {
-        std::lock_guard<Lock> guard(state.lock);
+        lock_guard guard(state.lock);
         ad_var_dec_ref_int(ad_index, state[ad_index]);
     }
 }
@@ -857,8 +853,7 @@ static std::pair<ADIndex, ADVariable *> ad_var_new(JitBackend backend,
         index = (ADIndex) state.variables.size();
         state.variables.emplace_back();
     } else {
-        index = unused.top();
-        unused.pop();
+        index = unused.pop();
     }
 
 #if defined(DRJIT_SANITIZE_INTENSE)
@@ -893,8 +888,7 @@ static EdgeIndex ad_edge_new() {
         index = (EdgeIndex) state.edges.size();
         state.edges.emplace_back();
     } else {
-        index = unused.top();
-        unused.pop();
+        index = unused.pop();
     }
 
 #if defined(DRJIT_SANITIZE_INTENSE)
@@ -1026,7 +1020,7 @@ DRJIT_NOINLINE Index ad_var_new_impl(const char *label, JitVar &&result,
     #pragma GCC diagnostic pop
 #endif
 
-    std::lock_guard<Lock> guard(state.lock);
+    lock_guard guard(state.lock);
 
     /* Potentially turn off derivative tracking for some of the operands if
        we're within a scope that enables/disables gradient propagation
@@ -1189,7 +1183,7 @@ JitIndex ad_grad(Index index, bool null_ok) {
     size_t size;
 
     if (ad_index) {
-        std::lock_guard<Lock> guard(state.lock);
+        lock_guard guard(state.lock);
         const ADVariable *v = state[ad_index];
         result = v->grad;
         backend = (JitBackend) v->backend;
@@ -1222,7 +1216,7 @@ void ad_clear_grad(Index index) {
         return;
     ad_log("ad_clear_grad(a%u)", ad_index);
 
-    std::lock_guard<Lock> guard(state.lock);
+    lock_guard guard(state.lock);
     ADVariable *v = state[ad_index];
     v->grad = JitVar();
 }
@@ -1243,7 +1237,7 @@ void ad_accum_grad(Index index, JitIndex value) {
     if (jit_var_is_zero_literal(value))
         return;
 
-    std::lock_guard<Lock> guard(state.lock);
+    lock_guard guard(state.lock);
     ADVariable *v = state[ad_index];
 
     JitVar value_v = JitVar::borrow(value);
@@ -1260,7 +1254,7 @@ void ad_accum_grad(Index index, JitIndex value) {
 }
 
 Index ad_var_set_label(Index index, size_t argc, ...) {
-    std::lock_guard<Lock> guard(state.lock);
+    lock_guard guard(state.lock);
 
     // First, turn the variable-length argument list into a usable label
     va_list ap;
@@ -1392,7 +1386,7 @@ void ad_enqueue(dr::ADMode mode, Index index) {
 
     LocalState &ls = local_state;
 
-    std::lock_guard<Lock> guard(state.lock);
+    lock_guard guard(state.lock);
     switch (mode) {
         case dr::ADMode::Forward:
             ad_dfs_fwd(ls.todo, ad_index, state[ad_index]);
@@ -1539,7 +1533,7 @@ void ad_traverse(dr::ADMode mode, uint32_t flags) {
     todo.swap(todo_tls);
     bool clear_edges = flags & (uint32_t) dr::ADFlag::ClearEdges;
 
-    std::lock_guard<Lock> guard(state.lock);
+    lock_guard guard(state.lock);
     try {
         // Bring the edges into the appropriate order
         std::sort(todo.begin(), todo.end(),
@@ -1766,7 +1760,7 @@ void ad_scope_enter(ADScope type, size_t size, const Index *indices, int symboli
             scope.isolate = true;
 
             /* access state data structure */ {
-                std::lock_guard<Lock> guard(state.lock);
+                lock_guard guard(state.lock);
                 scope.counter = state.counter;
             }
 
@@ -1801,13 +1795,13 @@ void ad_scope_leave(bool process_postponed) {
     ad_log("ad_scope_leave(%s)", type_name);
 
     if (scopes.size() < 2 || !scopes[scopes.size() - 2].symbolic) {
-        std::lock_guard<Lock> guard(state.lock);
+        lock_guard guard(state.lock);
         for (uint32_t i: scope.implicit_in)
             ad_var_dec_ref_int(i, state[i]);
         for (uint32_t i: scope.implicit_out)
             ad_var_dec_ref_int(i, state[i]);
     } else {
-        std::lock_guard<Lock> guard(state.lock);
+        lock_guard guard(state.lock);
         Scope &prev = scopes[scopes.size() - 2];
         for (uint32_t i : scope.implicit_in) {
             if (!prev.implicit_in.insert(i).second)
@@ -1839,7 +1833,7 @@ void ad_scope_leave(bool process_postponed) {
             ad_traverse(dr::ADMode::Backward,
                         (uint32_t) dr::ADFlag::ClearVertices);
         } else {
-            std::lock_guard<Lock> guard(state.lock);
+            lock_guard guard(state.lock);
             for (EdgeRef &er: scope.postponed) {
                 ad_var_dec_ref_int(er.target, state[er.target]);
                 state.edges[er.id].visited = 0;
@@ -1888,7 +1882,7 @@ int ad_has_grad(Index index) {
     if (!ad_index)
         return 0;
 
-    std::lock_guard<Lock> guard(state.lock);
+    lock_guard guard(state.lock);
     const ADVariable *v = state[ad_index];
     return v->grad.valid();
 }
@@ -2316,7 +2310,7 @@ Index ad_var_new(JitIndex i0) {
         VarInfo info = jit_set_backend(i0);
         const char *prefix = jit_prefix(info.backend);
 
-        std::lock_guard<Lock> guard(state.lock);
+        lock_guard guard(state.lock);
         ADVariable *v = state[ad_index(result)];
 
         if (!prefix || !label)
@@ -2341,7 +2335,7 @@ Index ad_var_schedule_force(Index index, int *rv) {
 
     jit_index = jit_var_schedule_force(jit_index, rv);
     if (ad_index) {
-        std::lock_guard<Lock> guard(state.lock);
+        lock_guard guard(state.lock);
         ad_var_inc_ref_int(ad_index, state[ad_index]);
     }
 
@@ -2354,7 +2348,7 @@ Index ad_var_data(Index index, void **ptr) {
 
     jit_index = jit_var_data(jit_index, ptr);
     if (ad_index) {
-        std::lock_guard<Lock> guard(state.lock);
+        lock_guard guard(state.lock);
         ad_var_inc_ref_int(ad_index, state[ad_index]);
     }
 
@@ -2364,7 +2358,7 @@ Index ad_var_data(Index index, void **ptr) {
 void ad_mark_loop_boundary(Index index) {
     ADIndex ad_index = ::ad_index(index);
     if (ad_index) {
-        std::lock_guard<Lock> guard(state.lock);
+        lock_guard guard(state.lock);
         state[ad_index]->flags |= (uint8_t) VariableFlags::LoopBoundary;
     }
 }
@@ -2373,7 +2367,7 @@ uint32_t ad_pred(uint32_t ad_index, uint32_t i_) {
     if (ad_index == 0)
         return 0;
 
-    std::lock_guard<Lock> guard(state.lock);
+    lock_guard guard(state.lock);
     const ADVariable *v = state[ad_index];
     uint32_t edge = v->next_bwd;
 
@@ -3364,13 +3358,13 @@ public:
           mode(mode) { }
 
     ~PacketGather() {
-        std::lock_guard<Lock> guard(state.lock);
+        lock_guard guard(state.lock);
         for (ADIndex index : m_output_indices)
             ad_var_dec_ref_int(index, state[index]);
     }
 
     void forward() override {
-        std::lock_guard<Lock> guard(state.lock);
+        lock_guard guard(state.lock);
         size_t n = m_output_indices.size();
 
         const ADVariable *v = state[m_input_indices[0]];
@@ -3388,7 +3382,7 @@ public:
     }
 
     void backward() override {
-        std::lock_guard<Lock> guard(state.lock);
+        lock_guard guard(state.lock);
         size_t n = m_output_indices.size();
 
         index32_vector grad_out;
@@ -3420,7 +3414,7 @@ public:
     void add_output(uint32_t index) {
         add_index(m_backend, index, false);
 
-        std::lock_guard<Lock> guard(state.lock);
+        lock_guard guard(state.lock);
         ad_var_inc_ref_int(index, state[index]);
     }
 
@@ -3484,7 +3478,7 @@ Index ad_var_scatter(Index target, Index value, JitIndex offset, JitIndex mask,
     if (is_detached(value) && (is_detached(target) || perm_scatter)) {
         ADIndex ad_index = ::ad_index(target);
         if (ad_index) {
-            std::lock_guard<Lock> guard(state.lock);
+            lock_guard guard(state.lock);
             ad_var_inc_ref_int(ad_index, state[ad_index]);
         }
 
@@ -3551,13 +3545,13 @@ public:
     }
 
     ~PacketScatter() {
-        std::lock_guard<Lock> guard(state.lock);
+        lock_guard guard(state.lock);
         for (uint32_t index: m_output_indices)
             ad_var_dec_ref_int(index, state[index]);
     }
 
     void forward() override {
-        std::lock_guard<Lock> guard(state.lock);
+        lock_guard guard(state.lock);
         JitIndex *grad_in = (JitIndex *) alloca(sizeof(JitIndex) * m_n);
         size_t n_valid = 0;
         JitVar zero = scalar(m_backend, m_type, 0.0);
@@ -3598,7 +3592,7 @@ public:
     }
 
     void backward() override {
-        std::lock_guard<Lock> guard(state.lock);
+        lock_guard guard(state.lock);
         JitIndex *out = (JitIndex *) alloca(sizeof(JitIndex) * m_n);
 
         ADVariable *v = state[m_output_indices[0]];
@@ -3635,7 +3629,7 @@ public:
 
     void add_output(uint32_t index) {
         add_index(m_backend, index, false);
-        std::lock_guard<Lock> guard(state.lock);
+        lock_guard guard(state.lock);
         ad_var_inc_ref_int(index, state[index]);
     }
 
@@ -3749,7 +3743,7 @@ static_assert(sizeof(type_name_short) / sizeof(type_name_short[0]) == (size_t) V
 
 
 const char *ad_var_whos() {
-    std::lock_guard<Lock> guard(state.lock);
+    lock_guard guard(state.lock);
 
     std::vector<uint32_t> indices;
     for (size_t i = 1; i < state.variables.size(); ++i) {
@@ -3776,7 +3770,7 @@ const char *ad_var_whos() {
 }
 
 const char *ad_var_graphviz() {
-    std::lock_guard<Lock> guard(state.lock);
+    lock_guard guard(state.lock);
 
     std::vector<uint32_t> indices;
     for (size_t i = 1; i < state.variables.size(); ++i) {
@@ -3971,7 +3965,7 @@ void ad_var_check_implicit(uint64_t index) {
     if (ad_index == 0 || !jit_flag(JitFlag::SymbolicScope))
         return;
 
-    std::lock_guard<Lock> guard(state.lock);
+    lock_guard guard(state.lock);
     ADVariable *v = state[ad_index];
 
     if (!(v->flags & (uint8_t) VariableFlags::Symbolic)) {
@@ -4112,13 +4106,13 @@ void ad_copy_implicit_deps(drjit::vector<uint32_t>& result, bool input) {
 class CoopVecPack : public dr::detail::CustomOpBase {
 public:
     ~CoopVecPack() {
-        std::lock_guard<Lock> guard(state.lock);
+        lock_guard guard(state.lock);
         for (uint32_t index: m_output_indices)
             ad_var_dec_ref_int(index, state[index]);
     }
 
     void forward() override {
-        std::lock_guard<Lock> guard(state.lock);
+        lock_guard guard(state.lock);
         uint32_t size = (uint32_t) m_inputs.size();
         JitIndex *tmp = (JitIndex *) alloca(sizeof(JitIndex) * size);
         size_t n_valid = 0;
@@ -4145,7 +4139,7 @@ public:
     }
 
     void backward() override {
-        std::lock_guard<Lock> guard(state.lock);
+        lock_guard guard(state.lock);
         uint32_t n = (uint32_t) m_inputs.size();
 
         ADVariable *v = state[m_output_indices[0]];
@@ -4173,7 +4167,7 @@ public:
 
     void add_output(JitBackend backend, uint32_t index) {
         add_index(backend, index, false);
-        std::lock_guard<Lock> guard(state.lock);
+        lock_guard guard(state.lock);
         ad_var_inc_ref_int(index, state[index]);
     }
 
@@ -4251,13 +4245,13 @@ public:
           m_in_size(in_size), m_out_size(out_size) { }
 
     ~CoopVecPackMatrices() {
-        std::lock_guard<Lock> guard(state.lock);
+        lock_guard guard(state.lock);
         for (uint32_t index : m_output_indices)
             ad_var_dec_ref_int(index, state[index]);
     }
 
     void forward() override {
-        std::lock_guard<Lock> guard(state.lock);
+        lock_guard guard(state.lock);
         ADVariable *target = state[m_output_indices[0]];
 
         // Pass the prior destination's gradient through unchanged.
@@ -4290,7 +4284,7 @@ public:
     }
 
     void backward() override {
-        std::lock_guard<Lock> guard(state.lock);
+        lock_guard guard(state.lock);
         ADVariable *out = state[m_output_indices[0]];
         if (!out->grad.valid())
             return;
@@ -4329,7 +4323,7 @@ public:
 
     void add_output(JitBackend backend, uint32_t index) {
         add_index(backend, index, false);
-        std::lock_guard<Lock> guard(state.lock);
+        lock_guard guard(state.lock);
         ad_var_inc_ref_int(index, state[index]);
     }
 
@@ -4389,13 +4383,13 @@ Index ad_coop_vec_pack_matrices(uint32_t count, Index in,
 class CoopVecUnpack : public dr::detail::CustomOpBase {
 public:
     ~CoopVecUnpack() {
-        std::lock_guard<Lock> guard(state.lock);
+        lock_guard guard(state.lock);
         for (ADIndex index : m_output_indices)
             ad_var_dec_ref_int(index, state[index]);
     }
 
     void forward() override {
-        std::lock_guard<Lock> guard(state.lock);
+        lock_guard guard(state.lock);
         size_t n = m_output_indices.size();
 
         const ADVariable *v = state[m_input_indices[0]];
@@ -4412,7 +4406,7 @@ public:
     }
 
     void backward() override {
-        std::lock_guard<Lock> guard(state.lock);
+        lock_guard guard(state.lock);
         size_t n = m_output_indices.size();
 
         JitIndex *tmp = (JitIndex *) alloca(sizeof(JitIndex) * n);
@@ -4440,7 +4434,7 @@ public:
     void add_output(uint32_t index) {
         add_index(m_backend, index, false);
 
-        std::lock_guard<Lock> guard(state.lock);
+        lock_guard guard(state.lock);
         ad_var_inc_ref_int(index, state[index]);
     }
 
@@ -4636,7 +4630,7 @@ public:
     }
 
     void forward() override {
-        std::lock_guard<Lock> guard(state.lock);
+        lock_guard guard(state.lock);
 
         const ADVariable *A_v = ad_index(m_A) ? state[ad_index(m_A)] : nullptr,
                        *x_v = ad_index(m_x) ? state[ad_index(m_x)] : nullptr,
@@ -4671,7 +4665,7 @@ public:
     }
 
     void backward() override {
-        std::lock_guard<Lock> guard(state.lock);
+        lock_guard guard(state.lock);
         ADVariable *out_v = state[m_output_indices[0]];
         const JitVar &grad = out_v->grad;
 
@@ -4753,7 +4747,7 @@ uint64_t ad_coop_vec_matvec(uint64_t A_index, const MatrixDescr *A_descr,
         return result.release();
     } else {
         {
-            std::lock_guard<Lock> guard(state.lock);
+            lock_guard guard(state.lock);
             A_index = ad_var_memop_remap(A_index, true);
             b_index = ad_var_memop_remap(b_index, true);
             A_index_j = jit_index(A_index);
@@ -4792,7 +4786,7 @@ void ad_reorder(Index key, uint32_t num_bits, uint32_t n, Index *in, Index *out)
 
     jit_reorder(jit_index(key), num_bits, n, tmp_in, tmp_out);
 
-    std::lock_guard<Lock> guard(state.lock);
+    lock_guard guard(state.lock);
     for (uint32_t i = 0; i < n; ++i) {
         ADIndex ad = ad_index(in[i]);
         if (ad)
@@ -4840,7 +4834,7 @@ struct PushScope {
                 );
             }
 
-            std::lock_guard<Lock> guard(state.lock);
+            lock_guard guard(state.lock);
             for (uint32_t i: child_scope.implicit_in)
                 ad_var_dec_ref_int(i, state[i]);
             for (uint32_t i: child_scope.implicit_out)
@@ -4883,7 +4877,7 @@ struct CustomOp : Special {
         if (m_op.get()) {
             ref<dr::detail::CustomOpBase> op = std::move(m_op);
             {
-                unlock_guard<Lock> guard(state.lock);
+                unlock_guard guard(state.lock);
                 ad_log("ad_free(): freeing custom operation \"%s\"", op->name());
                 op.reset();
             }
@@ -4915,7 +4909,7 @@ struct CustomOp : Special {
         if (m_op.get() && !ad_release_one_output(m_op.get())) {
             ref<dr::detail::CustomOpBase> op = std::move(m_op);
             {
-                unlock_guard<Lock> guard(state.lock);
+                unlock_guard guard(state.lock);
                 ad_log("ad_free(): freeing custom operation \"%s\"", op->name());
                 op.reset();
             }
@@ -4935,7 +4929,7 @@ struct CustomOp : Special {
         }
 
         /* leave critical section */ {
-            unlock_guard<Lock> guard(state.lock);
+            unlock_guard guard(state.lock);
             PushScope push(m_scope);
             scoped_set_flags flag_guard(m_flags);
             m_op->forward();
@@ -4967,7 +4961,7 @@ struct CustomOp : Special {
         }
 
         /* leave critical section */ {
-            unlock_guard<Lock> guard(state.lock);
+            unlock_guard guard(state.lock);
             PushScope push(m_scope);
             scoped_set_flags flag_guard(m_flags);
             m_op->backward();
@@ -5049,7 +5043,7 @@ bool ad_custom_op(dr::detail::CustomOpBase *op) {
     ad_log("ad_var_custom_op(\"%s\", n_in=%zu, n_out=%zu)",
            name, inputs.size(), outputs.size());
 
-    std::lock_guard<Lock> guard(state.lock);
+    lock_guard guard(state.lock);
 
     uint32_t flags = jit_flags();
 
@@ -5180,14 +5174,14 @@ NAMESPACE_BEGIN(drjit)
 NAMESPACE_BEGIN(detail)
 
 CustomOpBase::CustomOpBase() {
-    std::lock_guard<Lock> guard(state.lock);
+    lock_guard guard(state.lock);
     m_backend = JitBackend::None;
     m_counter_offset = state.counter;
     state.counter += 2;
 }
 
 CustomOpBase::~CustomOpBase() {
-    std::lock_guard<Lock> guard(state.lock);
+    lock_guard guard(state.lock);
 
     for (size_t i = 0, size = m_input_indices.size(); i < size; ++i) {
         ADIndex ad_index = m_input_indices[i];
@@ -5218,7 +5212,7 @@ bool CustomOpBase::add_index(JitBackend backend, ADIndex index, bool input) {
     if (!index)
         return false;
 
-    std::lock_guard<Lock> guard(state.lock);
+    lock_guard guard(state.lock);
     ad_var_inc_ref_int(index, state[index]);
 
     dr::vector<uint32_t> &indices = input ? m_input_indices
