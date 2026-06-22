@@ -9,6 +9,7 @@ add_library(
   loop.cpp
   cond.cpp
   resample.cpp
+  texture.cpp
 )
 
 if (NOT MSVC)

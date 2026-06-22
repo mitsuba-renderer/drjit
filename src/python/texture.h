@@ -14,10 +14,60 @@
         default: { using Output = dr::DynamicArray<T>;  return (expr); }       \
     }
 
+// Build a ``pos``/``active`` signature with extra args and return type
+#define DR_TEX_SIG(name, extra, ret)                                           \
+    "def " name "(self, pos: drjit.AnyArray, "                                 \
+    "active: drjit.AnyArray | bool = True" extra ") -> " ret
+
+// Bind one ``Texture`` method, specialized to the query precision ``T``
+#define def_tex_eval(T)                                                        \
+    def("eval", &tex_eval<T, Dimension, Tex>, "pos"_a,                         \
+        "active"_a = nb::none(),                                               \
+        nb::sig(DR_TEX_SIG("eval", "", "drjit.AnyArray")), doc_Texture_eval)
+#define def_tex_write(T)                                                       \
+    def("write", &tex_write<T, Dimension, Tex>, "pos"_a, "value"_a,            \
+        "active"_a.sig("Bool(True)") = nb::none(), doc_Texture_write)
+#define def_tex_eval_fetch(T)                                                  \
+    def("eval_fetch", &tex_eval_fetch<T, Dimension, Tex>, "pos"_a,             \
+        "active"_a = nb::none(),                                               \
+        nb::sig(DR_TEX_SIG("eval_fetch", "", "tuple[drjit.AnyArray, ...]")),   \
+        doc_Texture_eval_fetch)
+#define def_tex_eval_cubic(T)                                                  \
+    def("eval_cubic", &tex_eval_cubic<T, Dimension, Tex>, "pos"_a,             \
+        "active"_a = nb::none(), "force_nonaccel"_a = false,                   \
+        nb::sig(DR_TEX_SIG("eval_cubic", ", force_nonaccel: bool = False",     \
+                           "drjit.AnyArray")),                                 \
+        doc_Texture_eval_cubic)
+#define def_tex_eval_cubic_grad(T)                                             \
+    def("eval_cubic_grad", &tex_eval_cubic_grad<T, Dimension, Tex>, "pos"_a,   \
+        "active"_a = nb::none(),                                               \
+        nb::sig(DR_TEX_SIG("eval_cubic_grad", "",                              \
+                           "tuple[drjit.AnyArray, list[drjit.AnyArray]]")),    \
+        doc_Texture_eval_cubic_grad)
+#define def_tex_eval_cubic_hessian(T)                                          \
+    def("eval_cubic_hessian", &tex_eval_cubic_hessian<T, Dimension, Tex>,      \
+        "pos"_a, "active"_a = nb::none(),                                      \
+        nb::sig(DR_TEX_SIG("eval_cubic_hessian", "",                           \
+                           "tuple[drjit.AnyArray, list[drjit.AnyArray], "      \
+                           "list[drjit.AnyArray]]")),                          \
+        doc_Texture_eval_cubic_hessian)
+#define def_tex_eval_cubic_helper(T)                                           \
+    def("eval_cubic_helper", &tex_eval_cubic_helper<T, Dimension, Tex>,        \
+        "pos"_a, "active"_a = nb::none(),                                      \
+        nb::sig(DR_TEX_SIG("eval_cubic_helper", "", "drjit.AnyArray")),        \
+        doc_Texture_eval_cubic_helper)
+
+/// Resolve an optional mask, defaulting to ``true`` when unset
+template <typename T>
+static dr::mask_t<T> mask_or_true(const std::optional<dr::mask_t<T>> &active) {
+    return active.has_value() ? active.value() : dr::mask_t<T>(true);
+}
+
 template <typename T, size_t Dimension, typename Tex>
 static nb::object tex_eval(const Tex &texture,
                            const dr::Array<T, Dimension> &pos,
-                           const dr::mask_t<T> &active) {
+                           const std::optional<dr::mask_t<T>> &active_) {
+    dr::mask_t<T> active = mask_or_true<T>(active_);
     DR_TEX_DISPATCH(texture,
                     nb::cast(texture.template eval<Output>(pos, active)));
 }
@@ -25,8 +75,9 @@ static nb::object tex_eval(const Tex &texture,
 template <typename T, size_t Dimension, typename Tex>
 static nb::object tex_eval_cubic(const Tex &texture,
                                  const dr::Array<T, Dimension> &pos,
-                                 const dr::mask_t<T> &active,
+                                 const std::optional<dr::mask_t<T>> &active_,
                                  bool force_nonaccel) {
+    dr::mask_t<T> active = mask_or_true<T>(active_);
     DR_TEX_DISPATCH(texture, nb::cast(texture.template eval_cubic<Output>(
                                  pos, active, force_nonaccel)));
 }
@@ -34,7 +85,8 @@ static nb::object tex_eval_cubic(const Tex &texture,
 template <typename T, size_t Dimension, typename Tex>
 static nb::object tex_eval_cubic_helper(const Tex &texture,
                                         const dr::Array<T, Dimension> &pos,
-                                        const dr::mask_t<T> &active) {
+                                        const std::optional<dr::mask_t<T>> &active_) {
+    dr::mask_t<T> active = mask_or_true<T>(active_);
     DR_TEX_DISPATCH(texture, nb::cast(texture.template eval_cubic_helper<Output>(
                                  pos, active)));
 }
@@ -42,9 +94,10 @@ static nb::object tex_eval_cubic_helper(const Tex &texture,
 template <typename T, size_t Dimension, typename Tex>
 static nb::object tex_eval_fetch(const Tex &texture,
                                  const dr::Array<T, Dimension> &pos,
-                                 const dr::mask_t<T> &active) {
-    constexpr size_t ResultSize = 1 << Dimension;
-    auto to_tuple = [ResultSize](auto &&corners) {
+                                 const std::optional<dr::mask_t<T>> &active_) {
+    dr::mask_t<T> active = mask_or_true<T>(active_);
+    auto to_tuple = [](auto &&corners) {
+        constexpr size_t ResultSize = 1 << Dimension;
         nb::object out = nb::steal(PyTuple_New((Py_ssize_t) ResultSize));
         for (size_t i = 0; i < ResultSize; ++i)
             NB_TUPLE_SET_ITEM(out.ptr(), (Py_ssize_t) i,
@@ -58,7 +111,8 @@ static nb::object tex_eval_fetch(const Tex &texture,
 template <typename T, size_t Dimension, typename Tex>
 static nb::object tex_eval_cubic_grad(const Tex &texture,
                                       const dr::Array<T, Dimension> &pos,
-                                      const dr::mask_t<T> &active) {
+                                      const std::optional<dr::mask_t<T>> &active_) {
+    dr::mask_t<T> active = mask_or_true<T>(active_);
     size_t channels = texture.shape()[Dimension];
     auto build = [&](auto &&res) {
         nb::list gradient;
@@ -73,7 +127,8 @@ static nb::object tex_eval_cubic_grad(const Tex &texture,
 template <typename T, size_t Dimension, typename Tex>
 static nb::object tex_eval_cubic_hessian(const Tex &texture,
                                          const dr::Array<T, Dimension> &pos,
-                                         const dr::mask_t<T> &active) {
+                                         const std::optional<dr::mask_t<T>> &active_) {
+    dr::mask_t<T> active = mask_or_true<T>(active_);
     size_t channels = texture.shape()[Dimension];
     auto build = [&](auto &&res) {
         nb::list gradient, hessian;
@@ -87,7 +142,22 @@ static nb::object tex_eval_cubic_hessian(const Tex &texture,
                                  pos, active)));
 }
 
-#undef DR_TEX_DISPATCH
+template <typename T, size_t Dimension, typename Tex>
+static void tex_write(Tex &texture,
+                      const dr::Array<dr::uint32_array_t<T>, Dimension> &pos,
+                      const dr::vector<T> &value,
+                      const std::optional<dr::mask_t<T>> &active_) {
+    dr::mask_t<T> active = mask_or_true<T>(active_);
+    size_t channels = texture.shape()[Dimension];
+    if (value.size() != channels)
+        nb::raise("Texture.write(): expected %zu channel values, got %zu.",
+                  channels, value.size());
+    if constexpr (Tex::HasGPUTexture)
+        texture.write(pos, value.data(), active);
+    else
+        nb::raise("Texture.write(): requires a CUDA or Metal "
+                  "float16/float32 texture.");
+}
 
 template <typename Type, size_t Dimension>
 void bind_texture(nb::module_ &m, const char *name) {
@@ -138,153 +208,30 @@ void bind_texture(nb::module_ &m, const char *name) {
         .def_prop_ro("shape", [](const Tex &t) {
             PyObject *shape = PyTuple_New(t.ndim());
             for (size_t i = 0; i < t.ndim(); ++i)
-                PyTuple_SetItem(shape, i, PyLong_FromLong((long) t.shape()[i]));
+                NB_TUPLE_SET_ITEM(shape, i, PyLong_FromLong((long) t.shape()[i]));
             return nb::steal<nb::tuple>(shape);
         }, doc_Texture_shape)
-        #define def_tex_eval(T)                                                \
-            def("eval",                                                        \
-                [](const Tex &texture, const dr::Array<T, Dimension> &pos,     \
-                   const std::optional<dr::mask_t<T>> active_) {               \
-                    dr::mask_t<T> active = active_.has_value() ?               \
-                                                     active_.value() :         \
-                                                     true;                     \
-                    return tex_eval(texture, pos, active);                     \
-                }, "pos"_a, "active"_a = nb::none(),                           \
-                nb::sig("def eval(self, pos: drjit.AnyArray, "                 \
-                        "active: drjit.AnyArray | bool = True) "               \
-                        "-> drjit.AnyArray"),                                  \
-                doc_Texture_eval)
         .def_tex_eval(Float32)
         .def_tex_eval(Float16)
         .def_tex_eval(Float64)
-        #undef def_tex_eval
-        #define def_tex_write(T)                                               \
-            def("write",                                                       \
-                [](Tex &texture,                                               \
-                   const dr::Array<dr::uint32_array_t<T>, Dimension> &pos,     \
-                   const dr::vector<T> &value,                                 \
-                   const std::optional<dr::mask_t<T>> active_) {               \
-                    dr::mask_t<T> active = active_.has_value() ?               \
-                                                     active_.value() :         \
-                                                     true;                     \
-                                                                               \
-                    size_t channels = texture.shape()[Dimension];              \
-                    if (value.size() != channels)                              \
-                        nb::raise("Texture.write(): expected %zu channel "     \
-                                  "values, got %zu.", channels, value.size()); \
-                    if constexpr (Tex::HasGPUTexture)                          \
-                        texture.write(pos, value.data(), active);              \
-                    else                                                       \
-                        nb::raise("Texture.write(): requires a CUDA or Metal " \
-                                  "float16/float32 texture.");                 \
-                }, "pos"_a, "value"_a,                                         \
-                "active"_a.sig("Bool(True)") = nb::none(),                     \
-                doc_Texture_write)
         .def_tex_write(Float32)
         .def_tex_write(Float16)
         .def_tex_write(Float64)
-        #undef def_tex_write
-        #define def_tex_eval_fetch(T)                                          \
-            def("eval_fetch",                                                  \
-                [](const Tex &texture, const dr::Array<T, Dimension> &pos,     \
-                   const std::optional<dr::mask_t<T>> active_) {               \
-                    dr::mask_t<T> active = active_.has_value() ?               \
-                                                     active_.value() :         \
-                                                     true;                     \
-                    return tex_eval_fetch(texture, pos, active);               \
-                }, "pos"_a, "active"_a = nb::none(),                           \
-                nb::sig(                                                       \
-                    Dimension == 1                                             \
-                        ? "def eval_fetch(self, pos: drjit.AnyArray, "         \
-                          "active: drjit.AnyArray | bool = True) "             \
-                          "-> tuple[drjit.AnyArray, drjit.AnyArray]"           \
-                        : Dimension == 2                                       \
-                        ? "def eval_fetch(self, pos: drjit.AnyArray, "         \
-                          "active: drjit.AnyArray | bool = True) "             \
-                          "-> tuple[drjit.AnyArray, drjit.AnyArray, "          \
-                          "drjit.AnyArray, drjit.AnyArray]"                    \
-                        : "def eval_fetch(self, pos: drjit.AnyArray, "         \
-                          "active: drjit.AnyArray | bool = True) "             \
-                          "-> tuple[drjit.AnyArray, drjit.AnyArray, "          \
-                          "drjit.AnyArray, drjit.AnyArray, drjit.AnyArray, "   \
-                          "drjit.AnyArray, drjit.AnyArray, drjit.AnyArray]"),  \
-                doc_Texture_eval_fetch)
         .def_tex_eval_fetch(Float32)
         .def_tex_eval_fetch(Float16)
         .def_tex_eval_fetch(Float64)
-        #undef def_tex_eval_fetch
-        #define def_tex_eval_cubic(T)                                          \
-            def("eval_cubic",                                                  \
-                [](const Tex &texture, const dr::Array<T, Dimension> &pos,     \
-                   const std::optional<dr::mask_t<T>> active_,                 \
-                   bool force_nonaccel) {                                      \
-                    dr::mask_t<T> active = active_.has_value() ?               \
-                                                     active_.value() :         \
-                                                     true;                     \
-                    return tex_eval_cubic(texture, pos, active,                \
-                                          force_nonaccel);                     \
-                }, "pos"_a, "active"_a = nb::none(),                           \
-                "force_nonaccel"_a = false,                                    \
-                nb::sig("def eval_cubic(self, pos: drjit.AnyArray, "           \
-                        "active: drjit.AnyArray | bool = True, "               \
-                        "force_nonaccel: bool = False) -> drjit.AnyArray"),    \
-                doc_Texture_eval_cubic)
         .def_tex_eval_cubic(Float32)
         .def_tex_eval_cubic(Float16)
         .def_tex_eval_cubic(Float64)
-        #undef def_tex_eval_cubic
-        #define def_tex_eval_cubic_grad(T)                                     \
-            def("eval_cubic_grad",                                             \
-                [](const Tex &texture, const dr::Array<T, Dimension> &pos,     \
-                   const std::optional<dr::mask_t<T>> active_) {               \
-                    dr::mask_t<T> active = active_.has_value() ?               \
-                                                     active_.value() :         \
-                                                     true;                     \
-                    return tex_eval_cubic_grad(texture, pos, active);          \
-                }, "pos"_a, "active"_a = nb::none(),                           \
-                nb::sig("def eval_cubic_grad(self, pos: drjit.AnyArray, "      \
-                        "active: drjit.AnyArray | bool = True) "               \
-                        "-> tuple[drjit.AnyArray, list[drjit.AnyArray]]"),     \
-                doc_Texture_eval_cubic_grad)
         .def_tex_eval_cubic_grad(Float32)
         .def_tex_eval_cubic_grad(Float16)
         .def_tex_eval_cubic_grad(Float64)
-        #undef def_tex_eval_cubic_grad
-        #define def_tex_eval_cubic_hessian(T)                                  \
-            def("eval_cubic_hessian",                                          \
-                [](const Tex &texture, const dr::Array<T, Dimension> &pos,     \
-                   const std::optional<dr::mask_t<T>> active_) {               \
-                    dr::mask_t<T> active = active_.has_value() ?               \
-                                                     active_.value() :         \
-                                                     true;                     \
-                    return tex_eval_cubic_hessian(texture, pos, active);       \
-                }, "pos"_a, "active"_a = nb::none(),                           \
-                nb::sig("def eval_cubic_hessian(self, pos: drjit.AnyArray, "   \
-                        "active: drjit.AnyArray | bool = True) "               \
-                        "-> tuple[drjit.AnyArray, list[drjit.AnyArray], "      \
-                        "list[drjit.AnyArray]]"),                              \
-                doc_Texture_eval_cubic_hessian)
         .def_tex_eval_cubic_hessian(Float32)
         .def_tex_eval_cubic_hessian(Float16)
         .def_tex_eval_cubic_hessian(Float64)
-        #undef def_tex_eval_cubic_hessian
-        #define def_tex_eval_cubic_helper(T)                                   \
-            def("eval_cubic_helper",                                           \
-                [](const Tex &texture, const dr::Array<T, Dimension> &pos,     \
-                   const std::optional<dr::mask_t<T>> active_) {               \
-                    dr::mask_t<T> active = active_.has_value() ?               \
-                                                     active_.value() :         \
-                                                     true;                     \
-                    return tex_eval_cubic_helper(texture, pos, active);        \
-                }, "pos"_a, "active"_a = nb::none(),                           \
-                nb::sig("def eval_cubic_helper(self, pos: drjit.AnyArray, "    \
-                        "active: drjit.AnyArray | bool = True) "               \
-                        "-> drjit.AnyArray"),                                  \
-                doc_Texture_eval_cubic_helper)
         .def_tex_eval_cubic_helper(Float32)
         .def_tex_eval_cubic_helper(Float16)
         .def_tex_eval_cubic_helper(Float64);
-        #undef def_tex_eval_cubic_helper
 
     tex.attr("IsTexture") = true;
 
@@ -306,3 +253,13 @@ void bind_texture_all(nb::module_ &m) {
     bind_texture<Type64, 2>(m, "Texture2f64");
     bind_texture<Type64, 3>(m, "Texture3f64");
 }
+
+#undef DR_TEX_DISPATCH
+#undef DR_TEX_SIG
+#undef def_tex_eval
+#undef def_tex_write
+#undef def_tex_eval_fetch
+#undef def_tex_eval_cubic
+#undef def_tex_eval_cubic_grad
+#undef def_tex_eval_cubic_hessian
+#undef def_tex_eval_cubic_helper

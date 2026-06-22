@@ -1,5 +1,5 @@
 /*
-    drjit/texture.h -- N-D Texture interpolation with GPU acceleration
+    drjit/texture.h -- N-dimensional Texture interpolation with GPU acceleration
 
     Dr.Jit is a C++ template library for efficient vectorization and
     differentiation of numerical kernels on modern processor architectures.
@@ -14,29 +14,18 @@
 #include <drjit-core/half.h>
 #include <drjit-core/texture.h>
 #include <drjit/dynamic.h>
+#include <drjit/extra.h>
+#include <drjit/texture_impl.h>
 #include <drjit/idiv.h>
 #include <drjit/jit.h>
 #include <drjit/tensor.h>
 #include <drjit/util.h>
 #include <drjit/traversable_base.h>
-#include <vector>
+#include <array>
 
 #pragma once
 
 NAMESPACE_BEGIN(drjit)
-
-/// Texture interpolation methods
-enum class FilterMode : uint32_t {
-    Nearest = 0, /// Nearest-neighbor interpolation
-    Linear = 1   /// Linear interpolation
-};
-
-/// Texture wrapping methods
-enum class WrapMode : uint32_t {
-    Repeat = 0, /// Repeats the texture
-    Clamp = 1,  /// Replicates the edge color
-    Mirror = 2  /// Mirrors the texture wrt. each edge
-};
 
 template <typename Storage_, size_t Dimension> class Texture : TraversableBase {
 public:
@@ -44,17 +33,20 @@ public:
     static constexpr bool IsMetal = is_metal_v<Storage_>;
     static constexpr bool IsDiff = is_diff_v<Storage_>;
     static constexpr bool IsDynamic = is_dynamic_v<Storage_>;
-    // Only half/single-precision floating-point hardware textures are supported
     static constexpr bool IsHalf = std::is_same_v<scalar_t<Storage_>, drjit::half>;
     static constexpr bool IsSingle = std::is_same_v<scalar_t<Storage_>, float>;
+
+    // Only half/single-precision floating-point hardware textures are supported
     static constexpr bool HasGPUTexture = (IsHalf || IsSingle) && (IsCUDA || IsMetal);
 
     using Int32 = int32_array_t<Storage_>;
     using UInt32 = uint32_array_t<Storage_>;
     using Storage = std::conditional_t<IsDynamic, Storage_, DynamicArray<Storage_>>;
-    using Packet = std::conditional_t<is_jit_v<Storage_>,
-        DynamicArray<Storage_>, Storage_*>;
     using TensorXf = Tensor<Storage>;
+
+    // Precomputed reciprocal for the Repeat/Mirror wrap math.
+    using Divisor = std::conditional_t<is_jit_v<Storage_>, divisor<Int32, true>,
+                                       divisor<int32_t, true>>;
 
     /// Query position type for an evaluation returning the array type \c Output
     template <typename Output>
@@ -66,28 +58,6 @@ public:
 
     // Backend that ``jit_tex_*`` dispatches on (only meaningful if HasGPUTexture)
     static constexpr JitBackend Backend = backend_v<Storage_>;
-
-    // Number of JIT variables backing the texture: the sub-textures, plus the
-    // Metal sampler, plus (for writable CUDA textures) surface handles.
-    uint32_t tex_n_indices() const {
-        uint32_t n_textures = 1 + ((uint32_t(m_channels) - 1) / 4);
-        uint32_t extra = IsMetal ? 1u : 0u;
-        if (IsCUDA && m_writable)
-            extra += n_textures;
-        return n_textures + extra;
-    }
-
-    #define DR_TEX_ALLOC_PACKET(name, size)                     \
-        Packet _packet;                                         \
-        Storage_* name;                                         \
-                                                                \
-        if constexpr (is_jit_v<Value>) {                        \
-            _packet = empty<Packet>(m_channels_storage);        \
-            name = _packet.data();                              \
-        } else {                                                \
-            name = (Storage_*) alloca(sizeof(Storage_) * size); \
-            (void) _packet;                                     \
-        }
 
     /// Default constructor: create an invalid texture object
     Texture() = default;
@@ -179,48 +149,12 @@ public:
         return Texture(handle, writable, filter_mode, wrap_mode);
     }
 
-    Texture(Texture &&other) noexcept {
-        m_handle = other.m_handle;
-        other.m_handle = nullptr;
-        m_size = other.m_size;
-        m_channels = other.m_channels;
-        m_channels_storage = other.m_channels_storage;
-        for (size_t i = 0; i < Dimension + 1; ++i)
-            m_shape[i] = std::move(other.m_shape[i]);
-        m_value = std::move(other.m_value);
-        m_unpadded_value = std::move(other.m_unpadded_value);
-        m_resolution_opaque = std::move(other.m_resolution_opaque);
-        for (size_t i = 0; i < Dimension; ++i)
-            m_inv_resolution[i] = std::move(other.m_inv_resolution[i]);
-        m_filter_mode = other.m_filter_mode;
-        m_wrap_mode = other.m_wrap_mode;
-        m_use_accel = other.m_use_accel;
-        m_writable = other.m_writable;
-        m_migrated = other.m_migrated;
-        m_tensor_dirty = other.m_tensor_dirty;
-    }
+    Texture(Texture &&other) noexcept { move_from(std::move(other)); }
 
     Texture &operator=(Texture &&other) noexcept {
         if constexpr (HasGPUTexture)
             jit_tex_destroy(m_handle);
-        m_handle = other.m_handle;
-        other.m_handle = nullptr;
-        m_size = other.m_size;
-        m_channels = other.m_channels;
-        m_channels_storage = other.m_channels_storage;
-        for (size_t i = 0; i < Dimension + 1; ++i)
-            m_shape[i] = std::move(other.m_shape[i]);
-        m_value = std::move(other.m_value);
-        m_unpadded_value = std::move(other.m_unpadded_value);
-        m_resolution_opaque = std::move(other.m_resolution_opaque);
-        for (size_t i = 0; i < Dimension; ++i)
-            m_inv_resolution[i] = std::move(other.m_inv_resolution[i]);
-        m_filter_mode = other.m_filter_mode;
-        m_wrap_mode = other.m_wrap_mode;
-        m_use_accel = other.m_use_accel;
-        m_writable = other.m_writable;
-        m_migrated = other.m_migrated;
-        m_tensor_dirty = other.m_tensor_dirty;
+        move_from(std::move(other));
         return *this;
     }
 
@@ -273,16 +207,22 @@ public:
     /// Return the texture shape
     const size_t *shape() const { return m_shape; }
 
+    /// Return the texture filtering mode (e.g., nearest, bilinear, etc.)
     FilterMode filter_mode() const { return m_filter_mode; }
+
+    /// Return the boundary handling mode for out-of-bounds lookups
     WrapMode wrap_mode() const { return m_wrap_mode; }
+
+    /// Is the texture data held exclusively in GPU texture memory?
     bool migrated() const { return m_migrated; }
+
+    /// Are hardware texture units used for evaluation?
     bool use_accel() const { return m_use_accel; }
 
     /// Was this texture created so that kernels may store into it via \ref write()?
     bool writable() const { return m_writable; }
 
-    /// Map a \ref from_native_handle() texture for use by Dr.Jit (no-op on
-    /// Metal, required for CUDA/OpenGL).
+    /// Map an imported texture (\ref from_native_handle()) for use by Dr.Jit
     void map() {
         if constexpr (HasGPUTexture)
             jit_tex_map(m_handle);
@@ -294,10 +234,13 @@ public:
             jit_tex_unmap(m_handle);
     }
 
-    /// Return the native texture handle (as an integer), e.g. to display it in a
-    /// GUI. On Metal this is the ``id<MTLTexture>`` of sub-texture \c sub_index;
-    /// on CUDA it is the wrapped OpenGL texture id (\c sub_index is ignored, and
-    /// the result is 0 unless the texture wraps an OpenGL handle).
+    /**
+     * \brief Return the native texture handle (as an integer)
+     *
+     * On Metal this is the ``id<MTLTexture>`` of sub-texture \c sub_index. On
+     * CUDA it is the wrapped OpenGL texture id (\c sub_index is ignored, and the
+     * result is 0 unless the texture wraps an OpenGL handle).
+     */
     uintptr_t native_handle(size_t sub_index = 0) const {
         if constexpr (HasGPUTexture)
             return jit_tex_native_handle(m_handle, sub_index);
@@ -323,13 +266,10 @@ public:
             Storage padded_value;
 
             if (m_channels_storage != m_channels) {
-                using Mask = mask_t<Storage_>;
-                UInt32 idx = arange<UInt32>(m_size);
-                UInt32 pixels_idx = idx / m_channels_storage;
-                UInt32 channel_idx = idx % m_channels_storage;
-                Mask active = channel_idx < m_channels;
-                idx = fmadd(pixels_idx, m_channels, channel_idx);
-                padded_value = gather<Storage>(value, idx, active);
+                padded_value = steal_storage(ad_tex_repack(
+                    combined_index(value),
+                    (uint32_t) (m_size / m_channels_storage),
+                    (uint32_t) m_channels_storage, (uint32_t) m_channels));
             } else {
                 padded_value = value;
             }
@@ -339,16 +279,11 @@ public:
                     "Texture::set_value(): unexpected array size (%zu vs %zu)!",
                     padded_value.size(), m_size);
 
-            // We can always re-compute the unpadded values from the padded
-            // ones. However, if we systematically do that, users will not be
-            // able to lookup gradients on the unpadded tensor (`tensor().grad`).
-            // The reason for that is that `m_unpadded_value` would be overriden
-            // on the next `tensor()` call, which was the original source of
-            // gradient tracking. Unless the AD traversal was configured to
-            // keep intermediate vertices, user would not be able to reference
-            // the correct gradient value.
-            // To solve this issue, we store the AD index now, and re-attach
-            // it to the output of `tensor()` on every call.
+            // Stash the AD index of the unpadded `value` and re-attach it in
+            // `tensor()` so gradients stay queryable via `tensor().grad`.
+            // Recomputing the unpadded values from the padded ones would
+            // instead overwrite `m_unpadded_value` (the gradient source) on the
+            // next `tensor()` call.
             if constexpr (IsDiff) {
                 if (grad_enabled(value))
                     m_unpadded_value.array() =
@@ -385,13 +320,14 @@ public:
      * \brief Overwrite the texture contents with the provided tensor
      *
      * This method updates the values of all texels. Changing the texture
-     * resolution or its number of channels is also supported. However, on the CUDA
-     * and Metal backends, such operations have a significantly larger overhead
-     * (new hardware texture objects must be created; on CUDA this also
+     * resolution or its number of channels is also supported. However, on the
+     * CUDA and Metal backends, such operations have a significantly larger
+     * overhead (new hardware texture objects must be created; on CUDA this also
      * synchronizes the GPU pipeline).
      *
      * When \c migrate is set to \c true on the CUDA and Metal backends, the
-     * texture information is *fully* migrated to GPU texture memory to avoid redundant storage.
+     * texture information is *fully* migrated to GPU texture memory to avoid
+     * redundant storage.
      */
     template <typename TensorT>
     void set_tensor(TensorT &&tensor, bool migrate = false) {
@@ -493,13 +429,9 @@ public:
                 resume_grad<Storage> ad_scope_guard;
 
                 if (m_channels != m_channels_storage) {
-                    UInt32 idx = arange<UInt32>(
-                        (m_size * m_channels) / m_channels_storage
-                    );
-                    UInt32 pixels_idx = idx / m_channels;
-                    UInt32 channel_idx = idx % m_channels;
-                    idx = fmadd(pixels_idx, m_channels_storage, channel_idx);
-                    Storage values = gather<Storage>(m_value.array(), idx);
+                    Storage values = steal_storage(ad_tex_repack(
+                        value_index(), (uint32_t) (m_size / m_channels_storage),
+                        (uint32_t) m_channels, (uint32_t) m_channels_storage));
 
                     // On the last call to `set_value` we saved the AD index
                     // of the unpadded values. We can re-attach it here.
@@ -556,50 +488,6 @@ public:
     }
 
     /**
-     * \brief Evaluate linear interpolant using a CUDA texture lookup
-     *
-     * This is an implementation detail, please use \ref eval() that may
-     * dispatch to this function depending on its inputs.
-     */
-    template <typename Output>
-    Output eval_cuda(const position_for<Output> &pos_,
-                     mask_for<Output> active = true) const {
-        using Value = value_t<Output>;
-        using Float32 = float32_array_t<Value>;
-        using PosF32 = Array<Float32, Dimension>;
-
-        PosF32 pos(pos_);
-        Output out = alloc_output<Output>();
-
-        if constexpr (HasGPUTexture) {
-            if (m_use_accel) {
-                uint32_t pos_idx[Dimension];
-                uint32_t *out_idx =
-                    (uint32_t *) alloca(m_channels_storage * sizeof(uint32_t));
-                for (size_t i = 0; i < Dimension; ++i)
-                    pos_idx[i] = pos[i].index();
-
-                // Query coordinates and output values are always single precision
-                jit_tex_lookup(m_handle, pos_idx,
-                               active.index(), out_idx);
-
-                for (size_t ch = 0; ch < m_channels_storage; ++ch) {
-                    Float32 v = Float32::steal(out_idx[ch]);
-
-                    if (ch < m_channels)
-                        out.set_entry(ch, Value(v));
-                }
-
-                return out;
-            }
-        }
-        DRJIT_MARK_USED(pos); DRJIT_MARK_USED(active);
-        for (size_t ch = 0; ch < m_channels; ++ch)
-            out.set_entry(ch, zeros<Value>());
-        return out;
-    }
-
-    /**
      * \brief Evaluate linear interpolant using explicit arithmetic
      *
      * This is an implementation detail, please use \ref eval() that may
@@ -612,91 +500,37 @@ public:
     template <typename Output>
     Output eval_nonaccel(const position_for<Output> &pos,
                          mask_for<Output> active = true) const {
-        using Value = value_t<Output>;
-        using PosF = Array<Value, Dimension>;
-        using PosI = int32_array_t<PosF>;
-        using Mask = mask_t<Value>;
-
-        if constexpr (!is_array_v<Mask>)
-            active = true;
-
         Output out = alloc_output<Output>();
-
-        if (DRJIT_UNLIKELY(m_filter_mode == FilterMode::Nearest)) {
-            const PosF pos_f = pos * PosF(m_resolution_opaque);
-            const PosI pos_i = floor2int<PosI>(pos_f);
-            const PosI pos_i_w = wrap(pos_i);
-
-            UInt32 idx = index(pos_i_w);
-            DR_TEX_ALLOC_PACKET(packet, m_channels_storage);
-            gather_packet_dynamic(m_channels_storage, m_value.array(), idx, packet, active);
-            for (uint32_t ch = 0; ch < m_channels; ++ch)
-                out.set_entry(ch, Value(packet[ch]));
-        } else {
-            using InterpOffset = Array<Int32, ipow(2, Dimension)>;
-            using InterpPosI = Array<InterpOffset, Dimension>;
-            using InterpIdx = uint32_array_t<InterpOffset>;
-
-            const PosF pos_f = fmadd(pos, PosF(m_resolution_opaque), -.5f);
-            const PosI pos_i = floor2int<PosI>(pos_f);
-
-            int32_t offset[2] = { 0, 1 };
-
-            InterpPosI pos_i_w = interp_positions<PosI, 2>(offset, pos_i);
-            pos_i_w = wrap(pos_i_w);
-            InterpIdx idx = index(pos_i_w);
-
-            for (uint32_t ch = 0; ch < m_channels; ++ch)
-                out.set_entry(ch, zeros<Value>());
-
-            #define DR_TEX_ACCUM(index, weight)                                \
-                {                                                              \
-                    UInt32 index_ = index;                                     \
-                    Value weight_ = weight;                                    \
-                    DR_TEX_ALLOC_PACKET(packet, m_channels_storage);           \
-                    gather_packet_dynamic(m_channels_storage, m_value.array(), \
-                        index_, packet, active);                               \
-                    for (uint32_t ch = 0; ch < m_channels; ++ch)               \
-                        out.set_entry(ch, fmadd(                               \
-                            Value(packet[ch]),                                 \
-                            weight_,                                           \
-                            out.entry(ch)));                                   \
-                }
-
-            const PosF w1 = pos_f - pos_i, w0 = 1.f - w1;
-
-            if constexpr (Dimension == 1) {
-                DR_TEX_ACCUM(idx.x(), w0.x());
-                DR_TEX_ACCUM(idx.y(), w1.x());
-            } else if constexpr (Dimension == 2) {
-                DR_TEX_ACCUM(idx.x(), w0.x() * w0.y());
-                DR_TEX_ACCUM(idx.y(), w1.x() * w0.y());
-                DR_TEX_ACCUM(idx.z(), w0.x() * w1.y());
-                DR_TEX_ACCUM(idx.w(), w1.x() * w1.y());
-            } else if constexpr (Dimension == 3) {
-                DR_TEX_ACCUM(idx[0], w0.x() * w0.y() * w0.z());
-                DR_TEX_ACCUM(idx[1], w1.x() * w0.y() * w0.z());
-                DR_TEX_ACCUM(idx[2], w0.x() * w1.y() * w0.z());
-                DR_TEX_ACCUM(idx[3], w1.x() * w1.y() * w0.z());
-                DR_TEX_ACCUM(idx[4], w0.x() * w0.y() * w1.z());
-                DR_TEX_ACCUM(idx[5], w1.x() * w0.y() * w1.z());
-                DR_TEX_ACCUM(idx[6], w0.x() * w1.y() * w1.z());
-                DR_TEX_ACCUM(idx[7], w1.x() * w1.y() * w1.z());
-            }
-
-            #undef DR_TEX_ACCUM
-        }
+        if constexpr (is_jit_v<Storage_>)
+            eval_jit(pos, out, active, /* use_accel = */ false);
+        else
+            eval_nonaccel_scalar(pos, out, active);
         return out;
+    }
+
+    /// Scalar fallback for \ref eval_nonaccel(); the JIT path uses the
+    /// type-erased kernel in ``libdrjit-extra``
+    template <typename Output, typename Value = value_t<Output>>
+    void eval_nonaccel_scalar(const position_for<Output> &pos, Output &out,
+                              mask_for<Output> active = true) const {
+        Value *res_mem     = (Value *) alloca(sizeof(Value) * m_channels);
+        Value *scratch_mem = (Value *) alloca(sizeof(Value) * m_channels);
+        detail::tex_scratch<Value> res(res_mem, m_channels),
+                                   scratch(scratch_mem, m_channels);
+        detail::tex_eval(scalar_ops<Value>(active), pos.data(), res.data(),
+                         scratch.data());
+        for (size_t ch = 0; ch < m_channels; ++ch)
+            out.set_entry(ch, res[ch]);
     }
 
     /**
      * \brief Evaluate the linear interpolant represented by this texture
      *
-     * This function dispatches to \ref eval_nonaccel() or \ref eval_cuda()
-     * depending on whether or not CUDA is available. If invoked with CUDA
-     * arrays that track derivative information, the function records the AD
-     * graph of \ref eval_nonaccel() and combines it with the primal result of
-     * \ref eval_cuda().
+     * On the JIT backends the evaluation is performed by the type-erased
+     * ``ad_tex_eval`` kernel in ``libdrjit-extra``, which uses the hardware
+     * texture units when available and re-attaches the differentiable
+     * arithmetic for gradient tracking. The scalar backend uses \ref
+     * eval_nonaccel().
      *
      * When using the non-hardware-accelerated evaluation, the numerical
      * precision of the interpolation is dictated by the floating point
@@ -705,34 +539,19 @@ public:
     template <typename Output>
     Output eval(const position_for<Output> &pos,
                 mask_for<Output> active = true) const {
-        if constexpr (HasGPUTexture) {
-            if (m_use_accel) {
-                Output out = eval_cuda<Output>(pos, active);
-
-                if constexpr (IsDiff) {
-                    // Re-attach the computation if gradient tracking is enabled
-                    if (grad_enabled(m_value, pos)) {
-
-                        // Derivtives w.r.t. `pos` require the primal value of
-                        // the texture. We therefore must sync up the texture
-                        // if it was fully migrated.
-                        if (grad_enabled(pos))
-                            sync_device_data();
-
-                        Output out_nonaccel =
-                            eval_nonaccel<Output>(pos, active);
-
-                        for (size_t ch = 0; ch < m_channels; ++ch)
-                            out.set_entry(ch, replace_grad(out.entry(ch),
-                                                           out_nonaccel.entry(ch)));
-                    }
-                }
-
-                return out;
+        if constexpr (is_jit_v<Storage_>) {
+            // Derivatives w.r.t. `pos` require the primal texture data; sync it
+            // back if the texture was fully migrated to GPU texture memory.
+            if constexpr (HasGPUTexture) {
+                if (m_use_accel && grad_enabled(pos))
+                    sync_device_data();
             }
+            Output out = alloc_output<Output>();
+            eval_jit(pos, out, active, m_use_accel);
+            return out;
+        } else {
+            return eval_nonaccel<Output>(pos, active);
         }
-
-        return eval_nonaccel<Output>(pos, active);
     }
 
     /**
@@ -755,121 +574,20 @@ public:
             jit_raise("Texture::write(): texture was not created with "
                       "writable=true.");
 
-        using Float32 = float32_array_t<Value>;
-
         uint32_t pos_idx[Dimension];
         for (size_t i = 0; i < Dimension; ++i)
             pos_idx[i] = pos[i].index();
 
-        // Convert + zero-pad the channels to the texture's storage width.
-        dr::vector<Float32> vals;
-        vals.reserve(m_channels_storage);
-        uint32_t *val_idx =
-            (uint32_t *) alloca(m_channels_storage * sizeof(uint32_t));
-        for (size_t ch = 0; ch < m_channels_storage; ++ch) {
-            vals.push_back(ch < m_channels ? Float32(value[ch])
-                                           : zeros<Float32>());
-            val_idx[ch] = vals[ch].index();
-        }
+        uint64_t *val_idx = (uint64_t *) alloca(sizeof(uint64_t) * m_channels);
+        for (size_t ch = 0; ch < m_channels; ++ch)
+            val_idx[ch] = (uint64_t) value[ch].index();
 
-        jit_tex_write(m_handle, pos_idx, val_idx, active.index());
+        ad_tex_write((uint32_t) m_channels_storage, (uint32_t) m_channels,
+                     m_handle, pos_idx, val_idx, active.index());
 
         // The GPU texture object is now the authoritative copy
         m_migrated = true;
         m_tensor_dirty = true;
-    }
-
-    /**
-     * \brief Fetch the texels that would be referenced in a CUDA texture lookup
-     * with linear interpolation without actually performing this interpolation.
-     *
-     * This is an implementation detail, please use \ref eval_fetch() that may
-     * dispatch to this function depending on its inputs.
-     */
-    template <typename Output>
-    Array<Output, (1 << Dimension)>
-    eval_fetch_cuda(const position_for<Output> &pos_,
-                    mask_for<Output> active = true) const {
-        using Value = value_t<Output>;
-        using PosF = Array<Value, Dimension>;
-        constexpr size_t out_size = 1 << Dimension;
-
-        Array<Output, out_size> out = alloc_fetch_output<Output>();
-
-        if constexpr (HasGPUTexture) {
-            if (m_use_accel) {
-                if constexpr (Dimension == 1) {
-                    PosF pos(pos_);
-
-                    const PosF res_f = PosF(m_resolution_opaque);
-                    const PosF pos_f = floor(fmadd(pos, res_f, -.5f)) + .5f;
-
-                    PosF fetch_pos;
-                    PosF inv_shape = rcp(res_f);
-                    for (size_t ix = 0; ix < 2; ix++) {
-                        fetch_pos = pos_f + PosF(ix);
-                        fetch_pos *= inv_shape;
-
-                        out.set_entry(ix, eval_cuda<Output>(fetch_pos, active));
-                    }
-                } else if constexpr (Dimension == 2) {
-                    using Float32 = float32_array_t<Value>;
-                    using PosF32 = Array<Float32, Dimension>;
-
-                    PosF32 pos(pos_);
-
-                    uint32_t pos_idx[Dimension];
-                    uint32_t *out_idx = (uint32_t *) alloca(4 *
-                        m_channels_storage * sizeof(uint32_t));
-                    for (size_t i = 0; i < Dimension; ++i)
-                        pos_idx[i] = pos[i].index();
-
-                    jit_tex_bilerp_fetch(m_handle, pos_idx,
-                                         active.index(), out_idx);
-
-                    for (size_t ch = 0; ch < m_channels_storage; ++ch) {
-                        Float32 v1 = Float32::steal(out_idx[ch*4 + 0]),
-                                v2 = Float32::steal(out_idx[ch*4 + 1]),
-                                v3 = Float32::steal(out_idx[ch*4 + 2]),
-                                v4 = Float32::steal(out_idx[ch*4 + 3]);
-
-                        if (ch < m_channels) {
-                            out.entry(2).set_entry(ch, Value(v1));
-                            out.entry(3).set_entry(ch, Value(v2));
-                            out.entry(1).set_entry(ch, Value(v3));
-                            out.entry(0).set_entry(ch, Value(v4));
-                        }
-                    }
-                } else if constexpr (Dimension == 3) {
-                    PosF pos(pos_);
-
-                    const PosF res_f = PosF(m_resolution_opaque);
-                    const PosF pos_f = floor(fmadd(pos, res_f, -.5f)) + .5f;
-
-                    PosF fetch_pos;
-                    PosF inv_shape = rcp(res_f);
-                    for (size_t iz = 0; iz < 2; iz++) {
-                        for (size_t iy = 0; iy < 2; iy++) {
-                            for (size_t ix = 0; ix < 2; ix++) {
-                                size_t index = iz * 4 + iy * 2 + ix;
-                                fetch_pos = pos_f + PosF(ix, iy, iz);
-                                fetch_pos *= inv_shape;
-
-                                out.set_entry(index,
-                                    eval_cuda<Output>(fetch_pos, active));
-                            }
-                        }
-                    }
-                }
-                return out;
-            }
-        }
-
-        DRJIT_MARK_USED(pos_); DRJIT_MARK_USED(active);
-        for (size_t i = 0; i < ipow(2ul, Dimension); ++i)
-            for (size_t ch = 0; ch < m_channels; ++ch)
-                out.entry(i).set_entry(ch, zeros<Value>());
-        return out;
     }
 
     /**
@@ -883,87 +601,63 @@ public:
      * dispatch to this function depending on its inputs.
      */
     template <typename Output>
-    Array<Output, (1 << Dimension)>
-    eval_fetch_nonaccel(const position_for<Output> &pos,
-                        mask_for<Output> active = true) const {
+    void eval_fetch_nonaccel(const position_for<Output> &pos,
+                             Array<Output, (1 << Dimension)> &out,
+                             mask_for<Output> active = true) const {
         using Value = value_t<Output>;
-        using PosF = Array<Value, Dimension>;
-        using PosI = int32_array_t<PosF>;
-        using Mask = mask_t<Value>;
-        using InterpOffset = Array<Int32, 1 << Dimension>;
-        using InterpPosI = Array<InterpOffset, Dimension>;
-        using InterpIdx = uint32_array_t<InterpOffset>;
-
-        if constexpr (!is_array_v<Mask>)
-            active = true;
-
-        Array<Output, (1 << Dimension)> out = alloc_fetch_output<Output>();
-
-        const PosF pos_f = fmadd(pos, PosF(m_resolution_opaque), -.5f);
-        const PosI pos_i = floor2int<PosI>(pos_f);
-
-        int32_t offset[2] = { 0, 1 };
-
-        InterpPosI pos_i_w = interp_positions<PosI, 2>(offset, pos_i);
-        pos_i_w = wrap(pos_i_w);
-        InterpIdx idx = index(pos_i_w);
-
-        for (size_t i = 0; i < InterpOffset::Size; ++i) {
-            DR_TEX_ALLOC_PACKET(packet, m_channels_storage);
-            gather_packet_dynamic(
-                m_channels_storage, m_value.array(), idx[i], packet, active);
-            for (uint32_t ch = 0; ch < m_channels; ++ch)
-                out.entry(i).set_entry(ch, Value(packet[ch]));
-        }
-        return out;
+        constexpr size_t ncorner = 1 << Dimension;
+        Value *buf_mem = (Value *) alloca(sizeof(Value) * ncorner * m_channels);
+        detail::tex_scratch<Value> buf(buf_mem, ncorner * m_channels);
+        Value *ptrs[ncorner];
+        for (size_t c = 0; c < ncorner; ++c)
+            ptrs[c] = buf.data() + c * m_channels;
+        detail::tex_fetch(scalar_ops<Value>(active), pos.data(), ptrs);
+        for (size_t c = 0; c < ncorner; ++c)
+            for (size_t ch = 0; ch < m_channels; ++ch)
+                out.entry(c).set_entry(ch, ptrs[c][ch]);
     }
 
     /**
      * \brief Fetch the texels that would be referenced in a texture lookup with
      * linear interpolation without actually performing this interpolation.
      *
-     * This function dispatches to \ref eval_fetch_nonaccel() or \ref
-     * eval_fetch_cuda() depending on whether or not CUDA is available. If
-     * invoked with CUDA arrays that track derivative information, the function
-     * records the AD graph of \ref eval_fetch_nonaccel() and combines it with
-     * the primal result of \ref eval_fetch_cuda().
+     * On the JIT backends this is performed by the type-erased ``ad_tex_fetch``
+     * kernel in ``libdrjit-extra`` (hardware-accelerated when available, with
+     * the differentiable arithmetic re-attached); the scalar backend uses
+     * \ref eval_fetch_nonaccel().
      */
     template <typename Output>
     Array<Output, (1 << Dimension)>
     eval_fetch(const position_for<Output> &pos,
                mask_for<Output> active = true) const {
-        constexpr size_t out_size = 1 << Dimension;
+        using Value = value_t<Output>;
+        constexpr size_t ncorner = 1 << Dimension;
+        Array<Output, ncorner> out = alloc_fetch_output<Output>();
 
-        if constexpr (HasGPUTexture) {
-            if (m_use_accel) {
-                Array<Output, out_size> out =
-                    eval_fetch_cuda<Output>(pos, active);
-
-                if constexpr (IsDiff) {
-                    // Re-attach the computation if gradient tracking is enabled
-                    if (grad_enabled(m_value, pos)) {
-
-                        // Derivtives w.r.t. `pos` require the primal value of
-                        // the texture. We therefore must sync up the texture
-                        // if it was fully migrated.
-                        if (grad_enabled(pos))
-                            sync_device_data();
-
-                        Array<Output, out_size> out_nonaccel =
-                            eval_fetch_nonaccel<Output>(pos, active);
-
-                        for (size_t i = 0; i < out_size; ++i)
-                            for (size_t ch = 0; ch < m_channels; ++ch)
-                                out.entry(i).set_entry(ch,
-                                    replace_grad(out.entry(i).entry(ch),
-                                                 out_nonaccel.entry(i).entry(ch)));
-                    }
-                }
-                return out;
+        if constexpr (is_jit_v<Storage_>) {
+            // Derivatives w.r.t. `pos` require the primal texture data; sync it
+            // back if the texture was fully migrated to GPU texture memory.
+            if constexpr (HasGPUTexture) {
+                if (m_use_accel && grad_enabled(pos))
+                    sync_device_data();
             }
-        }
 
-        return eval_fetch_nonaccel<Output>(pos, active);
+            uint64_t *o = (uint64_t *) alloca(sizeof(uint64_t) * ncorner *
+                                              m_channels);
+            ad_tex_fetch(type_v<scalar_t<Value>>, (uint32_t) Dimension,
+                (uint32_t) m_channels_storage, (uint32_t) m_channels,
+                (int) m_wrap_mode, m_handle, (int) m_use_accel, value_index(),
+                resolution_indices().data(), idiv_indices().data(),
+                pos_indices(pos).data(), active.index(), o);
+
+            for (size_t c = 0; c < ncorner; ++c)
+                for (size_t ch = 0; ch < m_channels; ++ch)
+                    out.entry(c).set_entry(
+                        ch, steal_value<Value>(o[c * m_channels + ch]));
+        } else {
+            eval_fetch_nonaccel<Output>(pos, out, active);
+        }
+        return out;
     }
 
     /**
@@ -978,84 +672,19 @@ public:
     Output eval_cubic_helper(const position_for<Output> &pos,
                              mask_for<Output> active = true) const {
         using Value = value_t<Output>;
-        using PosF = Array<Value, Dimension>;
-        using PosI = int32_array_t<PosF>;
-        using Mask = mask_t<Value>;
-        using Array4 = Array<Value, 4>;
-        using InterpOffset = Array<Int32, ipow(4, Dimension)>;
-        using InterpPosI = Array<InterpOffset, Dimension>;
-        using InterpIdx = uint32_array_t<InterpOffset>;
-
-        if constexpr (!is_array_v<Mask>)
-            active = true;
-
         Output out = alloc_output<Output>();
 
-        PosF pos_(pos);
-        PosF pos_f = fmadd(pos_, PosF(m_resolution_opaque), -.5f);
-        PosI pos_i = floor2int<PosI>(pos_f);
+        // Per-channel scratch on the stack (this helper also runs on JIT arrays
+        // to build an AD graph, hence ``tex_scratch``).
+        Value *res_mem     = (Value *) alloca(sizeof(Value) * m_channels);
+        Value *scratch_mem = (Value *) alloca(sizeof(Value) * m_channels);
+        detail::tex_scratch<Value> res(res_mem, m_channels),
+                                   scratch(scratch_mem, m_channels);
 
-        // `offset[k]` controls the k-th offset for any dimension.
-        // With cubic B-Spline, it is by default [-1, 0, 1, 2].
-        int32_t offset[4] = {-1, 0, 1, 2};
-
-        InterpPosI pos_i_w = interp_positions<PosI, 4>(offset, pos_i);
-        pos_i_w = wrap(pos_i_w);
-        InterpIdx idx = index(pos_i_w);
-
-        PosF pos_a = pos_f - PosF(pos_i);
-
-        const auto compute_weight = [&pos_a](uint32_t dim) -> Array4 {
-            const Value alpha = Value(pos_a[dim]);
-            Value alpha2 = alpha * alpha,
-                  alpha3 = alpha2 * alpha;
-            Value multiplier = Value(1.f / 6.f);
-            return multiplier *
-                   Array4(-alpha3 + 3.f * alpha2 - 3.f * alpha + 1.f,
-                           3.f * alpha3 - 6.f * alpha2 + 4.f,
-                          -3.f * alpha3 + 3.f * alpha2 + 3.f * alpha + 1.f,
-                           alpha3);
-        };
-
-        for (uint32_t ch = 0; ch < m_channels; ++ch)
-            out.set_entry(ch, zeros<Value>());
-
-        #define DR_TEX_CUBIC_ACCUM(index, weight)                              \
-            {                                                                  \
-                UInt32 index_ = index;                                         \
-                Value weight_ = weight;                                        \
-                DR_TEX_ALLOC_PACKET(packet, m_channels_storage);               \
-                gather_packet_dynamic(m_channels_storage, m_value.array(),     \
-                    index_, packet, active);                                   \
-                for (uint32_t ch = 0; ch < m_channels; ++ch)                   \
-                    out.set_entry(ch, fmadd(                                   \
-                        Value(packet[ch]),                                     \
-                        weight_,                                               \
-                        out.entry(ch)));                                       \
-            }
-
-        if constexpr (Dimension == 1) {
-            Array4 wx = compute_weight(0);
-            for (uint32_t ix = 0; ix < 4; ix++)
-                DR_TEX_CUBIC_ACCUM(idx[ix], wx[ix]);
-        } else if constexpr (Dimension == 2) {
-            Array4 wx = compute_weight(0),
-                   wy = compute_weight(1);
-            for (uint32_t iy = 0; iy < 4; iy++)
-                for (uint32_t ix = 0; ix < 4; ix++)
-                    DR_TEX_CUBIC_ACCUM(idx[iy * 4 + ix], wx[ix] * wy[iy]);
-        } else if constexpr (Dimension == 3) {
-            Array4 wx = compute_weight(0),
-                   wy = compute_weight(1),
-                   wz = compute_weight(2);
-            for (uint32_t iz = 0; iz < 4; iz++)
-                for (uint32_t iy = 0; iy < 4; iy++)
-                    for (uint32_t ix = 0; ix < 4; ix++)
-                        DR_TEX_CUBIC_ACCUM(idx[iz * 16 + iy * 4 + ix],
-                                           wx[ix] * wy[iy] * wz[iz]);
-        }
-
-        #undef DR_TEX_CUBIC_ACCUM
+        detail::tex_eval_cubic(scalar_ops<Value>(active), pos.data(),
+                               res.data(), scratch.data());
+        for (size_t ch = 0; ch < m_channels; ++ch)
+            out.set_entry(ch, res[ch]);
         return out;
     }
 
@@ -1084,131 +713,35 @@ public:
                       mask_for<Output> active = true,
                       bool force_nonaccel  = false) const {
         using Value = value_t<Output>;
-        using PosF = Array<Value, Dimension>;
-        using PosI = int32_array_t<PosF>;
-        using Mask = mask_t<Value>;
-        using Array3 = Array<Value, 3>;
-
-        if constexpr (!is_array_v<Mask>)
-            active = true;
-
-        Output out = alloc_output<Output>();
-
-        if constexpr (HasGPUTexture) {
-            if (m_migrated && force_nonaccel)
-                jit_log(::LogLevel::Warn,
-                        "\"force_nonaccel\" is used while the data has been fully "
-                        "migrated to GPU texture memory");
-        }
-
-        PosF res_f = PosF(m_resolution_opaque);
-        PosF pos_f = fmadd(pos, res_f, -.5f);
-        PosI pos_i = floor2int<PosI>(pos_f);
-        PosF pos_a = pos_f - PosF(pos_i);
-        PosF inv_shape = rcp(res_f);
-
-        /* With cubic B-Spline, normally we have 4 query points and 4 weights
-           for each dimension. After the linear interpolation transformation,
-           they are reduced to 2 query points and 2 weights. This function
-           returns the two weights and query coordinates.
-           Note: the two weights sum to be 1.0 so only `w01` is returned. */
-        auto compute_weight_coord = [&](uint32_t dim) -> Array3 {
-            const Value integ = (Value) pos_i[dim];
-            const Value alpha = (Value) pos_a[dim];
-            Value alpha2 = square(alpha),
-                  alpha3 = alpha2 * alpha;
-            Value multiplier = Value(1.f / 6.f);
-            // four basis functions, transformed to take as input the fractional part
-            Value w0 =
-                      Value(-alpha3 + 3.f * alpha2 - 3.f * alpha + 1.f) * multiplier,
-                  w1 = Value(3.f * alpha3 - 6.f * alpha2 + 4.f) * multiplier,
-                  w3 = alpha3 * multiplier;
-            Value w01 = w0 + w1,
-                  w23 = Value(1.f - w01);
-            return Array3(
-                w01,
-                Value(integ - 0.5f + w1 / w01) * inv_shape[dim],
-                Value(integ + 1.5f + w3 / w23) * inv_shape[dim]); // (integ + 0.5) +- 1 + weight
-        };
-
-        auto eval_helper = [&](const PosF &pos,
-                               const Mask &active) -> Output {
+        if constexpr (is_jit_v<Storage_>) {
+            bool use_accel = m_use_accel && !force_nonaccel;
             if constexpr (HasGPUTexture) {
-                if (m_use_accel && !force_nonaccel)
-                    return eval_cuda<Output>(pos, active);
+                if (m_migrated && force_nonaccel)
+                    jit_log(::LogLevel::Warn,
+                            "\"force_nonaccel\" is used while the data has been "
+                            "fully migrated to GPU texture memory");
+                // Derivatives w.r.t. `pos` require the primal texture data
+                if (use_accel && grad_enabled(pos))
+                    sync_device_data();
             }
-            DRJIT_MARK_USED(force_nonaccel);
-            return eval_nonaccel<Output>(pos, active);
-        };
 
-        using F = Value;
-
-        if constexpr (Dimension == 1) {
-            Array3 cx = compute_weight_coord(0);
-            Output f0 = eval_helper(PosF(F(cx[1])), active),
-                   f1 = eval_helper(PosF(F(cx[2])), active);
+            Output out = alloc_output<Output>();
+            uint64_t *o = (uint64_t *) alloca(sizeof(uint64_t) * m_channels);
+            ad_tex_cubic(type_v<scalar_t<Value>>, (uint32_t) Dimension,
+                (uint32_t) m_channels_storage, (uint32_t) m_channels,
+                (int) m_wrap_mode, m_handle, (int) use_accel, value_index(),
+                resolution_indices().data(), idiv_indices().data(),
+                pos_indices(pos).data(), active.index(), o);
 
             for (size_t ch = 0; ch < m_channels; ++ch)
-                out.set_entry(ch, lerp(f1.entry(ch), f0.entry(ch), cx[0]));
-        } else if constexpr (Dimension == 2) {
-            Array3 cx = compute_weight_coord(0),
-                   cy = compute_weight_coord(1);
-            Output f00 = eval_helper(PosF(F(cx[1]), F(cy[1])), active),
-                   f01 = eval_helper(PosF(F(cx[1]), F(cy[2])), active),
-                   f10 = eval_helper(PosF(F(cx[2]), F(cy[1])), active),
-                   f11 = eval_helper(PosF(F(cx[2]), F(cy[2])), active);
-
-            Value f0, f1;
-            for (size_t ch = 0; ch < m_channels; ++ch) {
-                f0 = lerp(f01.entry(ch), f00.entry(ch), cy[0]);
-                f1 = lerp(f11.entry(ch), f10.entry(ch), cy[0]);
-
-                out.set_entry(ch, lerp(f1, f0, cx[0]));
-            }
-        } else if constexpr (Dimension == 3) {
-            Array3 cx = compute_weight_coord(0),
-                   cy = compute_weight_coord(1),
-                   cz = compute_weight_coord(2);
-            Output f000 = eval_helper(PosF(F(cx[1]), F(cy[1]), F(cz[1])), active),
-                   f001 = eval_helper(PosF(F(cx[1]), F(cy[1]), F(cz[2])), active),
-                   f010 = eval_helper(PosF(F(cx[1]), F(cy[2]), F(cz[1])), active),
-                   f011 = eval_helper(PosF(F(cx[1]), F(cy[2]), F(cz[2])), active),
-                   f100 = eval_helper(PosF(F(cx[2]), F(cy[1]), F(cz[1])), active),
-                   f101 = eval_helper(PosF(F(cx[2]), F(cy[1]), F(cz[2])), active),
-                   f110 = eval_helper(PosF(F(cx[2]), F(cy[2]), F(cz[1])), active),
-                   f111 = eval_helper(PosF(F(cx[2]), F(cy[2]), F(cz[2])), active);
-
-            Value f00, f01, f10, f11, f0, f1;
-            for (size_t ch = 0; ch < m_channels; ++ch) {
-                f00 = lerp(f001.entry(ch), f000.entry(ch), cz[0]);
-                f01 = lerp(f011.entry(ch), f010.entry(ch), cz[0]);
-                f10 = lerp(f101.entry(ch), f100.entry(ch), cz[0]);
-                f11 = lerp(f111.entry(ch), f110.entry(ch), cz[0]);
-                f0 = lerp(f01, f00, cy[0]);
-                f1 = lerp(f11, f10, cy[0]);
-
-                out.set_entry(ch, lerp(f1, f0, cx[0]));
-            }
+                out.set_entry(ch, steal_value<Value>(o[ch]));
+            return out;
+        } else {
+            // Direct B-spline evaluation (faster than the linear-lookup
+            // transform without hardware bilinear units).
+            DRJIT_MARK_USED(force_nonaccel);
+            return eval_cubic_helper<Output>(pos, active);
         }
-
-        if constexpr (IsDiff) {
-            // Re-attach the computation if gradient tracking is enabled
-            if (grad_enabled(m_value, pos)) {
-
-                // Derivtives w.r.t. `pos` require the primal value of
-                // the texture. We therefore must sync up the texture
-                // if it was fully migrated.
-                if (grad_enabled(pos))
-                    sync_device_data();
-
-                // AD graph only
-                Output result_diff = eval_cubic_helper<Output>(pos, active);
-                for (size_t ch = 0; ch < m_channels; ++ch)
-                    out.set_entry(ch, replace_grad(out.entry(ch),
-                                                   result_diff.entry(ch)));
-            }
-        }
-        return out;
     }
 
     /// Per-channel value and positional gradient returned by \ref eval_cubic_grad()
@@ -1232,135 +765,11 @@ public:
     CubicGrad<Output> eval_cubic_grad(const position_for<Output> &pos,
                                       mask_for<Output> active = true) const {
         using Value = value_t<Output>;
-        using PosF = Array<Value, Dimension>;
-        using PosI = int32_array_t<PosF>;
-        using Mask = mask_t<Value>;
-        using ArrayX = DynamicArray<Value>;
-        using Gradient = replace_value_t<Output, PosF>;
-        using Array4 = Array<Value, 4>;
-        using InterpOffset = Array<Int32, ipow(4, Dimension)>;
-        using InterpPosI = Array<InterpOffset, Dimension>;
-        using InterpIdx = uint32_array_t<InterpOffset>;
-
-        if constexpr (!is_array_v<Mask>)
-            active = true;
-
-        PosF res_f = PosF(m_resolution_opaque);
-        PosF pos_f = fmadd(pos, res_f, -.5f);
-        PosI pos_i = floor2int<PosI>(pos_f);
-
-        int32_t offset[4] = {-1, 0, 1, 2};
-
-        InterpPosI pos_i_w = interp_positions<PosI, 4>(offset, pos_i);
-        pos_i_w = wrap(pos_i_w);
-        InterpIdx idx = index(pos_i_w);
-
-        PosF pos_a = pos_f - PosF(pos_i);
-
-        const auto compute_weight = [&pos_a](uint32_t dim,
-                                             bool is_grad) -> Array4 {
-            const Value alpha = Value(pos_a[dim]);
-            Value alpha2 = square(alpha);
-            Value multiplier = Value(1.f / 6.f);
-            if (!is_grad) {
-                Value alpha3 = alpha2 * alpha;
-                return multiplier * Array4(
-                    Value(-alpha3 + 3.f * alpha2 - 3.f * alpha + 1.f),
-                    Value(3.f * alpha3 - 6.f * alpha2 + 4.f),
-                    Value(-3.f * alpha3 + 3.f * alpha2 + 3.f * alpha + 1.f),
-                    alpha3);
-            } else {
-                return multiplier * Array4(
-                    Value(-3.f * alpha2 + 6.f * alpha - 3.f),
-                    Value(9.f * alpha2 - 12.f * alpha),
-                    Value(-9.f * alpha2 + 6.f * alpha + 3.f),
-                    Value(3.f * alpha2));
-            }
-        };
-
+        using Gradient = replace_value_t<Output, Array<Value, Dimension>>;
+        using Hessian = replace_value_t<Output, Matrix<Value, Dimension>>;
         Output out_value = alloc_output<Output>();
         Gradient out_gradient = alloc_output<Gradient>();
-        for (uint32_t ch = 0; ch < m_channels; ++ch) {
-            out_value.set_entry(ch, zeros<Value>());
-            out_gradient.set_entry(ch, zeros<PosF>());
-        }
-        ArrayX values = empty<ArrayX>(m_channels);
-
-
-        #define DR_TEX_CUBIC_GATHER(index)                                     \
-            {                                                                  \
-                UInt32 index_ = index;                                         \
-                DR_TEX_ALLOC_PACKET(packet, m_channels_storage);               \
-                gather_packet_dynamic(m_channels_storage, m_value.array(),     \
-                    index_, packet, active);                                   \
-                for (uint32_t ch = 0; ch < m_channels; ++ch)                   \
-                    values.set_entry(ch, Value(packet[ch]));                   \
-            }
-        #define DR_TEX_CUBIC_ACCUM_VALUE(weight)                               \
-            {                                                                  \
-                Value weight_ = weight;                                        \
-                for (uint32_t ch = 0; ch < m_channels; ++ch)                   \
-                    out_value.set_entry(ch, fmadd(values.entry(ch), weight_,   \
-                                                  out_value.entry(ch)));       \
-            }
-        #define DR_TEX_CUBIC_ACCUM_GRAD(dim, weight)                           \
-            {                                                                  \
-                uint32_t dim_ = dim;                                           \
-                Value weight_ = weight;                                        \
-                for (uint32_t ch = 0; ch < m_channels; ++ch)                   \
-                    out_gradient.entry(ch).set_entry(dim_, fmadd(             \
-                        values.entry(ch), weight_,                            \
-                        out_gradient.entry(ch).entry(dim_)));                 \
-            }
-
-        if constexpr (Dimension == 1) {
-            Array4 wx = compute_weight(0, false),
-                   gx = compute_weight(0, true);
-            for (uint32_t ix = 0; ix < 4; ++ix) {
-                DR_TEX_CUBIC_GATHER(idx[ix]);
-                DR_TEX_CUBIC_ACCUM_VALUE(wx[ix]);
-                DR_TEX_CUBIC_ACCUM_GRAD(0, gx[ix]);
-            }
-        } else if constexpr (Dimension == 2) {
-            Array4 wx = compute_weight(0, false),
-                   wy = compute_weight(1, false),
-                   gx = compute_weight(0, true),
-                   gy = compute_weight(1, true);
-            for (uint32_t iy = 0; iy < 4; ++iy)
-                for (uint32_t ix = 0; ix < 4; ++ix) {
-                    DR_TEX_CUBIC_GATHER(idx[iy * 4 + ix]);
-                    DR_TEX_CUBIC_ACCUM_VALUE(wx[ix] * wy[iy]);
-                    DR_TEX_CUBIC_ACCUM_GRAD(0, gx[ix] * wy[iy]);
-                    DR_TEX_CUBIC_ACCUM_GRAD(1, wx[ix] * gy[iy]);
-                }
-        } else if constexpr (Dimension == 3) {
-            Array4 wx = compute_weight(0, false),
-                   wy = compute_weight(1, false),
-                   wz = compute_weight(2, false),
-                   gx = compute_weight(0, true),
-                   gy = compute_weight(1, true),
-                   gz = compute_weight(2, true);
-            for (uint32_t iz = 0; iz < 4; ++iz)
-                for (uint32_t iy = 0; iy < 4; ++iy)
-                    for (uint32_t ix = 0; ix < 4; ++ix) {
-                        DR_TEX_CUBIC_GATHER(idx[iz * 16 + iy * 4 + ix]);
-                        DR_TEX_CUBIC_ACCUM_VALUE(wx[ix] * wy[iy] * wz[iz]);
-                        DR_TEX_CUBIC_ACCUM_GRAD(0, gx[ix] * wy[iy] * wz[iz]);
-                        DR_TEX_CUBIC_ACCUM_GRAD(1, wx[ix] * gy[iy] * wz[iz]);
-                        DR_TEX_CUBIC_ACCUM_GRAD(2, wx[ix] * wy[iy] * gz[iz]);
-                    }
-        }
-
-        #undef DR_TEX_CUBIC_GATHER
-        #undef DR_TEX_CUBIC_ACCUM_VALUE
-        #undef DR_TEX_CUBIC_ACCUM_GRAD
-
-        // transform volume from unit size to its resolution
-        for (uint32_t ch = 0; ch < m_channels; ++ch)
-            for (uint32_t dim = 0; dim < Dimension; ++dim)
-                out_gradient.entry(ch).set_entry(dim,
-                    out_gradient.entry(ch).entry(dim) * Value(res_f[dim]));
-
+        eval_cubic_deriv(pos, active, out_value, out_gradient, (Hessian *) nullptr);
         return { out_value, out_gradient };
     }
 
@@ -1386,232 +795,27 @@ public:
     CubicHessian<Output> eval_cubic_hessian(const position_for<Output> &pos,
                                             mask_for<Output> active = true) const {
         using Value = value_t<Output>;
-        using PosF = Array<Value, Dimension>;
-        using PosI = int32_array_t<PosF>;
-        using Mask = mask_t<Value>;
-        using ArrayX = DynamicArray<Value>;
-        using Gradient = replace_value_t<Output, PosF>;
+        using Gradient = replace_value_t<Output, Array<Value, Dimension>>;
         using Hessian = replace_value_t<Output, Matrix<Value, Dimension>>;
-        using Array4 = Array<Value, 4>;
-        using InterpOffset = Array<Int32, ipow(4, Dimension)>;
-        using InterpPosI = Array<InterpOffset, Dimension>;
-        using InterpIdx = uint32_array_t<InterpOffset>;
-
-        if constexpr (!is_array_v<Mask>)
-            active = true;
-
-        PosF res_f = PosF(m_resolution_opaque);
-        PosF pos_f = fmadd(pos, res_f, -.5f);
-        PosI pos_i = floor2int<PosI>(pos_f);
-
-        int32_t offset[4] = {-1, 0, 1, 2};
-
-        InterpPosI pos_i_w = interp_positions<PosI, 4>(offset, pos_i);
-        pos_i_w = wrap(pos_i_w);
-        InterpIdx idx = index(pos_i_w);
-
-        PosF pos_a = pos_f - PosF(pos_i);
-
-        const auto compute_weight = [&pos_a](uint32_t dim) -> Array4 {
-            const Value alpha = Value(pos_a[dim]);
-            Value alpha2 = square(alpha),
-                  alpha3 = alpha2 * alpha;
-            Value multiplier = Value(1.f / 6.f);
-            return multiplier * Array4(
-                Value(-alpha3 + 3.f * alpha2 - 3.f * alpha + 1.f),
-                Value(3.f * alpha3 - 6.f * alpha2 + 4.f),
-                Value(-3.f * alpha3 + 3.f * alpha2 + 3.f * alpha + 1.f),
-                alpha3);
-        };
-
-        const auto compute_weight_gradient = [&pos_a](uint32_t dim) -> Array4 {
-            const Value alpha = Value(pos_a[dim]);
-            Value alpha2 = square(alpha);
-            Value multiplier = Value(1.f / 6.f);
-            return multiplier * Array4(
-                    Value(-3.f * alpha2 + 6.f * alpha - 3.f),
-                    Value( 9.f * alpha2 - 12.f * alpha),
-                    Value(-9.f * alpha2 + 6.f * alpha + 3.f),
-                    Value( 3.f * alpha2));
-        };
-
-        const auto compute_weight_hessian = [&pos_a](uint32_t dim) -> Array4 {
-            const Value alpha = Value(pos_a[dim]);
-            return Array4(
-                - alpha + 1.f,
-                3.f * alpha - 2.f,
-                -3.f * alpha + 1.f,
-                alpha
-            );
-        };
-
         Output out_value = alloc_output<Output>();
         Gradient out_gradient = alloc_output<Gradient>();
         Hessian out_hessian = alloc_output<Hessian>();
-        for (uint32_t ch = 0; ch < m_channels; ++ch) {
-            out_value.set_entry(ch, zeros<Value>());
-            out_gradient.set_entry(ch, zeros<PosF>());
-            out_hessian.set_entry(ch, zeros<Matrix<Value, Dimension>>());
-        }
-        ArrayX values = empty<ArrayX>(m_channels);
-
-        // Make sure channel related operations are executed together
-        #define DR_TEX_CUBIC_GATHER(index)                                     \
-            {                                                                  \
-                UInt32 index_ = index;                                         \
-                DR_TEX_ALLOC_PACKET(packet, m_channels_storage);               \
-                gather_packet_dynamic(m_channels_storage, m_value.array(),     \
-                    index_, packet, active);                                   \
-                for (uint32_t ch = 0; ch < m_channels; ++ch)                   \
-                    values.set_entry(ch, Value(packet[ch]));                   \
-            }
-        #define DR_TEX_CUBIC_ACCUM_VALUE(weight)                               \
-            {                                                                  \
-                Value weight_ = weight;                                        \
-                for (uint32_t ch = 0; ch < m_channels; ++ch)                   \
-                    out_value.set_entry(ch, fmadd(values.entry(ch), weight_,   \
-                                                  out_value.entry(ch)));       \
-            }
-        #define DR_TEX_CUBIC_ACCUM_GRAD(dim, weight_grad)                      \
-            {                                                                  \
-                uint32_t dim_ = dim;                                           \
-                Value weight_grad_ = weight_grad;                              \
-                for (uint32_t ch = 0; ch < m_channels; ++ch)                   \
-                    out_gradient.entry(ch).set_entry(dim_, fmadd(              \
-                        values.entry(ch), weight_grad_,                        \
-                        out_gradient.entry(ch).entry(dim_)));                  \
-            }
-        #define DR_TEX_CUBIC_ACCUM_HESSIAN(dim1, dim2, weight_hessian)         \
-            {                                                                  \
-                uint32_t dim1_ = dim1,                                         \
-                         dim2_ = dim2;                                         \
-                Value weight_hessian_ = weight_hessian;                        \
-                for (uint32_t ch = 0; ch < m_channels; ++ch)                   \
-                    out_hessian.entry(ch).entry(dim1_).set_entry(dim2_,        \
-                        fmadd(values.entry(ch), weight_hessian_,               \
-                            out_hessian.entry(ch).entry(dim1_).entry(dim2_))); \
-            }
-        #define DR_TEX_CUBIC_HESSIAN_SYMM(dim1, dim2)                          \
-            {                                                                  \
-                uint32_t dim1_ = dim1,                                         \
-                         dim2_ = dim2;                                         \
-                for (uint32_t ch = 0; ch < m_channels; ++ch)                   \
-                    out_hessian.entry(ch).entry(dim2_).set_entry(dim1_,        \
-                        out_hessian.entry(ch).entry(dim1_).entry(dim2_));      \
-            }
-
-        if constexpr (Dimension == 1) {
-            Array4 wx  = compute_weight(0),
-                   gx  = compute_weight_gradient(0),
-                   ggx = compute_weight_hessian(0);
-            for (uint32_t ix = 0; ix < 4; ++ix) {
-                DR_TEX_CUBIC_GATHER(idx[ix]);
-                DR_TEX_CUBIC_ACCUM_VALUE(wx[ix]);
-                DR_TEX_CUBIC_ACCUM_GRAD(0, gx[ix]);
-                DR_TEX_CUBIC_ACCUM_HESSIAN(0, 0, ggx[ix]);
-            }
-            DRJIT_MARK_USED(compute_weight);
-        } else if constexpr (Dimension == 2) {
-            Array4 wx  = compute_weight(0),
-                   wy  = compute_weight(1),
-                   gx  = compute_weight_gradient(0),
-                   gy  = compute_weight_gradient(1),
-                   ggx = compute_weight_hessian(0),
-                   ggy = compute_weight_hessian(1);
-            for (uint32_t iy = 0; iy < 4; ++iy)
-                for (uint32_t ix = 0; ix < 4; ++ix) {
-                    DR_TEX_CUBIC_GATHER(idx[iy * 4 + ix]);
-                    DR_TEX_CUBIC_ACCUM_VALUE(wx[ix] * wy[iy]);
-                    DR_TEX_CUBIC_ACCUM_GRAD(0, gx[ix] * wy[iy]);
-                    DR_TEX_CUBIC_ACCUM_GRAD(1, wx[ix] * gy[iy]);
-                    DR_TEX_CUBIC_ACCUM_HESSIAN(0, 0, ggx[ix] * wy[iy]);
-                    DR_TEX_CUBIC_ACCUM_HESSIAN(0, 1, gx[ix] * gy[iy]);
-                    DR_TEX_CUBIC_ACCUM_HESSIAN(1, 1, wx[ix] * ggy[iy]);
-                }
-            DR_TEX_CUBIC_HESSIAN_SYMM(0, 1);
-        } else if constexpr (Dimension == 3) {
-            Array4 wx = compute_weight(0),
-                   wy = compute_weight(1),
-                   wz = compute_weight(2),
-                   gx = compute_weight_gradient(0),
-                   gy = compute_weight_gradient(1),
-                   gz = compute_weight_gradient(2),
-                   ggx = compute_weight_hessian(0),
-                   ggy = compute_weight_hessian(1),
-                   ggz = compute_weight_hessian(2);
-            for (uint32_t iz = 0; iz < 4; ++iz)
-                for (uint32_t iy = 0; iy < 4; ++iy)
-                    for (uint32_t ix = 0; ix < 4; ++ix) {
-                        DR_TEX_CUBIC_GATHER(idx[iz * 16 + iy * 4 + ix]);
-                        DR_TEX_CUBIC_ACCUM_VALUE(wx[ix] * wy[iy] * wz[iz]);
-                        DR_TEX_CUBIC_ACCUM_GRAD(0, gx[ix] * wy[iy] * wz[iz]);
-                        DR_TEX_CUBIC_ACCUM_GRAD(1, wx[ix] * gy[iy] * wz[iz]);
-                        DR_TEX_CUBIC_ACCUM_GRAD(2, wx[ix] * wy[iy] * gz[iz]);
-                        DR_TEX_CUBIC_ACCUM_HESSIAN(0, 0, ggx[ix] * wy[iy] * wz[iz]);
-                        DR_TEX_CUBIC_ACCUM_HESSIAN(1, 1, wx[ix] * ggy[iy] * wz[iz]);
-                        DR_TEX_CUBIC_ACCUM_HESSIAN(2, 2, wx[ix] * wy[iy] * ggz[iz]);
-                        DR_TEX_CUBIC_ACCUM_HESSIAN(0, 1, gx[ix] * gy[iy] * wz[iz]);
-                        DR_TEX_CUBIC_ACCUM_HESSIAN(0, 2, gx[ix] * wy[iy] * gz[iz]);
-                        DR_TEX_CUBIC_ACCUM_HESSIAN(1, 2, wx[ix] * gy[iy] * gz[iz]);
-                    }
-            DR_TEX_CUBIC_HESSIAN_SYMM(0, 1);
-            DR_TEX_CUBIC_HESSIAN_SYMM(0, 2);
-            DR_TEX_CUBIC_HESSIAN_SYMM(1, 2);
-        }
-
-        #undef DR_TEX_CUBIC_GATHER
-        #undef DR_TEX_CUBIC_ACCUM_VALUE
-        #undef DR_TEX_CUBIC_ACCUM_GRAD
-        #undef DR_TEX_CUBIC_ACCUM_HESSIAN
-        #undef DR_TEX_CUBIC_HESSIAN_SYMM
-
-        // transform volume from unit size to its resolution
-        for (uint32_t ch = 0; ch < m_channels; ++ch)
-            for (uint32_t dim1 = 0; dim1 < Dimension; ++dim1) {
-                out_gradient.entry(ch).set_entry(dim1,
-                    out_gradient.entry(ch).entry(dim1) * Value(res_f[dim1]));
-                for (uint32_t dim2 = 0; dim2 < Dimension; ++dim2)
-                    out_hessian.entry(ch).entry(dim1).set_entry(dim2,
-                        out_hessian.entry(ch).entry(dim1).entry(dim2) *
-                        Value(res_f[dim1] * res_f[dim2]));
-            }
-
+        eval_cubic_deriv(pos, active, out_value, out_gradient, &out_hessian);
         return { out_value, out_gradient, out_hessian };
     }
 
-    /**
-     * \brief Applies the configured texture wrapping mode to an integer
-     * position
-     */
-    template <typename T> T wrap(const T &pos) const {
-        using Scalar = scalar_t<T>;
-        static_assert(
-            size_v<T> == Dimension &&
-            std::is_integral_v<Scalar> &&
-            std::is_signed_v<Scalar>
-        );
+    /// Gather the channels at \c idx and cast them to the query precision
+    template <typename Value>
+    void gather_texel(const uint32_array_t<Value> &idx,
+                      const mask_t<Value> &active, Value *out) const {
+        // Per-channel packet scratch on the stack
+        Storage_ *packet_mem = (Storage_ *) alloca(sizeof(Storage_) * m_channels_storage);
+        detail::tex_scratch<Storage_> packet(packet_mem, m_channels_storage);
 
-        Array<Int32, Dimension> res = m_resolution_opaque;
-        if (m_wrap_mode == WrapMode::Clamp) {
-            return clip(pos, 0, res - 1);
-        } else {
-            T value_shift_neg = select(pos < 0, pos + 1, pos);
-
-            T div;
-            for (size_t i = 0; i < Dimension; ++i)
-                div[i] = m_inv_resolution[i](value_shift_neg[i]);
-
-            T mod = pos - div * res;
-            mod[mod < 0] += T(res);
-
-            if (m_wrap_mode == WrapMode::Mirror)
-                // Starting at 0, flip the texture every other repetition
-                // (flip when: even number of repetitions in negative direction,
-                // or odd number of repetitions in positive direction)
-                mod = select(((div & 1) == 0) ^ (pos < 0), mod, res - 1 - mod);
-
-            return mod;
-        }
+        gather_packet_dynamic(m_channels_storage, m_value.array(), idx,
+                              packet.data(), active);
+        for (uint32_t ch = 0; ch < m_channels; ++ch)
+            out[ch] = Value(packet[ch]);
     }
 
 protected:
@@ -1641,9 +845,16 @@ protected:
             tensor_shape[i] = shape[i];
             m_shape[i] = shape[i];
             m_resolution_opaque[Dimension - 1 - i] = opaque<UInt32>((uint32_t) shape[i]);
-            m_inv_resolution[Dimension - 1 - i] = divisor<int32_t>((int32_t) shape[i]);
+            m_inv_resolution[Dimension - 1 - i] = Divisor((int32_t) shape[i]);
             m_size *= shape[i];
             unpadded_size *= shape[i];
+        }
+
+        // Only make the divisor opaque when it is actually used
+        if constexpr (is_jit_v<Storage_>) {
+            if (wrap_mode != WrapMode::Clamp)
+                for (size_t i = 0; i < Dimension; ++i)
+                    make_opaque(m_inv_resolution[i]);
         }
         tensor_shape[Dimension] = m_channels_storage;
         m_shape[Dimension] = channels;
@@ -1687,9 +898,30 @@ protected:
         }
     }
 
-    #undef DR_TEX_ALLOC_PACKET
-
 private:
+    /// Steal all members from \c other (shared by the move constructor and the
+    /// move-assignment operator)
+    void move_from(Texture &&other) noexcept {
+        m_handle = other.m_handle;
+        other.m_handle = nullptr;
+        m_size = other.m_size;
+        m_channels = other.m_channels;
+        m_channels_storage = other.m_channels_storage;
+        for (size_t i = 0; i < Dimension + 1; ++i)
+            m_shape[i] = std::move(other.m_shape[i]);
+        m_value = std::move(other.m_value);
+        m_unpadded_value = std::move(other.m_unpadded_value);
+        m_resolution_opaque = std::move(other.m_resolution_opaque);
+        for (size_t i = 0; i < Dimension; ++i)
+            m_inv_resolution[i] = std::move(other.m_inv_resolution[i]);
+        m_filter_mode = other.m_filter_mode;
+        m_wrap_mode = other.m_wrap_mode;
+        m_use_accel = other.m_use_accel;
+        m_writable = other.m_writable;
+        m_migrated = other.m_migrated;
+        m_tensor_dirty = other.m_tensor_dirty;
+    }
+
     /// Updates the device-side padded tensor
     void sync_device_data() const {
         if constexpr (HasGPUTexture) {
@@ -1728,108 +960,201 @@ private:
             output[Dimension] = m_value.shape(Dimension);
     }
 
-    /// Helper function to compute integer powers of numbers
-    template <typename T>
-    constexpr static T ipow(T num, unsigned int pow) {
-        return pow == 0 ? 1 : num * ipow(num, pow - 1);
+    /// Operations object for generating scalar texture evaluation code
+    template <typename Value> struct ScalarOps {
+        using Float = Value;
+        using Int   = int32_array_t<Value>;
+        using UInt  = uint32_array_t<Value>;
+        using Mask  = mask_t<Value>;
+
+        const Texture *tex;
+        Mask active;
+        uint32_t dim, channels_out;
+        FilterMode filter_mode;
+        WrapMode wrap_mode;
+
+        Float lit(double v) const { return Value(v); }
+        Float res_f(uint32_t k) const { return Value(tex->m_resolution_opaque[k]); }
+        Int res_i(uint32_t k) const { return Int(tex->m_resolution_opaque[k]); }
+        Float to_float(const Int &i) const { return Value(i); }
+        Int idiv(const Int &a, uint32_t k) const { return tex->m_inv_resolution[k](a); }
+        void gather(const UInt &idx, Float *out) const {
+            tex->gather_texel(idx, active, out);
+        }
+    };
+
+    /// Build a \ref ScalarOps bound to this texture and the query mask
+    template <typename Value>
+    ScalarOps<Value> scalar_ops(mask_t<Value> active) const {
+        if constexpr (!is_array_v<mask_t<Value>>)
+            active = true;
+        return ScalarOps<Value>{ this, active, (uint32_t) Dimension,
+            (uint32_t) m_channels, m_filter_mode, m_wrap_mode };
     }
 
-    /// Builds the set of integer positions necessary for the interpolation
-    template <typename T, size_t Length>
-    static Array<Array<Int32, ipow(Length, Dimension)>, Dimension>
-    interp_positions(const int *offset, const T &pos) {
-        using Scalar = scalar_t<T>;
-        using InterpOffset = Array<Int32, ipow(Length, Dimension)>;
-        using InterpPosI = Array<InterpOffset, Dimension>;
-        static_assert(
-            size_v<T> == Dimension &&
-            std::is_integral_v<Scalar> &&
-            std::is_signed_v<Scalar>
-        );
+    // -- Type-erased marshalling helpers backing the JIT ``ad_tex_*`` calls --
 
-        InterpPosI pos_i;
-        if constexpr (Dimension == 1) {
-            for (uint32_t ix = 0; ix < Length; ix++) {
-                pos_i[0][ix] = offset[ix] + pos.x();
-            }
-        } else if constexpr (Dimension == 2) {
-            for (uint32_t iy = 0; iy < Length; iy++) {
-                for (uint32_t ix = 0; ix < Length; ix++) {
-                    pos_i[0][iy * Length + ix] = offset[ix] + pos.x();
-                    pos_i[1][ix * Length + iy] = offset[ix] + pos.y();
+    /// Combined AD/JIT index of a storage array
+    static uint64_t combined_index(const Storage &v) {
+        if constexpr (is_diff_v<Storage_>)
+            return v.index_combined();
+        else
+            return (uint64_t) v.index();
+    }
+
+    /// Adopt an owned combined index returned by an ``ad_tex_*`` call as Storage
+    static Storage steal_storage(uint64_t index) {
+        if constexpr (is_diff_v<Storage_>)
+            return Storage::steal(index);
+        else
+            return Storage::steal((uint32_t) index);
+    }
+
+    /// Combined AD/JIT index of the padded texture storage tensor
+    uint64_t value_index() const { return combined_index(m_value.array()); }
+
+    /// JIT indices of the per-dimension opaque resolution variables
+    std::array<uint32_t, Dimension> resolution_indices() const {
+        std::array<uint32_t, Dimension> r;
+        for (size_t k = 0; k < Dimension; ++k)
+            r[k] = m_resolution_opaque[k].index();
+        return r;
+    }
+
+    /// JIT indices of the opaque magic-division constants (multiplier, shift per
+    /// dimension) backing the Repeat/Mirror wrap math (0 for Clamp)
+    std::array<uint32_t, 2 * Dimension> idiv_indices() const {
+        std::array<uint32_t, 2 * Dimension> r;
+        for (size_t k = 0; k < Dimension; ++k) {
+            r[2 * k + 0] = m_inv_resolution[k].multiplier.index();
+            r[2 * k + 1] = m_inv_resolution[k].shift.index();
+        }
+        return r;
+    }
+
+    /// Combined AD/JIT indices of a query position
+    template <typename Value>
+    static std::array<uint64_t, Dimension>
+    pos_indices(const Array<Value, Dimension> &pos) {
+        std::array<uint64_t, Dimension> r;
+        for (size_t k = 0; k < Dimension; ++k) {
+            if constexpr (is_diff_v<Value>)
+                r[k] = pos[k].index_combined();
+            else
+                r[k] = (uint64_t) pos[k].index();
+        }
+        return r;
+    }
+
+    /// Adopt an owned combined index returned by an ``ad_tex_*`` call
+    template <typename Value>
+    static Value steal_value(uint64_t index) {
+        if constexpr (is_diff_v<Value>)
+            return Value::steal(index);
+        else
+            return Value::steal((uint32_t) index);
+    }
+
+    /// Evaluate via the type-erased ``ad_tex_eval`` kernel (JIT backends only)
+    template <typename Output, typename Value = value_t<Output>>
+    void eval_jit(const position_for<Output> &pos, Output &out,
+                  mask_for<Output> active, bool use_accel) const {
+        uint64_t *out_idx = (uint64_t *) alloca(sizeof(uint64_t) * m_channels);
+        ad_tex_eval(type_v<scalar_t<Value>>, (uint32_t) Dimension,
+                    (uint32_t) m_channels_storage, (uint32_t) m_channels,
+                    (int) m_filter_mode, (int) m_wrap_mode, m_handle,
+                    (int) use_accel, value_index(), resolution_indices().data(),
+                    idiv_indices().data(), pos_indices(pos).data(),
+                    active.index(), out_idx);
+        for (size_t ch = 0; ch < m_channels; ++ch)
+            out.set_entry(ch, steal_value<Value>(out_idx[ch]));
+    }
+
+    /// Shared marshaller for \ref eval_cubic_grad() / \ref eval_cubic_hessian():
+    /// fills value + gradient (and hessian, when \c out_hessian is non-null),
+    /// dispatching to ``ad_tex_cubic_deriv`` on the JIT backends and the scalar
+    /// B-spline math otherwise.
+    template <typename Output, typename Gradient, typename Hessian>
+    void eval_cubic_deriv(const position_for<Output> &pos, mask_for<Output> active,
+                          Output &out_value, Gradient &out_gradient,
+                          Hessian *out_hessian) const {
+        using Value = value_t<Output>;
+        bool want_hess = out_hessian != nullptr;
+        size_t n_grad = m_channels * Dimension,
+               n_hess = want_hess ? n_grad * Dimension : 0;
+
+        if constexpr (is_jit_v<Storage_>) {
+            uint64_t *vp = (uint64_t *) alloca(sizeof(uint64_t) * m_channels),
+                     *gp = (uint64_t *) alloca(sizeof(uint64_t) * n_grad),
+                     *hp = want_hess ? (uint64_t *) alloca(sizeof(uint64_t) * n_hess)
+                                     : nullptr;
+            ad_tex_cubic_deriv(type_v<scalar_t<Value>>, (uint32_t) Dimension,
+                               (uint32_t) m_channels_storage, (uint32_t) m_channels,
+                               (int) m_wrap_mode, value_index(),
+                               resolution_indices().data(), idiv_indices().data(),
+                               pos_indices(pos).data(), active.index(), vp, gp, hp);
+            // The kernel's flat outputs match this iteration order; walk linearly
+            for (size_t ch = 0; ch < m_channels; ++ch) {
+                out_value.set_entry(ch, steal_value<Value>(*vp++));
+                for (size_t m = 0; m < Dimension; ++m) {
+                    out_gradient.entry(ch).set_entry(m, steal_value<Value>(*gp++));
+                    if (want_hess)
+                        for (size_t n = 0; n < Dimension; ++n)
+                            out_hessian->entry(ch).entry(m).set_entry(
+                                n, steal_value<Value>(*hp++));
                 }
             }
-        } else if constexpr (Dimension == 3) {
-            constexpr size_t LengthSqr = Length * Length;
-            for (uint32_t iz = 0; iz < Length; iz++) {
-                for (uint32_t iy = 0; iy < Length; iy++) {
-                    for (uint32_t ix = 0; ix < Length; ix++) {
-                        pos_i[0][iz * LengthSqr + iy * Length + ix] =
-                            offset[ix] + pos.x();
-                        pos_i[1][iz * LengthSqr + ix * Length + iy] =
-                            offset[ix] + pos.y();
-                        pos_i[2][ix * LengthSqr + iy * Length + iz] =
-                            offset[ix] + pos.z();
-                    }
+        } else {
+            Value *vmem       = (Value *) alloca(sizeof(Value) * m_channels),
+                  *gmem       = (Value *) alloca(sizeof(Value) * n_grad),
+                  *hmem       = want_hess ? (Value *) alloca(sizeof(Value) * n_hess) : nullptr,
+                  *scratch_mem = (Value *) alloca(sizeof(Value) * m_channels);
+            detail::tex_scratch<Value> vs(vmem, m_channels), gs(gmem, n_grad),
+                                       hs(hmem, n_hess), scratch(scratch_mem, m_channels);
+            detail::tex_eval_cubic_deriv(scalar_ops<Value>(active), pos.data(),
+                                         vs.data(), gs.data(),
+                                         want_hess ? hs.data() : nullptr, scratch.data());
+            Value *vp = vs.data(), *gp = gs.data(), *hp = hs.data();
+            for (size_t ch = 0; ch < m_channels; ++ch) {
+                out_value.set_entry(ch, *vp++);
+                for (size_t m = 0; m < Dimension; ++m) {
+                    out_gradient.entry(ch).set_entry(m, *gp++);
+                    if (want_hess)
+                        for (size_t n = 0; n < Dimension; ++n)
+                            out_hessian->entry(ch).entry(m).set_entry(n, *hp++);
                 }
             }
         }
-
-        return pos_i;
-    }
-
-    /// Helper function to compute the array index for a given N-D position
-    template <typename T>
-    uint32_array_t<value_t<T>> index(const T &pos) const {
-        using Scalar = scalar_t<T>;
-        using Index = uint32_array_t<value_t<T>>;
-        static_assert(
-            size_v<T> == Dimension &&
-            std::is_integral_v<Scalar> &&
-            std::is_signed_v<Scalar>
-        );
-
-        Index index;
-        if constexpr (Dimension == 1) {
-            index = Index(pos.x());
-        } else if constexpr (Dimension == 2) {
-            index = Index(
-                fmadd(Index(pos.y()), m_resolution_opaque.x(), Index(pos.x())));
-        } else if constexpr (Dimension == 3) {
-            index = Index(fmadd(
-                fmadd(Index(pos.z()), m_resolution_opaque.y(), Index(pos.y())),
-                m_resolution_opaque.x(), Index(pos.x())));
-        }
-
-        return index;
     }
 
 private:
     void *m_handle = nullptr;
-    size_t m_size = 0;                      /* Total size of array */
-    size_t m_channels = 0;                  /* Number of channels */
-    size_t m_channels_storage = 0;          /* Rounded-up number of channels
-                                               depending on backened */
-    size_t m_shape[Dimension + 1] = {};     /* Unpadded shape of texture */
-    mutable TensorXf m_value;               /* Tensor padded for packet size */
-    mutable TensorXf m_unpadded_value;      /* Lazily computed if texture data
-                                               is updated after initialization */
+    size_t m_size = 0;                       ///< Total size of array
+    size_t m_channels = 0;                   ///< Number of channels
+    /// Rounded-up number of channels (depends on the backend)
+    size_t m_channels_storage = 0;
+    size_t m_shape[Dimension + 1] = {};      ///< Unpadded shape of texture
+    mutable TensorXf m_value;                ///< Tensor padded for packet size
+    /// Lazily computed if texture data is updated after initialization
+    mutable TensorXf m_unpadded_value;
 
     // Stored in this order: width, height, depth
     Array<UInt32, Dimension> m_resolution_opaque;
-    divisor<int32_t> m_inv_resolution[Dimension] { };
+
+    // Reciprocal resolution for the Repeat/Mirror wrap math. On the JIT backends
+    // the magic constants are opaque variables consumed by the type-erased
+    // kernel (see ad_tex_eval); populated only when the wrap mode divides.
+    Divisor m_inv_resolution[Dimension] { };
 
     FilterMode m_filter_mode;
     WrapMode m_wrap_mode;
     bool m_use_accel = false;
-    bool m_writable = false;                /* Texture was created so kernels
-                                               may store into it via write() */
-    mutable bool m_migrated = false;        /* Hardware-texture backend flag to indicate
-                                               whether texture data is
-                                               exclusively on the device */
-    mutable bool m_tensor_dirty = false;    /* Flag to indicate whether
-                                               public-facing unpadded tensor
-                                               needs to be updated */
+    /// Texture was created so kernels may store into it via write()
+    bool m_writable = false;
+    /// Hardware-texture flag: is the data held exclusively on the device?
+    mutable bool m_migrated = false;
+    /// Does the public-facing unpadded tensor need to be updated?
+    mutable bool m_tensor_dirty = false;
 
 public:
     void
@@ -1845,8 +1170,8 @@ public:
                   m_resolution_opaque, m_inv_resolution);
         if constexpr (HasGPUTexture) {
             uint32_t n_indices = tex_n_indices();
-            std::vector<uint32_t> indices(n_indices);
-            jit_tex_get_indices(m_handle, indices.data());
+            uint32_t *indices = (uint32_t *) alloca(sizeof(uint32_t) * n_indices);
+            jit_tex_get_indices(m_handle, indices);
             for (uint32_t i = 0; i < n_indices; i++)
                 fn(payload, indices[i], "", "");
         }
@@ -1863,8 +1188,8 @@ public:
                   m_resolution_opaque, m_inv_resolution);
         if constexpr (HasGPUTexture) {
             uint32_t n_indices = tex_n_indices();
-            std::vector<uint32_t> indices(n_indices);
-            jit_tex_get_indices(m_handle, indices.data());
+            uint32_t *indices = (uint32_t *) alloca(sizeof(uint32_t) * n_indices);
+            jit_tex_get_indices(m_handle, indices);
             for (uint32_t i = 0; i < n_indices; i++) {
                 uint64_t new_index = fn(payload, indices[i], "", "");
                 if (new_index != indices[i])
@@ -1873,6 +1198,17 @@ public:
             }
         }
     }
+
+    // Number of JIT variables backing the texture: the sub-textures, plus the
+    // Metal sampler, plus (for writable CUDA textures) surface handles.
+    uint32_t tex_n_indices() const {
+        uint32_t n_textures = 1 + ((uint32_t(m_channels) - 1) / 4);
+        uint32_t extra = IsMetal ? 1u : 0u;
+        if (IsCUDA && m_writable)
+            extra += n_textures;
+        return n_textures + extra;
+    }
+
 };
 
 NAMESPACE_END(drjit)

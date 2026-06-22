@@ -229,6 +229,9 @@ void traverse_1_fn_ro(const Value &value, void *payload,
                 traverse_1_fn_ro(x, payload, fn);
             });
         }
+    } else if constexpr (std::is_array_v<Value>) {
+        for (size_t i = 0; i < std::extent_v<Value>; ++i)
+            traverse_1_fn_ro(value[i], payload, fn);
     } else if constexpr (std::is_pointer_v<Value> &&
                          is_detected_v<detail::det_traverse_1_cb_ro, Value>) {
         if (value)
@@ -285,6 +288,9 @@ void traverse_1_fn_rw(Value &value, void *payload,
                 traverse_1_fn_rw(x, payload, fn);
             });
         }
+    } else if constexpr (std::is_array_v<Value>) {
+        for (size_t i = 0; i < std::extent_v<Value>; ++i)
+            traverse_1_fn_rw(value[i], payload, fn);
     } else if constexpr (std::is_pointer_v<Value> &&
                          is_detected_v<detail::det_traverse_1_cb_rw, Value>) {
         if (value)

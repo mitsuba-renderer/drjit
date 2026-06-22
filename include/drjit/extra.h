@@ -221,6 +221,92 @@ extern DRJIT_EXTRA_EXPORT uint64_t ad_var_scatter_packet(size_t n, uint64_t targ
 extern DRJIT_EXTRA_EXPORT uint64_t ad_var_shrink(uint64_t index, size_t size);
 
 extern DRJIT_EXTRA_EXPORT uint64_t ad_var_cast(uint64_t, VarType);
+
+// ---------------------------------------------------------------------------
+//  Type-erased N-D texture interpolation (see src/extra/texture.cpp)
+// ---------------------------------------------------------------------------
+
+/**
+ * \brief Evaluate a texture's nearest-neighbor / (multi-)linear interpolant
+ *
+ * Type-erased backend of ``drjit::Texture<...>::eval()`` for the JIT backends.
+ * All variable arguments are combined AD/JIT indices.
+ *
+ * \param query_type        Scalar VarType to evaluate/return in (F16/F32/F64).
+ * \param dimension         Texture dimensionality (1, 2, or 3).
+ * \param channels_stored   Storage channel count (power of two >= channels_out).
+ * \param channels_out      Number of (unpadded) output channels.
+ * \param value             Combined index of the padded texture storage tensor.
+ * \param res               One opaque UInt32 JIT index per dimension (w, h, d).
+ * \param idiv              Per-dimension magic-division constants of
+ *                          ``drjit::divisor<int32_t>`` for the Repeat/Mirror
+ *                          wrap modes.
+ * \param pos               One combined index per dimension (query coordinate).
+ * \param active            Mask JIT index.
+ * \param out               Receives ``channels_out`` combined indices (owned).
+ */
+extern DRJIT_EXTRA_EXPORT void
+ad_tex_eval(VarType query_type, uint32_t dimension, uint32_t channels_stored,
+            uint32_t channels_out, int filter_mode, int wrap_mode,
+            void *handle, int use_accel, uint64_t value, const uint32_t *res,
+            const uint32_t *idiv, const uint64_t *pos, uint32_t active,
+            uint64_t *out);
+
+/**
+ * \brief Fetch the ``2^dim`` corner texels of a linear lookup (no interpolation)
+ *
+ * ``out`` receives ``(2^dim) * channels_out`` owned combined indices, corner
+ * ``c`` (bit ``k`` = offset along dimension ``k``) at ``out[c * channels_out + ch]``.
+ */
+extern DRJIT_EXTRA_EXPORT void
+ad_tex_fetch(VarType query_type, uint32_t dimension, uint32_t channels_stored,
+             uint32_t channels_out, int wrap_mode, void *handle,
+             int use_accel, uint64_t value, const uint32_t *res,
+             const uint32_t *idiv, const uint64_t *pos, uint32_t active,
+             uint64_t *out);
+
+/// Evaluate a clamped cubic B-spline interpolant (see \ref ad_tex_eval).
+extern DRJIT_EXTRA_EXPORT void
+ad_tex_cubic(VarType query_type, uint32_t dimension, uint32_t channels_stored,
+             uint32_t channels_out, int wrap_mode, void *handle,
+             int use_accel, uint64_t value, const uint32_t *res,
+             const uint32_t *idiv, const uint64_t *pos, uint32_t active,
+             uint64_t *out);
+
+/**
+ * \brief Cubic B-spline value + positional gradient (+ optional hessian)
+ *
+ * ``out_value`` receives ``channels_out`` indices; ``out_grad`` receives
+ * ``channels_out * dim`` indices (``out_grad[ch * dim + m]`` = d/dx_m). When
+ * ``out_hess`` is non-null it additionally receives ``channels_out * dim * dim``
+ * indices (``out_hess[(ch * dim + m) * dim + n]`` = d^2/dx_m dx_n). The result
+ * is non-differentiable. See \ref ad_tex_eval for the shared parameters.
+ */
+extern DRJIT_EXTRA_EXPORT void
+ad_tex_cubic_deriv(VarType query_type, uint32_t dimension, uint32_t channels_stored,
+                   uint32_t channels_out, int wrap_mode, uint64_t value,
+                   const uint32_t *res, const uint32_t *idiv,
+                   const uint64_t *pos, uint32_t active, uint64_t *out_value,
+                   uint64_t *out_grad, uint64_t *out_hess);
+
+/// Store ``channels_out`` values into a writable hardware texture (\ref Texture::write).
+extern DRJIT_EXTRA_EXPORT void
+ad_tex_write(uint32_t channels_stored, uint32_t channels_out, void *handle,
+             const uint32_t *pos, const uint64_t *value, uint32_t active);
+
+/**
+ * \brief Re-pack channel-interleaved texture data to a different channel width
+ *
+ * Gathers ``source`` (``n_pixels * src_channels`` elements) into a buffer of
+ * ``n_pixels * dst_channels`` elements; source channels beyond ``src_channels``
+ * are zero-filled (used to pad/unpad the storage tensor in \ref
+ * Texture::set_value() / \ref Texture::tensor()). The gather is differentiable;
+ * the returned combined index is owned by the caller.
+ */
+extern DRJIT_EXTRA_EXPORT uint64_t
+ad_tex_repack(uint64_t source, uint32_t n_pixels, uint32_t dst_channels,
+              uint32_t src_channels);
+
 extern DRJIT_EXTRA_EXPORT void ad_enqueue(drjit::ADMode, uint64_t);
 extern DRJIT_EXTRA_EXPORT void ad_traverse(drjit::ADMode, uint32_t);
 
