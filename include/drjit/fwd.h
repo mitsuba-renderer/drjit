@@ -269,4 +269,17 @@ namespace detail {
 /// Enumeration to distinguish different types of primal/derivative computation
 enum class ADMode { Primal, Forward, Backward };
 
+/// Texture interpolation methods
+enum class FilterMode : uint32_t {
+    Nearest = 0, /// Nearest-neighbor interpolation
+    Linear = 1   /// Linear interpolation
+};
+
+/// Texture wrapping methods
+enum class WrapMode : uint32_t {
+    Repeat = 0, /// Repeats the texture
+    Clamp = 1,  /// Replicates the edge color
+    Mirror = 2  /// Mirrors the texture wrt. each edge
+};
+
 NAMESPACE_END(drjit)
