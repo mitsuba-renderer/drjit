@@ -55,8 +55,8 @@
 #include <tsl/robin_map.h>
 #include <nanobind/intrusive/counter.inl>
 #include <string>
-#include "lock.h"
-#include "free_slots.h"
+#include "../../ext/drjit-core/src/lock.h"
+#include "../../ext/drjit-core/src/free_slots.h"
 
 namespace dr = drjit;
 

@@ -23,7 +23,7 @@
 
 namespace dr = drjit;
 
-NAMESPACE_BEGIN()
+namespace {
 
 /// Largest supported texture dimension
 static constexpr uint32_t MaxDim = 3;
@@ -190,7 +190,7 @@ static void tex_eval_accel(void *handle,
     finalize_lookup(tmp, channels_stored, channels_out, query_type, out);
 }
 
-NAMESPACE_END()
+} // anonymous namespace
 
 void ad_tex_eval(VarType query_type, uint32_t dim, uint32_t channels_stored,
                  uint32_t channels_out, int filter_mode, int wrap_mode,
