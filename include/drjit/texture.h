@@ -484,7 +484,15 @@ public:
         if constexpr (is_dynamic_v<Output>)
             for (size_t i = 0; i < (1 << Dimension); ++i)
                 out.set_entry(i, empty<Output>(m_channels));
+        // The corners are intentionally uninitialized
+#if defined(__GNUC__)
+#  pragma GCC diagnostic push
+#  pragma GCC diagnostic ignored "-Wuninitialized"
+#endif
         return out;
+#if defined(__GNUC__) && !defined(__clang__)
+#  pragma GCC diagnostic pop
+#endif
     }
 
     /**
