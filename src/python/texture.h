@@ -143,6 +143,12 @@ static nb::object tex_eval_cubic_hessian(const Tex &texture,
                                  pos, active)));
 }
 
+template <typename Type, size_t Dimension, typename Tex>
+static auto tex_wrap(const Tex &texture,
+                     const dr::Array<dr::int32_array_t<Type>, Dimension> &pos) {
+    return texture.wrap(pos);
+}
+
 template <typename T, size_t Dimension, typename Tex>
 static void tex_write(Tex &texture,
                       const dr::Array<dr::uint32_array_t<T>, Dimension> &pos,
@@ -203,6 +209,9 @@ void bind_texture(nb::module_ &m, const char *name) {
              nb::rv_policy::reference_internal, doc_Texture_tensor)
         .def("filter_mode", &Tex::filter_mode, doc_Texture_filter_mode)
         .def("wrap_mode", &Tex::wrap_mode, doc_Texture_wrap_mode)
+        .def("wrap", &tex_wrap<Type, Dimension, Tex>, "pos"_a,
+             nb::sig("def wrap(self, pos: drjit.AnyArray) -> drjit.AnyArray"),
+             doc_Texture_wrap)
         .def("use_accel", &Tex::use_accel, doc_Texture_use_accel)
         .def("writable", &Tex::writable, doc_Texture_writable)
         .def_static("from_native_handle", &Tex::from_native_handle, "handle"_a,

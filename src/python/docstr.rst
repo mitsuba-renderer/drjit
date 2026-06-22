@@ -7132,6 +7132,10 @@
 
     Return the wrap mode
 
+.. topic:: Texture_wrap
+
+    Apply the configured texture wrapping mode to an integer position
+
 .. topic:: Texture_use_accel
 
     Return whether texture uses the GPU for storage and evaluation

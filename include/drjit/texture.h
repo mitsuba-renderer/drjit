@@ -812,6 +812,38 @@ public:
         return { out_value, out_gradient, out_hessian };
     }
 
+    /// Apply the configured texture wrapping mode to an integer position
+    template <typename T> T wrap(const T &pos) const {
+        using Int = value_t<T>;
+        static_assert(size_v<T> == Dimension &&
+                          std::is_integral_v<scalar_t<T>> &&
+                          std::is_signed_v<scalar_t<T>>,
+                      "Texture::wrap(): expected a signed integer position with "
+                      "one component per texture dimension.");
+
+        if constexpr (is_jit_v<Storage_>) {
+            std::array<uint32_t, Dimension> pos_idx;
+            for (size_t k = 0; k < Dimension; ++k)
+                pos_idx[k] = pos[k].index();
+
+            std::array<uint32_t, Dimension> out_idx;
+            ad_tex_wrap((uint32_t) Dimension, (int) m_wrap_mode,
+                        resolution_indices().data(), idiv_indices().data(),
+                        pos_idx.data(), out_idx.data());
+
+            T result;
+            for (size_t k = 0; k < Dimension; ++k)
+                result[k] = Int::steal(out_idx[k]);
+            return result;
+        } else {
+            auto ops = scalar_ops<float32_array_t<Int>>(true);
+            T result;
+            for (size_t k = 0; k < Dimension; ++k)
+                result[k] = detail::tex_wrap(ops, pos[k], k);
+            return result;
+        }
+    }
+
     /// Gather the channels at \c idx and cast them to the query precision
     template <typename Value>
     void gather_texel(const uint32_array_t<Value> &idx,

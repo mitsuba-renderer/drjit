@@ -306,6 +306,33 @@ void ad_tex_fetch(VarType query_type, uint32_t dim, uint32_t channels_stored,
         out_idx[i] = result[i].release();
 }
 
+void ad_tex_wrap(uint32_t dim, int wrap_mode, const uint32_t *res_idx,
+                 const uint32_t *idiv_idx, const uint32_t *pos_idx,
+                 uint32_t *out_idx) {
+    // Only the integer-coordinate parts of ``JitOps`` are needed here (res_i,
+    // idiv, wrap_mode); the float/gather machinery is left default-initialized.
+    JitOps ops;
+    ops.backend = jit_set_backend(res_idx[0]).backend;
+    ops.dim = dim;
+    ops.wrap_mode = (dr::WrapMode) wrap_mode;
+    bool divides = ops.wrap_mode != dr::WrapMode::Clamp;
+
+    Int pos[MaxDim];
+    for (uint32_t k = 0; k < dim; ++k) {
+        ops.res_i_[k] = Int(UInt::borrow(res_idx[k]));
+        pos[k] = Int::borrow(pos_idx[k]);
+        if (divides) {
+            ops.inv_res_[k].multiplier = Int::borrow(idiv_idx[2 * k + 0]);
+            ops.inv_res_[k].shift      = Int::borrow(idiv_idx[2 * k + 1]);
+        }
+    }
+
+    // The result is a pure integer variable (no AD component); hand back the
+    // owning JIT index.
+    for (uint32_t k = 0; k < dim; ++k)
+        out_idx[k] = (uint32_t) dr::detail::tex_wrap(ops, pos[k], k).release();
+}
+
 void ad_tex_cubic(VarType query_type, uint32_t dim, uint32_t channels_stored,
                   uint32_t channels_out, int wrap_mode, void *handle,
                   int use_accel, uint64_t value, const uint32_t *res_idx,

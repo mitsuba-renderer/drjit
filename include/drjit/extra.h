@@ -265,6 +265,20 @@ ad_tex_fetch(VarType query_type, uint32_t dimension, uint32_t channels_stored,
              const uint32_t *idiv, const uint64_t *pos, uint32_t active,
              uint64_t *out);
 
+/**
+ * \brief Apply a texture's wrapping mode to integer texel coordinates
+ *
+ * Type-erased backend of ``drjit::Texture<...>::wrap()`` for the JIT backends.
+ * Remaps the ``dimension`` signed-integer query coordinates ``pos`` (one JIT
+ * index per dimension) into the valid <tt>[0, resolution)</tt> range according
+ * to ``wrap_mode``, writing the result to ``out`` as ``dimension`` owned JIT
+ * indices. The operation is integer-only and hence non-differentiable. See
+ * \ref ad_tex_eval for the shared ``res``/``idiv`` arguments.
+ */
+extern DRJIT_EXTRA_EXPORT void
+ad_tex_wrap(uint32_t dimension, int wrap_mode, const uint32_t *res,
+            const uint32_t *idiv, const uint32_t *pos, uint32_t *out);
+
 /// Evaluate a clamped cubic B-spline interpolant (see \ref ad_tex_eval).
 extern DRJIT_EXTRA_EXPORT void
 ad_tex_cubic(VarType query_type, uint32_t dimension, uint32_t channels_stored,
