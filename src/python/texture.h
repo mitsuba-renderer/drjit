@@ -44,7 +44,7 @@ static nb::object tex_eval_fetch(const Tex &texture,
                                  const dr::Array<T, Dimension> &pos,
                                  const dr::mask_t<T> &active) {
     constexpr size_t ResultSize = 1 << Dimension;
-    auto to_tuple = [ResultSize](auto &&corners) {
+    auto to_tuple = [](auto &&corners) {
         nb::object out = nb::steal(PyTuple_New((Py_ssize_t) ResultSize));
         for (size_t i = 0; i < ResultSize; ++i)
             NB_TUPLE_SET_ITEM(out.ptr(), (Py_ssize_t) i,
