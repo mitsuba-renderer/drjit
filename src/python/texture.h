@@ -232,6 +232,7 @@ void bind_texture(nb::module_ &m, const char *name) {
                 NB_TUPLE_SET_ITEM(shape, i, PyLong_FromLong((long) t.shape()[i]));
             return nb::steal<nb::tuple>(shape);
         }, doc_Texture_shape)
+        .def("channel_count", &Tex::channel_count, doc_Texture_channel_count)
         .def_tex_eval(Float32)
         .def_tex_eval(Float16)
         .def_tex_eval(Float64)

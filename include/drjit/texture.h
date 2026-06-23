@@ -231,6 +231,9 @@ public:
     /// Return the texture shape
     const size_t *shape() const { return m_shape; }
 
+    /// Return the number of channels (equals ``shape()[ndim()-1]``)
+    size_t channel_count() const { return m_channels; }
+
     /// Return the texture filtering mode (e.g., nearest, bilinear, etc.)
     FilterMode filter_mode() const { return m_filter_mode; }
 

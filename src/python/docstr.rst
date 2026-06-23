@@ -7161,6 +7161,10 @@
 
     Return the texture shape
 
+.. topic:: Texture_channel_count
+
+    Return the number of channels (equals ``shape()[ndim()-1]``)
+
 .. topic:: Texture_eval
 
     Evaluate the linear interpolant represented by this texture.
