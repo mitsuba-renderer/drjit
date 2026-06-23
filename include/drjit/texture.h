@@ -23,6 +23,7 @@
 #include <drjit/util.h>
 #include <drjit/traversable_base.h>
 #include <array>
+#include <cassert>
 
 #pragma once
 
@@ -89,6 +90,14 @@ public:
      * defines the wrapping method. The default behavior is \ref
      * WrapMode::Clamp, which indefinitely extends the colors on the boundary
      * along each dimension.
+     *
+     * On the CUDA and Metal backends, hardware texture units resolve the
+     * sub-texel position using reduced-precision fixed-point weights (8
+     * fractional bits on CUDA, i.e. 256 steps between texels). This does not
+     * degrade the stored values or the interpolated quantity, only how finely
+     * the fractional position within a texel is resolved. Set \c use_accel to
+     * \c false to disable the texture units and avoid this approximation at some
+     * cost in performance.
      *
      * For 8-bit textures, setting \c srgb additionally requests that samples
      * be decoded from sRGB to linear. Passing it for a floating-point texture
@@ -536,29 +545,8 @@ public:
         return out;
     }
 
-    /// Scalar fallback for \ref eval_nonaccel(); the JIT path uses the
-    /// type-erased kernel in ``libdrjit-extra``
-    template <typename Output, typename Value = value_t<Output>>
-    void eval_nonaccel_scalar(const position_for<Output> &pos, Output &out,
-                              mask_for<Output> active = true) const {
-        Value *res_mem     = (Value *) alloca(sizeof(Value) * m_channels);
-        Value *scratch_mem = (Value *) alloca(sizeof(Value) * m_channels);
-        detail::tex_scratch<Value> res(res_mem, m_channels),
-                                   scratch(scratch_mem, m_channels);
-        detail::tex_eval(scalar_ops<Value>(active), pos.data(), res.data(),
-                         scratch.data());
-        for (size_t ch = 0; ch < m_channels; ++ch)
-            out.set_entry(ch, res[ch]);
-    }
-
     /**
      * \brief Evaluate the linear interpolant represented by this texture
-     *
-     * On the JIT backends the evaluation is performed by the type-erased
-     * ``ad_tex_eval`` kernel in ``libdrjit-extra``, which uses the hardware
-     * texture units when available and re-attaches the differentiable
-     * arithmetic for gradient tracking. The scalar backend uses \ref
-     * eval_nonaccel().
      *
      * When using the non-hardware-accelerated evaluation, the numerical
      * precision of the interpolation is dictated by the floating point
@@ -642,15 +630,28 @@ public:
                              mask_for<Output> active = true) const {
         using Value = value_t<Output>;
         constexpr size_t ncorner = 1 << Dimension;
-        Value *buf_mem = (Value *) alloca(sizeof(Value) * ncorner * m_channels);
-        detail::tex_scratch<Value> buf(buf_mem, ncorner * m_channels);
-        Value *ptrs[ncorner];
-        for (size_t c = 0; c < ncorner; ++c)
-            ptrs[c] = buf.data() + c * m_channels;
-        detail::tex_fetch(scalar_ops<Value>(active), pos.data(), ptrs);
-        for (size_t c = 0; c < ncorner; ++c)
-            for (size_t ch = 0; ch < m_channels; ++ch)
-                out.entry(c).set_entry(ch, ptrs[c][ch]);
+        if constexpr (!is_jit_v<Storage_> && !is_dynamic_v<Output>) {
+            constexpr uint32_t C = (uint32_t) size_v<Output>;
+            assert(m_channels == C);
+            Value buf[ncorner * C];
+            Value *ptrs[ncorner];
+            for (uint32_t c = 0; c < ncorner; ++c)
+                ptrs[c] = buf + c * C;
+            detail::tex_fetch(scalar_ops<Value, C>(active), pos.data(), ptrs);
+            for (uint32_t c = 0; c < ncorner; ++c)
+                for (uint32_t ch = 0; ch < C; ++ch)
+                    out.entry(c).set_entry(ch, ptrs[c][ch]);
+        } else {
+            Value *buf_mem = (Value *) alloca(sizeof(Value) * ncorner * m_channels);
+            detail::tex_scratch<Value> buf(buf_mem, ncorner * m_channels);
+            Value *ptrs[ncorner];
+            for (size_t c = 0; c < ncorner; ++c)
+                ptrs[c] = buf.data() + c * m_channels;
+            detail::tex_fetch(scalar_ops<Value>(active), pos.data(), ptrs);
+            for (size_t c = 0; c < ncorner; ++c)
+                for (size_t ch = 0; ch < m_channels; ++ch)
+                    out.entry(c).set_entry(ch, ptrs[c][ch]);
+        }
     }
 
     /**
@@ -705,17 +706,30 @@ public:
         using Value = value_t<Output>;
         Output out = alloc_output<Output>();
 
-        // Per-channel scratch on the stack (this helper also runs on JIT arrays
-        // to build an AD graph, hence ``tex_scratch``).
-        Value *res_mem     = (Value *) alloca(sizeof(Value) * m_channels);
-        Value *scratch_mem = (Value *) alloca(sizeof(Value) * m_channels);
-        detail::tex_scratch<Value> res(res_mem, m_channels),
-                                   scratch(scratch_mem, m_channels);
+        // This helper also runs on JIT arrays (to build an AD graph), whose
+        // storage is channel-padded; only unpadded scalar storage with a
+        // statically-sized output can use the compile-time channel count. The
+        // ``else`` keeps the ``alloca`` out of the static path entirely (so it
+        // stays inlinable), rather than relying on dead-code elimination.
+        if constexpr (!is_jit_v<Storage_> && !is_dynamic_v<Output>) {
+            constexpr uint32_t C = (uint32_t) size_v<Output>;
+            assert(m_channels == C);
+            Value res[C], scratch[C];
+            detail::tex_eval_cubic(scalar_ops<Value, C>(active), pos.data(),
+                                   res, scratch);
+            for (uint32_t ch = 0; ch < C; ++ch)
+                out.set_entry(ch, res[ch]);
+        } else {
+            Value *res_mem     = (Value *) alloca(sizeof(Value) * m_channels);
+            Value *scratch_mem = (Value *) alloca(sizeof(Value) * m_channels);
+            detail::tex_scratch<Value> res(res_mem, m_channels),
+                                       scratch(scratch_mem, m_channels);
 
-        detail::tex_eval_cubic(scalar_ops<Value>(active), pos.data(),
-                               res.data(), scratch.data());
-        for (size_t ch = 0; ch < m_channels; ++ch)
-            out.set_entry(ch, res[ch]);
+            detail::tex_eval_cubic(scalar_ops<Value>(active), pos.data(),
+                                   res.data(), scratch.data());
+            for (size_t ch = 0; ch < m_channels; ++ch)
+                out.set_entry(ch, res[ch]);
+        }
         return out;
     }
 
@@ -867,27 +881,41 @@ public:
         }
     }
 
-    /// Gather the channels at \c idx and cast them to the query precision
+    /// Cast a raw stored texel to the query precision. For 8-bit storage this
+    /// normalizes 0..255 to [0, 1] and optionally decodes sRGB (matching the
+    /// hardware read; the sRGB formats leave each RGBA group's 4th channel
+    /// linear). A plain cast for floating-point storage.
     template <typename Value>
+    Value convert_texel(const Storage_ &s, uint32_t ch) const {
+        Value v = Value(s);
+        if constexpr (IsUInt8) {
+            v *= Value(1.f / 255.f);
+            if (m_srgb && (ch % 4) != 3)
+                v = srgb_to_linear(v);
+        }
+        return v;
+    }
+
+    /// Gather the channels at \c idx and cast them to the query precision.
+    /// ``CChannels`` is the channel count when statically known (fixed scratch,
+    /// unrolled loop); 0 selects the runtime ``alloca`` path.
+    template <uint32_t CChannels = 0, typename Value>
     void gather_texel(const uint32_array_t<Value> &idx,
                       const mask_t<Value> &active, Value *out) const {
-        // Per-channel packet scratch on the stack
-        Storage_ *packet_mem = (Storage_ *) alloca(sizeof(Storage_) * m_channels_storage);
-        detail::tex_scratch<Storage_> packet(packet_mem, m_channels_storage);
-
-        gather_packet_dynamic(m_channels_storage, m_value.array(), idx,
-                              packet.data(), active);
-        for (uint32_t ch = 0; ch < m_channels; ++ch) {
-            Value v = Value(packet[ch]);
-            // 8-bit storage is gathered as 0..255; normalize (and decode sRGB)
-            // to match the hardware texture units' normalized read. The sRGB
-            // formats leave each RGBA sub-texture's 4th (alpha) channel linear.
-            if constexpr (IsUInt8) {
-                v *= Value(1.f / 255.f);
-                if (m_srgb && (ch % 4) != 3)
-                    v = srgb_to_linear(v);
-            }
-            out[ch] = v;
+        if constexpr (CChannels != 0) {
+            // Scalar storage is unpadded, so m_channels_storage == CChannels.
+            Storage_ packet[CChannels];
+            gather_packet_dynamic(CChannels, m_value.array(), idx, packet, active);
+            for (uint32_t ch = 0; ch < CChannels; ++ch)
+                out[ch] = convert_texel<Value>(packet[ch], ch);
+        } else {
+            // Per-channel packet scratch on the stack
+            Storage_ *packet_mem = (Storage_ *) alloca(sizeof(Storage_) * m_channels_storage);
+            detail::tex_scratch<Storage_> packet(packet_mem, m_channels_storage);
+            gather_packet_dynamic(m_channels_storage, m_value.array(), idx,
+                                  packet.data(), active);
+            for (uint32_t ch = 0; ch < m_channels; ++ch)
+                out[ch] = convert_texel<Value>(packet[ch], ch);
         }
     }
 
@@ -1071,16 +1099,21 @@ private:
             output[Dimension] = m_value.shape(Dimension);
     }
 
-    /// Operations object for generating scalar texture evaluation code
-    template <typename Value> struct ScalarOps {
+    /// Operations object for generating scalar texture evaluation code.
+    /// ``CChannels`` is the channel count when statically known (so the loops
+    /// unroll), or 0 for a runtime count (see \ref detail::ChannelCount).
+    template <typename Value, uint32_t CChannels = 0>
+    struct ScalarOps : detail::ChannelCount<CChannels> {
         using Float = Value;
         using Int   = int32_array_t<Value>;
         using UInt  = uint32_array_t<Value>;
         using Mask  = mask_t<Value>;
 
+        // The texture dimension is always a compile-time constant
+        static constexpr uint32_t dim = (uint32_t) Dimension;
+
         const Texture *tex;
         Mask active;
-        uint32_t dim, channels_out;
         FilterMode filter_mode;
         WrapMode wrap_mode;
 
@@ -1090,17 +1123,21 @@ private:
         Float to_float(const Int &i) const { return Value(i); }
         Int idiv(const Int &a, uint32_t k) const { return tex->m_inv_resolution[k](a); }
         void gather(const UInt &idx, Float *out) const {
-            tex->gather_texel(idx, active, out);
+            tex->template gather_texel<CChannels>(idx, active, out);
         }
     };
 
     /// Build a \ref ScalarOps bound to this texture and the query mask
-    template <typename Value>
-    ScalarOps<Value> scalar_ops(mask_t<Value> active) const {
+    template <typename Value, uint32_t CChannels = 0>
+    ScalarOps<Value, CChannels> scalar_ops(mask_t<Value> active) const {
         if constexpr (!is_array_v<mask_t<Value>>)
             active = true;
-        return ScalarOps<Value>{ this, active, (uint32_t) Dimension,
-            (uint32_t) m_channels, m_filter_mode, m_wrap_mode };
+        if constexpr (CChannels != 0)
+            return ScalarOps<Value, CChannels>{ {}, this, active, m_filter_mode,
+                                                m_wrap_mode };
+        else
+            return ScalarOps<Value, 0>{ { (uint32_t) m_channels }, this, active,
+                                        m_filter_mode, m_wrap_mode };
     }
 
     // -- Type-erased marshalling helpers backing the JIT ``ad_tex_*`` calls --
@@ -1166,7 +1203,7 @@ private:
             return Value::steal((uint32_t) index);
     }
 
-    /// Evaluate via the type-erased ``ad_tex_eval`` kernel (JIT backends only)
+    /// Evaluate the texture interpolant symbolically
     template <typename Output, typename Value = value_t<Output>>
     void eval_jit(const position_for<Output> &pos, Output &out,
                   mask_for<Output> active, bool use_accel) const {
@@ -1180,6 +1217,30 @@ private:
         for (size_t ch = 0; ch < m_channels; ++ch)
             out.set_entry(ch, steal_value<Value>(out_idx[ch]));
     }
+
+    /// Scalar fallback for \ref eval_nonaccel().
+    template <typename Output, typename Value = value_t<Output>>
+    void eval_nonaccel_scalar(const position_for<Output> &pos, Output &out,
+                              mask_for<Output> active = true) const {
+        if constexpr (!is_jit_v<Storage_> && !is_dynamic_v<Output>) {
+            constexpr uint32_t C = (uint32_t) size_v<Output>;
+            assert(m_channels == C);
+            Value res[C], scratch[C];
+            detail::tex_eval(scalar_ops<Value, C>(active), pos.data(), res, scratch);
+            for (uint32_t ch = 0; ch < C; ++ch)
+                out.set_entry(ch, res[ch]);
+        } else {
+            Value *res_mem     = (Value *) alloca(sizeof(Value) * m_channels);
+            Value *scratch_mem = (Value *) alloca(sizeof(Value) * m_channels);
+            detail::tex_scratch<Value> res(res_mem, m_channels),
+                                       scratch(scratch_mem, m_channels);
+            detail::tex_eval(scalar_ops<Value>(active), pos.data(), res.data(),
+                             scratch.data());
+            for (size_t ch = 0; ch < m_channels; ++ch)
+                out.set_entry(ch, res[ch]);
+        }
+    }
+
 
     /// Shared marshaller for \ref eval_cubic_grad() / \ref eval_cubic_hessian():
     /// fills value + gradient (and hessian, when \c out_hessian is non-null).
@@ -1240,30 +1301,43 @@ private:
     void *m_handle = nullptr;
     size_t m_size = 0;                       ///< Total size of array
     size_t m_channels = 0;                   ///< Number of channels
+
     /// Rounded-up number of channels (depends on the backend)
     size_t m_channels_storage = 0;
-    size_t m_shape[Dimension + 1] = {};      ///< Unpadded shape of texture
-    mutable TensorXf m_value;                ///< Tensor padded for packet size
+
+    /// Unpadded shape of texture
+    size_t m_shape[Dimension + 1] = {};
+
+    /// Tensor padded for packet size
+    mutable TensorXf m_value;
+
     /// Lazily computed if texture data is updated after initialization
     mutable TensorXf m_unpadded_value;
 
     // Stored in this order: width, height, depth
     Array<UInt32, Dimension> m_resolution_opaque;
 
-    // Reciprocal resolution for the Repeat/Mirror wrap math. On the JIT backends
-    // the magic constants are opaque variables consumed by the type-erased
-    // kernel (see ad_tex_eval); populated only when the wrap mode divides.
+    // Reciprocal resolution for the Repeat/Mirror wrap math.
     Divisor m_inv_resolution[Dimension] { };
 
+    /// Texture interpolation mode
     FilterMode m_filter_mode;
+
+    /// Texture wrapping mode
     WrapMode m_wrap_mode;
+
+    /// Use the hardware texture units?
     bool m_use_accel = false;
+
     /// Texture was created so kernels may store into it via write()
     bool m_writable = false;
+
     /// 8-bit textures: decode sRGB -> linear on sampling
     bool m_srgb = false;
+
     /// Hardware-texture flag: is the data held exclusively on the device?
     mutable bool m_migrated = false;
+
     /// Does the public-facing unpadded tensor need to be updated?
     mutable bool m_tensor_dirty = false;
 

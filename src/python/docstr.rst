@@ -7045,6 +7045,13 @@
     defines the wrapping method. The default behavior is ``drjit.WrapMode.Clamp``,
     which indefinitely extends the colors on the boundary along each dimension.
 
+    On the CUDA and Metal backends, hardware texture units resolve the sub-texel
+    position using reduced-precision fixed-point weights (8 fractional bits on
+    CUDA, i.e. 256 steps between texels). This does not degrade the stored values
+    or the interpolated quantity, only how finely the fractional position within
+    a texel is resolved. Set ``use_accel=False`` to disable the texture units and
+    avoid this approximation at some cost in performance.
+
     For 8-bit textures, setting ``srgb`` additionally requests that samples be
     decoded from sRGB to linear. Passing it for a floating-point texture raises
     an error. Channels are grouped into hardware RGBA quads, so within each group
