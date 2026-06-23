@@ -159,37 +159,38 @@ static void tex_write(Tex &texture,
     if (value.size() != channels)
         nb::raise("Texture.write(): expected %zu channel values, got %zu.",
                   channels, value.size());
-    if constexpr (Tex::HasGPUTexture)
+    if constexpr (dr::is_jit_v<typename Tex::Storage>)
         texture.write(pos, value.data(), active);
     else
-        nb::raise("Texture.write(): requires a CUDA or Metal "
-                  "float16/float32 texture.");
+        nb::raise("Texture.write(): requires a JIT backend (CUDA, Metal, or LLVM).");
 }
 
-template <typename Type, size_t Dimension>
+template <typename Type, size_t Dimension, typename QueryArray = Type>
 void bind_texture(nb::module_ &m, const char *name) {
     using Tex = dr::Texture<Type, Dimension>;
-    using Float16 = dr::replace_scalar_t<Type, dr::half>;
-    using Float32 = dr::replace_scalar_t<Type, float>;
-    using Float64 = dr::replace_scalar_t<Type, double>;
+    // Query/output precisions; for 8-bit textures these come from a separate
+    // floating-point guide (\c QueryArray) since the storage type is integral.
+    using Float16 = dr::replace_scalar_t<QueryArray, dr::half>;
+    using Float32 = dr::replace_scalar_t<QueryArray, float>;
+    using Float64 = dr::replace_scalar_t<QueryArray, double>;
 
     auto tex = nb::class_<Tex>(m, name)
         .def("__init__", [](Tex* t, const dr::vector<size_t>& shape,
                          size_t channels, bool use_accel,
                          dr::FilterMode filter_mode, dr::WrapMode wrap_mode,
-                         bool writable) {
+                         bool writable, bool srgb) {
                  new (t) Tex(shape.data(), channels, use_accel, filter_mode,
-                             wrap_mode, writable); },
+                             wrap_mode, writable, srgb); },
              "shape"_a, "channels"_a, "use_accel"_a = true,
              "filter_mode"_a = dr::FilterMode::Linear,
              "wrap_mode"_a = dr::WrapMode::Clamp,
-             "writable"_a = false,
+             "writable"_a = false, "srgb"_a = false,
              doc_Texture_init)
         .def(nb::init<const typename Tex::TensorXf &, bool, bool, dr::FilterMode,
-                      dr::WrapMode>(),
+                      dr::WrapMode, bool>(),
              "tensor"_a, "use_accel"_a = true, "migrate"_a = true,
              "filter_mode"_a = dr::FilterMode::Linear,
-             "wrap_mode"_a = dr::WrapMode::Clamp,
+             "wrap_mode"_a = dr::WrapMode::Clamp, "srgb"_a = false,
              doc_Texture_init_tensor)
         .def("set_value",
              &Tex::template set_value<const typename Tex::Storage &>,
@@ -214,10 +215,11 @@ void bind_texture(nb::module_ &m, const char *name) {
              doc_Texture_wrap)
         .def("use_accel", &Tex::use_accel, doc_Texture_use_accel)
         .def("writable", &Tex::writable, doc_Texture_writable)
+        .def("srgb", &Tex::srgb, doc_Texture_srgb)
         .def_static("from_native_handle", &Tex::from_native_handle, "handle"_a,
              "writable"_a = false,
              "filter_mode"_a = dr::FilterMode::Linear,
-             "wrap_mode"_a = dr::WrapMode::Clamp,
+             "wrap_mode"_a = dr::WrapMode::Clamp, "srgb"_a = false,
              doc_Texture_from_native_handle)
         .def("map", &Tex::map, doc_Texture_map)
         .def("unmap", &Tex::unmap, doc_Texture_unmap)
@@ -262,6 +264,9 @@ void bind_texture_all(nb::module_ &m) {
     using Type16 = dr::float16_array_t<Type>;
     using Type32 = dr::float32_array_t<Type>;
     using Type64 = dr::float64_array_t<Type>;
+    // 8-bit storage is integral; queries still return single precision via the
+    // \c Type32 guide (differentiable in the AD variants).
+    using Type8 = dr::uint8_array_t<Type>;
     bind_texture<Type16, 1>(m, "Texture1f16");
     bind_texture<Type16, 2>(m, "Texture2f16");
     bind_texture<Type16, 3>(m, "Texture3f16");
@@ -271,6 +276,9 @@ void bind_texture_all(nb::module_ &m) {
     bind_texture<Type64, 1>(m, "Texture1f64");
     bind_texture<Type64, 2>(m, "Texture2f64");
     bind_texture<Type64, 3>(m, "Texture3f64");
+    bind_texture<Type8, 1, Type32>(m, "Texture1f8u");
+    bind_texture<Type8, 2, Type32>(m, "Texture2f8u");
+    bind_texture<Type8, 3, Type32>(m, "Texture3f8u");
 }
 
 #undef DR_TEX_DISPATCH

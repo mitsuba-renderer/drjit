@@ -156,6 +156,25 @@ the primal lookup operation is hardware-accelerated, a subsequent
 non-accelerated lookup is additionally performed *solely* to record each
 individual operation into the AD graph.
 
+8-bit textures
+^^^^^^^^^^^^^^
+
+The interface of ``Texture?f8u`` variants (e.g. :py:class:`Texture3f8u
+<drjit.auto.ad.Texture3f8u>`) slightly differs from their floating point
+counterparts. They store texture data compactly using unsigned 8-bit integers,
+but their ``eval_*`` members produce floating point output by transparently
+remapping ``0..255`` onto the interval ``[0, 1]``.
+
+When the texture object was created with ``srgb=True``, i.e.,
+
+.. code-block:: python
+
+   tex = Texture2f8u(tensor_u8, srgb=True)
+
+evaluation will apply the nonlinear sRGB transfer function to turn
+gamma-encoded 8-bit values back into a linear scale. The CUDA and Metal
+backends perform both types of conversions in hardware.
+
 Writing to textures
 -------------------
 
@@ -178,11 +197,10 @@ The access mode follows the *operation*, so a ``writable`` texture may be both
 written and sampled (a texture rendered in one kernel can be looked up in
 another). Its contents can be read back into a tensor via :py:func:`.tensor()
 <drjit.auto.Texture2f.tensor>` / :py:func:`.value()
-<drjit.auto.Texture2f.value>` as usual. On Metal the underlying texture is
-created with shader-write usage; on CUDA it is backed by a surface object.
+<drjit.auto.Texture2f.value>` as usual. Writing 8-bit textures clips and
+quantizes ``[0, 1]`` float inputs and sRGB-encodes them if needed.
 
-This feature requires the CUDA or Metal backend (it is unavailable for
-``llvm``/``scalar`` textures, and for double-precision textures).
+This feature requires a JIT backend; it is unavailable for ``scalar`` textures.
 
 Wrapping native textures
 ------------------------

@@ -9,10 +9,6 @@ def _skip_metal_f64(t, texture_type):
     if dr.backend_v(t) == dr.JitBackend.Metal and 'f64' in texture_type:
         pytest.skip("Metal does not support float64")
 
-def _skip_non_hw_write(t):
-    if dr.backend_v(t) not in (dr.JitBackend.CUDA, dr.JitBackend.Metal):
-        pytest.skip("hardware texture writes require the CUDA or Metal backend")
-
 @pytest.mark.parametrize("wrap_mode", wrap_modes)
 @pytest.mark.parametrize("force_optix", [True, False])
 @pytest.mark.parametrize("texture_type", ['Texture1f64', 'Texture1f', 'Texture1f16'])
@@ -984,7 +980,6 @@ def test27_masked(t, texture_type):
 def test28_write_flag(t, texture_type):
     # Writable textures expose write(); a non-writable one rejects it; and a
     # writable texture can be *both* written and sampled.
-    _skip_non_hw_write(t)
     mod = sys.modules[t.__module__]
     TexType = getattr(mod, texture_type)
     UInt32 = dr.uint32_array_t(t)
@@ -1020,11 +1015,10 @@ def test28_write_flag(t, texture_type):
 @pytest.mark.parametrize("texture_type", ['Texture2f', 'Texture2f16'])
 @pytest.test_arrays("is_jit, float32, shape=(*)")
 def test29_write_read(t, texture_type):
-    # Per-pixel hardware stores round-trip through the texture for every channel
+    # Per-pixel stores round-trip through the texture for every channel
     # count (exercises the 1/2/4-channel sub-texture split and padding). The
     # value written at pixel `idx`, channel `c` is `(idx*ch + c)*0.01`, so the
     # interleaved read-back tensor must equal `arange(H*W*ch)*0.01`.
-    _skip_non_hw_write(t)
     mod = sys.modules[t.__module__]
     TexType = getattr(mod, texture_type)
     UInt32 = dr.uint32_array_t(t)
@@ -1047,7 +1041,6 @@ def test29_write_read(t, texture_type):
 @pytest.test_arrays("is_jit, float32, shape=(*)")
 def test30_write_masked(t, texture_type):
     # A masked store updates only the active lanes.
-    _skip_non_hw_write(t)
     mod = sys.modules[t.__module__]
     TexType = getattr(mod, texture_type)
     UInt32 = dr.uint32_array_t(t)
@@ -1071,8 +1064,7 @@ def test30_write_masked(t, texture_type):
 @pytest.mark.parametrize("texture_type", ['Texture3f', 'Texture3f16'])
 @pytest.test_arrays("is_jit, float32, shape=(*)")
 def test31_write_3d(t, texture_type):
-    # 3D hardware stores round-trip.
-    _skip_non_hw_write(t)
+    # 3D stores round-trip.
     mod = sys.modules[t.__module__]
     TexType = getattr(mod, texture_type)
     UInt32 = dr.uint32_array_t(t)
@@ -1153,3 +1145,149 @@ def test32_from_native_handle(t, texture_type):
     # A non-writable texture cannot be wrapped for writing.
     with pytest.raises(Exception):
         TexType.from_native_handle(src.native_handle(), writable=True)
+
+
+def _srgb_to_linear(u):
+    x = u / 255.0
+    return x / 12.92 if x <= 0.04045 else ((x + 0.055) / 1.055) ** 2.4
+
+
+@pytest.mark.parametrize("srgb", [False, True])
+@pytest.mark.parametrize("channels", [1, 3, 5])
+@pytest.test_arrays("is_jit, float32, shape=(*)")
+def test33_uint8(t, channels, srgb):
+    # 8-bit textures normalize their 0..255 storage to [0, 1] on lookup,
+    # optionally decoding sRGB. Pin the exact normalized value via a nearest
+    # lookup, and require the hardware and arithmetic paths to agree.
+    mod = sys.modules[t.__module__]
+    TexType = getattr(mod, 'Texture2f8u')
+    UInt8 = getattr(mod, 'UInt8')
+    Array2f = getattr(mod, 'Array2f')
+
+    H, W = 4, 5
+    vals = [(i * 37 + ch * 53) % 256
+            for i in range(H * W) for ch in range(channels)]
+    data = mod.TensorXu8(UInt8(vals), shape=(H, W, channels))
+
+    tex = TexType(data, use_accel=True, migrate=False, srgb=srgb)
+    tex_soft = TexType(data, use_accel=False, srgb=srgb)
+    tex_near = TexType(data, use_accel=False, srgb=srgb,
+                       filter_mode=dr.FilterMode.Nearest)
+    assert tex.srgb() == srgb
+
+    # Nearest lookup at the first texel's center returns its (decoded) value.
+    # sRGB decoding (like the hardware) skips each RGBA group's alpha channel.
+    out0 = tex_near.eval(Array2f(0.5 / W, 0.5 / H))
+    for ch in range(channels):
+        ref = (_srgb_to_linear(vals[ch]) if srgb and ch % 4 != 3
+               else vals[ch] / 255.0)
+        assert dr.allclose(out0[ch], ref, 1e-3, 1e-3)
+
+    # Hardware and arithmetic linear lookups agree
+    pos = Array2f([0.2, 0.55, 0.9], [0.3, 0.6, 0.8])
+    out_soft, out_accel = tex_soft.eval(pos), tex.eval(pos)
+    for ch in range(channels):
+        assert dr.allclose(out_soft[ch], out_accel[ch], 5e-3, 5e-3)
+
+
+@pytest.test_arrays("is_diff, float32, shape=(*)")
+def test34_uint8_eval_variants(t):
+    # The full lookup surface (fetch / cubic / their derivatives) normalizes
+    # 8-bit storage like eval(), and the hardware and arithmetic paths agree.
+    mod = sys.modules[t.__module__]
+    TexType = getattr(mod, 'Texture2f8u')
+    UInt8 = getattr(mod, 'UInt8')
+    Array2f = getattr(mod, 'Array2f')
+
+    H, W, C = 5, 6, 3
+    vals = [(i * 29 + ch * 71) % 256
+            for i in range(H * W) for ch in range(C)]
+    data = mod.TensorXu8(UInt8(vals), shape=(H, W, C))
+    tex = TexType(data, use_accel=True, migrate=False)
+    tex_soft = TexType(data, use_accel=False)
+    pos = Array2f([0.3, 0.6], [0.4, 0.7])
+
+    # eval_fetch: each corner is normalized, and the paths agree
+    fa, fs = tex.eval_fetch(pos), tex_soft.eval_fetch(pos)
+    for corner in range(4):
+        for ch in range(C):
+            assert dr.all((fs[corner][ch] >= 0) & (fs[corner][ch] <= 1))
+            assert dr.allclose(fa[corner][ch], fs[corner][ch], 5e-3, 5e-3)
+
+    # eval_cubic: hardware and arithmetic agree
+    ca, cs = tex.eval_cubic(pos), tex_soft.eval_cubic(pos)
+    for ch in range(C):
+        assert dr.allclose(ca[ch], cs[ch], 5e-3, 5e-3)
+
+    # eval_cubic_grad / eval_cubic_hessian run and produce finite results
+    _, grad = tex_soft.eval_cubic_grad(pos)
+    _, _, hess = tex_soft.eval_cubic_hessian(pos)
+    assert dr.all(dr.isfinite(dr.ravel(grad[0])), axis=None)
+    assert dr.all(dr.isfinite(dr.ravel(hess[0])), axis=None)
+
+
+@pytest.mark.parametrize("use_accel", [False, True])
+@pytest.test_arrays("is_diff, float32, shape=(*)")
+def test35_uint8_grad(t, use_accel):
+    # An 8-bit lookup is differentiable w.r.t. the (continuous) query position,
+    # but its integer storage carries no gradient.
+    if use_accel and dr.backend_v(t) not in (dr.JitBackend.CUDA, dr.JitBackend.Metal):
+        pytest.skip("hardware textures require the CUDA or Metal backend")
+    mod = sys.modules[t.__module__]
+    TexType = getattr(mod, 'Texture2f8u')
+    UInt8 = getattr(mod, 'UInt8')
+    Array2f = getattr(mod, 'Array2f')
+
+    H, W, C = 4, 4, 2
+    vals = [(i * 17 + ch * 91) % 256
+            for i in range(H * W) for ch in range(C)]
+    data = mod.TensorXu8(UInt8(vals), shape=(H, W, C))
+
+    # Integer storage cannot be made differentiable
+    assert not dr.grad_enabled(data.array)
+
+    tex = TexType(data, use_accel=use_accel, migrate=False)
+    pos = Array2f(0.5, 0.5)
+    dr.enable_grad(pos)
+    out = tex.eval(pos)
+    dr.backward(out[0] + out[1])
+    g = dr.grad(pos)
+    assert dr.all(dr.isfinite(g))
+
+
+@pytest.test_arrays("is_jit, float32, shape=(*)")
+def test36_uint8_write(t):
+    # write() to an 8-bit texture quantizes [0, 1] floats to normalized storage,
+    # sRGB-encoding when requested (leaving each RGBA group's alpha linear), so a
+    # sampled read round-trips the written value. Metal's unorm/sRGB pixel format
+    # converts in hardware; CUDA and LLVM do it in software.
+    mod = sys.modules[t.__module__]
+    TexType = getattr(mod, 'Texture2f8u')
+    UInt32 = dr.uint32_array_t(t)
+    Array2u = getattr(mod, 'Array2u')
+    Array2f = getattr(mod, 'Array2f')
+
+    H, W = 4, 4
+    for srgb in (False, True):
+        for ch in (1, 3, 4):
+            tex = TexType([H, W], ch, use_accel=True, writable=True,
+                          filter_mode=dr.FilterMode.Nearest, srgb=srgb)
+            idx = dr.arange(UInt32, H * W)
+            vals = [t(idx * ch + c) * (1.0 / (H * W * ch)) for c in range(ch)]
+            tex.write(Array2u(idx % W, idx // W), vals)
+            dr.eval()
+            for i in (0, H * W // 2, H * W - 1):
+                out = tex.eval(Array2f((i % W + 0.5) / W, (i // W + 0.5) / H))
+                for c in range(ch):
+                    v = (i * ch + c) / (H * W * ch)
+                    assert dr.allclose(out[c], v, atol=7e-3)
+
+    # The encoding actually happens: mid-gray 0.5 stores 128 linearly but 188 in
+    # sRGB, while an RGBA group's alpha channel stays linear either way.
+    def stored(srgb):
+        tex = TexType([1, 1], 4, use_accel=True, writable=True, srgb=srgb)
+        tex.write(Array2u(0, 0), [t(0.5)] * 4)
+        dr.eval()
+        return [int(x) for x in tex.value()]
+    assert stored(False) == [128, 128, 128, 128]
+    assert stored(True) == [188, 188, 188, 128]

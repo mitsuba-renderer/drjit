@@ -7045,6 +7045,12 @@
     defines the wrapping method. The default behavior is ``drjit.WrapMode.Clamp``,
     which indefinitely extends the colors on the boundary along each dimension.
 
+    For 8-bit textures, setting ``srgb`` additionally requests that samples be
+    decoded from sRGB to linear. Passing it for a floating-point texture raises
+    an error. Channels are grouped into hardware RGBA quads, so within each group
+    of four the first three are decoded and the fourth (alpha) is left linear
+    (e.g. channel 3 is linear for a 6-channel texture).
+
 .. topic:: Texture_init_tensor
 
     Construct a new texture from a given tensor
@@ -7126,11 +7132,11 @@
 
 .. topic:: Texture_filter_mode
 
-    Return the filter mode
+    Return the texture filtering mode (e.g., nearest, bilinear, etc.)
 
 .. topic:: Texture_wrap_mode
 
-    Return the wrap mode
+    Return the boundary handling mode for out-of-bounds lookups
 
 .. topic:: Texture_wrap
 
@@ -7138,14 +7144,11 @@
 
 .. topic:: Texture_use_accel
 
-    Return whether texture uses the GPU for storage and evaluation
+    Are hardware texture units used for evaluation?
 
 .. topic:: Texture_migrated
 
-    Return whether textures with :py:func:`use_accel()` set to ``True`` only store
-    the data as a hardware-accelerated GPU texture.
-
-    If ``False`` then a copy of the array data will additionally be retained .
+    Is the texture data held exclusively in GPU texture memory?
 
 .. topic:: Texture_shape
 
@@ -7227,6 +7230,10 @@
     Was this texture created so that kernels may store into it via
     :py:func:`write()`?
 
+.. topic:: Texture_srgb
+
+    Are 8-bit samples decoded from sRGB to linear?
+
 .. topic:: Texture_write
 
     Store values into a writable hardware texture
@@ -7261,8 +7268,8 @@
 
 .. topic:: Texture_map
 
-    Map a :py:func:`from_native_handle()` texture for use by Dr.Jit (no-op on
-    Metal, required for CUDA/OpenGL).
+    Map an imported texture (:py:func:`from_native_handle()`) for use by Dr.Jit
+    (no-op on Metal, required for CUDA/OpenGL).
 
 .. topic:: Texture_unmap
 
