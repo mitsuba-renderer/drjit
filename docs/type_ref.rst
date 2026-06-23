@@ -626,6 +626,32 @@ Textures
    .. automethod:: eval_cubic_hessian
    .. automethod:: eval_cubic_helper
 
+.. autoclass:: drjit.scalar.Texture3f8u
+
+   .. automethod:: __init__
+   .. automethod:: set_value
+   .. automethod:: set_tensor
+   .. automethod:: update_inplace
+   .. automethod:: value
+   .. automethod:: tensor
+   .. automethod:: filter_mode
+   .. automethod:: wrap_mode
+   .. automethod:: use_accel
+   .. automethod:: migrated
+   .. automethod:: writable
+   .. automethod:: srgb
+   .. automethod:: from_native_handle
+   .. automethod:: map
+   .. automethod:: unmap
+   .. automethod:: native_handle
+   .. autoproperty:: shape
+   .. automethod:: eval
+   .. automethod:: eval_fetch
+   .. automethod:: eval_cubic
+   .. automethod:: eval_cubic_grad
+   .. automethod:: eval_cubic_hessian
+   .. automethod:: eval_cubic_helper
+
 Random number generators
 ^^^^^^^^^^^^^^^^^^^^^^^^
 

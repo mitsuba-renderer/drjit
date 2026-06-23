@@ -13,6 +13,7 @@
 #include <drjit/array.h>
 #include <drjit-core/half.h>
 #include <drjit-core/texture.h>
+#include <drjit/color.h>
 #include <drjit/dynamic.h>
 #include <drjit/extra.h>
 #include <drjit/texture_impl.h>
@@ -31,13 +32,15 @@ template <typename Storage_, size_t Dimension> class Texture : TraversableBase {
 public:
     static constexpr bool IsCUDA = is_cuda_v<Storage_>;
     static constexpr bool IsMetal = is_metal_v<Storage_>;
-    static constexpr bool IsDiff = is_diff_v<Storage_>;
     static constexpr bool IsDynamic = is_dynamic_v<Storage_>;
     static constexpr bool IsHalf = std::is_same_v<scalar_t<Storage_>, drjit::half>;
     static constexpr bool IsSingle = std::is_same_v<scalar_t<Storage_>, float>;
+    static constexpr bool IsUInt8 = std::is_same_v<scalar_t<Storage_>, uint8_t>;
+    static constexpr bool IsDiff = is_diff_v<Storage_> && !IsUInt8;
 
-    // Only half/single-precision floating-point hardware textures are supported
-    static constexpr bool HasGPUTexture = (IsHalf || IsSingle) && (IsCUDA || IsMetal);
+    // Half/single-precision float and normalized 8-bit hardware textures are supported
+    static constexpr bool HasGPUTexture =
+        (IsHalf || IsSingle || IsUInt8) && (IsCUDA || IsMetal);
 
     using Int32 = int32_array_t<Storage_>;
     using UInt32 = uint32_array_t<Storage_>;
@@ -86,12 +89,18 @@ public:
      * defines the wrapping method. The default behavior is \ref
      * WrapMode::Clamp, which indefinitely extends the colors on the boundary
      * along each dimension.
+     *
+     * For 8-bit textures, setting \c srgb additionally requests that samples
+     * be decoded from sRGB to linear. Passing it for a floating-point texture
+     * raises an error. Channels are grouped into hardware RGBA quads, so within
+     * each group of four the first three are decoded and the fourth (alpha) is
+     * left linear (e.g. channel 3 is linear for a 6-channel texture).
      */
     Texture(const size_t shape[Dimension], size_t channels,
             bool use_accel = true,
             FilterMode filter_mode = FilterMode::Linear,
             WrapMode wrap_mode = WrapMode::Clamp,
-            bool writable = false) {
+            bool writable = false, bool srgb = false) : m_srgb(srgb) {
         init(shape, channels, use_accel, filter_mode, wrap_mode,
              /* init_tensor = */ true, writable);
     }
@@ -116,7 +125,8 @@ public:
     template <typename TensorT>
     Texture(TensorT &&tensor, bool use_accel = true, bool migrate = true,
             FilterMode filter_mode = FilterMode::Linear,
-            WrapMode wrap_mode = WrapMode::Clamp) {
+            WrapMode wrap_mode = WrapMode::Clamp, bool srgb = false)
+        : m_srgb(srgb) {
         if (tensor.ndim() != Dimension + 1)
             jit_raise("Texture::Texture(): tensor dimension must equal "
                         "texture dimension plus one.");
@@ -145,8 +155,9 @@ public:
      */
     static Texture from_native_handle(uintptr_t handle, bool writable = false,
                                       FilterMode filter_mode = FilterMode::Linear,
-                                      WrapMode wrap_mode = WrapMode::Clamp) {
-        return Texture(handle, writable, filter_mode, wrap_mode);
+                                      WrapMode wrap_mode = WrapMode::Clamp,
+                                      bool srgb = false) {
+        return Texture(handle, writable, filter_mode, wrap_mode, srgb);
     }
 
     Texture(Texture &&other) noexcept { move_from(std::move(other)); }
@@ -171,12 +182,15 @@ public:
 private:
     /// Private constructor for \ref from_native_handle()
     Texture(uintptr_t handle, bool writable, FilterMode filter_mode,
-            WrapMode wrap_mode) {
+            WrapMode wrap_mode, bool srgb) : m_srgb(srgb) {
         if constexpr (HasGPUTexture) {
+            if (srgb && !IsUInt8)
+                jit_raise("Texture(): the 'srgb' flag is only supported for "
+                          "8-bit (UInt8) textures.");
             void *h = jit_tex_wrap(Backend, handle, Dimension,
                                    (int) type_v<scalar_t<Storage_>>,
                                    (int) writable, (int) filter_mode,
-                                   (int) wrap_mode);
+                                   (int) wrap_mode, (int) m_srgb);
 
             // The native shape is innermost-first (+channels); reverse it into
             // the tensor order that init() expects.
@@ -192,6 +206,7 @@ private:
                  /* external = */ h);
         } else {
             (void) handle; (void) writable; (void) filter_mode; (void) wrap_mode;
+            (void) srgb;
             jit_raise("Texture::from_native_handle() requires the CUDA or Metal "
                       "backend.");
         }
@@ -222,7 +237,11 @@ public:
     /// Was this texture created so that kernels may store into it via \ref write()?
     bool writable() const { return m_writable; }
 
+    /// Are 8-bit samples decoded from sRGB to linear?
+    bool srgb() const { return m_srgb; }
+
     /// Map an imported texture (\ref from_native_handle()) for use by Dr.Jit
+    /// (no-op on Metal, required for CUDA/OpenGL).
     void map() {
         if constexpr (HasGPUTexture)
             jit_tex_map(m_handle);
@@ -413,6 +432,7 @@ public:
         set_value(m_unpadded_value.array(), migrate);
     }
 
+    /// Return the texture data as an array object
     const Storage &value() const { return tensor().array(); }
 
     /// Return the texture data as a tensor object
@@ -576,25 +596,33 @@ public:
     template <typename Value>
     void write(const Array<uint32_array_t<Value>, Dimension> &pos,
                const Value *value, mask_t<Value> active = true) {
-        static_assert(HasGPUTexture,
-                      "Texture::write() requires the CUDA or Metal backend.");
+        static_assert(is_jit_v<Storage_>,
+                      "Texture::write() requires a JIT backend");
         if (!m_writable)
             jit_raise("Texture::write(): texture was not created with "
                       "writable=true.");
 
-        uint32_t pos_idx[Dimension];
-        for (size_t i = 0; i < Dimension; ++i)
-            pos_idx[i] = pos[i].index();
+        if constexpr (HasGPUTexture) {
+            uint32_t pos_idx[Dimension];
+            for (size_t i = 0; i < Dimension; ++i)
+                pos_idx[i] = pos[i].index();
 
-        uint64_t *val_idx = (uint64_t *) alloca(sizeof(uint64_t) * m_channels);
-        for (size_t ch = 0; ch < m_channels; ++ch)
-            val_idx[ch] = (uint64_t) value[ch].index();
+            uint64_t *val_idx = (uint64_t *) alloca(sizeof(uint64_t) * m_channels);
+            for (size_t ch = 0; ch < m_channels; ++ch)
+                val_idx[ch] = (uint64_t) value[ch].index();
 
-        ad_tex_write((uint32_t) m_channels_storage, (uint32_t) m_channels,
-                     m_handle, pos_idx, val_idx, active.index());
+            ad_tex_write((uint32_t) m_channels_storage, (uint32_t) m_channels,
+                         type_v<scalar_t<Storage_>>, (int) m_srgb, m_handle,
+                         pos_idx, val_idx, active.index());
 
-        // The GPU texture object is now the authoritative copy
-        m_migrated = true;
+            // The GPU texture object is now the authoritative copy
+            m_migrated = true;
+        } else {
+            // No hardware texture (LLVM, or double precision): scatter into the
+            // backing storage instead.
+            write_nonaccel(pos, value, active);
+        }
+
         m_tensor_dirty = true;
     }
 
@@ -628,11 +656,6 @@ public:
     /**
      * \brief Fetch the texels that would be referenced in a texture lookup with
      * linear interpolation without actually performing this interpolation.
-     *
-     * On the JIT backends this is performed by the type-erased ``ad_tex_fetch``
-     * kernel in ``libdrjit-extra`` (hardware-accelerated when available, with
-     * the differentiable arithmetic re-attached); the scalar backend uses
-     * \ref eval_fetch_nonaccel().
      */
     template <typename Output>
     Array<Output, (1 << Dimension)>
@@ -654,9 +677,9 @@ public:
                                               m_channels);
             ad_tex_fetch(type_v<scalar_t<Value>>, (uint32_t) Dimension,
                 (uint32_t) m_channels_storage, (uint32_t) m_channels,
-                (int) m_wrap_mode, m_handle, (int) m_use_accel, value_index(),
-                resolution_indices().data(), idiv_indices().data(),
-                pos_indices(pos).data(), active.index(), o);
+                (int) m_wrap_mode, (int) m_srgb, m_handle, (int) m_use_accel,
+                value_index(), resolution_indices().data(),
+                idiv_indices().data(), pos_indices(pos).data(), active.index(), o);
 
             for (size_t c = 0; c < ncorner; ++c)
                 for (size_t ch = 0; ch < m_channels; ++ch)
@@ -737,9 +760,9 @@ public:
             uint64_t *o = (uint64_t *) alloca(sizeof(uint64_t) * m_channels);
             ad_tex_cubic(type_v<scalar_t<Value>>, (uint32_t) Dimension,
                 (uint32_t) m_channels_storage, (uint32_t) m_channels,
-                (int) m_wrap_mode, m_handle, (int) use_accel, value_index(),
-                resolution_indices().data(), idiv_indices().data(),
-                pos_indices(pos).data(), active.index(), o);
+                (int) m_wrap_mode, (int) m_srgb, m_handle, (int) use_accel,
+                value_index(), resolution_indices().data(),
+                idiv_indices().data(), pos_indices(pos).data(), active.index(), o);
 
             for (size_t ch = 0; ch < m_channels; ++ch)
                 out.set_entry(ch, steal_value<Value>(o[ch]));
@@ -854,8 +877,51 @@ public:
 
         gather_packet_dynamic(m_channels_storage, m_value.array(), idx,
                               packet.data(), active);
+        for (uint32_t ch = 0; ch < m_channels; ++ch) {
+            Value v = Value(packet[ch]);
+            // 8-bit storage is gathered as 0..255; normalize (and decode sRGB)
+            // to match the hardware texture units' normalized read. The sRGB
+            // formats leave each RGBA sub-texture's 4th (alpha) channel linear.
+            if constexpr (IsUInt8) {
+                v *= Value(1.f / 255.f);
+                if (m_srgb && (ch % 4) != 3)
+                    v = srgb_to_linear(v);
+            }
+            out[ch] = v;
+        }
+    }
+
+    /// Convert a query-precision value to stored form (the inverse of \ref
+    /// convert_texel): 8-bit storage is sRGB-encoded and quantized to 0..255,
+    /// floating-point storage is a plain cast.
+    template <typename Value>
+    Storage_ store_texel(const Value &v, uint32_t ch) const {
+        if constexpr (IsUInt8) {
+            Value w = clip(v, Value(0), Value(1));
+            if (m_srgb && (ch % 4) != 3)
+                w = linear_to_srgb(w);
+            return Storage_(fmadd(w, Value(255), Value(0.5)));
+        } else {
+            return Storage_(v);
+        }
+    }
+
+    /// Software fallback for \ref write(): scatter the per-channel values into
+    /// the channel-padded backing storage. Used whenever the texture has no
+    /// hardware representation (the LLVM backend, or double precision).
+    template <typename Value>
+    void write_nonaccel(const Array<uint32_array_t<Value>, Dimension> &pos,
+                        const Value *value, mask_t<Value> active) {
+        using UInt = uint32_array_t<Value>;
+
+        // Row-major flat texel index into the [shape..., channels] storage
+        UInt pixel = pos[Dimension - 1];
+        for (size_t i = 1; i < Dimension; ++i)
+            pixel = fmadd(pixel, (uint32_t) m_shape[i], pos[Dimension - 1 - i]);
+        UInt base = pixel * (uint32_t) m_channels_storage;
+
         for (uint32_t ch = 0; ch < m_channels; ++ch)
-            out[ch] = Value(packet[ch]);
+            scatter(m_value.array(), store_texel(value[ch], ch), base + ch, active);
     }
 
 protected:
@@ -865,6 +931,10 @@ protected:
               void *external = nullptr) {
         if (channels == 0)
             jit_raise("Texture::Texture(): must have at least 1 channel!");
+
+        if (m_srgb && !IsUInt8)
+            jit_raise("Texture(): the 'srgb' flag is only supported for 8-bit "
+                      "(UInt8) textures.");
 
         m_writable = writable;
         m_channels = channels;
@@ -932,7 +1002,7 @@ protected:
                     m_handle = jit_tex_create(
                         Backend, Dimension, tex_shape, m_channels_storage,
                         (int) type_v<scalar_t<Storage_>>, (int) filter_mode,
-                        (int) wrap_mode, (int) m_writable);
+                        (int) wrap_mode, (int) m_writable, (int) m_srgb);
                 }
             }
         }
@@ -958,6 +1028,7 @@ private:
         m_wrap_mode = other.m_wrap_mode;
         m_use_accel = other.m_use_accel;
         m_writable = other.m_writable;
+        m_srgb = other.m_srgb;
         m_migrated = other.m_migrated;
         m_tensor_dirty = other.m_tensor_dirty;
     }
@@ -1102,18 +1173,16 @@ private:
         uint64_t *out_idx = (uint64_t *) alloca(sizeof(uint64_t) * m_channels);
         ad_tex_eval(type_v<scalar_t<Value>>, (uint32_t) Dimension,
                     (uint32_t) m_channels_storage, (uint32_t) m_channels,
-                    (int) m_filter_mode, (int) m_wrap_mode, m_handle,
-                    (int) use_accel, value_index(), resolution_indices().data(),
-                    idiv_indices().data(), pos_indices(pos).data(),
-                    active.index(), out_idx);
+                    (int) m_filter_mode, (int) m_wrap_mode, (int) m_srgb,
+                    m_handle, (int) use_accel, value_index(),
+                    resolution_indices().data(), idiv_indices().data(),
+                    pos_indices(pos).data(), active.index(), out_idx);
         for (size_t ch = 0; ch < m_channels; ++ch)
             out.set_entry(ch, steal_value<Value>(out_idx[ch]));
     }
 
     /// Shared marshaller for \ref eval_cubic_grad() / \ref eval_cubic_hessian():
-    /// fills value + gradient (and hessian, when \c out_hessian is non-null),
-    /// dispatching to ``ad_tex_cubic_deriv`` on the JIT backends and the scalar
-    /// B-spline math otherwise.
+    /// fills value + gradient (and hessian, when \c out_hessian is non-null).
     template <typename Output, typename Gradient, typename Hessian>
     void eval_cubic_deriv(const position_for<Output> &pos, mask_for<Output> active,
                           Output &out_value, Gradient &out_gradient,
@@ -1130,7 +1199,7 @@ private:
                                      : nullptr;
             ad_tex_cubic_deriv(type_v<scalar_t<Value>>, (uint32_t) Dimension,
                                (uint32_t) m_channels_storage, (uint32_t) m_channels,
-                               (int) m_wrap_mode, value_index(),
+                               (int) m_wrap_mode, (int) m_srgb, value_index(),
                                resolution_indices().data(), idiv_indices().data(),
                                pos_indices(pos).data(), active.index(), vp, gp, hp);
             // The kernel's flat outputs match this iteration order; walk linearly
@@ -1191,6 +1260,8 @@ private:
     bool m_use_accel = false;
     /// Texture was created so kernels may store into it via write()
     bool m_writable = false;
+    /// 8-bit textures: decode sRGB -> linear on sampling
+    bool m_srgb = false;
     /// Hardware-texture flag: is the data held exclusively on the device?
     mutable bool m_migrated = false;
     /// Does the public-facing unpadded tensor need to be updated?

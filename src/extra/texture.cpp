@@ -18,6 +18,8 @@
 #include <drjit/extra.h>
 #include <drjit/texture_impl.h>
 #include <drjit/idiv.h>
+#include <drjit/color.h>
+#include <drjit/math.h>
 #include <drjit-core/half.h>
 #include <drjit-core/texture.h>
 
@@ -52,6 +54,29 @@ static Float query_scalar(JitBackend backend, VarType type, double value) {
 /// Cast an AD variable index to the runtime query precision
 static Float to_query(uint64_t index, VarType type) {
     return Float::steal(ad_var_cast(index, type));
+}
+
+/// The type-erased ``Float`` re-tagged with a concrete precision ``T``
+template <typename T> using TypedFloat = dr::DiffArray<JitBackend::None, T>;
+
+/// sRGB -> linear, dispatched to the typed ``dr::srgb_to_linear`` since
+/// ``Float`` is type-erased
+static Float srgb_to_linear(const Float &x, VarType query_type) {
+    auto decode = [](const auto &v) {
+        return Float::steal(dr::srgb_to_linear(v).release());
+    };
+    switch (query_type) {
+        case VarType::Float16: {
+            // Decode in single precision, then cast back
+            Float xf = to_query(x.index_combined(), VarType::Float32);
+            Float yf = decode(TypedFloat<float>::borrow(xf.index_combined()));
+            return to_query(yf.index_combined(), VarType::Float16);
+        }
+        case VarType::Float32: return decode(TypedFloat<float>::borrow(x.index_combined()));
+        case VarType::Float64: return decode(TypedFloat<double>::borrow(x.index_combined()));
+        default: jit_raise("ad_tex_eval(): unsupported query type!");
+    }
+    return Float();
 }
 
 /// Cast ``dim`` query coordinates to single precision (the hardware texture
@@ -89,6 +114,8 @@ struct JitOps {
     uint32_t dim, channels_stored, channels_out;
     dr::FilterMode filter_mode;
     dr::WrapMode wrap_mode;
+    bool unorm8 = false;
+    bool srgb = false;
     uint64_t value;
     Mask active;
     Float res_f_[MaxDim];
@@ -116,13 +143,24 @@ struct JitOps {
                                    ReduceMode::Auto);
 
         finalize_lookup(tmp, channels_stored, channels_out, query_type, out);
+
+        // Map 8-bit values to [0, 1]. For sRGB textures, apply the transfer
+        // curve to linearize. To replicate how GPUs do this, skip every 4th
+        // channel (A in RGBA).
+        if (unorm8) {
+            for (uint32_t ch = 0; ch < channels_out; ++ch) {
+                out[ch] = out[ch] * lit(1.0 / 255.0);
+                if (srgb && (ch % 4) != 3)
+                    out[ch] = srgb_to_linear(out[ch], query_type);
+            }
+        }
     }
 };
 
 /// Create the ``Ops`` object for ``ad_tex_*`` functions.
 static JitOps tex_setup(VarType query_type, uint32_t dim, uint32_t channels_stored,
                         uint32_t channels_out, int filter_mode,
-                        int wrap_mode, uint64_t value,
+                        int wrap_mode, int srgb, uint64_t value,
                         const uint32_t *res_idx, const uint32_t *idiv_idx,
                         const uint64_t *pos_idx, uint32_t active_idx,
                         Float *pos) {
@@ -134,6 +172,8 @@ static JitOps tex_setup(VarType query_type, uint32_t dim, uint32_t channels_stor
     ops.channels_stored = channels_stored;
     ops.filter_mode = (dr::FilterMode) filter_mode;
     ops.wrap_mode = (dr::WrapMode) wrap_mode;
+    ops.unorm8 = jit_var_type((uint32_t) value) == VarType::UInt8;
+    ops.srgb = srgb != 0;
     ops.value = value;
     bool divides = ops.wrap_mode != dr::WrapMode::Clamp;
     for (uint32_t k = 0; k < dim; ++k) {
@@ -193,14 +233,14 @@ static void tex_eval_accel(void *handle,
 } // anonymous namespace
 
 void ad_tex_eval(VarType query_type, uint32_t dim, uint32_t channels_stored,
-                 uint32_t channels_out, int filter_mode, int wrap_mode,
+                 uint32_t channels_out, int filter_mode, int wrap_mode, int srgb,
                  void *handle, int use_accel, uint64_t value,
                  const uint32_t *res_idx, const uint32_t *idiv_idx,
                  const uint64_t *pos_idx, uint32_t active_idx,
                  uint64_t *out_idx) {
     Float pos[MaxDim];
     JitOps ops = tex_setup(query_type, dim, channels_stored, channels_out,
-                             filter_mode, wrap_mode, value, res_idx, idiv_idx,
+                             filter_mode, wrap_mode, srgb, value, res_idx, idiv_idx,
                              pos_idx, active_idx, pos);
 
     bool accel = handle != nullptr && use_accel;
@@ -231,14 +271,14 @@ void ad_tex_eval(VarType query_type, uint32_t dim, uint32_t channels_stored,
 }
 
 void ad_tex_fetch(VarType query_type, uint32_t dim, uint32_t channels_stored,
-                  uint32_t channels_out, int wrap_mode, void *handle,
+                  uint32_t channels_out, int wrap_mode, int srgb, void *handle,
                   int use_accel, uint64_t value, const uint32_t *res_idx,
                   const uint32_t *idiv_idx, const uint64_t *pos_idx,
                   uint32_t active_idx, uint64_t *out_idx) {
     Float pos[MaxDim];
     JitOps ops = tex_setup(query_type, dim, channels_stored, channels_out,
-                             (int) dr::FilterMode::Linear, wrap_mode, value, res_idx,
-                             idiv_idx, pos_idx, active_idx, pos);
+                             (int) dr::FilterMode::Linear, wrap_mode, srgb, value,
+                             res_idx, idiv_idx, pos_idx, active_idx, pos);
 
     uint32_t ncorner = 1u << dim;
 
@@ -334,14 +374,14 @@ void ad_tex_wrap(uint32_t dim, int wrap_mode, const uint32_t *res_idx,
 }
 
 void ad_tex_cubic(VarType query_type, uint32_t dim, uint32_t channels_stored,
-                  uint32_t channels_out, int wrap_mode, void *handle,
+                  uint32_t channels_out, int wrap_mode, int srgb, void *handle,
                   int use_accel, uint64_t value, const uint32_t *res_idx,
                   const uint32_t *idiv_idx, const uint64_t *pos_idx,
                   uint32_t active_idx, uint64_t *out_idx) {
     Float pos[MaxDim];
     JitOps ops = tex_setup(query_type, dim, channels_stored, channels_out,
-                             (int) dr::FilterMode::Linear, wrap_mode, value, res_idx,
-                             idiv_idx, pos_idx, active_idx, pos);
+                             (int) dr::FilterMode::Linear, wrap_mode, srgb, value,
+                             res_idx, idiv_idx, pos_idx, active_idx, pos);
 
     bool accel = (handle != nullptr && use_accel);
 
@@ -399,9 +439,10 @@ void ad_tex_cubic(VarType query_type, uint32_t dim, uint32_t channels_stored,
         for (uint32_t ch = 0; ch < channels_out; ++ch)
             result[ch] = f[ch];
 
-        // The transform is non-linear in `pos`, so replace its AD graph with a
-        // direct B-spline evaluation when gradient tracking is on (``f`` is free
-        // after the reduction, so reuse it for the recompute).
+        // The coordinate warp is non-linear in `pos`, so its AD graph gives the
+        // wrong derivative. When gradients are tracked, recompute via the
+        // directly-differentiable B-spline path and splice its gradient onto the
+        // fast primal with replace_grad() (reusing the now-dead `f` as scratch).
         if (any_grad(value, pos_idx, dim)) {
             Float *scratch_mem = (Float *) alloca(sizeof(Float) * channels_out);
             tex_scratch<Float> scratch(scratch_mem, channels_out);
@@ -416,15 +457,15 @@ void ad_tex_cubic(VarType query_type, uint32_t dim, uint32_t channels_stored,
 }
 
 void ad_tex_cubic_deriv(VarType query_type, uint32_t dim, uint32_t channels_stored,
-                        uint32_t channels_out, int wrap_mode,
+                        uint32_t channels_out, int wrap_mode, int srgb,
                         uint64_t value, const uint32_t *res_idx,
                         const uint32_t *idiv_idx, const uint64_t *pos_idx,
                         uint32_t active_idx, uint64_t *out_value,
                         uint64_t *out_grad, uint64_t *out_hess) {
     Float pos[MaxDim];
     JitOps ops = tex_setup(query_type, dim, channels_stored, channels_out,
-                             (int) dr::FilterMode::Linear, wrap_mode, value, res_idx,
-                             idiv_idx, pos_idx, active_idx, pos);
+                             (int) dr::FilterMode::Linear, wrap_mode, srgb, value,
+                             res_idx, idiv_idx, pos_idx, active_idx, pos);
 
     bool want_hess = out_hess != nullptr;
     Float *value_mem = (Float *) alloca(sizeof(Float) * channels_out);
@@ -449,20 +490,34 @@ void ad_tex_cubic_deriv(VarType query_type, uint32_t dim, uint32_t channels_stor
             out_hess[i] = hess_out[i].release();
 }
 
-void ad_tex_write(uint32_t channels_stored, uint32_t channels_out, void *handle,
+void ad_tex_write(uint32_t channels_stored, uint32_t channels_out,
+                  VarType storage_type, int srgb, void *handle,
                   const uint32_t *pos_idx, const uint64_t *value,
                   uint32_t active_idx) {
     using F32 = GenericArray<float>;
-    jit_set_backend(pos_idx[0]);
+    JitBackend backend = jit_set_backend(pos_idx[0]).backend;
+
+    // CUDA stores 8-bit textures as raw unorm8 bytes, so clip and sRGB-encode in
+    // software (codegen scales to 0..255); Metal does this in hardware.
+    bool quantize = backend == JitBackend::CUDA &&
+                    storage_type == VarType::UInt8;
 
     F32 *vals_mem = (F32 *) alloca(sizeof(F32) * channels_stored);
     tex_scratch<F32> vals(vals_mem, channels_stored);
     uint32_t *val_idx = (uint32_t *) alloca(channels_stored * sizeof(uint32_t));
     for (uint32_t ch = 0; ch < channels_stored; ++ch) {
-        vals[ch] = ch < channels_out
-                       ? F32::steal(jit_var_cast((uint32_t) value[ch],
-                                                 VarType::Float32, 0))
-                       : dr::zeros<F32>();
+        if (ch < channels_out) {
+            F32 v = F32::steal(jit_var_cast((uint32_t) value[ch],
+                                            VarType::Float32, 0));
+            if (quantize) {
+                v = dr::clip(v, 0.f, 1.f);
+                if (srgb && (ch % 4) != 3)
+                    v = dr::linear_to_srgb(v);
+            }
+            vals[ch] = v;
+        } else {
+            vals[ch] = dr::zeros<F32>();
+        }
         val_idx[ch] = vals[ch].index();
     }
 

@@ -153,14 +153,11 @@ extern DRJIT_EXTRA_EXPORT uint64_t ad_var_reduce_dot(uint64_t i0, uint64_t i1);
 
 /// Transpose the last two dimensions of a row-major tensor. The input is
 /// interpreted as a (``batch``, ``M``, ``N``) view over ``source``'s flat
-/// storage, and the output has shape (``batch``, ``N``, ``M``). The shape
-/// relabel lives on the caller side — this function returns a flat JIT
-/// variable of size ``batch * M * N``. Built on top of ``ad_var_gather``:
-/// both forward and reverse-mode AD are handled by the underlying gather,
-/// which recognizes the 1-to-1 permutation via ``ReduceMode::Permute``.
+/// storage, and the output has shape (``batch``, ``N``, ``M``).
 extern DRJIT_EXTRA_EXPORT uint64_t ad_var_transpose(uint64_t source,
                                                     uint32_t batch,
-                                                    uint32_t M, uint32_t N);
+                                                    uint32_t M,
+                                                    uint32_t N);
 
 /// Differentiable matrix multiplication. See \ref jit_var_batched_gemm for
 /// the shape, transpose, and batching convention — this entry point follows
@@ -236,6 +233,7 @@ extern DRJIT_EXTRA_EXPORT uint64_t ad_var_cast(uint64_t, VarType);
  * \param dimension         Texture dimensionality (1, 2, or 3).
  * \param channels_stored   Storage channel count (power of two >= channels_out).
  * \param channels_out      Number of (unpadded) output channels.
+ * \param srgb              Decode sRGB to linear (UInt8 textures only).
  * \param value             Combined index of the padded texture storage tensor.
  * \param res               One opaque UInt32 JIT index per dimension (w, h, d).
  * \param idiv              Per-dimension magic-division constants of
@@ -247,7 +245,7 @@ extern DRJIT_EXTRA_EXPORT uint64_t ad_var_cast(uint64_t, VarType);
  */
 extern DRJIT_EXTRA_EXPORT void
 ad_tex_eval(VarType query_type, uint32_t dimension, uint32_t channels_stored,
-            uint32_t channels_out, int filter_mode, int wrap_mode,
+            uint32_t channels_out, int filter_mode, int wrap_mode, int srgb,
             void *handle, int use_accel, uint64_t value, const uint32_t *res,
             const uint32_t *idiv, const uint64_t *pos, uint32_t active,
             uint64_t *out);
@@ -260,7 +258,7 @@ ad_tex_eval(VarType query_type, uint32_t dimension, uint32_t channels_stored,
  */
 extern DRJIT_EXTRA_EXPORT void
 ad_tex_fetch(VarType query_type, uint32_t dimension, uint32_t channels_stored,
-             uint32_t channels_out, int wrap_mode, void *handle,
+             uint32_t channels_out, int wrap_mode, int srgb, void *handle,
              int use_accel, uint64_t value, const uint32_t *res,
              const uint32_t *idiv, const uint64_t *pos, uint32_t active,
              uint64_t *out);
@@ -282,7 +280,7 @@ ad_tex_wrap(uint32_t dimension, int wrap_mode, const uint32_t *res,
 /// Evaluate a clamped cubic B-spline interpolant (see \ref ad_tex_eval).
 extern DRJIT_EXTRA_EXPORT void
 ad_tex_cubic(VarType query_type, uint32_t dimension, uint32_t channels_stored,
-             uint32_t channels_out, int wrap_mode, void *handle,
+             uint32_t channels_out, int wrap_mode, int srgb, void *handle,
              int use_accel, uint64_t value, const uint32_t *res,
              const uint32_t *idiv, const uint64_t *pos, uint32_t active,
              uint64_t *out);
@@ -298,15 +296,17 @@ ad_tex_cubic(VarType query_type, uint32_t dimension, uint32_t channels_stored,
  */
 extern DRJIT_EXTRA_EXPORT void
 ad_tex_cubic_deriv(VarType query_type, uint32_t dimension, uint32_t channels_stored,
-                   uint32_t channels_out, int wrap_mode, uint64_t value,
+                   uint32_t channels_out, int wrap_mode, int srgb, uint64_t value,
                    const uint32_t *res, const uint32_t *idiv,
                    const uint64_t *pos, uint32_t active, uint64_t *out_value,
                    uint64_t *out_grad, uint64_t *out_hess);
 
-/// Store ``channels_out`` values into a writable hardware texture (\ref Texture::write).
+/// Store ``channels_out`` values into a writable texture. For textures with
+/// 8-bit storage, values are clamped, potentially sRGB-encoded, and rounded.
 extern DRJIT_EXTRA_EXPORT void
-ad_tex_write(uint32_t channels_stored, uint32_t channels_out, void *handle,
-             const uint32_t *pos, const uint64_t *value, uint32_t active);
+ad_tex_write(uint32_t channels_stored, uint32_t channels_out,
+             VarType storage_type, int srgb, void *handle, const uint32_t *pos,
+             const uint64_t *value, uint32_t active);
 
 /**
  * \brief Re-pack channel-interleaved texture data to a different channel width
