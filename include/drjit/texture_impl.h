@@ -54,6 +54,11 @@ NAMESPACE_BEGIN(detail)
 /// Largest supported texture dimension
 static constexpr uint32_t MaxDim = 3;
 
+/// Holds an ``Ops`` channel count as a compile-time constant (so loops unroll
+/// and scratch can be fixed stack arrays), or a runtime member when ``C == 0``.
+template <uint32_t C> struct ChannelCount { static constexpr uint32_t channels_out = C; };
+template <> struct ChannelCount<0> { uint32_t channels_out; };
+
 /// RAII helper to initialize/destruct an array over caller-supplied storage
 template <typename T> struct tex_scratch {
     DRJIT_NON_COPYABLE(tex_scratch)
