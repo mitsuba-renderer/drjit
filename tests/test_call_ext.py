@@ -332,6 +332,56 @@ def test08_getters(t, use_mask):
 
 
 @pytest.test_arrays('float32,is_diff,shape=(*)')
+def test08b_getters_shared_buffer(t, drjit_verbose, capsys):
+    # Fuse several distinct opaque getters into one kernel, with getter results
+    # used directly as outputs (this case triggered an LLVM register-naming
+    # collision before). Check correctness, and that every getter routes through
+    # the shared call-data buffer rather than its own buffer + gather.
+    UInt32 = dr.uint32_array_t(t)
+    pkg = get_pkg(t)
+    A, B, BasePtr = pkg.A, pkg.B, pkg.BasePtr
+    a, b = A(), B()
+    c = BasePtr(a, a, a, b, b)
+
+    g = c.opaque_getter()         # one getter table (Float)
+    f, u = c.complex_getter()     # two more tables (Float + UInt32)
+    out = g + f + t(u)
+    dr.eval(out, g, f, u)
+
+    assert dr.all(g == t([1, 1, 1, 2, 2]))
+    assert dr.all(f == t([1, 1, 1, 4, 4]))
+    assert dr.all(u == UInt32([5, 5, 5, 3, 3]))
+    assert dr.all(out == t([7, 7, 7, 9, 9]))
+
+    # All three getters take the shared-buffer path; none falls back to a
+    # standalone buffer + gather.
+    transcript = capsys.readouterr().out
+    assert transcript.count('jit_var_call_getter') == 3
+    assert transcript.count('jit_var_gather(') == 0
+
+
+@pytest.mark.parametrize("symbolic", [True, False])
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+def test08c_nested_getter(t, symbolic):
+    # 'nested_getter' is a regular method whose body invokes the 'opaque_getter'
+    # getter on a reinterpreted pointer, so the getter reads the shared buffer
+    # from inside a callable -- exercising base-pointer forwarding (use_nested).
+    UInt32 = dr.uint32_array_t(t)
+    pkg = get_pkg(t)
+    A, B, BasePtr = pkg.A, pkg.B, pkg.BasePtr
+    a, b = A(), B()
+
+    c = BasePtr(a, a, a, b, b)
+    # Pointer indices selecting, per lane, which instance's opaque value the
+    # inner getter returns (a.opaque == 1, b.opaque == 2).
+    s = dr.reinterpret_array(UInt32, BasePtr(a, b, a, b, a))
+
+    with dr.scoped_set_flag(dr.JitFlag.SymbolicCalls, symbolic):
+        r = c.nested_getter(s)
+        assert dr.all(r == t([1, 2, 1, 2, 1]))
+
+
+@pytest.test_arrays('float32,is_diff,shape=(*)')
 def test09_constant_getter(t, drjit_verbose, capsys):
     pkg = get_pkg(t)
 
@@ -343,12 +393,15 @@ def test09_constant_getter(t, drjit_verbose, capsys):
     d = c.constant_getter()
     transcript = capsys.readouterr().out
     assert d[0] == 123
+    # A getter returning the same literal across instances is elided to a
+    # masked literal -- no value table is built.
     assert transcript.count('ad_call_getter') == 1
-    assert transcript.count('jit_var_gather') == 0
+    assert transcript.count('jit_var_call_getter') == 0
     d = c.opaque_getter()
     transcript = capsys.readouterr().out
+    # Distinct per-instance values route through the shared call-data buffer.
     assert transcript.count('ad_call_getter') == 1
-    assert transcript.count('jit_var_gather') == 1
+    assert transcript.count('jit_var_call_getter') == 1
 
 
 @pytest.test_arrays('float32,is_diff,shape=(*)')

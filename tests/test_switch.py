@@ -775,3 +775,100 @@ def test19_filter_loop_state(t):
 
     out = dr.switch(UInt32([0, 1]) ,[f, g], x=Float([0.1, 0.2]))
     assert dr.allclose(out, [10.1, 0.2])
+
+
+@pytest.mark.parametrize("symbolic", [True, False])
+@pytest.test_arrays('float32,shape=(*),jit')
+def test20_nested_switch_data(t, symbolic):
+    # A nested dr.switch whose inner callables consume a buffer (gather) and a
+    # texture, while the outer level captures an opaque scalar. Exercises a
+    # callable's captured data across nesting levels: evaluated scalars, buffer
+    # pointers and resource handles.
+    m = sys.modules[t.__module__]
+    UInt32 = dr.uint32_array_t(t)
+
+    with dr.scoped_set_flag(dr.JitFlag.SymbolicCalls, symbolic):
+        buf = t(5, 6, 7, 8)
+        tex = m.Texture1f([2], 1, True, dr.FilterMode.Linear, dr.WrapMode.Clamp)
+        tex.set_value(t(0.0, 1.0))             # eval(0.25) = 0, eval(0.75) = 1
+        a = [dr.opaque(t, 10.0), dr.opaque(t, 20.0)]
+
+        def leaf0(j, x): return dr.gather(t, buf, j) + tex.eval(x)[0]
+        def leaf1(j, x): return dr.gather(t, buf, j) + tex.eval(x)[0] + 100.0
+        def top0(i2, j, x): return dr.switch(i2, [leaf0, leaf1], j, x) + a[0]
+        def top1(i2, j, x): return dr.switch(i2, [leaf0, leaf1], j, x) + a[1]
+
+        i1 = UInt32(0, 0, 1, 1)
+        i2 = UInt32(0, 1, 0, 1)
+        j  = UInt32(0, 1, 2, 3)
+        x  = t(0.25, 0.75, 0.25, 0.75)
+        res = dr.switch(i1, [top0, top1], i2, j, x)
+        assert dr.allclose(res, t(15, 117, 27, 129))
+
+
+@pytest.mark.parametrize("symbolic", [True, False])
+@pytest.test_arrays('float32,shape=(*),jit')
+def test21_switch_many_opaque(t, symbolic):
+    # Stress the per-instance call-data path of dr.switch(): each callable closes
+    # over a different set of *opaque* scalars and returns a known weighted sum of
+    # them. Captured opaque scalars become per-instance "call data", so this
+    # exercises the size-binning layout and the packet coalescing of that data.
+    # Distinct per-field weights make the result sensitive to any offset mismatch.
+    #
+    # Strategy: sample many configurations with a seeded RNG -- varying the capture
+    # count, the mix of type sizes, and the source-order permutation -- plus a few
+    # explicit edge cases (single capture; each size class alone; a full-width
+    # same-size run; a run one element past the packet width).
+    import random
+    m = sys.modules[t.__module__]
+    UInt32 = dr.uint32_array_t(t)
+
+    # Scalar types grouped by byte size (no Float64: unsupported on Metal).
+    types_by_size = {
+        1: [m.Bool, m.Int8, m.UInt8],
+        2: [m.Float16],
+        4: [m.UInt32, m.Int32, m.Float32],
+        8: [m.UInt64, m.Int64],
+    }
+    all_types = [T for ts in types_by_size.values() for T in ts]
+
+    # Effective value once stored in 'T' (a bool collapses to 0/1).
+    def eff(T, v):
+        return (1 if v else 0) if T is m.Bool else v
+
+    rng = random.Random(0)
+
+    # (type, value, weight) triples.
+    specs = []
+    specs.append([(m.Int64, 42, 1)])                          # single -> no coalescing
+    for T in all_types:                                       # each size class, run of 2
+        specs.append([(T, 5, 1), (T, 9, 2)])
+    specs.append([(m.UInt32, j + 1, j + 1) for j in range(8)])   # full-width run
+    specs.append([(m.Float32, j + 1, j + 1) for j in range(9)])  # one past width (chunk+tail)
+    for _ in range(24):                                       # sampled mixes/counts/orders
+        k = rng.randint(2, 12)
+        vals = rng.sample(range(1, 101), k)
+        specs.append([(rng.choice(all_types), v, j + 1) for j, v in enumerate(vals)])
+
+    def make(spec):
+        caps = [dr.opaque(T, v) for (T, v, w) in spec]
+        ws   = [w for (_, _, w) in spec]
+        def fn(x):
+            acc = t(0)
+            for c, w in zip(caps, ws):
+                acc += t(w) * t(c)
+            return acc + x
+        return fn, float(sum(w * eff(T, v) for (T, v, w) in spec))
+
+    callables, sums = zip(*[make(s) for s in specs])
+    n = len(callables)
+
+    with dr.scoped_set_flag(dr.JitFlag.SymbolicCalls, symbolic):
+        # Several lanes per callable, in a scrambled selection order (gcd(7, n) = 1
+        # so every callable is exercised).
+        sel = [(i * 7 + 3) % n for i in range(4 * n)]
+        idx = UInt32(sel)
+        x   = t([float(i) for i in range(len(sel))])
+        res = dr.switch(idx, list(callables), x)
+        ref = t([sums[s] + float(i) for i, s in enumerate(sel)])
+        assert dr.allclose(res, ref)
