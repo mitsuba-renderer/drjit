@@ -461,7 +461,9 @@ void export_detail(nb::module_ &) {
 
      .def("new_scope", &jit_new_scope, "backend"_a, doc_detail_new_scope)
      .def("scope", &jit_scope, "backend"_a, doc_detail_scope)
-     .def("set_scope", &jit_set_scope, "backend"_a, "scope"_a, doc_detail_set_scope);
+     .def("set_scope", &jit_set_scope, "backend"_a, "scope"_a, doc_detail_set_scope)
+     .def("advance_scope", &jit_advance_scope, "backend"_a, "n"_a,
+          "Debug/test hook: fast-forward the scope counter by 'n'.");
 
 #if defined(DRJIT_DISABLE_LEAK_WARNINGS)
     set_leak_warnings(false);

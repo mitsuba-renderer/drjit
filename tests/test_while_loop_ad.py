@@ -733,3 +733,25 @@ def test44_general_bwd_matrix_sqrt_newton(t):
     fwd_probe = dr.grad(L_fwd)
 
     dr.assert_allclose(bwd_probe, fwd_probe, rtol=1e-4)
+
+
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+def test45_general_bwd_invariant_diff_input(t):
+    # The fused loop forward/backward passes of this kernel (previously) placed
+    # an evaluated variable into an incorrect scope, which miscompiled the derivative.
+    # This test ensures that the fix is in place.
+    UInt = dr.uint32_array_t(t)
+
+    x = t(2)
+    dr.enable_grad(x)
+
+    pw, i = t(x), UInt(0)
+    pw, i = dr.while_loop(
+        (pw, i),
+        lambda pw, i: i < 3,
+        lambda pw, i: (pw * x, i + 1),
+        mode='symbolic', max_iterations=5)
+
+    dr.backward(pw)
+    dr.assert_allclose(pw, 16)
+    dr.assert_allclose(dr.grad(x), 32)
