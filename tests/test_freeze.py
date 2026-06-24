@@ -4000,3 +4000,63 @@ def test105_batched_gemm_varying_batch(t, auto_opaque):
         assert tuple(res.shape) == tuple(ref.shape)
         assert dr.allclose(res, ref, atol=1e-3)
 
+
+
+@pytest.test_arrays("float32, jit, shape=(*)")
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test106_nested_switch(t, auto_opaque):
+    """
+    Freeze a nested dr.switch that captures opaque scalars at each nesting level,
+    then replay it with changing captured values. The per-kernel call-data buffer
+    must be rebuilt with the new values on each replay.
+    """
+    UInt32 = dr.uint32_array_t(t)
+
+    def func(i1, i2, x, a0, a1, c0, c1):
+        def leaf0(x): return x + c0
+        def leaf1(x): return x + c1
+        def top0(i2, x): return dr.switch(i2, [leaf0, leaf1], x) + a0
+        def top1(i2, x): return dr.switch(i2, [leaf0, leaf1], x) + a1
+        return dr.switch(i1, [top0, top1], i2, x)
+
+    frozen = dr.freeze(func, auto_opaque=auto_opaque)
+
+    for it in range(4):
+        i1 = UInt32(0, 0, 1, 1)
+        i2 = UInt32(0, 1, 0, 1)
+        x = dr.arange(t, 4) + it
+        a0 = dr.opaque(t, 10.0 + it); a1 = dr.opaque(t, 20.0 + it)
+        c0 = dr.opaque(t, 1000.0 + it); c1 = dr.opaque(t, 2000.0 + it)
+
+        res = frozen(i1, i2, x, a0, a1, c0, c1)
+        ref = func(i1, i2, x, a0, a1, c0, c1)
+        assert dr.allclose(res, ref)
+
+    assert frozen.n_recordings == 1
+
+
+@pytest.test_arrays("float32, jit, shape=(*)")
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test107_frozen_getter(t, auto_opaque):
+    """
+    Freeze a function performing opaque getters. Replaying with changed
+    per-instance opaque values must rebuild the getter value table in the shared
+    call-data buffer, i.e. the getter's deferred value references must survive
+    into the aggregate.
+    """
+    pkg = get_pkg(t)
+    A, B, BasePtr = pkg.A, pkg.B, pkg.BasePtr
+    a, b = A(), B()
+    c = BasePtr(a, a, a, b, b)
+
+    @dr.freeze(auto_opaque=auto_opaque)
+    def func(c):
+        return c.opaque_getter()
+
+    for it in range(4):
+        a.opaque = dr.opaque(t, 1.0 + it)
+        b.opaque = dr.opaque(t, 2.0 + it)
+        res = func(c)
+        assert dr.all(res == t([1 + it, 1 + it, 1 + it, 2 + it, 2 + it]))
+
+    assert func.n_recordings == 1

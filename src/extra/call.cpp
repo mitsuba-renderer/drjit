@@ -75,7 +75,6 @@ static void ad_call_getter(JitBackend backend, const char *variant,
     index64_vector args2; // unused
     vector<uint64_t> rv2;
     index32_vector rv3;
-    index32_vector cleanup;
     (void) args;
 
     JitVar null_instance = JitVar::steal(jit_var_u32(backend, 0)),
@@ -134,7 +133,7 @@ static void ad_call_getter(JitBackend backend, const char *variant,
                               "callable %zu is not a scalar (r%u has size %zu).",
                               domain_or_empty, separator, name, i, (uint32_t) index2,
                               size2);
-                rv3[i*rv2.size()+j] = (uint32_t) index2;
+                rv3[j*callable_count+i] = (uint32_t) index2;
                 jit_var_inc_ref((uint32_t) index2);
             }
         }
@@ -155,8 +154,9 @@ static void ad_call_getter(JitBackend backend, const char *variant,
 
         // Find the first defined return value
         uint32_t first = 0;
+        const uint32_t *values = rv3.data() + i * callable_count;
         for (size_t j = 0; j < callable_count; ++j) {
-            first = rv3[i+j*rv2.size()];
+            first = values[j];
             if (first)
                 break;
         }
@@ -168,65 +168,20 @@ static void ad_call_getter(JitBackend backend, const char *variant,
         // Check if this is a literal
         bool is_literal = true;
         for (size_t j = 0; j < callable_count; ++j) {
-            uint32_t index3 = rv3[i+j*rv2.size()];
+            uint32_t index3 = values[j];
             if (index3 && index3 != first)
                 is_literal = false;
         }
 
         if (is_literal) {
+            // Fast path for literals
             uint32_t out = jit_var_and(first, mask.index());
             rv[i] = out;
-            continue;
+        } else {
+            VarType type = jit_var_type((uint32_t) rv2[i]);
+            rv[i] = jit_var_call_getter(type, (uint32_t) callable_count,
+                                        values, index, mask.index());
         }
-
-        VarType type = jit_var_type((uint32_t) rv2[i]);
-        size_t tsize = jit_type_size(type);
-
-        void *ptr = jit_malloc(backend, tsize * (callable_count + 1));
-
-        JitVar buf = JitVar::steal(
-            jit_var_mem_map(backend, type, ptr, callable_count + 1, 1));
-
-        size_t agg_size = sizeof(AggregationEntry) * callable_count;
-        AggregationEntry *agg = (AggregationEntry *)
-            jit_malloc(backend, agg_size, /*shared=*/1);
-        AggregationEntry *p = agg;
-
-        for (size_t j = 0; j < callable_count; ++j) {
-            p->offset = (uint32_t) ((j + 1) * tsize);
-
-            uint32_t rv3_i = rv3[i+j*rv2.size()];
-            if (!rv3_i) {
-                p->size = (int16_t) tsize;
-                p->src = 0;
-            } else {
-                VarState state = jit_var_state(rv3_i);
-
-                switch (state) {
-                    case VarState::Literal:
-                        p->size = (int16_t) tsize;
-                        p->src = 0;
-                        jit_var_read(rv3_i, 0, &p->src);
-                        break;
-
-                    case VarState::Unevaluated:
-                    case VarState::Evaluated:
-                        p->size = (int16_t) -(int) tsize;
-                        cleanup.push_back(jit_var_data(rv3_i, (void **) &p->src));
-                        break;
-
-                    default:
-                        jit_free(agg);
-                        jit_raise("ad_call_getter(): invalid variable state");
-                }
-            }
-
-            p++;
-        }
-
-        jit_aggregate(backend, ptr, agg, (uint32_t) (p - agg));
-        rv[i] = jit_var_gather(buf.index(), index, mask.index());
-        jit_free(agg);
     }
 }
 

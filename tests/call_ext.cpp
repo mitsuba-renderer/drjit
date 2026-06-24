@@ -36,6 +36,9 @@ template <typename Float> struct Base : drjit::TraversableBase {
     virtual Float nested(Float x, UInt32 s) = 0;
     /// Nested vcall, using a member variable as a pointer.
     virtual Float nested_self(Float x) = 0;
+    /// Nested *getter*: invokes a getter on a reinterpreted pointer from within
+    /// a callable body, producing a getter nested inside an indirect call.
+    virtual Float nested_getter(UInt32 s) = 0;
     virtual void dummy() = 0;
     virtual float scalar_getter() = 0;
     virtual Float opaque_getter() = 0;
@@ -89,6 +92,12 @@ template <typename Float> struct A : Base<Float> {
 
     virtual Float nested_self(Float x) override {
         return x + dr::gather<Float>(value, UInt32(0));
+    }
+
+    virtual Float nested_getter(UInt32 s_param) override {
+        using BaseArray = dr::replace_value_t<Float, Base<Float>*>;
+        BaseArray self = dr::reinterpret_array<BaseArray>(s_param);
+        return self->opaque_getter();
     }
 
     virtual std::pair<Sampler<Float> *, Float> sample(Sampler<Float> *s) override {
@@ -163,6 +172,12 @@ template <typename Float> struct B : Base<Float> {
         return self->nested(x, this->s);
     }
 
+    virtual Float nested_getter(UInt32 s_param) override {
+        using BaseArray = dr::replace_value_t<Float, Base<Float>*>;
+        BaseArray self = dr::reinterpret_array<BaseArray>(s_param);
+        return self->opaque_getter();
+    }
+
     virtual std::pair<Sampler<Float> *, Float> sample(Sampler<Float> *sampler) override {
         return { sampler, 0 };
     }
@@ -198,6 +213,7 @@ DRJIT_CALL_TEMPLATE_BEGIN(Base)
     DRJIT_CALL_METHOD(h)
     DRJIT_CALL_METHOD(nested)
     DRJIT_CALL_METHOD(nested_self)
+    DRJIT_CALL_METHOD(nested_getter)
     DRJIT_CALL_METHOD(sample)
     DRJIT_CALL_METHOD(gather_packet)
     DRJIT_CALL_METHOD(scatter_packet)
@@ -290,6 +306,9 @@ void bind(nb::module_ &m) {
         .def("nested_self",
              [](BaseArray &self, Float x) { return self->nested_self(x); },
              "x"_a)
+        .def("nested_getter",
+             [](BaseArray &self, UInt32 s) { return self->nested_getter(s); },
+             "s"_a)
         .def("dummy", [](BaseArray &self) { return self->dummy(); })
         .def("scalar_getter", [](BaseArray &self, Mask m) {
                 return self->scalar_getter(m);
