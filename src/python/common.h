@@ -52,17 +52,28 @@ inline nb::object tuple_call(nb::handle callable, nb::handle tuple) {
 /// Create interned string for a few very commonly used identifiers
 #define DR_STR(x) s_##x
 extern nb::handle DR_STR(DRJIT_STRUCT);
-extern nb::handle DR_STR(dataclasses);
 extern nb::handle DR_STR(__dataclass_fields__);
 extern nb::handle DR_STR(name);
 extern nb::handle DR_STR(type);
-extern nb::handle DR_STR(fields);
 extern nb::handle DR_STR(_traverse_write);
 extern nb::handle DR_STR(_traverse_read);
 extern nb::handle DR_STR(_traverse_1_cb_rw);
 extern nb::handle DR_STR(_traverse_1_cb_ro);
-extern nb::handle DR_STR(typing);
-extern nb::handle DR_STR(get_type_hints);
+
+/// Dr.Jit can lazily import and then cache the following objects to avoid
+/// costly nb::module_::import() calls.
+enum class LazyImport {
+    DataclassesFields,   // dataclasses.fields
+    TypingGetTypeHints,  // typing.get_type_hints
+    TypingGetArgs,       // typing.get_args
+    Count
+};
+
+/// Fetch one of the object from \ref LazyImport
+extern nb::handle lazy_import(LazyImport value);
+
+/// Release every object cached by lazy_import().
+extern void lazy_import_shutdown();
 
 /// Extract the DRJIT_STRUCT element of a custom data structure type, if available
 inline nb::dict get_drjit_struct(nb::handle tp) {
@@ -76,14 +87,24 @@ inline nb::dict get_drjit_struct(nb::handle tp) {
 inline nb::object get_dataclass_fields(nb::handle tp) {
     nb::object result = nb::getattr(tp, DR_STR(__dataclass_fields__), nb::handle());
     if (result.is_valid()) {
-        result = nb::module_::import_(DR_STR(dataclasses)).attr(DR_STR(fields))(tp);
+        result = lazy_import(LazyImport::DataclassesFields)(tp);
 
-        // Handle postponed type information
-        nb::object hints = nb::module_::import_(DR_STR(typing)).attr(DR_STR(get_type_hints))(tp);
+        // Resolve postponed (string) annotations only if present: the expensive
+        // typing.get_type_hints() call is unnecessary for concrete field types.
+        bool needs_hints = false;
         for (auto field : result) {
-            nb::object field_type = field.attr(DR_STR(type));
-            if (field_type.type().is(&PyUnicode_Type))
-                field.attr(DR_STR(type)) = hints[field.attr(DR_STR(name))];
+            if (nb::isinstance<nb::str>(field.attr(DR_STR(type)))) {
+                needs_hints = true;
+                break;
+            }
+        }
+
+        if (needs_hints) {
+            nb::object hints = lazy_import(LazyImport::TypingGetTypeHints)(tp);
+            for (auto field : result) {
+                if (field.attr(DR_STR(type)).type().is(&PyUnicode_Type))
+                    field.attr(DR_STR(type)) = hints[field.attr(DR_STR(name))];
+            }
         }
     }
     return result;

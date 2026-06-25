@@ -1268,33 +1268,53 @@ static VarState get_state(nb::handle h_) {
 }
 
 nb::handle DR_STR(DRJIT_STRUCT);
-nb::handle DR_STR(dataclasses);
 nb::handle DR_STR(__dataclass_fields__);
 nb::handle DR_STR(name);
 nb::handle DR_STR(type);
-nb::handle DR_STR(fields);
 nb::handle DR_STR(_traverse_write);
 nb::handle DR_STR(_traverse_read);
 nb::handle DR_STR(_traverse_1_cb_rw);
 nb::handle DR_STR(_traverse_1_cb_ro);
-nb::handle DR_STR(typing);
-nb::handle DR_STR(get_type_hints);
+
+/// Cache backing lazy_import(), indexed by LazyImport. Populated on demand and
+/// released by lazy_import_shutdown().
+static nb::object s_lazy_import_cache[(int) LazyImport::Count];
+
+nb::handle lazy_import(LazyImport value) {
+    nb::object &entry = s_lazy_import_cache[(int) value];
+    if (!entry.is_valid()) {
+        const char *module_name = nullptr, *attr_name = nullptr;
+        switch (value) {
+            case LazyImport::DataclassesFields:
+                module_name = "dataclasses"; attr_name = "fields"; break;
+            case LazyImport::TypingGetTypeHints:
+                module_name = "typing"; attr_name = "get_type_hints"; break;
+            case LazyImport::TypingGetArgs:
+                module_name = "typing"; attr_name = "get_args"; break;
+            default:
+                nb::raise("lazy_import(): invalid index!");
+        }
+        entry = nb::module_::import_(module_name).attr(attr_name);
+    }
+    return entry;
+}
+
+void lazy_import_shutdown() {
+    for (nb::object &entry : s_lazy_import_cache)
+        entry.reset();
+}
 
 void export_base(nb::module_ &m) {
     // Create interned strings for a few very commonly used identifiers. This
     // cannot be done statically as the GIL might not have been acquired.
     DR_STR(DRJIT_STRUCT) = PyUnicode_InternFromString("DRJIT_STRUCT");
-    DR_STR(dataclasses) = PyUnicode_InternFromString("dataclasses");
     DR_STR(__dataclass_fields__) = PyUnicode_InternFromString("__dataclass_fields__");
     DR_STR(name) = PyUnicode_InternFromString("name");
     DR_STR(type) = PyUnicode_InternFromString("type");
-    DR_STR(fields) = PyUnicode_InternFromString("fields");
     DR_STR(_traverse_write) = PyUnicode_InternFromString("_traverse_write");
     DR_STR(_traverse_read) = PyUnicode_InternFromString("_traverse_read");
     DR_STR(_traverse_1_cb_rw) = PyUnicode_InternFromString("_traverse_1_cb_rw");
     DR_STR(_traverse_1_cb_ro) = PyUnicode_InternFromString("_traverse_1_cb_ro");
-    DR_STR(typing) = PyUnicode_InternFromString("typing");
-    DR_STR(get_type_hints) = PyUnicode_InternFromString("get_type_hints");
 
     // Generic type variable used in many places
     for (const char *name :

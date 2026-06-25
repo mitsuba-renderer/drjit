@@ -1388,7 +1388,7 @@ nb::object linspace(const nb::type_object_t<ArrayBase> &dtype,
 /// Extract types from typing.Optional[T], typing.Union[T, None], etc.
 nb::object extract_type(nb::object tp) {
     try {
-        nb::object args = nb::module_::import_("typing").attr("get_args")(tp);
+        nb::object args = lazy_import(LazyImport::TypingGetArgs)(tp);
         size_t len = nb::len(args);
         nb::handle nt = nb::none().type();
         if (len == 1)

@@ -249,6 +249,7 @@ NB_MODULE(_drjit_ext, m_) {
     nb::module_::import_("atexit").attr("register")(nb::cpp_function([]() {
         dr::sync_thread(); // Finish any ongoing Dr.Jit computations.
         python_cleanup_thread_static_shutdown();
+        lazy_import_shutdown(); // Release objects cached by lazy_import().
     }));
 
     export_bind(detail);

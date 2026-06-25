@@ -1152,9 +1152,9 @@ inline void traverse_py_cb_ro(const TraversableBase *base, void *payload,
     if (!self)
         return;
 
-    auto detail = nb::module_::import_("drjit.detail");
-    nb::callable traverse_py_cb_ro_fn =
-        nb::borrow<nb::callable>(nb::getattr(detail, "traverse_py_cb_ro"));
+    // Resolved once; non-owning reference, kept alive by drjit.detail's module dict.
+    static nb::handle traverse_py_cb_ro_fn =
+        nb::module_::import_("drjit.detail").attr("traverse_py_cb_ro");
 
     traverse_py_cb_ro_fn(self,
         nb::cpp_function([&](uint64_t index, const char *variant,
@@ -1180,9 +1180,9 @@ inline void traverse_py_cb_rw(TraversableBase *base, void *payload,
     if (!self)
         return;
 
-    auto detail = nb::module_::import_("drjit.detail");
-    nb::callable traverse_py_cb_rw_fn =
-        nb::borrow<nb::callable>(nb::getattr(detail, "traverse_py_cb_rw"));
+    // Resolved once; non-owning reference, kept alive by drjit.detail's module dict.
+    static nb::handle traverse_py_cb_rw_fn =
+        nb::module_::import_("drjit.detail").attr("traverse_py_cb_rw");
 
     traverse_py_cb_rw_fn(self,
     nb::cpp_function([&](uint64_t index, const char *variant,
