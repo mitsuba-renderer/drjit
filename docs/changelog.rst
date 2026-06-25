@@ -153,13 +153,28 @@ DrJit 1.4.0 (TBA)
   `c1282c <https://github.com/mitsuba-renderer/drjit/commit/c1282ca81a14145095f8be16ccd632d6fc7a5a8c>`__,
   `13fe80 <https://github.com/mitsuba-renderer/drjit/commit/13fe80ed2142098179b32c127d0dde7eaba0a506>`__).
 
-- **Better LLVM code generation**: Several changes reduce memory traffic in
-  generated CPU kernels. Vectorized method inputs and outputs are now
-  passed in registers, load/store aliasing metadata was improved. (Dr.Jit-Core
-  commits `83207d
-  <https://github.com/mitsuba-renderer/drjit-core/commit/83207d5aeeb8fab27473c606b6a71349bce4157c>`__,
-  `84c85b
-  <https://github.com/mitsuba-renderer/drjit-core/commit/84c85bd9d07a2de88a73a23dd0bf0baad53df104>`__).
+- **Faster function calls**: Dr.Jit now generates much better
+  code for indirect function calls in kernels (e.g., method calls on arrays of
+  object instances, :py:func:`dr.switch() <switch>`, and
+  :py:func:`dr.dispatch() <dispatch>`). The
+  per-instance data of all callables is now merged into a single per-kernel
+  buffer and fetched using vectorized packet loads, rather than being scattered
+  across many small buffers and read element by element. On the LLVM backend,
+  call inputs and outputs are additionally passed in registers rather than
+  stack scratch space, which reduces memory traffic and
+  improves performance. Dr.Jit also uses more efficient data structures to
+  collect call data, which speeds up the compilation of kernels that dispatch to
+  a large number of instances.
+  (Dr.Jit-Core commits
+  `1ed505 <https://github.com/mitsuba-renderer/drjit-core/commit/1ed505b2ee4a1a9eb98599cc08dd31927f017d4d>`__,
+  `bc6d9c <https://github.com/mitsuba-renderer/drjit-core/commit/bc6d9cacb76d83c9725787e19af7ec14d510d972>`__,
+  `69120f <https://github.com/mitsuba-renderer/drjit-core/commit/69120ffef47b2cf2b05d74ffbea4c320c833c00e>`__,
+  `83207d <https://github.com/mitsuba-renderer/drjit-core/commit/83207d5aeeb8fab27473c606b6a71349bce4157c>`__).
+
+- **LLVM code generation**: Load/store aliasing metadata was improved so that
+  non-conflicting memory operations within a kernel can be freely reordered
+  or hoisted out of loops, which improves performance of kernels on the LLVM backend.
+  (Dr.Jit-Core commit `84c85b <https://github.com/mitsuba-renderer/drjit-core/commit/84c85bd9d07a2de88a73a23dd0bf0baad53df104>`__).
 
 - **Warp-reduction for packet scatter-reduce**: On the CUDA and Metal backends,
   :py:func:`dr.scatter_reduce() <scatter_reduce>` now provides a *packet-aware*
@@ -174,14 +189,13 @@ DrJit 1.4.0 (TBA)
   This release adds *instance pooling*, which provides a cache to recycle
   short-lived objects. Dr.Jit opts into this feature to accelerate tracing,
   which generates large amounts of temporaries. Other optimizations target
-  object creation/destruction and nd-array exchange. (Dr.Jit commit `6b212c
-  <https://github.com/mitsuba-renderer/drjit/commit/6b212c235004edfad964665ade3e6f3ec9af6ecb>`__,
+  object creation/destruction and nd-array exchange. (Dr.Jit commit `6b212c <https://github.com/mitsuba-renderer/drjit/commit/6b212c235004edfad964665ade3e6f3ec9af6ecb>`__,
   nanobind PRs `#1366 <https://github.com/wjakob/nanobind/pull/1366>`__, `#1374
   <https://github.com/wjakob/nanobind/pull/1374>`__, `#1375
   <https://github.com/wjakob/nanobind/pull/1375>`__).
 
 - **nanothread optimizations**: The thread pool driving parallel evaluation
-  was improved as follows:
+  was improved:
 
   - **Faster worker wake-up**: idle worker threads busy-poll for a short while
     and then go to sleep to avoid wasting power. The new version of
@@ -219,10 +233,8 @@ DrJit 1.4.0 (TBA)
 
 - **Command queue flushing**: The new :py:func:`dr.flush_thread()
   <flush_thread>` function flushes queued work to the GPU, which is needed for
-  multi-threaded use of Dr.Jit on the Metal backend. (Dr.Jit commit `c68e00
-  <https://github.com/mitsuba-renderer/drjit/commit/c68e00853de7957912e490245c2036196fe422ff>`__,
-  Dr.Jit-Core commit `467dd3
-  <https://github.com/mitsuba-renderer/drjit-core/commit/467dd3d23ed23129139dcdf557baead32b683e01>`__).
+  multi-threaded use of Dr.Jit on the Metal backend. (Dr.Jit commit `c68e00 <https://github.com/mitsuba-renderer/drjit/commit/c68e00853de7957912e490245c2036196fe422ff>`__,
+  Dr.Jit-Core commit `467dd3 <https://github.com/mitsuba-renderer/drjit-core/commit/467dd3d23ed23129139dcdf557baead32b683e01>`__).
 
 **Bug Fixes**
 
@@ -343,8 +355,7 @@ DrJit 1.4.0 (TBA)
   support (``.tf()`` conversion, support in :py:func:`@dr.wrap <wrap>`).
 
 - ⚠️ **Removed Kahan-compensated atomic scatter**. The
-  ``drjit.scatter_add_kahan()`` operation was removed. See commit `f6b4be
-  <https://github.com/mitsuba-renderer/drjit-core/commit/f6b4be02af6714a80fd07f970c9686ac2978e324>`__
+  ``drjit.scatter_add_kahan()`` operation was removed. See commit `f6b4be <https://github.com/mitsuba-renderer/drjit-core/commit/f6b4be02af6714a80fd07f970c9686ac2978e324>`__
   for the rationale.
 
 - ⚠️ **Compute capability**. Dr.Jit-Core's CUDA backend now requires compute
