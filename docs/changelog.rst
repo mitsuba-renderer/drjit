@@ -15,7 +15,8 @@ DrJit 1.4.0 (TBA)
   symbolic control flow, automatic differentiation, hardware-accelerated
   ray tracing and textures, :ref:`cooperative vectors <coop_vec>`, and
   reductions. (contributed by `Sébastien Speierer
-  <https://github.com/Speierers>`__).
+  <https://github.com/Speierers>`__ and `Wenzel Jakob
+  <https://github.com/wjakob>`__).
 
 - **Matrix Multiplication for Tensors**: The ``@`` operator and
   :py:func:`dr.matmul() <matmul>` now support tensors of any size and shape,
@@ -186,7 +187,7 @@ DrJit 1.4.0 (TBA)
     and then go to sleep to avoid wasting power. The new version of
     nanothread is more careful to wake only the required number of threads,
     and it does so using efficient OS primitives, such as
-    `futex <https://en.wikipedia.org/wiki/Futex>` on Linux (commits
+    `futex <https://en.wikipedia.org/wiki/Futex>`__ on Linux (commits
     `73efa1 <https://github.com/mitsuba-renderer/nanothread/commit/73efa1367ddd49aa2026b245c6857231eefbb344>`__,
     `366774 <https://github.com/mitsuba-renderer/nanothread/commit/366774d9f92d62bba3b3c7e53503a290e42315b0>`__).
 
@@ -207,7 +208,99 @@ DrJit 1.4.0 (TBA)
     that is now fixed.
     (`f11692 <https://github.com/mitsuba-renderer/nanothread/commit/f1169296bb4af6ee1e553e3b331be8ec4275e399>`__).
 
-**API Breaks**
+**Minor features**
+
+- **CUDA Green Context API**: Added :py:class:`drjit.cuda.green_context`, a
+  context manager that isolates kernels to a subset of the GPU's streaming
+  multiprocessors. See the :ref:`green context documentation <green_context>`
+  for details.
+  (Dr.Jit commit `6c69ec <https://github.com/mitsuba-renderer/drjit/commit/6c69ecb75cfc605063502747e9c9264bc739ead9>`__,
+  Dr.Jit-Core commit `d4f1a6 <https://github.com/mitsuba-renderer/drjit-core/commit/d4f1a62c6b175af295e857069b1401c36bcf6caa>`__).
+
+- **Command queue flushing**: The new :py:func:`dr.flush_thread()
+  <flush_thread>` function flushes queued work to the GPU, which is needed for
+  multi-threaded use of Dr.Jit on the Metal backend. (Dr.Jit commit `c68e00
+  <https://github.com/mitsuba-renderer/drjit/commit/c68e00853de7957912e490245c2036196fe422ff>`__,
+  Dr.Jit-Core commit `467dd3
+  <https://github.com/mitsuba-renderer/drjit-core/commit/467dd3d23ed23129139dcdf557baead32b683e01>`__).
+
+**Bug Fixes**
+
+- Fixed a bug in :py:meth:`dr.rng().integers() <random.Generator.integers>`
+  where a symbolic loop was misused, producing invalid LLVM IR.
+  (commit `f7054e <https://github.com/mitsuba-renderer/drjit/commit/f7054e1b82d7b930e08fd3bb4a8f091543160f18>`__).
+
+- Fixed a variable shadowing bug in ``_flatten``/``_unflatten`` that caused
+  crashes when flattening PyTrees containing custom ``DRJIT_STRUCT`` types.
+  (PR `#482 <https://github.com/mitsuba-renderer/drjit/pull/482>`__).
+
+- Fixed a bug in :py:class:`nn.SinEncode <drjit.nn.SinEncode>` where the
+  per-octave phase offset did not match the documented formula. Code using
+  ``shift=0`` is unaffected.
+
+- Fixed incorrect type names in :py:func:`dr.graphviz_ad() <graphviz_ad>`.
+  (commit `0c685e <https://github.com/mitsuba-renderer/drjit/commit/0c685e42d553aad27063c6fd756f5cba91ac503c>`__).
+
+- Fixed minor memory leaks due to recorded/frozen kernels.
+  (Dr.Jit-Core commit `f0bf64 <https://github.com/mitsuba-renderer/drjit-core/commit/f0bf641ead1ce23697d13dab89f980da467c188e>`__).
+
+- Fixed memory leaks related to kernel histories.
+  (Dr.Jit-Core commit `318e55 <https://github.com/mitsuba-renderer/drjit-core/commit/318e554a242a1de11e6a4694de16a6936ef1671f>`__).
+
+- Renamed the conflicting ``KernelRecordingMode.None`` enumerator to
+  ``Inactive`` to avoid the collision with Python's ``None``.
+  (Dr.Jit-Core PR `#186 <https://github.com/mitsuba-renderer/drjit-core/pull/186>`__,
+  Dr.Jit PR `#481 <https://github.com/mitsuba-renderer/drjit/pull/481>`__).
+
+- Fixed several issues involving symbolic loops with aliased state variables.
+  (Dr.Jit PRs `#505 <https://github.com/mitsuba-renderer/drjit/pull/505>`__,
+  `#510 <https://github.com/mitsuba-renderer/drjit/pull/510>`__,
+  Dr.Jit-Core PR `#198 <https://github.com/mitsuba-renderer/drjit-core/pull/198>`__,
+  contributed by `Lovro Nuic <https://github.com/lnuic>`__).
+
+- Fixed half-precision ``Min``/``Max`` reductions and the half-precision
+  infinity constant.
+  (Dr.Jit-Core PR `#199 <https://github.com/mitsuba-renderer/drjit-core/pull/199>`__).
+
+- Various smaller backend fixes: a missing mask predicate in the CUDA packet
+  ``scatter_reduce`` path, a crash in Metal cooperative-vector matrix-vector
+  products with unsupported output dimensions, a race condition under
+  multi-threaded Metal use, incorrect fast-math flag handling on ``Sqrt`` and
+  ``Div`` nodes, and more robust handling of failed ``jit_eval()`` calls.
+  (Dr.Jit-Core PRs `#191 <https://github.com/mitsuba-renderer/drjit-core/pull/191>`__,
+  `#200 <https://github.com/mitsuba-renderer/drjit-core/pull/200>`__,
+  `#196 <https://github.com/mitsuba-renderer/drjit-core/pull/196>`__,
+  `#192 <https://github.com/mitsuba-renderer/drjit-core/pull/192>`__,
+  commits
+  `368c53 <https://github.com/mitsuba-renderer/drjit-core/commit/368c539bf5659224a4ad2d9be69a3093e4fa9714>`__,
+  `37bbce <https://github.com/mitsuba-renderer/drjit-core/commit/37bbce6ccdf05910c53b4ca234b907b0dbd47845>`__,
+  Dr.Jit PR `#503 <https://github.com/mitsuba-renderer/drjit/pull/503>`__).
+
+**Other Improvements**
+
+- Improved documentation and error messages when the Dr.Jit binary fails to
+  load. (PR `#485 <https://github.com/mitsuba-renderer/drjit/pull/485>`__).
+
+- Various improvements to Dr.Jit's static type annotations: added missing
+  stubs for :py:func:`dr.mean() <mean>`, added type hints for ``PrefixRedOp``,
+  and minor stub pattern replacement rule fixes.
+  (PRs `#478 <https://github.com/mitsuba-renderer/drjit/pull/478>`__,
+  `#480 <https://github.com/mitsuba-renderer/drjit/pull/480>`__,
+  `#483 <https://github.com/mitsuba-renderer/drjit/pull/483>`__).
+
+- **Release the GIL while waiting for kernel history**: Retrieving timing data
+  via :py:func:`dr.kernel_history() <kernel_history>` now releases the GIL while
+  waiting for the asynchronous results to arrive, allowing other Python threads
+  to make progress in the meantime.
+  (commits `766e1e <https://github.com/mitsuba-renderer/drjit/commit/766e1e9ade4c722a88d1a1dd18d7d5140115ab8f>`__,
+  `f90bfd <https://github.com/mitsuba-renderer/drjit/commit/f90bfd6a77364a1dd0fff51ff1ab5e0999ff5c8b>`__).
+
+- **ndarray Cleanup**: ndarray reclamation previously always went through an
+  asynchronous cleanup thread. This detour is now skipped for CUDA and Metal arrays
+  when the calling thread already holds the GIL.
+  (commit `c01a23 <https://github.com/mitsuba-renderer/drjit/commit/c01a235744fe22c64c9a97bc1817a9f49b6b9a78>`__).
+
+**API Breaks and Device Compatibility**
 
 - ⚠️ :py:func:`nn.pack() <drjit.nn.pack>` and :py:func:`nn.unpack()
   <drjit.nn.unpack>` **no longer return the shared buffer as the first
@@ -254,114 +347,9 @@ DrJit 1.4.0 (TBA)
   <https://github.com/mitsuba-renderer/drjit-core/commit/f6b4be02af6714a80fd07f970c9686ac2978e324>`__
   for the rationale.
 
-**Minor features**
-
-- **CUDA Green Context API**: Added :py:class:`drjit.cuda.green_context`, a
-  context manager that isolates kernels to a subset of the GPU's streaming
-  multiprocessors. See the :ref:`green context documentation <green_context>`
-  for details.
-  (Dr.Jit commit `6c69ec <https://github.com/mitsuba-renderer/drjit/commit/6c69ecb75cfc605063502747e9c9264bc739ead9>`__,
-  Dr.Jit-Core commit `d4f1a6 <https://github.com/mitsuba-renderer/drjit-core/commit/d4f1a62c6b175af295e857069b1401c36bcf6caa>`__).
-
-- **Command queue flushing**: The new :py:func:`dr.flush_thread()
-  <flush_thread>` function flushes queued work to the GPU, which is needed for
-  multi-threaded use of Dr.Jit on the Metal backend. (Dr.Jit commit `c68e00
-  <https://github.com/mitsuba-renderer/drjit/commit/c68e00853de7957912e490245c2036196fe422ff>`__,
-  Dr.Jit-Core commit `467dd3
-  <https://github.com/mitsuba-renderer/drjit-core/commit/467dd3d23ed23129139dcdf557baead32b683e01>`__).
-
-**Bug Fixes**
-
-- Fixed a bug in :py:meth:`dr.rng().integers() <random.Generator.integers>`
-  where a symbolic loop was misused, producing invalid LLVM IR.
-  (commit `f7054e <https://github.com/mitsuba-renderer/drjit/commit/f7054e1b82d7b930e08fd3bb4a8f091543160f18>`__).
-
-- Fixed a variable shadowing bug in ``_flatten``/``_unflatten`` that caused
-  crashes when flattening PyTrees containing custom ``DRJIT_STRUCT`` types.
-  (PR `#482 <https://github.com/mitsuba-renderer/drjit/pull/482>`__).
-
-- Fixed a bug in :py:class:`nn.SinEncode <drjit.nn.SinEncode>` where the
-  per-octave phase offset did not match the documented formula. Code using
-  ``shift=0`` is unaffected.
-
-- Fixed incorrect type names in :py:func:`dr.graphviz_ad() <graphviz_ad>`.
-  (commit `0c685e <https://github.com/mitsuba-renderer/drjit/commit/0c685e42d553aad27063c6fd756f5cba91ac503c>`__).
-
-- Fixed minor memory leaks due to recorded/frozen kernels.
-  (Dr.Jit-Core commit `f0bf64 <https://github.com/mitsuba-renderer/drjit-core/commit/f0bf641ead1ce23697d13dab89f980da467c188e>`__).
-
-- Fixed memory leaks related to kernel histories.
-  (Dr.Jit-Core commit `318e55 <https://github.com/mitsuba-renderer/drjit-core/commit/318e554a242a1de11e6a4694de16a6936ef1671f>`__).
-
-- Renamed the conflicting ``KernelRecordingMode.None`` enumerator to
-  ``Inactive`` to avoid the collision with Python's ``None``.
-  (Dr.Jit-Core PR `#186 <https://github.com/mitsuba-renderer/drjit-core/pull/186>`__,
-  Dr.Jit PR `#481 <https://github.com/mitsuba-renderer/drjit/pull/481>`__).
-
-- Fixed a loop code generation crash that occurred when two symbolic loop state
-  variables shared a single update value.
-  (Dr.Jit PR `#505 <https://github.com/mitsuba-renderer/drjit/pull/505>`__,
-  Dr.Jit-Core PR `#198 <https://github.com/mitsuba-renderer/drjit-core/pull/198>`__).
-
-- Fixed half-precision ``Min``/``Max`` reductions and the half-precision
-  infinity constant.
-  (Dr.Jit-Core PR `#199 <https://github.com/mitsuba-renderer/drjit-core/pull/199>`__).
-
-- Various smaller backend fixes: a missing mask predicate in the CUDA packet
-  ``scatter_reduce`` path, a crash in Metal cooperative-vector matrix-vector
-  products with unsupported output dimensions, a race condition under
-  multi-threaded Metal use, incorrect fast-math flag handling on ``Sqrt`` and
-  ``Div`` nodes, and more robust handling of failed ``jit_eval()`` calls.
-  (Dr.Jit-Core PRs `#191 <https://github.com/mitsuba-renderer/drjit-core/pull/191>`__,
-  `#200 <https://github.com/mitsuba-renderer/drjit-core/pull/200>`__,
-  `#196 <https://github.com/mitsuba-renderer/drjit-core/pull/196>`__,
-  `#192 <https://github.com/mitsuba-renderer/drjit-core/pull/192>`__,
-  commits
-  `368c53 <https://github.com/mitsuba-renderer/drjit-core/commit/368c539bf5659224a4ad2d9be69a3093e4fa9714>`__,
-  `37bbce <https://github.com/mitsuba-renderer/drjit-core/commit/37bbce6ccdf05910c53b4ca234b907b0dbd47845>`__,
-  Dr.Jit PR `#503 <https://github.com/mitsuba-renderer/drjit/pull/503>`__).
-
-**Other Improvements**
-
-- Improved documentation and error messages when the Dr.Jit binary fails to
-  load. (PR `#485 <https://github.com/mitsuba-renderer/drjit/pull/485>`__).
-
-- Various improvements to Dr.Jit's static type annotations: added missing
-  stubs for :py:func:`dr.mean() <mean>`, added type hints for ``PrefixRedOp``,
-  and minor stub pattern replacement rule fixes.
-  (PRs `#478 <https://github.com/mitsuba-renderer/drjit/pull/478>`__,
-  `#480 <https://github.com/mitsuba-renderer/drjit/pull/480>`__,
-  `#483 <https://github.com/mitsuba-renderer/drjit/pull/483>`__).
-
-- **Release the GIL while waiting for kernel history**: Retrieving timing data
-  via :py:func:`dr.kernel_history() <kernel_history>` now releases the GIL while
-  waiting for the asynchronous results to arrive, allowing other Python threads
-  to make progress in the meantime.
-  (commits `766e1e <https://github.com/mitsuba-renderer/drjit/commit/766e1e9ade4c722a88d1a1dd18d7d5140115ab8f>`__,
-  `f90bfd <https://github.com/mitsuba-renderer/drjit/commit/f90bfd6a77364a1dd0fff51ff1ab5e0999ff5c8b>`__).
-
-- **ndarray Cleanup**: ndarray reclamation previously always went through an
-  asynchronous cleanup thread. This detour is now skipped for CUDA ndarrays
-  when the calling thread already holds the GIL.
-  (commit `c01a23 <https://github.com/mitsuba-renderer/drjit/commit/c01a235744fe22c64c9a97bc1817a9f49b6b9a78>`__).
-
-- Minor C++ API conveniences: the ``DRJIT_STRUCT`` traverse macros were split
-  into smaller building blocks (enabling customized traversal), and a new
-  ``DRJIT_NON_COPYABLE`` macro was added.
-  (commits `b4330d <https://github.com/mitsuba-renderer/drjit/commit/b4330d9adc0a89ec0bfc1cc064a26baab664b584>`__,
-  `45500e <https://github.com/mitsuba-renderer/drjit/commit/45500e302029c4a8346047163dca9179f00b6df6>`__).
-
-**Compatibility**
-
-- Updated the bundled `nanobind <https://github.com/wjakob/nanobind>`__
-  dependency to **v2.13.0** (see the performance notes above).
-  (commit `ad7fb4 <https://github.com/mitsuba-renderer/drjit/commit/ad7fb488200ed9623d38a244d08b3e7279e1c5a0>`__).
-
-- Dr.Jit-Core now requires CUDA compute capability **7.5 or higher** (Turing
-  and later). The precompiled CC 5.0 and 7.0 PTX bundles have been replaced
-  by a single CC 7.5 bundle, and loading it requires NVIDIA driver **R535
-  or newer**. ``jit_cuda_init()`` enforces this minimum and refuses to enable
-  the CUDA backend on older drivers.
+- ⚠️ **Compute capability**. Dr.Jit-Core's CUDA backend now requires compute
+  capability **7.5 or higher** (Turing and later) and NVIDIA driver **R535 or
+  newer**.
   (Dr.Jit-Core PR `#188 <https://github.com/mitsuba-renderer/drjit-core/pull/188>`__).
 
 DrJit 1.3.1 (February 23, 2026)
