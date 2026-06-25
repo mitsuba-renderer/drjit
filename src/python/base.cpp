@@ -583,11 +583,11 @@ static nb::object tensor_transpose_mT(nb::handle_t<ArrayBase> h) {
 
     nb::tuple shape_out = nb::steal<nb::tuple>(PyTuple_New((Py_ssize_t) r));
     for (size_t i = 0; i < r - 2; ++i)
-        PyTuple_SET_ITEM(shape_out.ptr(), (Py_ssize_t) i,
+        NB_TUPLE_SET_ITEM(shape_out.ptr(), (Py_ssize_t) i,
                          PyLong_FromSize_t(shape[i]));
-    PyTuple_SET_ITEM(shape_out.ptr(), (Py_ssize_t) (r - 2),
+    NB_TUPLE_SET_ITEM(shape_out.ptr(), (Py_ssize_t) (r - 2),
                      PyLong_FromSize_t(N));
-    PyTuple_SET_ITEM(shape_out.ptr(), (Py_ssize_t) (r - 1),
+    NB_TUPLE_SET_ITEM(shape_out.ptr(), (Py_ssize_t) (r - 1),
                      PyLong_FromSize_t(M));
 
     // Empty output: no underlying element, return a zero-valued tensor.
@@ -958,12 +958,12 @@ nb::object matmul(nb::handle h0, nb::handle h1, bool At, bool Bt) {
                         PyTuple_New((Py_ssize_t) out_rank));
                     Py_ssize_t pos = 0;
                     for (size_t d = 0; d < n; ++d)
-                        PyTuple_SET_ITEM(t.ptr(), pos++,
+                        NB_TUPLE_SET_ITEM(t.ptr(), pos++,
                                          PyLong_FromSize_t((size_t) gb.extent[n - 1 - d]));
                     if (!a_is_1d)
-                        PyTuple_SET_ITEM(t.ptr(), pos++, PyLong_FromSize_t(M));
+                        NB_TUPLE_SET_ITEM(t.ptr(), pos++, PyLong_FromSize_t(M));
                     if (!b_is_1d)
-                        PyTuple_SET_ITEM(t.ptr(), pos++, PyLong_FromSize_t(N));
+                        NB_TUPLE_SET_ITEM(t.ptr(), pos++, PyLong_FromSize_t(N));
                     shape_out = std::move(t);
                 }
 

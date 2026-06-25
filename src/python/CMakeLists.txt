@@ -147,6 +147,14 @@ if (APPLE)
           /usr/local/opt/lld/bin /usr/local/opt/llvm/bin)
   if (DRJIT_LLD)
     target_link_options(drjit-python PRIVATE -fuse-ld=${DRJIT_LLD} -Wl,--icf=safe)
+
+    # AppleClang generates __chkstk_darwin in large binding functions, which LLD
+    # does not accept when LTO is also enabled. Disable the stack probes for
+    # them. The code that needs these in any case runs at import time and not
+    # recursively
+    if ("LTO" IN_LIST DRJIT_DIST_FLAGS)
+      target_compile_options(drjit-python PRIVATE -fno-stack-check)
+    endif()
   endif()
 endif()
 
