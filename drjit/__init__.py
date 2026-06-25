@@ -4067,6 +4067,21 @@ def freeze(
         import functools
         import inspect
 
+        # Capturing closure variables lets the frozen function detect when
+        # nonlocal/global symbols change.
+        _cv = inspect.getclosurevars(f)
+        _global_names = tuple(frozenset(_cv.globals) | frozenset(_cv.unbound))
+        _free_vars = f.__code__.co_freevars
+
+        def capture_closure():
+            g = f.__globals__
+            globals_ = {n: g[n] for n in _global_names if n in g}
+            cells = f.__closure__
+            nonlocals_ = {} if cells is None else {
+                n: c.cell_contents for n, c in zip(_free_vars, cells)
+            }
+            return globals_, nonlocals_
+
         def inner(input: dict):
             """
             This inner function is the one that is actually frozen, and it calls
@@ -4094,11 +4109,10 @@ def freeze(
                 if not self.enabled:
                     return self.f(*args, **kwargs)
 
-                # Capture closure variables to detect when nonlocal symbols change.
-                closure = inspect.getclosurevars(f)
+                globals_, nonlocals_ = capture_closure()
                 input = {
-                    "globals": closure.globals,
-                    "nonlocals": closure.nonlocals,
+                    "globals": globals_,
+                    "nonlocals": nonlocals_,
                     "args": args,
                     "kwargs": kwargs,
                 }
@@ -4164,11 +4178,12 @@ def freeze(
                 if not self.enabled:
                     return self.f(self.obj, *args, **kwargs)
 
-                # Capture closure variables to detect when nonlocal symbols change.
-                closure = inspect.getclosurevars(self.f)
+                # self.f is the same function object captured by capture_closure
+                # above (its __globals__/__closure__ are identical).
+                globals_, nonlocals_ = capture_closure()
                 input = {
-                        "globals": closure.globals,
-                        "nonlocals": closure.nonlocals,
+                        "globals": globals_,
+                        "nonlocals": nonlocals_,
                         "args": [self.obj, *args],
                         "kwargs": kwargs,
                     }
