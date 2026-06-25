@@ -195,7 +195,7 @@ void bind_texture(nb::module_ &m, const char *name) {
         .def("set_value",
              &Tex::template set_value<const typename Tex::Storage &>,
              "value"_a, "migrate"_a = false, doc_Texture_set_value)
-        .def("set_value",
+        .def("set_value_with_event",
              [](Tex &t, const typename Tex::Storage &value,
                 Event<Tex::Backend> &event, bool migrate) {
                  t.set_value(value, migrate);
