@@ -63,7 +63,7 @@ def test01_slice_index(t):
     check(shape=(3, 7), indices=(t(0), slice(0, 7, 3)),
           shape_out=(1, 3), index_out=t(0, 3, 6))
     check(shape=(3, 7), indices=(t(0), t(0, 3, 6)),
-          shape_out=(1, 3), index_out=t(0, 3, 6))
+          shape_out=(3,), index_out=t(0, 3, 6))
     check(shape=(3, 7), indices=(2, slice(None, None, None)),
           shape_out=(7,), index_out=t(14, 15, 16, 17, 18, 19, 20))
     check(shape=(3, 7), indices=(slice(None, None, None), 2),
@@ -1127,3 +1127,219 @@ def test37_split(t):
         dr.split(dr.array_t(t)(1, 2, 3), 3)
     with pytest.raises(TypeError, match="expected a tensor"):
         dr.array_split(dr.array_t(t)(1, 2, 3), 3)
+
+
+@pytest.test_arrays("float32, jit")
+def test38_multidim_scalar(t):
+    pytest.importorskip("torch")
+
+    mod = sys.modules[t.__module__]
+    TensorXf = mod.TensorXf
+    Float = mod.Float
+
+    shape = (10, 10, 10)
+    rng = dr.rng()
+
+    x = rng.random(Float, dr.prod(shape))
+    x = TensorXf(x, shape)
+    x_torch = x.torch()
+
+    ref = x_torch[:, 1, :]
+    res = x[:, 1, :]
+
+    assert dr.allclose(res, ref)
+
+
+@pytest.test_arrays("float32, jit")
+def test39_multidim_advanced(t):
+    pytest.importorskip("torch")
+
+    mod = sys.modules[t.__module__]
+    UInt32 = mod.UInt32
+    TensorXf = mod.TensorXf
+    Float = mod.Float
+
+    shape = (10, 10, 10)
+    rng = dr.rng()
+    index = dr.arange(UInt32, 5) + 1
+
+    x = rng.random(Float, dr.prod(shape))
+    x = TensorXf(x, shape)
+    x_torch = x.torch()
+
+    index_torch = index.torch().long()
+    ref = x_torch[index_torch, :, index_torch]
+    res = x[index, :, index]
+
+    assert dr.allclose(res, ref)
+
+
+@pytest.test_arrays("float32, jit")
+def test40_advanced_indexing_broadcast(t):
+    """Size-1 array broadcast against a larger array in non-consecutive
+    advanced indexing."""
+    pytest.importorskip("torch")
+
+    mod = sys.modules[t.__module__]
+    UInt32 = mod.UInt32
+    TensorXf = mod.TensorXf
+    Float = mod.Float
+
+    shape = (4, 5, 6)
+    rng = dr.rng()
+
+    x = rng.random(Float, dr.prod(shape))
+    x = TensorXf(x, shape)
+    x_torch = x.torch()
+
+    idx_one = UInt32(2)
+    idx_many = dr.arange(UInt32, 3) + 1
+
+    ref = x_torch[idx_one.torch().long(), :, idx_many.torch().long()]
+    res = x[idx_one, :, idx_many]
+
+    assert dr.allclose(res, ref)
+
+
+@pytest.test_arrays("float32, jit")
+def test41_advanced_indexing_with_integer(t):
+    """Integer index between two array indices: the integer folds into the
+    base offset while the arrays share the broadcasted advanced index."""
+    pytest.importorskip("torch")
+
+    mod = sys.modules[t.__module__]
+    UInt32 = mod.UInt32
+    TensorXf = mod.TensorXf
+    Float = mod.Float
+
+    shape = (5, 6, 7)
+    rng = dr.rng()
+    index = dr.arange(UInt32, 4)
+
+    x = rng.random(Float, dr.prod(shape))
+    x = TensorXf(x, shape)
+    x_torch = x.torch()
+
+    index_torch = index.torch().long()
+    ref = x_torch[index_torch, 3, index_torch]
+    res = x[index, 3, index]
+
+    assert dr.allclose(res, ref)
+
+
+@pytest.test_arrays("float32, jit")
+def test42_advanced_indexing_coalesce(t):
+    """Multiple passthrough dims between array indices — the passthroughs
+    get coalesced into one synthetic component, but advanced indexing
+    must still produce correct results."""
+    pytest.importorskip("torch")
+
+    mod = sys.modules[t.__module__]
+    UInt32 = mod.UInt32
+    TensorXf = mod.TensorXf
+    Float = mod.Float
+
+    shape = (3, 4, 5, 6)
+    rng = dr.rng()
+    index = dr.arange(UInt32, 2)
+
+    x = rng.random(Float, dr.prod(shape))
+    x = TensorXf(x, shape)
+    x_torch = x.torch()
+
+    index_torch = index.torch().long()
+    ref = x_torch[index_torch, :, :, index_torch]
+    res = x[index, :, :, index]
+
+    assert dr.allclose(res, ref)
+
+
+@pytest.test_arrays("float32, jit")
+def test43_advanced_consecutive_integer(t):
+    """Integer between array indices does not break consecutiveness."""
+    pytest.importorskip("torch")
+
+    mod = sys.modules[t.__module__]
+    UInt32 = mod.UInt32
+    TensorXf = mod.TensorXf
+    Float = mod.Float
+
+    x = TensorXf(dr.arange(Float, 5 * 6 * 7 * 8), (5, 6, 7, 8))
+    x_torch = x.torch()
+
+    idx = dr.arange(UInt32, 4)
+    idx_torch = idx.torch().long()
+
+    ref = x_torch[:, idx_torch, 3, idx_torch]
+    res = x[:, idx, 3, idx]
+    assert dr.allclose(res, ref)
+
+
+@pytest.test_arrays("float32, jit")
+def test44_advanced_non_consecutive_none(t):
+    """None between array indices breaks consecutiveness."""
+    pytest.importorskip("torch")
+
+    mod = sys.modules[t.__module__]
+    UInt32 = mod.UInt32
+    TensorXf = mod.TensorXf
+    Float = mod.Float
+
+    y = TensorXf(dr.arange(Float, 5 * 6 * 7), (5, 6, 7))
+    y_torch = y.torch()
+
+    idx = dr.arange(UInt32, 4)
+    idx_torch = idx.torch().long()
+
+    ref = y_torch[:, idx_torch, None, idx_torch]
+    res = y[:, idx, None, idx]
+    assert dr.allclose(res, ref)
+
+
+@pytest.test_arrays("float32, jit")
+def test45_torch_array_indexing(t):
+    """Array (gather) indexing via __getitem__ must match PyTorch."""
+    pytest.importorskip("torch")
+
+    mod = sys.modules[t.__module__]
+    UInt32 = mod.UInt32
+    TensorXf = mod.TensorXf
+    Float = mod.Float
+
+    # 1D
+    x = TensorXf(dr.arange(Float, 10))
+    x_torch = x.torch()
+    idx = UInt32(0, 2, 4, 6, 8)
+    assert dr.allclose(x[idx], x_torch[idx.torch().long()])
+
+    # 2D (first dimension)
+    x = TensorXf(dr.arange(Float, 20), shape=(4, 5))
+    x_torch = x.torch()
+    idx = UInt32(0, 2, 3)
+    res = x[idx]
+    assert res.shape == (3, 5)
+    assert dr.allclose(res, x_torch[idx.torch().long()])
+
+
+@pytest.test_arrays("float32, jit")
+def test46_torch_setitem(t):
+    """Scalar and slice assignment on tensors must match PyTorch."""
+    pytest.importorskip("torch")
+
+    mod = sys.modules[t.__module__]
+    TensorXf = mod.TensorXf
+    Float = mod.Float
+
+    # Single element
+    x = TensorXf(dr.arange(Float, 10))
+    x_torch = x.torch().clone()
+    x[5] = 100.0
+    x_torch[5] = 100.0
+    assert dr.allclose(x, x_torch)
+
+    # Slice
+    x = TensorXf(dr.arange(Float, 10))
+    x_torch = x.torch().clone()
+    x[2:7] = 100.0
+    x_torch[2:7] = 100.0
+    assert dr.allclose(x, x_torch)

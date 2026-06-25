@@ -630,36 +630,48 @@ possible to reuse the same code as long as trailing dimensions do not change.
    func(t, UInt(1), UInt(1), UInt(1))
 
 Dr.Jit also supports advanced tensor indexing, allowing you to use arrays to
-index into a tensor e.g. ``t[UInt(1, 2, 3), :]``. This syntax can also be
-used inside of frozen functions, however it might lead to kernels with baked-in
-kernel sizes, and therefore incorrect outputs. If tensor indexing with indices
-of changing sizes is required, calculating the array index manually with the
-formula in the above example is recommended.
+index into a tensor e.g. ``t[UInt(1, 2, 3), :]``. When multiple array indices
+are used, they select element-wise following NumPy/PyTorch semantics (all
+arrays must have the same length or length 1 for broadcasting). This syntax
+can also be used inside of frozen functions, however it might lead to kernels
+with baked-in kernel sizes, and therefore incorrect outputs. If tensor indexing
+with indices of changing sizes is required, calculating the array index
+manually with the formula in the above example is recommended.
 
 .. code-block:: python
 
    @dr.freeze
    def func(t: TensorXf, i: UInt, j: UInt, k: UInt):
-      # Indexes into the tensor array, getting the entry at (row, col)
+      # Indexes into the tensor array, getting the entry at (i, j, k)
       return t[i, j, k]
 
    t = TensorXf(dr.arange(Float, 10*7*3), shape=(10, 7, 3))
 
    # The first call will record the function, and will return a tensor of shape
-   # (3, 2, 1)
-   func(t, UInt(1, 2, 3), UInt(1, 2), UInt(1))
+   # (3,)
+   func(t, UInt(1, 2, 3), UInt(1, 2, 3), UInt(1, 2, 3))
 
    # Calling the function with a different number of index elements will be
-   # correct, as long as only the array with the largest number of indices
-   # changes.
-   func(t, UInt(1, 2, 3, 4), UInt(1, 2), UInt(1))
+   # correct, as long as only array indices are used (no slices).
+   func(t, UInt(1, 2, 3, 4), UInt(1, 2, 3, 4), UInt(1, 2, 3, 4))
 
-   # Calling the function with a different number of index elements on multiple
-   # dimensions can lead  to incorrect outputs. The heuristic will use the larger
-   # array to infer the size of the kernel, by multiplication with the recorded
-   # fraction (in this case 2). This call will (incorrectly) return a tensor of
-   # shape (4, 2, 1).
-   func(t, UInt(1, 2, 3, 4), UInt(1, 2, 3), UInt(1))
+   # Mixing array indices with slice dimensions can lead to incorrect outputs
+   # when the tensor data size happens to be a multiple of the kernel launch
+   # size. The heuristic will infer the kernel size from the tensor data
+   # pointer instead of the array indices.
+
+   @dr.freeze
+   def func2(t: TensorXf, row: UInt):
+      return t[row, :]
+
+   t2 = TensorXf(dr.arange(Float, 10*10*3), shape=(10, 10, 3))
+
+   # This call records the kernel with array size 2 (launch size 2*30=60,
+   # and tensor size 300 is a multiple of 60)
+   func2(t2, UInt(0, 1))
+
+   # This call will (incorrectly) replay with the old kernel size
+   func2(t2, UInt(0, 1, 2))
 
 
 .. warning::

@@ -17,19 +17,28 @@
 #include "base.h"
 #include "slice.h"
 #include "meta.h"
+#include <algorithm>
 #include <vector>
 
 /// Holds metadata about slicing component
 struct Component {
+    enum Type { None, Integer, Slice, Advanced };
+
+    Type type;
     Py_ssize_t start, step, slice_size, size;
     nb::object object;
 
-    Component(Py_ssize_t start, Py_ssize_t step, Py_ssize_t slice_size,
-              Py_ssize_t size)
-        : start(start), step(step), slice_size(slice_size), size(size) { }
+    Component(Type t)
+        : type(t), start(0), step(1), slice_size(1), size(1) { }
 
-    Component(nb::handle h, Py_ssize_t slice_size, Py_ssize_t size)
-        : start(0), step(1), slice_size(slice_size), size(size),
+    Component(Type t, Py_ssize_t start, Py_ssize_t step,
+              Py_ssize_t slice_size, Py_ssize_t size)
+        : type(t), start(start), step(step),
+          slice_size(slice_size), size(size) { }
+
+    Component(Type t, nb::handle h, Py_ssize_t slice_size,
+              Py_ssize_t size)
+        : type(t), start(0), step(1), slice_size(slice_size), size(size),
           object(nb::borrow(h)) { }
 };
 
@@ -72,11 +81,13 @@ slice_index(const nb::type_object_t<ArrayBase> &dtype,
            indices_len = nb::len(indices);
 
     std::vector<Component> components;
-    components.reserve(shape_len);
+    components.reserve(indices_len);
+
+    size_t advanced_size = 0;
 
     for (nb::handle h : indices) {
         if (h.is_none()) {
-            shape_out.append(1);
+            components.emplace_back(Component::None);
             continue;
         }
 
@@ -96,15 +107,13 @@ slice_index(const nb::type_object_t<ArrayBase> &dtype,
                           "bounds for axis %zu with size %zd.",
                           v, components.size(), size);
 
-            components.emplace_back(v, 1, 1, size);
+            components.emplace_back(Component::Integer, v, 1, 1, size);
             continue;
         } else if (tp.is(&PySlice_Type)) {
             Py_ssize_t start, stop, step;
             size_t slice_length;
             nb::detail::slice_compute(h.ptr(), size, start, stop, step, slice_length);
-            components.emplace_back(start, step, (Py_ssize_t) slice_length, size);
-            shape_out.append(slice_length);
-            size_out *= slice_length;
+            components.emplace_back(Component::Slice, start, step, (Py_ssize_t) slice_length, size);
             continue;
         } else if (is_drjit_type(tp)) {
             const ArraySupplement *s2 = &supp(tp);
@@ -138,9 +147,18 @@ slice_index(const nb::type_object_t<ArrayBase> &dtype,
                 if (!o.type().is(dtype))
                     o = dtype(o);
 
-                components.emplace_back(o, slice_size, size);
-                shape_out.append(slice_size);
-                size_out *= slice_size;
+                components.emplace_back(Component::Advanced, o, slice_size, size);
+
+                if (advanced_size == 0)
+                    advanced_size = slice_size;
+                else if (slice_size != 1 && advanced_size != 1 &&
+                         advanced_size != slice_size)
+                    nb::raise("drjit.slice_index(): advanced index arrays "
+                              "with shapes %zu and %zu cannot be broadcast "
+                              "together.", advanced_size, slice_size);
+                else if (slice_size > advanced_size)
+                    advanced_size = slice_size;
+
                 continue;
             }
         } else if (tp.is(&PyEllipsis_Type)) {
@@ -151,9 +169,7 @@ slice_index(const nb::type_object_t<ArrayBase> &dtype,
                 if (shape_offset >= shape_len)
                     nb::detail::fail("slice_index(): internal error.");
                 size = nb::cast<Py_ssize_t>(shape[shape_offset++]);
-                components.emplace_back(0, 1, size, size);
-                shape_out.append(size);
-                size_out *= size;
+                components.emplace_back(Component::Slice, 0, 1, size, size);
             }
             continue;
         }
@@ -167,10 +183,45 @@ slice_index(const nb::type_object_t<ArrayBase> &dtype,
     // Implicit ellipsis at the end
     while (shape_offset != shape_len) {
         Py_ssize_t size = nb::cast<Py_ssize_t>(shape[shape_offset++]);
-        components.emplace_back(0, 1, size, size);
-        shape_out.append(size);
-        size_out *= size;
+        components.emplace_back(Component::Slice, 0, 1, size, size);
     }
+
+    // Build output shape following PyTorch/NumPy advanced indexing
+    // rules: consecutive advanced indices produce a single dimension
+    // in place; non-consecutive ones move it to the front.
+    shape_out.clear();
+
+    bool has_advanced = false, consecutive = true, in_gap = false;
+    for (const auto &c : components) {
+        if (c.type == Component::Advanced) {
+            if (in_gap) consecutive = false;
+            has_advanced = true;
+            in_gap = false;
+        } else if (has_advanced &&
+                   (c.type == Component::Slice || c.type == Component::None)) {
+            in_gap = true;
+        }
+    }
+
+    bool advanced_added = false;
+    if (has_advanced && !consecutive) {
+        advanced_added = true;
+        shape_out.append(advanced_size);
+    }
+    for (const auto &c : components) {
+        if (c.type == Component::None)
+            shape_out.append(1);
+        else if (c.type == Component::Slice)
+            shape_out.append(c.slice_size);
+        else if (c.type == Component::Advanced && !advanced_added) {
+            advanced_added = true;
+            shape_out.append(advanced_size);
+        }
+    }
+
+    size_out = 1;
+    for (nb::handle h : shape_out)
+        size_out *= nb::cast<size_t>(h);
 
     if (size_out == 0)
         return { nb::tuple(shape_out), dtype() };
@@ -181,9 +232,10 @@ slice_index(const nb::type_object_t<ArrayBase> &dtype,
     // passthrough axes a slab of the linear output index maps directly
     // to the input. Coalesce each run into one synthetic axis so the
     // main loop below handles it as one ordinary iteration.
+    // shape_out is not affected.
     auto is_passthrough = [](const Component &c) {
-        return !c.object.is_valid() && c.start == 0 && c.step == 1 &&
-               c.slice_size == c.size;
+        return c.type == Component::Slice && c.start == 0 &&
+               c.step == 1 && c.slice_size == c.size;
     };
     {
         size_t out = 0;
@@ -194,11 +246,11 @@ slice_index(const nb::type_object_t<ArrayBase> &dtype,
                 ++out; ++k;
                 continue;
             }
-            size_t run_size = 1;
+            Py_ssize_t run_size = 1;
             while (k < components.size() && is_passthrough(components[k]))
                 run_size *= components[k++].size;
-            components[out++] = Component(0, 1, (Py_ssize_t) run_size,
-                                          (Py_ssize_t) run_size);
+            components[out++] = Component(
+                Component::Slice, 0, 1, run_size, run_size);
         }
         components.erase(components.begin() + out, components.end());
     }
@@ -206,16 +258,16 @@ slice_index(const nb::type_object_t<ArrayBase> &dtype,
     // A "skippable" axis has output size 1 *and* a fixed input position,
     // so its contribution is a single constant we fold into `base`. Two
     // forms qualify: a literal integer index `t[i]`, and a `:` slice on
-    // a size-1 input dim. (An index-array `t[arr]` with len(arr) == 1
-    // also has output size 1, but reads `arr[0]` at runtime, so it
-    // requires a gather and is NOT skippable.)
+    // a size-1 input dim. (An array index with len==1 also has output
+    // size 1, but reads arr[0] at runtime, so it is NOT skippable.)
     auto is_skippable = [](const Component &c) {
-        return !c.object.is_valid() && c.slice_size == 1;
+        return c.type == Component::Integer ||
+               (c.type == Component::Slice && c.slice_size == 1);
     };
 
     // Walk `components` once to compute:
     //   `base`  -- the total constant input offset, summing
-    //              `start * input_stride` over every non-gather axis.
+    //              `start * in_stride` over every non-Advanced axis.
     //              Seeded into `index_out` so the main loop's per-axis
     //              fma absorbs it for free (one fewer add per axis).
     //   `first` -- index of the outermost non-skippable axis. The main
@@ -226,7 +278,8 @@ slice_index(const nb::type_object_t<ArrayBase> &dtype,
     size_t in_stride = 1, first = components.size();
     for (size_t k = components.size(); k-- > 0;) {
         const Component &c = components[k];
-        if (!c.object.is_valid())
+        if (c.type == Component::None) continue;
+        if (c.type != Component::Advanced)
             base += uint32_t(c.start * in_stride);
         if (!is_skippable(c))
             first = k;
@@ -237,14 +290,45 @@ slice_index(const nb::type_object_t<ArrayBase> &dtype,
     nb::object active = nb::borrow(Py_True);
     nb::object index_out = dtype(base);
 
+    // Pre-extract the advanced index before the main loop.
+    nb::object advanced_idx;
+    if (has_advanced && size_out == advanced_size) {
+        // Advanced dim is the only output dim.
+        advanced_idx = index;
+    } else if (has_advanced && !consecutive) {
+        // Non-consecutive: advanced dim is outermost.
+        size_t rest_size = size_out / advanced_size;
+        advanced_idx = index.floor_div(dtype(rest_size));
+        index = fma(advanced_idx, dtype(uint32_t(-rest_size)), index);
+    }
+
     // Process axes from innermost to outermost, peeling one output
     // coordinate off `index` at each step.
     in_stride = 1;
     for (size_t k = components.size(); k-- > first;) {
         const Component &c = components[k];
+        if (c.type == Component::None) continue;
         if (!is_skippable(c)) {
             nb::object rem;
-            if (k == first) {
+            if (has_advanced && c.type == Component::Advanced) {
+                // All advanced components share one output dim.
+                // For consecutive, the first one peels; the rest reuse.
+                if (!advanced_idx.is_valid()) {
+                    if (k == first ||
+                        components[first].type == Component::Advanced) {
+                        // No more Slice dims to peel — index already
+                        // holds the advanced coordinate.
+                        advanced_idx = std::move(index);
+                    } else {
+                        nb::object next =
+                            index.floor_div(dtype(advanced_size));
+                        advanced_idx = fma(
+                            next, dtype(uint32_t(-advanced_size)), index);
+                        index = std::move(next);
+                    }
+                }
+                rem = (c.slice_size == 1) ? dtype(0) : advanced_idx;
+            } else if (k == first) {
                 rem = std::move(index);
             } else {
                 nb::object next = index.floor_div(dtype(c.slice_size));
@@ -253,10 +337,10 @@ slice_index(const nb::type_object_t<ArrayBase> &dtype,
             }
 
             // Add this axis's contribution to the input linear index:
-            //   slice:  (step * rem) * in_stride   (start * in_stride is in `base`)
-            //   gather: arr[rem]    * in_stride
+            //   slice:    (step * rem) * in_stride   (start * in_stride is in `base`)
+            //   advanced: gather(arr, rem) * in_stride
             uint32_t coef = uint32_t(in_stride);
-            if (c.object.is_valid())
+            if (c.type == Component::Advanced)
                 rem = gather(dtype, c.object, rem, active, ReduceMode::Auto);
             else
                 coef *= uint32_t(c.step);
