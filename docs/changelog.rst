@@ -5,8 +5,8 @@
 Changelog
 #########
 
-DrJit 1.4.0 (TBA)
------------------
+DrJit 1.4.0 (June 25, 2026)
+---------------------------
 
 **Major new Features**
 
