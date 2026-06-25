@@ -41,6 +41,8 @@ struct LoopState {
     size_t active_size;
     /// Has the alias-free working copy of 'state' been built yet?
     bool dealiased = false;
+    /// Scratch set to detect aliasing in the state on each read
+    tsl::robin_set<uint64_t, UInt64Hasher> seen;
 
     LoopState(nb::tuple &&state, nb::callable &&cond, nb::callable &&body,
               dr::vector<dr::string> &&labels, bool strict, bool check_size)
@@ -108,7 +110,8 @@ static void while_loop_read_cb(void *p, dr::vector<uint64_t> &indices) {
     // returns the same array object in several state entries.
     bool aliased = false;
     if (ls->dealiased) {
-        tsl::robin_set<uint64_t, UInt64Hasher> seen;
+        tsl::robin_set<uint64_t, UInt64Hasher> &seen = ls->seen;
+        seen.clear();
         seen.reserve(indices.size());
         for (uint64_t index : indices) {
             if (!(uint32_t) index)
