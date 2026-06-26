@@ -45,6 +45,9 @@ DrJit 1.4.0 (June 25, 2026)
   fast transpose convolution instead of atomic scatters whenever possible. The
   new ``boundary`` argument is also available on :py:func:`dr.resample()
   <resample>`.
+  (Dr.Jit commits
+  `00b40a <https://github.com/mitsuba-renderer/drjit/commit/00b40a6e873abf2031ed7e11fc19f505b96ec383>`__,
+  `d96ba5 <https://github.com/mitsuba-renderer/drjit/commit/d96ba5d933cb805e51f5599b4af020ad5b34250d>`__).
 
 - **Transpose**: Added :py:attr:`dr.ArrayBase.T <ArrayBase.T>` and
   :py:attr:`dr.ArrayBase.mT <ArrayBase.mT>`, matching PyTorch's semantics. (PR
@@ -95,15 +98,18 @@ DrJit 1.4.0 (June 25, 2026)
   The :py:func:`nn.pack() <drjit.nn.pack>` function is now differentiable. This enables
   the use of Cooperative Vectors with matrix-level optimizers
   like :py:class:`Muon <drjit.opt.Muon>`.
+  (PR `#490 <https://github.com/mitsuba-renderer/drjit/pull/490>`__).
 
 - **Reverse-mode differentiation of symbolic loops**:
   :py:func:`@dr.syntax <syntax>` ``while`` loops and symbolic
   :py:func:`dr.while_loop() <while_loop>` calls are now differentiable in
   reverse mode via trajectory replay. See the
   :ref:`documentation <diff_loops>` for details.
+  (PR `#491 <https://github.com/mitsuba-renderer/drjit/pull/491>`__).
 
 - **NumPy-style advanced tensor indexing**: Tensor indexing with multiple
   integer arrays now follows NumPy/PyTorch semantics.
+  (PR `#460 <https://github.com/mitsuba-renderer/drjit/pull/460>`__).
 
 - **NumPy-style array/tensor manipulation and sorting**: This release brings a
   large set NumPy-compatible functions for sorting, reshaping, and reindexing
@@ -252,6 +258,7 @@ DrJit 1.4.0 (June 25, 2026)
 - Fixed a bug in :py:class:`nn.SinEncode <drjit.nn.SinEncode>` where the
   per-octave phase offset did not match the documented formula. Code using
   ``shift=0`` is unaffected.
+  (PR `#490 <https://github.com/mitsuba-renderer/drjit/pull/490>`__).
 
 - Fixed incorrect type names in :py:func:`dr.graphviz_ad() <graphviz_ad>`.
   (commit `0c685e <https://github.com/mitsuba-renderer/drjit/commit/0c685e42d553aad27063c6fd756f5cba91ac503c>`__).
