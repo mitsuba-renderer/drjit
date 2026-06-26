@@ -843,3 +843,94 @@ def test28_permutation_tensor(t):
         ((3, 5, 2, 4), 0), ((3, 5, 2, 4), 1), ((3, 5, 2, 4), 2), ((3, 5, 2, 4), 3),
     ]:
         check(shape, axis)
+
+
+# Lower median oracle: the element at sorted rank (n - 1) // 2.
+def _lower_median(x_np, axis=None, keepdims=False):
+    import numpy as np
+    return np.quantile(x_np, 0.5, axis=axis, method='lower', keepdims=keepdims)
+
+
+@pytest.test_arrays('jit, float32, shape=(*)')
+def test29_median_1d(t):
+    np = pytest.importorskip("numpy")
+
+    # The lower median preserves the element type (an existing element is
+    # selected), so it works identically across float and integer types.
+    for arr_t in (t, dr.float64_array_t(t), dr.int32_array_t(t)):
+        for x in ([3, 1, 4, 1, 5, 9, 2],          # odd  -> central element
+                  [3, 1, 4, 1, 5, 9, 2, 6],       # even -> lower of the two
+                  [42],                           # n=1
+                  [2, 1]):                         # n=2
+            x_np = np.array(x)
+            assert dr.median(arr_t(x))[0] == _lower_median(x_np)
+            assert dr.median(arr_t(x), axis=None)[0] == _lower_median(x_np)
+
+    # The result keeps the input element type, including for integers.
+    i32 = dr.int32_array_t(t)
+    assert dr.median(i32([1, 2, 3, 4]))[0] == 2   # lower of (2, 3), exact int
+
+    # return_index gives the position of the selected element
+    x = t([3, 1, 4, 1, 5, 9, 2, 6])
+    v, idx = dr.median(x, return_index=True)
+    assert v[0] == _lower_median(x.numpy())
+    assert dr.gather(t, x, idx)[0] == v[0]
+
+    # Python iterables and scalars fall back to a sorted-list median
+    assert dr.median([3, 1, 2]) == _lower_median(np.array([3, 1, 2]))
+    assert dr.median([3, 1, 2, 4]) == _lower_median(np.array([3, 1, 2, 4]))
+    v, idx = dr.median([3, 1, 2, 4], return_index=True)
+    assert v == 2 and idx == 2
+    assert dr.median(7.0) == 7.0
+
+
+@pytest.test_arrays('is_tensor, jit, float32')
+def test30_median_tensor(t):
+    np = pytest.importorskip("numpy")
+    rng = np.random.default_rng(42)
+
+    def check(shape, axis, keepdims):
+        x_np = rng.standard_normal(shape).astype(np.float32)
+        x_dr = t(x_np)
+        a = dr.median(x_dr, axis=axis, keepdims=keepdims)
+        e = _lower_median(x_np, axis=axis, keepdims=keepdims)
+        assert a.shape == e.shape, f'shape mismatch shape={shape} axis={axis} keepdims={keepdims}'
+        assert dr.allclose(a, e), f'value mismatch shape={shape} axis={axis} keepdims={keepdims}'
+
+    import itertools
+    for shape in [(4, 6), (7, 11), (3, 4, 5), (2, 3, 7)]:
+        ndim = len(shape)
+        axes = [None, -1, *range(ndim)]
+        for r in range(2, ndim + 1):
+            axes += itertools.combinations(range(ndim), r)
+        for axis in axes:
+            for keepdims in (False, True):
+                check(shape, axis, keepdims)
+
+    # return_index along a single axis yields along-axis indices that
+    # reproduce the median values via take_along_axis.
+    x_np = rng.standard_normal((4, 6)).astype(np.float32)
+    x_dr = t(x_np)
+    for axis in (0, 1, -1):
+        v, idx = dr.median(x_dr, axis=axis, keepdims=True, return_index=True)
+        picked = np.take_along_axis(x_np, idx.numpy(), axis=axis)
+        assert np.array_equal(picked, v.numpy()), f'return_index mismatch axis={axis}'
+
+
+@pytest.test_arrays('jit, float32, shape=(*), is_diff')
+def test31_median_ad(t):
+    # The lower median selects a single input element, so the gradient is
+    # 1.0 on that element and 0.0 elsewhere (odd and even alike).
+
+    x = t([3, 1, 4, 1, 5, 9, 2])  # sorted central value is 3 (index 0)
+    dr.enable_grad(x)
+    m = dr.median(x)
+    dr.backward(m)
+    assert dr.allclose(x.grad, [1, 0, 0, 0, 0, 0, 0])
+
+    # Even count: lower median is 3 (index 0), the lower of {3, 4}
+    y = t([3, 1, 4, 1, 5, 9, 2, 6])
+    dr.enable_grad(y)
+    m = dr.median(y)
+    dr.backward(m)
+    assert dr.allclose(y.grad, [1, 0, 0, 0, 0, 0, 0, 0])

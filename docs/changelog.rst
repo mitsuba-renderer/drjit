@@ -5,6 +5,12 @@
 Changelog
 #########
 
+DrJit 1.5.0 (unreleased)
+------------------------
+
+- Added :py:func:`dr.median() <median>`, which computes the median along one
+  or more axes.
+
 DrJit 1.4.0 (June 25, 2026)
 ---------------------------
 

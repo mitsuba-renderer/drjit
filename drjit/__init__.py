@@ -1926,6 +1926,101 @@ def argsort(value: ArrayBase, /, axis: int = -1, descending: bool = False) -> Ar
         return _radix_sort(value, len(value), descending, return_indices=True)
 
 
+def _median_blocks(inner, block_size, return_index):
+    """
+    Select the lower median (the element at rank ``(block_size - 1) // 2``) of
+    each contig. block of ``block_size`` elements of the flat array ``inner``
+    """
+    arr_tp = type(inner)
+    if block_size == 0:
+        raise RuntimeError("median(): cannot compute the median of an empty input.")
+
+    UInt32 = uint32_array_t(arr_tp)
+    # A radix-select would avoid fully sorting each block, but no concrete use
+    # case currently justifies the added complexity over reusing the sort.
+    perm = _radix_sort(inner, block_size, descending=False, return_indices=True)
+    base = arange(UInt32, len(inner) // block_size) * block_size
+
+    idx = gather(UInt32, perm, base + (block_size - 1) // 2)
+    values = gather(arr_tp, inner, idx)
+    return (values, idx - base) if return_index else values
+
+
+@overload
+def median(value: ArrayT, /, axis: Union[int, Tuple[int, ...], None] = -1,
+           keepdims: bool = False, return_index: Literal[False] = False) -> ArrayT: ...
+
+
+@overload
+def median(value: ArrayT, /, axis: Union[int, Tuple[int, ...], None] = -1,
+           keepdims: bool = False, *, return_index: Literal[True]) -> Tuple[ArrayT, ArrayBase]: ...
+
+
+def median(value: ArrayT, /, axis: Union[int, Tuple[int, ...], None] = -1,
+           keepdims: bool = False, return_index: bool = False) -> ArrayT:
+    '''
+    Compute the median of the input along the specified axis/axes.
+
+    The median is the element at sorted rank ``(N - 1) // 2`` of the ``N``
+    reduced elements (the lower of the two central values for even ``N``).
+
+    See :py:func:`dr.reduce` for the meaning of ``axis`` and ``keepdims``.
+
+    Args:
+        value: Input array or tensor.
+
+        axis (int | tuple[int, ...] | None): The axis/axes along which to
+          operate. The default ``axis=-1`` reduces along the last axis.
+          The special argument ``axis=None`` computes the median over all
+          elements.
+
+        keepdims (bool): if ``True``, the reduced axes are retained as
+          size-1 dimensions in the output. Defaults to ``False``.
+
+        return_index (bool): if ``True``, additionally return the index of
+          the selected element within the reduced axis/axes (the index into
+          the flattened reduced extent when reducing several axes at once).
+
+    Returns:
+        The median along the specified axis/axes, or a ``(values, indices)``
+        tuple if ``return_index`` is set.
+    '''
+    if not is_array_v(value):
+        items = list(value) if hasattr(value, '__iter__') else [value]
+        n = len(items)
+        if n == 0:
+            raise RuntimeError("median(): cannot compute the median of an empty input.")
+        sel = sorted(range(n), key=items.__getitem__)[(n - 1) // 2]
+        return (items[sel], sel) if return_index else items[sel]
+
+    if not is_tensor_v(value):
+        return _median_blocks(value, len(value), return_index)
+
+    shape = value.shape
+    ndim = len(shape)
+    if axis is None:
+        axes = tuple(range(ndim))
+    else:
+        axes = (axis,) if isinstance(axis, int) else tuple(axis)
+        axes = tuple(sorted(a % ndim for a in axes))
+
+    # Move the reduced axes to the end so they form contiguous blocks.
+    tail = tuple(range(ndim - len(axes), ndim))
+    if axes != tail:
+        value = moveaxis(value, axes, tail)
+
+    if keepdims:
+        out_shape = tuple(1 if d in axes else shape[d] for d in range(ndim))
+    else:
+        out_shape = tuple(shape[d] for d in range(ndim) if d not in axes)
+
+    res = _median_blocks(value.array, prod([shape[a] for a in axes]), return_index)
+    if return_index:
+        med, idx = res
+        return tensor_t(type(med))(med, out_shape), tensor_t(type(idx))(idx, out_shape)
+    return tensor_t(type(res))(res, out_shape)
+
+
 def normalize(arg: T, /) -> T:
     '''
     Normalize the input vector so that it has unit length and return the

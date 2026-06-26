@@ -80,6 +80,7 @@ Reductions
 .. autofunction:: mean
 .. autofunction:: var
 .. autofunction:: std
+.. autofunction:: median
 .. autofunction:: argmin
 .. autofunction:: argmax
 .. autofunction:: sort
