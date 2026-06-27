@@ -382,6 +382,10 @@ def test08_prefix_sum(t):
     assert dr.all(dr.prefix_sum(x) == [0, 3, 6, 9])
     assert dr.all(dr.cumsum(x) == [3, 6, 9, 12])
 
+    A = m.TensorXf([[1, 2, 3], [4, 5, 6]])
+    assert dr.all(dr.cumsum(A, axis=(0, 1)) == m.TensorXf([[1, 3, 6], [5, 12, 21]]))
+    assert dr.all(dr.prefix_sum(A, axis=(0, 1)) == m.TensorXf([[0, 0, 0], [0, 1, 3]]))
+
 
 @pytest.test_arrays('shape=(*), bool')
 def test09_compress(t):
