@@ -43,7 +43,7 @@ def test02_add_sub(t, size):
 
 @pytest.mark.parametrize('size', [0, 20, 100])
 @pytest.test_arrays('jit,float16,shape=(*),-diff', 'jit,float32,shape=(*),-diff')
-def test03_add_min_max_fma(t, size):
+def test03_min_max_fma_dot_abs(t, size):
     skip_if_coopvec_not_supported(t)
 
     # Test min/max/FMA operations
@@ -70,6 +70,17 @@ def test03_add_min_max_fma(t, size):
     assert r0 == 10 and r1 == 21
     r0, r1 = dr.fma(a, zeros, c)         # c
     assert r0 == 11 and r1 == 13
+
+    # Dot product
+    p = nn.CoopVec(t(1), t(2), t(3))
+    q = nn.CoopVec(t(4), t(5), t(6))
+    assert dr.allclose(dr.dot(p, q), 32)
+    assert dr.allclose(dr.dot(q, p), 32)
+    assert dr.allclose(dr.dot(p, p), 14)
+
+    # Absolute value
+    r0, r1, r2 = dr.abs(nn.CoopVec(t(-1), t(2), t(-3)))
+    assert r0 == 1 and r1 == 2 and r2 == 3
 
 @pytest.mark.parametrize('sub_slice', [False, True])
 @pytest.test_arrays('jit,float16,shape=(*),-diff')
