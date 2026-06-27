@@ -32,6 +32,12 @@ template <JitBackend Backend> void bind(nb::module_ m) {
         return target;
     });
 
+    m.def("packet_scatter_ptr", [](Float v0, Float v1, UInt32 index) -> Pair {
+        Float target[4] = { Float(0.f), Float(0.f), Float(0.f), Float(0.f) };
+        dr::scatter(target, Array2f(v0, v1), index);
+        return { target[0] + target[2], target[1] + target[3] };
+    });
+
     m.def("packet_gather_dynamic", [](Float source, UInt32 index) -> Pair {
         Float out[2];
         dr::gather_packet_dynamic(2, source, index, out, true);

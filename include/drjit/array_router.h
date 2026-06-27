@@ -1069,8 +1069,25 @@ Target gather(Source &&source, const Index &index, const Mask &mask_ = true,
     (void) mode;
 }
 
+namespace detail {
+    template <typename Target, typename Index> Target broadcast_index(const Index &index) {
+        using Scalar = scalar_t<Index>;
+        static_assert(Target::Size != Dynamic);
+
+        Index scaled = index * Scalar(Target::Size);
+        Target result;
+        for (size_t i = 0; i < Target::Size; ++i) {
+            if constexpr (depth_v<Target> == depth_v<Index> + 1)
+                result.entry(i) = scaled + Scalar(i);
+            else
+                result.entry(i) = broadcast_index<value_t<Target>>(scaled + Scalar(i));
+        }
+        return result;
+    }
+}
+
 template <typename Target, typename Value, typename Index, typename Mask = mask_t<Index>>
-void scatter(Target &target, const Value &value, const Index &index,
+void scatter(Target &&target, const Value &value, const Index &index,
              const Mask &mask_ = true, ReduceMode mode = ReduceMode::Auto) {
     DRJIT_MARK_USED(mode);
     // Broadcast mask to match shape of Index
@@ -1101,8 +1118,13 @@ void scatter(Target &target, const Value &value, const Index &index,
         if constexpr (depth_v<Value> == depth_v<Index>) {
             value.scatter_(target, uint32_array_t<Value>(index), mask, mode);
         } else {
-            Target::template scatter_packet_<Value::Size>(
-                target, value, uint32_array_t<value_t<Value>>(index), mask, mode);
+            if constexpr (is_array_v<Target>) {
+                Target::template scatter_packet_<Value::Size>(
+                    target, value, uint32_array_t<value_t<Value>>(index), mask, mode);
+            } else {
+                using TargetIndex = replace_scalar_t<Value, scalar_t<Index>>;
+                scatter(target, value, detail::broadcast_index<TargetIndex>(index), mask);
+            }
         }
     } else if constexpr (is_drjit_struct_v<Value>) {
         static_assert(is_drjit_struct_v<Target>,

@@ -72,3 +72,16 @@ def test02_scatter(t, fn, packet):
     assert dr.allclose(dr.grad(target), dr.grad(target_r))
     for v, v_r in zip(vals, vals_r):
         assert dr.allclose(dr.grad(v), dr.grad(v_r))
+
+
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+def test03_packet_scatter_ptr(t):
+    pkg = get_pkg(t)
+    UInt32 = sys.modules[t.__module__].UInt32
+    index = UInt32(0, 1)
+    v0, v1 = t(10, 20), t(30, 40)
+
+    r0, r1 = pkg.packet_scatter_ptr(v0, v1, index)
+
+    assert dr.allclose(r0, v0)
+    assert dr.allclose(r1, v1)
