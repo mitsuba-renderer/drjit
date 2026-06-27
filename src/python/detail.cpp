@@ -435,6 +435,8 @@ void export_detail(nb::module_ &) {
               return nb::make_tuple(major, minor);
           })
 
+     .def("coop_vec_supported", &jit_coop_vec_supported, "backend"_a)
+
      .def("trace_func", &trace_func, "frame"_a, "event"_a,
           "arg"_a = nb::none())
 

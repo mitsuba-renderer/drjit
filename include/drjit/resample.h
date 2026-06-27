@@ -203,7 +203,7 @@ public:
      * It resamples the input array with the stride ``stride``.
      *
      * The main difference is that this version *traces* the resampling step.
-     * It is usable with LLVM, CUDA, and Metal arrays.
+     * It is usable with LLVM, CUDA, AMD, and Metal arrays.
      */
     template <typename Array>
     Array resample_fwd(const Array &source, uint32_t stride) const;
@@ -234,6 +234,15 @@ extern template DRJIT_EXTRA_EXPORT CUDAArray<double> Resampler::resample_fwd(con
 extern template DRJIT_EXTRA_EXPORT CUDAArray<half> Resampler::resample_bwd(const CUDAArray<half> &, uint32_t) const;
 extern template DRJIT_EXTRA_EXPORT CUDAArray<float> Resampler::resample_bwd(const CUDAArray<float> &, uint32_t) const;
 extern template DRJIT_EXTRA_EXPORT CUDAArray<double> Resampler::resample_bwd(const CUDAArray<double> &, uint32_t) const;
+#endif
+
+#if defined(DRJIT_ENABLE_AMD)
+extern template DRJIT_EXTRA_EXPORT AMDArray<half> Resampler::resample_fwd(const AMDArray<half> &, uint32_t) const;
+extern template DRJIT_EXTRA_EXPORT AMDArray<float> Resampler::resample_fwd(const AMDArray<float> &, uint32_t) const;
+extern template DRJIT_EXTRA_EXPORT AMDArray<double> Resampler::resample_fwd(const AMDArray<double> &, uint32_t) const;
+extern template DRJIT_EXTRA_EXPORT AMDArray<half> Resampler::resample_bwd(const AMDArray<half> &, uint32_t) const;
+extern template DRJIT_EXTRA_EXPORT AMDArray<float> Resampler::resample_bwd(const AMDArray<float> &, uint32_t) const;
+extern template DRJIT_EXTRA_EXPORT AMDArray<double> Resampler::resample_bwd(const AMDArray<double> &, uint32_t) const;
 #endif
 
 #if defined(DRJIT_ENABLE_LLVM)

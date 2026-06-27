@@ -85,7 +85,7 @@ NAMESPACE_BEGIN(drjit)
  * representation.
  */
 struct ArrayMeta {
-    uint32_t backend       : 2;
+    uint32_t backend       : 3;
     uint32_t type          : 4;
     uint32_t ndim          : 3;
     uint32_t is_vector     : 1;
@@ -98,7 +98,7 @@ struct ArrayMeta {
     uint32_t is_class      : 1;
     uint32_t is_valid      : 1;
     uint32_t tsize_rel     : 7; // type size as multiple of 'talign'
-    uint32_t talign        : 7; // type alignment
+    uint32_t talign        : 6; // type alignment
     uint8_t shape[4];
 };
 
@@ -369,7 +369,7 @@ NB_INLINE void bind_init(ArrayBinding &b, nanobind::handle scope = {},
                      Size = sizeof(T),
                      RelSize = Size / Align;
 
-    static_assert(Align < 0x80 && RelSize < 0x80 && RelSize * Align == Size,
+    static_assert(Align < 0x40 && RelSize < 0x80 && RelSize * Align == Size,
                   "drjit::bind(): type is too large!");
 
     memset((void *) &b, 0, sizeof(ArrayBinding));
@@ -523,10 +523,17 @@ template <typename T> NB_INLINE void bind_base(ArrayBinding &b) {
                     nb::detail::raise("Could not initialize element with a "
                                       "value of type '%s'.", tp_name.c_str());
                 }
-                if (opaque)
-                    new (a) T(drjit::opaque<T>(scalar, size));
-                else
-                    new (a) T(drjit::full<T>(scalar, size));
+                if constexpr (T::IsJIT) {
+                    if (opaque)
+                        new (a) T(T::Derived::opaque_(scalar, size));
+                    else
+                        new (a) T(T::Derived::full_(scalar, size));
+                } else {
+                    if (opaque)
+                        new (a) T(drjit::opaque<T>(scalar, size));
+                    else
+                        new (a) T(drjit::full<T>(scalar, size));
+                }
             };
 
             if constexpr (std::is_same_v<scalar_t<T>, uint32_t>) {

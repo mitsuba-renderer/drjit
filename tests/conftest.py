@@ -32,6 +32,26 @@ for o in dr.__dict__.values():
 array_types = [a for a in array_types
                if not ('backend=metal' in a.__meta__ and 'type=float64' in a.__meta__)]
 
+def _backend_available(meta):
+    if 'backend=cuda' in meta:
+        return dr.has_backend(dr.JitBackend.CUDA)
+    if 'backend=llvm' in meta:
+        return dr.has_backend(dr.JitBackend.LLVM)
+    if 'backend=metal' in meta:
+        return dr.has_backend(dr.JitBackend.Metal)
+    if 'backend=amd' in meta:
+        return dr.has_backend(dr.JitBackend.AMD)
+    return True
+
+array_types = [a for a in array_types if _backend_available(a.__meta__)]
+array_packages = [
+    p for p in array_packages
+    if ((not p.__name__.startswith('drjit.cuda') or dr.has_backend(dr.JitBackend.CUDA)) and
+        (not p.__name__.startswith('drjit.llvm') or dr.has_backend(dr.JitBackend.LLVM)) and
+        (not p.__name__.startswith('drjit.metal') or dr.has_backend(dr.JitBackend.Metal)) and
+        (not p.__name__.startswith('drjit.amd') or dr.has_backend(dr.JitBackend.AMD)))
+]
+
 
 def _test_arrays(*queries, name='t'):
     """
@@ -74,6 +94,7 @@ def _test_arrays(*queries, name='t'):
     if len(combined) == 0:
         raise Exception('Query failed')
 
+    combined = sorted(combined, key=lambda a: a.__module__ + '.' + a.__name__)
     ids = [a.__module__ + '.' + a.__name__ for a in combined]
     def wrapped(func):
         return pytest.mark.parametrize(name, combined, ids=ids)(func)
@@ -112,6 +133,16 @@ def drjit_verbose():
     dr.set_log_level(dr.LogLevel.Trace)
     yield
     dr.set_log_level(level)
+
+@pytest.fixture(autouse=True)
+def drjit_cleanup():
+    yield
+    dr.sync_thread()
+    dr.flush_kernel_cache()
+    dr.kernel_history_clear()
+    dr.flush_malloc_cache()
+    dr.detail.malloc_clear_statistics()
+    dr.set_flag(dr.JitFlag.Default, True)
 
 def pytest_configure():
     pytest.test_arrays = _test_arrays # type: ignore

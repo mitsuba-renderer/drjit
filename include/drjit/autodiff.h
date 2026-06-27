@@ -85,6 +85,7 @@ struct DRJIT_TRIVIAL_ABI DiffArray
     static constexpr bool IsCUDA = Backend == JitBackend::CUDA;
     static constexpr bool IsLLVM = Backend == JitBackend::LLVM;
     static constexpr bool IsMetal = Backend == JitBackend::Metal;
+    static constexpr bool IsAMD = Backend == JitBackend::AMD;
     static constexpr bool IsFloat = drjit::is_floating_point_v<Value_> || std::is_same_v<void, Value_>;
     static constexpr bool IsClass =
         std::is_pointer_v<Value_> &&
@@ -876,6 +877,7 @@ private:
 template <typename Value> using CUDADiffArray = DiffArray<JitBackend::CUDA, Value>;
 template <typename Value> using LLVMDiffArray = DiffArray<JitBackend::LLVM, Value>;
 template <typename Value> using MetalDiffArray = DiffArray<JitBackend::Metal, Value>;
+template <typename Value> using AMDDiffArray = DiffArray<JitBackend::AMD, Value>;
 
 template <typename T> void enqueue(ADMode mode, const T &value) {
     if constexpr (is_diff_v<T> && depth_v<T> == 1)

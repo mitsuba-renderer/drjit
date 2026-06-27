@@ -429,12 +429,14 @@ void FlatVariables::schedule_jit_variables(
             switch (info.backend) {
                 case JitBackend::CUDA:  info_name = "CUDA";  break;
                 case JitBackend::LLVM:  info_name = "LLVM";  break;
+                case JitBackend::AMD:   info_name = "AMD";   break;
                 case JitBackend::Metal: info_name = "Metal"; break;
                 default: break;
             }
             switch (backend) {
                 case JitBackend::CUDA:  bk_name = "CUDA";  break;
                 case JitBackend::LLVM:  bk_name = "LLVM";  break;
+                case JitBackend::AMD:   bk_name = "AMD";   break;
                 case JitBackend::Metal: bk_name = "Metal"; break;
                 default: break;
             }

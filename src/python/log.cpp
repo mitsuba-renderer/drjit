@@ -145,7 +145,14 @@ void export_log(nb::module_ &m, PyModuleDef &pmd) {
     // Shut down the Dr.Jit component when the Python interpreter
     // has been fully wound down. Doing it above (in pmd.m_free)
     // can lead to leak warnings.
-    (void) Py_AtExit([] { drjit_py_is_alive = 0; jit_shutdown(false); });
+    (void) Py_AtExit([] {
+        drjit_py_is_alive = 0;
+#if defined(_WIN32) && defined(DRJIT_ENABLE_AMD)
+        jit_shutdown(true);
+#else
+        jit_shutdown(false);
+#endif
+    });
 
     nb::enum_<LogLevel>(m, "LogLevel")
         .value("Disable", LogLevel::Disable)

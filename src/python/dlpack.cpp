@@ -11,6 +11,7 @@
 #include "dlpack.h"
 #include "base.h"
 #include "memop.h"
+#include <drjit-core/amd.h>
 #include <drjit-core/half.h>
 #include <nanobind/ndarray.h>
 
@@ -116,7 +117,9 @@ static nb::ndarray<> dlpack(nb::handle_t<ArrayBase> h, bool force_cpu, nb::handl
             JitBackend backend = (JitBackend) s2.backend;
 
             JitVar value = JitVar::borrow(index);
-            if (force_cpu && (backend == JitBackend::CUDA || backend == JitBackend::Metal))
+            if (force_cpu && (backend == JitBackend::CUDA ||
+                              backend == JitBackend::AMD ||
+                              backend == JitBackend::Metal))
                 value = JitVar::steal(jit_var_migrate(value.index(),
                                                       JitBackend::None));
 
@@ -145,6 +148,21 @@ static nb::ndarray<> dlpack(nb::handle_t<ArrayBase> h, bool force_cpu, nb::handl
                         jit_cuda_sync_stream(stream_handle);
                     }
                 }
+            } else if (backend == JitBackend::AMD && !force_cpu) {
+                device_type = nb::device::rocm::value;
+                device_id = jit_amd_device_raw();
+
+                if (!stream.is_none() && !stream.equal(nb::int_(-1))) {
+                    if (stream.equal(nb::int_(0))) {
+                        nb::gil_scoped_release guard;
+                        jit_sync_thread();
+                    } else {
+                        uintptr_t stream_handle;
+                        if (!nb::try_cast(stream, stream_handle))
+                            nb::raise_type_error("__dlpack__(): 'stream' argument must be 'None' or of type 'int'.");
+                        jit_amd_sync_stream(stream_handle);
+                    }
+                }
             } else {
                 nb::gil_scoped_release guard;
                 jit_sync_thread();
@@ -157,7 +175,9 @@ static nb::ndarray<> dlpack(nb::handle_t<ArrayBase> h, bool force_cpu, nb::handl
                 s2.init_index(ad_index | new_index, inst_ptr(tmp));
                 nb::inst_mark_ready(tmp);
 
-                if ((backend == JitBackend::CUDA || backend == JitBackend::Metal) && force_cpu)
+                if ((backend == JitBackend::CUDA ||
+                     backend == JitBackend::AMD ||
+                     backend == JitBackend::Metal) && force_cpu)
                     owner = std::move(tmp);
                 else
                     nb::inst_replace_move(owner, tmp);
@@ -262,6 +282,9 @@ static nb::tuple dlpack_device(nb::handle_t<ArrayBase> h) {
     if ((JitBackend) s.backend == JitBackend::CUDA) {
         device_type = nb::device::cuda::value;
         device_id = jit_cuda_device_raw();
+    } else if ((JitBackend) s.backend == JitBackend::AMD) {
+        device_type = nb::device::rocm::value;
+        device_id = jit_amd_device_raw();
     } else {
         device_type = nb::device::cpu::value;
         device_id = 0;

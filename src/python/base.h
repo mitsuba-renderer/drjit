@@ -20,7 +20,7 @@ extern nb::handle array_base;
 extern nb::handle array_module;
 
 /// Reference to the Dr.Jit core module
-extern nb::handle array_submodules[7];
+extern nb::handle array_submodules[9];
 
 /// Create and publish the ArrayBase type object
 extern void export_base(nb::module_&);

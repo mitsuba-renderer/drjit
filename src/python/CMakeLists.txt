@@ -23,7 +23,8 @@ configure_file(
 set(PY_FILES
   config.py __init__.py ast.py detail.py interop.py dda.py opt.py nn.py
   random.py hashgrid.py _sh_eval.py _reduce.py scalar/__init__.py scalar/ad.py
-  llvm/__init__.py llvm/ad.py cuda/__init__.py cuda/ad.py metal/__init__.py metal/ad.py)
+  llvm/__init__.py llvm/ad.py cuda/__init__.py cuda/ad.py amd/__init__.py
+  amd/ad.py metal/__init__.py metal/ad.py)
 
 set(PY_FILES_OUT "")
 
@@ -92,6 +93,7 @@ nanobind_add_module(
   scalar.h      scalar.cpp
   llvm.h        llvm.cpp llvm_ad.cpp
   cuda.h        cuda.cpp cuda_ad.cpp
+  amd.h         amd.cpp amd_ad.cpp
   green_context.h green_context.cpp
   metal.h       metal.cpp metal_ad.cpp
 )
@@ -139,6 +141,20 @@ endif()
 
 target_link_libraries(drjit-python PRIVATE drjit drjit-core drjit-extra)
 
+if (MSVC AND CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  set(DRJIT_CLANGRT_BUILTINS "")
+  if (DEFINED ENV{ROCM_HOME})
+    file(TO_CMAKE_PATH "$ENV{ROCM_HOME}" DRJIT_ROCM_HOME)
+    file(GLOB DRJIT_CLANGRT_BUILTINS
+      "${DRJIT_ROCM_HOME}/lib/llvm/lib/clang/*/lib/windows/clang_rt.builtins-x86_64.lib")
+  endif()
+
+  if (DRJIT_CLANGRT_BUILTINS)
+    list(GET DRJIT_CLANGRT_BUILTINS 0 DRJIT_CLANGRT_BUILTINS_LIB)
+    target_link_libraries(drjit-python PRIVATE "${DRJIT_CLANGRT_BUILTINS_LIB}")
+  endif()
+endif()
+
 # Prefer linking using lld with Identical Code Folding, if available.
 # This makes the resulting binary 37% smaller.
 if (APPLE)
@@ -166,11 +182,15 @@ if (DRJIT_ENABLE_CUDA)
   target_compile_definitions(drjit-python PRIVATE -DDRJIT_ENABLE_CUDA)
 endif()
 
+if (DRJIT_ENABLE_AMD)
+  target_compile_definitions(drjit-python PRIVATE -DDRJIT_ENABLE_AMD)
+endif()
+
 if (DRJIT_ENABLE_METAL)
   target_compile_definitions(drjit-python PRIVATE -DDRJIT_ENABLE_METAL)
 endif()
 
-if (DRJIT_ENABLE_OPTIX)
+if (DRJIT_ENABLE_OPTIX AND DRJIT_ENABLE_CUDA)
     target_compile_definitions(drjit-python PRIVATE -DDRJIT_ENABLE_OPTIX)
 endif()
 
@@ -198,6 +218,35 @@ if (MSVC)
       DEPENDS ${target}
     )
   endforeach(target)
+
+  if (DRJIT_ENABLE_AMD)
+    set(DRJIT_AMD_RUNTIME_DLLS "")
+
+    if (DRJIT_HIPRT_ROOT)
+      file(GLOB DRJIT_HIPRT_DLLS
+        "${DRJIT_HIPRT_ROOT}/dist/bin/Release/hiprt*64.dll")
+      list(APPEND DRJIT_AMD_RUNTIME_DLLS ${DRJIT_HIPRT_DLLS})
+    endif()
+
+    if (DEFINED ENV{ROCM_HOME})
+      file(TO_CMAKE_PATH "$ENV{ROCM_HOME}" DRJIT_ROCM_HOME)
+      file(GLOB DRJIT_HIP_DLLS
+        "${DRJIT_ROCM_HOME}/bin/amdhip64*.dll"
+        "${DRJIT_ROCM_HOME}/bin/amd_comgr*.dll"
+        "${DRJIT_ROCM_HOME}/bin/rocm_kpack*.dll"
+        "${DRJIT_ROCM_HOME}/bin/hiprtc*.dll")
+      list(APPEND DRJIT_AMD_RUNTIME_DLLS ${DRJIT_HIP_DLLS})
+    endif()
+
+    foreach(dll ${DRJIT_AMD_RUNTIME_DLLS})
+      get_filename_component(DLL_NAME "${dll}" NAME)
+      add_custom_command(
+        TARGET copy-targets-drjit POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+          "${dll}" "${DRJIT_PYTHON_DST_DIR}/${DLL_NAME}"
+      )
+    endforeach()
+  endif()
 
   list(APPEND DRJIT_STUB_DEPENDS copy-targets-drjit)
 endif()
@@ -245,6 +294,14 @@ if (NOT (DRJIT_SANITIZE_ASAN OR DRJIT_SANITIZE_UBSAN))
       ${DRJIT_PYTHON_DST_DIR}/cuda/ad.pyi)
     list(APPEND DRJIT_MARKERS
       ${DRJIT_PYTHON_DST_DIR}/cuda/py.typed)
+  endif()
+
+  if (DRJIT_ENABLE_AMD)
+    list(APPEND DRJIT_STUBS
+      ${DRJIT_PYTHON_DST_DIR}/amd/__init__.pyi
+      ${DRJIT_PYTHON_DST_DIR}/amd/ad.pyi)
+    list(APPEND DRJIT_MARKERS
+      ${DRJIT_PYTHON_DST_DIR}/amd/py.typed)
   endif()
 
   if (DRJIT_ENABLE_METAL)

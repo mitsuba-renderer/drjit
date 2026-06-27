@@ -772,6 +772,10 @@ nb::object import_ndarray(ArrayMeta m, PyObject *arg, vector<size_t> *shape_out,
                 m.backend = (uint8_t) JitBackend::CUDA;
                 break;
 
+            case nb::device::rocm::value:
+                m.backend = (uint8_t) JitBackend::AMD;
+                break;
+
             case nb::device::cpu::value:
                 m.backend = (uint8_t) JitBackend::LLVM;
                 break;
@@ -806,9 +810,10 @@ nb::object import_ndarray(ArrayMeta m, PyObject *arg, vector<size_t> *shape_out,
     VarType vt = (VarType) m.type;
 
     if (backend != JitBackend::None) {
-        int32_t device_type = (backend == JitBackend::CUDA || backend == JitBackend::Metal)
-                                  ? nb::device::cuda::value
-                                  : nb::device::cpu::value;
+        int32_t device_type = backend == JitBackend::CUDA ? nb::device::cuda::value :
+                              backend == JitBackend::AMD  ? nb::device::rocm::value :
+                              backend == JitBackend::Metal ? nb::device::metal::value :
+                              nb::device::cpu::value;
 
         uint32_t index;
 
@@ -820,6 +825,7 @@ nb::object import_ndarray(ArrayMeta m, PyObject *arg, vector<size_t> *shape_out,
             JitBackend src_backend;
             switch (ndarr.device_type()) {
                 case nb::device::cuda::value: src_backend = JitBackend::CUDA; break;
+                case nb::device::rocm::value: src_backend = JitBackend::AMD; break;
                 case nb::device::cpu::value:  src_backend = JitBackend::None; break;
                 default: nb::raise("Unsupported source device!");
             }

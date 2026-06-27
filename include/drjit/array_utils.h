@@ -16,6 +16,10 @@
 
 #pragma once
 
+#if defined(_MSC_VER)
+#  include <intrin.h>
+#endif
+
 #if defined(DRJIT_NO_CORE_LIB)
 #  include <stdexcept>
 #  include <cstdio>

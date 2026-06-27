@@ -83,6 +83,13 @@ void export_quat(nb::module_ &m) {
     export_t<dr::CUDAArray<double>>(m);
 #endif
 
+#if defined(DRJIT_ENABLE_AMD)
+    export_t<dr::AMDDiffArray<float>>(m);
+    export_t<dr::AMDDiffArray<double>>(m);
+    export_t<dr::AMDArray<float>>(m);
+    export_t<dr::AMDArray<double>>(m);
+#endif
+
 #if defined(DRJIT_ENABLE_LLVM)
     export_t<dr::LLVMDiffArray<float>>(m);
     export_t<dr::LLVMDiffArray<double>>(m);

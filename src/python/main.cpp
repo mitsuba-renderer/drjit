@@ -20,6 +20,7 @@
 #include "scalar.h"
 #include "llvm.h"
 #include "cuda.h"
+#include "amd.h"
 #include "metal.h"
 #include "reduce.h"
 #include "eval.h"
@@ -81,6 +82,13 @@ NB_MODULE(_drjit_ext, m_) {
                 cuda_ad = nb::module_::import_("drjit.cuda.ad");
 #endif
 
+#if defined(DRJIT_ENABLE_AMD)
+    backends |= 1u << (uint32_t) JitBackend::AMD;
+
+    nb::module_ amd    = nb::module_::import_("drjit.amd"),
+                amd_ad = nb::module_::import_("drjit.amd.ad");
+#endif
+
 #if defined(DRJIT_ENABLE_METAL)
     backends |= 1u << (uint32_t) JitBackend::Metal;
 
@@ -96,6 +104,7 @@ NB_MODULE(_drjit_ext, m_) {
         .value("Invalid", JitBackend::None, doc_JitBackend_Invalid)
         .value("CUDA", JitBackend::CUDA, doc_JitBackend_CUDA)
         .value("LLVM", JitBackend::LLVM, doc_JitBackend_LLVM)
+        .value("AMD", JitBackend::AMD)
         .value("Metal", JitBackend::Metal, doc_JitBackend_Metal);
 
     nb::enum_<JitFlag>(m, "JitFlag", doc_JitFlag, nb::is_arithmetic())
@@ -292,6 +301,11 @@ NB_MODULE(_drjit_ext, m_) {
     export_cuda_ad(cuda_ad);
 #endif
 
+#if defined(DRJIT_ENABLE_AMD)
+    export_amd(amd);
+    export_amd_ad(amd_ad);
+#endif
+
 #if defined(DRJIT_ENABLE_METAL)
     export_metal(metal);
     export_metal_ad(metal_ad);
@@ -307,6 +321,7 @@ NB_MODULE(_drjit_ext, m_) {
             case JitBackend::None: key = "scalar"; break;
             case JitBackend::CUDA: key = "cuda"; break;
             case JitBackend::LLVM: key = "llvm"; break;
+            case JitBackend::AMD: key = "amd"; break;
             case JitBackend::Metal: key = "metal"; break;
             default: nb::raise("Unknown backend");
         }
@@ -333,13 +348,15 @@ NB_MODULE(_drjit_ext, m_) {
                   backend = JitBackend::LLVM;
               else if (strcmp(name, "metal") == 0)
                   backend = JitBackend::Metal;
+              else if (strcmp(name, "amd") == 0)
+                  backend = JitBackend::AMD;
               else if (strcmp(name, "scalar") == 0)
                   backend = JitBackend::None;
               else
-                  nb::raise("set_backend(): argument must equal 'cuda', 'llvm', 'metal', or 'scalar'!");
+                  nb::raise("set_backend(): argument must equal 'cuda', 'llvm', 'metal', 'amd', or 'scalar'!");
               set_backend(backend);
           },
-          nb::sig("def set_backend(arg: Literal['cuda', 'llvm', 'metal', 'scalar'], /)"), doc_set_backend);
+          nb::sig("def set_backend(arg: Literal['cuda', 'llvm', 'metal', 'amd', 'scalar'], /)"), doc_set_backend);
 
     m.def("set_backend", set_backend);
 
@@ -352,6 +369,8 @@ NB_MODULE(_drjit_ext, m_) {
             set_backend(JitBackend::Metal);
         else if (jit_has_backend(JitBackend::CUDA))
             set_backend(JitBackend::CUDA);
+        else if (jit_has_backend(JitBackend::AMD))
+            set_backend(JitBackend::AMD);
         else if (jit_has_backend(JitBackend::LLVM))
             set_backend(JitBackend::LLVM);
         else
@@ -365,6 +384,8 @@ NB_MODULE(_drjit_ext, m_) {
             set_backend(JitBackend::Metal);
         } else if (jit_has_backend(JitBackend::CUDA)) {
             set_backend(JitBackend::CUDA);
+        } else if (jit_has_backend(JitBackend::AMD)) {
+            set_backend(JitBackend::AMD);
         } else if (jit_has_backend(JitBackend::LLVM)) {
             set_backend(JitBackend::LLVM);
         } else {

@@ -7,9 +7,9 @@ import sys
 
 def skip_if_coopvec_not_supported(t):
     backend = dr.backend_v(t)
-    if backend == dr.JitBackend.Metal:
-        pytest.skip("Metal does not support cooperative vectors")
-    elif backend == dr.JitBackend.CUDA:
+    if not dr.detail.coop_vec_supported(backend):
+        pytest.skip(f"{backend.name} backend does not support cooperative vectors")
+    if backend == dr.JitBackend.CUDA:
         if dr.detail.cuda_version() < (12, 8):
             pytest.skip("CUDA driver does not support cooperative vectors (Driver R570) or later is required")
     elif backend == dr.JitBackend.LLVM:

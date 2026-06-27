@@ -55,6 +55,8 @@ dr::string meta_str(ArrayMeta m) {
             result += "  backend=cuda,\n";
         else if (m.backend == (uint16_t) JitBackend::LLVM)
             result += "  backend=llvm,\n";
+        else if (m.backend == (uint16_t) JitBackend::AMD)
+            result += "  backend=amd,\n";
         else if (m.backend == (uint16_t) JitBackend::Metal)
             result += "  backend=metal,\n";
         else
@@ -498,8 +500,9 @@ nb::handle meta_get_module(ArrayMeta meta) noexcept {
     int index = 0;
     switch ((JitBackend) meta.backend) {
         case JitBackend::CUDA:  index = 1; break;
-        case JitBackend::LLVM:  index = 3; break;
-        case JitBackend::Metal: index = 5; break;
+        case JitBackend::AMD:   index = 3; break;
+        case JitBackend::LLVM:  index = 5; break;
+        case JitBackend::Metal: index = 7; break;
         default: break;
     }
     if ((JitBackend) meta.backend != JitBackend::None)

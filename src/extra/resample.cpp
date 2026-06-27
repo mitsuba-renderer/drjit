@@ -749,6 +749,15 @@ template CUDAArray<float> Resampler::resample_bwd(const CUDAArray<float> &, uint
 template CUDAArray<double> Resampler::resample_bwd(const CUDAArray<double> &, uint32_t) const;
 #endif
 
+#if defined(DRJIT_ENABLE_AMD)
+template DRJIT_EXTRA_EXPORT AMDArray<half> Resampler::resample_fwd(const AMDArray<half> &, uint32_t) const;
+template DRJIT_EXTRA_EXPORT AMDArray<float> Resampler::resample_fwd(const AMDArray<float> &, uint32_t) const;
+template DRJIT_EXTRA_EXPORT AMDArray<double> Resampler::resample_fwd(const AMDArray<double> &, uint32_t) const;
+template DRJIT_EXTRA_EXPORT AMDArray<half> Resampler::resample_bwd(const AMDArray<half> &, uint32_t) const;
+template DRJIT_EXTRA_EXPORT AMDArray<float> Resampler::resample_bwd(const AMDArray<float> &, uint32_t) const;
+template DRJIT_EXTRA_EXPORT AMDArray<double> Resampler::resample_bwd(const AMDArray<double> &, uint32_t) const;
+#endif
+
 #if defined(DRJIT_ENABLE_LLVM)
 template LLVMArray<half> Resampler::resample_fwd(const LLVMArray<half> &, uint32_t) const;
 template LLVMArray<float> Resampler::resample_fwd(const LLVMArray<float> &, uint32_t) const;

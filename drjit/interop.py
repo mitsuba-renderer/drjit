@@ -129,6 +129,8 @@ def to_drjit(value, source, value_tp = None, enable_grad = None,
         tp_index += 1
         if (source == 'torch' and pytorch_check(h)) or \
            (source == 'jax'   and jax_check(h)):
+            if source == 'torch':
+                _torch_sync_tensor(h)
             r = dr.detail.import_tensor(h, True)
             if type(r) is not tp and dr.is_array_v(tp):
                 if dr.backend_v(tp) != dr.backend_v(r):
@@ -311,11 +313,21 @@ def _migrate_backend(value, target_backend):
 
     src_name = type(value).__module__ + '.' + type(value).__name__
     if target_backend == dr.JitBackend.Metal:
-        dst_name = src_name.replace('.llvm.', '.metal.').replace('.cuda.', '.metal.')
+        dst_name = (src_name.replace('.llvm.', '.metal.')
+                            .replace('.cuda.', '.metal.')
+                            .replace('.amd.', '.metal.'))
     elif target_backend == dr.JitBackend.CUDA:
-        dst_name = src_name.replace('.llvm.', '.cuda.').replace('.metal.', '.cuda.')
+        dst_name = (src_name.replace('.llvm.', '.cuda.')
+                            .replace('.amd.', '.cuda.')
+                            .replace('.metal.', '.cuda.'))
+    elif target_backend == dr.JitBackend.AMD:
+        dst_name = (src_name.replace('.llvm.', '.amd.')
+                            .replace('.cuda.', '.amd.')
+                            .replace('.metal.', '.amd.'))
     else:
-        dst_name = src_name.replace('.cuda.', '.llvm.').replace('.metal.', '.llvm.')
+        dst_name = (src_name.replace('.cuda.', '.llvm.')
+                            .replace('.amd.', '.llvm.')
+                            .replace('.metal.', '.llvm.'))
 
     import importlib
     parts = dst_name.rsplit('.', 1)
@@ -326,6 +338,12 @@ def _migrate_backend(value, target_backend):
         arr_tp = dr.array_t(dst_tp)
         return dst_tp(arr_tp(value.array.numpy()), value.shape)
     return dst_tp(value.numpy())
+
+
+def _torch_sync_tensor(value):
+    import torch
+    if getattr(value, 'is_cuda', False) and getattr(torch.version, 'hip', None):
+        torch.cuda.synchronize(value.device)
 
 
 class WrapADOp(dr.CustomOp):
@@ -430,6 +448,8 @@ def new_drjit_scope():
         dr.detail.new_scope(dr.JitBackend.LLVM)
     if dr.has_backend(dr.JitBackend.CUDA):
         dr.detail.new_scope(dr.JitBackend.CUDA)
+    if dr.has_backend(dr.JitBackend.AMD):
+        dr.detail.new_scope(dr.JitBackend.AMD)
 
 def create_torch_wrapper():
     from torch import set_grad_enabled as torch_set_grad_enabled

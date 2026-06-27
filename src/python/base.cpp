@@ -74,7 +74,7 @@
     m.def(#name, [](double v0, double v1) { return dr::name(v0, v1); });
 
 nb::handle array_module;
-nb::handle array_submodules[7];
+nb::handle array_submodules[9];
 nb::handle array_base;
 
 #define Py_nb_absolute_base Py_nb_absolute
@@ -1612,13 +1612,18 @@ void export_base(nb::module_ &m) {
     array_submodules[2] = array_submodules[1].attr("ad");
 #endif
 
-#if defined(DRJIT_ENABLE_LLVM)
-    array_submodules[3] = m.attr("llvm");
+#if defined(DRJIT_ENABLE_AMD)
+    array_submodules[3] = m.attr("amd");
     array_submodules[4] = array_submodules[3].attr("ad");
 #endif
 
-#if defined(DRJIT_ENABLE_METAL)
-    array_submodules[5] = m.attr("metal");
+#if defined(DRJIT_ENABLE_LLVM)
+    array_submodules[5] = m.attr("llvm");
     array_submodules[6] = array_submodules[5].attr("ad");
+#endif
+
+#if defined(DRJIT_ENABLE_METAL)
+    array_submodules[7] = m.attr("metal");
+    array_submodules[8] = array_submodules[7].attr("ad");
 #endif
 }

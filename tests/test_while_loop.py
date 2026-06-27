@@ -178,16 +178,19 @@ def test11_dependency_structure(t, optimize, drjit_verbose, capsys):
             b = dr.value_t(t)(100)
             a += one
 
+        lit_x = ('i32 1234', '0x4d2', '(uint32_t) 1234ull')
+        lit_y = ('i32 5678', '0x162e', '(uint32_t) 5678ull')
+
         for i in range(2):
             assert a.x + 1 == 1236
             s = capsys.readouterr().out
-            assert ('i32 1234' in s or '0x4d2' in s)
-            assert not ('i32 5678' in s or '0x162e' in s)
+            assert any(v in s for v in lit_x)
+            assert not any(v in s for v in lit_y)
 
             assert a.y + 1 == 5680
             s = capsys.readouterr().out
-            assert not ('i32 1234' in s or '0x4d2' in s)
-            assert ('i32 5678' in s or '0x162e' in s)
+            assert not any(v in s for v in lit_x)
+            assert any(v in s for v in lit_y)
 
 
 @pytest.mark.parametrize('optimize', [True, False])

@@ -83,6 +83,26 @@ void export_resample(nb::module_ &) {
               (dr::CUDAArray<double>(Resampler::*)(const dr::CUDAArray<double> &, uint32_t) const) &Resampler::resample_bwd,
               "target"_a.noconvert(), "stride"_a)
 #endif
+#if defined(DRJIT_ENABLE_AMD)
+         .def("resample_fwd",
+              (dr::AMDArray<dr::half>(Resampler::*)(const dr::AMDArray<dr::half> &, uint32_t) const) &Resampler::resample_fwd,
+              "source"_a.noconvert(), "stride"_a)
+         .def("resample_fwd",
+              (dr::AMDArray<float>(Resampler::*)(const dr::AMDArray<float> &, uint32_t) const) &Resampler::resample_fwd,
+              "source"_a.noconvert(), "stride"_a)
+         .def("resample_fwd",
+              (dr::AMDArray<double>(Resampler::*)(const dr::AMDArray<double> &, uint32_t) const) &Resampler::resample_fwd,
+              "source"_a.noconvert(), "stride"_a)
+         .def("resample_bwd",
+              (dr::AMDArray<dr::half>(Resampler::*)(const dr::AMDArray<dr::half> &, uint32_t) const) &Resampler::resample_bwd,
+              "target"_a.noconvert(), "stride"_a)
+         .def("resample_bwd",
+              (dr::AMDArray<float>(Resampler::*)(const dr::AMDArray<float> &, uint32_t) const) &Resampler::resample_bwd,
+              "target"_a.noconvert(), "stride"_a)
+         .def("resample_bwd",
+              (dr::AMDArray<double>(Resampler::*)(const dr::AMDArray<double> &, uint32_t) const) &Resampler::resample_bwd,
+              "target"_a.noconvert(), "stride"_a)
+#endif
 #if defined(DRJIT_ENABLE_LLVM)
          .def("resample_fwd",
               (dr::LLVMArray<dr::half>(Resampler::*)(const dr::LLVMArray<dr::half> &, uint32_t) const) &Resampler::resample_fwd,
