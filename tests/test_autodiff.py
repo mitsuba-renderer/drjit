@@ -620,6 +620,24 @@ def test027_prod(t):
     assert len(y) == 1 and dr.allclose(y[0], 80)
     assert dr.allclose(dr.grad(x), [80, 40, 16, 10])
 
+    x = t(2, 0, 4)
+    dr.enable_grad(x)
+    y = dr.prod(x)
+    dr.backward(y)
+    assert dr.allclose(y[0], 0)
+    assert dr.allclose(dr.grad(x), [0, 8, 0])
+
+    x = t(0, 3, 0)
+    dr.enable_grad(x)
+    dr.backward(dr.prod(x))
+    assert dr.allclose(dr.grad(x), [0, 0, 0])
+
+    x = t(2, 0, 4)
+    dr.enable_grad(x)
+    y = dr.prod(x)
+    dr.forward(x)
+    assert dr.allclose(dr.grad(y), 8)
+
 
 @pytest.test_arrays('is_diff,float,shape=(*)')
 def test028_max_bwd(t):
@@ -1939,6 +1957,13 @@ def test122_block_mul_fwd(t):
     assert dr.all(y == [2, 12, 30])
     assert dr.all(y.grad == [40, 240, 600])
 
+    x = t(2, 0, 4, 0, 0, 5)
+    dr.enable_grad(x)
+    y = dr.block_reduce(dr.ReduceOp.Mul, x, 3)
+    x.grad = [1, 1, 1, 1, 1, 1]
+    dr.forward_to(y)
+    assert dr.all(y.grad == [8, 0])
+
 
 @pytest.test_arrays('is_diff,float32,shape=(*)')
 def test123_block_mul_bwd(t):
@@ -1948,6 +1973,13 @@ def test123_block_mul_bwd(t):
     y.grad = [1, 10, 100]
     dr.backward_to(x)
     assert dr.all(x.grad == [2, 1, 40, 30, 600, 500])
+
+    x = t(2, 0, 4, 0, 0, 5)
+    dr.enable_grad(x)
+    y = dr.block_reduce(dr.ReduceOp.Mul, x, 3)
+    y.grad = [1, 1]
+    dr.backward_to(x)
+    assert dr.all(x.grad == [0, 8, 0, 0, 0, 0])
 
 
 @pytest.mark.parametrize("enabled", [True, False])

@@ -2198,6 +2198,22 @@ struct BlockReduceEdge : Special {
         }
     }
 
+    JitVar mul_weight(size_t size) const {
+        Index i0 = m_value_in.index();
+        JitVar z = scalar(i0, 0.0),
+               o = scalar(i0, 1.0),
+               n_zero = dr::block_sum(dr::select(m_value_in == z, o, z),
+                                      m_block_size, m_symbolic),
+               nz_prod = dr::block_reduce(ReduceOp::Mul,
+                                          dr::select(m_value_in == z, o, m_value_in),
+                                          m_block_size, m_symbolic),
+               w_zero = dr::select(n_zero == o, nz_prod, z);
+
+        return dr::select(
+            m_value_in == z, dr::repeat(w_zero, m_block_size, size),
+            dr::repeat(m_value_out, m_block_size, size) / m_value_in);
+    }
+
     void forward(const ADVariable *source, ADVariable *target) override {
         JitVar source_grad = source->grad;
 
@@ -2211,9 +2227,8 @@ struct BlockReduceEdge : Special {
                 break;
 
             case ReduceOp::Mul:
-                result = dr::block_sum(
-                    source_grad / m_value_in,
-                    m_block_size, m_symbolic) * m_value_out;
+                result = dr::block_sum(source_grad * mul_weight(source->size),
+                                       m_block_size, m_symbolic);
                 break;
 
             case ReduceOp::Min:
@@ -2245,7 +2260,8 @@ struct BlockReduceEdge : Special {
                 break;
 
             case ReduceOp::Mul:
-                result = dr::repeat(target_grad * m_value_out, m_block_size, source->size) / m_value_in;
+                result = dr::repeat(target_grad, m_block_size, source->size) *
+                         mul_weight(source->size);
                 break;
 
             case ReduceOp::Min:
@@ -2914,7 +2930,15 @@ Index ad_var_reduce(JitBackend backend, VarType vt, ReduceOp op, Index i0) {
             case ReduceOp::Mul: {
                     JitVar v0 = JitVar::borrow(jit_index(i0)),
                            z  = scalar(i0, 0.0),
-                           w0 = dr::select(v0 == z, z, result / v0);
+                           o  = scalar(i0, 1.0),
+                           n_zero = JitVar::steal(jit_var_reduce(
+                               backend, vt, ReduceOp::Add,
+                               dr::select(v0 == z, o, z).index())),
+                           nz_prod = JitVar::steal(jit_var_reduce(
+                               backend, vt, ReduceOp::Mul,
+                               dr::select(v0 == z, o, v0).index())),
+                           w_zero = dr::select(n_zero == o, nz_prod, z),
+                           w0 = dr::select(v0 == z, w_zero, result / v0);
                     return ad_var_new("prod", std::move(result),
                                       Arg(i0, std::move(w0)));
                 }
