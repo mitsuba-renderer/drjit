@@ -42,3 +42,7 @@ extern nb::object extract_type(nb::object tp);
 extern void python_cleanup_thread_static_initialization();
 
 extern void python_cleanup_thread_static_shutdown();
+
+extern bool drjit_thread_holds_gil();
+
+extern void enqueue_python_log(int level, const char *msg);

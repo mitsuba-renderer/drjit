@@ -20,6 +20,7 @@
 #  include <dlfcn.h>
 #endif
 
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -33,6 +34,7 @@
 #include "shape.h"
 #include "dlpack.h"
 #include "init.h"
+#include "log.h"
 #include "coop_vec.h"
 
 /// Forward declarations
@@ -862,23 +864,36 @@ static std::mutex python_cleanup_queue_mutex;
 static std::condition_variable python_cleanup_queue_cond;
 static bool python_cleanup_thread_stop = false;
 static std::vector<nb::detail::ndarray_handle*> python_cleanup_queue;
+static std::vector<std::pair<int, std::string>> python_log_queue;
 static std::thread python_cleanup_thread;
 
 void python_cleanup_thread_main() {
     while (true) {
         std::unique_lock lock(python_cleanup_queue_mutex);
         python_cleanup_queue_cond.wait(lock, [] {
-            return !python_cleanup_queue.empty() || python_cleanup_thread_stop;
+            return !python_cleanup_queue.empty() || !python_log_queue.empty() ||
+                   python_cleanup_thread_stop;
         });
 
         std::vector<nb::detail::ndarray_handle*> todo;
+        std::vector<std::pair<int, std::string>> logs;
         todo.swap(python_cleanup_queue);
+        logs.swap(python_log_queue);
+
+        bool stop = python_cleanup_thread_stop;
         lock.unlock();
 
         nb::gil_scoped_acquire guard;
+
+        // Perform deferred ndarray dec-ref operations
         for (auto p: todo)
             nb::detail::ndarray_dec_ref(p);
-        if (python_cleanup_thread_stop)
+
+        // Write deferred log messages
+        for (auto &e: logs)
+            log_write_locked(e.first, e.second.c_str());
+
+        if (stop)
             break;
     }
 }
@@ -898,26 +913,39 @@ void python_cleanup_thread_static_shutdown() {
 }
 
 void enqueue_python_cleanup(nb::detail::ndarray_handle *p) {
-    std::scoped_lock lock(python_cleanup_queue_mutex);
-    python_cleanup_queue.emplace_back(p);
+    {
+        std::scoped_lock lock(python_cleanup_queue_mutex);
+        python_cleanup_queue.emplace_back(p);
+    }
+    python_cleanup_queue_cond.notify_one();
+}
+
+void enqueue_python_log(int level, const char *msg) {
+    {
+        std::scoped_lock lock(python_cleanup_queue_mutex);
+        python_log_queue.emplace_back(level, std::string(msg));
+    }
     python_cleanup_queue_cond.notify_one();
 }
 
 int drjit_py_is_alive = 1;
 
 // Resolved at init time via dlsym (see export_init). Returns nonzero when the
-// *calling* thread holds the GIL, allowing synchronous ndarray cleanup.
+// *caller* holds the GIL, allowing synchronous ndarray cleanup and logging.
 extern "C" {
     static int (*py_gilstate_check)() = nullptr;
 }
-extern int disable_gc_scope;
+
+bool drjit_thread_holds_gil() {
+    return py_gilstate_check && py_gilstate_check();
+}
 
 static void ndarray_free_cb_2(void *p) {
     if (!nb::is_alive() || !drjit_py_is_alive)
         return;
 
     // If we're currently holding the GIL, then, release the array right now
-    if (!disable_gc_scope && py_gilstate_check && py_gilstate_check())
+    if (py_gilstate_check && py_gilstate_check())
         nb::detail::ndarray_dec_ref((nb::detail::ndarray_handle *) p);
     else
         enqueue_python_cleanup((nb::detail::ndarray_handle *) p);

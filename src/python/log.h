@@ -14,3 +14,4 @@
 #include "common.h"
 
 extern void export_log(nb::module_ &, PyModuleDef &);
+extern void log_write_locked(int level, const char *msg);
