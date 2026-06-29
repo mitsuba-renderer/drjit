@@ -214,7 +214,12 @@ set(STUB_ARGS
 # doesn't play well with stub generation. Disable stubs if sanitizers are
 # enabled.
 
-if (NOT (DRJIT_SANITIZE_ASAN OR DRJIT_SANITIZE_UBSAN))
+set(DRJIT_GENERATE_STUBS ${DRJIT_ENABLE_STUBS})
+if (DRJIT_SANITIZE_ASAN OR DRJIT_SANITIZE_UBSAN)
+  set(DRJIT_GENERATE_STUBS OFF)
+endif()
+
+if (DRJIT_GENERATE_STUBS)
   # Expected set of outputs and marker files for all stubs
 
   set(DRJIT_STUBS
@@ -288,7 +293,8 @@ if (NOT (DRJIT_SANITIZE_ASAN OR DRJIT_SANITIZE_UBSAN))
       ${DRJIT_PYTHON_DST_DIR}/auto/__init__.py
       ${DRJIT_PYTHON_DST_DIR}/auto/ad.py
 
-    COMMAND cmake -E touch
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${DRJIT_PYTHON_DST_DIR}/auto
+    COMMAND ${CMAKE_COMMAND} -E touch
       ${DRJIT_PYTHON_DST_DIR}/auto/py.typed
       ${DRJIT_PYTHON_DST_DIR}/auto/__init__.py
       ${DRJIT_PYTHON_DST_DIR}/auto/ad.py
@@ -301,5 +307,22 @@ if (NOT (DRJIT_SANITIZE_ASAN OR DRJIT_SANITIZE_UBSAN))
     ${DRJIT_PYTHON_DST_DIR}/auto/ad.pyi
     ${DRJIT_PYTHON_DST_DIR}/auto/ad.py
     ${DRJIT_PYTHON_DST_DIR}/auto/py.typed
+  )
+else()
+  add_custom_command(
+    OUTPUT
+      ${DRJIT_PYTHON_DST_DIR}/auto/__init__.py
+      ${DRJIT_PYTHON_DST_DIR}/auto/ad.py
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${DRJIT_PYTHON_DST_DIR}/auto
+    COMMAND ${CMAKE_COMMAND} -E touch
+      ${DRJIT_PYTHON_DST_DIR}/auto/__init__.py
+      ${DRJIT_PYTHON_DST_DIR}/auto/ad.py
+    DEPENDS drjit-copy-python-src
+  )
+
+  add_custom_target(
+    drjit-auto-stub ALL DEPENDS
+    ${DRJIT_PYTHON_DST_DIR}/auto/__init__.py
+    ${DRJIT_PYTHON_DST_DIR}/auto/ad.py
   )
 endif()

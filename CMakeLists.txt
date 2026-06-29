@@ -26,6 +26,7 @@ option(DRJIT_ENABLE_CUDA          "Build the Dr.Jit CUDA backend?" ${DRJIT_ENABL
 option(DRJIT_ENABLE_METAL         "Build the Dr.Jit Metal backend? (Apple Silicon GPUs)" ${DRJIT_ENABLE_METAL_DEFAULT})
 option(DRJIT_ENABLE_AUTODIFF      "Build Dr.Jit automatic differentation library?" ON)
 option(DRJIT_ENABLE_PYTHON        "Build Python extension library?" ON)
+option(DRJIT_ENABLE_STUBS         "Generate and install Python type stubs?" ON)
 option(DRJIT_ENABLE_TESTS         "Build Dr.Jit test suite? (Warning, this takes *very* long to compile)" OFF)
 option(DRJIT_ENABLE_LEAK_WARNINGS "Emit DrJit and nanobind leak warnings? By default, leak warnings are disabled automatically when building PyPi wheels." ${DRJIT_ENABLE_LEAK_WARNINGS_DEFAULT})
 
@@ -208,79 +209,126 @@ endif()
 
 if (DRJIT_MASTER_PROJECT)
   install(DIRECTORY include/drjit DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+  install(DIRECTORY ext/drjit-core/include/drjit-core DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
-  install(TARGETS drjit-core EXPORT drjitTargets DESTINATION drjit)
-  install(TARGETS drjit-extra EXPORT drjitTargets DESTINATION drjit)
-  install(TARGETS nanothread EXPORT drjitTargets DESTINATION drjit)
+  if (DRJIT_ENABLE_JIT)
+    if (DRJIT_ENABLE_PYTHON)
+      install(TARGETS drjit-core EXPORT drjitTargets DESTINATION drjit)
+      install(TARGETS drjit-extra EXPORT drjitTargets DESTINATION drjit)
+      install(TARGETS nanothread EXPORT drjitTargets DESTINATION drjit)
+    else()
+      install(
+        TARGETS drjit-core drjit-extra nanothread
+        EXPORT drjitTargets
+        RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
+        ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+        LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+      )
+    endif()
+  endif()
 
   if (DRJIT_ENABLE_PYTHON)
+    set(DRJIT_INSTALL_STUBS ${DRJIT_ENABLE_STUBS})
+    if (DRJIT_SANITIZE_ASAN OR DRJIT_SANITIZE_UBSAN)
+      set(DRJIT_INSTALL_STUBS OFF)
+    endif()
+
     install(TARGETS drjit-python DESTINATION drjit)
     install(FILES
       ${CMAKE_CURRENT_BINARY_DIR}/drjit/config.py
-      ${CMAKE_CURRENT_BINARY_DIR}/drjit/__init__.pyi
       ${CMAKE_CURRENT_BINARY_DIR}/drjit/__init__.py
-      ${CMAKE_CURRENT_BINARY_DIR}/drjit/ast.pyi
       ${CMAKE_CURRENT_BINARY_DIR}/drjit/ast.py
       ${CMAKE_CURRENT_BINARY_DIR}/drjit/dda.py
-      ${CMAKE_CURRENT_BINARY_DIR}/drjit/detail.pyi
       ${CMAKE_CURRENT_BINARY_DIR}/drjit/detail.py
-      ${CMAKE_CURRENT_BINARY_DIR}/drjit/hashgrid.pyi
       ${CMAKE_CURRENT_BINARY_DIR}/drjit/hashgrid.py
-      ${CMAKE_CURRENT_BINARY_DIR}/drjit/interop.pyi
       ${CMAKE_CURRENT_BINARY_DIR}/drjit/interop.py
-      ${CMAKE_CURRENT_BINARY_DIR}/drjit/nn.pyi
       ${CMAKE_CURRENT_BINARY_DIR}/drjit/nn.py
       ${CMAKE_CURRENT_BINARY_DIR}/drjit/opt.py
-      ${CMAKE_CURRENT_BINARY_DIR}/drjit/random.pyi
       ${CMAKE_CURRENT_BINARY_DIR}/drjit/random.py
-      ${CMAKE_CURRENT_BINARY_DIR}/drjit/py.typed
       DESTINATION drjit
     )
+    if (DRJIT_INSTALL_STUBS)
+      install(FILES
+        ${CMAKE_CURRENT_BINARY_DIR}/drjit/__init__.pyi
+        ${CMAKE_CURRENT_BINARY_DIR}/drjit/ast.pyi
+        ${CMAKE_CURRENT_BINARY_DIR}/drjit/detail.pyi
+        ${CMAKE_CURRENT_BINARY_DIR}/drjit/hashgrid.pyi
+        ${CMAKE_CURRENT_BINARY_DIR}/drjit/interop.pyi
+        ${CMAKE_CURRENT_BINARY_DIR}/drjit/nn.pyi
+        ${CMAKE_CURRENT_BINARY_DIR}/drjit/random.pyi
+        ${CMAKE_CURRENT_BINARY_DIR}/drjit/py.typed
+        DESTINATION drjit
+      )
+    endif()
     install(FILES
-      ${CMAKE_CURRENT_BINARY_DIR}/drjit/scalar/__init__.pyi
       ${CMAKE_CURRENT_BINARY_DIR}/drjit/scalar/__init__.py
       DESTINATION drjit/scalar
     )
+    if (DRJIT_INSTALL_STUBS)
+      install(FILES
+        ${CMAKE_CURRENT_BINARY_DIR}/drjit/scalar/__init__.pyi
+        DESTINATION drjit/scalar
+      )
+    endif()
     install(FILES
-      ${CMAKE_CURRENT_BINARY_DIR}/drjit/llvm/py.typed
-      ${CMAKE_CURRENT_BINARY_DIR}/drjit/llvm/__init__.pyi
       ${CMAKE_CURRENT_BINARY_DIR}/drjit/llvm/__init__.py
-      ${CMAKE_CURRENT_BINARY_DIR}/drjit/llvm/ad.pyi
       ${CMAKE_CURRENT_BINARY_DIR}/drjit/llvm/ad.py
       DESTINATION drjit/llvm
     )
+    if (DRJIT_INSTALL_STUBS)
+      install(FILES
+        ${CMAKE_CURRENT_BINARY_DIR}/drjit/llvm/py.typed
+        ${CMAKE_CURRENT_BINARY_DIR}/drjit/llvm/__init__.pyi
+        ${CMAKE_CURRENT_BINARY_DIR}/drjit/llvm/ad.pyi
+        DESTINATION drjit/llvm
+      )
+    endif()
     if (DRJIT_ENABLE_CUDA)
       install(FILES
-        ${CMAKE_CURRENT_BINARY_DIR}/drjit/cuda/py.typed
-        ${CMAKE_CURRENT_BINARY_DIR}/drjit/cuda/__init__.pyi
         ${CMAKE_CURRENT_BINARY_DIR}/drjit/cuda/__init__.py
-        ${CMAKE_CURRENT_BINARY_DIR}/drjit/cuda/ad.pyi
         ${CMAKE_CURRENT_BINARY_DIR}/drjit/cuda/ad.py
         DESTINATION drjit/cuda
       )
+      if (DRJIT_INSTALL_STUBS)
+        install(FILES
+          ${CMAKE_CURRENT_BINARY_DIR}/drjit/cuda/py.typed
+          ${CMAKE_CURRENT_BINARY_DIR}/drjit/cuda/__init__.pyi
+          ${CMAKE_CURRENT_BINARY_DIR}/drjit/cuda/ad.pyi
+          DESTINATION drjit/cuda
+        )
+      endif()
     endif()
     if (DRJIT_ENABLE_METAL)
       install(FILES
-        ${CMAKE_CURRENT_BINARY_DIR}/drjit/metal/py.typed
-        ${CMAKE_CURRENT_BINARY_DIR}/drjit/metal/__init__.pyi
         ${CMAKE_CURRENT_BINARY_DIR}/drjit/metal/__init__.py
-        ${CMAKE_CURRENT_BINARY_DIR}/drjit/metal/ad.pyi
         ${CMAKE_CURRENT_BINARY_DIR}/drjit/metal/ad.py
         DESTINATION drjit/metal
       )
+      if (DRJIT_INSTALL_STUBS)
+        install(FILES
+          ${CMAKE_CURRENT_BINARY_DIR}/drjit/metal/py.typed
+          ${CMAKE_CURRENT_BINARY_DIR}/drjit/metal/__init__.pyi
+          ${CMAKE_CURRENT_BINARY_DIR}/drjit/metal/ad.pyi
+          DESTINATION drjit/metal
+        )
+      endif()
     endif()
     install(FILES
-      ${CMAKE_CURRENT_BINARY_DIR}/drjit/auto/py.typed
-      ${CMAKE_CURRENT_BINARY_DIR}/drjit/auto/__init__.pyi
       ${CMAKE_CURRENT_BINARY_DIR}/drjit/auto/__init__.py
-      ${CMAKE_CURRENT_BINARY_DIR}/drjit/auto/ad.pyi
       ${CMAKE_CURRENT_BINARY_DIR}/drjit/auto/ad.py
       DESTINATION drjit/auto
     )
+    if (DRJIT_INSTALL_STUBS)
+      install(FILES
+        ${CMAKE_CURRENT_BINARY_DIR}/drjit/auto/py.typed
+        ${CMAKE_CURRENT_BINARY_DIR}/drjit/auto/__init__.pyi
+        ${CMAKE_CURRENT_BINARY_DIR}/drjit/auto/ad.pyi
+        DESTINATION drjit/auto
+      )
+    endif()
   endif()
 
   if (DRJIT_ENABLE_JIT)
-    install(DIRECTORY ext/drjit-core/include/drjit-core DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
     install(DIRECTORY ext/drjit-core/ext/nanothread/include/nanothread DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
   endif()
 
