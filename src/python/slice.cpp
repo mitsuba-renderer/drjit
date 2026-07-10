@@ -460,7 +460,10 @@ PyObject *mp_subscript(PyObject *self, PyObject *key) noexcept {
             } else {
                 ArrayMeta m2 = s;
                 m2.shape[0] = (uint8_t) (slicelen <= 4 ? slicelen : DRJIT_DYNAMIC);
-                nb::object result = meta_get_type(m2)();
+                dr::vector<size_t> shape;
+                shape_impl(self, shape);
+                shape[0] = slicelen;
+                nb::object result = full("empty", meta_get_type(m2), nb::handle(), shape);
                 for (size_t i = 0; i < slicelen; ++i)
                     result[i] = nb::handle(self)[start + step * i];
                 return result.release().ptr();
