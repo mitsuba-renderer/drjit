@@ -207,3 +207,11 @@ def test16_nested_slice_assignment(t):
     x = dr.ones(t, (3, 20))
     x[:-1, 1:100:2] = 2
     assert dr.any(x == 2, axis=None)
+
+
+@pytest.test_arrays('shape=(*, *), float32')
+def test17_2d_slice_get_dynamic_size(t):
+    b = t([1.0], [2.0], [3.0], [4.0], [5.0], [6.0], [7.0], [8.0], [9.0])
+    b3 = b[3:]
+    assert len(b3) == 6
+    assert dr.all(b3 == [[4.0], [5.0], [6.0], [7.0], [8.0], [9.0]])
