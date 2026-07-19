@@ -653,7 +653,7 @@ static nb::object prefix_reduce(ReduceOp op, nb::handle h, nb::handle axis, bool
         nb::object o = nb::borrow(h);
         nb::tuple t = nb::cast<nb::tuple>(axis);
         for (size_t i = 0, s = t.size(); i < s; ++i)
-            o = prefix_reduce(op, h, t[s - 1 - i], exclusive, reverse);
+            o = prefix_reduce(op, o, t[s - 1 - i], exclusive, reverse);
         return o;
     }
     int axis_i;
