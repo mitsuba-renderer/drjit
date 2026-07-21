@@ -1,7 +1,9 @@
 #include <nanobind/nanobind.h>
+#include <nanobind/stl/array.h>
 #include <nanobind/stl/pair.h>
 #include <drjit/python.h>
 #include <drjit/autodiff.h>
+#include <drjit/packet.h>
 #include <drjit/util.h>
 
 namespace nb = nanobind;
@@ -32,6 +34,11 @@ template <JitBackend Backend> void bind(nb::module_ m) {
         return target;
     });
 
+    m.def("packet_scatter_assign", [](Float target, Float v0, Float v1, UInt32 index) {
+        dr::scatter(target, Array2f(v0, v1), index);
+        return target;
+    });
+
     m.def("packet_gather_dynamic", [](Float source, UInt32 index) -> Pair {
         Float out[2];
         dr::gather_packet_dynamic(2, source, index, out, true);
@@ -47,6 +54,12 @@ template <JitBackend Backend> void bind(nb::module_ m) {
 
 NB_MODULE(memop_ext, m) {
     nb::module_::import_("drjit");
+
+    m.def("packet_scatter_ptr", []() {
+        std::array<float, 6> target { };
+        dr::scatter(target.data(), dr::Packet<float, 3>(1.f, 2.f, 3.f), 1u);
+        return target;
+    });
 
 #if defined(DRJIT_ENABLE_LLVM)
     bind<JitBackend::LLVM>(m.def_submodule("llvm"));
