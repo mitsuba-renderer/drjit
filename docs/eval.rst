@@ -414,15 +414,15 @@ end up dominating the computation time and lead to poor device utilization.
 Here, it would have been better to compile a single kernel that can handle
 any possible value of ``i``.
 
-To do so, use the function :py:func:`dr.opaque() <drjit.opaque>`, which creates
-an evaluated variable containing the given constant. With this change, the
-counter is no longer a literal constant, which collapses all loop iterations to
-a single consistent cache entry.
+To do so, use the function :py:func:`dr.opaque() <drjit.opaque>`, which returns
+an opaque copy of its argument. With this change, the counter is no longer a
+literal constant, which collapses all loop iterations to a single consistent
+cache entry.
 
 .. code-block:: python
 
    for i in range(1000):
-       i2 = dr.opaque(Int, i)
+       i2 = dr.opaque(Int(i))
        y = f(y, i2)
        dr.eval(y)
 
@@ -430,7 +430,7 @@ Alternatively, the following also works
 
 .. code-block:: python
 
-   i = dr.opaque(Int, 0)
+   i = dr.opaque(Int(0))
    for _ in range(1000):
        y = f(y, i)
        i += 1

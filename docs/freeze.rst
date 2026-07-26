@@ -477,7 +477,7 @@ resulting in lower performance than not using frozen functions.
 
    for i in range(n):
       # Re-tracing can be prevented by using an opaque JIT variable instead.
-      i = dr.opaque(UInt32, i)
+      i = dr.opaque(UInt32(i))
       func(scene, i)
 
 
@@ -485,7 +485,7 @@ Auto-opaque
 ~~~~~~~~~~~
 
 There is one more subtlety when using a *literal* JIT variable (:py:obj:`UInt32(i)`)
-instead of an opaque one (:py:obj:`dr.opaque(UInt32, i)`). The "auto-opaque"
+instead of an opaque one (:py:obj:`dr.opaque(UInt32(i))`). The "auto-opaque"
 feature, which is enabled by default, will detect literal JIT inputs that
 change between calls and make them opaque. However, this means that the function
 has to be traced at least twice, which incurs additional overhead at the start.

@@ -1307,18 +1307,6 @@ def isolate_grad(when=True):
 #      Miscellaneous
 # -------------------------------------------------------------------
 
-def copy(arg: T, /) -> T:
-    """
-    Create a deep copy of a PyTree
-
-    This function recursively traverses PyTrees and replaces Dr.Jit arrays with
-    copies created via the ordinary copy constructor. It also rebuilds tuples,
-    lists, dictionaries, and other :ref:`custom data strutures <custom_types_py>`.
-    """
-
-    return detail.copy(arg)
-
-
 def sign(arg, /):
     r'''
     sign(arg, /)

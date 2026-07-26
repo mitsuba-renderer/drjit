@@ -90,6 +90,47 @@ static void make_opaque(nb::handle h) {
 
 static void make_opaque_2(nb::args args) { return make_opaque(args); }
 
+/**
+ * \brief Return an opaque copy of a PyTree
+ *
+ * This rebuilds the PyTree while giving each Dr.Jit array storage of its own,
+ * so that the result is guaranteed to be distinct from every other variable in
+ * the system. Differentiability is preserved.
+ */
+nb::object opaque(nb::handle h) {
+    struct OpaqueOp : TransformCallback {
+        void operator()(nb::handle h1, nb::handle h2) override {
+            const ArraySupplement &s = supp(h1.type());
+
+            if (!s.index) {
+                nb::inst_replace_copy(h2, h1);
+                return;
+            }
+
+            uint64_t index = ad_var_copy_opaque(s.index(inst_ptr(h1)));
+            s.init_index(index, inst_ptr(h2));
+            ad_var_dec_ref(index);
+        }
+
+        nb::object transform_unknown(nb::handle h) const override {
+            if (h.type().is(coop_vector_type))
+                nb::raise("Cooperative vectors cannot be evaluated. They must "
+                          "be unpacked into regular variables.");
+            return nb::borrow(h);
+        }
+    };
+
+    if (PyType_Check(h.ptr()))
+        nb::raise("drjit.opaque(): expected an array, tensor, or PyTree, but "
+                  "received a type object. Did you mean to write "
+                  "drjit.opaque(dtype, value, shape)?");
+
+    eval(h);
+
+    OpaqueOp op;
+    return transform("drjit.opaque", op, h);
+}
+
 bool eval(nb::handle h) {
     if (schedule(h)) {
         nb::gil_scoped_release guard;

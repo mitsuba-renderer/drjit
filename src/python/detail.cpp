@@ -23,13 +23,10 @@
  * copies created via the ordinary copy constructor. It also rebuilds tuples,
  * lists, dictionaries, and custom data strutures.
  *
- * This function exists for Dr.Jit-internal use. You probably should not call
- * it in your own application code.
- *
  * (Note: this explanation is also part of src/python/docstr.rst -- please keep
  * them in sync in case you make a change here)
  */
-nb::object copy(nb::handle h) {
+static nb::object copy(nb::handle h) {
     struct CopyOp : TransformCallback {
         void operator()(nb::handle h1, nb::handle h2) override {
             nb::inst_replace_copy(h2, h1);
@@ -37,7 +34,7 @@ nb::object copy(nb::handle h) {
     };
 
     CopyOp c;
-    return transform("drjit.detail.copy", c, h);
+    return transform("drjit.copy", c, h);
 }
 
 void stash_ref(nb::handle h, dr::vector<StashRef> &v) {
@@ -400,8 +397,11 @@ void traverse_py_cb_rw_impl(nb::handle self, nb::callable c) {
     }
 }
 
-void export_detail(nb::module_ &) {
+void export_detail(nb::module_ &m) {
     nb::module_ d = nb::module_::import_("drjit.detail");
+
+    m.def("copy", &copy, "arg"_a, doc_copy,
+          nb::sig("def copy(arg: T, /) -> T"));
 
     d.def("collect_indices",
           [](nb::handle h) {
@@ -413,8 +413,6 @@ void export_detail(nb::module_ &) {
 
      .def("update_indices", &update_indices, "value"_a, "indices"_a,
           doc_detail_update_indices)
-
-     .def("copy", &copy, "value"_a, doc_detail_copy)
 
      .def("check_compatibility", &check_compatibility,
           doc_detail_check_compatibility)

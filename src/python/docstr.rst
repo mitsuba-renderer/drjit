@@ -2189,17 +2189,21 @@
 
 .. topic:: opaque
 
-    Return an *opaque* constant-valued instance of the desired type and shape.
+    Return an *opaque* copy of an array, tensor, or :ref:`PyTree <pytrees>`.
 
-    This function is very similar to :py:func:`drjit.full` in that it creates
-    constant-valued instances of various types including (potentially nested)
-    Dr.Jit arrays, tensors, and :ref:`PyTrees <pytrees>`. Please refer to the
-    documentation of :py:func:`drjit.full` for details on the function signature.
-    However, :py:func:`drjit.full` creates *literal constant* arrays, which
-    means that Dr.Jit is fully aware of the array contents.
+    A *literal constant* array is one whose contents Dr.Jit is fully aware of,
+    which means that it can bake them into the programs it generates. In
+    contrast, an *opaque* array is backed by a representation in device memory,
+    and the generated program reads it from there.
 
-    In contrast, :py:func:`drjit.opaque` produces an *opaque* array backed by a
-    representation in device memory.
+    :py:func:`drjit.opaque` returns an opaque copy of its argument, giving each
+    array storage of its own:
+
+    .. code-block:: python
+
+       from drjit.llvm import Float
+
+       y = dr.opaque(Float(2))
 
     .. rubric:: Why is this useful?
 
@@ -2238,24 +2242,39 @@
     .. code-block:: python
 
        # The following lines reuse the compiled kernel regardless of the constant
-       value = dr.opqaque(Float, 2)
+       value = dr.opaque(Float(2))
        result = complex_function(value, ...)
        print(result)
 
-    This function is related to :py:func:`drjit.make_opaque`, which can turn an
-    already existing Dr.Jit array, tensor, or :ref:`PyTree <pytrees>` into an
-    opaque representation.
+    This function is related to :py:func:`drjit.make_opaque`, which turns an
+    existing array, tensor, or :ref:`PyTree <pytrees>` into an opaque
+    representation *in place*. :py:func:`drjit.make_opaque` leaves an already
+    evaluated array alone, whereas :py:func:`drjit.opaque` always gives each
+    array storage of its own, so that the result is guaranteed to be distinct
+    from every other variable in the system.
+
+    .. rubric:: Constant-valued form
+
+    A second overload creates an opaque constant-valued instance of a given type
+    and shape, analogously to :py:func:`drjit.full`:
+
+    .. code-block:: python
+
+       value = dr.opaque(Float, 2)   # equivalent to dr.opaque(Float(2))
 
     Args:
+        arg (object): An array, tensor, or :ref:`PyTree <pytrees>` to copy.
         dtype (type): Desired Dr.Jit array type, Python scalar type, or
-          :ref:`PyTree <pytrees>`.
+          :ref:`PyTree <pytrees>` (constant-valued form).
         value (object): An instance of the underlying scalar type
           (``float``/``int``/``bool``, etc.) that will be used to initialize the
-          array contents.
+          array contents (constant-valued form).
         shape (Sequence[int] | int): Shape of the desired array
+          (constant-valued form).
 
     Returns:
-        object: A instance of type ``dtype`` filled with ``value``
+        object: An opaque copy of ``arg``, or an instance of type ``dtype``
+        filled with ``value``
 
 .. topic:: empty
 
@@ -3631,10 +3650,10 @@
     additionally converts literal constant arrays into evaluated (device
     memory-based) representations.
 
-    It is related to the function :py:func:`drjit.opaque` that can be used to
-    directly construct such opaque arrays. Please see the documentation of this
-    function regarding the rationale of making array contents opaque to Dr.Jit's
-    symbolic tracing mechanism.
+    It is related to the function :py:func:`drjit.opaque`, which returns an
+    opaque *copy* rather than modifying its argument in place. Please see the
+    documentation of that function regarding the rationale of making array
+    contents opaque to Dr.Jit's symbolic tracing mechanism.
 
     Args:
         *args (tuple): A variable-length list of Dr.Jit array instances or
@@ -5715,18 +5734,20 @@
         object: A Dr.Jit array or :ref:`PyTree <pytrees>` containing the
         result of each performed function call.
 
-.. topic:: detail_copy
+.. topic:: copy
 
-    Create a deep copy of a PyTree
+    Create a deep copy of an array, tensor, or :ref:`PyTree <pytrees>`.
 
     This function recursively traverses PyTrees and replaces Dr.Jit arrays with
     copies created via the ordinary copy constructor. It also rebuilds tuples,
-    lists, dictionaries, and custom data structures. The purpose of this function
-    is isolate the inputs of :py:func:`drjit.while_loop()` and
-    :py:func:`drjit.if_stmt()` from changes.
+    lists, dictionaries, and other :ref:`custom data structures
+    <custom_types_py>`.
 
-    This function exists for Dr.Jit-internal use. You probably should not call
-    it in your own application code.
+    Args:
+        arg (object): An array, tensor, or :ref:`PyTree <pytrees>` to copy.
+
+    Returns:
+        object: A deep copy of ``arg``
 
 .. topic:: detail_check_compatibility
 
@@ -8539,7 +8560,7 @@
                   # Create an opaque variable representing the number 'loop_state'.
                   # This keeps this changing value from being baked into the program,
                   # which is needed for proper kernel caching
-                  queue_size_o = dr.opaque(UInt32, queue_size)
+                  queue_size_o = dr.opaque(UInt32(queue_size))
 
                   while not stopping_criterion(state):
                       # This line represents the loop body that processes work

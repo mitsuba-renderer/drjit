@@ -33,6 +33,7 @@
 #include "shape.h"
 #include "dlpack.h"
 #include "init.h"
+#include "eval.h"
 #include "coop_vec.h"
 
 /// Forward declarations
@@ -1448,10 +1449,12 @@ void export_init(nb::module_ &m) {
           [](nb::type_object dtype, nb::handle value, dr::vector<size_t> shape) {
               return full("full", dtype, value, shape);
           }, "dtype"_a, "value"_a, "shape"_a)
+     .def("opaque", &opaque, "arg"_a.none(), doc_opaque,
+          nb::sig("def opaque(arg: T) -> T"))
      .def("opaque",
           [](nb::type_object dtype, nb::handle value, size_t size) {
               return full("opaque", dtype, value, size, true);
-          }, "dtype"_a, "value"_a, "shape"_a = 1, doc_opaque)
+          }, "dtype"_a, "value"_a, "shape"_a = 1)
      .def("opaque",
           [](nb::type_object dtype, nb::handle value, dr::vector<size_t> shape) {
               return full("opaque", dtype, value, shape, true);

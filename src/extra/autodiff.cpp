@@ -2394,6 +2394,15 @@ Index ad_var_copy(Index i0) {
         return ad_var_new("copy", std::move(result), Arg(i0, 1.0));
 }
 
+Index ad_var_copy_opaque(Index i0) {
+    JitVar result = JitVar::steal(jit_var_copy_opaque(jit_index(i0)));
+
+    if (likely(is_detached(i0)))
+        return result.release();
+    else
+        return ad_var_new("copy", std::move(result), Arg(i0, 1.0));
+}
+
 // ==========================================================================
 
 Index ad_var_add(Index i0, Index i1) {

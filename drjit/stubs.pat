@@ -138,12 +138,21 @@ drjit.(empty|zeros|ones)$:
     def \1(dtype: type[T], shape: int | Sequence[int] = 1) -> T:
         \doc
 
-drjit.(full|opaque)$:
+drjit.full$:
     @overload
-    def \1(dtype: type[ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT]], value: ValCpT | tuple | list, shape: int | Sequence[int] = 1) -> SelfT:
+    def full(dtype: type[ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT]], value: ValCpT | tuple | list, shape: int | Sequence[int] = 1) -> SelfT:
         \doc
     @overload
-    def \1(dtype: type[T], value: T, shape: int | Sequence[int]) -> T: ...
+    def full(dtype: type[T], value: T, shape: int | Sequence[int]) -> T: ...
+
+drjit.opaque$:
+    @overload
+    def opaque(arg: T) -> T:
+        \doc
+    @overload
+    def opaque(dtype: type[ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT]], value: ValCpT | tuple | list, shape: int | Sequence[int] = 1) -> SelfT: ...
+    @overload
+    def opaque(dtype: type[T], value: T, shape: int | Sequence[int]) -> T: ...
 
 drjit.lerp$:
     @overload

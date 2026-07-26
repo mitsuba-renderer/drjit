@@ -22,7 +22,6 @@ struct StashRef {
 };
 
 // See misc.cpp for documentation of these functions
-extern nb::object copy(nb::handle h);
 extern void collect_indices(nb::handle, dr::vector<uint64_t> &,
                             bool inc_ref = false);
 extern nb::object update_indices(nb::handle, const dr::vector<uint64_t> &);

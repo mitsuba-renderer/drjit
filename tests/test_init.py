@@ -728,3 +728,34 @@ def test32_gpu_ndarray_is_copy(t):
     v = t(a)
     a[0] = 999  # modify source
     assert v[0] == 1  # drjit array should be unchanged
+
+
+# Test that dr.opaque() gives each array in a PyTree storage of its own
+@pytest.test_arrays('float32, jit, shape=(*)')
+def test33_opaque_pytree(t):
+    Array3f = getattr(sys.modules[t.__module__], 'Array3f')
+
+    a = t(1, 2, 3)
+    b = dr.opaque(a)
+    assert b.state == dr.VarState.Evaluated and dr.all(a == b)
+
+    # The copy has separate storage
+    dr.scatter(b, t(0), dr.uint32_array_t(t)(0))
+    assert dr.all(a == [1, 2, 3]) and dr.all(b == [0, 2, 3])
+
+    # Repeated and literal-valued entries are not aliased
+    c = dr.opaque((a, a, Array3f(0, 1, 0)))
+    indices = [c[0].index, c[1].index] + [c[2][i].index for i in range(3)]
+    assert len(set(indices)) == 5
+    assert all(v.state == dr.VarState.Evaluated for v in (c[0], c[1], c[2][0]))
+
+    # Non-array leaves pass through, type objects are rejected
+    assert dr.opaque({'x': None}) == {'x': None}
+    with pytest.raises(RuntimeError, match='received a type object'):
+        dr.opaque(t)
+
+    if dr.is_diff_v(t):
+        d = t(1, 2, 3)
+        dr.enable_grad(d)
+        dr.backward(dr.opaque(d))
+        assert dr.all(dr.grad(d) == 1)

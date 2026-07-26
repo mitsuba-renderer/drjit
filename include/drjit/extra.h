@@ -349,6 +349,11 @@ extern DRJIT_EXTRA_EXPORT void ad_scope_leave(bool process_postponed);
 /// ``jit_eval()``.
 extern DRJIT_EXTRA_EXPORT uint64_t ad_var_schedule_force(uint64_t index, int *rv);
 
+/// Differentiable version of ``jit_var_copy_opaque()``: copy a variable into
+/// storage of its own, evaluating it if needed, so that the result is
+/// guaranteed to be distinct from every other variable.
+extern DRJIT_EXTRA_EXPORT uint64_t ad_var_copy_opaque(uint64_t index);
+
 /// Ensure that ``index`` is fully evaluated, and return a pointer to its
 /// device memory via ``ptr_out``. This process may require the creation of a
 /// new variable, hence the function always returns a new reference (whose
