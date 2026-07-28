@@ -678,3 +678,28 @@ def test21_tensor_cond_scalar_with_tensor(t, mode):
     r = my_fun(x, y)
     assert r.shape == (2, 3)
     assert dr.allclose(r, t([4, 3, 2, 1, 0, -1], shape=(2, 3)))
+
+
+@pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
+@pytest.mark.parametrize('index', [0, 1])
+@pytest.test_arrays('float32,is_jit,shape=(*)')
+def test24_partially_evaluated_outputs(t, mode, index):
+    # Evaluate one output of a conditional, then combine it with a second one
+    # that is still symbolic. The evaluated output enters the next kernel as an
+    # ordinary input, so the conditional must not create it a second time.
+    x = t(1, 2, 3, 4)
+
+    a, b = dr.if_stmt(
+        args = (x,),
+        cond = dr.mask_t(t)(True, False, True, False),
+        true_fn = lambda x: (x + 1, x + 2),
+        false_fn = lambda x: (x * 10, x * 20),
+        mode = mode
+    )
+
+    dr.eval((a, b)[index])
+    r = dr.fma(a, 100, b)
+
+    assert dr.all(a == t(2, 20, 4, 40))
+    assert dr.all(b == t(3, 40, 5, 80))
+    assert dr.all(r == t(203, 2040, 405, 4080))
