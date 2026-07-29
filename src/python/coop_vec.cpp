@@ -578,7 +578,8 @@ void export_coop_vec(nb::module_ &m) {
              nb::sig("def __radd__(self, arg: CoopVec[T] | T | float | int, /) -> CoopVec[T]"))
         .def("__sub__", &coop_vec_binary_op<JitOp::Sub>,
              nb::sig("def __sub__(self, arg: CoopVec[T] | T | float | int, /) -> CoopVec[T]"))
-        .def("__rsub__", &coop_vec_binary_op<JitOp::Sub>,
+        .def("__rsub__",
+             [](nb::handle h0, nb::handle h1) { return coop_vec_binary_op<JitOp::Sub>(h1, h0); },
              nb::sig("def __rsub__(self, arg: CoopVec[T] | T | float | int, /) -> CoopVec[T]"))
         .def("__mul__", &coop_vec_binary_op<JitOp::Mul>,
              nb::sig("def __mul__(self, arg: CoopVec[T] | T | float | int, /) -> CoopVec[T]"))
