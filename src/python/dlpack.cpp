@@ -182,10 +182,7 @@ static nb::ndarray<> dlpack(nb::handle_t<ArrayBase> h, bool force_cpu, nb::handl
             }
 
         } else {
-            nb::object arr = nb::borrow(h);
-            if (s.is_tensor)
-                arr = nb::steal(s.tensor_array(h.ptr()));
-            ptr = s2.data(inst_ptr(arr));
+            ptr = s2.data(inst_ptr(owner));
         }
     } else {
         shape.resize(s.ndim);
