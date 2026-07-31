@@ -149,7 +149,7 @@ template <typename T> T abs_(const T &a) {
         return DRJIT_BUILTIN(fabsf)(a);
     else if constexpr (std::is_same_v<T, double>)
         return DRJIT_BUILTIN(fabs)(a);
-    else if constexpr (std::is_signed_v<T>)
+    else if constexpr (drjit::detail::is_signed_v<T>)
         return a < 0 ? -a : a;
     else
         return a;
@@ -206,6 +206,21 @@ template <typename T> T maximum_(const T &a, const T &b) {
 
 template <typename T> T minimum_(const T &a, const T &b) {
     return b < a ? b : a;
+}
+
+template <typename T> T copysign_(const T &a, const T &b) {
+    if constexpr (std::is_same_v<T, float>)
+        return DRJIT_BUILTIN(copysignf)(a, b);
+    else if constexpr (std::is_same_v<T, double>)
+        return DRJIT_BUILTIN(copysign)(a, b);
+    else if constexpr (drjit::detail::is_floating_point_v<T>)
+        return (T) drjit::detail::copysign_((float) a, (float) b);
+    else if constexpr (std::is_unsigned_v<T>)
+        return a;
+    else {
+        T r = a < 0 ? (T) -a : a;
+        return b < 0 ? (T) -r : r;
+    }
 }
 
 template <typename T> T fmadd_(const T &a, const T &b, const T &c) {

@@ -78,6 +78,7 @@ static const char *op_names[] = {
 
     "minimum",
     "maximum",
+    "copysign",
     "atan2",
 
     // Binary bit/mask operations

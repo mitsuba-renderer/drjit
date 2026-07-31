@@ -193,6 +193,7 @@ DRJIT_ROUTE_UNARY_FALLBACK(rsqrt, rsqrt, detail::rsqrt_(a))
 
 DRJIT_ROUTE_BINARY_FALLBACK(maximum, maximum, detail::maximum_((E) a1, (E) a2))
 DRJIT_ROUTE_BINARY_FALLBACK(minimum, minimum, detail::minimum_((E) a1, (E) a2))
+DRJIT_ROUTE_BINARY_FALLBACK(copysign, copysign, detail::copysign_((E) a1, (E) a2))
 DRJIT_ROUTE_BINARY_FALLBACK(mul_hi, mul_hi,     detail::mul_hi_((E) a1, (E) a2))
 DRJIT_ROUTE_BINARY_FALLBACK(mul_wide, mul_wide, detail::mul_wide_((E) a1, (E) a2))
 DRJIT_ROUTE_UNARY_FALLBACK(lzcnt, lzcnt, detail::lzcnt_(a))
@@ -383,23 +384,8 @@ template <typename T> DRJIT_INLINE mask_t<T> signbit(const T &v) {
 
 
 template <typename T1, typename T2>
-DRJIT_INLINE T1 copysign(const T1 &v1, const T2 &v2) {
-    T1 v1_a = abs(v1);
-
-    if constexpr (is_floating_point_v<scalar_t<T2>> && !is_diff_v<T2>)
-        return detail::or_(v1_a, detail::and_(detail::sign_mask<T2>(), v2));
-    else
-        return select(signbit(v2), -v1_a, v1_a);
-}
-
-template <typename T1, typename T2>
-DRJIT_INLINE T1 copysign_neg(const T1 &v1, const T2 &v2) {
-    T1 v1_a = abs(v1);
-
-    if constexpr (is_floating_point_v<scalar_t<T2>> && !is_diff_v<T2>)
-        return detail::or_(v1_a, detail::andnot_(detail::sign_mask<T2>(), v2));
-    else
-        return select(signbit(v2), v1_a, -v1_a);
+DRJIT_INLINE auto copysign_neg(const T1 &v1, const T2 &v2) {
+    return copysign(v1, -v2);
 }
 
 template <typename T1, typename T2>

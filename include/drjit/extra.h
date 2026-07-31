@@ -95,6 +95,7 @@ DR_EXPORT_AD_2(mul)
 DR_EXPORT_AD_2(div)
 DR_EXPORT_AD_2(min)
 DR_EXPORT_AD_2(max)
+DR_EXPORT_AD_2(copysign)
 
 // Ternary operations
 DR_EXPORT_AD_3(fma)
