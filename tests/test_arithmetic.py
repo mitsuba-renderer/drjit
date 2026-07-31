@@ -581,3 +581,35 @@ def test25_allclose_mixed_precision(t):
     a = t(1.0, 2.0, 3.0)
     b = np.array([1.0, 2.0, 3.0], dtype=np.float64)
     assert dr.allclose(a, b)
+
+@pytest.test_arrays('-bool, -uint, shape=(*)')
+def test26_copysign(t):
+    a, b = t(1, 2, 3, 4), t(1, -1, 1, -1)
+    assert dr.all(dr.copysign(a, b) == t(1, -2, 3, -4))
+    assert dr.all(dr.copysign(-a, b) == t(1, -2, 3, -4))
+    assert dr.all(dr.copysign(a, -b) == t(-1, 2, -3, 4))
+
+
+@pytest.test_arrays('float, shape=(*)')
+def test27_copysign_signed_zero(t):
+    # Unlike an 'arg >= 0' comparison, 'copysign' propagates negative zeros
+    assert dr.all(dr.copysign(t(1, 1), t(0.0, -0.0)) == t(1, -1))
+
+
+@pytest.test_arrays('float, shape=(3, *)')
+def test28_copysign_nested(t):
+    r = dr.copysign(t(1, 2, 3), t(-1, 1, -1))
+    assert dr.all(r == t(-1, 2, -3), axis=None)
+
+
+@pytest.test_arrays('float32, jit, is_diff, shape=(*)')
+def test29_copysign_grad(t):
+    a, b = t(1, -2, 3, -4), t(1, -1, -1, 1)
+    dr.enable_grad(a, b)
+    r = dr.copysign(a, b)
+    assert dr.all(r == t(1, -2, -3, 4))
+    dr.backward(r)
+
+    # d/da copysign(a, b) is sign(a)*sign(b), the derivative w.r.t. 'b' is zero
+    assert dr.all(dr.grad(a) == t(1, 1, -1, -1))
+    assert dr.all(dr.grad(b) == t(0, 0, 0, 0))

@@ -1331,21 +1331,6 @@ def sign(arg, /):
     return select(arg >= 0, t(1), t(-1))
 
 
-def copysign(arg0, arg1, /):
-    '''
-    Copy the sign of ``arg1`` to ``arg0`` element-wise.
-
-    Args:
-        arg0 (int | float | drjit.ArrayBase): A Python or Dr.Jit array to change the sign of
-        arg1 (int | float | drjit.ArrayBase): A Python or Dr.Jit array to copy the sign from
-
-    Returns:
-        float | int | drjit.ArrayBase: The values of ``arg0`` with the sign of ``arg1``
-    '''
-    arg0_a = abs(arg0)
-    return select(arg1 >= 0, arg0_a, -arg0_a)
-
-
 def mulsign(arg0, arg1, /):
     '''
     Multiply ``arg0`` by the sign of ``arg1`` element-wise.

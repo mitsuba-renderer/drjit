@@ -609,6 +609,22 @@
     Returns:
         int | float | drjit.ArrayBase: Minimum of the input(s)
 
+.. topic:: copysign
+
+    Copy the sign of ``arg1`` to ``arg0`` element-wise.
+
+    For floating point inputs, this function realizes the IEEE-754
+    ``copysign`` operation and compiles into a dedicated instruction on all
+    backends. It propagates the sign of negative zeros, i.e.,
+    ``dr.copysign(1.0, -0.0) == -1.0``.
+
+    Args:
+        arg0 (int | float | drjit.ArrayBase): A Python or Dr.Jit array to change the sign of
+        arg1 (int | float | drjit.ArrayBase): A Python or Dr.Jit array to copy the sign from
+
+    Returns:
+        int | float | drjit.ArrayBase: The values of ``arg0`` with the sign of ``arg1``
+
 .. topic:: square
 
     Compute the square of the input array, tensor, or arithmetic type.

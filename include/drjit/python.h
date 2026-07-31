@@ -167,6 +167,7 @@ enum class ArrayOp {
 
     Minimum,
     Maximum,
+    Copysign,
     Atan2,
 
     // Binary bit/mask operations
@@ -560,6 +561,10 @@ template <typename T> void bind_arithmetic(ArrayBinding &b) {
         new (c) T(drjit::maximum(*a, *b));
     };
 
+    b[ArrayOp::Copysign] = (void *) +[](const T *a, const T *b, T *c) {
+        new (c) T(drjit::copysign(*a, *b));
+    };
+
     // Ternary arithetic operations
     b[ArrayOp::Fma] = (void *) +[](const T *a, const T *b, const T *c, T *d) {
         new (d) T(fmadd(*a, *b, *c));
@@ -640,7 +645,7 @@ inline void disable_cast(ArrayBinding &b) {
 inline void disable_arithmetic(ArrayBinding &b) {
     b[ArrayOp::Abs] = b[ArrayOp::Neg] = b[ArrayOp::Add] = b[ArrayOp::Sub] =
         b[ArrayOp::Mul] = b[ArrayOp::Minimum] = b[ArrayOp::Maximum] =
-        b[ArrayOp::Fma] = b[ArrayOp::Sum] = b[ArrayOp::Prod] =
+        b[ArrayOp::Copysign] = b[ArrayOp::Fma] = b[ArrayOp::Sum] = b[ArrayOp::Prod] =
         b[ArrayOp::Min] = b[ArrayOp::Max] = DRJIT_OP_NOT_IMPLEMENTED;
 }
 

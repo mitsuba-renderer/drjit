@@ -2861,6 +2861,24 @@ Index ad_var_max(Index i0, Index i1) {
 
 // ==========================================================================
 
+Index ad_var_copysign(Index i0, Index i1) {
+    JitVar result = JitVar::steal(jit_var_copysign(jit_index(i0), jit_index(i1)));
+
+    // The result only depends on the sign of the second argument
+    if (is_detached(i0)) {
+        return result.release();
+    } else {
+        JitVar v0 = JitVar::borrow(jit_index(i0)),
+               v1 = JitVar::borrow(jit_index(i1)),
+               one = scalar(i0, 1.0),
+               w0 = dr::copysign(one, v0) * dr::copysign(one, v1);
+
+        return ad_var_new("copysign", std::move(result), Arg(i0, std::move(w0)));
+    }
+}
+
+// ==========================================================================
+
 Index ad_var_select(Index i0, Index i1, Index i2) {
     JitVar result = JitVar::steal(
         jit_var_select(jit_index(i0), jit_index(i1), jit_index(i2)));

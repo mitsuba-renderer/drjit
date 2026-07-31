@@ -1565,6 +1565,10 @@ void export_base(nb::module_ &m) {
           [](Py_ssize_t a, Py_ssize_t b) { return dr::maximum(a, b); });
     DR_MATH_BINOP(maximum, ArrayOp::Maximum);
 
+    m.def("copysign",
+          [](Py_ssize_t a, Py_ssize_t b) { return dr::copysign(a, b); });
+    DR_MATH_BINOP(copysign, ArrayOp::Copysign);
+
     DR_MATH_BINOP(atan2, ArrayOp::Atan2);
 
     m.def("fma", (nb::object (*)(nb::handle, nb::handle, nb::handle)) fma)

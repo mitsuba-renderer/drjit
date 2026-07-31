@@ -285,6 +285,12 @@ struct Tensor
         return Tensor(drjit::maximum(t0.m_array, t1.m_array), std::move(shape));
     }
 
+    Tensor copysign_(const Tensor &b) const {
+        Tensor t0 = *this, t1 = b;
+        Shape shape = detail::tensor_broadcast("copysign_", t0, t1);
+        return Tensor(drjit::copysign(t0.m_array, t1.m_array), std::move(shape));
+    }
+
     auto gt_(const Tensor &b) const {
         Tensor t0 = *this, t1 = b;
         Shape shape = detail::tensor_broadcast("gt_", t0, t1);
