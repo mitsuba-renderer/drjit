@@ -420,6 +420,8 @@ class WrapADOp(dr.CustomOp):
                                             target_backend=self._target_backend))
 
 torch_wrapper = None
+sympy_wrapper_cls = None
+sympy_compile_context = False
 
 # Temporary storage of 'desc_o' needed for torch->drjit PyTorch forward-AD
 # See https://github.com/pytorch/pytorch/issues/117491
@@ -519,6 +521,318 @@ def create_torch_wrapper():
 
 
     return TorchWrapper
+
+def create_sympy_wrapper():
+    '''Lazily create the SympyWrapper class, importing SymPy and other
+    dependencies only when first needed.'''
+    import sympy as sp
+    import hashlib
+    import marshal
+    import inspect
+    from pathlib import Path
+    from sympy.printing.pycode import PythonCodePrinter
+
+    class DrJitPrinter(PythonCodePrinter):
+        '''Code printer that generates Dr.Jit compatible code from SymPy expressions.'''
+
+        def __init__(self, settings=None):
+            super().__init__(settings)
+            self.module_imports = {"drjit": {"sqrt", "exp", "pi"}}
+
+        def _print_Pi(self, expr):
+            return "dr.pi"
+
+        def _print_Exp1(self, expr):
+            return "dr.e"
+
+        def _print_Pow(self, expr):
+            base, exp_val = expr.as_base_exp()
+            base_str = self._print(base)
+            if exp_val == sp.Rational(1, 2) or exp_val == 0.5:
+                return f"dr.sqrt({base_str})"
+            if isinstance(exp_val, sp.Integer) and exp_val > 0 and exp_val <= 4:
+                result = "*".join([f"({base_str})"] * int(exp_val))
+                return f"({result})"
+            return f"({base_str})**({self._print(exp_val)})"
+
+        def _print_exp(self, expr):
+            return f"dr.exp({self._print(expr.args[0])})"
+
+        def _print_sqrt(self, expr):
+            return f"dr.sqrt({self._print(expr.args[0])})"
+
+        def _print_sin(self, expr):
+            return f"dr.sin({self._print(expr.args[0])})"
+
+        def _print_cos(self, expr):
+            return f"dr.cos({self._print(expr.args[0])})"
+
+        def _print_tan(self, expr):
+            return f"dr.tan({self._print(expr.args[0])})"
+
+        def _print_asin(self, expr):
+            return f"dr.asin({self._print(expr.args[0])})"
+
+        def _print_acos(self, expr):
+            return f"dr.acos({self._print(expr.args[0])})"
+
+        def _print_atan(self, expr):
+            return f"dr.atan({self._print(expr.args[0])})"
+
+        def _print_atan2(self, expr):
+            return f"dr.atan2({self._print(expr.args[0])}, {self._print(expr.args[1])})"
+
+        def _print_log(self, expr):
+            return f"dr.log({self._print(expr.args[0])})"
+
+        def _print_Abs(self, expr):
+            return f"dr.abs({self._print(expr.args[0])})"
+
+        def _print_sign(self, expr):
+            return f"dr.sign({self._print(expr.args[0])})"
+
+        def _print_Min(self, expr):
+            args = ", ".join(self._print(arg) for arg in expr.args)
+            return f"dr.minimum({args})"
+
+        def _print_Max(self, expr):
+            args = ", ".join(self._print(arg) for arg in expr.args)
+            return f"dr.maximum({args})"
+
+        def _print_ImmutableDenseMatrix(self, expr):
+            rows = []
+            for i in range(expr.rows):
+                row_elements = []
+                for j in range(expr.cols):
+                    row_elements.append(self._print(expr[i, j]))
+                rows.append("[" + ", ".join(row_elements) + "]")
+            return "[" + ", ".join(rows) + "]"
+
+        def _print_Matrix(self, expr):
+            return self._print_ImmutableDenseMatrix(expr)
+
+        def _print_Piecewise(self, expr):
+            result = None
+            for i in range(len(expr.args) - 1, -1, -1):
+                value_expr, cond_expr = expr.args[i]
+                value_str = self._print(value_expr)
+                if cond_expr == True:
+                    result = value_str
+                else:
+                    cond_str = self._print(cond_expr)
+                    if result is None:
+                        result = value_str
+                    else:
+                        result = f"dr.select({cond_str}, {value_str}, {result})"
+            return result if result is not None else "0"
+
+        def _print_DiracDelta(self, expr):
+            return "0.0"
+
+    def drjit_code(expr, cse=False, cse_prefix="x", **settings):
+        '''Generate Dr.Jit compatible code from a SymPy expression.'''
+        printer = DrJitPrinter(settings)
+
+        if cse:
+            replacements, reduced_exprs = sp.cse(
+                expr, symbols=sp.numbered_symbols(cse_prefix)
+            )
+            code_lines = []
+            for symbol, subexpr in replacements:
+                code_lines.append(f"{symbol} = {printer.doprint(subexpr)}")
+            if isinstance(reduced_exprs, list) and len(reduced_exprs) == 1:
+                reduced_exprs = reduced_exprs[0]
+            code_lines.append(printer.doprint(reduced_exprs))
+            return code_lines
+        else:
+            return printer.doprint(expr)
+
+    def _cache_dir():
+        d = Path.home() / ".drjit" / "sympy"
+        d.mkdir(parents=True, exist_ok=True)
+        return d
+
+    def flatten_scalars(leaves):
+        '''Extract the flat list of DrJit scalar components from leaves.'''
+        scalars = []
+        for leaf in leaves:
+            if isinstance(leaf, (type(None), int, float, bool, str)):
+                pass
+            elif dr.is_matrix_v(leaf):
+                for col in leaf:
+                    for elem in col:
+                        scalars.append(elem)
+            elif dr.is_vector_v(leaf):
+                for elem in leaf:
+                    scalars.append(elem)
+            elif dr.is_arithmetic_v(leaf):
+                scalars.append(leaf)
+            else:
+                raise RuntimeError(
+                    f"Unsupported DrJit type for SymPy: {type(leaf)}")
+        return scalars
+
+    def from_drjit_sympy(leaves):
+        '''Convert a flat list of DrJit leaves to SymPy equivalents.
+
+        Returns ``(sympy_leaves, n_scalars)`` where *sympy_leaves*
+        mirrors the input but with SymPy types, and *n_scalars* is the
+        total number of scalar components.
+        '''
+        sympy_leaves = []
+        counter = 0
+        for leaf in leaves:
+            if isinstance(leaf, (type(None), int, float, bool, str)):
+                sympy_leaves.append(leaf)
+            elif dr.is_matrix_v(leaf):
+                cols = []
+                for col in leaf:
+                    col_syms = []
+                    for elem in col:
+                        col_syms.append(sp.Symbol(f"i{counter}", real=True))
+                        counter += 1
+                    cols.append(col_syms)
+                sympy_leaves.append(sp.Matrix(cols))
+            elif dr.is_vector_v(leaf):
+                syms = []
+                for elem in leaf:
+                    syms.append(sp.Symbol(f"i{counter}", real=True))
+                    counter += 1
+                sympy_leaves.append(sp.Matrix(syms))
+            elif dr.is_arithmetic_v(leaf):
+                sympy_leaves.append(sp.Symbol(f"i{counter}", real=True))
+                counter += 1
+            else:
+                raise RuntimeError(
+                    f"Unsupported DrJit type for SymPy: {type(leaf)}")
+        return sympy_leaves, counter
+
+    def to_drjit_pytree(expr):
+        '''Convert a SymPy result to a plain Python PyTree.
+
+        Maps ``sp.MatrixBase`` to nested lists and ``sp.Tuple`` to
+        tuples so that ``flatten`` sees only plain Python containers.
+        '''
+        def fn(a):
+            if isinstance(a, sp.MatrixBase):
+                return apply(fn, a.tolist())
+            elif isinstance(a, sp.Tuple):
+                return apply(fn, tuple(a))
+            return ...
+        return apply(fn, expr)
+
+    class SympyWrapper:
+        '''Wrapper that compiles SymPy functions to optimized DrJit code.
+
+        Follows the same pattern as the PyTorch wrapper: ``flatten``/``unflatten``
+        handle PyTree structure, while ``from_drjit_sympy``/``to_drjit_pytree``
+        handle the DrJit <-> SymPy leaf conversion.
+        '''
+
+        def __init__(
+            self,
+            f_sp,
+        ):
+            self.f_sp = f_sp
+            # The generated code uses ``dr.*`` calls, so ensure ``dr``
+            # is available even if the user function didn't import it.
+            func_globals = f_sp.__globals__
+            if 'dr' not in func_globals:
+                func_globals = {**func_globals, 'dr': dr}
+            self.__globals__ = func_globals
+            self.enabled = True
+            self.sig = inspect.signature(f_sp)
+            self.cache = {}
+
+        def codegen(self, flat_exprs, n_symbols):
+            expr_key = repr(flat_exprs)
+
+            key = f"{n_symbols=}; {expr_key=}"
+            key = hashlib.sha256(key.encode()).hexdigest()
+
+            cache_dir = _cache_dir()
+            cache_file = cache_dir / f"{key}.pyc"
+
+            if cache_file.exists():
+                with open(cache_file, "rb") as f:
+                    compiled = marshal.load(f)
+            else:
+                def process(e):
+                    e = e.doit(deep=True)
+                    e = e.replace(lambda e: isinstance(e, sp.Derivative), lambda e: 0)
+                    e = e.replace(lambda e: isinstance(e, sp.DiracDelta), lambda e: 0)
+                    return e
+
+                flat_exprs = [process(e) for e in flat_exprs]
+
+                symbols_dr = ",".join((f"i{i}" for i in range(n_symbols)))
+                code_lines = drjit_code(flat_exprs, cse=True)
+                code = f"def func({symbols_dr}):\n"
+                for line in code_lines[:-1]:
+                    code += f"    {line}\n"
+                code += f"    r = {code_lines[-1]}\n"
+
+                if len(flat_exprs) == 1:
+                    code += "    r = [r]\n"
+
+                code += "    return tuple(r)"
+
+                (cache_dir / f"{key}.py").write_text(code)
+
+                compiled = compile(code, f"<generated {key}>", "exec")
+
+                with open(cache_file, "wb") as f:
+                    marshal.dump(compiled, f)
+
+            return compiled
+
+        def compile(self, desc, drjit_leaves):
+            # Convert DrJit leaves to SymPy equivalents
+            sympy_leaves, n_scalars = from_drjit_sympy(drjit_leaves)
+
+            # Reconstruct the PyTree with SymPy leaves
+            sympy_args = unflatten(list(desc), *sympy_leaves)
+
+            global sympy_compile_context
+            sympy_compile_context = True
+            try:
+                expr = self.f_sp(*sympy_args)
+            finally:
+                sympy_compile_context = False
+
+            # Convert SymPy output to plain PyTree, then flatten
+            pytree = to_drjit_pytree(expr)
+            desc_out, *flat_exprs = flatten(pytree)
+
+            compiled = self.codegen(flat_exprs, n_scalars)
+            func_code = compiled.co_consts[0]
+            f_dr = types.FunctionType(func_code, self.__globals__)
+
+            return f_dr, desc_out
+
+        def __call__(self, *args, **kwargs):
+            if self.enabled and not sympy_compile_context:
+                bound_args = self.sig.bind(*args, **kwargs)
+                bound_args.apply_defaults()
+                bound_args = tuple(bound_args.arguments.values())
+
+                # Flatten the DrJit PyTree
+                desc, *drjit_leaves = flatten(bound_args)
+                cache_key = repr(desc) + repr([type(v) for v in drjit_leaves])
+
+                cached = self.cache.get(cache_key)
+                if cached is None:
+                    f_dr, desc_out = self.compile(desc, drjit_leaves)
+                    self.cache[cache_key] = (f_dr, desc_out)
+                else:
+                    f_dr, desc_out = cached
+
+                flat_results = f_dr(*flatten_scalars(drjit_leaves))
+                return unflatten(list(desc_out), *flat_results)
+            else:
+                return self.f_sp(*args, **kwargs)
+
+    return SympyWrapper
 
 T = typing.TypeVar("T")
 
@@ -651,7 +965,7 @@ def wrap(source: typing.Union[str, types.ModuleType],
     # Get module names if source and target are not already strings
     source = source.__name__ if not isinstance(source, str) else source
     target = target.__name__ if not isinstance(target, str) else target
-    valid_types = ('drjit', 'torch', 'jax')
+    valid_types = ('drjit', 'torch', 'jax', 'sympy')
 
     if source not in valid_types:
         raise ValueError("drjit.wrap(): unknown 'source' argument.")
@@ -667,7 +981,16 @@ def wrap(source: typing.Union[str, types.ModuleType],
         # Nothing to do
         return lambda x: x
 
-    if source == 'drjit':
+    if source == 'drjit' and target == 'sympy':
+        global sympy_wrapper_cls
+
+        if sympy_wrapper_cls is None:
+            sympy_wrapper_cls = create_sympy_wrapper()
+
+        def wrapper(func):
+            return sympy_wrapper_cls(func)
+        return wrapper
+    elif source == 'drjit':
         def wrapper(func):
             return lambda *args, **kwargs: \
                 dr.custom(WrapADOp, func, target, *args, **kwargs)
