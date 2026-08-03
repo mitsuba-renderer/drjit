@@ -106,10 +106,14 @@ static nb::ndarray<> dlpack(nb::handle_t<ArrayBase> h, bool force_cpu, nb::handl
     int32_t device_id = 0, device_type = nb::device::cpu::value;
     void *ptr;
     nb::object owner;
+    bool empty_rank_0 = false;
 
     if (is_dynamic) {
         owner = ravel(h, s.is_complex ? 'F' : 'C', &shape, &strides);
         const ArraySupplement &s2 = supp(owner.type());
+
+        // Handle default-constructed tensors with empty shape *and* storage
+        empty_rank_0 = shape.empty() && s2.len(inst_ptr(owner)) == 0;
 
         if (s2.index) {
             uint32_t index = (uint32_t) s2.index(inst_ptr(owner));
@@ -230,6 +234,11 @@ static nb::ndarray<> dlpack(nb::handle_t<ArrayBase> h, bool force_cpu, nb::handl
 
         shape.resize(shape.size() - 1);
         strides.resize(strides.size() - 1);
+    }
+
+    if (empty_rank_0) {
+        shape.push_back(0);
+        strides.push_back(1);
     }
 
     // PyTorch fails to call the capsule destructor when the data pointer is
