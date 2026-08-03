@@ -153,6 +153,11 @@ def allclose(
         # No derivative tracking in the following
         a, b = detach(a), detach(b)
 
+        # Mask arrays have no meaningful tolerance; compare for equality
+        if (is_array_v(a) and is_mask_v(a)) or \
+           (is_array_v(b) and is_mask_v(b)):
+            return all(a == b, axis=None)
+
         if is_special_v(a):
             a = array_t(a)(a)
         if is_special_v(b):
