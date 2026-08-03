@@ -188,6 +188,15 @@ struct Tensor
     Tensor(Array &&data, Shape &&shape)
         : m_array(std::move(data)), m_shape(shape) { }
 
+    Tensor(const Array &data, std::initializer_list<size_t> shape)
+        : Tensor(data, shape.size(), shape.begin()) { }
+
+    Tensor(Array &&data, std::initializer_list<size_t> shape)
+        : Tensor(std::move(data), shape.size(), shape.begin()) { }
+
+    Tensor(const void *ptr, std::initializer_list<size_t> shape)
+        : Tensor(ptr, shape.size(), shape.begin()) { }
+
     template <typename T, enable_if_t<drjit::detail::is_scalar_v<T> && !std::is_pointer_v<T>> = 0>
     Tensor(T value) : m_array(value) { }
 
