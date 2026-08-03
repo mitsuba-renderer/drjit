@@ -192,7 +192,14 @@ def test05_matvec(t, shape, transpose, bias, pack):
     if bias:
         ref += b_n[:, None]
 
-    assert dr.allclose(r_n, ref)
+    # Both operands are NumPy arrays, so dr.allclose() cannot infer a suitable
+    # tolerance and defaults to double precision thresholds
+    if dr.type_v(t) == dr.VarType.Float16:
+        rtol, atol = 1e-2, 1e-2
+    else:
+        rtol, atol = 1e-3, 1e-5
+
+    assert dr.allclose(r_n, ref, rtol=rtol, atol=atol)
 
 
 @pytest.test_arrays('jit,shape=(*),float16,-diff', 'jit,shape=(*),float32,-diff')
