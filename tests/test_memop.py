@@ -1631,3 +1631,42 @@ def test44_gather_size1_literal(t):
     for i in range(3):
         result = dr.gather(t, source, UInt32(i))
         assert result[0] == source.numpy()[i]
+
+
+@pytest.test_arrays('float32,jit,shape=(*)')
+@pytest.mark.parametrize('packet_ops', [True, False])
+@pytest.mark.parametrize('psize', [2, 3, 4])
+def test45_packet_scatter_fallback_merges(t, psize, packet_ops):
+    """A packet scatter that decomposes into individual scatters (e.g. because
+    the packet size is odd) must still fit into a single kernel. Conflicting
+    writes queued beforehand are flushed first, adding one kernel launch."""
+    mod = sys.modules[t.__module__]
+    UInt32 = dr.uint32_array_t(t)
+    ArrayXf = mod.ArrayXf
+
+    size = 128
+
+    def scatter(prior):
+        index = dr.arange(UInt32, size)
+        value = ArrayXf([t(i + 1) for i in range(psize)])
+        target = dr.zeros(t, size * psize)
+        dr.eval(target, index, value)
+
+        with dr.scoped_set_flag(dr.JitFlag.PacketOps, packet_ops):
+            with dr.scoped_set_flag(dr.JitFlag.KernelHistory, True):
+                dr.kernel_history_clear()
+                if prior:
+                    dr.scatter(target, t(7), UInt32(0))
+                dr.scatter(target, value, index)
+                dr.eval(target)
+                history = dr.kernel_history((dr.KernelType.JIT,))
+
+        ref = dr.zeros(t, size * psize)
+        for i in range(psize):
+            dr.scatter(ref, t(i + 1), dr.arange(UInt32, size) * psize + i)
+        assert dr.all(target == ref)
+
+        return len(history)
+
+    assert scatter(prior=False) == 1
+    assert scatter(prior=True) == 2
