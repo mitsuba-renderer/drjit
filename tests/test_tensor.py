@@ -915,8 +915,8 @@ def test32_stack(t):
         dr.stack([a, b])
     with pytest.raises(RuntimeError, match="out of bounds"):
         dr.stack([a, a], axis=3)
-    with pytest.raises(TypeError, match="expected tensor"):
-        dr.stack([dr.array_t(t)(1, 2)])
+    # plain arrays are promoted to their tensor equivalent
+    assert dr.stack([dr.array_t(t)(1, 2)]).shape == np.stack([np.array([1, 2])]).shape
     with pytest.raises(RuntimeError, match="at least one"):
         dr.stack([])
 
@@ -952,11 +952,12 @@ def test33_vstack_hstack_column_stack_dstack(t):
     for shapes in [((3,), (3,)), ((2,3), (2,3)), ((2,3,4), (2,3,5))]:
         check(dr.dstack, np.dstack, shapes)
 
-    # non-tensor rejection
-    a = dr.array_t(t)(1, 2, 3)
-    for fn in [dr.vstack, dr.hstack, dr.column_stack, dr.dstack]:
-        with pytest.raises(TypeError, match="expected tensor"):
-            fn([a, a])
+    # plain arrays are promoted to their tensor equivalent, which matches
+    # what the corresponding NumPy routines do with 1D inputs
+    a, a_np = dr.array_t(t)(1, 2, 3), np.array([1, 2, 3])
+    for fn, fn_np in [(dr.vstack, np.vstack), (dr.hstack, np.hstack),
+                      (dr.column_stack, np.column_stack), (dr.dstack, np.dstack)]:
+        assert np.array_equal(fn([a, a]).numpy(), fn_np([a_np, a_np]))
 
 
 @pytest.test_arrays('is_tensor, jit, uint32')

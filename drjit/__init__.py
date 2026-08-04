@@ -2311,18 +2311,31 @@ def concat(arr: Sequence[ArrayT], /, axis: Optional[int] = 0) -> ArrayT:
 
 
 def _validate_tensor_sequence(arrays, name: str):
+    """
+    Check that ``arrays`` is a sequence of Dr.Jit arrays of a single type, and
+    return it with every non-tensor entry promoted to the matching tensor type.
+    These operations add a dimension, which a plain array cannot represent.
+    """
     if is_array_v(arrays):
         raise TypeError(f"drjit.{name}(): input should be a Python sequence of tensors, not a single array.")
     if len(arrays) == 0:
         raise RuntimeError(f"drjit.{name}(): at least one input tensor is required!")
-    ref_tp = type(arrays[0])
-    if not is_tensor_v(ref_tp):
-        raise TypeError(f"drjit.{name}(): expected tensor inputs (got {ref_tp.__module__}.{ref_tp.__qualname__}).")
-    for i, a in enumerate(arrays):
+
+    result = []
+    for a in arrays:
+        tp = type(a)
+        if not (is_array_v(tp) and is_jit_v(tp)):
+            raise TypeError(f"drjit.{name}(): expected Dr.Jit array or tensor inputs "
+                            f"(got {tp.__module__}.{tp.__qualname__}).")
+        result.append(a if is_tensor_v(tp) else tensor_t(tp)(a))
+
+    ref_tp = type(result[0])
+    for i, a in enumerate(result):
         if type(a) is not ref_tp:
             raise TypeError(f"drjit.{name}(): all inputs must have the same type "
                             f"(input 0 has type {ref_tp.__module__}.{ref_tp.__qualname__}, "
                             f"input {i} has type {type(a).__module__}.{type(a).__qualname__}).")
+    return result
 
 
 def expand_dims(value: ArrayT, /, axis: Union[int, Tuple[int, ...]]) -> ArrayT:
@@ -2394,6 +2407,10 @@ def stack(arrays: Sequence[ArrayT], /, axis: int = 0) -> ArrayT:
     more dimension than the inputs: a new axis of size ``len(arrays)`` is
     inserted at position ``axis``.
 
+    Plain Dr.Jit arrays are promoted to their tensor equivalent, so that
+    ``dr.stack([x, y, z], axis=1)`` turns three 1D arrays of length ``N`` into
+    an ``(N, 3)`` tensor.
+
     For example, stacking two tensors of shape ``(M, N)`` with ``axis=0``
     produces shape ``(2, M, N)``, while ``axis=1`` produces ``(M, 2, N)``.
 
@@ -2402,6 +2419,7 @@ def stack(arrays: Sequence[ArrayT], /, axis: int = 0) -> ArrayT:
 
     Args:
         arrays: Sequence of tensors. All must have the same type and shape.
+            Plain Dr.Jit arrays are promoted to their tensor equivalent.
 
         axis (int): The position of the new axis in the result. Negative
             values count backwards from the last dimension.
@@ -2409,7 +2427,7 @@ def stack(arrays: Sequence[ArrayT], /, axis: int = 0) -> ArrayT:
     Returns:
         object: A tensor with ``ndim + 1`` dimensions.
     """
-    _validate_tensor_sequence(arrays, 'stack')
+    arrays = _validate_tensor_sequence(arrays, 'stack')
 
     ref_shape = arrays[0].shape
     ndim = len(ref_shape)
@@ -2445,13 +2463,14 @@ def vstack(arrays: Sequence[ArrayT], /) -> ArrayT:
     ``row_stack`` is an alias for this function.
 
     Args:
-        arrays: Sequence of tensors to stack.
+        arrays: Sequence of tensors to stack. Plain Dr.Jit arrays are
+            promoted to their tensor equivalent.
 
     Returns:
         object: A tensor with at least two dimensions formed by vertical
         concatenation.
     """
-    _validate_tensor_sequence(arrays, 'vstack')
+    arrays = _validate_tensor_sequence(arrays, 'vstack')
     tp = type(arrays[0])
     fixed = [reshape(tp, a, (1,) + a.shape) if len(a.shape) == 1
              else a for a in arrays]
@@ -2472,12 +2491,13 @@ def hstack(arrays: Sequence[ArrayT], /) -> ArrayT:
     The inputs must have the same shape along all but the concatenation axis.
 
     Args:
-        arrays: Sequence of tensors to stack.
+        arrays: Sequence of tensors to stack. Plain Dr.Jit arrays are
+            promoted to their tensor equivalent.
 
     Returns:
         object: A tensor formed by horizontal concatenation.
     """
-    _validate_tensor_sequence(arrays, 'hstack')
+    arrays = _validate_tensor_sequence(arrays, 'hstack')
     if len(arrays[0].shape) == 1:
         return concat(arrays, axis=0)
     return concat(arrays, axis=1)
@@ -2497,12 +2517,13 @@ def column_stack(arrays: Sequence[ArrayT], /) -> ArrayT:
     All inputs must have the same first dimension.
 
     Args:
-        arrays: Sequence of tensors to stack.
+        arrays: Sequence of tensors to stack. Plain Dr.Jit arrays are
+            promoted to their tensor equivalent.
 
     Returns:
         object: A tensor formed by column-wise concatenation.
     """
-    _validate_tensor_sequence(arrays, 'column_stack')
+    arrays = _validate_tensor_sequence(arrays, 'column_stack')
     tp = type(arrays[0])
     fixed = [reshape(tp, a, a.shape + (1,)) if len(a.shape) == 1
              else a for a in arrays]
@@ -2521,13 +2542,14 @@ def dstack(arrays: Sequence[ArrayT], /) -> ArrayT:
     The inputs must have the same shape along all but the third axis.
 
     Args:
-        arrays: Sequence of tensors to stack.
+        arrays: Sequence of tensors to stack. Plain Dr.Jit arrays are
+            promoted to their tensor equivalent.
 
     Returns:
         object: A tensor with at least three dimensions formed by depth-wise
         concatenation.
     """
-    _validate_tensor_sequence(arrays, 'dstack')
+    arrays = _validate_tensor_sequence(arrays, 'dstack')
     tp = type(arrays[0])
     fixed = []
     for a in arrays:
