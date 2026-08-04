@@ -1287,8 +1287,8 @@ def test36_gather_packet(t, packet_size, force_optix):
     elif tp == dr.VarType.Float64:
         ArrayXf = mod.ArrayXf64
 
-    # Make n divisible by packet_size to avoid gather packet errors
-    n = 16 * 16  # 256 - divisible by all packet sizes
+    # The source size must be divisible by every packet size tested above
+    n = 240  # = lcm(1, 2, 3, 4, 5, 6, 12, 16)
 
     with dr.scoped_set_flag(dr.JitFlag.KernelHistory, True):
         with dr.scoped_set_flag(dr.JitFlag.ForceOptiX, force_optix):
