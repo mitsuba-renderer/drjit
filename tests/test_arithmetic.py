@@ -613,3 +613,17 @@ def test29_copysign_grad(t):
     # d/da copysign(a, b) is sign(a)*sign(b), the derivative w.r.t. 'b' is zero
     assert dr.all(dr.grad(a) == t(1, 1, -1, -1))
     assert dr.all(dr.grad(b) == t(0, 0, 0, 0))
+
+
+@pytest.test_arrays('float32, jit, shape=(4, *)')
+def test30_assert_allclose_nested(t):
+    # A failed comparison reports an AssertionError, also for nested arrays
+    # whose reductions collapse to a plain Python scalar
+    mod = sys.modules[t.__module__]
+
+    for a, b, n in ((t(0, 0, 0, 0), t(1, 2, 3, 4), '4 / 4'),
+                    (mod.Float(0, 0), mod.Float(1, 1), '2 / 2')):
+        dr.assert_allclose(a, a)
+        with pytest.raises(AssertionError) as e:
+            dr.assert_allclose(a, b, atol=1e-4)
+        assert f'Mismatched elements: {n}' in str(e.value)

@@ -338,10 +338,14 @@ def assert_allclose(
         denom_safe = select(denom > 0, denom, 1)
         sel_rel = select(mismatched, abs_diff / denom_safe, 0)
 
-        n_mismatch = int(count(mismatched, axis=None).array[0])
-        n_total = width(cond)
-        max_abs = float(max(sel_abs, axis=None).array[0])
-        max_rel = float(max(sel_rel, axis=None).array[0])
+        # A full reduction yields a width-1 array or a Python scalar
+        def _scalar(arg):
+            return arg.array[0] if is_array_v(arg) else arg
+
+        n_mismatch = int(_scalar(count(mismatched, axis=None)))
+        n_total = prod(shape(cond))
+        max_abs = float(_scalar(max(sel_abs, axis=None)))
+        max_rel = float(_scalar(max(sel_rel, axis=None)))
 
         def _labeled(name, arr):
             label = f' {name}: '
