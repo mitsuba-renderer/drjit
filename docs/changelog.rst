@@ -14,6 +14,12 @@ DrJit 1.5.0 (unreleased)
 - :py:func:`dr.copysign() <copysign>` now maps onto a dedicated IR node that
   the CUDA, LLVM, and Metal backends turn into a single backend instruction.
 
+- :py:func:`dr.scatter_reduce() <scatter_reduce>` now consistently supports
+  :py:attr:`ReduceOp.Min` and :py:attr:`ReduceOp.Max` reductions of floating
+  point arrays. The Metal and CUDA backend emulate them using integer min/max
+  atomics. The LLVM backend uses a CAS loop with a non-atomic load that
+  potentially skips the loop if it would not change the result.
+
 DrJit 1.4.0 (June 25, 2026)
 ---------------------------
 

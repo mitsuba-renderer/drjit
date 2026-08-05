@@ -3258,14 +3258,14 @@
          - ❌
          - ✅
          - ⚠️  CC≥90
-         - ❌
-         - ❌
+         - ✅
+         - ✅
        * - :py:attr:`ReduceOp.Max`
          - ❌
          - ✅
          - ⚠️  CC≥90
-         - ❌
-         - ❌
+         - ✅
+         - ✅
        * - :py:attr:`ReduceOp.And`
          - ❌
          - ✅

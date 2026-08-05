@@ -403,6 +403,15 @@ def test17_slice(t):
 def versiontuple(v):
     return tuple(map(int, (v.split("."))))
 
+
+def gen_values(t, rng, size, signed):
+    """Generate scatter-reduction test values, optionally of mixed sign"""
+    if dr.type_v(t) == dr.VarType.Float16:
+        # Half precision needs a limited value range to remain exact
+        return t(rng.next_float32() * 2 - 1) if signed else dr.full(t, 1, size)
+    j = t(rng.next_uint32())
+    return j - 2**31 if signed else j
+
 @pytest.mark.parametrize('op',
     [dr.ReduceOp.Add, dr.ReduceOp.Min, dr.ReduceOp.Max,
      dr.ReduceOp.And, dr.ReduceOp.Or])
@@ -418,14 +427,16 @@ def test18_scatter_reduce(t, op):
         pytest.skip(f"Unsupported scatter combination: backend={dr.backend_v(t)}, type={dr.type_v(t)}, op={op}")
     identity = dr.detail.reduce_identity(t, op)
 
+    # Float min/max atomics may be emulated via integer atomics that
+    # dispatch on the sign, so generate values of both signs
+    signed = dr.is_float_v(t) and op in (dr.ReduceOp.Min, dr.ReduceOp.Max)
+
     for k in range(0, 10):
         k = 2**k
 
         rng = mod.PCG32(size)
-        j = t(rng.next_uint32())
         i = rng.next_uint32_bounded(k)
-        if dr.type_v(t) == dr.VarType.Float16:
-            j = dr.full(t, 1, size)
+        j = gen_values(t, rng, size, signed)
 
         buf_1 = dr.full(t, identity[0], k)
         dr.scatter_reduce(op, buf_1, index=i, value=j, mode=dr.ReduceMode.Direct)
@@ -469,9 +480,7 @@ def test18_scatter_reduce(t, op):
     perm = UInt32(np.random.permutation(size))
 
     rng = mod.PCG32(size)
-    j = t(rng.next_uint32())
-    if dr.type_v(t) == dr.VarType.Float16:
-        j = dr.full(t, 1, size)
+    j = gen_values(t, rng, size, signed)
     buf_1 = dr.full(t, identity[0], size)
     dr.scatter_reduce(op, buf_1, index=perm, value=j, mode=dr.ReduceMode.NoConflicts)
 
@@ -507,14 +516,12 @@ def test18b_scatter_reduce_packet(t, op):
     identity = dr.detail.reduce_identity(vt, op)[0]
     mod = sys.modules[t.__module__]
 
+    signed = dr.is_float_v(vt) and op in (dr.ReduceOp.Min, dr.ReduceOp.Max)
+
     for k in (1, 16, 1024):
         rng = mod.PCG32(size)
         i = rng.next_uint32_bounded(k)
-        if dr.type_v(vt) == dr.VarType.Float16:
-            cols = [dr.full(vt, 1, size) for _ in range(n)]
-        else:
-            cols = [vt(rng.next_uint32()) for _ in range(n)]
-        val = t(*cols)
+        val = t(*[gen_values(vt, rng, size, signed) for _ in range(n)])
 
         buf_local = dr.full(vt, identity, k * n)
         dr.scatter_reduce(op, buf_local, value=val, index=i, mode=dr.ReduceMode.Local)
@@ -1220,7 +1227,15 @@ def test35_scatter_packet_reduce(t, reduce_op, packet_size, force_optix, mode):
             (not force_optix or cuda_version >= (13, 2))
         if force_optix and tp == dr.VarType.Float16:
             supports_wide_vector_reduction = False
-        if supports_wide_vector_reduction:
+        # Float min/max atomics use a sign-predicated integer pair that cannot vectorize
+        emulated_minmax = reduce_op in ("Min", "Max") and \
+            tp in (dr.VarType.Float32, dr.VarType.Float64)
+        if emulated_minmax:
+            st, ut = ("s64", "u64") if tp == dr.VarType.Float64 else ("s32", "u32")
+            sop, uop = ("min", "max") if reduce_op == "Min" else ("max", "min")
+            assert ir.count(f"red.global.{sop}.{st}") == packet_size
+            assert ir.count(f"red.global.{uop}.{ut}") == packet_size
+        elif supports_wide_vector_reduction:
             if tp == dr.VarType.Float16:
                 n_regs = {1: 0, 2: 2, 3: 0, 4: 4, 5: 0, 6: 2, 12: 4, 16: 8}[packet_size]
                 n_inst = {1: 0, 2: 1, 3: 0, 4: 1, 5: 0, 6: 3, 12: 3, 16: 2}[packet_size]
