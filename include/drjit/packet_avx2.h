@@ -334,9 +334,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(32)
             odd.m = _mm256_mul_epu32(_mm256_srli_epi64(m, 32), _mm256_srli_epi64(b.m, 32));
         }
 
-        return select(
-            mask_t<Derived>(true, false, true, false, true, false, true, false),
-            even, odd);
+        return _mm256_blend_epi32(odd.m, even.m, 0b01010101);
     }
 
 #if defined(DRJIT_X86_AVX512)
