@@ -188,7 +188,7 @@ PyObject *apply(ArrayOp op, Slot slot, std::index_sequence<Is...> is,
         void *impl = s[op];
 
         if (impl == DRJIT_OP_NOT_IMPLEMENTED) {
-            if constexpr (std::is_same_v<Slot, int>)
+            if constexpr (std::is_same_v<Slot, int> && sizeof...(Args) > 1)
                 return nb::not_implemented().release().ptr();
             else
                 nb::raise("operation not supported for this type.");
