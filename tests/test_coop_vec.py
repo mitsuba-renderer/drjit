@@ -135,6 +135,9 @@ def test04_pack_unpack(t, sub_slice):
         assert dr.all(m.TensorXf16(X2a) == X2[:, 0:32], axis=None)
 
 
+# NumPy's matmul reports spurious FP exceptions when built against Apple
+# Accelerate, whose GEMM kernels set the FPU status flags on SIMD padding lanes.
+@pytest.mark.filterwarnings('ignore:.*encountered in matmul:RuntimeWarning')
 @pytest.mark.parametrize('shape', [(2, 8), (5, 2), (16, 16)])
 @pytest.mark.parametrize('transpose', [False, True])
 @pytest.mark.parametrize('bias', [False, True])
