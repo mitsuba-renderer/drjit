@@ -167,6 +167,8 @@ enum class ArrayOp {
 
     Minimum,
     Maximum,
+    FMin,
+    FMax,
     Copysign,
     Atan2,
 
@@ -561,6 +563,14 @@ template <typename T> void bind_arithmetic(ArrayBinding &b) {
         new (c) T(drjit::maximum(*a, *b));
     };
 
+    b[ArrayOp::FMin] = (void *) +[](const T *a, const T *b, T *c) {
+        new (c) T(drjit::fmin(*a, *b));
+    };
+
+    b[ArrayOp::FMax] = (void *) +[](const T *a, const T *b, T *c) {
+        new (c) T(drjit::fmax(*a, *b));
+    };
+
     b[ArrayOp::Copysign] = (void *) +[](const T *a, const T *b, T *c) {
         new (c) T(drjit::copysign(*a, *b));
     };
@@ -645,7 +655,7 @@ inline void disable_cast(ArrayBinding &b) {
 inline void disable_arithmetic(ArrayBinding &b) {
     b[ArrayOp::Abs] = b[ArrayOp::Neg] = b[ArrayOp::Add] = b[ArrayOp::Sub] =
         b[ArrayOp::Mul] = b[ArrayOp::Minimum] = b[ArrayOp::Maximum] =
-        b[ArrayOp::Copysign] = b[ArrayOp::Fma] = b[ArrayOp::Sum] = b[ArrayOp::Prod] =
+        b[ArrayOp::FMin] = b[ArrayOp::FMax] = b[ArrayOp::Copysign] = b[ArrayOp::Fma] = b[ArrayOp::Sum] = b[ArrayOp::Prod] =
         b[ArrayOp::Min] = b[ArrayOp::Max] = DRJIT_OP_NOT_IMPLEMENTED;
 }
 

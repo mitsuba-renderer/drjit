@@ -21,8 +21,9 @@ class BinaryOp(Protocol):
 _reduce_ops: Dict[dr.ReduceOp, BinaryOp] = {
     dr.ReduceOp.Add: cast(BinaryOp, lambda a, b: a + b),
     dr.ReduceOp.Mul: cast(BinaryOp, lambda a, b: a * b),
-    dr.ReduceOp.Min: cast(BinaryOp, lambda a, b: dr.minimum(a, b)),
-    dr.ReduceOp.Max: cast(BinaryOp, lambda a, b: dr.maximum(a, b)),
+    # Reductions ignore NaNs
+    dr.ReduceOp.Min: cast(BinaryOp, lambda a, b: dr.fmin(a, b)),
+    dr.ReduceOp.Max: cast(BinaryOp, lambda a, b: dr.fmax(a, b)),
     dr.ReduceOp.Or: cast(BinaryOp, lambda a, b: a | b),
     dr.ReduceOp.And: cast(BinaryOp, lambda a, b: a & b),
 }

@@ -321,6 +321,20 @@ struct DRJIT_TRIVIAL_ABI DiffArray
             return steal(jit_var_max(m_index, a.m_index));
     }
 
+    DiffArray fmin_(const DiffArray &a) const {
+        if constexpr (IsFloat)
+            return steal(ad_var_fmin(m_index, a.m_index));
+        else
+            return steal(jit_var_fmin(m_index, a.m_index));
+    }
+
+    DiffArray fmax_(const DiffArray &a) const {
+        if constexpr (IsFloat)
+            return steal(ad_var_fmax(m_index, a.m_index));
+        else
+            return steal(jit_var_fmax(m_index, a.m_index));
+    }
+
     DiffArray copysign_(const DiffArray &a) const {
         if constexpr (IsFloat)
             return steal(ad_var_copysign(m_index, a.m_index));

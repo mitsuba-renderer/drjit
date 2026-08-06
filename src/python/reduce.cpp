@@ -62,14 +62,14 @@ static Reduction reductions[] = {
         "min",
         [](nb::handle tp) { return tp.is(&PyLong_Type) || tp.is(&PyFloat_Type); },
         []() -> nb::object { return nb::float_(INFINITY); },
-        [](nb::handle h1, nb::handle h2) { return array_module.attr("minimum")(h1, h2); }
+        [](nb::handle h1, nb::handle h2) { return array_module.attr("fmin")(h1, h2); }
     },
     {
         ArrayOp::Max,
         "max",
         [](nb::handle tp) { return tp.is(&PyLong_Type) || tp.is(&PyFloat_Type); },
         []() -> nb::object { return nb::float_(-INFINITY); },
-        [](nb::handle h1, nb::handle h2) { return array_module.attr("maximum")(h1, h2); }
+        [](nb::handle h1, nb::handle h2) { return array_module.attr("fmax")(h1, h2); }
     },
     {
         ArrayOp::And,

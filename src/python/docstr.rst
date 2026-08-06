@@ -585,6 +585,9 @@
 
     Compute the element-wise maximum value of the provided inputs.
 
+    A NaN in either input propagates to the output. Use
+    :py:func:`drjit.fmax` to ignore NaNs instead.
+
     (Not to be confused with :py:func:`drjit.max`, which reduces the input
     along the specified axes to determine the maximum)
 
@@ -599,8 +602,39 @@
 
     Compute the element-wise minimum value of the provided inputs.
 
+    A NaN in either input propagates to the output. Use
+    :py:func:`drjit.fmin` to ignore NaNs instead.
+
     (Not to be confused with :py:func:`drjit.min`, which reduces the input
     along the specified axes to determine the minimum)
+
+    Args:
+        arg0 (int | float | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+        arg1 (int | float | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+
+    Returns:
+        int | float | drjit.ArrayBase: Minimum of the input(s)
+
+.. topic:: fmax
+
+    Compute the element-wise maximum value of the provided inputs, ignoring NaNs.
+
+    If exactly one input is a NaN, the other one is returned. Integers have no
+    NaNs, hence this is equivalent to :py:func:`drjit.maximum` there.
+
+    Args:
+        arg0 (int | float | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+        arg1 (int | float | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+
+    Returns:
+        int | float | drjit.ArrayBase: Maximum of the input(s)
+
+.. topic:: fmin
+
+    Compute the element-wise minimum value of the provided inputs, ignoring NaNs.
+
+    If exactly one input is a NaN, the other one is returned. Integers have no
+    NaNs, hence this is equivalent to :py:func:`drjit.minimum` there.
 
     Args:
         arg0 (int | float | drjit.ArrayBase): A Python or Dr.Jit arithmetic type

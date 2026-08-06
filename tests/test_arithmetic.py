@@ -646,3 +646,91 @@ def test30_assert_allclose_nested(t):
         with pytest.raises(AssertionError) as e:
             dr.assert_allclose(a, b, atol=1e-4)
         assert f'Mismatched elements: {n}' in str(e.value)
+
+
+@pytest.test_arrays('float, shape=(*)')
+def test_minmax_nan(t):
+    # 'minimum'/'maximum' propagate NaNs, 'fmin'/'fmax' ignore them
+    nan, inf = float('nan'), float('inf')
+    a, b = t(nan, 5, nan, 5), t(5, nan, nan, 1)
+
+    def check(value, ref):
+        assert dr.all(dr.isnan(value) == dr.isnan(t(*ref)))
+        assert dr.all((value == t(*ref)) | dr.isnan(value))
+
+    for x, y in ((a, b), (b, a)):
+        check(dr.minimum(x, y), (nan, nan, nan, 1))
+        check(dr.maximum(x, y), (nan, nan, nan, 5))
+        check(dr.fmin(x, y), (5, 5, nan, 1))
+        check(dr.fmax(x, y), (5, 5, nan, 5))
+
+    # Infinities must never swallow a NaN. The second entry avoids folding.
+    check(dr.minimum(t(nan, 1), t(-inf)), (nan, -inf))
+    check(dr.minimum(t(nan, 1), t(inf)), (nan, 1))
+    check(dr.maximum(t(nan, 1), t(inf)), (nan, inf))
+    check(dr.maximum(t(nan, 1), t(-inf)), (nan, 1))
+    check(dr.fmin(t(nan, 1), t(-inf)), (-inf, -inf))
+    check(dr.fmin(t(nan, 1), t(inf)), (inf, 1))
+    check(dr.fmax(t(nan, 1), t(inf)), (inf, inf))
+    check(dr.fmax(t(nan, 1), t(-inf)), (-inf, 1))
+
+    # A single literal is folded on the host and must agree with the above
+    check(dr.minimum(t(nan), t(5)), (nan,))
+    check(dr.minimum(t(5), t(nan)), (nan,))
+    check(dr.fmin(t(nan), t(5)), (5,))
+    check(dr.fmin(t(5), t(nan)), (5,))
+    check(dr.fmin(t(nan), t(nan)), (nan,))
+
+
+@pytest.test_arrays('int32, -uint32, shape=(*)')
+def test_minmax_nan_int(t):
+    # Integers have no NaNs
+    a, b = t(1, 5, -3, 7), t(5, 1, 2, 7)
+    assert dr.all(dr.fmin(a, b) == dr.minimum(a, b))
+    assert dr.all(dr.fmax(a, b) == dr.maximum(a, b))
+    assert dr.fmin(4, 7) == 4 and dr.fmax(4, 7) == 7
+
+
+def test_minmax_nan_packet():
+    # Same conventions at every packet width
+    nan = float('nan')
+
+    for name in ('Array2f', 'Array3f', 'Array4f', 'Array2f64', 'Array4f64',
+                 'Array4f16', 'Array2f16'):
+        t = getattr(dr.scalar, name)
+        n = dr.size_v(t)
+        pa, pb = (nan, 5, nan, 5), (5, nan, nan, 1)
+        a = t(*[pa[i % 4] for i in range(n)])
+        b = t(*[pb[i % 4] for i in range(n)])
+
+        def check(value, ref, op):
+            for i in range(n):
+                got, exp = float(value[i]), float(ref[i % 4])
+                assert (got != got and exp != exp) or got == exp, \
+                    f'{name}.{op} lane {i}: {got} != {exp}'
+
+        for x, y in ((a, b), (b, a)):
+            check(dr.minimum(x, y), (nan, nan, nan, 1), 'minimum')
+            check(dr.maximum(x, y), (nan, nan, nan, 5), 'maximum')
+            check(dr.fmin(x, y), (5, 5, nan, 1), 'fmin')
+            check(dr.fmax(x, y), (5, 5, nan, 5), 'fmax')
+
+    # Integers are unaffected
+    ti = dr.scalar.Array4i
+    a, b = ti(1, 5, -3, 7), ti(5, 1, 2, 7)
+    assert dr.all(dr.fmin(a, b) == dr.minimum(a, b))
+    assert dr.all(dr.fmax(a, b) == dr.maximum(a, b))
+
+
+@pytest.test_arrays('float32, shape=(*)')
+def test_minmax_nan_reduction(t):
+    # Reductions ignore NaNs, wherever the NaN sits
+    nan = float('nan')
+    for data in ((nan, 1, 2, 3), (1, nan, 2, 3), (1, 2, 3, nan)):
+        assert dr.min(t(*data)) == 1
+        assert dr.max(t(*data)) == 3
+
+    target = dr.zeros(t, 2)
+    index = dr.uint32_array_t(t)(0, 0)
+    dr.scatter_reduce(dr.ReduceOp.Min, target, t(nan, 5), index)
+    assert target[0] == 0

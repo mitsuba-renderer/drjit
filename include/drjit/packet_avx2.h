@@ -351,8 +351,8 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(32)
 
     DRJIT_INLINE Value sum_()  const { return sum(low_() + high_()); }
     DRJIT_INLINE Value prod_() const { return prod(low_() * high_()); }
-    DRJIT_INLINE Value min_()  const { return min(minimum(low_(), high_())); }
-    DRJIT_INLINE Value max_()  const { return max(maximum(low_(), high_())); }
+    DRJIT_INLINE Value min_()  const { return min(drjit::fmin(low_(), high_())); }
+    DRJIT_INLINE Value max_()  const { return max(drjit::fmax(low_(), high_())); }
 
     DRJIT_INLINE bool all_() const { return _mm256_movemask_ps(_mm256_castsi256_ps(m)) == 0xFF; }
     DRJIT_INLINE bool any_() const { return _mm256_movemask_ps(_mm256_castsi256_ps(m)) != 0; }
@@ -804,8 +804,8 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(32)
     //
     DRJIT_INLINE Value sum_()  const { return sum(low_() + high_()); }
     DRJIT_INLINE Value prod_() const { return prod(low_() * high_()); }
-    DRJIT_INLINE Value min_()  const { return min(drjit::minimum(low_(), high_())); }
-    DRJIT_INLINE Value max_()  const { return max(drjit::maximum(low_(), high_())); }
+    DRJIT_INLINE Value min_()  const { return min(drjit::fmin(low_(), high_())); }
+    DRJIT_INLINE Value max_()  const { return max(drjit::fmax(low_(), high_())); }
 
     DRJIT_INLINE bool all_() const { return _mm256_movemask_pd(_mm256_castsi256_pd(m)) == 0xF; }
     DRJIT_INLINE bool any_() const { return _mm256_movemask_pd(_mm256_castsi256_pd(m)) != 0; }

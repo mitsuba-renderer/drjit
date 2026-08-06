@@ -200,12 +200,22 @@ template <typename T> T round_(const T &a) {
         return (T) drjit::detail::round_((float) a);
 }
 
+/// IEEE-754-2019 'maximum'/'minimum': a NaN operand makes the result NaN
 template <typename T> T maximum_(const T &a, const T &b) {
-    return a < b ? b : a;
+    return (a > b || a != a) ? a : b;
 }
 
 template <typename T> T minimum_(const T &a, const T &b) {
-    return b < a ? b : a;
+    return (a < b || a != a) ? a : b;
+}
+
+/// IEEE-754-2008 'maxNum'/'minNum': a NaN operand is ignored
+template <typename T> T fmax_(const T &a, const T &b) {
+    return (a > b || b != b) ? a : b;
+}
+
+template <typename T> T fmin_(const T &a, const T &b) {
+    return (a < b || b != b) ? a : b;
 }
 
 template <typename T> T copysign_(const T &a, const T &b) {

@@ -2861,6 +2861,48 @@ Index ad_var_max(Index i0, Index i1) {
 
 // ==========================================================================
 
+Index ad_var_fmin(Index i0, Index i1) {
+    JitVar result = JitVar::steal(jit_var_fmin(jit_index(i0), jit_index(i1)));
+
+    if (is_detached(i0, i1)) {
+        return result.release();
+    } else {
+        JitVar v0 = JitVar::borrow(jit_index(i0)),
+               v1 = JitVar::borrow(jit_index(i1)),
+               zero = scalar(i0, 0.0),
+               one  = scalar(i0, 1.0);
+
+        JitMask mask = v0 <= v1;
+
+        return ad_var_new("fmin", std::move(result),
+                          Arg(i0, dr::select(mask, one, zero)),
+                          Arg(i1, dr::select(mask, zero, one)));
+    }
+}
+
+// ==========================================================================
+
+Index ad_var_fmax(Index i0, Index i1) {
+    JitVar result = JitVar::steal(jit_var_fmax(jit_index(i0), jit_index(i1)));
+
+    if (is_detached(i0, i1)) {
+        return result.release();
+    } else {
+        JitVar v0 = JitVar::borrow(jit_index(i0)),
+               v1 = JitVar::borrow(jit_index(i1)),
+               zero = scalar(i0, 0.0),
+               one  = scalar(i0, 1.0);
+
+        JitMask mask = v0 > v1;
+
+        return ad_var_new("fmax", std::move(result),
+                          Arg(i0, dr::select(mask, one, zero)),
+                          Arg(i1, dr::select(mask, zero, one)));
+    }
+}
+
+// ==========================================================================
+
 Index ad_var_copysign(Index i0, Index i1) {
     JitVar result = JitVar::steal(jit_var_copysign(jit_index(i0), jit_index(i1)));
 

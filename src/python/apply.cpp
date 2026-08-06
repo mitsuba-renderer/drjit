@@ -78,6 +78,8 @@ static const char *op_names[] = {
 
     "minimum",
     "maximum",
+    "fmin",
+    "fmax",
     "copysign",
     "atan2",
 

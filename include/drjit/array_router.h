@@ -119,6 +119,24 @@ NAMESPACE_BEGIN(drjit)
         }                                                                      \
     }
 
+/// Like the above, but integer arguments are redirected to another operation
+#define DRJIT_ROUTE_BINARY_FALLBACK_INT(name, func, alt, expr)                 \
+    template <typename T1, typename T2>                                        \
+    DRJIT_INLINE auto name(const T1 &a1, const T2 &a2) {                       \
+        using E = expr_t<T1, T2>;                                              \
+        if constexpr (!is_floating_point_v<E>) {                               \
+            return alt(a1, a2);                                                \
+        } else if constexpr (is_array_any_v<T1, T2>) {                         \
+            if constexpr (std::is_same_v<T1, E> && std::is_same_v<T2, E>)      \
+                return a1.derived().func##_(a2.derived());                     \
+            else                                                               \
+                return name(static_cast<ref_cast_t<T1, E>>(a1),                \
+                            static_cast<ref_cast_t<T2, E>>(a2));               \
+        } else {                                                               \
+            return expr;                                                       \
+        }                                                                      \
+    }
+
 /// Define a ternary operation
 #define DRJIT_ROUTE_TERNARY_FALLBACK(name, func, expr)                         \
     template <typename T1, typename T2, typename T3>                           \
@@ -193,6 +211,9 @@ DRJIT_ROUTE_UNARY_FALLBACK(rsqrt, rsqrt, detail::rsqrt_(a))
 
 DRJIT_ROUTE_BINARY_FALLBACK(maximum, maximum, detail::maximum_((E) a1, (E) a2))
 DRJIT_ROUTE_BINARY_FALLBACK(minimum, minimum, detail::minimum_((E) a1, (E) a2))
+// Integers have no NaNs
+DRJIT_ROUTE_BINARY_FALLBACK_INT(fmax, fmax, maximum, detail::fmax_((E) a1, (E) a2))
+DRJIT_ROUTE_BINARY_FALLBACK_INT(fmin, fmin, minimum, detail::fmin_((E) a1, (E) a2))
 DRJIT_ROUTE_BINARY_FALLBACK(copysign, copysign, detail::copysign_((E) a1, (E) a2))
 DRJIT_ROUTE_BINARY_FALLBACK(mul_hi, mul_hi,     detail::mul_hi_((E) a1, (E) a2))
 DRJIT_ROUTE_BINARY_FALLBACK(mul_wide, mul_wide, detail::mul_wide_((E) a1, (E) a2))
@@ -1149,8 +1170,8 @@ void scatter_reduce(ReduceOp op, Target &target, const Value &value,
                         if constexpr (!std::is_same_v<Value, bool>)
                             return a * b;
                         break;
-                    case ReduceOp::Min: return minimum(a, b);
-                    case ReduceOp::Max: return maximum(a, b);
+                    case ReduceOp::Min: return drjit::fmin(a, b);
+                    case ReduceOp::Max: return drjit::fmax(a, b);
                     case ReduceOp::And:
                         if constexpr (is_integral_v<Value>)
                             return a & b;

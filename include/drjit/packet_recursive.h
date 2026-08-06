@@ -99,6 +99,8 @@ struct StaticArrayImpl<Value_, Size_, IsMask_, Derived_,
 
     DRJIT_INLINE Derived minimum_(Ref a) const { return Derived(minimum(a1, a.a1), minimum(a2, a.a2)); }
     DRJIT_INLINE Derived maximum_(Ref a) const { return Derived(maximum(a1, a.a1), maximum(a2, a.a2)); }
+    DRJIT_INLINE Derived fmin_(Ref a) const { return Derived(fmin(a1, a.a1), fmin(a2, a.a2)); }
+    DRJIT_INLINE Derived fmax_(Ref a) const { return Derived(fmax(a1, a.a1), fmax(a2, a.a2)); }
     DRJIT_INLINE Derived abs_() const { return Derived(abs(a1), abs(a2)); }
     DRJIT_INLINE Derived sqrt_() const { return Derived(sqrt(a1), sqrt(a2)); }
     DRJIT_INLINE Derived ceil_() const { return Derived(ceil(a1), ceil(a2)); }
@@ -236,16 +238,16 @@ struct StaticArrayImpl<Value_, Size_, IsMask_, Derived_,
 
     DRJIT_INLINE Value min_() const {
         if constexpr (Size1 == Size2)
-            return min(minimum(a1, a2));
+            return min(drjit::fmin(a1, a2));
         else
-            return minimum(min(a1), min(a2));
+            return drjit::fmin(min(a1), min(a2));
     }
 
     DRJIT_INLINE Value max_() const {
         if constexpr (Size1 == Size2)
-            return max(maximum(a1, a2));
+            return max(drjit::fmax(a1, a2));
         else
-            return maximum(max(a1), max(a2));
+            return drjit::fmax(max(a1), max(a2));
     }
 
     DRJIT_INLINE Value dot_(Ref a) const {

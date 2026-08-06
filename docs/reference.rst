@@ -313,6 +313,8 @@ Standard mathematical functions
 .. autofunction:: abs
 .. autofunction:: minimum
 .. autofunction:: maximum
+.. autofunction:: fmin
+.. autofunction:: fmax
 .. autofunction:: sqrt
 .. autofunction:: cbrt
 .. autofunction:: rcp

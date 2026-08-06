@@ -728,8 +728,11 @@ void export_coop_vec(nb::module_ &m) {
     );
 
     m.def("fma", &coop_vec_ternary_op<JitOp::Fma>);
+    // Cooperative vector min/max always ignore NaNs
     m.def("minimum", &coop_vec_binary_op<JitOp::Min>);
     m.def("maximum", &coop_vec_binary_op<JitOp::Max>);
+    m.def("fmin", &coop_vec_binary_op<JitOp::FMin>);
+    m.def("fmax", &coop_vec_binary_op<JitOp::FMax>);
     m.def("step", &coop_vec_binary_op<JitOp::Step>, doc_step);
     m.def("log2", &coop_vec_unary_op<JitOp::Log2>);
     m.def("exp2", &coop_vec_unary_op<JitOp::Exp2>);

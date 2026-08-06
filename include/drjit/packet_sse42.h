@@ -226,8 +226,14 @@ template <bool IsMask_, typename Derived_> struct alignas(16)
     #undef DRJIT_COMP
 
     DRJIT_INLINE Derived abs_()      const { return _mm_andnot_ps(_mm_set1_ps(-0.f), m); }
-    DRJIT_INLINE Derived minimum_(Ref b) const { return _mm_min_ps(b.m, m); }
-    DRJIT_INLINE Derived maximum_(Ref b) const { return _mm_max_ps(b.m, m); }
+    // 'minps' returns its second operand for NaN inputs, hence only a NaN in
+    // 'b' needs an explicit test. It folds away when 'b' is a constant.
+    DRJIT_INLINE Derived minimum_(Ref b) const { return _mm_blendv_ps(_mm_min_ps(b.m, m), b.m, _mm_cmpunord_ps(b.m, b.m)); }
+    DRJIT_INLINE Derived maximum_(Ref b) const { return _mm_blendv_ps(_mm_max_ps(b.m, m), b.m, _mm_cmpunord_ps(b.m, b.m)); }
+
+    // Same, with the operand order that makes a NaN vanish instead
+    DRJIT_INLINE Derived fmin_(Ref b) const { return _mm_blendv_ps(_mm_min_ps(m, b.m), m, _mm_cmpunord_ps(b.m, b.m)); }
+    DRJIT_INLINE Derived fmax_(Ref b) const { return _mm_blendv_ps(_mm_max_ps(m, b.m), m, _mm_cmpunord_ps(b.m, b.m)); }
     DRJIT_INLINE Derived sqrt_()     const { return _mm_sqrt_ps(m);     }
 
     DRJIT_INLINE Derived floor_() const {
@@ -1037,8 +1043,11 @@ template <bool IsMask_, typename Derived_> struct alignas(16)
     #undef DRJIT_COMP
 
     DRJIT_INLINE Derived abs_()      const { return _mm_andnot_pd(_mm_set1_pd(-0.), m); }
-    DRJIT_INLINE Derived minimum_(Ref b) const { return _mm_min_pd(b.m, m); }
-    DRJIT_INLINE Derived maximum_(Ref b) const { return _mm_max_pd(b.m, m); }
+    DRJIT_INLINE Derived minimum_(Ref b) const { return _mm_blendv_pd(_mm_min_pd(b.m, m), b.m, _mm_cmpunord_pd(b.m, b.m)); }
+    DRJIT_INLINE Derived maximum_(Ref b) const { return _mm_blendv_pd(_mm_max_pd(b.m, m), b.m, _mm_cmpunord_pd(b.m, b.m)); }
+
+    DRJIT_INLINE Derived fmin_(Ref b) const { return _mm_blendv_pd(_mm_min_pd(m, b.m), m, _mm_cmpunord_pd(b.m, b.m)); }
+    DRJIT_INLINE Derived fmax_(Ref b) const { return _mm_blendv_pd(_mm_max_pd(m, b.m), m, _mm_cmpunord_pd(b.m, b.m)); }
     DRJIT_INLINE Derived ceil_()     const { return _mm_ceil_pd(m);     }
     DRJIT_INLINE Derived floor_()    const { return _mm_floor_pd(m);    }
     DRJIT_INLINE Derived sqrt_()     const { return _mm_sqrt_pd(m);     }
