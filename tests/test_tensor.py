@@ -1344,3 +1344,17 @@ def test46_torch_setitem(t):
     x[2:7] = 100.0
     x_torch[2:7] = 100.0
     assert dr.allclose(x, x_torch)
+
+@pytest.test_arrays('jit, float32, shape=(3, *)')
+def test47_init_from_tensor_convert(t):
+    # The element type of a tensor is converted like that of any other input
+    mod = sys.modules[t.__module__]
+    ref = t([1, 2], [3, 4], [5, 6])
+
+    for name in ('TensorXf', 'TensorXf64', 'TensorXi'):
+        tensor_t = getattr(mod, name)
+        for target in (t, mod.Array3f64):
+            x = target(tensor_t(ref), flip_axes=False)
+            y = target(tensor_t(ref, flip_axes=True), flip_axes=True)
+            assert dr.all(x == target(ref), axis=None)
+            assert dr.all(y == target(ref), axis=None)

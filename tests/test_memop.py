@@ -265,6 +265,14 @@ def test12_unravel_vec(t, drjit_verbose, capsys):
     with pytest.raises(TypeError, match="expected array of type"):
         dr.unravel(t, t(), order='C')
 
+    # The element type and AD flavor of the input are converted when needed
+    mod = sys.modules[t.__module__]
+    other = mod.Array3f64 if dr.type_v(t) != dr.VarType.Float64 else mod.Array3f
+    assert dr.all(dr.unravel(other, v0, order='C') ==
+                  other([1, 2, 3], [4, 5, 6], 7), axis=None)
+    assert dr.all(dr.unravel(t, dr.detach(dr.value_t(t)(v0)), order='C') ==
+                  t([1, 2, 3], [4, 5, 6], 7), axis=None)
+
     with pytest.raises(RuntimeError, match="order parameter must equal"):
         dr.unravel(t, vt(), order='Q')
 

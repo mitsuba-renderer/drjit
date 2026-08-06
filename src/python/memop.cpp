@@ -765,33 +765,31 @@ nb::object unravel(const nb::type_object_t<ArrayBase> &dtype,
         throw nb::type_error(
             "drjit.unravel(): 'dtype' cannot be a tensor!");
 
-    ArrayMeta m { }, m2 { };
+    ArrayMeta m { };
     m.backend = s.backend;
     m.type = s.type;
     m.is_diff = s.is_diff;
     m.is_valid = 1;
     m.ndim = 1;
     m.shape[0] = DRJIT_DYNAMIC;
-    nb::handle flat = meta_get_type(m);
 
-    if (!flat.is(array.type())) {
-        m2 = m;
-        m2.is_diff = false;
-        flat = meta_get_type(m2);
+    // Convert the input into the flat array type implied by 'dtype'
+    nb::handle flat_tp = meta_get_type(m);
+    nb::object flat = nb::borrow(array);
 
-        if (!flat.is(array.type())) {
-            nb::str flat_name = nb::type_name(flat),
-                    actual_name = nb::inst_name(array);
+    if (!flat_tp.is(array.type())) {
+        const ArraySupplement &s_arr = supp(array.type());
+        if (s_arr.ndim != 1 || s_arr.shape[0] != DRJIT_DYNAMIC)
             nb::raise_type_error(
                 "drjit.unravel(): expected array of type '%s', but got '%s'!",
-                flat_name.c_str(), actual_name.c_str());
-        }
+                nb::type_name(flat_tp).c_str(), nb::inst_name(array).c_str());
+        flat = flat_tp(flat);
     }
 
-    if (array.type().is(dtype))
-        return nb::borrow(array);
+    if (flat_tp.is(dtype))
+        return flat;
 
-    Py_ssize_t size = (Py_ssize_t) len(array);
+    Py_ssize_t size = (Py_ssize_t) len(flat);
 
     Py_ssize_t shape[4] { }, strides[4] { }, stride = 1;
     int ndim = s.ndim;
@@ -845,12 +843,12 @@ nb::object unravel(const nb::type_object_t<ArrayBase> &dtype,
         s.shape[0] > 1 && ((s.shape[0]-1) & s.shape[0])==0) {
         // Potentially use dr.gather() to benefit from new packet gather feature for power-of-two sized unravels
         return gather(
-            dtype, nb::borrow(array),
+            dtype, flat,
             arange(nb::borrow<nb::type_object_t<ArrayBase>>(index_dtype), 0,
                    shape[1], 1),
             nb::bool_(true));
     } else {
-        return unravel_recursive(dtype, array, index_dtype, shape, strides, 0, 0,
+        return unravel_recursive(dtype, flat, index_dtype, shape, strides, 0, 0,
                                  (int) ndim - index_dtype.is_valid());
     }
 }

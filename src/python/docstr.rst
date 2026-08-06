@@ -3528,9 +3528,9 @@
         dtype (type): An arbitrary Dr.Jit array type
 
         array (drjit.ArrayBase): A dynamically sized 1D Dr.Jit array instance
-           that is compatible with ``dtype``. In other words, both must have the
-           same underlying scalar type and be located imported in the same package
-           (e.g., ``drjit.llvm.ad``).
+           that uses the same backend as ``dtype`` (e.g. ``drjit.llvm``). Its
+           element type and AD flavor are converted when they differ from the
+           ones implied by ``dtype``.
 
         order (str): A single character indicating the index order. ``'F'`` (the
            default) indicates column-major/Fortran-style ordering, in which case
