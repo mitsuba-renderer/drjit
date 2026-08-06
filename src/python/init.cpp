@@ -255,7 +255,8 @@ static int tp_init_array_impl(PyObject *self, PyObject *const *args,
                         flattened = nb::steal(as.tensor_array(arg));
                         source_shape_vec = shape;
                     } else {
-                        flattened = import_ndarray(s, arg, &source_shape_vec);
+                        flattened = import_ndarray(s, arg, &source_shape_vec,
+                                                   false, do_flip_axes);
                     }
 
                     if (do_flip_axes)
@@ -676,7 +677,11 @@ static void ndarray_keep_alive(JitBackend backend, uint32_t index,
                                nb::detail::ndarray_handle *p);
 
 nb::object import_ndarray(ArrayMeta m, PyObject *arg, vector<size_t> *shape_out,
-                          bool force_ad) {
+                          bool force_ad, bool flip_axes) {
+    // For complex arrays, 'flip_axes' refers to their interleaved storage
+    // format and does not transpose the input
+    flip_axes &= !m.is_complex;
+
     int64_t shape[4];
     nb::detail::ndarray_config conf { };
     conf.order = 'C';
@@ -693,6 +698,9 @@ nb::object import_ndarray(ArrayMeta m, PyObject *arg, vector<size_t> *shape_out,
             if (shape[i] == DRJIT_DYNAMIC)
                 shape[i] = -1;
         }
+        // 'flip_axes' transposes the input, hence the expected shape reverses
+        if (flip_axes)
+            std::reverse(shape, shape + m.ndim);
     }
 
     if (m.is_complex) {
@@ -707,12 +715,16 @@ nb::object import_ndarray(ArrayMeta m, PyObject *arg, vector<size_t> *shape_out,
         arg, &conf, (uint8_t) nb::detail::cast_flags::convert, nullptr);
 
     if (!th && m.ndim > 1 && m.shape[m.ndim - 1] == DRJIT_DYNAMIC) {
-        // Try conversion of scalar to vectorized representation
+        // Try conversion of scalar to vectorized representation. 'flip_axes'
+        // moved the dynamic dimension to the front.
         conf.ndim--;
+        conf.shape += flip_axes;
         th = nb::detail::ndarray_import(
             arg, &conf, (uint8_t) nb::detail::cast_flags::convert, nullptr);
-        if (!th)
+        if (!th) {
             conf.ndim++;
+            conf.shape -= flip_axes;
+        }
     }
 
     if (!th) {
@@ -787,12 +799,9 @@ nb::object import_ndarray(ArrayMeta m, PyObject *arg, vector<size_t> *shape_out,
     }
 
     if (m.is_complex) {
-        if (shape_out) {
-            shape_out->resize(shape_out->size() + 1);
-            for (size_t i = shape_out->size() - 1; i > 0; --i)
-                shape_out->operator[](i) = shape_out->operator[](i - 1);
-            shape_out->operator[](0) = 2;
-        }
+        // Complex arrays are imported with flipped axes, hence the trailing '2'
+        if (shape_out)
+            shape_out->push_back(2);
         ndim += 1;
         size *= 2;
     }
