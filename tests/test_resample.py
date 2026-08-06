@@ -310,6 +310,27 @@ def test16_convolve_axis(t):
     assert dr.allclose(a, b)
 
 
+# Argument validation for the documented error conditions.
+@pytest.test_arrays('float32, shape=(*)')
+def test17_convolve_errors(t):
+    x = t(1, 2, 3, 4, 5)
+    # 'filter_radius' is meaningless for a discrete kernel
+    with pytest.raises(RuntimeError, match="filter_radius' must be None"):
+        dr.convolve(x, [1.0, 2.0, 1.0], filter_radius=1.0)
+    # ... but required for a custom continuous filter
+    with pytest.raises(RuntimeError, match="must be specified"):
+        dr.convolve(x, lambda v: max(1.0 - abs(v), 0.0))
+    # an empty kernel is rejected
+    with pytest.raises(RuntimeError, match="kernel is empty"):
+        dr.convolve(x, [])
+    # unknown boundary mode
+    with pytest.raises(RuntimeError, match="invalid boundary"):
+        dr.convolve(x, [1.0], boundary='nope')
+    # resample shape must match the input rank
+    with pytest.raises(RuntimeError, match="same number of axes"):
+        dr.resample(x, (4, 4))
+
+
 # A continuous filter is sampled at the integer offsets in [-radius, radius],
 # hence it must agree with the discrete kernel holding those same samples. This
 # also pins the tap count, since a window that is off by one would truncate the
@@ -383,25 +404,68 @@ def test21_resample_symmetry(t, boundary):
             assert dr.allclose(fwd, dr.gather(t, rev, idx), atol=1e-6)
 
 
-# Argument validation for the documented error conditions.
+# Index of sample 'g' in the boundary-extended signal, at any distance. Used as
+# a reference below; scipy.ndimage is not usable for this, as its 'reflect' mode
+# zero-fills beyond two periods.
+def boundary_index(g, n, boundary):
+    if boundary == 'nearest':
+        return min(max(g, 0), n - 1)
+    if boundary == 'wrap':
+        return g % n
+    if boundary == 'mirror' and n == 1:
+        return 0
+    period = 2 * n if boundary == 'reflect' else 2 * n - 2
+    g %= period
+    if g >= n:
+        g = period - 1 - g if boundary == 'reflect' else period - g
+    return g
+
+
+# The periodic boundary modes reduce modulo the period, so a filter that is
+# several times wider than the array wraps around as often as needed.
+@pytest.mark.parametrize('boundary', ['nearest', 'wrap', 'reflect', 'mirror'])
 @pytest.test_arrays('float32, shape=(*)')
-def test17_convolve_errors(t):
-    x = t(1, 2, 3, 4, 5)
-    # 'filter_radius' is meaningless for a discrete kernel
-    with pytest.raises(RuntimeError, match="filter_radius' must be None"):
-        dr.convolve(x, [1.0, 2.0, 1.0], filter_radius=1.0)
-    # ... but required for a custom continuous filter
-    with pytest.raises(RuntimeError, match="must be specified"):
-        dr.convolve(x, lambda v: max(1.0 - abs(v), 0.0))
-    # an empty kernel is rejected
-    with pytest.raises(RuntimeError, match="kernel is empty"):
-        dr.convolve(x, [])
-    # unknown boundary mode
-    with pytest.raises(RuntimeError, match="invalid boundary"):
-        dr.convolve(x, [1.0], boundary='nope')
-    # a kernel larger than the array is only allowed for the 'zero' boundary
-    with pytest.raises(RuntimeError, match="cannot be larger than the array"):
-        dr.convolve(t(1, 2, 3), [1.0, 1.0, 1.0, 1.0, 1.0], boundary='wrap')
-    # resample shape must match the input rank
-    with pytest.raises(RuntimeError, match="same number of axes"):
-        dr.resample(x, (4, 4))
+def test22_wide_footprint(t, boundary):
+    np = pytest.importorskip("numpy")
+    np.random.seed(9)
+
+    for n in (1, 2, 3, 5):
+        x = np.float32(np.random.rand(n))
+        for ksize in (3, 11, 41):
+            k = np.float32(np.random.rand(ksize) - 0.5)
+            o = (ksize - 1) // 2
+            ref = [sum(k[j] * x[boundary_index(i + o - j, n, boundary)]
+                       for j in range(ksize)) for i in range(n)]
+            out = dr.convolve(t(x), list(k), boundary=boundary, normalize=False)
+            assert np.allclose(ref, out.numpy(), atol=1e-4)
+
+    # A continuous filter that is far wider than the array (this used to read
+    # out of bounds and produce NaNs)
+    y = dr.resample(t(np.float32(np.random.rand(64))), (1,), filter='lanczos',
+                    boundary=boundary)
+    assert dr.all(dr.isfinite(y))
+
+
+# The wide remap must also hold in the symbolic tap loop and in the reverse-mode
+# scatter, neither of which the forward test above reaches.
+@pytest.mark.parametrize('boundary', ['nearest', 'wrap', 'reflect', 'mirror'])
+@pytest.test_arrays('float32, shape=(*), is_diff')
+def test23_wide_symbolic_and_grad(t, boundary):
+    np = pytest.importorskip("numpy")
+    np.random.seed(10)
+    xv = np.float32(np.random.rand(4))
+    gv = np.float32(np.random.rand(4))
+    k = [float(v) for v in np.float32(np.random.rand(23) - 0.5)]
+
+    ev = dr.convolve(t(xv), k, boundary=boundary, normalize=False, mode='evaluated')
+    sy = dr.convolve(t(xv), k, boundary=boundary, normalize=False, mode='symbolic')
+    assert dr.allclose(ev, sy, atol=1e-5)
+
+    # <g, A x> == <A^T g, x>
+    x = t(xv)
+    dr.enable_grad(x)
+    y = dr.convolve(x, k, boundary=boundary, normalize=False)
+    lhs = dr.dot(t(gv), dr.detach(y))[0]
+    y.grad = t(gv)
+    dr.backward_to(x)
+    assert dr.allclose(lhs, dr.dot(t(xv), x.grad)[0], rtol=1e-4)

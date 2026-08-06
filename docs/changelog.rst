@@ -46,6 +46,10 @@ DrJit 1.5.0 (unreleased)
     ``numpy.convolve(..., mode='same')``. Specify ``normalize=True`` to restore
     the previous behavior.
 
+  - Periodic boundary conditions (``"wrap"``, ``"reflect"``, and ``"mirror"``)
+    extended the array by a single period. Larger filters could trigger
+    undefined behavior by reading beyond the end of the array. The extension
+    now repeats as often as needed.
 
 DrJit 1.4.0 (June 25, 2026)
 ---------------------------
