@@ -2819,7 +2819,7 @@ def resample(
       filter is susceptible to ringing when the input array contains
       discontinuities.
 
-    - ``"gaussian"``: use a Gaussian filter that queries :math:4^n` neighbors
+    - ``"gaussian"``: use a Gaussian filter that queries :math:`4^n` neighbors
       to reconstruct each output sample when upsampling. The kernel has a
       standard deviation of 0.5 and is truncated after 4 standard deviations.
       This filter is mainly useful when intending to blur a signal.
@@ -2930,7 +2930,7 @@ def convolve(
     *,
     axis: Union[int, Tuple[int, ...], None] = None,
     boundary: Literal["zero", "nearest", "wrap", "reflect", "mirror"] = "zero",
-    normalize: bool = True,
+    normalize: bool = False,
     mode: Optional[Literal["evaluated", "symbolic"]] = None
 ) -> ArrayT:
     ...
@@ -2943,7 +2943,7 @@ def convolve(
     *,
     axis: Union[int, Tuple[int, ...], None] = None,
     boundary: Literal["zero", "nearest", "wrap", "reflect", "mirror"] = "zero",
-    normalize: bool = True,
+    normalize: bool = False,
     mode: Optional[Literal["evaluated", "symbolic"]] = None
 ) -> ArrayT:
     ...
@@ -2956,19 +2956,15 @@ def convolve(
     *,
     axis: Union[int, Tuple[int, ...], None] = None,
     boundary: Literal["zero", "nearest", "wrap", "reflect", "mirror"] = "zero",
-    normalize: bool = True,
+    normalize: bool = False,
     mode: Optional[Literal["evaluated", "symbolic"]] = None
 ) -> ArrayT:
     """
     Convolve one or more axes of an input array/tensor with a 1D filter.
 
-    This function filters one or more axes of a Dr.Jit array or tensor. The
-    filter can either be a *continuous* reconstruction filter (a preset or a
-    callable, sampled at integer offsets) or a *discrete* kernel (a sequence of
-    coefficients). The resolution of the array is left unchanged.
-
-    A typical use of a continuous filter is to blur an image, e.g. by
-    convolving it with a 2D Gaussian:
+    This function filters one or more axes of a Dr.Jit array or tensor, leaving
+    its resolution unchanged. A typical use is to blur an image, e.g., by
+    convolving it with a truncated 2D Gaussian:
 
     .. code-block:: python
 
@@ -2977,17 +2973,32 @@ def convolve(
        blurred_image = dr.convolve(
            image,
            filter='gaussian',
-           filter_radius=10
+           filter_radius=10,
+           normalize=True
        )
 
-    The set of supported presets is identical to :py:func:`resample`, please
-    refer to its documentation for an overview.
+    The ``normalize=True`` argument rescales the filter weights so that the
+    blur preserves the overall brightness of the image. It is not the default,
+    since ``dr.convolve`` otherwise applies the kernel exactly as given.
 
-    **Continuous filters.** It is also possible to provide filters by providing
-    a function which Dr.Jit will evaluate at interger offsets within within
-    ``[-filter_radius, filter_radius]``. A radius :math:`r` thus yields
-    :math:`2\\lfloor r\\rfloor+1` taps centered on the output sample, which is
-    equivalent to passing the corresponding discrete kernel:
+    **Specifying the filter.** The ``filter`` argument accepts three forms:
+
+    - The name of a *preset*. The available choices are identical to
+      :py:func:`resample`, please refer to its documentation for an overview.
+      Here, ``filter_radius`` scales the preset's intrinsic radius to turn it
+      into a blur.
+
+    - A *callable* representing a continuous reconstruction filter. Dr.Jit
+      samples it at the integer offsets within ``[-filter_radius,
+      filter_radius]``, so that a radius :math:`r` yields
+      :math:`2\\lfloor r\\rfloor+1` taps centered on the output sample.
+      Specifying ``filter_radius`` is mandatory in this case.
+
+    - A *sequence* of numbers representing a discrete kernel, which Dr.Jit
+      applies directly. Here, ``filter_radius`` must be ``None``.
+
+    The latter two are equivalent whenever the sequence lists the samples of
+    the function:
 
     .. code-block:: python
 
@@ -2995,17 +3006,15 @@ def convolve(
        box = lambda v: 1.0 if abs(v) <= 2 else 0.0
 
        # Both evaluate to [3, 4, 5, 4, 3]
-       dr.convolve(x, box, 2, normalize=False)
-       dr.convolve(x, [1, 1, 1, 1, 1], normalize=False)
+       dr.convolve(x, box, 2)
+       dr.convolve(x, [1, 1, 1, 1, 1])
 
-    **Discrete kernels and the relation to** ``numpy.convolve``\\ **.** When
-    ``filter`` is a sequence of numbers, it is interpreted as a discrete
-    convolution kernel that is applied directly. The kernel is flipped and
-    aligned so that the result matches the central part of a full convolution
-    (the alignment of :py:func:`numpy.convolve` with ``mode='same'``). Unlike
-    :py:func:`numpy.convolve`, which returns a longer array, ``dr.convolve``
-    always preserves the input shape. The following two computations therefore
-    agree:
+    **Relation to NumPy.** With default arguments, :py:func:`drjit.convolve()`
+    is equivalent to ``numpy.convolve(..., mode='same')``. The full convolution
+    of an :math:`N`-sample signal with a :math:`K`-tap kernel has :math:`N+K-1`
+    samples, of which Dr.Jit returns the central :math:`N` to preserve the
+    input shape. (NumPy returns :math:`\\max(N, K)` samples here, hence the two
+    agree as long as the kernel is no longer than the signal.)
 
     .. code-block:: python
 
@@ -3015,35 +3024,27 @@ def convolve(
        k = np.array([1, 0, -1],      dtype=np.float32)
 
        ref = np.convolve(x, k, mode='same')
-       out = dr.convolve(dr.scalar.ArrayXf(x), list(k),
-                         boundary='zero', normalize=False)
+       out = dr.convolve(dr.scalar.ArrayXf(x), list(k))
 
        assert np.allclose(ref, out.numpy())
 
-    The two arguments that reproduce ``numpy.convolve`` are ``boundary='zero'``
-    (which zero-pads the boundary) and ``normalize=False`` (which applies the
-    raw kernel coefficients). These differ from the defaults, which renormalize
-    the weights so that filtering a signal does not alter its overall magnitude.
-
     **Boundary handling.** The ``boundary`` argument selects how filter taps
-    that reach past the edge of the array are treated. The names match those of
+    past the edge of the array are treated. The names match those of
     ``scipy.ndimage``. Given an array ``[a b c d]``, the left boundary is
     extended as follows:
 
     - ``"zero"``: ``0 0 0 | a b c d`` (taps outside the array contribute zero).
     - ``"nearest"``: ``a a a | a b c d`` (clamp to the edge sample).
-    - ``"wrap"``: ``b c d | a b c d`` (periodic, with period equal to the array
-      size).
-    - ``"reflect"``: ``c b a | a b c d`` (reflect; the edge sample is
-      duplicated).
-    - ``"mirror"``: ``d c b | a b c d`` (reflect; the edge sample is not
-      duplicated).
+    - ``"wrap"``: ``b c d | a b c d`` (periodic, with period equal to the array size).
+    - ``"reflect"``: ``c b a | a b c d`` (reflect; the edge sample is duplicated).
+    - ``"mirror"``: ``d c b | a b c d`` (reflect; the edge sample is not duplicated).
 
-    **Normalization.** When ``normalize`` is set, the effective per-output
-    weights are rescaled to sum to one. For the ``"zero"`` boundary this also
-    compensates for taps that fall outside the array, reducing darkening near
-    the edges. Set ``normalize=False`` to apply the raw filter coefficients (as
-    needed to reproduce ``numpy.convolve``).
+    **Normalization.** By default, ``dr.convolve`` applies the filter
+    coefficients exactly as given. Setting ``normalize=True`` instead rescales
+    the effective per-output weights to sum to one, so that filtering a signal
+    does not alter its overall magnitude. For the ``"zero"`` boundary this also
+    compensates for taps that fall outside the array, which would otherwise
+    attenuate the output near the edges.
 
     **Differentiability.** The operation is differentiable. For the ``"zero"``
     and ``"wrap"`` boundaries its reverse-mode derivative is the transpose of the
@@ -3056,12 +3057,13 @@ def convolve(
 
         filter (str | Callable[[float], float] | Sequence[float]):
           Either the name of a filter preset, a custom continuous filter
-          function, or a sequence of discrete kernel coefficients.
+          function, or a sequence of discrete kernel coefficients, see the
+          above text for an overview.
 
         filter_radius (float | None):
           The radius of a custom continuous filter (in samples), where it is
           mandatory. For a preset, it instead scales that filter's intrinsic
-          radius to turn it into a blur (e.g. ``filter='gaussian',
+          radius to turn it into a blur (e.g., ``filter='gaussian',
           filter_radius=10`` uses a Gaussian with a standard deviation of 5
           samples). Must be ``None`` for a discrete kernel.
 
@@ -3073,7 +3075,7 @@ def convolve(
           overview. The default is ``"zero"``.
 
         normalize (bool): Whether to renormalize the filter weights, see the
-          above text. The default is ``True``.
+          above text. The default is ``False``.
 
         mode (str | None): Selects how the convolution kernel is generated.
           ``"evaluated"`` (the default, also selected by ``None``) fully unrolls
@@ -3522,7 +3524,7 @@ def _gather_remap(arr: 'ArrayBase',
     ``out_shape``. For every output element, the per-axis output
     coordinate ``o_i`` is passed through ``axis_remap[i]`` (if given,
     else identity) — this is where the per-operation logic lives
-    (e.g. ``p % size`` for tile, ``p // repeats`` for repeat). The
+    (e.g., ``p % size`` for tile, ``p // repeats`` for repeat). The
     remapped coordinates are then dotted with the row-major strides of
     ``in_shape`` to obtain the flat source index; axes with ``in_shape[i]
     == 1`` are broadcast and contribute nothing.
@@ -3642,7 +3644,7 @@ def _repeat_leaf(value: 'ArrayBase',
     Index = uint32_array_t(type(arr))
     out_size, remap_fn = _repeat_axis_remap(shape_in[axis], repeats, Index)
     if out_size == shape_in[axis] and remap_fn is None:
-        return value  # identity (e.g. ``repeats == 1``)
+        return value  # identity (e.g., ``repeats == 1``)
 
     out_shape = shape_in[:axis] + (out_size,) + shape_in[axis + 1:]
     remap: List[Optional[Callable]] = [None] * ndim
@@ -4090,7 +4092,7 @@ def freeze(
     - The sets of variables of the same size change. In the example above, this
       would be the case if ``len(x) == len(y)`` in one call, and ``len(x) != len(y)``
       subsequently.
-    - When Dr.Jit variables reference external memory (e.g. mapped NumPy arrays), the
+    - When Dr.Jit variables reference external memory (e.g., mapped NumPy arrays), the
       memory can be aligned or unaligned. A re-tracing step is needed when this
       status changes.
 

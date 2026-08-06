@@ -108,15 +108,16 @@ def test06_manual_filter(t):
 @pytest.test_arrays('float, -jit, shape=(*)')
 def test07_convolve(t):
     x = t(1, 2, 10, 100)
-    y = dr.convolve(x, 'linear', 1)
+    y = dr.convolve(x, 'linear', 1, normalize=True)
     assert dr.allclose(x, y)
 
-    y = dr.convolve(x, 'linear', 2)
+    y = dr.convolve(x, 'linear', 2, normalize=True)
     z = t((1+2*.5)/1.5, (1*.5+2+10*.5)/2, (2*.5+10+100*.5)/2, (100+10*.5)/1.5)
     assert dr.allclose(y, z)
 
 
-# A discrete kernel with zero padding reproduces np.convolve(..., mode='same')
+# A discrete kernel reproduces np.convolve(..., mode='same') with the default
+# arguments, i.e. zero padding and no normalization.
 @pytest.test_arrays('float32, shape=(*)')
 def test08_convolve_discrete_numpy(t):
     np = pytest.importorskip("numpy")
@@ -125,7 +126,7 @@ def test08_convolve_discrete_numpy(t):
     for ksize in (1, 3, 5, 8):
         k = np.float32(np.random.rand(ksize) - 0.5)
         ref = np.convolve(x, k, mode='same')
-        out = dr.convolve(t(x), list(k), boundary='zero', normalize=False)
+        out = dr.convolve(t(x), list(k))
         assert np.allclose(ref, out.numpy(), atol=1e-5)
 
 
@@ -360,7 +361,7 @@ def test20_convolve_symmetry(t, boundary):
                 ('linear', 'hamming', 'cubic', 'lanczos', 'gaussian')]
 
     for f, radius in filters:
-        y = dr.convolve(x, f, radius, boundary=boundary)
+        y = dr.convolve(x, f, radius, boundary=boundary, normalize=True)
         assert dr.allclose(y, dr.gather(t, y, rev), atol=1e-6)
 
 
