@@ -326,6 +326,11 @@ def test17_convolve_errors(t):
     # unknown boundary mode
     with pytest.raises(RuntimeError, match="invalid boundary"):
         dr.convolve(x, [1.0], boundary='nope')
+    # a negative radius is rejected (it used to allocate a huge tap window)
+    with pytest.raises(RuntimeError, match="radius must be positive"):
+        dr.convolve(x, lambda v: 1.0, -1.0)
+    with pytest.raises(RuntimeError, match="radius must be positive"):
+        dr.resample(x, (3,), filter=lambda v: 1.0, filter_radius=-0.5)
     # resample shape must match the input rank
     with pytest.raises(RuntimeError, match="same number of axes"):
         dr.resample(x, (4, 4))

@@ -68,6 +68,8 @@ struct Resampler::Impl {
         : source_res(source_res), target_res(target_res), boundary(boundary) {
         if (source_res == 0 || target_res == 0)
             drjit_raise("drjit.Resampler(): source/target resolution cannot be zero!");
+        if (!(radius >= 0) || !(radius_scale > 0))
+            drjit_raise("drjit.Resampler(): the filter radius must be positive!");
 
         // Low-pass filter: scale reconstruction filters when downsampling
         double scale = (double) source_res / (double) target_res;
