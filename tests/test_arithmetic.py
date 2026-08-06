@@ -734,3 +734,25 @@ def test_minmax_nan_reduction(t):
     index = dr.uint32_array_t(t)(0, 0)
     dr.scatter_reduce(dr.ReduceOp.Min, target, t(nan, 5), index)
     assert target[0] == 0
+
+
+@pytest.test_arrays('float32, jit, shape=(*)')
+def test_clip_float(t):
+    x = t(-5, -1, 0, 1.5, 3, 7)
+    assert dr.all(dr.clip(x, 0, 3) == t(0, 0, 0, 1.5, 3, 3))
+    assert dr.all(dr.clip(x, 5, 3) == t(3, 3, 3, 3, 3, 3))
+
+    # 'clip' builds on 'minimum'/'maximum' and therefore propagates NaNs
+    nan = float('nan')
+    r = dr.clip(t(nan, 9), 0, 3)
+    assert dr.isnan(r)[0] and r[1] == 3
+    assert dr.all(dr.isnan(dr.clip(t(nan, nan), 5, 3)))
+    assert dr.all(dr.isnan(dr.clip(x, nan, 3)))
+    assert dr.all(dr.isnan(dr.clip(x, 0, nan)))
+
+
+@pytest.test_arrays('int32, -uint32, jit, shape=(*)')
+def test_clip_int(t):
+    v = t(-40, -5, -2, 0, 3, 9, 40)
+    assert dr.all(dr.clip(v, -2, 9) == t(-2, -2, -2, 0, 3, 9, 9))
+    assert dr.all(dr.clip(v, 9, 2) == t(2, 2, 2, 2, 2, 2, 2))

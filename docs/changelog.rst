@@ -20,11 +20,15 @@ DrJit 1.5.0 (unreleased)
   atomics. The LLVM backend uses a CAS loop with a non-atomic load that
   potentially skips the loop if it would not change the result.
 
-- The functions :py:func:`dr.minimum() <minimum>` and :py:func:`dr.maximum()
-  <maximum>` now consistently propagate NaNs, while new functions
-  :py:func:`dr.fmin() <fmin>` and :py:func:`dr.fmax() <fmax>` suppress NaNs.
-  This is consist with respect to other frameworks (e.g., NumPy/PyTorch). The
-  operations coincide for integers.
+- :py:func:`dr.minimum() <minimum>` and :py:func:`dr.maximum() <maximum>` now
+  consistently propagate NaNs, while the new functions :py:func:`dr.fmin()
+  <fmin>` and :py:func:`dr.fmax() <fmax>` suppress them. This is consist with
+  other frameworks (e.g., NumPy/PyTorch). The operations coincide for integers.
+
+- :py:func:`dr.clip() <clip>` is now defined as ``minimum(maximum(value, min),
+  max)`` instead of ``maximum(minimum(value, max), min)`` for consistency with
+  NumPy/PyTorch. This is only relevant when the interval is inverted (``min >
+  max``). Following the change above, the operation now also propagates NaNs.
 
 DrJit 1.4.0 (June 25, 2026)
 ---------------------------

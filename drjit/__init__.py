@@ -446,7 +446,9 @@ def clip(value, min, max):
 
     .. code-block::
 
-        dr.maximum(dr.minimum(value, max), min)
+        dr.minimum(dr.maximum(value, min), max)
+
+    Note that the function propagates NaNs in any argument.
 
     Args:
         value (int | float | drjit.ArrayBase): A Python or Dr.Jit type
@@ -456,7 +458,7 @@ def clip(value, min, max):
     Returns:
         float | drjit.ArrayBase: Clipped input
     '''
-    return maximum(minimum(value, max), min)
+    return minimum(maximum(value, min), max)
 
 
 def lerp(a, b, t):

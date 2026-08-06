@@ -376,7 +376,7 @@ auto lerp(const T1 &a, const T2 &b, const T3 &t) {
 /// Clip the value 'value' to the range [min, max]
 template <typename T1, typename T2, typename T3>
 auto clip(const T1 &value, const T2 &min, const T3 &max) {
-    return maximum(minimum(value, max), min);
+    return minimum(maximum(value, min), max);
 }
 
 template <typename T1, typename T2, typename T3>
