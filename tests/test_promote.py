@@ -1,5 +1,6 @@
 import drjit as dr
 import pytest
+import sys
 
 @pytest.test_arrays('float32,shape=(3)', 'float32,shape=(*)',
                     'float32,shape=(3, *)', 'float32,shape=(*, *)')
@@ -124,3 +125,23 @@ def test5_half_precision_promotion(t):
     assert dr.type_v(x) == dr.VarType.Float16
     assert dr.type_v(y) == dr.VarType.Float16
     assert dr.type_v(z) == dr.VarType.Float16
+
+
+@pytest.test_arrays('float64, shape=(3, *), jit')
+def test6_binop_promote_broadcast_and_convert(t):
+    # An operand may simultaneously require a broadcast into a deeper array
+    # and a conversion of its element type
+    mod = sys.modules[t.__module__]
+    Array3f, Array3f64 = mod.Array3f, t
+    Float, Float64, Int = mod.Float, mod.Float64, mod.Int
+
+    ref = Array3f64(2, 4, 6)
+
+    for arg in (2, 2.0, Float([2]), Float64([2]), Int([2]),
+                Array3f(2, 2, 2), Array3f64(2, 2, 2)):
+        x = Array3f64(1, 2, 3) * arg
+        assert type(x) is Array3f64 and dr.all(x == ref, axis=None)
+
+    # Widening the result works in the same way
+    x = Array3f(1, 2, 3) * Float64([2])
+    assert type(x) is Array3f64 and dr.all(x == ref, axis=None)

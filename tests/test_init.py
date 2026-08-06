@@ -759,3 +759,24 @@ def test33_opaque_pytree(t):
         dr.enable_grad(d)
         dr.backward(dr.opaque(d))
         assert dr.all(dr.grad(d) == 1)
+
+
+# Test which single-argument inputs broadcast, and which ones are unpacked
+@pytest.test_arrays('float32, shape=(3, *), jit')
+def test34_init_broadcast_vs_unpack(t):
+    np = pytest.importorskip("numpy")
+    mod = sys.modules[t.__module__]
+
+    # A 1D array is replicated across all components, converting its element
+    # type as needed. The decision only depends on the depth of the argument
+    for arg in (mod.Float(1, 2, 3), mod.Float64(1, 2, 3), mod.Int(1, 2, 3)):
+        v = t(arg)
+        assert v.shape == (3, 3)
+        assert dr.all(v == t([1, 2, 3], [1, 2, 3], [1, 2, 3]), axis=None)
+
+    # Everything else is unpacked component by component: sequences,
+    # ndarrays, and arrays of equal depth
+    for arg in ([1, 2, 3], (1, 2, 3), np.array([1, 2, 3], dtype=np.float32),
+                mod.Array3f64(1, 2, 3)):
+        v = t(arg)
+        assert dr.all(v == t(1, 2, 3), axis=None)

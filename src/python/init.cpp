@@ -188,13 +188,15 @@ static int tp_init_array_impl(PyObject *self, PyObject *const *args,
                         s_arg.ndim == 1 && s_arg.shape[0] == DRJIT_DYNAMIC) {
                         try_sequence_import = false;
                     } else {
-                        // Always broadcast when the element type is one of the sub-elements
-                        // or its AD/non-AD counterpart
+                        // Always broadcast when the argument has the shape of
+                        // one of the sub-elements. Its element type and AD
+                        // flavor are converted as part of the broadcast.
                         PyTypeObject *cur_tp = (PyTypeObject *) s.value;
                         while (cur_tp && is_drjit_type(cur_tp)) {
                             const ArraySupplement &s_cur = supp(cur_tp);
                             ArrayMeta m_curr = s_cur;
                             m_curr.is_diff = m_arg.is_diff;
+                            m_curr.type = m_arg.type;
                             if (m_curr == m_arg) {
                                 try_sequence_import = false;
                                 break;
