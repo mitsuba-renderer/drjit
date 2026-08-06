@@ -18,6 +18,7 @@
 #include "apply.h"
 #include "detail.h"
 #include "coop_vec.h"
+#include "traits.h"
 #include <nanobind/stl/optional.h>
 
 using ReduceInit = nb::object();
@@ -103,9 +104,7 @@ static Reduction reductions[] = {
         "count",
         [](nb::handle tp) { return tp.is(&PyBool_Type); },
         []() -> nb::object { return nb::int_(0); },
-        [](nb::handle h1, nb::handle h2) {
-            return h1 + array_module.attr("select")(h2, nb::int_(1), nb::int_(0));
-        }
+        [](nb::handle h1, nb::handle h2) { return h1 + h2; }
     }
 };
 
@@ -129,11 +128,24 @@ static_assert(sizeof(reductions) == sizeof(Reduction) * (size_t) ReduceOpExt::Op
 // Forward declaration
 nb::object reduce(uint32_t op, nb::handle h, nb::handle axis, nb::handle mode, bool keepdims);
 
+/// Turn a mask into an unsigned integer array of zeros and ones
+static nb::object count_promote(nb::handle h) {
+    nb::object tp = reinterpret_array_t(h, VarType::UInt32);
+    return array_module.attr("select")(h, tp(1), tp(0));
+}
+
+/// Handle a reduction that does not actually reduce anything
+static nb::object reduce_noop(uint32_t op, nb::handle h) {
+    if (op == (uint32_t) ReduceOpExt::Count)
+        return count_promote(h);
+    return nb::borrow(h);
+}
+
 nb::object reduce_seq(uint32_t op, nb::handle h, nb::handle axis, nb::handle mode) {
     Reduction red = reductions[(size_t) op];
 
     if (red.skip(h.type()))
-        return nb::borrow(h);
+        return reduce_noop(op, h);
 
     nb::object it;
     try {
@@ -152,7 +164,9 @@ nb::object reduce_seq(uint32_t op, nb::handle h, nb::handle axis, nb::handle mod
     for (nb::handle h2 : it) {
         nb::object o = nb::borrow(h2);
         if (axis.is_none())
-            o = reduce(op, o, axis, mode, false);
+            o = reduce(op, o, axis, mode, false); // yields a count already
+        else if (op == (uint32_t) ReduceOpExt::Count)
+            o = count_promote(o);
 
         if (i++ == 0)
             result = std::move(o);
@@ -228,7 +242,7 @@ nb::object reduce(uint32_t op, nb::handle h, nb::handle axis_, nb::handle mode, 
             // Accept 0-dim tensors and axis==0 (the default); return the
             // tensor without changes instead of failing with an error message.
             if (nb::try_cast(axis_, value) && value == 0)
-                return nb::borrow(h);
+                return reduce_noop(op, h);
         }
 
         // Number of axes along which to reduce (-1: all of them)
@@ -281,7 +295,7 @@ nb::object reduce(uint32_t op, nb::handle h, nb::handle axis_, nb::handle mode, 
 
             if (axis_len == 0) {
                 // Nothing to do
-                return nb::borrow(h);
+                return reduce_noop(op, h);
             } else if (axis_len == ndim) {
                 // Special case: reducing over all dims
                 axis = nb::none();
@@ -310,6 +324,10 @@ nb::object reduce(uint32_t op, nb::handle h, nb::handle axis_, nb::handle mode, 
 
                 return tp(value, nb::tuple());
             } else {
+                if (op == (uint32_t) ReduceOpExt::Count)
+                    return reduce((uint32_t) ReduceOp::Add, count_promote(h),
+                                  axis, mode, keepdims);
+
                 if (op >= (uint32_t) ReduceOp::Count) {
                     if (axis_len == 1 && red_axis == 0)
                         return reduce_seq(op, h, nb::int_(0), mode);
@@ -426,6 +444,9 @@ nb::object reduce(uint32_t op, nb::handle h, nb::handle axis_, nb::handle mode, 
             // Reduce along an intermediate axis
 
             ArrayMeta m = s;
+            if (op == (uint32_t) ReduceOpExt::Count)
+                m.type = (uint16_t) VarType::UInt32;
+
             dr::vector<size_t> shape;
             shape_impl(h, shape);
 
@@ -465,6 +486,10 @@ nb::object reduce(uint32_t op, nb::handle h, nb::handle axis_, nb::handle mode, 
                 shifted.append(nb::int_(nb::cast<int>(axis[i]) - 1));
             axis = nb::tuple(shifted);
         }
+
+        // The remaining axes reduce partial counts, which requires a sum
+        if (op == (uint32_t) ReduceOpExt::Count)
+            op = (uint32_t) ReduceOp::Add;
 
         return reduce(op, result, axis, mode, false);
     } catch (nb::python_error &e) {

@@ -439,6 +439,42 @@ def test11_count(t):
     assert dr.count(m.Array3b([True, False, True])) == 2
 
 
+@pytest.test_arrays('shape=(3, *), bool')
+def test11a_count_nested(t):
+    m = sys.modules[t.__module__]
+    u = dr.uint32_array_t(t)
+    i = dr.uint32_array_t(dr.value_t(t))
+
+    v = t([True,  False, False, True ],
+          [False, False, True,  False],
+          [False, True,  False, False])
+
+    assert dr.all(dr.count(v) == i(1, 1, 1, 1))
+    assert type(dr.count(v)) is i
+    assert dr.all(dr.count(v, axis=0) == i(1, 1, 1, 1))
+    assert dr.all(dr.count(v, axis=1) == u(2, 1, 1), axis=None)
+    assert dr.count(v, axis=None) == i(4)
+    assert dr.count(v, axis=(0, 1)) == i(4)
+    assert dr.all(dr.count(v, axis=()) == u([1, 0, 0, 1],
+                                            [0, 0, 1, 0],
+                                            [0, 1, 0, 0]), axis=None)
+
+    # Reductions of a nested Python list along all axes
+    assert dr.count([[True, False], [True, True]], axis=None) == 3
+
+    # Tensors, including axes other than the outermost one
+    tn = m.TensorXb([[True, False], [True, True]])
+    assert dr.all(dr.count(tn, axis=0) == [2, 1])
+    assert dr.all(dr.count(tn, axis=1) == [1, 2])
+    assert dr.count(tn, axis=None) == 3
+    assert dr.all(dr.count(tn, axis=1, keepdims=True) == m.TensorXu([[1], [2]]))
+
+    t3 = m.TensorXb([True, False, True, True, False, False, True, False], (2, 2, 2))
+    assert dr.count(t3, axis=None) == 4
+    assert dr.all(dr.count(t3, axis=(0, 2)) == m.TensorXu([1, 3], (2,)))
+    assert dr.all(dr.count(t3, axis=2) == m.TensorXu([1, 2, 0, 1], (2, 2)), axis=None)
+
+
 @pytest.test_arrays('shape=(*), float32, jit, -is_diff')
 def test11b_var_std(t):
     """``dr.var`` and ``dr.std`` should match NumPy's two-pass formulation

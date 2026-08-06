@@ -135,6 +135,25 @@ def test02d_assert_allclose_tensor(t):
     )
 
 
+@pytest.test_arrays('float32,shape=(3, *),jit,is_diff')
+def test02e_assert_allclose_nested(t):
+    a = t([1, 2], [2, 2], [3, 3])
+    dr.assert_allclose(a, t([1, 2], [2, 2], [3, 3]))
+
+    with pytest.raises(AssertionError) as ei:
+        dr.assert_allclose(a, t([1, 2], [2, 5], [3, 4]), rtol=0, atol=0)
+    assert str(ei.value) == (
+        "Arrays are not equal to tolerance rtol=0, atol=0\n"
+        "Mismatched elements: 2 / 6 (33.3%)\n"
+        "Max absolute difference: 3\n"
+        "Max relative difference: 0.6\n"
+        " ACTUAL: [[1, 2, 3],\n"
+        "          [2, 2, 3]]\n"
+        " DESIRED: [[1, 2, 3],\n"
+        "           [2, 5, 4]]"
+    )
+
+
 @pytest.test_arrays('-bool,shape=(3)', '-bool,shape=(3, *)', '-bool,shape=(*, *)')
 def test03_binop_simple(t):
     a = t(1, 2, 3)
