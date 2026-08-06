@@ -2980,9 +2980,23 @@ def convolve(
            filter_radius=10
        )
 
-    The set of supported presets and the meaning of ``filter_radius`` for
-    custom continuous filters are identical to :py:func:`resample`, please refer
-    to its documentation for details.
+    The set of supported presets is identical to :py:func:`resample`, please
+    refer to its documentation for an overview.
+
+    **Continuous filters.** It is also possible to provide filters by providing
+    a function which Dr.Jit will evaluate at interger offsets within within
+    ``[-filter_radius, filter_radius]``. A radius :math:`r` thus yields
+    :math:`2\\lfloor r\\rfloor+1` taps centered on the output sample, which is
+    equivalent to passing the corresponding discrete kernel:
+
+    .. code-block:: python
+
+       x = dr.llvm.Float(1, 1, 1, 1, 1)
+       box = lambda v: 1.0 if abs(v) <= 2 else 0.0
+
+       # Both evaluate to [3, 4, 5, 4, 3]
+       dr.convolve(x, box, 2, normalize=False)
+       dr.convolve(x, [1, 1, 1, 1, 1], normalize=False)
 
     **Discrete kernels and the relation to** ``numpy.convolve``\\ **.** When
     ``filter`` is a sequence of numbers, it is interpreted as a discrete
@@ -3045,9 +3059,11 @@ def convolve(
           function, or a sequence of discrete kernel coefficients.
 
         filter_radius (float | None):
-          The radius of the continuous function to be used in the convolution.
-          This must be specified for a custom continuous filter and must be
-          ``None`` for a discrete kernel.
+          The radius of a custom continuous filter (in samples), where it is
+          mandatory. For a preset, it instead scales that filter's intrinsic
+          radius to turn it into a blur (e.g. ``filter='gaussian',
+          filter_radius=10`` uses a Gaussian with a standard deviation of 5
+          samples). Must be ``None`` for a discrete kernel.
 
         axis (int | tuple[int, ...] | None): The axis or set of axes along which
           to convolve. The default argument ``axis=None`` causes all axes to be

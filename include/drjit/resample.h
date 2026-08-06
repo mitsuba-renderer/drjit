@@ -80,7 +80,9 @@ public:
      *    standard deviation of 0.5 and is truncated after 4 standard
      *    deviations. This filter is mainly useful when intending to blur a signal.
      *
-     * The optional ``radius_scale`` scales the filter kernel radius.
+     * The optional ``radius_scale`` scales the filter kernel radius. It is only
+     * meaningful in convolution mode (``source_res == target_res``), where it
+     * turns an interpolating filter into a blur of the requested width.
      *
      * See \ref Boundary and the discrete-kernel constructor for ``boundary`` and
      * ``normalize``. In traced modes, ``symbolic`` generates a symbolic loop over
@@ -102,6 +104,11 @@ public:
      * The implementation will invoke ``filter(x, payload)`` a number of times
      * to precompute internal tables used for resampling. The filter must return
      * zero for positions ``x`` outside of the interval ``[-radius, radius]``.
+     *
+     * In convolution mode (``source_res == target_res``), input and output
+     * samples coincide and the filter is sampled at the integer offsets within
+     * ``[-radius, radius]``, yielding ``2*floor(radius)+1`` taps centered on the
+     * output sample (vanishing ones at either end are dropped).
      *
      * See \ref Boundary and the discrete-kernel constructor for ``boundary``,
      * ``normalize``, and ``flip`` (unlike the preset filters, a custom filter may

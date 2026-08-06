@@ -68,14 +68,27 @@ struct Resampler::Impl {
             // Convolution mode, adapt to filter size scale factor
             radius *= radius_scale;
             filter_scale /= radius_scale;
+
+            // Input and output samples coincide, hence the filter reduces to a
+            // discrete kernel holding its samples at the integers in [-r, r]
+            int32_t half = (int32_t) std::floor(radius);
+            uint32_t n = (uint32_t) (2 * half + 1);
+            unique_ptr<double[]> kernel(new double[n]);
+
+            for (uint32_t l = 0; l < n; l++)
+                kernel[l] = filter(((int32_t) l - half) * filter_scale, payload);
+
+            store_kernel(kernel.get(), n, half, normalize, flip);
+            configure();
+            return;
         }
 
         taps = (uint32_t) std::ceil(radius * 2);
 
         offset = unique_ptr<int32_t[]>(new int32_t[target_res]);
-        weights = unique_ptr<double[]>(new double[taps * target_res]);
+        weights = unique_ptr<double[]>(new double[(size_t) taps * target_res]);
 
-        // 'flip': convolve by flipping the sign of the filter kenrle
+        // 'flip': convolve by flipping the sign of the filter kernel
         double sign = flip ? -1.0 : 1.0;
 
         unique_ptr<double[]> raw(new double[taps]);
@@ -85,7 +98,7 @@ struct Resampler::Impl {
             double center = (i + 0.5) * scale;
 
             // Signed index of the first original sample that might contribute
-            int32_t start = (int32_t) (center - radius + .5);
+            int32_t start = (int32_t) std::floor(center - radius + .5);
 
             for (uint32_t l = 0; l < taps; l++) {
                 // Relative position of sample in the filter frame
@@ -111,24 +124,35 @@ struct Resampler::Impl {
             drjit_raise("drjit.Resampler(): the filter kernel cannot be larger "
                         "than the array for this boundary mode!");
 
-        taps = (uint32_t) kernel_size;
-
-        offset = unique_ptr<int32_t[]>(new int32_t[res]);
-        weights = unique_ptr<double[]>(new double[taps * res]);
-
-        unique_ptr<double[]> raw(new double[taps]);
-
-        // 'flip': convolve by reversing the kernel and mirroring the origin.
-        int o = origin;
-        for (uint32_t l = 0; l < taps; l++)
-            raw[l] = flip ? kernel[taps - 1 - l] : kernel[l];
-        if (flip)
-            o = (int) (taps - 1) - origin;
-
-        for (uint32_t i = 0; i < res; i++)
-            store_row(i, (int32_t) i - o, raw.get(), normalize);
+        store_kernel(kernel, (uint32_t) kernel_size, origin, normalize, flip);
 
         configure();
+    }
+
+    /// Populate the tables with a shift-invariant convolution by the discrete
+    /// ``kernel``, whose entry ``origin`` aligns with the output. ``flip``
+    /// reverses the kernel and mirrors the origin (convolution vs. correlation).
+    /// The function deletes leading/trailing zero-valued taps.
+    void store_kernel(const double *kernel, uint32_t n, int32_t origin,
+                      bool normalize, bool flip) {
+        unique_ptr<double[]> raw(new double[n]);
+        for (uint32_t l = 0; l < n; l++)
+            raw[l] = kernel[flip ? n - 1 - l : l];
+        if (flip)
+            origin = (int32_t) (n - 1) - origin;
+
+        uint32_t lo = 0, hi = n;
+        while (hi - lo > 1 && raw[lo] == 0) ++lo;
+        while (hi - lo > 1 && raw[hi - 1] == 0) --hi;
+
+        taps = hi - lo;
+        origin -= (int32_t) lo;
+
+        offset = unique_ptr<int32_t[]>(new int32_t[target_res]);
+        weights = unique_ptr<double[]>(new double[(size_t) taps * target_res]);
+
+        for (uint32_t i = 0; i < target_res; i++)
+            store_row(i, (int32_t) i - origin, raw.get() + lo, normalize);
     }
 
     /// Populate the fast-path variables from the precomputed tables

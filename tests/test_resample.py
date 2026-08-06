@@ -1,5 +1,6 @@
 import drjit as dr
 import pytest
+import math
 
 # Test simple upsampling with a box filter (1D array)
 @pytest.test_arrays('float, -jit, shape=(*)')
@@ -306,6 +307,79 @@ def test16_convolve_axis(t):
     a = dr.convolve(t(img), list(k), axis=-1, boundary='reflect', normalize=False)
     b = dr.convolve(t(img), list(k), axis=1, boundary='reflect', normalize=False)
     assert dr.allclose(a, b)
+
+
+# A continuous filter is sampled at the integer offsets in [-radius, radius],
+# hence it must agree with the discrete kernel holding those same samples. This
+# also pins the tap count, since a window that is off by one would truncate the
+# filter or displace it.
+@pytest.mark.parametrize('boundary', ['zero', 'nearest', 'wrap', 'reflect', 'mirror'])
+@pytest.test_arrays('float32, shape=(*)')
+def test18_convolve_continuous_vs_discrete(t, boundary):
+    np = pytest.importorskip("numpy")
+    np.random.seed(7)
+    x = t(np.float32(np.random.rand(17)))
+
+    for radius in (1, 2, 3):
+        for stddev in (0.8, 1.5):
+            f = lambda v, s=stddev, r=radius: \
+                math.exp(-(v / s) ** 2 / 2) if abs(v) <= r else 0.0
+            k = [math.exp(-(i / stddev) ** 2 / 2)
+                 for i in range(-radius, radius + 1)]
+            for normalize in (False, True):
+                a = dr.convolve(x, f, float(radius), boundary=boundary,
+                                normalize=normalize)
+                b = dr.convolve(x, k, boundary=boundary, normalize=normalize)
+                assert dr.allclose(a, b, atol=1e-6)
+
+
+# A box function of radius 'k' must reproduce numpy.convolve() with a kernel of
+# 2*k+1 ones, which is the natural reading of the filter radius.
+@pytest.test_arrays('float32, shape=(*)')
+def test19_convolve_box_numpy(t):
+    np = pytest.importorskip("numpy")
+    x = t(1, 1, 1, 1, 1)
+    box = lambda v: 1.0 if abs(v) <= 2 else 0.0
+    out = dr.convolve(x, box, 2.0, boundary='zero', normalize=False)
+    ref = np.convolve(np.ones(5, np.float32), np.ones(5, np.float32), mode='same')
+    assert np.allclose(ref, out.numpy())
+
+
+# A symmetric filter applied to a symmetric signal must produce a symmetric
+# result for every boundary mode. This guards the placement of the tap window,
+# which is not otherwise observable for filters that decay to zero.
+@pytest.mark.parametrize('boundary', ['zero', 'nearest', 'wrap', 'reflect', 'mirror'])
+@pytest.test_arrays('float32, shape=(*)')
+def test20_convolve_symmetry(t, boundary):
+    x = t(1, 2, 5, 9, 9, 5, 2, 1)
+    rev = 7 - dr.arange(dr.uint32_array_t(t), 8)
+
+    filters = [(lambda v, r=r: math.exp(-v * v) if abs(v) <= r else 0.0, r)
+               for r in (1.0, 2.0, 2.5, 3.0)]
+    filters += [(f, 2.0) for f in
+                ('linear', 'hamming', 'cubic', 'lanczos', 'gaussian')]
+
+    for f, radius in filters:
+        y = dr.convolve(x, f, radius, boundary=boundary)
+        assert dr.allclose(y, dr.gather(t, y, rev), atol=1e-6)
+
+
+# resample() must be symmetric under the same reasoning: reversing a signal and
+# resampling it is the same as resampling and then reversing the output.
+@pytest.mark.parametrize('boundary', ['zero', 'nearest', 'wrap', 'reflect', 'mirror'])
+@pytest.test_arrays('float32, shape=(*)')
+def test21_resample_symmetry(t, boundary):
+    np = pytest.importorskip("numpy")
+    np.random.seed(8)
+    xv = np.float32(np.random.rand(11))
+
+    for filter in ('linear', 'hamming', 'cubic', 'lanczos', 'gaussian'):
+        for res in (5, 11, 23):
+            fwd = dr.resample(t(xv), (res,), filter=filter, boundary=boundary)
+            rev = dr.resample(t(xv[::-1].copy()), (res,), filter=filter,
+                              boundary=boundary)
+            idx = res - 1 - dr.arange(dr.uint32_array_t(t), res)
+            assert dr.allclose(fwd, dr.gather(t, rev, idx), atol=1e-6)
 
 
 # Argument validation for the documented error conditions.

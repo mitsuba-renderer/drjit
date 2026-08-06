@@ -30,6 +30,17 @@ DrJit 1.5.0 (unreleased)
   NumPy/PyTorch. This is only relevant when the interval is inverted (``min >
   max``). Following the change above, the operation now also propagates NaNs.
 
+- Fixed several bugs in :py:func:`dr.convolve() <convolve>` and
+  :py:func:`dr.resample() <resample>`:
+
+  - Convolutions with custom continuous filters did not correctly evaluate the
+    filter at all integer offsets within ``[-filter_radius, filter_radius]``.
+    Filter presets like ``box`` or ``gaussian`` were not affected.
+
+  - A rounding issue could lead to incorrect output for the ``"nearest"``,
+    ``"wrap"``, ``"reflect"``, and ``"mirror"`` boundaries. The default
+    ``"zero"`` boundary condition was unaffected.
+
 DrJit 1.4.0 (June 25, 2026)
 ---------------------------
 
