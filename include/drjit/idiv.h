@@ -215,11 +215,12 @@ struct divisor<T, Positive, enable_if_t<std::is_signed_v<T>>> {
         Value q = mul_hi(multiplier, value) + value;
         Value q_sign = sr<sizeof(T) * 8 - 1>(q);
         q = q + (q_sign & ((T(1) << shift) - (multiplier == 0 ? 1 : 0)));
-        if constexpr (Positive)
+        if constexpr (Positive) {
             return q >> shift;
-
-        Value sign = div < 0 ? -1 : 0;
-        return ((q >> shift) ^ sign) - sign;
+        } else {
+            Value sign = div < 0 ? -1 : 0;
+            return ((q >> shift) ^ sign) - sign;
+        }
     }
 } DRJIT_PACK;
 
@@ -277,7 +278,8 @@ struct divisor<T, Positive, enable_if_t<is_jit_v<T> && std::is_signed_v<scalar_t
         q = q >> s;
         if constexpr (Positive)
             return q;
-        return neg ? -q : q;
+        else
+            return neg ? -q : q;
     }
 
     DRJIT_STRUCT(divisor, multiplier, shift)

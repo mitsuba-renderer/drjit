@@ -299,7 +299,7 @@ slice_index(const nb::type_object_t<ArrayBase> &dtype,
         // Non-consecutive: advanced dim is outermost.
         size_t rest_size = size_out / advanced_size;
         advanced_idx = index.floor_div(dtype(rest_size));
-        index = fma(advanced_idx, dtype(uint32_t(-rest_size)), index);
+        index = fma(advanced_idx, dtype(uint32_t(0) - uint32_t(rest_size)), index);
     }
 
     // Process axes from innermost to outermost, peeling one output
@@ -323,7 +323,8 @@ slice_index(const nb::type_object_t<ArrayBase> &dtype,
                         nb::object next =
                             index.floor_div(dtype(advanced_size));
                         advanced_idx = fma(
-                            next, dtype(uint32_t(-advanced_size)), index);
+                            next, dtype(uint32_t(0) - uint32_t(advanced_size)),
+                            index);
                         index = std::move(next);
                     }
                 }

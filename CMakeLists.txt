@@ -141,6 +141,8 @@ if (MSVC)
    add_compile_options(/utf-8)  # Ensure source and execution charset is UTF-8
    add_compile_options(/wd4251) # "warning C4251: X needs to have dll-interface to be used by clients of struct Y"
    add_compile_options(/wd4127) # "warning C4127 : conditional expression is constant, consider using 'if constexpr' statement instead"
+   add_compile_options(/wd4324) # "warning C4324: structure was padded due to alignment specifier" (robin_map bucket entries)
+   add_compile_options(/wd4714) # "warning C4714: function marked as __forceinline not inlined"
 
   # Workaround to avoid a particular crash due to MS VC++ runtime library binary
   # incompatibility. In general the runtime version needs to be at least as new

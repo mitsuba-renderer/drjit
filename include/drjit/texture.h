@@ -878,7 +878,7 @@ public:
         } else {
             auto ops = scalar_ops<float32_array_t<Int>>(true);
             T result;
-            for (size_t k = 0; k < Dimension; ++k)
+            for (uint32_t k = 0; k < Dimension; ++k)
                 result[k] = detail::tex_wrap(ops, pos[k], k);
             return result;
         }
@@ -1155,10 +1155,7 @@ private:
 
     /// Adopt an owned combined index returned by an ``ad_tex_*`` call as Storage
     static Storage steal_storage(uint64_t index) {
-        if constexpr (is_diff_v<Storage_>)
-            return Storage::steal(index);
-        else
-            return Storage::steal((uint32_t) index);
+        return Storage::steal((typename Storage::Index) index);
     }
 
     /// Combined AD/JIT index of the padded texture storage tensor
