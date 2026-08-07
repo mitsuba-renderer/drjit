@@ -212,9 +212,21 @@ if (DRJIT_MASTER_PROJECT)
   install(DIRECTORY include/drjit DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
   install(DIRECTORY ext/drjit-core/include/drjit-core DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
-  install(TARGETS drjit-core EXPORT drjitTargets DESTINATION drjit)
-  install(TARGETS drjit-extra EXPORT drjitTargets DESTINATION drjit)
-  install(TARGETS nanothread EXPORT drjitTargets DESTINATION drjit)
+  if (DRJIT_ENABLE_JIT)
+    if (DRJIT_ENABLE_PYTHON)
+      install(TARGETS drjit-core EXPORT drjitTargets DESTINATION drjit)
+      install(TARGETS drjit-extra EXPORT drjitTargets DESTINATION drjit)
+      install(TARGETS nanothread EXPORT drjitTargets DESTINATION drjit)
+    else()
+      install(
+        TARGETS drjit-core drjit-extra nanothread
+        EXPORT drjitTargets
+        RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
+        ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+        LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+      )
+    endif()
+  endif()
 
   if (DRJIT_ENABLE_PYTHON)
     install(TARGETS drjit-python DESTINATION drjit)
