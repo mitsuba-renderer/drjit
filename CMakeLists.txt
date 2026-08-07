@@ -210,6 +210,7 @@ endif()
 
 if (DRJIT_MASTER_PROJECT)
   install(DIRECTORY include/drjit DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+  install(DIRECTORY ext/drjit-core/include/drjit-core DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
   install(TARGETS drjit-core EXPORT drjitTargets DESTINATION drjit)
   install(TARGETS drjit-extra EXPORT drjitTargets DESTINATION drjit)
@@ -282,7 +283,6 @@ if (DRJIT_MASTER_PROJECT)
   endif()
 
   if (DRJIT_ENABLE_JIT)
-    install(DIRECTORY ext/drjit-core/include/drjit-core DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
     install(DIRECTORY ext/drjit-core/ext/nanothread/include/nanothread DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
   endif()
 
