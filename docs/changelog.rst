@@ -74,7 +74,7 @@ DrJit 1.5.0 (August 7, 2026)
   expressions like ``Array3f64(TensorXf(...))`` legal.
   (commit `b7db80 <https://github.com/mitsuba-renderer/drjit/commit/b7db80dff36ddbd5d52fbf113bdcf3fe668a30b8>`__).
 
-- Fixed several bugs and changed defaultsin :py:func:`dr.convolve() <convolve>` and
+- Fixed several bugs and changed defaults in :py:func:`dr.convolve() <convolve>` and
   :py:func:`dr.resample() <resample>`:
 
   - Convolutions with custom continuous filters did not correctly evaluate the
@@ -99,9 +99,8 @@ DrJit 1.5.0 (August 7, 2026)
     now repeats as often as needed.
     (commit `6b5f56 <https://github.com/mitsuba-renderer/drjit/commit/6b5f5697e22523bd574c811264ab8de67f5c654f>`__).
 
-  - Other minor fixes.
-    (commits `dbb052 <https://github.com/mitsuba-renderer/drjit/commit/dbb052779d3d2964f93302d63ce855b231b50bd8>`__,
-     `1f342a <https://github.com/mitsuba-renderer/drjit/commit/1f342a185b3fd8186d455c8bd7269648ee0c364b>`__).
+  - Other minor fixes. (commits `dbb052 <https://github.com/mitsuba-renderer/drjit/commit/dbb052779d3d2964f93302d63ce855b231b50bd8>`__,
+    `1f342a <https://github.com/mitsuba-renderer/drjit/commit/1f342a185b3fd8186d455c8bd7269648ee0c364b>`__).
 
 - Fixed the behavior of :py:func:`dr.dot() <dot>` and ``__rsub__`` on
   cooperative vectors.
