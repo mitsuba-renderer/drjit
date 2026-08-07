@@ -5,51 +5,141 @@
 Changelog
 #########
 
-DrJit 1.5.0 (unreleased)
-------------------------
+DrJit 1.5.0 (August 7, 2026)
+----------------------------
 
 - Added :py:func:`dr.median() <median>`, which computes the median along one
   or more axes.
+  (commit `292dac <https://github.com/mitsuba-renderer/drjit/commit/292dac1ec478cae3c0d6a9385b9ab0cbcdd1b67b>`__).
 
-- :py:func:`dr.copysign() <copysign>` now maps onto a dedicated IR node that
-  the CUDA, LLVM, and Metal backends turn into a single backend instruction.
+- :py:func:`dr.minimum() <minimum>` and :py:func:`dr.maximum() <maximum>` now
+  consistently propagate NaNs, while the new functions :py:func:`dr.fmin()
+  <fmin>` and :py:func:`dr.fmax() <fmax>` suppress them. This is consistent
+  with other frameworks (e.g., NumPy/PyTorch). The operations coincide for
+  integers.
+  (commit `9e0a01 <https://github.com/mitsuba-renderer/drjit/commit/9e0a012bda738514bffff9203745068ee87095b4>`__,
+  Dr.Jit-Core commits
+  `efdfc1 <https://github.com/mitsuba-renderer/drjit-core/commit/efdfc15de105ce6710f3e1a0d8951e926078dc6b>`__,
+  `807937 <https://github.com/mitsuba-renderer/drjit-core/commit/8079374f637554d4f7ff5d5ac1023e040bc7512a>`__).
+
+- :py:func:`dr.count() <count>` now works on nested arrays and reduces along
+  user-specified axes.
+  (commit `508f9b <https://github.com/mitsuba-renderer/drjit/commit/508f9bab33743f0b3e72cf5c2e6238a78b131038>`__).
+
+- The expression :py:func:`dr.opaque(value) <opaque>` can now be used to make an opaque deep
+  copy of a PyTree argument. (commit `10093d <https://github.com/mitsuba-renderer/drjit/commit/10093dad3849cc14bcf5a047142e28691f6cbe63>`__).
 
 - :py:func:`dr.scatter_reduce() <scatter_reduce>` now consistently supports
   :py:attr:`ReduceOp.Min` and :py:attr:`ReduceOp.Max` reductions of floating
   point arrays. The Metal and CUDA backend emulate them using integer min/max
   atomics. The LLVM backend uses a CAS loop with a non-atomic load that
   potentially skips the loop if it would not change the result.
+  (commit `4d5103 <https://github.com/mitsuba-renderer/drjit/commit/4d5103a8491286daaf3b92a7e8b9ddf0b3cb58cf>`__,
+  Dr.Jit-Core commit `241a64 <https://github.com/mitsuba-renderer/drjit-core/commit/241a6429231ae82b1a40863a16afdd2af6fb2630>`__).
 
-- :py:func:`dr.minimum() <minimum>` and :py:func:`dr.maximum() <maximum>` now
-  consistently propagate NaNs, while the new functions :py:func:`dr.fmin()
-  <fmin>` and :py:func:`dr.fmax() <fmax>` suppress them. This is consist with
-  other frameworks (e.g., NumPy/PyTorch). The operations coincide for integers.
+- The on-disk kernel cache in ``~/.drjit`` previously grew without bound.
+  Dr.Jit now evicts least recently used entries. The cache directory,
+  its size limit, and its verbosity can be configured through environment
+  variables. Cache files also shrank to roughly a quarter of their former
+  size. See the :ref:`cache configuration <cache_config>` documentation for
+  details. (Dr.Jit-Core commit
+  `10436e <https://github.com/mitsuba-renderer/drjit-core/commit/10436e7eb958457da636ba9b67c0b76d6d7acb5e>`__).
+
+- :py:func:`dr.copysign() <copysign>` now maps onto a dedicated backend IR node
+  on the CUDA, LLVM, and Metal backends.
+  (commit `5ac8a8 <https://github.com/mitsuba-renderer/drjit/commit/5ac8a855023d6e90492ac62e63d8edfe197fb669>`__,
+  Dr.Jit-Core commit `14d599 <https://github.com/mitsuba-renderer/drjit-core/commit/14d599a2dafac4324f0da2b1ba60fdc7412e480c>`__).
 
 - :py:func:`dr.clip() <clip>` is now defined as ``minimum(maximum(value, min),
   max)`` instead of ``maximum(minimum(value, max), min)`` for consistency with
   NumPy/PyTorch. This is only relevant when the interval is inverted (``min >
   max``). Following the change above, the operation now also propagates NaNs.
+  (commit `83a0b1 <https://github.com/mitsuba-renderer/drjit/commit/83a0b1eb6233cde57ba302169e17ef2162d504ba>`__).
 
-- Fixed bugs and conventions in :py:func:`dr.convolve() <convolve>` and
+- :py:func:`dr.stack() <stack>`, :py:func:`dr.vstack() <vstack>`,
+  :py:func:`dr.hstack() <hstack>`, :py:func:`dr.column_stack()
+  <column_stack>`, and :py:func:`dr.dstack() <dstack>` now promote
+  non-tensor types to tensors.
+  (commit `3735e1 <https://github.com/mitsuba-renderer/drjit/commit/3735e172b8f7c84d6dc28e16b474d081f1f57127>`__).
+
+- Constructing a nested array from a 1D dynamic Dr.Jit array (e.g., ``Array3f(Float(1,
+  2, 3))``) now consistently broadcasts (commit `b804db <https://github.com/mitsuba-renderer/drjit/commit/b804dbf476924b541a84d8d7c46eb231abd7719c>`__).
+
+- A packet scatter that decomposes into individual scatters no longer
+  serializes into separate kernels.
+  (commit `b128b6 <https://github.com/mitsuba-renderer/drjit/commit/b128b6ab4dbdae23430df2b5dbc29ab05a0c1613>`__).
+
+- :py:func:`dr.unravel() <unravel>` now casts its input to the flat type
+  implied by ``dtype`` instead of rejecting a mismatch, which makes
+  expressions like ``Array3f64(TensorXf(...))`` legal.
+  (commit `b7db80 <https://github.com/mitsuba-renderer/drjit/commit/b7db80dff36ddbd5d52fbf113bdcf3fe668a30b8>`__).
+
+- Fixed several bugs and changed defaultsin :py:func:`dr.convolve() <convolve>` and
   :py:func:`dr.resample() <resample>`:
 
   - Convolutions with custom continuous filters did not correctly evaluate the
     filter at all integer offsets within ``[-filter_radius, filter_radius]``.
     Filter presets like ``box`` or ``gaussian`` were not affected.
+    (commit `232932 <https://github.com/mitsuba-renderer/drjit/commit/23293212a7a5a76627924da8f7a9974021906c3d>`__).
 
   - A rounding issue could lead to incorrect output for the ``"nearest"``,
     ``"wrap"``, ``"reflect"``, and ``"mirror"`` boundaries. The default
     ``"zero"`` boundary condition was unaffected.
+    (commit `232932 <https://github.com/mitsuba-renderer/drjit/commit/23293212a7a5a76627924da8f7a9974021906c3d>`__).
 
   - :py:func:`dr.convolve() <convolve>` no longer normalizes the filter weights
     by default. With the default arguments, it is now equivalent to
     ``numpy.convolve(..., mode='same')``. Specify ``normalize=True`` to restore
     the previous behavior.
+    (commit `715c2d <https://github.com/mitsuba-renderer/drjit/commit/715c2df7f48b932d429c236d0527efdf61554541>`__).
 
   - Periodic boundary conditions (``"wrap"``, ``"reflect"``, and ``"mirror"``)
     extended the array by a single period. Larger filters could trigger
     undefined behavior by reading beyond the end of the array. The extension
     now repeats as often as needed.
+    (commit `6b5f56 <https://github.com/mitsuba-renderer/drjit/commit/6b5f5697e22523bd574c811264ab8de67f5c654f>`__).
+
+  - Other minor fixes.
+    (commits `dbb052 <https://github.com/mitsuba-renderer/drjit/commit/dbb052779d3d2964f93302d63ce855b231b50bd8>`__,
+     `1f342a <https://github.com/mitsuba-renderer/drjit/commit/1f342a185b3fd8186d455c8bd7269648ee0c364b>`__).
+
+- Fixed the behavior of :py:func:`dr.dot() <dot>` and ``__rsub__`` on
+  cooperative vectors.
+  (PRs `#521 <https://github.com/mitsuba-renderer/drjit/pull/521>`__,
+  `#529 <https://github.com/mitsuba-renderer/drjit/pull/529>`__,
+  contributed by `Lovro Nuic <https://github.com/lnuic>`__).
+
+- Fixed :py:func:`dr.cumsum() <cumsum>` over a tuple of axes, which previously only
+  applied a single axis.
+  (PR `#522 <https://github.com/mitsuba-renderer/drjit/pull/522>`__,
+  contributed by `Lovro Nuic <https://github.com/lnuic>`__).
+
+- Slicing the outer dimension of a nested array (e.g. ``value[3:]``) produced a
+  result with the wrong size.
+  (PR `#523 <https://github.com/mitsuba-renderer/drjit/pull/523>`__,
+  contributed by `Delio Vicini <https://github.com/dvicini>`__).
+
+- Fixed a miscompilation in symbolic ``if`` statements with partially evaluated state.
+  (commit `9a7db9 <https://github.com/mitsuba-renderer/drjit/commit/9a7db92b07d162950d2285a44a921477bf819477>`__).
+
+- Fixed a race condition in ``dr.sync_thread()``.
+  (Dr.Jit-Core commit `c5a8a9 <https://github.com/mitsuba-renderer/drjit-core/commit/c5a8a95d121e9555bed6168c7254a553e000e2d3>`__).
+
+- Miscellaneous Jit-Core fixes.
+  (Dr.Jit-Core commits
+  `b1b839 <https://github.com/mitsuba-renderer/drjit-core/commit/b1b83917046e055d93d266b113461a632ba51ab3>`__,
+  `26d4a1 <https://github.com/mitsuba-renderer/drjit-core/commit/26d4a14041930632b832f5aef59ed71fcddee61c>`__,
+  `546967 <https://github.com/mitsuba-renderer/drjit-core/commit/546967a165632f9e7fe82055f9e36c3795c43eb9>`__,
+  `ac46d8 <https://github.com/mitsuba-renderer/drjit-core/commit/ac46d85458e296918a50073a12b636cf7576e787>`__,
+  `8eeccd <https://github.com/mitsuba-renderer/drjit-core/commit/8eeccd098ac2bfa159df65f41060ab318bb17124>`__).
+
+- Miscellaneous minor fixes in Dr.Jit.
+  (commits `abfa1c <https://github.com/mitsuba-renderer/drjit/commit/abfa1c72cb40266581a84f1faccf1d9537b13a7e>`__,
+  `b547d8 <https://github.com/mitsuba-renderer/drjit/commit/b547d867037685b56f93b344af755f0c3eb89df5>`__,
+  `564a37 <https://github.com/mitsuba-renderer/drjit/commit/564a37c8cf405ad72f0d1d7d16e3f5cf5f6f4075>`__,
+  `479252 <https://github.com/mitsuba-renderer/drjit/commit/4792522871cb0e6143af7be815c0176fa95c3c3d>`__,
+  `c478bb <https://github.com/mitsuba-renderer/drjit/commit/c478bb4ec56d477a4dac43fd1797a80b80952ed1>`__,
+  `02e2b4 <https://github.com/mitsuba-renderer/drjit/commit/02e2b4c504e59db6daa64077b218a0a00ca9b3d5>`__).
 
 DrJit 1.4.0 (June 25, 2026)
 ---------------------------
