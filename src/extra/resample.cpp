@@ -44,6 +44,11 @@ struct Resampler::Impl {
     // Codegen strategy: symbolic tap loop vs. unrolled + evaluated
     bool symbolic = false;
 
+    // Largest tap count that may use the unrolled path. Unrolling spills ~128
+    // bytes of stack per tap (AVX512). The LLVM backend on Windows cannot
+    // handle > 1 page (4KiB) spills in a kernel at the moment.
+    static constexpr uint32_t max_unrolled_taps = 32;
+
     // Transpose fast path: a shift-invariant operator (every window start equals
     // the affine 'j - conv_origin') has a windowed-convolution adjoint.
     bool shift_invariant = false;
@@ -168,6 +173,9 @@ struct Resampler::Impl {
 
     /// Populate the fast-path variables from the precomputed tables
     void configure() {
+        if (taps > max_unrolled_taps)
+            symbolic = true;
+
         // 'Mirror' of a single sample has no period and coincides with 'Nearest'
         if (boundary == Boundary::Mirror && source_res == 1)
             boundary = Boundary::Nearest;
@@ -498,7 +506,8 @@ Resampler::Resampler(uint32_t source_res, uint32_t target_res, const char *filte
 
     d = new Impl(source_res, target_res, filter_cb, nullptr, radius, radius_scale,
                  boundary, normalize, /* flip */ false);
-    d->symbolic = symbolic;
+    // 'configure()' may already have forced the symbolic loop
+    d->symbolic = d->symbolic || symbolic;
 }
 
 Resampler::Resampler(uint32_t source_res, uint32_t target_res,
@@ -507,14 +516,16 @@ Resampler::Resampler(uint32_t source_res, uint32_t target_res,
                      bool symbolic)
     : d(new Impl(source_res, target_res, filter, payload, radius, 1.0,
                  boundary, normalize, flip)) {
-    d->symbolic = symbolic;
+    // 'configure()' may already have forced the symbolic loop
+    d->symbolic = d->symbolic || symbolic;
 }
 
 Resampler::Resampler(uint32_t res, const double *kernel, size_t kernel_size,
                      int origin, Boundary boundary, bool normalize, bool flip,
                      bool symbolic)
     : d(new Impl(res, kernel, kernel_size, origin, boundary, normalize, flip)) {
-    d->symbolic = symbolic;
+    // 'configure()' may already have forced the symbolic loop
+    d->symbolic = d->symbolic || symbolic;
 }
 
 Resampler::~Resampler() { }
