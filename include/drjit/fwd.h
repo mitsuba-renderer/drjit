@@ -62,7 +62,7 @@
 #endif
 
 #define DRJIT_VERSION_MAJOR 1
-#define DRJIT_VERSION_MINOR 4
+#define DRJIT_VERSION_MINOR 5
 #define DRJIT_VERSION_PATCH 0
 
 #define DRJIT_STRINGIFY(x) #x
