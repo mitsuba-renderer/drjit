@@ -568,6 +568,100 @@ void complex_setter(nb::handle_t<ArrayBase> h, nb::handle value) {
         nb::raise_python_error();
 }
 
+// Specialized transpose/matrix multiplication implementations for scalar-mode
+// arrays which cannot use the ``ad_var_*`` functionality.
+
+/// Allocate an uninitialized flat array of the given type and length
+static nb::object alloc_flat(const ArraySupplement &s, nb::handle tp, size_t size) {
+    nb::object result = nb::inst_alloc(tp);
+    s.init(size, inst_ptr(result));
+    nb::inst_mark_ready(result);
+    return result;
+}
+
+/// Reference GEMM. ``GemmBatch`` reduce dims are not implemented (AD only).
+template <typename T>
+static void gemm_ref(const T *a, const T *b, T *c, bool At, bool Bt, size_t M,
+                     size_t N, size_t K, const GemmBatch *batch, size_t grid) {
+    // Half precision inputs accumulate at single precision, as in the JIT kernels
+    using Value = std::conditional_t<std::is_same_v<T, drjit::half>, float, T>;
+    size_t n = batch ? batch->n_bdims : 0;
+
+    for (size_t g = 0; g < grid; ++g) {
+        size_t lin = g, oa = 0, ob = 0;
+        for (size_t d = 0; d < n; ++d) {
+            oa += (lin % batch->extent[d]) * batch->a_stride[d];
+            ob += (lin % batch->extent[d]) * batch->b_stride[d];
+            lin /= batch->extent[d];
+        }
+
+        for (size_t i = 0; i < M; ++i) {
+            for (size_t j = 0; j < N; ++j) {
+                Value accum = 0;
+                for (size_t k = 0; k < K; ++k)
+                    accum += Value(a[oa + (At ? k * M + i : i * K + k)]) *
+                             Value(b[ob + (Bt ? j * K + k : k * N + j)]);
+                c[(g * M + i) * N + j] = T(accum);
+            }
+        }
+    }
+}
+
+/// Scalar-backend replacement for ``ad_var_batched_gemm()``, returns the flat
+/// array of the output tensor
+static nb::object gemm_scalar(nb::handle a, nb::handle b, bool At, bool Bt,
+                              size_t M, size_t N, size_t K,
+                              const GemmBatch *batch) {
+    nb::handle tp = a.type();
+    const ArraySupplement &s = supp(tp);
+
+    size_t grid = 1;
+    for (size_t d = 0, n = batch ? batch->n_bdims : 0; d < n; ++d)
+        grid *= batch->extent[d];
+
+    nb::object c = alloc_flat(s, tp, grid * M * N);
+
+    #define DR_GEMM_REF(T)                                                     \
+        gemm_ref((const T *) s.data(inst_ptr(a)),                              \
+                 (const T *) s.data(inst_ptr(b)),                              \
+                 (T *) s.data(inst_ptr(c)), At, Bt, M, N, K, batch, grid)
+
+    switch ((VarType) s.type) {
+        case VarType::Float16: DR_GEMM_REF(drjit::half); break;
+        case VarType::Float32: DR_GEMM_REF(float); break;
+        case VarType::Float64: DR_GEMM_REF(double); break;
+        default:
+            nb::raise("unsupported element type '%s'. The matrix "
+                      "multiplication only supports the floating point types "
+                      "Float16, Float32, and Float64.",
+                      jit_type_name((VarType) s.type));
+    }
+
+    #undef DR_GEMM_REF
+
+    return c;
+}
+
+/// Scalar-backend replacement for ``ad_var_transpose()``
+static nb::object transpose_scalar(nb::handle a, size_t batch, size_t M,
+                                   size_t N) {
+    nb::handle tp = a.type();
+    const ArraySupplement &s = supp(tp);
+    nb::object c = alloc_flat(s, tp, batch * M * N);
+
+    size_t tsize = jit_type_size((VarType) s.type), stride = tsize * M * N;
+    const uint8_t *src = (const uint8_t *) s.data(inst_ptr(a));
+    uint8_t *dst = (uint8_t *) s.data(inst_ptr(c));
+
+    for (size_t b = 0; b < batch; ++b, src += stride, dst += stride)
+        for (size_t i = 0; i < M; ++i)
+            for (size_t j = 0; j < N; ++j)
+                memcpy(dst + (j * M + i) * tsize, src + (i * N + j) * tsize,
+                       tsize);
+
+    return c;
+}
+
 // Transpose the last two dimensions of a row-major Dr.Jit tensor. The caller
 // must ensure ``shape.size() >= 2``.
 static nb::object tensor_transpose_mT(nb::handle_t<ArrayBase> h) {
@@ -596,6 +690,9 @@ static nb::object tensor_transpose_mT(nb::handle_t<ArrayBase> h) {
 
     nb::object array_in = nb::steal(s.tensor_array(h.ptr()));
     const ArraySupplement &sa = supp(array_in.type());
+
+    if ((JitBackend) sa.backend == JitBackend::None)
+        return tp(transpose_scalar(array_in, batch, M, N), shape_out);
 
     uint64_t i_out = ad_var_transpose(sa.index(inst_ptr(array_in)),
                                       (uint32_t) batch,
@@ -976,6 +1073,13 @@ nb::object matmul(nb::handle h0, nb::handle h1, bool At, bool Bt) {
                            array_b = nb::steal(s1.tensor_array(h1.ptr()));
                 const ArraySupplement &sa = supp(array_a.type());
 
+                const GemmBatch *bp = (n == 0) ? nullptr : &gb;
+
+                if ((JitBackend) sa.backend == JitBackend::None)
+                    return tp0(
+                        gemm_scalar(array_a, array_b, At, Bt, M, N, K_a, bp),
+                        shape_out);
+
                 // 1-D x 1-D inner product (M = N = 1, no batch): dispatch
                 // to the fused multiply-and-reduce kernel instead of a
                 // GEMM with degenerate matrix dims.
@@ -985,7 +1089,6 @@ nb::object matmul(nb::handle h0, nb::handle h1, bool At, bool Bt) {
                         sa.index(inst_ptr(array_a)),
                         sa.index(inst_ptr(array_b)));
                 } else {
-                    const GemmBatch *bp = (n == 0) ? nullptr : &gb;
                     i_out = ad_var_batched_gemm(
                         sa.index(inst_ptr(array_a)),
                         sa.index(inst_ptr(array_b)),

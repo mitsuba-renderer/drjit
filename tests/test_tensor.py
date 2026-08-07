@@ -598,7 +598,7 @@ def test23_item_array(t):
         t([]).item()
 
 
-@pytest.test_arrays('is_tensor,jit,float,-is_diff')
+@pytest.test_arrays('is_tensor,float,-is_diff')
 @pytest.mark.parametrize('shape', [(1, 1), (3, 5), (5, 3), (16, 16), (17, 23)])
 def test24_transpose_T_2d(t, shape):
     """``.T`` on a 2-D tensor produces the expected shape and values."""
@@ -610,7 +610,7 @@ def test24_transpose_T_2d(t, shape):
     assert (B.numpy() == A_np.T).all()
 
 
-@pytest.test_arrays('is_tensor,jit,float32,-is_diff')
+@pytest.test_arrays('is_tensor,float32,-is_diff')
 @pytest.mark.parametrize('shape', [
     (2, 3, 4),
     (2, 3, 4, 5),
@@ -628,7 +628,7 @@ def test25_transpose_mT(t, shape):
     assert (B.numpy() == np.swapaxes(A_np, -1, -2)).all()
 
 
-@pytest.test_arrays('is_tensor,jit,float32,-is_diff')
+@pytest.test_arrays('is_tensor,float32,-is_diff')
 @pytest.mark.parametrize('shape', [(0, 3, 4), (2, 0, 4), (2, 3, 0)])
 def test26_transpose_empty(t, shape):
     """Transpose of a tensor with an empty axis returns an empty tensor with the last two dims swapped."""
@@ -638,7 +638,7 @@ def test26_transpose_empty(t, shape):
     assert B.shape == shape[:-2] + (shape[-1], shape[-2])
 
 
-@pytest.test_arrays('is_tensor,jit,float32,-is_diff')
+@pytest.test_arrays('is_tensor,float32,-is_diff')
 def test27_transpose_errors(t):
     """``.T`` rejects tensors with rank != 2; ``.mT`` rejects rank < 2."""
     import numpy as np
@@ -650,7 +650,7 @@ def test27_transpose_errors(t):
         _ = t(np.zeros((5,), dtype='float32')).mT
 
 
-@pytest.test_arrays('is_tensor,jit,float32,-is_diff')
+@pytest.test_arrays('is_tensor,float32,-is_diff')
 @pytest.mark.parametrize('shape', [(3, 5), (2, 4, 6), (2, 3, 4, 5)])
 def test28_transpose_roundtrip(t, shape):
     """``x.mT.mT == x``."""

@@ -42,7 +42,7 @@ def _seed(*key):
 # Section A: baseline 2-D correctness
 # =========================================================================
 
-@pytest.test_arrays('is_tensor,jit,float,-is_diff')
+@pytest.test_arrays('is_tensor,float,-is_diff')
 @pytest.mark.parametrize('At,Bt', [(False, False), (True, False),
                                    (False, True), (True, True)])
 @pytest.mark.parametrize('dims', [
@@ -76,8 +76,8 @@ def test01_matmul_2d(t, dims, At, Bt):
     assert np.allclose(C.numpy(), ref, atol=_TOL_BY_TYPE[vt])
 
 
-@pytest.test_arrays('is_tensor,jit,int32,-is_diff',
-                    'is_tensor,jit,uint32,-is_diff')
+@pytest.test_arrays('is_tensor,int32,-is_diff',
+                    'is_tensor,uint32,-is_diff')
 def test02_matmul_int_unsupported(t):
     """Integer matmul is unsupported on every backend and must raise an
     informative error naming the floating point types that are allowed."""
@@ -96,7 +96,7 @@ def test02_matmul_int_unsupported(t):
 # Section B: empty / degenerate shapes
 # =========================================================================
 
-@pytest.test_arrays('is_tensor,jit,float32,-is_diff')
+@pytest.test_arrays('is_tensor,float32,-is_diff')
 @pytest.mark.parametrize('A_shape,B_shape,out_shape', [
     # Size-1 extents: exercise the BM=8 / V=1 fallback in the kernel.
     ((1, 1),    (1, 1),    (1, 1)),
@@ -174,7 +174,7 @@ def test04_matmul_large(t, M, K, N):
 # Section D: operator binding and input-validation errors
 # =========================================================================
 
-@pytest.test_arrays('is_tensor,jit,float32,-is_diff')
+@pytest.test_arrays('is_tensor,float32,-is_diff')
 @pytest.mark.parametrize('A_shape,B_shape', [
     ((7, 5),    (5, 9)),        # 2-D fast path
     ((3, 4, 5), (3, 5, 6)),     # N-D (GemmBatch) path
@@ -191,7 +191,7 @@ def test05_matmul_operator(t, A_shape, B_shape):
     assert np.allclose(C.numpy(), A_np @ B_np, atol=1e-4)
 
 
-@pytest.test_arrays('is_tensor,jit,float32,-is_diff')
+@pytest.test_arrays('is_tensor,float32,-is_diff')
 @pytest.mark.parametrize('A_shape,B_shape,At,Bt', [
     # Matrix-dim K mismatch.
     ((3, 4),            (5, 6),            False, False),
@@ -223,7 +223,7 @@ def test06_matmul_errors(t, A_shape, B_shape, At, Bt):
 # Section E: N-D / broadcast correctness (GemmBatch path)
 # =========================================================================
 
-@pytest.test_arrays('is_tensor,jit,float,-is_diff')
+@pytest.test_arrays('is_tensor,float,-is_diff')
 @pytest.mark.parametrize('At,Bt', [(False, False), (True, False),
                                    (False, True), (True, True)])
 @pytest.mark.parametrize('batch', [
@@ -258,7 +258,7 @@ def test10_batched_matmul(t, batch, At, Bt):
     assert np.allclose(C.numpy(), ref, atol=_TOL_BY_TYPE[vt])
 
 
-@pytest.test_arrays('is_tensor,jit,float32,-is_diff')
+@pytest.test_arrays('is_tensor,float32,-is_diff')
 @pytest.mark.parametrize('A_shape,B_shape', [
     # A is a single matrix broadcast over B's batch.
     ((3, 4),       (5, 4, 6)),
@@ -288,7 +288,7 @@ def test11_broadcast_shapes(t, A_shape, B_shape):
     assert np.allclose(C.numpy(), ref, atol=1e-4)
 
 
-@pytest.test_arrays('is_tensor,jit,float32,-is_diff')
+@pytest.test_arrays('is_tensor,float32,-is_diff')
 @pytest.mark.parametrize('At,Bt', [(False, False), (True, False),
                                    (False, True), (True, True)])
 def test12_broadcast_matmul_transpose(t, At, Bt):
@@ -314,7 +314,7 @@ def test12_broadcast_matmul_transpose(t, At, Bt):
     assert np.allclose(C.numpy(), ref, atol=1e-4)
 
 
-@pytest.test_arrays('is_tensor,jit,float32,-is_diff')
+@pytest.test_arrays('is_tensor,float32,-is_diff')
 @pytest.mark.parametrize('A_shape,B_shape', [
     # 1-D x 2-D: A acts as (1, K), the prepended axis is dropped.
     ((5,),       (5, 7)),
