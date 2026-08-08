@@ -1554,33 +1554,28 @@ void set_label(T &value, Labels... prefix) {
  * \brief Helper guard to mark scopes that are independent of any
  * ongoing symbolic computation
  *
- * Some scope of code might be traced as part of a symbolic section of code,
- * even though its functionality is independent of the actual symbolic
- * computations it is surrounded by. For example, consider a virtual function
- * call which initializes some data structure the first time it is called. This
- * initilization is completely detached from the symbolic inputs and is guarded
- * only by a scalar runtime check. In such a case, any evaluation which happens
- * in the initilization should be valid. Using this RAII helper will guarantee
- * this behavior.
+ * It is sometimes necessary to temporarily leave symbolic execution mode,
+ * e.g., to initialize a data structure that is accessed by symbolic code. This
+ * RAII wrapper legalizes such code regions, in which it is then possible to
+ * perform steps (e.g. variable evaluation) that are normally forbidden in
+ * symbolic regions.
  */
-template <typename T>
-struct scoped_disable_symbolic {
-
-    scoped_disable_symbolic() {
-        if constexpr(drjit::is_jit_v<T>) {
-            uint32_t index = jit_var_mask_default(T::Backend, 1);
-            jit_var_mask_push(T::Backend, index);
-            jit_var_dec_ref(index);
-        }
-    }
-
-    ~scoped_disable_symbolic() {
+template <typename T> struct scoped_eval_scope {
+    scoped_eval_scope() {
         if constexpr (drjit::is_jit_v<T>)
-            jit_var_mask_pop(T::Backend);
+            m_token = jit_eval_scope_enter(backend_v<T>);
     }
 
-    scoped_disable_symbolic(const scoped_disable_symbolic &) = delete;
-    scoped_disable_symbolic &operator=(const scoped_disable_symbolic &) = delete;
+    ~scoped_eval_scope() {
+        if constexpr (drjit::is_jit_v<T>)
+            jit_eval_scope_leave(backend_v<T>, m_token);
+    }
+
+    scoped_eval_scope(const scoped_eval_scope &) = delete;
+    scoped_eval_scope &operator=(const scoped_eval_scope &) = delete;
+
+private:
+    uint32_t m_token = 0;
 };
 
 template <typename T> bool grad_enabled(const T &value) {
