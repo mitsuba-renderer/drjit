@@ -288,7 +288,8 @@ if (NOT (DRJIT_SANITIZE_ASAN OR DRJIT_SANITIZE_UBSAN))
       ${DRJIT_PYTHON_DST_DIR}/auto/__init__.py
       ${DRJIT_PYTHON_DST_DIR}/auto/ad.py
 
-    COMMAND cmake -E touch
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${DRJIT_PYTHON_DST_DIR}/auto
+    COMMAND ${CMAKE_COMMAND} -E touch
       ${DRJIT_PYTHON_DST_DIR}/auto/py.typed
       ${DRJIT_PYTHON_DST_DIR}/auto/__init__.py
       ${DRJIT_PYTHON_DST_DIR}/auto/ad.py
