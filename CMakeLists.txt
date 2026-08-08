@@ -229,69 +229,105 @@ if (DRJIT_MASTER_PROJECT)
   endif()
 
   if (DRJIT_ENABLE_PYTHON)
+    # Stub generation is disabled for sanitizer builds in src/python/CMakeLists.txt.
+    set(DRJIT_INSTALL_STUBS ON)
+    if (DRJIT_SANITIZE_ASAN OR DRJIT_SANITIZE_UBSAN)
+      set(DRJIT_INSTALL_STUBS OFF)
+    endif()
+
     install(TARGETS drjit-python DESTINATION drjit)
     install(FILES
       ${CMAKE_CURRENT_BINARY_DIR}/drjit/config.py
-      ${CMAKE_CURRENT_BINARY_DIR}/drjit/__init__.pyi
       ${CMAKE_CURRENT_BINARY_DIR}/drjit/__init__.py
-      ${CMAKE_CURRENT_BINARY_DIR}/drjit/ast.pyi
       ${CMAKE_CURRENT_BINARY_DIR}/drjit/ast.py
       ${CMAKE_CURRENT_BINARY_DIR}/drjit/dda.py
-      ${CMAKE_CURRENT_BINARY_DIR}/drjit/detail.pyi
       ${CMAKE_CURRENT_BINARY_DIR}/drjit/detail.py
-      ${CMAKE_CURRENT_BINARY_DIR}/drjit/hashgrid.pyi
       ${CMAKE_CURRENT_BINARY_DIR}/drjit/hashgrid.py
-      ${CMAKE_CURRENT_BINARY_DIR}/drjit/interop.pyi
       ${CMAKE_CURRENT_BINARY_DIR}/drjit/interop.py
-      ${CMAKE_CURRENT_BINARY_DIR}/drjit/nn.pyi
       ${CMAKE_CURRENT_BINARY_DIR}/drjit/nn.py
       ${CMAKE_CURRENT_BINARY_DIR}/drjit/opt.py
-      ${CMAKE_CURRENT_BINARY_DIR}/drjit/random.pyi
       ${CMAKE_CURRENT_BINARY_DIR}/drjit/random.py
-      ${CMAKE_CURRENT_BINARY_DIR}/drjit/py.typed
       DESTINATION drjit
     )
+    if (DRJIT_INSTALL_STUBS)
+      install(FILES
+        ${CMAKE_CURRENT_BINARY_DIR}/drjit/__init__.pyi
+        ${CMAKE_CURRENT_BINARY_DIR}/drjit/ast.pyi
+        ${CMAKE_CURRENT_BINARY_DIR}/drjit/detail.pyi
+        ${CMAKE_CURRENT_BINARY_DIR}/drjit/hashgrid.pyi
+        ${CMAKE_CURRENT_BINARY_DIR}/drjit/interop.pyi
+        ${CMAKE_CURRENT_BINARY_DIR}/drjit/nn.pyi
+        ${CMAKE_CURRENT_BINARY_DIR}/drjit/random.pyi
+        ${CMAKE_CURRENT_BINARY_DIR}/drjit/py.typed
+        DESTINATION drjit
+      )
+    endif()
     install(FILES
-      ${CMAKE_CURRENT_BINARY_DIR}/drjit/scalar/__init__.pyi
       ${CMAKE_CURRENT_BINARY_DIR}/drjit/scalar/__init__.py
       DESTINATION drjit/scalar
     )
+    if (DRJIT_INSTALL_STUBS)
+      install(FILES
+        ${CMAKE_CURRENT_BINARY_DIR}/drjit/scalar/__init__.pyi
+        DESTINATION drjit/scalar
+      )
+    endif()
     install(FILES
-      ${CMAKE_CURRENT_BINARY_DIR}/drjit/llvm/py.typed
-      ${CMAKE_CURRENT_BINARY_DIR}/drjit/llvm/__init__.pyi
       ${CMAKE_CURRENT_BINARY_DIR}/drjit/llvm/__init__.py
-      ${CMAKE_CURRENT_BINARY_DIR}/drjit/llvm/ad.pyi
       ${CMAKE_CURRENT_BINARY_DIR}/drjit/llvm/ad.py
       DESTINATION drjit/llvm
     )
+    if (DRJIT_INSTALL_STUBS)
+      install(FILES
+        ${CMAKE_CURRENT_BINARY_DIR}/drjit/llvm/py.typed
+        ${CMAKE_CURRENT_BINARY_DIR}/drjit/llvm/__init__.pyi
+        ${CMAKE_CURRENT_BINARY_DIR}/drjit/llvm/ad.pyi
+        DESTINATION drjit/llvm
+      )
+    endif()
     if (DRJIT_ENABLE_CUDA)
       install(FILES
-        ${CMAKE_CURRENT_BINARY_DIR}/drjit/cuda/py.typed
-        ${CMAKE_CURRENT_BINARY_DIR}/drjit/cuda/__init__.pyi
         ${CMAKE_CURRENT_BINARY_DIR}/drjit/cuda/__init__.py
-        ${CMAKE_CURRENT_BINARY_DIR}/drjit/cuda/ad.pyi
         ${CMAKE_CURRENT_BINARY_DIR}/drjit/cuda/ad.py
         DESTINATION drjit/cuda
       )
+      if (DRJIT_INSTALL_STUBS)
+        install(FILES
+          ${CMAKE_CURRENT_BINARY_DIR}/drjit/cuda/py.typed
+          ${CMAKE_CURRENT_BINARY_DIR}/drjit/cuda/__init__.pyi
+          ${CMAKE_CURRENT_BINARY_DIR}/drjit/cuda/ad.pyi
+          DESTINATION drjit/cuda
+        )
+      endif()
     endif()
     if (DRJIT_ENABLE_METAL)
       install(FILES
-        ${CMAKE_CURRENT_BINARY_DIR}/drjit/metal/py.typed
-        ${CMAKE_CURRENT_BINARY_DIR}/drjit/metal/__init__.pyi
         ${CMAKE_CURRENT_BINARY_DIR}/drjit/metal/__init__.py
-        ${CMAKE_CURRENT_BINARY_DIR}/drjit/metal/ad.pyi
         ${CMAKE_CURRENT_BINARY_DIR}/drjit/metal/ad.py
         DESTINATION drjit/metal
       )
+      if (DRJIT_INSTALL_STUBS)
+        install(FILES
+          ${CMAKE_CURRENT_BINARY_DIR}/drjit/metal/py.typed
+          ${CMAKE_CURRENT_BINARY_DIR}/drjit/metal/__init__.pyi
+          ${CMAKE_CURRENT_BINARY_DIR}/drjit/metal/ad.pyi
+          DESTINATION drjit/metal
+        )
+      endif()
     endif()
     install(FILES
-      ${CMAKE_CURRENT_BINARY_DIR}/drjit/auto/py.typed
-      ${CMAKE_CURRENT_BINARY_DIR}/drjit/auto/__init__.pyi
       ${CMAKE_CURRENT_BINARY_DIR}/drjit/auto/__init__.py
-      ${CMAKE_CURRENT_BINARY_DIR}/drjit/auto/ad.pyi
       ${CMAKE_CURRENT_BINARY_DIR}/drjit/auto/ad.py
       DESTINATION drjit/auto
     )
+    if (DRJIT_INSTALL_STUBS)
+      install(FILES
+        ${CMAKE_CURRENT_BINARY_DIR}/drjit/auto/py.typed
+        ${CMAKE_CURRENT_BINARY_DIR}/drjit/auto/__init__.pyi
+        ${CMAKE_CURRENT_BINARY_DIR}/drjit/auto/ad.pyi
+        DESTINATION drjit/auto
+      )
+    endif()
   endif()
 
   if (DRJIT_ENABLE_JIT)
