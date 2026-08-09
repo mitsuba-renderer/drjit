@@ -215,14 +215,16 @@ def test11_write_mask_simple(t):
 
     assert dr.all(s[0] == [1, 0, 1])
 
-@pytest.test_arrays('jit,uint32,shape=(*)')
+@pytest.test_arrays('jit,uint32,shape=(*)', 'jit,bool,shape=(*)')
 @dr.syntax
 def test12_write_mask_conditional(t):
     Bool = dr.mask_t(t)
+    UInt32 = dr.uint32_array_t(t)
+
     s = dr.alloc_local(t, 1, value = dr.zeros(t))
     mask = Bool(True, False, True)
 
-    i = t(0, 1, 1)
+    i = UInt32(0, 1, 1)
 
     if i > 0:
         s.write(t(1), t(0), active=mask) 
