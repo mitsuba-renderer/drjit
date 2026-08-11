@@ -186,6 +186,7 @@ template <bool IsMask_, typename Derived_> struct alignas(16)
     DRJIT_INLINE Derived round_()    const { return vrndnq_f32(m);     }
     DRJIT_INLINE Derived floor_()    const { return vrndmq_f32(m);     }
     DRJIT_INLINE Derived ceil_()     const { return vrndpq_f32(m);     }
+    DRJIT_INLINE Derived trunc_()    const { return vrndq_f32(m);      }
 #endif
 
     DRJIT_INLINE Derived sqrt_() const {
@@ -469,6 +470,7 @@ template <bool IsMask_, typename Derived_> struct alignas(16)
     DRJIT_INLINE Derived round_()    const { return vrndnq_f64(m);     }
     DRJIT_INLINE Derived floor_()    const { return vrndmq_f64(m);     }
     DRJIT_INLINE Derived ceil_()     const { return vrndpq_f64(m);     }
+    DRJIT_INLINE Derived trunc_()    const { return vrndq_f64(m);      }
 #endif
 
     DRJIT_INLINE Derived rcp_() const {
