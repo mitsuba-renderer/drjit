@@ -15,6 +15,8 @@ DrJit 1.5.1 (unreleased)
   which only masked out the surrounding lanes and therefore still produced
   symbolic variables that could not be evaluated.
 
+- Removed a number of long-deprecated aliases.
+
 DrJit 1.5.0 (August 7, 2026)
 ----------------------------
 

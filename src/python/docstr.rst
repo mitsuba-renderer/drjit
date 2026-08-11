@@ -6474,30 +6474,6 @@
     - :py:attr:`drjit.JitFlag.PacketOps`.
     - :py:attr:`drjit.JitFlag.ShaderExecutionReordering`.
 
-.. topic:: JitFlag_LoopRecord
-
-    Deprecated. Replaced by :py:attr:`SymbolicLoops`.
-
-.. topic:: JitFlag_LoopOptimize
-
-    Deprecated. Replaced by :py:attr:`OptimizeLoops`.
-
-.. topic:: JitFlag_VCallRecord
-
-    Deprecated. Replaced by :py:attr:`SymbolicCalls`.
-
-.. topic:: JitFlag_VCallOptimize
-
-    Deprecated. Replaced by :py:attr:`OptimizeCalls`.
-
-.. topic:: JitFlag_VCallDeduplicate
-
-    Deprecated. Replaced by :py:attr:`MergeFunctions`.
-
-.. topic:: JitFlag_Recording
-
-    Deprecated. Replaced by :py:attr:`Symbolic`.
-
 .. topic:: VarState
 
     The :py:attr:`drjit.ArrayBase.state` property returns one of the following enumeration values describing possible evaluation states of a Dr.Jit variable.

@@ -124,15 +124,7 @@ NB_MODULE(_drjit_ext, m_) {
         .value("FreezingScope", JitFlag::FreezingScope, doc_JitFlag_FreezingScope)
         .value("EnableObjectTraversal", JitFlag::EnableObjectTraversal, doc_JitFlag_EnableObjectTraversal)
         .value("SpillToSharedMemory", JitFlag::SpillToSharedMemory, doc_JitFlag_SpillToSharedMemory)
-        .value("Default", JitFlag::Default, doc_JitFlag_Default)
-
-        // Deprecated aliases
-        .value("VCallRecord", JitFlag::VCallRecord, doc_JitFlag_VCallRecord)
-        .value("VCallOptimize", JitFlag::VCallOptimize, doc_JitFlag_VCallOptimize)
-        .value("VCallDeduplicate", JitFlag::VCallDeduplicate, doc_JitFlag_VCallDeduplicate)
-        .value("LoopRecord", JitFlag::LoopRecord, doc_JitFlag_LoopRecord)
-        .value("LoopOptimize", JitFlag::LoopOptimize, doc_JitFlag_LoopOptimize)
-        .value("Recording", JitFlag::Recording, doc_JitFlag_Recording);
+        .value("Default", JitFlag::Default, doc_JitFlag_Default);
 
     nb::enum_<VarType>(m, "VarType", doc_VarType)
         .value("Void", VarType::Void, doc_VarType_Void)

@@ -148,7 +148,7 @@ Index binary_search(scalar_t<Index> start_, scalar_t<Index> end_,
                                                      value_t<Index>, Index>>;
         using Mask1 = mask_t<Index1>;
 
-        if (iterations >= 2 && jit_flag(JitFlag::LoopRecord)) {
+        if (iterations >= 2 && jit_flag(JitFlag::SymbolicLoops)) {
             Index1 index = zeros<Index1>(width(pred(start)));
 
             drjit::tie(start, end, index) = drjit::while_loop(
@@ -209,9 +209,9 @@ IndexN binary_search(typename std::enable_if_t<is_jit_v<Index1>, Index1> start_,
 
     Index1 index = zeros<Index1>(width(pred(start)));
 
-    bool loop_record = jit_flag(JitFlag::LoopRecord);
-    if (jit_flag(JitFlag::Recording))
-        jit_set_flag(JitFlag::LoopRecord, true);
+    bool loop_record = jit_flag(JitFlag::SymbolicLoops);
+    if (jit_flag(JitFlag::SymbolicScope))
+        jit_set_flag(JitFlag::SymbolicLoops, true);
 
     drjit::tie(start, end, index) = drjit::while_loop(
         drjit::make_tuple(start, end, index),
@@ -229,7 +229,7 @@ IndexN binary_search(typename std::enable_if_t<is_jit_v<Index1>, Index1> start_,
         },
         "dr::binary_search()");
 
-    jit_set_flag(JitFlag::LoopRecord, loop_record);
+    jit_set_flag(JitFlag::SymbolicLoops, loop_record);
 
     return start;
 }

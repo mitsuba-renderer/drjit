@@ -253,18 +253,6 @@ DRJIT_INLINE auto operator/(const T1 &a1, const T2 &a2) {
                          static_cast<ref_cast_t<T2, E>>(a2));
 }
 
-template <typename T1, typename T2>
-[[deprecated("drjit::eq is deprecated, please use the normal '==' operator.")]]
-auto eq(const T1 &a, const T2 &b) {
-    return a == b;
-}
-
-template <typename T1, typename T2>
-[[deprecated("drjit::neq is deprecated, please use the normal '!=' operator.")]]
-auto neq(const T1 &a, const T2 &b) {
-    return a != b;
-}
-
 template <typename T, enable_if_not_array_t<T> = 0> T andnot(const T &a1, const T &a2) {
     return detail::andnot_(a1, a2);
 }
@@ -345,12 +333,6 @@ DRJIT_INLINE bool reinterpret_array(const detail::MaskBit<Source> &src) {
     return (bool) src;
 }
 
-template <typename T>
-[[deprecated("drjit::sqr was replaced by drjit::square (to be consistent with NumPy and to avoid typos/mixups with drjit::sqrt).")]]
-DRJIT_INLINE auto sqr(const T &value) {
-    return value * value;
-}
-
 template <typename T> DRJIT_INLINE auto square(const T &value) {
     return value * value;
 }
@@ -377,12 +359,6 @@ auto lerp(const T1 &a, const T2 &b, const T3 &t) {
 template <typename T1, typename T2, typename T3>
 auto clip(const T1 &value, const T2 &min, const T3 &max) {
     return minimum(maximum(value, min), max);
-}
-
-template <typename T1, typename T2, typename T3>
-[[deprecated("drjit::clamp was replaced by drjit::clip (to be consistent with NumPy).")]]
-auto clamp(const T1 &value, const T2 &min, const T3 &max) {
-    return clip(value, min, max);
 }
 
 namespace detail {

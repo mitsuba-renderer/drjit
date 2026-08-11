@@ -230,7 +230,7 @@ template <bool IsMask_, typename Derived_> struct alignas(32)
     DRJIT_INLINE auto eq_ (Ref a) const {
         using Int = int_array_t<Derived>;
         if constexpr (IsMask_)
-            return mask_t<Derived>(eq(Int(derived()), Int(a)));
+            return mask_t<Derived>(Int(derived()) == Int(a));
         else
             return DRJIT_COMP(eq, EQ_OQ);
     }
@@ -238,7 +238,7 @@ template <bool IsMask_, typename Derived_> struct alignas(32)
     DRJIT_INLINE auto neq_(Ref a) const {
         using Int = int_array_t<Derived>;
         if constexpr (IsMask_)
-            return mask_t<Derived>(neq(Int(derived()), Int(a)));
+            return mask_t<Derived>(Int(derived()) != Int(a));
         else
             return DRJIT_COMP(neq, NEQ_UQ);
     }
@@ -622,7 +622,7 @@ template <bool IsMask_, typename Derived_> struct alignas(32)
     DRJIT_INLINE auto eq_ (Ref a) const {
         using Int = int_array_t<Derived>;
         if constexpr (IsMask_)
-            return mask_t<Derived>(eq(Int(derived()), Int(a)));
+            return mask_t<Derived>(Int(derived()) == Int(a));
         else
             return DRJIT_COMP(eq, EQ_OQ);
     }
@@ -630,7 +630,7 @@ template <bool IsMask_, typename Derived_> struct alignas(32)
     DRJIT_INLINE auto neq_(Ref a) const {
         using Int = int_array_t<Derived>;
         if constexpr (IsMask_)
-            return mask_t<Derived>(neq(Int(derived()), Int(a)));
+            return mask_t<Derived>(Int(derived()) != Int(a));
         else
             return DRJIT_COMP(neq, NEQ_UQ);
     }

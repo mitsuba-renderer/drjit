@@ -339,13 +339,13 @@ struct Tensor
     auto eq_(const Tensor &b) const {
         Tensor t0 = *this, t1 = b;
         Shape shape = detail::tensor_broadcast("eq_", t0, t1);
-        return mask_t<Tensor>(eq(t0.m_array, t1.m_array), std::move(shape));
+        return mask_t<Tensor>(t0.m_array == t1.m_array, std::move(shape));
     }
 
     auto neq_(const Tensor &b) const {
         Tensor t0 = *this, t1 = b;
         Shape shape = detail::tensor_broadcast("neq_", t0, t1);
-        return mask_t<Tensor>(neq(t0.m_array, t1.m_array), std::move(shape));
+        return mask_t<Tensor>(t0.m_array != t1.m_array, std::move(shape));
     }
 
     Tensor neg_() const { return Tensor(-m_array, m_shape); }
