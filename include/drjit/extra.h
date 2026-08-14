@@ -312,6 +312,19 @@ ad_tex_write(uint32_t channels_stored, uint32_t channels_out,
              const uint64_t *value, uint32_t active);
 
 /**
+ * \brief Build an unevaluated expression that reads texel data back from a
+ * hardware texture
+ *
+ * Samples every texel at its center. The result is non-differentiable,
+ * reproduces the stored values exactly, and interleaves ``channels_out``
+ * channels per texel.See \ref ad_tex_eval for the shared parameters.
+ */
+extern DRJIT_EXTRA_EXPORT uint32_t
+ad_tex_readback(VarType storage_type, uint32_t dimension,
+                uint32_t channels_stored, uint32_t channels_out, int srgb,
+                void *handle, const uint32_t *res, size_t n_texels);
+
+/**
  * \brief Re-pack channel-interleaved texture data to a different channel width
  *
  * Gathers ``source`` (``n_pixels * src_channels`` elements) into a buffer of

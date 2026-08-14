@@ -7116,11 +7116,10 @@
     invokes ``set_tensor(tensor)`` to fill the texture memory with the provided
     tensor.
 
-    When ``migrate`` is set to ``True`` on a GPU backend, the texture is *fully*
-    migrated to GPU texture memory to avoid redundant storage. Note that the
-    texture is still differentiable even when migrated. The :py:func:`value()`
-    and :py:func:`tensor()` operations will perform a reverse migration in this
-    case.
+    When ``migrate`` is set to ``True`` (the default), Dr.Jit moves the
+    texture to the GPU backends to avoid redundant storage. Values like
+    :py:func:`tensor()` and :py:func:`value()` then produce a differentiable
+    symbolic view of the migrated memory.
 
     Both the ``filter_mode`` and ``wrap_mode`` have the same defaults and
     behaviors as for the previous constructor.
@@ -7129,9 +7128,8 @@
 
     Overwrite the texture contents with the provided linearized 1D array
 
-    When ``migrate`` is set to ``True`` on the CUDA and Metal backends, the
-    texture information is *fully* migrated to GPU texture memory to avoid
-    redundant storage.
+    When ``migrate`` is set, the CUDA and Metal backends migrate the texture
+    data into the GPU's native texture format to avoid redundant storage.
 
 .. topic:: Texture_set_value_2
 
@@ -7180,11 +7178,20 @@
 
 .. topic:: Texture_value
 
-    Return the texture data as an array object
+    Return the texture data as an array object. See the remark in
+    :py:func:`tensor()`.
 
 .. topic:: Texture_tensor
 
     Return the texture data as a tensor object
+
+    .. note::
+
+       When the texture was migrated to the GPU, this function returns a
+       symbolic view that occupies no actual storage. Its evaluation will
+       query the migrated hardware texture. Changing the texture contents via
+       :py:func:`set_tensor()`, :py:func:`write()`, etc., will also change
+       this view, so be sure to evaluate beforehand.
 
 .. topic:: Texture_filter_mode
 
@@ -7204,7 +7211,8 @@
 
 .. topic:: Texture_migrated
 
-    Is the texture data held exclusively in GPU texture memory?
+    Is the texture data held exclusively in GPU texture memory? True after a
+    migration, and for writable/wrapped textures.
 
 .. topic:: Texture_shape
 
@@ -7218,17 +7226,14 @@
 
     Evaluate the linear interpolant represented by this texture.
 
-    When hardware-acceleration is not available, the numerical precision of the
-    interpolation is dictated by the floating point precision of the query
-    point type.
+    When using the non-hardware-accelerated evaluation, the numerical
+    precision of the interpolation is dictated by the floating point precision
+    of the query point type.
 
 .. topic:: Texture_eval_fetch
 
     Fetch the texels that would be referenced in a texture lookup with
     linear interpolation without actually performing this interpolation.
-
-    The numerical precision of the interpolation is dictated by the
-    floating point precision of the query point type.
 
 .. topic:: Texture_eval_cubic
 
@@ -7250,9 +7255,6 @@
     (thus the default AD graph gives incorrect results). The implementation
     calls :py:func:`eval_cubic_helper()` function to replace the AD graph with a
     direct evaluation of the B-Spline basis functions in that case.
-
-    The numerical precision of the interpolation is dictated by the
-    floating point precision of the query point type.
 
 .. topic:: Texture_eval_cubic_grad
 
@@ -7305,6 +7307,11 @@
     This is a hardware texture store (a side effect): it is not differentiable,
     and the written texture is meant for display / external sampling rather than
     :py:func:`eval()`.
+
+    Reading the texture after writing to it (via :py:func:`value()`,
+    :py:func:`tensor()`, or the ``eval_*()`` methods) requires an intermediate
+    :py:func:`drjit.eval()` call. The write and the read may otherwise end up
+    in the same kernel, where their relative order is undefined.
 
 .. topic:: Texture_from_native_handle
 

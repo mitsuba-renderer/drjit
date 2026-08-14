@@ -107,15 +107,17 @@ around the underlying tensor representation, which remains accessible:
    array_data = tex.value()   # Same, but in array form
 
 Hardware-accelerated Dr.Jit textures work differently: they *migrate* texture
-data into a CUDA texture object that is no longer directly accessible to
-Dr.Jit. This makes methods such as :py:func:`.tensor()
-<drjit.cuda.Texture2f.tensor>` and :py:func:`.value()
-<drjit.cuda.Texture2f.value>` rather expensive, since they must copy the
-texture data from the CUDA object back into memory.
+data into a CUDA texture object to avoid redundant storage. Methods such as
+:py:func:`.tensor() <drjit.cuda.Texture2f.tensor>` and :py:func:`.value()
+<drjit.cuda.Texture2f.value>` then return a symbolic view that occupies no
+actual storage. Evaluating the view fetches the texel data back from the
+hardware texture, and it reflects the texture contents at the time of that
+evaluation. Evaluate it before overwriting the texture when the current
+contents are needed.
 
 If you desire access to a hardware-accelerated texture *and* at the
-same time retain the tensor representation, specify ``migrate=False``
-to the texture constructor, i.e.,
+same time want the tensor representation to stay in ordinary memory,
+specify ``migrate=False`` to the texture constructor, i.e.,
 
 .. code-block:: python
 

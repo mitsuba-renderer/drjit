@@ -895,12 +895,15 @@ def test25_eval_ad_migrated(t, texture_type, init):
     dr.allclose(tensor.grad, [0.5, 0])
     assert tex.migrated()
 
-    # Differentiating the texture lookup position requires that data to be unmigrated
+    # Differentiating the texture lookup position needs the primal texel data,
+    # which the readback view provides without undoing the migration
     pos = Array2f(0.5, 0)
     dr.enable_grad(pos)
     result = tex.eval(pos)
     dr.eval(result)
-    assert not tex.migrated()
+    assert tex.migrated()
+    dr.backward(result[0])
+    assert dr.allclose(pos.grad, [2, 0])
 
 
 @pytest.mark.parametrize("texture_type", ['Texture1f64', 'Texture1f', 'Texture1f16'])
@@ -1036,6 +1039,13 @@ def test29_write_read(t, texture_type):
         ref = dr.arange(StorageType, H * W * ch) * 0.01
         assert dr.allclose(tex.value(), ref, atol=5e-3)
 
+        # A second round exercises the readback view refresh: the read above
+        # materialized the view, which pinned the old contents
+        vals = [StorageType(idx * ch + c) * 0.02 for c in range(ch)]
+        tex.write(Array2u(px, py), vals)
+        dr.eval()
+        assert dr.allclose(tex.value(), ref * 2, atol=5e-3)
+
 
 @pytest.mark.parametrize("texture_type", ['Texture2f', 'Texture2f16'])
 @pytest.test_arrays("is_jit, float32, shape=(*)")
@@ -1117,9 +1127,12 @@ def test32_from_native_handle(t, texture_type):
     pos = Array2f(rng.next_float32(), rng.next_float32())
     ref = src.eval(pos)
     out = wrapped.eval(pos)
-    wrapped.unmap()
     for ch in range(C):
         assert dr.allclose(ref[ch], out[ch], 5e-3, 5e-3)
+
+    # tensor() reads back the wrapped texture's contents
+    assert dr.allclose(wrapped.tensor().array, data.array, 5e-3, 5e-3)
+    wrapped.unmap()
 
     # Dimensionality must match the texture type.
     with pytest.raises(Exception):
@@ -1291,3 +1304,33 @@ def test36_uint8_write(t):
         return [int(x) for x in tex.value()]
     assert stored(False) == [128, 128, 128, 128]
     assert stored(True) == [188, 188, 188, 128]
+
+
+@pytest.mark.parametrize("texture_type", ['Texture2f', 'Texture2f16'])
+@pytest.test_arrays("is_jit, float32, shape=(*)")
+def test45_migrated_tensor_semantics(t, texture_type):
+    # The tensor of a migrated texture is an unevaluated readback expression
+    # that reflects the texture contents at the time it is evaluated.
+    # Evaluating it pins the contents, so an evaluated tensor is unaffected
+    # by later updates of the texture.
+    if dr.backend_v(t) not in (dr.JitBackend.CUDA, dr.JitBackend.Metal):
+        pytest.skip("requires hardware textures")
+    mod = sys.modules[t.__module__]
+    TexType = getattr(mod, texture_type)
+    StorageType = getattr(mod, 'Float16' if texture_type.endswith('f16') else 'Float')
+
+    tex = TexType([2, 2], 1)
+    TensorType = type(tex.tensor())
+
+    a = StorageType(1, 2, 3, 4)
+    tex.set_tensor(TensorType(a, shape=(2, 2, 1)), migrate=True)
+    assert tex.migrated()
+    assert tex.tensor().array.state == dr.VarState.Unevaluated
+
+    held = TensorType(tex.tensor())
+    dr.eval(held)
+
+    b = StorageType(5, 6, 7, 8)
+    tex.set_tensor(TensorType(b, shape=(2, 2, 1)), migrate=True)
+    assert dr.all(held.array == a)
+    assert dr.all(tex.tensor().array == b)

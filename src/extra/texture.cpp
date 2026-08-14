@@ -524,6 +524,59 @@ void ad_tex_write(uint32_t channels_stored, uint32_t channels_out,
     jit_tex_write(handle, pos_idx, val_idx, active_idx);
 }
 
+uint32_t ad_tex_readback(VarType storage_type, uint32_t dim,
+                         uint32_t channels_stored, uint32_t channels_out,
+                         int srgb, void *handle, const uint32_t *res_idx,
+                         size_t n_texels) {
+    using F32 = GenericArray<float>;
+    using U32 = GenericArray<uint32_t>;
+
+    JitBackend backend = jit_set_backend(res_idx[0]).backend;
+    uint32_t C  = channels_out,
+             Cs = channels_stored;
+
+    U32 i     = U32::steal(jit_var_counter(backend, n_texels * C)),
+        texel = i / C,
+        ch    = i - texel * C;
+
+    // Texel-center coordinates, fastest-varying dimension first
+    F32 pos[MaxDim];
+    uint32_t pos_idx[MaxDim];
+    U32 rem = texel;
+    for (uint32_t k = 0; k < dim; ++k) {
+        U32 res   = U32::borrow(res_idx[k]),
+            next  = rem / res,
+            coord = rem - next * res;
+        rem = next;
+        pos[k] = (F32(coord) + 0.5f) / F32(res);
+        pos_idx[k] = pos[k].index();
+    }
+
+    dr::mask_t<F32> active = true;
+    uint32_t *tex_out = (uint32_t *) alloca(sizeof(uint32_t) * Cs);
+    jit_tex_lookup(handle, pos_idx, active.index(), tex_out);
+
+    F32 *val_mem = (F32 *) alloca(sizeof(F32) * Cs);
+    tex_scratch<F32> values(val_mem, Cs);
+    for (uint32_t k = 0; k < Cs; ++k) {
+        F32 v = F32::steal(tex_out[k]);
+        if (storage_type == VarType::UInt8) {
+            // Invert the hardware decoding (see Texture::store_texel())
+            v = dr::clip(v, 0.f, 1.f);
+            if (srgb && (k % 4) != 3)
+                v = dr::linear_to_srgb(v);
+            v = dr::fmadd(v, F32(255.f), F32(0.5f));
+        }
+        values[k] = v;
+    }
+
+    F32 result = values[C - 1];
+    for (uint32_t k = C - 1; k-- > 0; )
+        result = dr::select(ch == k, values[k], result);
+
+    return jit_var_cast(result.index(), storage_type, 0);
+}
+
 uint64_t ad_tex_repack(uint64_t source, uint32_t n_pixels, uint32_t dst_channels,
                        uint32_t src_channels) {
     JitBackend backend = jit_set_backend((uint32_t) source).backend;
