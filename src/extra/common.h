@@ -24,6 +24,12 @@
 template <typename Value>
 using GenericArray = drjit::JitArray<JitBackend::None, Value>;
 
+/**
+ * \brief Variant of \ref ad_enqueue() that only visits edges created after
+ * entering the innermost isolation scope
+ */
+extern void ad_enqueue_scoped(drjit::ADMode mode, uint64_t index);
+
 /// RAII AD Isolation helper
 struct scoped_isolation_guard {
     scoped_isolation_guard(int symbolic = -1) : symbolic(symbolic) {

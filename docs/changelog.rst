@@ -8,12 +8,10 @@ Changelog
 DrJit 1.5.1 (unreleased)
 ------------------------
 
-- Added :cpp:func:`jit_eval_scope_enter` / :cpp:func:`jit_eval_scope_leave`
-  and the C++ RAII wrapper ``drjit::scoped_eval_scope``, which temporarily
-  leave an enclosing symbolic region so that a program can build a cached data
-  structure on first use. They replace ``drjit::scoped_disable_symbolic``,
-  which only masked out the surrounding lanes and therefore still produced
-  symbolic variables that could not be evaluated.
+- Fixed an issue where forward-mode derivative propagation through symbolic operations
+  (:py:func:`drjit.while_loop`, :py:func:`drjit.if_stmt`,
+  :py:func:`drjit.switch`) could fail with an error message when the operation
+  depended on implicit inputs.
 
 - Removed a number of long-deprecated aliases.
 

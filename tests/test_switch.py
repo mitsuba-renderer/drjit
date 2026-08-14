@@ -872,3 +872,23 @@ def test21_switch_many_opaque(t, symbolic):
         res = dr.switch(idx, list(callables), x)
         ref = t([sums[s] + float(i) for i, s in enumerate(sel)])
         assert dr.allclose(res, ref)
+
+
+@pytest.mark.parametrize('symbolic', [True, False])
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+def test22_fwd_partial_seed_multiple_implicit(t, symbolic):
+    # Forward mode through a call whose targets implicitly capture several
+    # grad-enabled variables, of which only one is seeded (see the analogous
+    # loop test in test_while_loop_ad.py)
+    UInt32 = dr.uint32_array_t(t)
+
+    x, y = t(2), t(3)
+    dr.enable_grad(x, y)
+
+    with dr.scoped_set_flag(dr.JitFlag.SymbolicCalls, symbolic):
+        res = dr.switch(UInt32(0, 1),
+                        [lambda a: a * x * y, lambda a: a + x * y],
+                        t(1, 1))
+
+    dr.forward_from(x)
+    dr.assert_allclose(dr.grad(res), [3, 3])

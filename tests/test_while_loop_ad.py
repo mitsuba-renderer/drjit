@@ -755,3 +755,27 @@ def test45_general_bwd_invariant_diff_input(t):
     dr.backward(pw)
     dr.assert_allclose(pw, 16)
     dr.assert_allclose(dr.grad(x), 32)
+
+
+@pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
+@pytest.mark.parametrize('seed', ['x', 'y'])
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+def test46_fwd_partial_seed_multiple_implicit(t, mode, seed):
+    # Forward mode through a loop that implicitly captures several
+    # grad-enabled variables, of which only one is the starting point of
+    # the gradient propagation. The replay enqueues every capture and
+    # must not claim edges outside of the recording, such as the custom
+    # edge of the other capture.
+    UInt = dr.uint32_array_t(t)
+
+    x, y = t(2), t(3)
+    dr.enable_grad(x, y)
+
+    i, acc = dr.while_loop(
+        (UInt(0), t(0)),
+        lambda i, acc: i < 4,
+        lambda i, acc: (i + 1, acc + x*y),
+        mode=mode)
+
+    dr.forward_from(x if seed == 'x' else y)
+    dr.assert_allclose(dr.grad(acc), 12 if seed == 'x' else 8)

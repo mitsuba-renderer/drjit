@@ -699,7 +699,8 @@ public:
         }
 
         for (size_t i = m_implicit_in_offset; i < m_input_indices.size(); ++i)
-            ad_enqueue(dr::ADMode::Forward, uint64_t(m_input_indices[i]) << 32);
+            ad_enqueue_scoped(dr::ADMode::Forward,
+                              uint64_t(m_input_indices[i]) << 32);
 
         m_state2.release();
         ad_traverse(dr::ADMode::Forward, (uint32_t) dr::ADFlag::ClearNone);

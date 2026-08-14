@@ -419,3 +419,24 @@ def test14_symbolic_if_direct_non_scalar_implicit_read(t):
 
     assert dr.allclose(z, [10.0, 20.0, 1.0, 2.0])
     assert dr.allclose(y.grad, [1.0, 1.0, 0.0, 0.0])
+
+
+@pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+def test15_fwd_partial_seed_multiple_implicit(t, mode):
+    # Forward mode through a conditional whose branches implicitly capture
+    # several grad-enabled variables, of which only one is seeded (see the
+    # analogous loop test in test_while_loop_ad.py)
+    UInt32 = dr.uint32_array_t(t)
+
+    x, y = t(2), t(3)
+    dr.enable_grad(x, y)
+
+    res = dr.if_stmt((t(1, 1),),
+                     UInt32(0, 1) == 0,
+                     lambda a: a * x * y,
+                     lambda a: a + x * y,
+                     mode=mode)
+
+    dr.forward_from(x)
+    dr.assert_allclose(dr.grad(res), [3, 3])
