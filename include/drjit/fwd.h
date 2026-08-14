@@ -282,4 +282,11 @@ enum class WrapMode : uint32_t {
     Mirror = 2  /// Mirrors the texture wrt. each edge
 };
 
+/// MIP level selection methods for filtered texture lookups
+enum class MipFilter : uint32_t {
+    Disabled = 0, /// No MIP hierarchy, lookups sample the base level
+    Nearest = 1,  /// Sample the nearest MIP level
+    Linear = 2    /// Blend between the two nearest MIP levels
+};
+
 NAMESPACE_END(drjit)

@@ -25,6 +25,20 @@
     def("eval", &tex_eval<T, Dimension, Tex>, "pos"_a,                         \
         "active"_a = nb::none(),                                               \
         nb::sig(DR_TEX_SIG("eval", "", "drjit.AnyArray")), doc_Texture_eval)
+#define def_tex_eval_lod(T)                                                    \
+    def("eval_lod", &tex_eval_lod<T, Dimension, Tex>, "pos"_a, "lod"_a,        \
+        "active"_a = nb::none(),                                               \
+        nb::sig("def eval_lod(self, pos: drjit.AnyArray, "                     \
+                "lod: drjit.AnyArray | float, "                                \
+                "active: drjit.AnyArray | bool = True) -> drjit.AnyArray"),    \
+        doc_Texture_eval_lod)
+#define def_tex_eval_filtered(T)                                               \
+    def("eval_filtered", &tex_eval_filtered<T, Dimension, Tex>, "pos"_a,       \
+        "ddx"_a, "ddy"_a, "active"_a = nb::none(),                             \
+        nb::sig("def eval_filtered(self, pos: drjit.AnyArray, "                \
+                "ddx: drjit.AnyArray, ddy: drjit.AnyArray, "                   \
+                "active: drjit.AnyArray | bool = True) -> drjit.AnyArray"),    \
+        doc_Texture_eval_filtered)
 #define def_tex_write(T)                                                       \
     def("write", &tex_write<T, Dimension, Tex>, "pos"_a, "value"_a,            \
         "active"_a.sig("Bool(True)") = nb::none(), doc_Texture_write)
@@ -71,6 +85,27 @@ static nb::object tex_eval(const Tex &texture,
     dr::mask_t<T> active = mask_or_true<T>(active_);
     DR_TEX_DISPATCH(texture,
                     nb::cast(texture.template eval<Output>(pos, active)));
+}
+
+template <typename T, size_t Dimension, typename Tex>
+static nb::object tex_eval_lod(const Tex &texture,
+                               const dr::Array<T, Dimension> &pos,
+                               const T &lod,
+                               const std::optional<dr::mask_t<T>> &active_) {
+    dr::mask_t<T> active = mask_or_true<T>(active_);
+    DR_TEX_DISPATCH(texture,
+                    nb::cast(texture.template eval_lod<Output>(pos, lod, active)));
+}
+
+template <typename T, size_t Dimension, typename Tex>
+static nb::object tex_eval_filtered(const Tex &texture,
+                                    const dr::Array<T, Dimension> &pos,
+                                    const dr::Array<T, Dimension> &ddx,
+                                    const dr::Array<T, Dimension> &ddy,
+                                    const std::optional<dr::mask_t<T>> &active_) {
+    dr::mask_t<T> active = mask_or_true<T>(active_);
+    DR_TEX_DISPATCH(texture, nb::cast(texture.template eval_filtered<Output>(
+                                 pos, ddx, ddy, active)));
 }
 
 template <typename T, size_t Dimension, typename Tex>
@@ -170,7 +205,6 @@ void bind_texture(nb::module_ &m, const char *name) {
     using Tex = dr::Texture<Type, Dimension>;
     // Query/output precisions; for 8-bit textures these come from a separate
     // floating-point guide (\c QueryArray) since the storage type is integral.
-    using Float16 = dr::replace_scalar_t<QueryArray, dr::half>;
     using Float32 = dr::replace_scalar_t<QueryArray, float>;
     using Float64 = dr::replace_scalar_t<QueryArray, double>;
 
@@ -178,19 +212,23 @@ void bind_texture(nb::module_ &m, const char *name) {
         .def("__init__", [](Tex* t, const dr::vector<size_t>& shape,
                          size_t channels, bool use_accel,
                          dr::FilterMode filter_mode, dr::WrapMode wrap_mode,
-                         bool writable, bool srgb) {
+                         bool writable, bool srgb, dr::MipFilter mip_filter,
+                         size_t max_aniso) {
                  new (t) Tex(shape.data(), channels, use_accel, filter_mode,
-                             wrap_mode, writable, srgb); },
+                             wrap_mode, writable, srgb, mip_filter, max_aniso); },
              "shape"_a, "channels"_a, "use_accel"_a = true,
              "filter_mode"_a = dr::FilterMode::Linear,
              "wrap_mode"_a = dr::WrapMode::Clamp,
              "writable"_a = false, "srgb"_a = false,
+             "mip_filter"_a = dr::MipFilter::Disabled,
+             "max_aniso"_a = 8,
              doc_Texture_init)
         .def(nb::init<const typename Tex::TensorXf &, bool, bool, dr::FilterMode,
-                      dr::WrapMode, bool>(),
+                      dr::WrapMode, bool, dr::MipFilter, size_t>(),
              "tensor"_a, "use_accel"_a = true, "migrate"_a = true,
              "filter_mode"_a = dr::FilterMode::Linear,
              "wrap_mode"_a = dr::WrapMode::Clamp, "srgb"_a = false,
+             "mip_filter"_a = dr::MipFilter::Disabled, "max_aniso"_a = 8,
              doc_Texture_init_tensor)
         .def("set_value",
              &Tex::template set_value<const typename Tex::Storage &>,
@@ -210,6 +248,9 @@ void bind_texture(nb::module_ &m, const char *name) {
              nb::rv_policy::reference_internal, doc_Texture_tensor)
         .def("filter_mode", &Tex::filter_mode, doc_Texture_filter_mode)
         .def("wrap_mode", &Tex::wrap_mode, doc_Texture_wrap_mode)
+        .def("mip_filter", &Tex::mip_filter, doc_Texture_mip_filter)
+        .def("mip_levels", &Tex::mip_levels, doc_Texture_mip_levels)
+        .def("max_aniso", &Tex::max_aniso, doc_Texture_max_aniso)
         .def("wrap", &tex_wrap<Type, Dimension, Tex>, "pos"_a,
              nb::sig("def wrap(self, pos: drjit.AnyArray) -> drjit.AnyArray"),
              doc_Texture_wrap)
@@ -234,25 +275,22 @@ void bind_texture(nb::module_ &m, const char *name) {
         }, doc_Texture_shape)
         .def("channel_count", &Tex::channel_count, doc_Texture_channel_count)
         .def_tex_eval(Float32)
-        .def_tex_eval(Float16)
         .def_tex_eval(Float64)
+        .def_tex_eval_lod(Float32)
+        .def_tex_eval_lod(Float64)
+        .def_tex_eval_filtered(Float32)
+        .def_tex_eval_filtered(Float64)
         .def_tex_write(Float32)
-        .def_tex_write(Float16)
         .def_tex_write(Float64)
         .def_tex_eval_fetch(Float32)
-        .def_tex_eval_fetch(Float16)
         .def_tex_eval_fetch(Float64)
         .def_tex_eval_cubic(Float32)
-        .def_tex_eval_cubic(Float16)
         .def_tex_eval_cubic(Float64)
         .def_tex_eval_cubic_grad(Float32)
-        .def_tex_eval_cubic_grad(Float16)
         .def_tex_eval_cubic_grad(Float64)
         .def_tex_eval_cubic_hessian(Float32)
-        .def_tex_eval_cubic_hessian(Float16)
         .def_tex_eval_cubic_hessian(Float64)
         .def_tex_eval_cubic_helper(Float32)
-        .def_tex_eval_cubic_helper(Float16)
         .def_tex_eval_cubic_helper(Float64);
 
     tex.attr("IsTexture") = true;
@@ -285,6 +323,8 @@ void bind_texture_all(nb::module_ &m) {
 #undef DR_TEX_DISPATCH
 #undef DR_TEX_SIG
 #undef def_tex_eval
+#undef def_tex_eval_lod
+#undef def_tex_eval_filtered
 #undef def_tex_write
 #undef def_tex_eval_fetch
 #undef def_tex_eval_cubic

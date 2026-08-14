@@ -7107,6 +7107,16 @@
     of four the first three are decoded and the fourth (alpha) is left linear
     (e.g. channel 3 is linear for a 6-channel texture).
 
+    A ``mip_filter`` other than ``drjit.MipFilter.Disabled`` equips the texture
+    with a MIP pyramid for the filtered lookup methods :py:func:`eval_lod()`
+    and :py:func:`eval_filtered()`. The pyramid reaches down to a single texel
+    and is regenerated from the base level by :py:func:`set_value()` /
+    :py:func:`set_tensor()` using a box filter that averages two texels per
+    axis (applied in linear space for sRGB textures). ``max_aniso`` bounds the number of anisotropic taps
+    that :py:func:`eval_filtered()` may take; the value 1 selects isotropic
+    filtering, and values above the hardware limit of 16 raise an error.
+    MIP-mapped textures cannot be ``writable``.
+
 .. topic:: Texture_init_tensor
 
     Construct a new texture from a given tensor
@@ -7229,6 +7239,63 @@
     When using the non-hardware-accelerated evaluation, the numerical
     precision of the interpolation is dictated by the floating point precision
     of the query point type.
+
+.. topic:: Texture_eval_lod
+
+    Evaluate the texture at an explicit MIP level of detail.
+
+    A fractional ``lod`` blends the two enclosing pyramid levels under
+    ``drjit.MipFilter.Linear`` and rounds to the nearest level under
+    ``drjit.MipFilter.Nearest``; out-of-range values are clamped to the
+    pyramid. ``lod`` is filtering metadata and detached from derivative
+    tracking; derivatives flow through ``pos`` and the texture data
+    (including the pyramid generation). On a texture without a MIP pyramid,
+    the lookup degrades to a base-level :py:func:`eval()`.
+
+.. topic:: Texture_eval_filtered
+
+    Anisotropically filtered lookup driven by a screen-space footprint.
+
+    ``ddx`` and ``ddy`` are the derivatives of the texture coordinate with
+    respect to the two screen dimensions. They span the pixel's elliptical
+    footprint, whose semi-axes ``P_major``/``P_minor`` (measured in texels
+    of the base level) determine the filter:
+
+    .. code-block:: text
+
+        lod = clip(log2(max(P_minor, P_major / max_aniso)), 0, levels - 1)
+        N   = min(ceil(P_major / 2^lod), max_aniso)
+
+    and the result averages ``N`` trilinear taps distributed along the major
+    ellipse axis. The footprint, LOD, and tap count follow the reference
+    algorithm of the Direct3D 11.3 functional specification (section
+    7.18.11), which matches measured GPU texture unit behavior.
+    ``max_aniso=1`` collapses this to an ordinary trilinear lookup.
+
+    The scheme above describes the software implementation, which also
+    serves as the derivative of hardware-accelerated lookups. Hardware
+    anisotropic filtering (the ``use_accel`` constructor flag) is
+    approximate and vendor specific; results may deviate from the software
+    path by several percent for off-axis footprints. Pass
+    ``use_accel=False`` for reproducible output.
+
+    ``ddx``/``ddy`` are filtering metadata and detached from derivative
+    tracking; derivatives flow through ``pos`` and the texture data. On a
+    texture without a MIP pyramid, the lookup degrades to a base-level
+    :py:func:`eval()`.
+
+.. topic:: Texture_mip_filter
+
+    Return the MIP level selection mode of filtered lookups
+
+.. topic:: Texture_mip_levels
+
+    Return the number of MIP pyramid levels, including the base level (1 when
+    the texture is not MIP-mapped)
+
+.. topic:: Texture_max_aniso
+
+    Return the anisotropic tap bound of :py:func:`eval_filtered()`
 
 .. topic:: Texture_eval_fetch
 

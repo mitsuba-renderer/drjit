@@ -5,8 +5,31 @@
 Changelog
 #########
 
-DrJit 1.5.1 (unreleased)
+DrJit 1.6.0 (unreleased)
 ------------------------
+
+
+- The texture classes (e.g., :py:class:`Texture2f <drjit.auto.Texture2f>`)
+  now support anisotropic MIP-mapped filtering in 1-3 dimensions. The
+  implementation uses hardware functionality when available or emulates it
+  according to the `Direct3D 11.3 specification
+  <https://microsoft.github.io/DirectX-Specs/d3d/archive/D3D11_3_FunctionalSpec.htm>`__
+  reference algorithm, which gives good agreement with hardware behavior.
+
+  Calling :py:func:`.set_value() <drjit.auto.Texture2f.set_value>` or
+  :py:func:`.set_tensor() <drjit.auto.Texture2f.set_tensor>` on a texture
+  constructed with ``mip_filter=MipFilter::Nearest/Linear`` builds a MIP
+  pyramid. The following two new functions can be used to access it:
+
+  - :py:func:`.eval_lod() <drjit.auto.Texture2f.eval_lod>` samples the texture
+    at a specified LOD level.
+
+  - :py:func:`.eval_filtered() <drjit.auto.Texture2f.eval_filtered>` takes UV
+    differentials and performs an anisotropic lookup with up to
+    ``max_aniso`` taps.
+
+  Both operations are differentiable with respect to the query position and
+  texture data. The MIP pyramid construction is differentiable as well.
 
 - Fixed an issue where forward-mode derivative propagation through symbolic operations
   (:py:func:`drjit.while_loop`, :py:func:`drjit.if_stmt`,

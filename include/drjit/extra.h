@@ -229,8 +229,7 @@ extern DRJIT_EXTRA_EXPORT uint64_t ad_var_cast(uint64_t, VarType);
 /**
  * \brief Evaluate a texture's nearest-neighbor / (multi-)linear interpolant
  *
- * Type-erased backend of ``drjit::Texture<...>::eval()`` for the JIT backends.
- * All variable arguments are combined AD/JIT indices.
+ * This function implements the body of ``Texture::eval()`` on JIT backends.
  *
  * \param query_type        Scalar VarType to evaluate/return in (F16/F32/F64).
  * \param dimension         Texture dimensionality (1, 2, or 3).
@@ -252,6 +251,75 @@ ad_tex_eval(VarType query_type, uint32_t dimension, uint32_t channels_stored,
             void *handle, int use_accel, uint64_t value, const uint32_t *res,
             const uint32_t *idiv, const uint64_t *pos, uint32_t active,
             uint64_t *out);
+
+/**
+ * \brief Construct the MIP pyramid of a texture
+ *
+ * Each level halves the resolution using a 2x2 box filter with clamp boundary.
+ * 8-bit sRGB textures are filtered in linear space. The accumulation runs in
+ * single precision except for double-precision inputs. The result is
+ * differentiable with respect to ``value``.
+ *
+ * \param dimension        Texture dimensionality (1, 2, or 3).
+ * \param channels_stored  Storage channel count (power of two).
+ * \param srgb             Filter in linear space (UInt8 textures only).
+ * \param value            Combined index of the padded base texel buffer.
+ * \param res              Per-dimension base resolutions, fastest-varying
+ *                         (width) axis first.
+ * \param n_levels         Pyramid depth, including the base level.
+ * \return                 Owned combined index of the pyramid buffer storing
+ *                         levels ``1`` to ``n_levels - 1`` back to back.
+ */
+extern DRJIT_EXTRA_EXPORT uint64_t
+ad_tex_mipmap_from_base(uint32_t dimension, uint32_t channels_stored, int srgb,
+                    uint64_t value, const size_t *res, uint32_t n_levels);
+
+/**
+ * \brief Sample a MIP-mapped texture at an explicit level of detail
+ *
+ * See \ref ad_tex_eval for the shared parameters.
+ *
+ * \param mip_value   Combined index of the pyramid buffer built by \ref
+ *                    ad_tex_mipmap_from_base().
+ * \param mip_table   JIT index of the per-level constant table. The record
+ *                    layout is documented on \ref
+ *                    drjit::detail::tex_mip_table(), which builds the table.
+ * \param n_levels    Pyramid depth, including the base level.
+ * \param mip_filter  ``drjit::MipFilter`` cast to int.
+ * \param lod         JIT index of the query-precision level of detail. Passed
+ *                    without an AD component: it is filtering metadata and
+ *                    does not track derivatives.
+ */
+extern DRJIT_EXTRA_EXPORT void
+ad_tex_eval_lod(VarType query_type, uint32_t dimension, uint32_t channels_stored,
+                uint32_t channels_out, int filter_mode, int wrap_mode, int srgb,
+                void *handle, int use_accel, uint64_t value, uint64_t mip_value,
+                uint32_t mip_table, uint32_t n_levels, int mip_filter,
+                const uint32_t *res, const uint32_t *idiv, const uint64_t *pos,
+                uint32_t lod, uint32_t active, uint64_t *out);
+
+/**
+ * \brief Anisotropically filtered lookup of a MIP-mapped texture
+ *
+ * See \ref ad_tex_eval for the shared parameters and \ref ad_tex_eval_lod for
+ * the shared MIP pyramid parameters.
+ *
+ * \param max_aniso  Bound on the number of anisotropic taps.
+ * \param ddx        One JIT index per dimension: the screen-space derivatives
+ *                   of the query coordinate. Like ``lod`` above, they are
+ *                   filtering metadata passed without an AD component.
+ * \param ddy        Same as ``ddx``, for the second screen dimension.
+ */
+extern DRJIT_EXTRA_EXPORT void
+ad_tex_eval_filtered(VarType query_type, uint32_t dimension,
+                     uint32_t channels_stored, uint32_t channels_out,
+                     int filter_mode, int wrap_mode, int srgb, void *handle,
+                     int use_accel, uint64_t value, uint64_t mip_value,
+                     uint32_t mip_table, uint32_t n_levels, int mip_filter,
+                     uint32_t max_aniso, const uint32_t *res,
+                     const uint32_t *idiv, const uint64_t *pos,
+                     const uint32_t *ddx, const uint32_t *ddy, uint32_t active,
+                     uint64_t *out);
 
 /**
  * \brief Fetch the ``2^dim`` corner texels of a linear lookup (no interpolation)

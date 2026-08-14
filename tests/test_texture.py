@@ -1306,6 +1306,383 @@ def test36_uint8_write(t):
     assert stored(True) == [188, 188, 188, 128]
 
 
+# -----------------------------------------------------------------------
+#                        MIP-mapped texture lookups
+# -----------------------------------------------------------------------
+
+def _box_downsample(vals, w, h):
+    """Halve a row-major single-channel grid with the pyramid's box filter
+    (odd sizes clamp the last tap onto the boundary texel)"""
+    w2, h2 = max(w // 2, 1), max(h // 2, 1)
+    out = []
+    for y in range(h2):
+        for x in range(w2):
+            acc = 0.0
+            for dy in range(2):
+                for dx in range(2):
+                    sx, sy = min(2 * x + dx, w - 1), min(2 * y + dy, h - 1)
+                    acc += vals[sy * w + sx]
+            out.append(acc / 4)
+    return out, w2, h2
+
+
+def _bilerp(vals, w, h, u, v, wrap):
+    """Bilinear reference lookup of a row-major single-channel grid"""
+    import math
+
+    def texel(x, y):
+        if wrap == dr.WrapMode.Repeat:
+            x, y = x % w, y % h
+        elif wrap == dr.WrapMode.Mirror:
+            def m(i, n):
+                i = i % (2 * n)
+                return i if i < n else 2 * n - 1 - i
+            x, y = m(x, w), m(y, h)
+        else:
+            x, y = min(max(x, 0), w - 1), min(max(y, 0), h - 1)
+        return vals[y * w + x]
+
+    fx, fy = u * w - 0.5, v * h - 0.5
+    x0, y0 = math.floor(fx), math.floor(fy)
+    wx, wy = fx - x0, fy - y0
+    return (texel(x0, y0) * (1 - wx) * (1 - wy) +
+            texel(x0 + 1, y0) * wx * (1 - wy) +
+            texel(x0, y0 + 1) * (1 - wx) * wy +
+            texel(x0 + 1, y0 + 1) * wx * wy)
+
+
+def _test_grid(n, seed=0):
+    """Deterministic pseudo-random values in [0, 1)"""
+    return [((i * 37 + seed * 51 + 13) % 61) / 61.0 for i in range(n)]
+
+
+@pytest.mark.parametrize("texture_type", ['Texture2f', 'Texture2f64'])
+@pytest.test_arrays("is_jit, float32, shape=(*)")
+def test37_mip_lod(t, texture_type):
+    # eval_lod() reproduces the box-filtered pyramid levels exactly at their
+    # texel centers, blends adjacent levels for fractional inputs, clamps
+    # out-of-range levels, and degrades to eval() without a pyramid.
+    _skip_metal_f64(t, texture_type)
+    mod = sys.modules[t.__module__]
+    TexType = getattr(mod, texture_type)
+    Array2f = getattr(mod, 'Array2f')
+
+    vals = _test_grid(16)
+    l1, w1, h1 = _box_downsample(vals, 4, 4)
+    l2, _, _ = _box_downsample(l1, w1, h1)
+
+    tex = TexType([4, 4], 1, use_accel=False, mip_filter=dr.MipFilter.Linear)
+    tex.set_value(t(vals))
+    assert tex.mip_levels() == 3
+    assert tex.mip_filter() == dr.MipFilter.Linear
+
+    # Pyramid contents at the texel centers of each level
+    for y in range(2):
+        for x in range(2):
+            p = Array2f((x + 0.5) / 2, (y + 0.5) / 2)
+            assert dr.allclose(tex.eval_lod(p, 1.0)[0], l1[y * 2 + x])
+    p = Array2f(0.77, 0.13)
+    assert dr.allclose(tex.eval_lod(p, 2.0)[0], l2[0])
+
+    # A fractional LOD blends the two enclosing levels
+    p = Array2f(0.25, 0.25)
+    v0 = tex.eval_lod(p, 0.0)[0]
+    v1 = tex.eval_lod(p, 1.0)[0]
+    vf = tex.eval_lod(p, 0.3)[0]
+    assert dr.allclose(vf, dr.fma(v1 - v0, 0.3, v0))
+
+    # Out-of-range LODs clamp to the pyramid
+    assert dr.allclose(tex.eval_lod(p, 99.0)[0], l2[0])
+    assert dr.allclose(tex.eval_lod(p, -5.0)[0], v0)
+
+    # The nearest MIP filter rounds to the closest level
+    tex_n = TexType([4, 4], 1, use_accel=False, mip_filter=dr.MipFilter.Nearest)
+    tex_n.set_value(t(vals))
+    assert dr.allclose(tex_n.eval_lod(p, 0.4)[0], v0)
+    assert dr.allclose(tex_n.eval_lod(p, 0.6)[0], v1)
+
+    # Without a pyramid, eval_lod() degrades to eval()
+    tex_d = TexType([4, 4], 1, use_accel=False)
+    tex_d.set_value(t(vals))
+    assert tex_d.mip_levels() == 1
+    assert dr.allclose(tex_d.eval_lod(p, 2.0)[0], tex_d.eval(p)[0])
+
+
+@pytest.mark.parametrize("wrap_mode", wrap_modes)
+@pytest.test_arrays("is_jit, float32, shape=(*)")
+def test38_mip_wrap(t, wrap_mode):
+    # Lookups within the pyramid apply the wrap mode with each level's own
+    # resolution. The 6x4 texture makes the levels (3x2, 1x1) exercise the
+    # per-level division constants of the Repeat/Mirror wrap math.
+    mod = sys.modules[t.__module__]
+    TexType = getattr(mod, 'Texture2f')
+    Array2f = getattr(mod, 'Array2f')
+
+    vals = _test_grid(24, seed=1)
+    l1, w1, h1 = _box_downsample(vals, 6, 4)
+
+    tex = TexType([4, 6], 1, use_accel=False, wrap_mode=wrap_mode,
+                  mip_filter=dr.MipFilter.Linear)
+    tex.set_value(t(vals))
+    assert tex.mip_levels() == 3
+
+    for u, v in [(0.05, 0.02), (0.98, 0.5), (-0.3, 1.7), (0.5, -0.01),
+                 (0.31, 0.87)]:
+        got = tex.eval_lod(Array2f(u, v), 1.0)[0]
+        assert dr.allclose(got, _bilerp(l1, w1, h1, u, v, wrap_mode),
+                           atol=1e-6)
+
+
+@pytest.test_arrays("is_jit, float32, shape=(*)")
+def test39_mip_filtered(t):
+    # eval_filtered() implements anisotropic filtering: a footprint averages
+    # taps along its major axis at the LOD of the tap extent, and clamping
+    # the tap count coarsens the lookup instead.
+    mod = sys.modules[t.__module__]
+    TexType = getattr(mod, 'Texture2f')
+    Array2f = getattr(mod, 'Array2f')
+
+    vals = _test_grid(64, seed=2)
+    tex = TexType([8, 8], 1, use_accel=False, mip_filter=dr.MipFilter.Linear,
+                  max_aniso=4)
+    tex.set_value(t(vals))
+    assert tex.max_aniso() == 4
+
+    # A 4:1 footprint of four texels averages 4 taps at LOD 0
+    p, u = (0.4, 0.45), 4.0 / 8.0
+    ref = t(0)
+    for i in range(4):
+        tap = Array2f(p[0] + u * ((i + 0.5) / 4 - 0.5), p[1])
+        ref += tex.eval_lod(tap, 0.0)[0]
+    ref *= 0.25
+    got = tex.eval_filtered(Array2f(*p), Array2f(u, 0), Array2f(0, 1 / 8))[0]
+    assert dr.allclose(got, ref, atol=1e-6)
+
+    # With a single allowed tap, the same footprint coarsens to LOD 2
+    tex_iso = TexType([8, 8], 1, use_accel=False,
+                      mip_filter=dr.MipFilter.Linear, max_aniso=1)
+    tex_iso.set_value(t(vals))
+    got = tex_iso.eval_filtered(Array2f(*p), Array2f(u, 0),
+                                Array2f(0, 1 / 8))[0]
+    assert dr.allclose(got, tex_iso.eval_lod(Array2f(*p), 2.0)[0], atol=1e-6)
+
+    # A vanishing footprint reproduces the base-level lookup
+    zero = Array2f(0, 0)
+    got = tex.eval_filtered(Array2f(*p), zero, zero)[0]
+    assert dr.allclose(got, tex.eval(Array2f(*p))[0])
+
+    # Repeat wrap: taps stepping across the texture boundary wrap around
+    tex_r = TexType([8, 8], 1, use_accel=False, wrap_mode=dr.WrapMode.Repeat,
+                    mip_filter=dr.MipFilter.Linear, max_aniso=4)
+    tex_r.set_value(t(vals))
+    pr = (0.03, 0.45)
+    ref = t(0)
+    for i in range(4):
+        tap = Array2f(pr[0] + u * ((i + 0.5) / 4 - 0.5), pr[1])
+        ref += tex_r.eval_lod(tap, 0.0)[0]
+    ref *= 0.25
+    got = tex_r.eval_filtered(Array2f(*pr), Array2f(u, 0), Array2f(0, 1 / 8))[0]
+    assert dr.allclose(got, ref, atol=1e-6)
+
+    # Masked lanes return zero
+    Bool = getattr(mod, 'Bool')
+    p2 = Array2f(t(0.4, 0.6), t(0.45, 0.2))
+    ddx, ddy = Array2f(t(u, u), t(0, 0)), Array2f(t(0, 0), t(1 / 8, 1 / 8))
+    out = tex.eval_filtered(p2, ddx, ddy, Bool(True, False))
+    assert out[0][1] == 0
+
+
+@pytest.test_arrays("is_diff, float32, shape=(*)")
+def test40_mip_grad(t):
+    # Derivatives flow through the pyramid generation into the base texels:
+    # a level-1 texel-center lookup distributes its gradient over the 2x2
+    # base quadrant, and the anisotropic tap loop preserves a unit total.
+    mod = sys.modules[t.__module__]
+    TexType = getattr(mod, 'Texture2f')
+    TensorXf = getattr(mod, 'TensorXf')
+    Array2f = getattr(mod, 'Array2f')
+
+    tens = TensorXf(t(_test_grid(64, seed=3)), shape=(8, 8, 1))
+    dr.enable_grad(tens)
+    tex = TexType(tens, use_accel=False, mip_filter=dr.MipFilter.Linear,
+                  max_aniso=4)
+
+    # (1/8, 1/8) is the center of level-1 texel (0, 0)
+    out = tex.eval_lod(Array2f(1 / 8, 1 / 8), 1.0)
+    dr.backward(out[0])
+    g = dr.grad(tens).array
+    for i in range(64):
+        expected = 0.25 if (i % 8) < 2 and (i // 8) < 2 else 0.0
+        assert dr.allclose(g[i], expected)
+
+    # The tap loop of eval_filtered() distributes a unit gradient
+    dr.clear_grad(tens)
+    out = tex.eval_filtered(Array2f(0.4, 0.45), Array2f(0.5, 0),
+                            Array2f(0, 1 / 8))
+    dr.backward(out[0])
+    assert dr.allclose(dr.sum(dr.grad(tens).array), 1.0)
+
+    # Forward derivatives with respect to the query position
+    p = Array2f(0.3, 0.4)
+    dr.enable_grad(p)
+    out = tex.eval_lod(p, 0.5)
+    dr.forward_from(p.x)
+    assert dr.all(dr.isfinite(dr.grad(out[0])))
+
+    # eval_filtered() position derivative, checked against finite differences
+    ddx, ddy = Array2f(0.25, 0), Array2f(0, 1 / 8)
+    p = Array2f(0.3, 0.4)
+    dr.enable_grad(p)
+    out = tex.eval_filtered(p, ddx, ddy)
+    dr.forward_from(p.x)
+    eps = 1e-3
+    f0 = tex.eval_filtered(Array2f(0.3 - eps, 0.4), ddx, ddy)[0]
+    f1 = tex.eval_filtered(Array2f(0.3 + eps, 0.4), ddx, ddy)[0]
+    assert dr.allclose(dr.grad(out[0]), (f1 - f0) / (2 * eps), atol=1e-3)
+
+
+@pytest.test_arrays("is_jit, float32, shape=(*)")
+def test41_mip_uint8(t):
+    # 8-bit sRGB pyramids average in linear space and re-encode each level
+    mod = sys.modules[t.__module__]
+    TexType = getattr(mod, 'Texture2f8u')
+    UInt8 = getattr(mod, 'UInt8')
+    Array2f = getattr(mod, 'Array2f')
+
+    vals = [(i * 37 + 13) % 256 for i in range(16)]
+    data = mod.TensorXu8(UInt8(vals), shape=(4, 4, 1))
+    tex = TexType(data, use_accel=False, srgb=True,
+                  mip_filter=dr.MipFilter.Linear)
+
+    def linear_to_srgb(x):
+        return x * 12.92 if x <= 0.0031308 else 1.055 * x ** (1 / 2.4) - 0.055
+
+    lin = [_srgb_to_linear(v) for v in vals]
+    l1, _, _ = _box_downsample(lin, 4, 4)
+    ref = [_srgb_to_linear(round(linear_to_srgb(v) * 255)) for v in l1]
+
+    for y in range(2):
+        for x in range(2):
+            got = tex.eval_lod(Array2f((x + 0.5) / 2, (y + 0.5) / 2), 1.0)[0]
+            assert dr.allclose(got, ref[y * 2 + x], atol=2e-3)
+
+    # Four-channel variant: the alpha channel averages without the sRGB
+    # transfer function
+    vals = [(i * 53 + 7) % 256 for i in range(16)]
+    data = mod.TensorXu8(UInt8(vals), shape=(2, 2, 4))
+    tex = TexType(data, use_accel=False, srgb=True,
+                  mip_filter=dr.MipFilter.Linear)
+    got = tex.eval_lod(Array2f(0.5, 0.5), 1.0)
+    for ch in range(4):
+        chan = vals[ch::4]
+        if ch == 3:
+            ref_ch = int(sum(chan) / 4 + 0.5) / 255
+        else:
+            m = sum(_srgb_to_linear(v) for v in chan) / 4
+            ref_ch = _srgb_to_linear(int(linear_to_srgb(m) * 255 + 0.5))
+        assert dr.allclose(got[ch], ref_ch, atol=2e-3)
+
+
+@pytest.test_arrays("is_jit, float32, shape=(*)")
+def test42_mip_1d_3d(t):
+    # The pyramid generation and level lookups cover all dimensionalities
+    mod = sys.modules[t.__module__]
+
+    Tex1 = getattr(mod, 'Texture1f')
+    tex1 = Tex1([4], 1, use_accel=False, mip_filter=dr.MipFilter.Linear)
+    tex1.set_value(t(0.0, 0.25, 0.75, 0.5))
+    assert tex1.mip_levels() == 3
+    assert dr.allclose(tex1.eval_lod(t(0.25), 1.0)[0], 0.125)
+    assert dr.allclose(tex1.eval_lod(t(0.75), 1.0)[0], 0.625)
+    assert dr.allclose(tex1.eval_lod(t(0.1), 2.0)[0], 0.375)
+
+    Tex3 = getattr(mod, 'Texture3f')
+    Array3f = getattr(mod, 'Array3f')
+    vals = [float(x + 4 * y + 16 * z)
+            for z in range(4) for y in range(4) for x in range(4)]
+    tex3 = Tex3([4, 4, 4], 1, use_accel=False, mip_filter=dr.MipFilter.Linear)
+    tex3.set_value(t(vals))
+    assert tex3.mip_levels() == 3
+    # Level-1 texel (0, 0, 0) averages the 8 corner texels
+    ref = (0 + 1 + 4 + 5 + 16 + 17 + 20 + 21) / 8.0
+    assert dr.allclose(tex3.eval_lod(Array3f(0.25, 0.25, 0.25), 1.0)[0], ref)
+    # The top level holds the global mean
+    assert dr.allclose(tex3.eval_lod(Array3f(0.9, 0.1, 0.5), 2.0)[0],
+                       sum(vals) / 64)
+
+
+def test43_mip_scalar():
+    # The scalar (non-JIT) backend shares the pyramid and lookup code paths
+    from drjit.scalar import TensorXf, Texture2f, Array2f
+
+    vals = _test_grid(16, seed=4)
+    l1, _, _ = _box_downsample(vals, 4, 4)
+    tex = Texture2f(TensorXf(vals, shape=(4, 4, 1)),
+                    mip_filter=dr.MipFilter.Linear,
+                    wrap_mode=dr.WrapMode.Repeat)
+    assert tex.mip_levels() == 3
+    assert dr.allclose(tex.eval_lod(Array2f(0.25, 0.25), 1.0)[0], l1[0])
+    assert dr.allclose(tex.eval_lod(Array2f(-0.75, 1.25), 1.0)[0], l1[0])
+    got = tex.eval_filtered(Array2f(0.4, 0.45), Array2f(0.5, 0),
+                            Array2f(0, 0.25))
+    assert dr.all(dr.isfinite(got[0]))
+
+
+@pytest.test_arrays("is_diff, float32, shape=(*)")
+def test44_mip_accel(t):
+    # The hardware MIP sampling path (CUDA/Metal texture units) agrees with
+    # the arithmetic reference within the fixed-point weight precision of the
+    # texture units, and derivative tracking splices the hardware primal onto
+    # the arithmetic gradient.
+    mod = sys.modules[t.__module__]
+    if dr.backend_v(t) == dr.JitBackend.LLVM:
+        pytest.skip("no hardware texture units")
+    TexType = getattr(mod, 'Texture2f')
+    TensorXf = getattr(mod, 'TensorXf')
+    Array2f = getattr(mod, 'Array2f')
+
+    vals = _test_grid(64, seed=5)
+    tens = TensorXf(t(vals), shape=(8, 8, 1))
+    hw = TexType(tens, use_accel=True, migrate=False,
+                 mip_filter=dr.MipFilter.Linear, max_aniso=4)
+    sw = TexType(tens, use_accel=False,
+                 mip_filter=dr.MipFilter.Linear, max_aniso=4)
+
+    pos = Array2f(t(0.3, 0.62, 0.85, 0.13), t(0.4, 0.18, 0.77, 0.95))
+    for lod in [0.0, 0.7, 1.3, 2.0, 3.0]:
+        assert dr.allclose(hw.eval_lod(pos, lod)[0], sw.eval_lod(pos, lod)[0],
+                           rtol=5e-3, atol=5e-3)
+
+    # Isotropic footprints select levels the same way on both paths
+    for s in [0.5 / 8, 1 / 8, 4 / 8]:
+        assert dr.allclose(hw.eval_filtered(pos, Array2f(s, 0), Array2f(0, s))[0],
+                           sw.eval_filtered(pos, Array2f(s, 0), Array2f(0, s))[0],
+                           rtol=5e-3, atol=5e-3)
+
+    # Anisotropic tap placement is vendor-specific; require the same ballpark
+    got = hw.eval_filtered(pos, Array2f(4 / 8, 0), Array2f(0, 1 / 8))[0]
+    ref = sw.eval_filtered(pos, Array2f(4 / 8, 0), Array2f(0, 1 / 8))[0]
+    assert dr.allclose(got, ref, rtol=0.1, atol=0.05)
+
+    # Fully migrated textures sample the pyramid from texture memory alone
+    hw_m = TexType(TensorXf(t(vals), shape=(8, 8, 1)), use_accel=True,
+                   migrate=True, mip_filter=dr.MipFilter.Linear)
+    ref = (vals[0] + vals[1] + vals[8] + vals[9]) / 4  # level-1 texel (0, 0)
+    assert dr.allclose(hw_m.eval_lod(Array2f(1 / 8, 1 / 8), 1.0)[0], ref,
+                       rtol=3e-3, atol=3e-3)
+
+    # AD: primal from the hardware, gradient from the arithmetic formulation
+    dr.enable_grad(tens)
+    hw_ad = TexType(tens, use_accel=True, migrate=False,
+                    mip_filter=dr.MipFilter.Linear)
+    out = hw_ad.eval_lod(Array2f(1 / 8, 1 / 8), 1.0)
+    dr.backward(out[0])
+    g = dr.grad(tens).array
+    for i in range(64):
+        expected = 0.25 if (i % 8) < 2 and (i // 8) < 2 else 0.0
+        assert dr.allclose(g[i], expected)
+
+
 @pytest.mark.parametrize("texture_type", ['Texture2f', 'Texture2f16'])
 @pytest.test_arrays("is_jit, float32, shape=(*)")
 def test45_migrated_tensor_semantics(t, texture_type):
@@ -1334,3 +1711,85 @@ def test45_migrated_tensor_semantics(t, texture_type):
     tex.set_tensor(TensorType(b, shape=(2, 2, 1)), migrate=True)
     assert dr.all(held.array == a)
     assert dr.all(tex.tensor().array == b)
+
+
+@pytest.test_arrays("is_jit, float32, shape=(*)")
+def test46_filtered_rotation_invariance(t):
+    # An isotropic footprint must resolve to a single tap at the same LOD
+    # regardless of its rotation. Rounding error in the anisotropy ratio
+    # used to bump ceil() to two taps at some angles, filtering one level
+    # too sharply.
+    mod = sys.modules[t.__module__]
+    TexType = getattr(mod, 'Texture2f')
+    TensorXf = getattr(mod, 'TensorXf')
+    Array2f = getattr(mod, 'Array2f')
+    UInt32 = getattr(mod, 'UInt32')
+
+    res = 256
+    tex = TexType(TensorXf(_test_grid(res * res, seed=6), shape=(res, res, 1)),
+                  use_accel=False, mip_filter=dr.MipFilter.Linear, max_aniso=16)
+
+    # A few lookup positions, swept over rotation angles in one-degree steps
+    n_pos, n_ang = 4, 91
+    idx = dr.arange(UInt32, n_pos * n_ang)
+    pos = Array2f(dr.gather(t, t(0.3, 0.62, 0.45, 0.71), idx % n_pos),
+                  dr.gather(t, t(0.4, 0.35, 0.68, 0.52), idx % n_pos))
+    theta = dr.deg2rad(t(idx // n_pos))
+    s, c = dr.sincos(theta)
+
+    extent = 8.0 / res  # an 8-texel isotropic footprint, i.e. lod 3
+    out = tex.eval_filtered(pos, Array2f(c * extent, s * extent),
+                            Array2f(-s * extent, c * extent))
+    ref = tex.eval_lod(pos, 3.0)
+    assert dr.allclose(out[0], ref[0], rtol=1e-4, atol=1e-5)
+
+
+@pytest.test_arrays("is_jit, float32, shape=(*)")
+def test47_filtered_shear_invariance(t):
+    # Rotating the footprint parameterization, (ddx, ddy) -> (c*ddx + s*ddy,
+    # -s*ddx + c*ddy), sweeps the same ellipse, so the filtered result must
+    # not change even though the new axis pair is no longer orthogonal.
+    import math
+    mod = sys.modules[t.__module__]
+    TexType = getattr(mod, 'Texture2f')
+    TensorXf = getattr(mod, 'TensorXf')
+    Array2f = getattr(mod, 'Array2f')
+
+    res = 256
+    tex = TexType(TensorXf(_test_grid(res * res, seed=7), shape=(res, res, 1)),
+                  use_accel=False, mip_filter=dr.MipFilter.Linear, max_aniso=16)
+    pos = Array2f(t(0.3, 0.62, 0.45, 0.71), t(0.4, 0.35, 0.68, 0.52))
+
+    th = math.radians(20.0)
+    ddx = (math.cos(th) * 16 / res, math.sin(th) * 16 / res)
+    ddy = (-math.sin(th) * 4 / res, math.cos(th) * 4 / res)
+    ref = tex.eval_filtered(pos, Array2f(*ddx), Array2f(*ddy))
+
+    for alpha in (30.0, 45.0, 75.0):
+        c, s = math.cos(math.radians(alpha)), math.sin(math.radians(alpha))
+        ddx2 = Array2f(c * ddx[0] + s * ddy[0], c * ddx[1] + s * ddy[1])
+        ddy2 = Array2f(c * ddy[0] - s * ddx[0], c * ddy[1] - s * ddx[1])
+        out = tex.eval_filtered(pos, ddx2, ddy2)
+        assert dr.allclose(out[0], ref[0], rtol=1e-4, atol=1e-4)
+
+
+@pytest.test_arrays("is_jit, float32, shape=(*)")
+def test48_mip_accel_1d(t):
+    # 1D MIP-mapped hardware textures used to fail at creation on CUDA
+    # because the resource view dimensions disagreed with the mipmapped array
+    if dr.backend_v(t) == dr.JitBackend.LLVM:
+        pytest.skip("no hardware texture units")
+    mod = sys.modules[t.__module__]
+    TexType = getattr(mod, 'Texture1f')
+    TensorXf = getattr(mod, 'TensorXf')
+
+    vals = _test_grid(64, seed=8)
+    tens = TensorXf(t(vals), shape=(64, 1))
+    hw = TexType(tens, use_accel=True, migrate=False,
+                 mip_filter=dr.MipFilter.Linear, max_aniso=16)
+    sw = TexType(tens, use_accel=False,
+                 mip_filter=dr.MipFilter.Linear, max_aniso=16)
+    pos = t(0.1, 0.33, 0.52, 0.85)
+    for lod in [0.0, 1.0, 2.0, 3.0]:
+        assert dr.allclose(hw.eval_lod(pos, lod)[0], sw.eval_lod(pos, lod)[0],
+                           rtol=5e-3, atol=5e-3)

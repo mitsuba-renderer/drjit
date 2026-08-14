@@ -22,6 +22,7 @@
 #include <drjit/math.h>
 #include <drjit-core/half.h>
 #include <drjit-core/texture.h>
+#include <memory>
 
 namespace dr = drjit;
 
@@ -102,7 +103,10 @@ void finalize_lookup(const T *tmp, uint32_t channels_stored, uint32_t channels_o
     }
 }
 
-/// Operations object for generating differentiable texture evaluation code
+/// Operations object for generating differentiable texture evaluation code.
+/// It owns references to every variable it mentions, so copies (e.g. those
+/// captured by a retained ``sum_loop`` body) remain valid after the
+/// originating ``ad_tex_*`` call returns.
 struct JitOps {
     using Float = ::Float;
     using Int   = ::Int;
@@ -116,33 +120,57 @@ struct JitOps {
     dr::WrapMode wrap_mode;
     bool unorm8 = false;
     bool srgb = false;
-    uint64_t value;
+    Float value;
     Mask active;
     Float res_f_[MaxDim];
     Int res_i_[MaxDim];
     dr::divisor<Int> inv_res_[MaxDim];
 
+    // MIP pyramid state (see the ``mip_*`` parameters of ``ad_tex_eval_lod``)
+    Float mip_value;
+    Int mip_table;
+    dr::detail::TexLevel<Int, UInt> lvl;
+
     Float lit(double v) const { return query_scalar(backend, query_type, v); }
-    Float res_f(uint32_t k) const { return res_f_[k]; }
-    Int res_i(uint32_t k) const { return res_i_[k]; }
+    Int lit_i(int32_t v) const { return Int::steal(jit_var_i32(backend, v)); }
+    Float res_f(uint32_t k) const {
+        return lvl.bound ? to_float(res_i(k)) : res_f_[k];
+    }
+    Int res_i(uint32_t k) const {
+        Int r = res_i_[k];
+        if (lvl.bound)
+            r = dr::maximum(r >> lvl.level, lit_i(1));
+        return r;
+    }
     Float to_float(const Int &i) const { return to_query(i.index_combined(), query_type); }
 
     /// Floor-divide by the (opaque) resolution via the magic constants (see idiv.h)
-    Int idiv(const Int &a, uint32_t k) const { return inv_res_[k](a); }
+    Int idiv(const Int &a, uint32_t k) const {
+        if (lvl.bound)
+            return dr::detail::tex_idiv_dynamic(*this, lvl.div[k][0],
+                                                lvl.div[k][1], a);
+        return inv_res_[k](a);
+    }
 
     /// Gather the ``channels_out`` texels at ``idx`` and cast them to query precision
     void gather(const UInt &idx, Float *out) const {
-        uint64_t *tmp = (uint64_t *) alloca(sizeof(uint64_t) * channels_stored);
+        if (!lvl.bound) {
+            gather_from(value, idx, active, out);
+        } else if (lvl.includes_base) {
+            // The bound level may be the base level, whose texels live in the
+            // regular texture storage rather than the pyramid buffer
+            Mask is_base = lvl.level == 0;
+            gather_from(value, idx, active && is_base, out);
 
-        // ``gather_packet`` requires a packet size of at least two
-        if (channels_stored > 1)
-            ad_var_gather_packet(channels_stored, value, idx.index(),
-                                 active.index(), tmp, ReduceMode::Auto);
-        else
-            tmp[0] = ad_var_gather(value, idx.index(), active.index(),
-                                   ReduceMode::Auto);
-
-        finalize_lookup(tmp, channels_stored, channels_out, query_type, out);
+            Float *tmp_mem = (Float *) alloca(sizeof(Float) * channels_out);
+            tex_scratch<Float> tmp(tmp_mem, channels_out);
+            gather_from(mip_value, idx + lvl.offset, active && !is_base,
+                        tmp.data());
+            for (uint32_t ch = 0; ch < channels_out; ++ch)
+                out[ch] = dr::select(is_base, out[ch], tmp[ch]);
+        } else {
+            gather_from(mip_value, idx + lvl.offset, active, out);
+        }
 
         // Map 8-bit values to [0, 1]. For sRGB textures, apply the transfer
         // curve to linearize. To replicate how GPUs do this, skip every 4th
@@ -154,6 +182,106 @@ struct JitOps {
                     out[ch] = srgb_to_linear(out[ch], query_type);
             }
         }
+    }
+
+    /// Load the configuration of MIP level ``l`` (see the ``Ops`` contract)
+    void mip_record(const Int &l, Int *rec) const {
+        uint32_t stride = dim == 1 ? 4 : 8, tmp[8];
+        jit_var_gather_packet(stride, mip_table.index(), l.index(),
+                              active.index(), tmp);
+        for (uint32_t j = 0; j < stride; ++j)
+            rec[j] = Int::steal(tmp[j]);
+    }
+
+    /// Sum ``body(i, m, state, scratch)`` for ``i = 0, ..., n - 1``
+    template <typename Body>
+    void sum_loop(const Int &n, Float *state, uint32_t n_state,
+                  uint32_t n_scratch, Body body) const {
+        struct Payload {
+            JitBackend backend;
+            Int i, n;
+            uint32_t n_state, n_scratch;
+            std::unique_ptr<Float[]> state, scratch;
+            Body body;
+            Mask cond;
+        };
+
+        Payload *p = new Payload{ backend, lit_i(0), n, n_state, n_scratch,
+                                  std::unique_ptr<Float[]>(new Float[n_state]),
+                                  std::unique_ptr<Float[]>(new Float[n_scratch]),
+                                  std::move(body), Mask() };
+        for (uint32_t j = 0; j < n_state; ++j)
+            p->state[j] = state[j];
+
+        ad_loop_read read_cb = [](void *q, dr::vector<uint64_t> &indices) {
+            Payload *pl = (Payload *) q;
+            indices.push_back(ad_var_inc_ref(pl->i.index_combined()));
+            for (uint32_t j = 0; j < pl->n_state; ++j)
+                indices.push_back(ad_var_inc_ref(pl->state[j].index_combined()));
+        };
+
+        ad_loop_write write_cb = [](void *q, const dr::vector<uint64_t> &indices,
+                                    bool) {
+            Payload *pl = (Payload *) q;
+            pl->i = Int::borrow(indices[0]);
+            for (uint32_t j = 0; j < pl->n_state; ++j)
+                pl->state[j] = Float::borrow(indices[j + 1]);
+        };
+
+        ad_loop_cond cond_cb = [](void *q) -> uint32_t {
+            Payload *pl = (Payload *) q;
+            pl->cond = pl->i < pl->n;
+            return pl->cond.index();
+        };
+
+        ad_loop_body body_cb = [](void *q) {
+            Payload *pl = (Payload *) q;
+            Mask m = Mask::steal(jit_var_bool(pl->backend, true));
+            pl->body(pl->i, m, pl->state.get(), pl->scratch.get());
+            pl->i = pl->i + 1;
+
+            // Drop temporaries so that no reference to a variable of the
+            // recorded loop body outlives the recording
+            for (uint32_t j = 0; j < pl->n_scratch; ++j)
+                pl->scratch[j] = Float();
+        };
+
+        ad_loop_delete delete_cb = [](void *q) { delete (Payload *) q; };
+
+        bool all_done = ad_loop(backend, -1, 0, /* max_iterations */ -1,
+                                "dr::Texture::eval_filtered()", p, read_cb,
+                                write_cb, cond_cb, body_cb, delete_cb, true);
+
+        for (uint32_t j = 0; j < n_state; ++j)
+            state[j] = p->state[j];
+
+        if (all_done) {
+            delete p;
+        } else {
+            // Drop the state references. The loop will repopulate them later.
+            for (uint32_t j = 0; j < n_state; ++j)
+                p->state[j] = Float();
+            p->i = Int();
+            p->cond = Mask();
+        }
+    }
+
+private:
+    /// Raw packet gather of the stored channels at ``idx`` from the buffer
+    /// ``source``, cast to the query precision
+    void gather_from(const Float &source, const UInt &idx, const Mask &m,
+                     Float *out) const {
+        uint64_t *tmp = (uint64_t *) alloca(sizeof(uint64_t) * channels_stored);
+
+        // ``gather_packet`` requires a packet size of at least two
+        if (channels_stored > 1)
+            ad_var_gather_packet(channels_stored, source.index_combined(),
+                                 idx.index(), m.index(), tmp, ReduceMode::Auto);
+        else
+            tmp[0] = ad_var_gather(source.index_combined(), idx.index(),
+                                   m.index(), ReduceMode::Auto);
+
+        finalize_lookup(tmp, channels_stored, channels_out, query_type, out);
     }
 };
 
@@ -174,7 +302,7 @@ static JitOps tex_setup(VarType query_type, uint32_t dim, uint32_t channels_stor
     ops.wrap_mode = (dr::WrapMode) wrap_mode;
     ops.unorm8 = jit_var_type((uint32_t) value) == VarType::UInt8;
     ops.srgb = srgb != 0;
-    ops.value = value;
+    ops.value = Float::borrow(value);
     bool divides = ops.wrap_mode != dr::WrapMode::Clamp;
     for (uint32_t k = 0; k < dim; ++k) {
         UInt res = UInt::borrow(res_idx[k]);
@@ -230,6 +358,47 @@ static void tex_eval_accel(void *handle,
     finalize_lookup(tmp, channels_stored, channels_out, query_type, out);
 }
 
+/// Variant of \ref tex_eval_accel() sampling at an explicit level of detail
+static void tex_eval_lod_accel(void *handle,
+                               uint32_t channels_stored,
+                               uint32_t channels_out,
+                               VarType query_type,
+                               uint32_t dim,
+                               const Float *pos,
+                               const Float &lod,
+                               const Mask &active,
+                               Float *out) {
+    GenericArray<float> pos_f32[MaxDim];
+    uint32_t pos_idx32[MaxDim];
+    pos_to_f32(pos, dim, pos_f32, pos_idx32);
+    GenericArray<float> lod_f32 = GenericArray<float>::steal(
+        jit_var_cast(lod.index(), VarType::Float32, 0));
+
+    uint32_t *tmp = (uint32_t *) alloca(sizeof(uint32_t) * channels_stored);
+    jit_tex_lookup_lod(handle, pos_idx32, lod_f32.index(), active.index(), tmp);
+
+    finalize_lookup(tmp, channels_stored, channels_out, query_type, out);
+}
+
+/// Variant of \ref tex_eval_accel() driven by screen-space derivatives
+static void tex_eval_grad_accel(void *handle, uint32_t channels_stored,
+                                uint32_t channels_out, VarType query_type,
+                                uint32_t dim, const Float *pos,
+                                const Float *ddx, const Float *ddy,
+                                const Mask &active, Float *out) {
+    GenericArray<float> f32[3 * MaxDim];
+    uint32_t pos_idx32[MaxDim], ddx_idx32[MaxDim], ddy_idx32[MaxDim];
+    pos_to_f32(pos, dim, f32, pos_idx32);
+    pos_to_f32(ddx, dim, f32 + MaxDim, ddx_idx32);
+    pos_to_f32(ddy, dim, f32 + 2 * MaxDim, ddy_idx32);
+
+    uint32_t *tmp = (uint32_t *) alloca(sizeof(uint32_t) * channels_stored);
+    jit_tex_lookup_grad(handle, pos_idx32, ddx_idx32, ddy_idx32,
+                        active.index(), tmp);
+
+    finalize_lookup(tmp, channels_stored, channels_out, query_type, out);
+}
+
 } // anonymous namespace
 
 void ad_tex_eval(VarType query_type, uint32_t dim, uint32_t channels_stored,
@@ -264,6 +433,282 @@ void ad_tex_eval(VarType query_type, uint32_t dim, uint32_t channels_stored,
             for (uint32_t ch = 0; ch < channels_out; ++ch)
                 result[ch] = reattach(scratch[ch], result[ch]);
         }
+    }
+
+    for (uint32_t ch = 0; ch < channels_out; ++ch)
+        out_idx[ch] = result[ch].release();
+}
+
+namespace {
+
+using U32 = GenericArray<uint32_t>;
+
+/// Decompose the flat texel index ``o`` into per-dimension coordinates
+/// (fastest-varying axis first)
+static void tex_unpack_coords(const U32 &o, const size_t *res, uint32_t dim,
+                              U32 *out) {
+    if (dim == 1) {
+        out[0] = o;
+    } else if (dim == 2) {
+        out[1] = o / (uint32_t) res[0];
+        out[0] = o - out[1] * (uint32_t) res[0];
+    } else {
+        uint32_t slice = (uint32_t) (res[0] * res[1]);
+        out[2] = o / slice;
+        U32 r = o - out[2] * slice;
+        out[1] = r / (uint32_t) res[0];
+        out[0] = r - out[1] * (uint32_t) res[0];
+    }
+}
+
+/// 2x2 box downsampling from ``prev_res`` to ``res``. ``prev`` stores
+/// ``stride`` interleaved channels per texel; the result is an unevaluated
+/// ``out_type`` expression holding the ``res`` level in the same layout,
+/// accumulated in ``accum_type``. Odd input resolutions clamp the last tap
+/// onto the boundary texel. When ``unorm8`` is set, texels are decoded from
+/// 8-bit normalized (optionally sRGB) form before filtering and re-encoded
+/// afterwards; every fourth channel (alpha) bypasses the sRGB transfer
+/// function.
+static Float tex_downsample_box(JitBackend backend, VarType accum_type,
+                                VarType out_type, const Float &prev,
+                                const size_t *prev_res, const size_t *res,
+                                uint32_t dim, uint32_t stride, bool unorm8,
+                                bool srgb) {
+    size_t n = res[0] * res[1] * res[2];
+    uint32_t n_corners = 1u << dim;
+    Mask all = Mask::steal(jit_var_bool(backend, true));
+
+    U32 e = U32::steal(jit_var_counter(backend, n * stride)),
+        texel = e / stride, ch = e - texel * stride, coords[3];
+    tex_unpack_coords(texel, res, dim, coords);
+
+    Mask is_alpha;
+    if (srgb)
+        is_alpha = (ch & 3u) == 3u;
+
+    Float acc = query_scalar(backend, accum_type, 0.0);
+    for (uint32_t corner = 0; corner < n_corners; ++corner) {
+        U32 idx = dr::minimum(2 * coords[0] + (corner & 1),
+                              (uint32_t) (prev_res[0] - 1));
+        if (dim >= 2) {
+            U32 sy = dr::minimum(2 * coords[1] + ((corner >> 1) & 1),
+                                 (uint32_t) (prev_res[1] - 1));
+            idx = dr::fmadd(sy, (uint32_t) prev_res[0], idx);
+        }
+        if (dim == 3) {
+            U32 sz = dr::minimum(2 * coords[2] + ((corner >> 2) & 1),
+                                 (uint32_t) (prev_res[2] - 1));
+            idx = dr::fmadd(sz, (uint32_t) (prev_res[0] * prev_res[1]), idx);
+        }
+
+        U32 src = dr::fmadd(idx, stride, ch);
+        Float tap = Float::steal(ad_var_gather(prev.index_combined(),
+                                               src.index(), all.index(),
+                                               ReduceMode::Auto)),
+              v = to_query(tap.index_combined(), accum_type);
+        if (unorm8) {
+            v = v * query_scalar(backend, accum_type, 1.0 / 255.0);
+            if (srgb)
+                v = dr::select(is_alpha, v, srgb_to_linear(v, accum_type));
+        }
+        acc = acc + v;
+    }
+
+    acc = acc * query_scalar(backend, accum_type, 1.0 / n_corners);
+    if (unorm8) {
+        acc = dr::clip(acc, query_scalar(backend, accum_type, 0.0),
+                       query_scalar(backend, accum_type, 1.0));
+        if (srgb) {
+            Float enc = Float::steal(
+                dr::linear_to_srgb(
+                    TypedFloat<float>::borrow(acc.index_combined()))
+                    .release());
+            acc = dr::select(is_alpha, acc, enc);
+        }
+        acc = dr::fmadd(acc, query_scalar(backend, accum_type, 255.0),
+                        query_scalar(backend, accum_type, 0.5));
+    }
+
+    return Float::steal(ad_var_cast(acc.index_combined(), out_type));
+}
+
+/// Fill ``lres`` with the ``n_levels`` per-level resolutions (3 entries per
+/// level, fastest axis first) implied by the base resolution ``res_in``
+static void tex_level_res(const size_t *res_in, uint32_t dim,
+                          uint32_t n_levels, size_t *lres) {
+    size_t r[3] = { 1, 1, 1 };
+    for (uint32_t k = 0; k < dim; ++k)
+        r[k] = res_in[k];
+    for (uint32_t l = 0; l < n_levels; ++l) {
+        for (int k = 0; k < 3; ++k) {
+            lres[3 * l + k] = r[k];
+            r[k] = r[k] > 1 ? r[k] >> 1 : 1;
+        }
+    }
+}
+
+} // anonymous namespace
+
+uint64_t ad_tex_mipmap_from_base(uint32_t dim, uint32_t channels_stored, int srgb,
+                                 uint64_t value, const size_t *res_in,
+                                 uint32_t n_levels) {
+    if (n_levels <= 1)
+        return 0;
+
+    JitBackend backend = jit_set_backend((uint32_t) value).backend;
+    VarType storage_type = jit_var_type((uint32_t) value);
+    bool unorm8 = storage_type == VarType::UInt8;
+
+    // Box-filter accumulator: single precision, except for f64 storage
+    VarType accum_type = storage_type == VarType::Float64 ? VarType::Float64
+                                                          : VarType::Float32;
+
+    uint32_t C = channels_stored;
+
+    size_t *lres = (size_t *) alloca(sizeof(size_t) * 3 * n_levels);
+    tex_level_res(res_in, dim, n_levels, lres);
+
+    // Total texel count of the pyramid levels >= 1
+    size_t total = 0;
+    for (uint32_t l = 1; l < n_levels; ++l)
+        total += lres[3 * l] * lres[3 * l + 1] * lres[3 * l + 2];
+
+    Float mip = Float::steal(jit_var_undefined(backend, storage_type, total * C));
+    Mask all = Mask::steal(jit_var_bool(backend, true));
+
+    Float prev = Float::borrow(value);
+    uint32_t offset = 0;
+    for (uint32_t l = 1; l < n_levels; ++l) {
+        uint32_t n = (uint32_t) (lres[3 * l] * lres[3 * l + 1] * lres[3 * l + 2]);
+
+        Float level = tex_downsample_box(backend, accum_type, storage_type,
+                                         prev, lres + 3 * (l - 1), lres + 3 * l,
+                                         dim, C, unorm8, srgb != 0);
+
+        // Append the level to the pyramid buffer. The appended ranges never
+        // overlap, which permits ReduceMode::Permute.
+        U32 dst = U32::steal(jit_var_counter(backend, (size_t) n * C)) +
+                  offset * C;
+        mip = Float::steal(ad_var_scatter(mip.index_combined(),
+                                          level.index_combined(), dst.index(),
+                                          all.index(), ReduceOp::Identity,
+                                          ReduceMode::Permute));
+
+        // Materialize the level (one kernel that also performs the append);
+        // the next level's taps then read from memory instead of expanding
+        // recursively in the symbolic gather rewriter
+        jit_var_eval(level.index());
+
+        offset += n;
+        prev = level;
+    }
+
+    return mip.release();
+}
+
+void ad_tex_eval_lod(VarType query_type, uint32_t dim, uint32_t channels_stored,
+                     uint32_t channels_out, int filter_mode, int wrap_mode,
+                     int srgb, void *handle, int use_accel, uint64_t value,
+                     uint64_t mip_value, uint32_t mip_table, uint32_t n_levels,
+                     int mip_filter, const uint32_t *res_idx,
+                     const uint32_t *idiv_idx, const uint64_t *pos_idx,
+                     uint32_t lod_idx, uint32_t active_idx, uint64_t *out_idx) {
+    Float pos[MaxDim];
+    JitOps ops = tex_setup(query_type, dim, channels_stored, channels_out,
+                           filter_mode, wrap_mode, srgb, value, res_idx,
+                           idiv_idx, pos_idx, active_idx, pos);
+    ops.mip_value = Float::borrow(mip_value);
+    ops.mip_table = Int::borrow(mip_table);
+
+    Float *result_mem  = (Float *) alloca(sizeof(Float) * channels_out);
+    Float *scratch_mem = (Float *) alloca(sizeof(Float) * 2 * channels_out);
+    tex_scratch<Float> result(result_mem, channels_out),
+                       scratch(scratch_mem, 2 * channels_out);
+
+    if (n_levels > 1) {
+        Float lod = Float::borrow(lod_idx);
+        bool accel = handle != nullptr && use_accel,
+             grad  = any_grad(value, pos_idx, dim) ||
+                     any_grad(mip_value, nullptr, 0);
+
+        if (accel && !grad) {
+            tex_eval_lod_accel(handle, channels_stored, channels_out,
+                               query_type, dim, pos, lod, ops.active,
+                               result.data());
+        } else {
+            // AD case: perform a non-accelerated lookup with gradient tracking
+            // and splice the accelerated result into the primal if possible.
+            dr::detail::tex_eval_lod(ops, pos, lod, n_levels,
+                                     (dr::MipFilter) mip_filter,
+                                     result.data(), scratch.data());
+            if (accel) {
+                tex_eval_lod_accel(handle, channels_stored, channels_out,
+                                   query_type, dim, pos, lod, ops.active,
+                                   scratch.data());
+                for (uint32_t ch = 0; ch < channels_out; ++ch)
+                    result[ch] = reattach(scratch[ch], result[ch]);
+            }
+        }
+    } else {
+        dr::detail::tex_eval(ops, pos, result.data(), scratch.data());
+    }
+
+    for (uint32_t ch = 0; ch < channels_out; ++ch)
+        out_idx[ch] = result[ch].release();
+}
+
+void ad_tex_eval_filtered(VarType query_type, uint32_t dim,
+                          uint32_t channels_stored, uint32_t channels_out,
+                          int filter_mode, int wrap_mode, int srgb,
+                          void *handle, int use_accel, uint64_t value,
+                          uint64_t mip_value, uint32_t mip_table,
+                          uint32_t n_levels, int mip_filter, uint32_t max_aniso,
+                          const uint32_t *res_idx, const uint32_t *idiv_idx,
+                          const uint64_t *pos_idx, const uint32_t *ddx_idx,
+                          const uint32_t *ddy_idx, uint32_t active_idx,
+                          uint64_t *out_idx) {
+    Float pos[MaxDim], ddx[MaxDim], ddy[MaxDim];
+    JitOps ops = tex_setup(query_type, dim, channels_stored, channels_out,
+                           filter_mode, wrap_mode, srgb, value, res_idx,
+                           idiv_idx, pos_idx, active_idx, pos);
+    ops.mip_value = Float::borrow(mip_value);
+    ops.mip_table = Int::borrow(mip_table);
+
+    for (uint32_t k = 0; k < dim; ++k) {
+        ddx[k] = Float::borrow(ddx_idx[k]);
+        ddy[k] = Float::borrow(ddy_idx[k]);
+    }
+
+    Float *result_mem  = (Float *) alloca(sizeof(Float) * channels_out);
+    Float *scratch_mem = (Float *) alloca(sizeof(Float) * channels_out);
+    tex_scratch<Float> result(result_mem, channels_out),
+                       scratch(scratch_mem, channels_out);
+
+    if (n_levels > 1) {
+        bool accel = handle != nullptr && use_accel,
+             grad  = any_grad(value, pos_idx, dim) ||
+                     any_grad(mip_value, nullptr, 0);
+
+        if (accel && !grad) {
+            tex_eval_grad_accel(handle, channels_stored, channels_out,
+                                query_type, dim, pos, ddx, ddy, ops.active,
+                                result.data());
+        } else {
+            // AD case: perform a non-accelerated lookup with gradient tracking
+            // and splice the accelerated result into the primal result.
+            dr::detail::tex_eval_filtered(ops, pos, ddx, ddy, n_levels,
+                                          (dr::MipFilter) mip_filter,
+                                          max_aniso, result.data());
+            if (accel) {
+                tex_eval_grad_accel(handle, channels_stored, channels_out,
+                                    query_type, dim, pos, ddx, ddy, ops.active,
+                                    scratch.data());
+                for (uint32_t ch = 0; ch < channels_out; ++ch)
+                    result[ch] = reattach(scratch[ch], result[ch]);
+            }
+        }
+    } else {
+        dr::detail::tex_eval(ops, pos, result.data(), scratch.data());
     }
 
     for (uint32_t ch = 0; ch < channels_out; ++ch)

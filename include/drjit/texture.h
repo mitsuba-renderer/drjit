@@ -24,6 +24,7 @@
 #include <drjit/traversable_base.h>
 #include <array>
 #include <cassert>
+#include <memory>
 
 #pragma once
 
@@ -47,6 +48,12 @@ public:
     using UInt32 = uint32_array_t<Storage_>;
     using Storage = std::conditional_t<IsDynamic, Storage_, DynamicArray<Storage_>>;
     using TensorXf = Tensor<Storage>;
+
+    // Dynamic integer array holding the per-level MIP constant records
+    using Int32Buffer = int32_array_t<Storage>;
+
+    /// Stride of the records in \ref m_mip_table
+    static constexpr uint32_t MipStride = Dimension == 1 ? 4 : 8;
 
     // Precomputed reciprocal for the Repeat/Mirror wrap math.
     using Divisor = std::conditional_t<is_jit_v<Storage_>, divisor<Int32, true>,
@@ -104,14 +111,27 @@ public:
      * raises an error. Channels are grouped into hardware RGBA quads, so within
      * each group of four the first three are decoded and the fourth (alpha) is
      * left linear (e.g. channel 3 is linear for a 6-channel texture).
+     *
+     * Specifying a \c mip_filter causes the implementation to create a MIP
+     * pyramid for filtered lookups via \ref eval_lod() and \ref eval_filtered().
+     * The function \ref set_value() / \ref set_tensor() regenerate the pyramid.
+     * MIP-mapped textures cannot be \c writable.
+     *
+     * The \c max_aniso parameter only applies to MIP-mapped textures and
+     * controls the number of taps that anisotropic filtering in \ref
+     * eval_filtered() may use. The value 1 selects isotropic filtering, and
+     * values above the hardware limit of 16 raise an error.
      */
     Texture(const size_t shape[Dimension], size_t channels,
             bool use_accel = true,
             FilterMode filter_mode = FilterMode::Linear,
             WrapMode wrap_mode = WrapMode::Clamp,
-            bool writable = false, bool srgb = false) : m_srgb(srgb) {
+            bool writable = false, bool srgb = false,
+            MipFilter mip_filter = MipFilter::Disabled,
+            size_t max_aniso = 8) : m_srgb(srgb) {
         init(shape, channels, use_accel, filter_mode, wrap_mode,
-             /* init_tensor = */ true, writable);
+             /* init_tensor = */ true, writable, /* external = */ nullptr,
+             mip_filter, max_aniso);
     }
 
     /**
@@ -133,13 +153,16 @@ public:
     template <typename TensorT>
     Texture(TensorT &&tensor, bool use_accel = true, bool migrate = true,
             FilterMode filter_mode = FilterMode::Linear,
-            WrapMode wrap_mode = WrapMode::Clamp, bool srgb = false)
+            WrapMode wrap_mode = WrapMode::Clamp, bool srgb = false,
+            MipFilter mip_filter = MipFilter::Disabled, size_t max_aniso = 8)
         : m_srgb(srgb) {
         if (tensor.ndim() != Dimension + 1)
             jit_raise("Texture::Texture(): tensor dimension must equal "
                         "texture dimension plus one.");
         init(tensor.shape().data(), tensor.shape(Dimension), use_accel,
-             filter_mode, wrap_mode);
+             filter_mode, wrap_mode, /* init_tensor = */ true,
+             /* writable = */ false, /* external = */ nullptr,
+             mip_filter, max_aniso);
         set_tensor(std::forward<TensorT>(tensor), migrate);
     }
 
@@ -239,6 +262,16 @@ public:
     /// Return the boundary handling mode for out-of-bounds lookups
     WrapMode wrap_mode() const { return m_wrap_mode; }
 
+    /// Return the MIP level selection mode of filtered lookups
+    MipFilter mip_filter() const { return m_mip_filter; }
+
+    /// Return the number of MIP pyramid levels, including the base level
+    /// (1 when the texture is not MIP-mapped)
+    size_t mip_levels() const { return m_level_count; }
+
+    /// Return the anisotropic tap bound of \ref eval_filtered()
+    size_t max_aniso() const { return m_max_aniso; }
+
     /// Is the texture data held exclusively in GPU texture memory? True
     /// after a migration, and for writable/wrapped textures.
     bool migrated() const { return m_migrated || m_hw_mutable; }
@@ -292,6 +325,7 @@ public:
             if (value.size() != m_size)
                 jit_raise("Texture::set_value(): unexpected array size!");
             m_padded_tensor.array() = std::forward<StorageT>(value);
+            build_mipmap(m_padded_tensor.array());
         } else /* JIT variant */ {
             Storage padded_value;
 
@@ -317,9 +351,11 @@ public:
                         replace_grad(m_tensor.array(), value);
             }
 
+            build_mipmap(padded_value);
+
             if constexpr (HasGPUTexture) {
                 if (m_use_accel) {
-                    jit_tex_memcpy_d2t(padded_value.data(), m_handle);
+                    upload_levels(padded_value);
 
                     // Hardware-mutable textures (writable/ wrapped) keep their
                     // authoritative copy in the hardware texture and retain no
@@ -380,7 +416,8 @@ public:
 
         // Only update tensors & CUDA texture if shape changed
         init(tensor.shape().data(), tensor.shape(Dimension),
-             m_use_accel, m_filter_mode, m_wrap_mode, shape_changed);
+             m_use_accel, m_filter_mode, m_wrap_mode, shape_changed,
+             m_writable, nullptr, m_mip_filter, m_max_aniso);
 
         if constexpr (std::is_lvalue_reference_v<TensorT>)
             set_value(tensor.array(), migrate);
@@ -416,13 +453,16 @@ public:
         }
 
         if constexpr (!is_jit_v<Storage_>) {
-            if (shape_changed)
+            if (shape_changed) {
                 init(m_tensor.shape().data(),
                      m_tensor.shape(Dimension), m_use_accel, m_filter_mode,
-                     m_wrap_mode, true);
-            else
-                // Avoid unnecessary copy when working with `DynamicArray`
+                     m_wrap_mode, true, m_writable, nullptr, m_mip_filter,
+                     m_max_aniso);
+            } else {
+                // Only the MIP pyramid must be refreshed
+                build_mipmap(m_padded_tensor.array());
                 return;
+            }
         } else {
             // `Texture::init` might overwrite `m_tensor` with a
             // zero-initialized tensor, so let's copy it first
@@ -430,7 +470,8 @@ public:
 
             init(m_tensor.shape().data(),
                  m_tensor.shape(Dimension), m_use_accel, m_filter_mode,
-                 m_wrap_mode, shape_changed);
+                 m_wrap_mode, shape_changed, m_writable, nullptr, m_mip_filter,
+                 m_max_aniso);
 
             m_tensor.array() = inbound_tensor;
         }
@@ -542,6 +583,129 @@ public:
             return out;
         } else {
             return eval_nonaccel<Output>(pos, active);
+        }
+    }
+
+    /**
+     * \brief Evaluate the texture at an explicit MIP level of detail
+     *
+     * A fractional ``lod`` blends the two enclosing pyramid levels under
+     * \ref MipFilter::Linear and rounds to the nearest level under \ref
+     * MipFilter::Nearest. Out-of-range values are clamped.
+     *
+     * The evaluation is differentiable with respect to query position
+     * and texture data but not the ``lod`` parameter.
+     *
+     * On a texture without a MIP pyramid, the lookup degrades to a regular
+     * non-filtered \ref eval().
+     */
+    template <typename Output>
+    Output eval_lod(const position_for<Output> &pos,
+                    const value_t<Output> &lod,
+                    mask_for<Output> active = true) const {
+        if (m_level_count <= 1)
+            return eval<Output>(pos, active);
+
+        if constexpr (is_jit_v<Storage_>) {
+            using Value = value_t<Output>;
+
+            Output out = alloc_output<Output>();
+            uint64_t *o = (uint64_t *) alloca(sizeof(uint64_t) * m_channels);
+
+            ad_tex_eval_lod(type_v<scalar_t<Value>>, (uint32_t) Dimension,
+                (uint32_t) m_channels_storage, (uint32_t) m_channels,
+                (int) m_filter_mode, (int) m_wrap_mode, (int) m_srgb, m_handle,
+                (int) m_use_accel, value_index(), combined_index(m_mip),
+                m_mip_table.index(), m_level_count, (int) m_mip_filter,
+                resolution_indices().data(), idiv_indices().data(),
+                pos_indices(pos).data(), lod.index(), active.index(), o);
+
+            for (size_t ch = 0; ch < m_channels; ++ch)
+                out.set_entry(ch, steal_value<Value>(o[ch]));
+            return out;
+        } else {
+            using Value = value_t<Output>;
+            Output out = alloc_output<Output>();
+            Value *res_mem     = (Value *) alloca(sizeof(Value) * m_channels),
+                  *scratch_mem = (Value *) alloca(sizeof(Value) * 2 * m_channels);
+            detail::tex_scratch<Value> res(res_mem, m_channels),
+                                       scratch(scratch_mem, 2 * m_channels);
+            detail::tex_eval_lod(scalar_ops<Value>(active), pos.data(), lod,
+                                 m_level_count, m_mip_filter, res.data(),
+                                 scratch.data());
+            for (size_t ch = 0; ch < m_channels; ++ch)
+                out.set_entry(ch, res[ch]);
+            return out;
+        }
+    }
+
+    /**
+     * \brief Perform an anisotropically filtered texture lookup
+     *
+     * Besides the query position, this function additionally takes
+     * texture-space differentials ``ddx`` and ``ddy`` that span the pixel's
+     * elliptical footprint and control the MIP level and anisotropic filter
+     * shape. Filtering uses up to \ref max_aniso() trilinear taps along the
+     * major ellipse axis.
+     *
+     * Depending on backend availability and settings (the ``use_accel``
+     * constructor flag), the implementation either uses the GPU hardware
+     * instruction for anisotropic filtering, or it falls back to a software
+     * implementation of the Direct3D 11.3 reference algorithm. Hardware
+     * anisotropic filtering is approximate and vendor specific. Results may
+     * deviate from the software path by several percent for off-axis
+     * footprints. Pass ``use_accel=False`` for reproducible output.
+     *
+     * The evaluation is differentiable with respect to query position
+     * and texture data but not the ``ddx`` and ``ddy`` parameters.
+     *
+     * On a texture without a MIP pyramid, the lookup degrades to a regular
+     * non-filtered \ref eval().
+     */
+    template <typename Output>
+    Output eval_filtered(const position_for<Output> &pos,
+                         const position_for<Output> &ddx,
+                         const position_for<Output> &ddy,
+                         mask_for<Output> active = true) const {
+        if (m_level_count <= 1)
+            return eval<Output>(pos, active);
+
+        if constexpr (is_jit_v<Storage_>) {
+            using Value = value_t<Output>;
+
+            Output out = alloc_output<Output>();
+            uint64_t *o = (uint64_t *) alloca(sizeof(uint64_t) * m_channels);
+
+            // ``ddx``/``ddy`` are detached filtering metadata, hence plain
+            // JIT indices suffice
+            uint32_t ddx_i[Dimension], ddy_i[Dimension];
+            for (size_t k = 0; k < Dimension; ++k) {
+                ddx_i[k] = ddx[k].index();
+                ddy_i[k] = ddy[k].index();
+            }
+
+            ad_tex_eval_filtered(type_v<scalar_t<Value>>, (uint32_t) Dimension,
+                (uint32_t) m_channels_storage, (uint32_t) m_channels,
+                (int) m_filter_mode, (int) m_wrap_mode, (int) m_srgb, m_handle,
+                (int) m_use_accel, value_index(), combined_index(m_mip),
+                m_mip_table.index(), m_level_count, (int) m_mip_filter, m_max_aniso,
+                resolution_indices().data(), idiv_indices().data(),
+                pos_indices(pos).data(), ddx_i, ddy_i, active.index(), o);
+
+            for (size_t ch = 0; ch < m_channels; ++ch)
+                out.set_entry(ch, steal_value<Value>(o[ch]));
+            return out;
+        } else {
+            using Value = value_t<Output>;
+            Output out = alloc_output<Output>();
+            Value *res_mem = (Value *) alloca(sizeof(Value) * m_channels);
+            detail::tex_scratch<Value> res(res_mem, m_channels);
+            detail::tex_eval_filtered(scalar_ops<Value>(active), pos.data(),
+                                      ddx.data(), ddy.data(), m_level_count,
+                                      m_mip_filter, m_max_aniso, res.data());
+            for (size_t ch = 0; ch < m_channels; ++ch)
+                out.set_entry(ch, res[ch]);
+            return out;
         }
     }
 
@@ -852,27 +1016,33 @@ public:
         return v;
     }
 
-    /// Gather the channels at \c idx and cast them to the query precision.
-    /// ``CChannels`` is the channel count when statically known (fixed scratch,
-    /// unrolled loop); 0 selects the runtime ``alloca`` path.
+    /// Gather the channels at \c idx from \c src and cast them to the query
+    /// precision. ``CChannels`` is the channel count when statically known.
     template <uint32_t CChannels = 0, typename Value>
-    void gather_texel(const uint32_array_t<Value> &idx,
+    void gather_texel(const Storage &src, const uint32_array_t<Value> &idx,
                       const mask_t<Value> &active, Value *out) const {
         if constexpr (CChannels != 0) {
             // Scalar storage is unpadded, so m_channels_storage == CChannels.
             Storage_ packet[CChannels];
-            gather_packet_dynamic(CChannels, m_padded_tensor.array(), idx, packet, active);
+            gather_packet_dynamic(CChannels, src, idx, packet, active);
             for (uint32_t ch = 0; ch < CChannels; ++ch)
                 out[ch] = convert_texel<Value>(packet[ch], ch);
         } else {
             // Per-channel packet scratch on the stack
             Storage_ *packet_mem = (Storage_ *) alloca(sizeof(Storage_) * m_channels_storage);
             detail::tex_scratch<Storage_> packet(packet_mem, m_channels_storage);
-            gather_packet_dynamic(m_channels_storage, m_padded_tensor.array(), idx,
+            gather_packet_dynamic(m_channels_storage, src, idx,
                                   packet.data(), active);
             for (uint32_t ch = 0; ch < m_channels; ++ch)
                 out[ch] = convert_texel<Value>(packet[ch], ch);
         }
+    }
+
+    /// Overload of the above that reads the base texture storage
+    template <uint32_t CChannels = 0, typename Value>
+    void gather_texel(const uint32_array_t<Value> &idx,
+                      const mask_t<Value> &active, Value *out) const {
+        gather_texel<CChannels>(m_padded_tensor.array(), idx, active, out);
     }
 
     /// Convert a query-precision value to stored form (the inverse of \ref
@@ -912,7 +1082,8 @@ protected:
     void init(const size_t *shape, size_t channels, bool use_accel,
               FilterMode filter_mode, WrapMode wrap_mode,
               bool init_tensor = true, bool writable = false,
-              void *external = nullptr) {
+              void *external = nullptr,
+              MipFilter mip_filter = MipFilter::Disabled, size_t max_aniso = 8) {
         if (channels == 0)
             jit_raise("Texture::Texture(): must have at least 1 channel!");
 
@@ -920,8 +1091,18 @@ protected:
             jit_raise("Texture(): the 'srgb' flag is only supported for 8-bit "
                       "(UInt8) textures.");
 
+        if (mip_filter != MipFilter::Disabled) {
+            if (writable)
+                jit_raise("Texture(): MIP-mapped textures cannot be writable!");
+            if (max_aniso == 0 || max_aniso > 16)
+                jit_raise("Texture(): 'max_aniso' must be between 1 and 16 "
+                          "(the hardware limit), got %zu!", max_aniso);
+        }
+
         m_writable = writable;
         m_channels = channels;
+        m_mip_filter = mip_filter;
+        m_max_aniso = (uint32_t) max_aniso;
 
         // Determine padding used for channels depending on backend
         if constexpr (is_jit_v<Storage_>) {
@@ -957,6 +1138,8 @@ protected:
         m_filter_mode = filter_mode;
         m_wrap_mode = wrap_mode;
 
+        init_mip_table();
+
         if (init_tensor) {
             if constexpr (is_jit_v<Storage_>) {
                 m_padded_tensor =
@@ -987,7 +1170,9 @@ protected:
                     m_handle = jit_tex_create(
                         Backend, Dimension, tex_shape, m_channels_storage,
                         (int) type_v<scalar_t<Storage_>>, (int) filter_mode,
-                        (int) wrap_mode, (int) m_writable, (int) m_srgb);
+                        (int) wrap_mode, (int) m_writable, (int) m_srgb,
+                        m_level_count, m_mip_filter == MipFilter::Nearest ? 0 : 1,
+                        m_max_aniso);
                 }
                 m_hw_mutable = (m_writable || external_wrap) &&
                                !(IsCUDA && external_wrap && m_writable);
@@ -1021,6 +1206,12 @@ private:
         m_migrated = other.m_migrated;
         m_hw_mutable = other.m_hw_mutable;
         m_tensor_dirty = other.m_tensor_dirty;
+        m_mip_filter = other.m_mip_filter;
+        m_max_aniso = other.m_max_aniso;
+        m_level_count = other.m_level_count;
+        m_mip_texels = other.m_mip_texels;
+        m_mip = std::move(other.m_mip);
+        m_mip_table = std::move(other.m_mip_table);
     }
 
     /// Rebind the tensor members to fresh unevaluated readback expressions,
@@ -1105,6 +1296,71 @@ private:
         }
     }
 
+    /// Texel count of MIP level ``level``
+    size_t level_texels(uint32_t level) const {
+        size_t texels = 1;
+        for (size_t i = 0; i < Dimension; ++i) {
+            size_t r = m_shape[i] >> level;
+            texels *= r > 0 ? r : 1;
+        }
+        return texels;
+    }
+
+    /// Compute the MIP pyramid depth for the current shape and upload the
+    /// per-level constant table. Invoked by \ref init().
+    void init_mip_table() {
+        m_level_count = 1;
+        m_mip_texels = 0;
+
+        if (m_mip_filter == MipFilter::Disabled)
+            return;
+
+        std::unique_ptr<int32_t[]> table;
+        m_level_count = detail::tex_mip_table(table, m_mip_texels, m_shape,
+                                              (uint32_t) Dimension, MipStride);
+        if (m_level_count > 1)
+            m_mip_table = load<Int32Buffer>(table.get(),
+                                            (size_t) m_level_count * MipStride);
+    }
+
+    /// Upload the base texels and the MIP pyramid into the hardware texture
+    void upload_levels(const Storage &padded_value) {
+        jit_tex_memcpy_d2t(padded_value.data(), m_handle);
+
+        if (m_level_count > 1) {
+            const uint8_t *ptr = (const uint8_t *) m_mip.data();
+            size_t stride = m_channels_storage * sizeof(scalar_t<Storage_>);
+            for (uint32_t l = 1; l < m_level_count; ++l) {
+                jit_tex_memcpy_d2t(ptr, m_handle, l);
+                ptr += level_texels(l) * stride;
+            }
+        }
+    }
+
+    /// Regenerate the MIP pyramid
+    void build_mipmap(const Storage &base) {
+        if (m_level_count <= 1)
+            return;
+
+        // Resolutions with the width along ``x`` (fastest axis)
+        size_t res[Dimension];
+        for (size_t i = 0; i < Dimension; ++i)
+            res[Dimension - 1 - i] = m_shape[i];
+
+        if constexpr (is_jit_v<Storage_>) {
+            m_mip = steal_storage(ad_tex_mipmap_from_base(
+                (uint32_t) Dimension, (uint32_t) m_channels_storage,
+                (int) m_srgb, combined_index(base), res, m_level_count));
+        } else {
+            using T = scalar_t<Storage_>;
+            m_mip = empty<Storage>((size_t) m_mip_texels * m_channels_storage);
+            detail::tex_mipmap_from_base((const T *) base.data(), (T *) m_mip.data(),
+                                         res, (uint32_t) Dimension,
+                                         (uint32_t) m_channels_storage,
+                                         m_level_count, m_srgb);
+        }
+    }
+
     /// Helper function to reverse the tensor (\ref Texture.m_padded_tensor) shape
     void reverse_tensor_shape(size_t *output, bool include_channels) const {
         for (size_t i = 0; i < Dimension; ++i)
@@ -1131,13 +1387,61 @@ private:
         FilterMode filter_mode;
         WrapMode wrap_mode;
 
+        // Pyramid level binding (see the ``Ops`` contract in texture_impl.h)
+        detail::TexLevel<Int, UInt> lvl;
+
         Float lit(double v) const { return Value(v); }
-        Float res_f(uint32_t k) const { return Value(tex->m_resolution_opaque[k]); }
-        Int res_i(uint32_t k) const { return Int(tex->m_resolution_opaque[k]); }
+        Int lit_i(int32_t v) const { return Int(v); }
+        Float res_f(uint32_t k) const { return Value(res_i(k)); }
+        Int res_i(uint32_t k) const {
+            Int r = Int(tex->m_resolution_opaque[k]);
+            if (lvl.bound)
+                r = maximum(r >> lvl.level, Int(1));
+            return r;
+        }
         Float to_float(const Int &i) const { return Value(i); }
-        Int idiv(const Int &a, uint32_t k) const { return tex->m_inv_resolution[k](a); }
+        Int idiv(const Int &a, uint32_t k) const {
+            if (lvl.bound)
+                return detail::tex_idiv_dynamic(*this, lvl.div[k][0],
+                                                lvl.div[k][1], a);
+            return tex->m_inv_resolution[k](a);
+        }
         void gather(const UInt &idx, Float *out) const {
-            tex->template gather_texel<CChannels>(idx, active, out);
+            if (!lvl.bound) {
+                tex->template gather_texel<CChannels>(idx, active, out);
+                return;
+            }
+            UInt mip_idx = idx + lvl.offset;
+            if (lvl.includes_base) {
+                // The bound level may be the base level, whose texels live in
+                // the regular texture storage rather than the pyramid buffer
+                Mask is_base = lvl.level == 0;
+                tex->template gather_texel<CChannels>(idx, active && is_base, out);
+
+                uint32_t n = this->channels_out;
+                Float *tmp_mem = (Float *) alloca(sizeof(Float) * n);
+                detail::tex_scratch<Float> tmp(tmp_mem, n);
+                tex->template gather_texel<CChannels>(
+                    tex->m_mip, mip_idx, active && !is_base, tmp.data());
+                for (uint32_t ch = 0; ch < n; ++ch)
+                    out[ch] = select(is_base, out[ch], tmp[ch]);
+            } else {
+                tex->template gather_texel<CChannels>(tex->m_mip, mip_idx,
+                                                      active, out);
+            }
+        }
+
+        /// Load the constant record of MIP level ``l``
+        void mip_record(const Int &l, Int *rec) const {
+            auto r = drjit::gather<Array<Int, MipStride>>(tex->m_mip_table, UInt(l));
+            for (uint32_t j = 0; j < MipStride; ++j)
+                rec[j] = r[j];
+        }
+
+        template <typename Body>
+        void sum_loop(const Int &n, Float *state, uint32_t /* n_state */,
+                      uint32_t n_scratch, Body body) const {
+            detail::tex_sum_loop(*this, n, state, n_scratch, body);
         }
     };
 
@@ -1146,12 +1450,14 @@ private:
     ScalarOps<Value, CChannels> scalar_ops(mask_t<Value> active) const {
         if constexpr (!is_array_v<mask_t<Value>>)
             active = true;
-        if constexpr (CChannels != 0)
-            return ScalarOps<Value, CChannels>{ {}, this, active, m_filter_mode,
-                                                m_wrap_mode };
-        else
-            return ScalarOps<Value, 0>{ { (uint32_t) m_channels }, this, active,
-                                        m_filter_mode, m_wrap_mode };
+        ScalarOps<Value, CChannels> ops;
+        if constexpr (CChannels == 0)
+            ops.channels_out = (uint32_t) m_channels;
+        ops.tex = this;
+        ops.active = active;
+        ops.filter_mode = m_filter_mode;
+        ops.wrap_mode = m_wrap_mode;
+        return ops;
     }
 
     // -- Type-erased marshalling helpers backing the JIT ``ad_tex_*`` calls --
@@ -1382,6 +1688,24 @@ private:
     /// recomputed by \ref refresh()
     mutable bool m_tensor_dirty = false;
 
+    /// MIP level selection mode of filtered lookups
+    MipFilter m_mip_filter = MipFilter::Disabled;
+
+    /// Bound on the number of anisotropic taps of \ref eval_filtered()
+    uint32_t m_max_aniso = 1;
+
+    /// Number of MIP pyramid levels including the base (1 = no MIP mapping)
+    uint32_t m_level_count = 1;
+
+    /// Total texel count of the pyramid levels >= 1
+    uint32_t m_mip_texels = 0;
+
+    /// Channel-padded texels of the pyramid levels >= 1, stored back to back
+    Storage m_mip;
+
+    /// Per-level constants for the MIP lookup from \ref detail::tex_mip_table()
+    Int32Buffer m_mip_table;
+
 public:
     void
     traverse_1_cb_ro(void *payload,
@@ -1393,7 +1717,7 @@ public:
             return;
 
         DRJIT_MAP(DR_TRAVERSE_MEMBER_RO, m_padded_tensor, m_tensor,
-                  m_resolution_opaque, m_inv_resolution);
+                  m_resolution_opaque, m_inv_resolution, m_mip, m_mip_table);
         if constexpr (HasGPUTexture) {
             uint32_t n_indices = tex_n_indices();
             uint32_t *indices = (uint32_t *) alloca(sizeof(uint32_t) * n_indices);
@@ -1411,7 +1735,7 @@ public:
             return;
 
         DRJIT_MAP(DR_TRAVERSE_MEMBER_RW, m_padded_tensor, m_tensor,
-                  m_resolution_opaque, m_inv_resolution);
+                  m_resolution_opaque, m_inv_resolution, m_mip, m_mip_table);
         if constexpr (HasGPUTexture) {
             uint32_t n_indices = tex_n_indices();
             uint32_t *indices = (uint32_t *) alloca(sizeof(uint32_t) * n_indices);

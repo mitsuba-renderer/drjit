@@ -69,6 +69,36 @@ somewhat higher cost.
     point. You may, e.g., want to use a 32-bit position to query a 16-bit
     texture to avoid a loss of accuracy.
 
+MIP-mapped filtering
+--------------------
+
+Textures constructed with a ``mip_filter`` additionally maintain a sequence of
+progressively downscaled copies of the texture known as a *MIP pyramid*.
+
+.. code-block:: python
+
+   tex = Texture2f(tensor, mip_filter=dr.MipFilter.Linear, max_aniso=8)
+
+Two lookup methods consume this pyramid:
+
+- :py:func:`.eval_lod() <drjit.auto.Texture2f.eval_lod>` samples the texture at
+  an explicit *level of detail*, where a fractional level blends the two
+  enclosing pyramid levels.
+
+- :py:func:`.eval_filtered() <drjit.auto.Texture2f.eval_filtered>` implements
+  the standard anisotropic filtering scheme of graphics APIs. Given the
+  derivatives of the texture coordinate with respect to the two screen
+  dimensions, it selects a level of detail so that up to ``max_aniso``
+  trilinear taps along the major axis of the pixel footprint cover it without
+  aliasing.
+
+  .. code-block:: python
+
+     out = tex.eval_filtered(pos, ddx, ddy)
+
+Both methods are differentiable with respect to the query position and the
+texture data (including the pyramid generation).
+
 Hardware acceleration
 ---------------------
 

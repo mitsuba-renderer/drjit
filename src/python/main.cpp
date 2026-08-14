@@ -178,6 +178,11 @@ NB_MODULE(_drjit_ext, m_) {
         .value("Clamp", dr::WrapMode::Clamp)
         .value("Mirror", dr::WrapMode::Mirror);
 
+    nb::enum_<dr::MipFilter>(m, "MipFilter")
+        .value("Disabled", dr::MipFilter::Disabled)
+        .value("Nearest", dr::MipFilter::Nearest)
+        .value("Linear", dr::MipFilter::Linear);
+
     m.def("has_backend", &jit_has_backend, doc_has_backend);
 
     m.def("sync_thread", &jit_sync_thread, doc_sync_thread, nb::call_guard<nb::gil_scoped_release>())
