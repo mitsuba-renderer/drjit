@@ -213,25 +213,32 @@ void bind_texture(nb::module_ &m, const char *name) {
                          size_t channels, bool use_accel,
                          dr::FilterMode filter_mode, dr::WrapMode wrap_mode,
                          bool writable, bool srgb, dr::MipFilter mip_filter,
-                         size_t max_aniso) {
+                         size_t max_aniso,
+                         dr::MipBasis mip_basis) {
                  new (t) Tex(shape.data(), channels, use_accel, filter_mode,
-                             wrap_mode, writable, srgb, mip_filter, max_aniso); },
+                             wrap_mode, writable, srgb, mip_filter, max_aniso,
+                             mip_basis); },
              "shape"_a, "channels"_a, "use_accel"_a = true,
              "filter_mode"_a = dr::FilterMode::Linear,
              "wrap_mode"_a = dr::WrapMode::Clamp,
              "writable"_a = false, "srgb"_a = false,
              "mip_filter"_a = dr::MipFilter::Disabled,
              "max_aniso"_a = 8,
+             "mip_basis"_a = dr::MipBasis::Standard,
              doc_Texture_init)
         .def(nb::init<const typename Tex::TensorXf &, bool, bool, dr::FilterMode,
-                      dr::WrapMode, bool, dr::MipFilter, size_t>(),
+                      dr::WrapMode, bool, dr::MipFilter, size_t,
+                      dr::MipBasis>(),
              "tensor"_a, "use_accel"_a = true, "migrate"_a = true,
              "filter_mode"_a = dr::FilterMode::Linear,
              "wrap_mode"_a = dr::WrapMode::Clamp, "srgb"_a = false,
              "mip_filter"_a = dr::MipFilter::Disabled, "max_aniso"_a = 8,
+             "mip_basis"_a = dr::MipBasis::Standard,
              doc_Texture_init_tensor)
         .def("set_value",
-             &Tex::template set_value<const typename Tex::Storage &>,
+             [](Tex &t, const typename Tex::Storage &value, bool migrate) {
+                 t.set_value(value, migrate);
+             },
              "value"_a, "migrate"_a = false, doc_Texture_set_value)
         .def("set_value_with_event",
              [](Tex &t, const typename Tex::Storage &value,
@@ -240,17 +247,34 @@ void bind_texture(nb::module_ &m, const char *name) {
                  event.record();
              },
              "value"_a, "event"_a, "migrate"_a = false, doc_Texture_set_value_2)
-        .def("set_tensor", &Tex::template set_tensor<const typename Tex::TensorXf &>, "tensor"_a,  "migrate"_a = false, doc_Texture_set_tensor)
+        .def("set_tensor",
+             [](Tex &t, const typename Tex::TensorXf &tensor, bool migrate) {
+                 t.set_tensor(tensor, migrate);
+             },
+             "tensor"_a, "migrate"_a = false, doc_Texture_set_tensor)
+        .def("set_tensor",
+             [](Tex &t, size_t level, const typename Tex::TensorXf &tensor,
+                bool rebuild) {
+                 t.set_tensor(level, tensor, rebuild);
+             },
+             "level"_a, "tensor"_a, "rebuild"_a = true,
+             doc_Texture_set_tensor_level)
         .def("update_inplace", &Tex::update_inplace, "migrate"_a = false, doc_Texture_update_inplace)
         .def("value", &Tex::value, nb::rv_policy::reference_internal, doc_Texture_value)
         .def("tensor",
              nb::overload_cast<>(&Tex::tensor, nb::const_),
              nb::rv_policy::reference_internal, doc_Texture_tensor)
+        .def("tensor",
+             nb::overload_cast<size_t>(&Tex::tensor),
+             "level"_a, nb::rv_policy::reference_internal,
+             doc_Texture_tensor_level)
         .def("filter_mode", &Tex::filter_mode, doc_Texture_filter_mode)
         .def("wrap_mode", &Tex::wrap_mode, doc_Texture_wrap_mode)
         .def("mip_filter", &Tex::mip_filter, doc_Texture_mip_filter)
         .def("mip_levels", &Tex::mip_levels, doc_Texture_mip_levels)
         .def("max_aniso", &Tex::max_aniso, doc_Texture_max_aniso)
+        .def("mip_basis", &Tex::mip_basis,
+             doc_Texture_mip_basis)
         .def("wrap", &tex_wrap<Type, Dimension, Tex>, "pos"_a,
              nb::sig("def wrap(self, pos: drjit.AnyArray) -> drjit.AnyArray"),
              doc_Texture_wrap)

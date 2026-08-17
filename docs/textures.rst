@@ -69,6 +69,8 @@ somewhat higher cost.
     point. You may, e.g., want to use a 32-bit position to query a 16-bit
     texture to avoid a loss of accuracy.
 
+.. _texture_mipmap:
+
 MIP-mapped filtering
 --------------------
 
@@ -78,6 +80,27 @@ progressively downscaled copies of the texture known as a *MIP pyramid*.
 .. code-block:: python
 
    tex = Texture2f(tensor, mip_filter=dr.MipFilter.Linear, max_aniso=8)
+
+The ``mip_filter`` parameter (see :py:class:`dr.MipFilter <MipFilter>`) chooses
+how a filtered lookup turns a continuous level of detail into a sample of the
+pyramid:
+
+- ``MipFilter.Disabled`` is the default and omits the pyramid entirely. The
+  filtered lookups below then degrade to an ordinary base level
+  :py:func:`.eval() <drjit.auto.Texture2f.eval>`.
+
+- ``MipFilter.Nearest`` rounds to the closest level. This is the cheaper
+  option, but the level transitions tend to be visible.
+
+- ``MipFilter.Linear`` blends the two enclosing levels, which removes those
+  transitions at the cost of a second lookup.
+
+The ``max_aniso`` parameter bounds the number of taps of an anisotropic lookup
+and may range from 1 (isotropic filtering) to the hardware limit of 16.
+
+Calling :py:func:`.set_value() <drjit.auto.Texture2f.set_value>` or
+:py:func:`.set_tensor() <drjit.auto.Texture2f.set_tensor>` on an existing
+MIP-mapped texture rebuilds the pyramid.
 
 Two lookup methods consume this pyramid:
 
@@ -96,8 +119,71 @@ Two lookup methods consume this pyramid:
 
      out = tex.eval_filtered(pos, ddx, ddy)
 
-Both methods are differentiable with respect to the query position and the
-texture data (including the pyramid generation).
+Both methods are differentiable with respect to the query position and texture
+data, which includes derivative propagation through the MIP pyramid
+construction.
+
+.. _texture_laplacian:
+
+Laplacian basis
+---------------
+
+MIP-mapped textures can optionally adopt a *Laplacian pyramid* basis following
+the paper `Practical Inverse Rendering of Textured and Translucent Appearance
+<https://doi.org/10.1145/3730855>`__ by Weier et al. This feature targets
+workflows involving gradient-based optimization of textures with filtered
+texture lookups.
+
+In textures constructed with ``mip_basis=dr.MipBasis.Laplacian``, the
+authoritative representation is no longer the base image but a set of per-level
+coefficient tensors. The MIP pyramid uploaded to the GPU is then derived from
+these tensors by repeated upsampling and summation.
+
+.. code-block:: python
+
+   tex = Texture2f(tensor, migrate=False, mip_filter=dr.MipFilter.Linear,
+                   mip_basis=dr.MipBasis.Laplacian)
+
+This basis requires a MIP-mapped texture with floating-point storage on a JIT
+backend. The ``migrate=False`` argument is needed because the coefficient
+tensors must stay in ordinary memory (see :ref:`migration <texture_migration>`
+below).
+
+The coefficients form a coarse-to-fine hierarchy. The coarsest level determines
+the overall appearance of the texture, and each finer level adds increasingly
+localized detail. An adaptive optimizer such as Adam maintains a separate step
+size per level, which turns the decomposition into a multiscale preconditioner.
+
+The coefficient tensors are exposed through level-indexed accessor and setter
+overloads. A typical optimization loop registers them with an optimizer, writes
+the updated values back, and rebuilds the sampled pyramid once per iteration
+via :py:func:`.update_inplace() <drjit.auto.Texture2f.update_inplace>`:
+
+.. code-block:: python
+
+   opt = Adam(lr=1e-2)
+   for l in range(tex.mip_levels()):
+       opt[f'level_{l}'] = tex.tensor(l)
+
+   for it in range(n_iterations):
+       for l in range(tex.mip_levels()):
+           tex.set_tensor(l, opt[f'level_{l}'], rebuild=False)
+       tex.update_inplace()
+       loss = objective(tex.eval_filtered(...))
+       dr.backward(loss)
+       opt.step()
+
+With ``rebuild=False``, the assignment cheaply rebinds the coefficient tensor,
+and the :py:func:`.update_inplace() <drjit.auto.Texture2f.update_inplace>` call
+at the end synthesizes the pyramid once for all levels. The default
+``rebuild=True`` instead synthesizes it after every assignment, which is
+convenient when changing a single level but wasteful in a loop like the one
+above.
+
+Assigning the high-resolution base texture via :py:func:`.set_tensor()
+<drjit.auto.Texture2f.set_tensor>` or :py:func:`.set_value()
+<drjit.auto.Texture2f.set_value>` is also supported and decomposes the image
+into the Laplacian representation.
 
 Hardware acceleration
 ---------------------
@@ -123,6 +209,8 @@ to perform sampling
     fractional value for storing the *weights* used for linear interpolation. See
     the `CUDA programming guide <https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#linear-filtering>`_
     for more details.
+
+.. _texture_migration:
 
 Migration
 ^^^^^^^^^

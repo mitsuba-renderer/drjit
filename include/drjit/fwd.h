@@ -289,4 +289,15 @@ enum class MipFilter : uint32_t {
     Linear = 2    /// Blend between the two nearest MIP levels
 };
 
+/// Determines the basis representation of MIP-mapped textures
+enum class MipBasis : uint32_t {
+    /// Level 0 stores the texture image. Coarser levels are automatically
+    /// derived using a 2x2 box filter and are read-only.
+    Standard = 0,
+
+    /// Levels store the coefficients of a Laplacian decomposition and
+    /// can be modified. The MIP pyramid is automatically derived.
+    Laplacian = 1
+};
+
 NAMESPACE_END(drjit)

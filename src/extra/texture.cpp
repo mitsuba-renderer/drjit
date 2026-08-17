@@ -442,6 +442,7 @@ void ad_tex_eval(VarType query_type, uint32_t dim, uint32_t channels_stored,
 namespace {
 
 using U32 = GenericArray<uint32_t>;
+using I32 = GenericArray<int32_t>;
 
 /// Decompose the flat texel index ``o`` into per-dimension coordinates
 /// (fastest-varying axis first)
@@ -461,14 +462,102 @@ static void tex_unpack_coords(const U32 &o, const size_t *res, uint32_t dim,
     }
 }
 
-/// 2x2 box downsampling from ``prev_res`` to ``res``. ``prev`` stores
-/// ``stride`` interleaved channels per texel; the result is an unevaluated
-/// ``out_type`` expression holding the ``res`` level in the same layout,
-/// accumulated in ``accum_type``. Odd input resolutions clamp the last tap
-/// onto the boundary texel. When ``unorm8`` is set, texels are decoded from
-/// 8-bit normalized (optionally sRGB) form before filtering and re-encoded
-/// afterwards; every fourth channel (alpha) bypasses the sRGB transfer
-/// function.
+/**
+ * \brief Magnify a MIP level by a factor of 2 using bilinear interpolation
+ *
+ * This function is needed to both create and decompose the Laplacian MIP map
+ * representation. It provides the operator ``U`` of the analysis pass ``B_l =
+ * G_l - U(G_{l+1})`` and the synthesis pass ``G_l = B_l + U(G_{l+1})``.
+ *
+ * The implementation gathers directly from the texel array. Output texel ``f``
+ * maps to the continuous coarse-level position ``(f + 0.5) * r_coarse / r_fine
+ * - 0.5`` along each dimension, and the ``2^dim`` enclosing texels are combined
+ * with the corresponding bilinear weights. The mapping aligns the two grids at
+ * their texel centers, which produces weights of 3/4 and 1/4 per dimension when
+ * the resolution halves exactly. Taps that fall outside the coarse level are
+ * clamped to its bounds.
+ *
+ * The input ``coarse`` holds ``stride`` interleaved channels at resolution
+ * ``cres``. The return value is an unevaluated ``accum_type`` expression over
+ * ``n_texels(fres) * stride`` elements, where each element recovers its texel
+ * and channel from its own index.
+ */
+static Float tex_upsample_bilinear(JitBackend backend, VarType accum_type,
+                                   const Float &coarse, const size_t *cres,
+                                   const size_t *fres, uint32_t dim,
+                                   uint32_t stride) {
+    size_t n = fres[0] * fres[1] * fres[2];
+    Mask all = Mask::steal(jit_var_bool(backend, true));
+
+    U32 e = U32::steal(jit_var_counter(backend, n * stride)),
+        texel = e / stride, ch = e - texel * stride, coords[3];
+    tex_unpack_coords(texel, fres, dim, coords);
+
+    // Per-dimension tap indices and interpolation weights
+    U32 lo[3], hi[3];
+    Float t[3], u[3];
+    for (uint32_t k = 0; k < dim; ++k) {
+        double ratio = (double) cres[k] / (double) fres[k];
+        Float c = dr::fmadd(
+            to_query(coords[k].index(), accum_type),
+            query_scalar(backend, accum_type, ratio),
+            query_scalar(backend, accum_type, 0.5 * ratio - 0.5));
+        Int i0e = dr::floor2int<Int>(c);
+        t[k] = c - to_query(i0e.index_combined(), accum_type);
+        u[k] = query_scalar(backend, accum_type, 1.0) - t[k];
+
+        I32 i0 = I32::borrow(i0e.index());
+        int32_t top = (int32_t) cres[k] - 1;
+        lo[k] = U32(dr::clip(i0, 0, top));
+        hi[k] = U32(dr::clip(i0 + 1, 0, top));
+    }
+
+    Float acc = query_scalar(backend, accum_type, 0.0);
+    for (uint32_t corner = 0; corner < (1u << dim); ++corner) {
+        U32 idx = (corner & 1) ? hi[0] : lo[0];
+        Float w = (corner & 1) ? t[0] : u[0];
+        if (dim >= 2) {
+            idx = dr::fmadd(((corner >> 1) & 1) ? hi[1] : lo[1],
+                            (uint32_t) cres[0], idx);
+            w = w * (((corner >> 1) & 1) ? t[1] : u[1]);
+        }
+        if (dim == 3) {
+            idx = dr::fmadd(((corner >> 2) & 1) ? hi[2] : lo[2],
+                            (uint32_t) (cres[0] * cres[1]), idx);
+            w = w * (((corner >> 2) & 1) ? t[2] : u[2]);
+        }
+
+        U32 src = dr::fmadd(idx, stride, ch);
+        Float tap = Float::steal(ad_var_gather(coarse.index_combined(),
+                                               src.index(), all.index(),
+                                               ReduceMode::Auto));
+
+        acc = dr::fmadd(to_query(tap.index_combined(), accum_type), w, acc);
+    }
+
+    return acc;
+}
+
+/**
+ * \brief Shrink a MIP level by a factor of 2 using a box filter
+ *
+ * This is the reduction step of the pyramid construction. It generates the
+ * levels of an ordinary MIP map from a given base level, and it also builds
+ * the Gaussian pyramid that the Laplacian analysis pass differences.
+ *
+ * Each output texel averages the ``2^dim`` texels that cover it in ``prev``.
+ * When an input resolution is odd, the last tap along that axis is clamped
+ * onto the boundary texel.
+ *
+ * The average is accumulated in ``accum_type``. If ``unorm8`` is set, the
+ * texels are first decoded from their 8-bit normalized representation (and
+ * from sRGB when ``srgb`` is set), and the result is re-encoded afterwards.
+ * Every fourth channel holds alpha and bypasses the sRGB transfer function.
+ *
+ * The input ``prev`` holds ``stride`` interleaved channels at resolution
+ * ``prev_res``. The return value is an unevaluated ``out_type`` expression
+ * holding the ``res`` level in the same layout.
+ */
 static Float tex_downsample_box(JitBackend backend, VarType accum_type,
                                 VarType out_type, const Float &prev,
                                 const size_t *prev_res, const size_t *res,
@@ -604,6 +693,105 @@ uint64_t ad_tex_mipmap_from_base(uint32_t dim, uint32_t channels_stored, int srg
     }
 
     return mip.release();
+}
+
+void ad_tex_mipmap_from_laplacian(uint32_t dim, uint32_t channels,
+                                  uint32_t channels_stored,
+                                  const uint64_t *coef, uint32_t n_levels,
+                                  const size_t *res_in, uint64_t *out_base,
+                                  uint64_t *out_mip) {
+    JitBackend backend = jit_set_backend((uint32_t) coef[0]).backend;
+    VarType storage_type = jit_var_type((uint32_t) coef[0]);
+    VarType accum_type = storage_type == VarType::Float64 ? VarType::Float64
+                                                          : VarType::Float32;
+    uint32_t C = channels, Cs = channels_stored;
+
+    size_t *lres = (size_t *) alloca(sizeof(size_t) * 3 * n_levels);
+    tex_level_res(res_in, dim, n_levels, lres);
+
+    // Total texel count of the pyramid levels >= 1
+    size_t total = 0;
+    for (uint32_t l = 1; l < n_levels; ++l)
+        total += lres[3 * l] * lres[3 * l + 1] * lres[3 * l + 2];
+
+    Mask all = Mask::steal(jit_var_bool(backend, true));
+    Float mip;
+    if (n_levels > 1)
+        mip = Float::steal(
+            jit_var_undefined(backend, storage_type, total * Cs));
+
+    // Synthesize the Gaussian pyramid coarse to fine: G_{L-1} = B_{L-1},
+    // G_l = B_l + U(G_{l+1}), in storage precision with padded channels
+    Float prev;
+    size_t offset = total;
+    for (uint32_t l = n_levels; l-- > 0; ) {
+        size_t n_l = lres[3 * l] * lres[3 * l + 1] * lres[3 * l + 2];
+
+        // Coefficient level, padded to the storage layout
+        Float b = Float::borrow(coef[l]);
+        if (C != Cs)
+            b = Float::steal(ad_tex_repack(coef[l], (uint32_t) n_l, Cs, C));
+        b = to_query(b.index_combined(), accum_type);
+
+        Float g = b;
+        if (l != n_levels - 1)
+            g = b + tex_upsample_bilinear(backend, accum_type, prev,
+                                          lres + 3 * (l + 1), lres + 3 * l,
+                                          dim, Cs);
+
+        Float st = Float::steal(ad_var_cast(g.index_combined(), storage_type));
+        if (l > 0) {
+            // Append the level to the pyramid buffer
+            offset -= n_l;
+            U32 dst = U32::steal(jit_var_counter(backend, n_l * Cs)) +
+                      (uint32_t) (offset * Cs);
+            mip = Float::steal(ad_var_scatter(
+                mip.index_combined(), st.index_combined(), dst.index(),
+                all.index(), ReduceOp::Identity, ReduceMode::Permute));
+        }
+
+        // Materialize the level
+        jit_var_eval(st.index());
+        prev = st;
+    }
+
+    *out_base = prev.release();
+    *out_mip = n_levels > 1 ? mip.release() : 0;
+}
+
+void ad_tex_laplacian_from_base(uint32_t dim, uint32_t channels,
+                                uint64_t value, uint32_t n_levels,
+                                const size_t *res_in, uint64_t *out) {
+    JitBackend backend = jit_set_backend((uint32_t) value).backend;
+    VarType storage_type = jit_var_type((uint32_t) value);
+    VarType accum_type = storage_type == VarType::Float64 ? VarType::Float64
+                                                          : VarType::Float32;
+    uint32_t C = channels;
+
+    size_t *lres = (size_t *) alloca(sizeof(size_t) * 3 * n_levels);
+    tex_level_res(res_in, dim, n_levels, lres);
+
+    // Gaussian chain, ignoring any AD component of ``value``
+    std::unique_ptr<Float[]> g(new Float[n_levels]);
+    g[0] = Float::steal(
+        ad_var_cast((uint64_t) (uint32_t) value, accum_type));
+    for (uint32_t l = 1; l < n_levels; ++l) {
+        g[l] = tex_downsample_box(backend, accum_type, accum_type, g[l - 1],
+                                  lres + 3 * (l - 1), lres + 3 * l, dim, C,
+                                  /* unorm8 = */ false, /* srgb = */ false);
+        jit_var_eval(g[l].index());
+    }
+
+    // Coefficients: B_l = G_l - U(G_{l+1}), B_{L-1} = G_{L-1}
+    for (uint32_t l = 0; l < n_levels; ++l) {
+        Float b = g[l];
+        if (l + 1 < n_levels)
+            b = b - tex_upsample_bilinear(backend, accum_type, g[l + 1],
+                                          lres + 3 * (l + 1), lres + 3 * l,
+                                          dim, C);
+        out[l] = ad_var_cast(b.index_combined(), storage_type);
+        jit_var_schedule((uint32_t) out[l]);
+    }
 }
 
 void ad_tex_eval_lod(VarType query_type, uint32_t dim, uint32_t channels_stored,

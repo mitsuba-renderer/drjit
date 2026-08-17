@@ -183,6 +183,10 @@ NB_MODULE(_drjit_ext, m_) {
         .value("Nearest", dr::MipFilter::Nearest)
         .value("Linear", dr::MipFilter::Linear);
 
+    nb::enum_<dr::MipBasis>(m, "MipBasis")
+        .value("Standard", dr::MipBasis::Standard)
+        .value("Laplacian", dr::MipBasis::Laplacian);
+
     m.def("has_backend", &jit_has_backend, doc_has_backend);
 
     m.def("sync_thread", &jit_sync_thread, doc_sync_thread, nb::call_guard<nb::gil_scoped_release>())

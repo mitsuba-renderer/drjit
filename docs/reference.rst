@@ -673,6 +673,8 @@ enumerations provided here
 
 .. autoenum:: WrapMode
 .. autoenum:: FilterMode
+.. autoenum:: MipFilter
+.. autoenum:: MipBasis
 
 Low-level bits
 --------------

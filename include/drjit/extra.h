@@ -275,6 +275,41 @@ ad_tex_mipmap_from_base(uint32_t dimension, uint32_t channels_stored, int srgb,
                     uint64_t value, const size_t *res, uint32_t n_levels);
 
 /**
+ * \brief Build a MIP pyramid from a Laplacian-parameterized texture
+ *
+ * \c coef holds the indices of ``n_levels`` coefficient arrays (finest first
+ * with ``channels`` interleaved channels). The Gaussian pyramid is synthesized
+ * coarse-to-fine by factor-2 bilinear upsampling and summation.
+ *
+ * The function returns the base texture through \c out_base and the packed
+ * levels >= 1 through \c out_mip following the layout of \ref
+ * ad_tex_mipmap_from_base(). Both are padded to ``channels_stored`` channels. The
+ * output is differentiable with respect to all coefficients.
+ */
+extern DRJIT_EXTRA_EXPORT void
+ad_tex_mipmap_from_laplacian(uint32_t dimension, uint32_t channels,
+                             uint32_t channels_stored, const uint64_t *coef,
+                             uint32_t n_levels, const size_t *res,
+                             uint64_t *out_base, uint64_t *out_mip);
+
+/**
+ * \brief Decompose a base image into Laplacian pyramid coefficients
+ *
+ * This is the inverse of \ref ad_tex_mipmap_from_laplacian(): it builds the
+ * Gaussian chain of \c value (``channels`` interleaved channels) with the 2x2
+ * box filter and stores per-level differences against the upsampled
+ * next-coarser level.
+ *
+ * The function writes ``n_levels`` coefficient indices to \c out. The
+ * implementation (intentionally) does not propagate derivatives from ``value``
+ * to ``out``.
+ */
+extern DRJIT_EXTRA_EXPORT void
+ad_tex_laplacian_from_base(uint32_t dimension, uint32_t channels,
+                           uint64_t value, uint32_t n_levels,
+                           const size_t *res, uint64_t *out);
+
+/**
  * \brief Sample a MIP-mapped texture at an explicit level of detail
  *
  * See \ref ad_tex_eval for the shared parameters.

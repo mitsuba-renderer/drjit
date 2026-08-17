@@ -1793,3 +1793,184 @@ def test48_mip_accel_1d(t):
     for lod in [0.0, 1.0, 2.0, 3.0]:
         assert dr.allclose(hw.eval_lod(pos, lod)[0], sw.eval_lod(pos, lod)[0],
                            rtol=5e-3, atol=5e-3)
+
+
+@pytest.test_arrays("is_jit, float32, shape=(*)")
+def test49_laplacian_roundtrip(t):
+    # In Laplacian mode, set_tensor() decomposes the image into per-level
+    # coefficient tensors and tensor() returns the synthesized reconstruction.
+    # The analysis stores exactly what the synthesis adds back, so the round
+    # trip is exact up to floating point rounding, for any resolution.
+    mod = sys.modules[t.__module__]
+    TensorXf = getattr(mod, 'TensorXf')
+
+    for tex_name, shape in [('Texture1f', (8,)), ('Texture1f', (5,)),
+                            ('Texture2f', (8, 8)), ('Texture2f', (7, 5)),
+                            ('Texture3f', (4, 4, 4)), ('Texture3f', (3, 5, 2))]:
+        for channels in (1, 3):
+            TexType = getattr(mod, tex_name)
+            n = channels
+            for s in shape:
+                n *= s
+            tens = TensorXf(t(_test_grid(n, seed=9)), shape=(*shape, channels))
+            tex = TexType(tens, use_accel=False, migrate=False,
+                          mip_filter=dr.MipFilter.Linear,
+                          mip_basis=dr.MipBasis.Laplacian)
+            assert tex.mip_basis() == dr.MipBasis.Laplacian
+            assert dr.allclose(tex.tensor().array, tens.array, atol=1e-6)
+
+            # The coefficient tensors follow the per-level resolutions
+            for l in range(tex.mip_levels()):
+                expected = tuple(max(s >> l, 1) for s in shape) + (channels,)
+                assert tex.tensor(l).shape == expected
+
+
+@pytest.test_arrays("is_jit, float32, shape=(*)")
+def test50_laplacian_primal(t):
+    # After set_tensor() with the same image, the Base and Laplacian
+    # bases sample identical pyramids (the analysis inverts the
+    # synthesis level by level).
+    mod = sys.modules[t.__module__]
+    TexType = getattr(mod, 'Texture2f')
+    TensorXf = getattr(mod, 'TensorXf')
+    Array2f = getattr(mod, 'Array2f')
+
+    tens = TensorXf(t(_test_grid(8 * 8 * 2, seed=10)), shape=(8, 8, 2))
+    base = TexType(tens, use_accel=False, mip_filter=dr.MipFilter.Linear,
+                   max_aniso=4)
+    lap = TexType(tens, use_accel=False, migrate=False,
+                  mip_filter=dr.MipFilter.Linear, max_aniso=4,
+                  mip_basis=dr.MipBasis.Laplacian)
+
+    pos = Array2f(t(0.3, 0.62, 0.85, 0.13), t(0.4, 0.18, 0.77, 0.95))
+    for a, b in zip(base.eval(pos), lap.eval(pos)):
+        assert dr.allclose(a, b, atol=1e-6)
+    for lod in [0.0, 0.7, 1.6, 3.0]:
+        for a, b in zip(base.eval_lod(pos, lod), lap.eval_lod(pos, lod)):
+            assert dr.allclose(a, b, atol=1e-6)
+    ddx, ddy = Array2f(3 / 8, 0), Array2f(0, 1 / 8)
+    for a, b in zip(base.eval_filtered(pos, ddx, ddy),
+                    lap.eval_filtered(pos, ddx, ddy)):
+        assert dr.allclose(a, b, atol=1e-6)
+
+
+@pytest.test_arrays("is_diff, float32, shape=(*)")
+def test51_laplacian_grad(t):
+    # A lookup pinned to pyramid level k deposits gradient into the
+    # coefficients of level k and coarser ones only; a base-level lookup
+    # reaches every level. At levels >= 1, the position (1/8, 1/8) clamps
+    # onto texel (0, 0), whose coefficient receives a unit gradient; at the
+    # base level it sits between texel centers and spreads over four taps.
+    mod = sys.modules[t.__module__]
+    TexType = getattr(mod, 'Texture2f')
+    TensorXf = getattr(mod, 'TensorXf')
+    Array2f = getattr(mod, 'Array2f')
+
+    tens = TensorXf(t(_test_grid(64, seed=11)), shape=(8, 8, 1))
+    tex = TexType(tens, use_accel=False, migrate=False,
+                  mip_filter=dr.MipFilter.Linear,
+                  mip_basis=dr.MipBasis.Laplacian)
+    n_levels = tex.mip_levels()
+    assert n_levels == 4
+    for l in range(n_levels):
+        dr.enable_grad(tex.tensor(l))
+
+    for k in range(n_levels):
+        for l in range(n_levels):
+            dr.clear_grad(tex.tensor(l))
+        tex.update_inplace()
+        out = tex.eval_lod(Array2f(1 / 8, 1 / 8), float(k))
+        dr.backward(out[0])
+        for l in range(n_levels):
+            g = dr.grad(tex.tensor(l)).array
+            if l < k:
+                assert dr.all(g == 0)
+            else:
+                if l == k:
+                    assert dr.allclose(g[0], 1.0 if k > 0 else 0.25)
+                assert dr.sum(dr.abs(g))[0] > 0
+
+
+@pytest.test_arrays("is_jit, float32, shape=(*)")
+def test52_laplacian_validation(t):
+    # Unsupported configurations of the Laplacian basis raise
+    mod = sys.modules[t.__module__]
+    TexType = getattr(mod, 'Texture2f')
+    TensorXf = getattr(mod, 'TensorXf')
+    lap = dr.MipBasis.Laplacian
+
+    with pytest.raises(RuntimeError, match="requires a MIP-mapped"):
+        TexType([4, 4], 1, mip_basis=lap)
+
+    Tex8 = getattr(mod, 'Texture2f8u')
+    with pytest.raises(RuntimeError, match="floating-point storage"):
+        Tex8([4, 4], 1, mip_filter=dr.MipFilter.Linear, mip_basis=lap)
+
+    from drjit.scalar import Texture2f as ScalarTex
+    with pytest.raises(RuntimeError, match="JIT backend"):
+        ScalarTex([4, 4], 1, mip_filter=dr.MipFilter.Linear,
+                  mip_basis=lap)
+
+    tens = TensorXf(t(_test_grid(16, seed=12)), shape=(4, 4, 1))
+    with pytest.raises(RuntimeError, match="migration is not supported"):
+        TexType(tens, mip_filter=dr.MipFilter.Linear, mip_basis=lap)
+
+    tex = TexType(tens, migrate=False, mip_filter=dr.MipFilter.Linear,
+                  mip_basis=lap)
+    with pytest.raises(RuntimeError, match="migration is not supported"):
+        tex.update_inplace(migrate=True)
+    with pytest.raises(RuntimeError, match="out of bounds"):
+        tex.tensor(tex.mip_levels())
+    with pytest.raises(RuntimeError, match="shape mismatch"):
+        tex.set_tensor(0, TensorXf(dr.zeros(t, 4), shape=(2, 2, 1)))
+
+    base = TexType(tens, migrate=False, mip_filter=dr.MipFilter.Linear)
+    with pytest.raises(RuntimeError, match="Laplacian basis"):
+        base.tensor(0)
+
+
+@pytest.test_arrays("is_diff, float32, shape=(*)")
+def test53_laplacian_optimize(t):
+    # A few Adam steps on the coefficient tensors of a zero-initialized
+    # texture reduce an image loss
+    from drjit.opt import Adam
+    mod = sys.modules[t.__module__]
+    TexType = getattr(mod, 'Texture2f')
+    TensorXf = getattr(mod, 'TensorXf')
+    Array2f = getattr(mod, 'Array2f')
+    UInt32 = getattr(mod, 'UInt32')
+
+    target = t(_test_grid(64, seed=13))
+    tex = TexType([8, 8], 1, use_accel=False,
+                  mip_filter=dr.MipFilter.Linear,
+                  mip_basis=dr.MipBasis.Laplacian)
+
+    # The default rebuild=True takes effect immediately, while rebuild=False
+    # defers the synthesis to the next update_inplace()
+    coarsest = tex.mip_levels() - 1
+    half = TensorXf(dr.full(t, 0.5, 1), shape=(1, 1, 1))
+    tex.set_tensor(coarsest, half)
+    assert dr.allclose(tex.eval_lod(Array2f(0.5, 0.5), coarsest)[0], 0.5)
+    tex.set_tensor(coarsest, dr.zeros(TensorXf, (1, 1, 1)), rebuild=False)
+    assert dr.allclose(tex.eval_lod(Array2f(0.5, 0.5), coarsest)[0], 0.5)
+    tex.update_inplace()
+    assert dr.allclose(tex.eval_lod(Array2f(0.5, 0.5), coarsest)[0], 0.0)
+
+    opt = Adam(lr=0.05)
+    for l in range(tex.mip_levels()):
+        opt[f'level_{l}'] = tex.tensor(l)
+
+    idx = dr.arange(UInt32, 64)
+    pos = Array2f((t(idx % 8) + 0.5) / 8, (t(idx // 8) + 0.5) / 8)
+
+    losses = []
+    for it in range(50):
+        for l in range(tex.mip_levels()):
+            tex.set_tensor(l, opt[f'level_{l}'], rebuild=False)
+        tex.update_inplace()
+        out = tex.eval(pos)[0]
+        loss = dr.mean(dr.square(out - target))
+        dr.backward(loss)
+        opt.step()
+        losses.append(loss[0])
+    assert losses[-1] < 0.05 * losses[0]

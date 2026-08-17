@@ -7117,6 +7117,20 @@
     filtering, and values above the hardware limit of 16 raise an error.
     MIP-mapped textures cannot be ``writable``.
 
+    A MIP-mapped texture can additionally choose a ``mip_basis``. The
+    default ``drjit.MipBasis.Standard`` treats the base image as the
+    authoritative representation and derives the coarser levels from it, so
+    derivatives of filtered lookups flow into the base texels. With
+    ``drjit.MipBasis.Laplacian``, the texture instead stores one
+    coefficient tensor per pyramid level (see :py:func:`tensor()`), and the
+    sampled pyramid is reconstructed from them by upsampling and summation.
+    Derivatives of a lookup at level ``k`` then flow into the coefficients of
+    level ``k`` and all coarser ones, which makes this basis an
+    effective multiscale preconditioner for texture optimization. Laplacian
+    mode requires a MIP-mapped texture with floating-point storage on a JIT
+    backend and does not support migration (pass ``migrate=False`` when
+    constructing from a tensor).
+
 .. topic:: Texture_init_tensor
 
     Construct a new texture from a given tensor
@@ -7140,6 +7154,11 @@
 
     When ``migrate`` is set, the CUDA and Metal backends migrate the texture
     data into the GPU's native texture format to avoid redundant storage.
+
+    With ``drjit.MipBasis.Laplacian``, the array is first decomposed into
+    per-level coefficients, so a subsequent :py:func:`tensor()` reproduces it
+    up to floating point rounding. Migration is unavailable in that case and
+    raises an exception.
 
 .. topic:: Texture_set_value_2
 
@@ -7171,6 +7190,25 @@
     texture information is *fully* migrated to GPU texture memory to avoid
     redundant storage.
 
+    With ``drjit.MipBasis.Laplacian``, the tensor is first
+    decomposed into the per-level coefficient tensors (a detached analysis
+    step), and the sampled pyramid is then rebuilt from them. A subsequent
+    :py:func:`tensor()` therefore reproduces the input up to floating point
+    rounding.
+
+.. topic:: Texture_set_tensor_level
+
+    Overwrite the coefficient tensor of one pyramid level and rebuild the
+    sampled pyramid (Laplacian basis only)
+
+    The tensor shape must match the level. Resolution changes go through the
+    whole-image :py:func:`set_tensor()`.
+
+    Passing ``rebuild=False`` only rebinds the coefficient tensor, which
+    costs no computation; the sampled pyramid is then refreshed by a later
+    call to :py:func:`update_inplace()`. An optimization loop should assign
+    all levels this way and rebuild once per iteration.
+
 .. topic:: Texture_update_inplace
 
     Update the texture after applying an indirect update to its tensor
@@ -7184,7 +7222,14 @@
 
     When ``migrate`` is set to ``True`` on the CUDA and Metal backends, the
     texture information is *fully* migrated to GPU texture memory to avoid
-    redundant storage.
+    redundant storage. The Laplacian basis does not support migration and
+    raises an exception in that case.
+
+    With ``drjit.MipBasis.Laplacian``, the per-level coefficient
+    tensors (see :py:func:`tensor()`) are the authoritative state instead, and
+    this method rebuilds the sampled pyramid from their current contents. An
+    optimization loop should write the coefficient tensors in place and call
+    this method once per step.
 
 .. topic:: Texture_value
 
@@ -7202,6 +7247,15 @@
        query the migrated hardware texture. Changing the texture contents via
        :py:func:`set_tensor()`, :py:func:`write()`, etc., will also change
        this view, so be sure to evaluate beforehand.
+
+.. topic:: Texture_tensor_level
+
+    Return the coefficient tensor of one pyramid level (Laplacian basis
+    only)
+
+    The tensor has the resolution of pyramid level ``level`` and the number
+    of channels of the texture. Changes to it are only propagated to the
+    texture by a subsequent call to :py:func:`update_inplace()`.
 
 .. topic:: Texture_filter_mode
 
@@ -7296,6 +7350,10 @@
 .. topic:: Texture_max_aniso
 
     Return the anisotropic tap bound of :py:func:`eval_filtered()`
+
+.. topic:: Texture_mip_basis
+
+    Return the MIP basis of the texture
 
 .. topic:: Texture_eval_fetch
 
