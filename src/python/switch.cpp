@@ -245,8 +245,8 @@ nb::object dispatch_impl(nb::handle_t<dr::ArrayBase> inst,
             }
 
             nb::object self_o = nb::steal(NB_CALL(nb_type_put)(
-                state.type, nullptr, self, nb::rv_policy::reference, nullptr,
-                nullptr));
+                NB_CTX, state.type, nullptr, self, nb::rv_policy::reference,
+                nullptr, nullptr));
 
             nb::object result =
                 state.target_o(self_o, *state.args_o[0], **state.args_o[1]);

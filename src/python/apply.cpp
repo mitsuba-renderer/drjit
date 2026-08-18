@@ -927,17 +927,16 @@ nb::object transform(const char *op, TransformCallback &tc, nb::handle h) {
         } else if (tp.is(&PyTuple_Type)) {
             nb::tuple t = nb::borrow<nb::tuple>(h);
             size_t size = nb::len(t);
-            result = nb::steal(PyTuple_New(size));
-            if (!result.is_valid())
-                nb::raise_python_error();
+            nb::tuple_builder tb(size);
             for (size_t i = 0; i < size; ++i)
-                NB_TUPLE_SET_ITEM(result.ptr(), i,
-                                  transform(op, tc, t[i]).release().ptr());
+                tb.put(transform(op, tc, t[i]));
+            result = tb.commit();
         } else if (tp.is(&PyList_Type)) {
-            nb::list tmp;
-            for (nb::handle item : nb::borrow<nb::list>(h))
-                tmp.append(transform(op, tc, item));
-            result = std::move(tmp);
+            nb::list l = nb::borrow<nb::list>(h);
+            nb::list_builder lb(nb::len(l));
+            for (nb::handle item : l)
+                lb.put(transform(op, tc, item));
+            result = lb.commit();
         } else if (tp.is(&PyDict_Type)) {
             nb::dict tmp;
             for (auto [k, v] : nb::borrow<nb::dict>(h))
@@ -1051,15 +1050,11 @@ nb::object transform_pair(const char *op, TransformPairCallback &tc,
             if (len1 != len2)
                 nb::raise("incompatible input lengths (%zu and %zu).", len1, len2);
 
-            nb::object result = nb::steal(PyTuple_New(len1));
-            if (!result.is_valid())
-                nb::raise_python_error();
-
+            nb::tuple_builder result(len1);
             for (size_t i = 0; i < len1; ++i)
-                NB_TUPLE_SET_ITEM(result.ptr(), i,
-                                  transform_pair(op, tc, t1[i], t2[i]).release().ptr());
+                result.put(transform_pair(op, tc, t1[i], t2[i]));
 
-            return result;
+            return result.commit();
         } else if (tp1.is(&PyList_Type)) {
             nb::list l1 = nb::borrow<nb::list>(h1),
                      l2 = nb::borrow<nb::list>(h2);
@@ -1067,11 +1062,11 @@ nb::object transform_pair(const char *op, TransformPairCallback &tc,
             if (len1 != len2)
                 nb::raise("incompatible input lengths (%zu and %zu).", len1, len2);
 
-            nb::list result;
+            nb::list_builder result(len1);
             for (size_t i = 0; i < len1; ++i)
-                result.append(transform_pair(op, tc, l1[i], l2[i]));
+                result.put(transform_pair(op, tc, l1[i], l2[i]));
 
-            return std::move(result);
+            return result.commit();
         } else if (tp1.is(&PyDict_Type)) {
             nb::dict d1 = nb::borrow<nb::dict>(h1),
                      d2 = nb::borrow<nb::dict>(h2);

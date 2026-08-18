@@ -730,12 +730,12 @@ nb::object VariableTracker::restore(const dr::vector<dr::string> &labels,
         label = default_label;
         return m_impl->restore(label);
     } else {
-        nb::object result = nb::steal(PyTuple_New(labels.size()));
+        nb::tuple_builder result(labels.size());
         for (size_t i = 0; i < labels.size(); ++i) {
             label = labels[i];
-            NB_TUPLE_SET_ITEM(result.ptr(), i, m_impl->restore(label).release().ptr());
+            result.put(m_impl->restore(label));
         }
-        return result;
+        return result.commit();
     }
 }
 
@@ -747,12 +747,12 @@ nb::object VariableTracker::rebuild(const dr::vector<dr::string> &labels,
         label = default_label;
         return m_impl->rebuild(label).first;
     } else {
-        nb::object result = nb::steal(PyTuple_New(labels.size()));
+        nb::tuple_builder result(labels.size());
         for (size_t i = 0; i < labels.size(); ++i) {
             label = labels[i];
-            NB_TUPLE_SET_ITEM(result.ptr(), i, m_impl->rebuild(label).first.release().ptr());
+            result.put(m_impl->rebuild(label).first);
         }
-        return result;
+        return result.commit();
     }
 }
 
@@ -863,13 +863,14 @@ std::pair<nb::object, bool> VariableTracker::Impl::rebuild(dr::string &label) {
             }
         } else if (s.ndim > 1) {
             size_t size = size_valid(v, label, value, nb::len(value));
-            nb::list tmp;
+            nb::list_builder builder(size);
             for (size_t i = 0; i < size; ++i) {
                 ScopedAppendLabel guard(label, "[", i, "]");
                 auto [o, n] = rebuild(label);
-                tmp.append(o);
+                builder.put(std::move(o));
                 new_object |= n;
             }
+            nb::list tmp = builder.commit();
 
             if (new_object) {
                 if (mutate) {
@@ -895,13 +896,14 @@ std::pair<nb::object, bool> VariableTracker::Impl::rebuild(dr::string &label) {
         }
     } else if (tp.is(&PyTuple_Type) || tp.is(&PyList_Type)) {
         size_t size = size_valid(v, label, value, nb::len(value));
-        nb::list tmp;
+        nb::list_builder builder(size);
         for (size_t i = 0; i < size; ++i) {
             ScopedAppendLabel guard(label, "[", i, "]");
             auto [o, n] = rebuild(label);
-            tmp.append(o);
+            builder.put(std::move(o));
             new_object |= n;
         }
+        nb::list tmp = builder.commit();
         if (new_object) {
             bool is_list = tp.is(&PyList_Type);
             if (mutate && is_list) {
@@ -930,15 +932,15 @@ std::pair<nb::object, bool> VariableTracker::Impl::rebuild(dr::string &label) {
         }
     } else if (tp.is(coop_vector_type)) {
         size_t size = size_valid(v, label, value, nb::len(value));
-        nb::list tmp;
+        nb::list_builder builder(size);
 
         for (size_t i = 0; i < size; ++i) {
             ScopedAppendLabel guard(label, "[", i, "]");
             auto [o, n] = rebuild(label);
-            tmp.append(o);
+            builder.put(std::move(o));
         }
 
-        value = nb::cast(CoopVec(tmp));
+        value = nb::cast(CoopVec(builder.commit()));
         new_object = true;
     } else if (nb::dict ds = get_drjit_struct(tp); ds.is_valid()) {
         nb::object tmp = tp();

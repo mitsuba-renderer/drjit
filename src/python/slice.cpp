@@ -74,7 +74,6 @@ slice_index(const nb::type_object_t<ArrayBase> &dtype,
 
     size_t shape_offset = 0;
     size_t size_out = 1;
-    nb::list shape_out;
 
     // Preallocate memory for computed slicing components
     size_t shape_len = nb::len(shape),
@@ -189,8 +188,6 @@ slice_index(const nb::type_object_t<ArrayBase> &dtype,
     // Build output shape following PyTorch/NumPy advanced indexing
     // rules: consecutive advanced indices produce a single dimension
     // in place; non-consecutive ones move it to the front.
-    shape_out.clear();
-
     bool has_advanced = false, consecutive = true, in_gap = false;
     for (const auto &c : components) {
         if (c.type == Component::Advanced) {
@@ -203,28 +200,35 @@ slice_index(const nb::type_object_t<ArrayBase> &dtype,
         }
     }
 
+    // Advanced indices collapse into a single output dimension
+    size_t shape_out_len = (size_t) has_advanced;
+    for (const auto &c : components)
+        shape_out_len += c.type == Component::None || c.type == Component::Slice;
+
+    nb::tuple_builder shape_builder(shape_out_len);
     bool advanced_added = false;
     if (has_advanced && !consecutive) {
         advanced_added = true;
-        shape_out.append(advanced_size);
+        shape_builder.put(advanced_size);
     }
     for (const auto &c : components) {
         if (c.type == Component::None)
-            shape_out.append(1);
+            shape_builder.put(1);
         else if (c.type == Component::Slice)
-            shape_out.append(c.slice_size);
+            shape_builder.put(c.slice_size);
         else if (c.type == Component::Advanced && !advanced_added) {
             advanced_added = true;
-            shape_out.append(advanced_size);
+            shape_builder.put(advanced_size);
         }
     }
+    nb::tuple shape_out = shape_builder.commit();
 
     size_out = 1;
     for (nb::handle h : shape_out)
         size_out *= nb::cast<size_t>(h);
 
     if (size_out == 0)
-        return { nb::tuple(shape_out), dtype() };
+        return { shape_out, dtype() };
 
     // A "passthrough" axis is a full `:` slice over a dim of its full
     // input size, e.g. axes 1 and 2 in `t[a, :, :]`. Such an axis is the
@@ -350,7 +354,7 @@ slice_index(const nb::type_object_t<ArrayBase> &dtype,
         in_stride *= c.size;
     }
 
-    return { nb::tuple(shape_out), index_out };
+    return { shape_out, index_out };
 }
 
 PyObject *mp_subscript(PyObject *self, PyObject *key) noexcept {

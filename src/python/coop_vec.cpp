@@ -130,16 +130,16 @@ nb::list CoopVec::expand_to_list() const {
     uint64_t *tmp = (uint64_t *) alloca(m_size * sizeof(uint64_t));
     ad_coop_vec_unpack(m_index, m_size, tmp);
 
-    nb::list result;
+    nb::list_builder result(m_size);
     const ArraySupplement &s = supp(m_type);
     for (uint32_t i = 0; i < m_size; ++i) {
         nb::object o = nb::inst_alloc(m_type);
         s.init_index(tmp[i], inst_ptr(o));
         ad_var_dec_ref(tmp[i]);
         nb::inst_mark_ready(o);
-        result.append(std::move(o));
+        result.put(std::move(o));
     }
-    return result;
+    return result.commit();
 }
 
 /// Unpack a cooperative vector into a Dr.Jit array type like ArrayXf
@@ -192,12 +192,12 @@ static nb::object coop_vec_binary_op(nb::handle h0, nb::handle h1) {
         if (ptr[i])
             continue;
 
-        nb::list args;
+        nb::tuple_builder args(c->m_size);
         nb::object oi = c->m_type(o[i]);
         for (uint32_t j = 0; j < c->m_size; ++j)
-            args.append(oi);
+            args.put(oi);
 
-        o[i] = nb::cast(CoopVec(nb::borrow<nb::args>(nb::tuple(args))));
+        o[i] = nb::cast(CoopVec(nb::borrow<nb::args>(args.commit())));
         if (!nb::try_cast(o[i], ptr[i], false))
             nb::raise("CoopVec::binary_op(): internal error");
     }
@@ -232,11 +232,11 @@ static nb::object coop_vec_ternary_op(nb::handle h0, nb::handle h1,
         if (ptr[i])
             continue;
 
-        nb::list args;
+        nb::tuple_builder args(c->m_size);
         for (uint32_t j = 0; j < c->m_size; ++j)
-            args.append(c->m_type(o[i]));
+            args.put(c->m_type(o[i]));
 
-        o[i] = nb::cast(CoopVec(nb::borrow<nb::args>(nb::tuple(args))));
+        o[i] = nb::cast(CoopVec(nb::borrow<nb::args>(args.commit())));
         if (!nb::try_cast(o[i], ptr[i], false))
             nb::raise("CoopVec::ternary_op(): internal error");
     }
@@ -438,16 +438,16 @@ static nb::object repack_impl(const char *name, MatrixLayout layout,
         return result;
     } else if (arg_tp.is(&PyTuple_Type)) {
         nb::tuple t = nb::borrow<nb::tuple>(arg);
-        nb::list result;
+        nb::tuple_builder result(nb::len(t));
         for (nb::handle h : t)
-            result.append(repack_impl(name, layout, h, offset, items));
-        return nb::tuple(result);
+            result.put(repack_impl(name, layout, h, offset, items));
+        return result.commit();
     } else if (arg_tp.is(&PyList_Type)) {
         nb::list l = nb::borrow<nb::list>(arg);
-        nb::list result;
+        nb::list_builder result(nb::len(l));
         for (nb::handle h : l)
-            result.append(repack_impl(name, layout, h, offset, items));
-        return std::move(result);
+            result.put(repack_impl(name, layout, h, offset, items));
+        return result.commit();
     } else if (arg_tp.is(&PyDict_Type)) {
         nb::dict d = nb::borrow<nb::dict>(arg);
         nb::dict result;
@@ -551,10 +551,11 @@ static nb::object repack(const char *name, const char *layout_str, nb::handle ar
 }
 
 static CoopVec coopvec_abs_workaround(nb::handle_t<CoopVec> &v) {
-    nb::list result;
-    for (nb::handle h: v)
-        result.append(nb::steal(PyNumber_Absolute(h.ptr())));
-    return CoopVec(result);
+    nb::list entries = nb::cast<const CoopVec &>(v).expand_to_list();
+    nb::list_builder result(nb::len(entries));
+    for (nb::handle h: entries)
+        result.put(nb::steal(PyNumber_Absolute(h.ptr())));
+    return CoopVec(result.commit());
 }
 
 void export_coop_vec(nb::module_ &m) {

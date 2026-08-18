@@ -100,7 +100,7 @@ void export_log(nb::module_ &m, nb::handle self) {
 
     // Switch from the Python logger to standard stderr output once the
     // extension module goes away
-    NB_CALL(keep_alive_ptr)(self.ptr(), (void *) log_callback,
+    NB_CALL(keep_alive_ptr)(NB_CTX, self.ptr(), (void *) log_callback,
                             [](void *) noexcept {
                                 jit_set_log_level_stderr(LogLevel::Warn);
                                 jit_set_log_level_callback(LogLevel::Disable,

@@ -134,11 +134,10 @@ static nb::object tex_eval_fetch(const Tex &texture,
     dr::mask_t<T> active = mask_or_true<T>(active_);
     auto to_tuple = [](auto &&corners) {
         constexpr size_t ResultSize = 1 << Dimension;
-        nb::object out = nb::steal(PyTuple_New((Py_ssize_t) ResultSize));
+        nb::tuple_builder out(ResultSize);
         for (size_t i = 0; i < ResultSize; ++i)
-            NB_TUPLE_SET_ITEM(out.ptr(), (Py_ssize_t) i,
-                              nb::cast(corners.entry(i)).release().ptr());
-        return out;
+            out.put(corners.entry(i));
+        return out.commit();
     };
     DR_TEX_DISPATCH(
         texture, to_tuple(texture.template eval_fetch<Output>(pos, active)));
@@ -151,10 +150,10 @@ static nb::object tex_eval_cubic_grad(const Tex &texture,
     dr::mask_t<T> active = mask_or_true<T>(active_);
     size_t channels = texture.shape()[Dimension];
     auto build = [&](auto &&res) {
-        nb::list gradient;
+        nb::list_builder gradient(channels);
         for (size_t ch = 0; ch < channels; ++ch)
-            gradient.append(nb::cast(res.gradient.entry(ch)));
-        return nb::make_tuple(nb::cast(res.value), gradient);
+            gradient.put(res.gradient.entry(ch));
+        return nb::make_tuple(nb::cast(res.value), gradient.commit());
     };
     DR_TEX_DISPATCH(
         texture, build(texture.template eval_cubic_grad<Output>(pos, active)));
@@ -167,12 +166,13 @@ static nb::object tex_eval_cubic_hessian(const Tex &texture,
     dr::mask_t<T> active = mask_or_true<T>(active_);
     size_t channels = texture.shape()[Dimension];
     auto build = [&](auto &&res) {
-        nb::list gradient, hessian;
+        nb::list_builder gradient(channels), hessian(channels);
         for (size_t ch = 0; ch < channels; ++ch) {
-            gradient.append(nb::cast(res.gradient.entry(ch)));
-            hessian.append(nb::cast(res.hessian.entry(ch)));
+            gradient.put(res.gradient.entry(ch));
+            hessian.put(res.hessian.entry(ch));
         }
-        return nb::make_tuple(nb::cast(res.value), gradient, hessian);
+        return nb::make_tuple(nb::cast(res.value), gradient.commit(),
+                              hessian.commit());
     };
     DR_TEX_DISPATCH(texture, build(texture.template eval_cubic_hessian<Output>(
                                  pos, active)));
@@ -292,10 +292,10 @@ void bind_texture(nb::module_ &m, const char *name) {
              doc_Texture_native_handle)
         .def("migrated", &Tex::migrated, doc_Texture_migrated)
         .def_prop_ro("shape", [](const Tex &t) {
-            PyObject *shape = PyTuple_New(t.ndim());
+            nb::tuple_builder shape(t.ndim());
             for (size_t i = 0; i < t.ndim(); ++i)
-                NB_TUPLE_SET_ITEM(shape, i, PyLong_FromLong((long) t.shape()[i]));
-            return nb::steal<nb::tuple>(shape);
+                shape.put(t.shape()[i]);
+            return shape.commit();
         }, doc_Texture_shape)
         .def("channel_count", &Tex::channel_count, doc_Texture_channel_count)
         .def_tex_eval(Float32)

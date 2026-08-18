@@ -189,7 +189,7 @@ nb::object prefix_reduce_seq(ReduceOp op, nb::handle h, int axis, bool exclusive
         nb::raise("for reductions over (non-Dr.Jit) iterable types, 'axis' must equal 0.");
 
     nb::object value = red.init();
-    nb::list result;
+    nb::list_builder builder(size);
 
     for (size_t i = 0; i < size; ++i) {
         nb::object o = nb::borrow(h[reverse ? size - 1 - i : i]);
@@ -200,11 +200,10 @@ nb::object prefix_reduce_seq(ReduceOp op, nb::handle h, int axis, bool exclusive
         else
             value = red.combine(value, o);
 
-        if (!result.is_valid())
-            nb::raise_python_error();
-
-        result.append(exclusive ? value_prev : value);
+        builder.put(exclusive ? value_prev : value);
     }
+
+    nb::list result = builder.commit();
 
     if (is_drjit_array(h))
         return h.type()(result);
@@ -276,8 +275,9 @@ nb::object reduce(uint32_t op, nb::handle h, nb::handle axis_, nb::handle mode, 
             // bounds-check, then deduplicate and sort. Sorting is
             // required by the recursive reduction below, which assumes
             // ascending order; dedup avoids reducing a remapped axis.
-            nb::list new_axis;
-            for (nb::handle h2 : nb::borrow<nb::tuple>(axis)) {
+            nb::tuple axis_t = nb::borrow<nb::tuple>(axis);
+            nb::list_builder new_axis(nb::len(axis_t));
+            for (nb::handle h2 : axis_t) {
                 int value;
                 if (!nb::try_cast(h2, value))
                     nb::raise("%s", axis_type_msg);
@@ -286,9 +286,9 @@ nb::object reduce(uint32_t op, nb::handle h, nb::handle axis_, nb::handle mode, 
                 if (value < 0 || value >= ndim)
                     nb::raise("out-of-bounds axis (got %i, ndim=%i)",
                               value, ndim);
-                new_axis.append(value);
+                new_axis.put(value);
             }
-            nb::list l = nb::list(nb::set(new_axis));
+            nb::list l = nb::list(nb::set(new_axis.commit()));
             l.sort();
             axis = nb::tuple(l);
             axis_len = (int) nb::len(axis);
@@ -481,10 +481,11 @@ nb::object reduce(uint32_t op, nb::handle h, nb::handle axis_, nb::handle mode, 
             // ones since their positions in ``result`` have shifted by
             // one. Axes are sorted ascending, so all entries beyond
             // index 0 are strictly greater than the reduced axis.
-            nb::list shifted;
-            for (size_t i = 1; i < nb::len(axis); ++i)
-                shifted.append(nb::int_(nb::cast<int>(axis[i]) - 1));
-            axis = nb::tuple(shifted);
+            size_t axis_size = nb::len(axis);
+            nb::tuple_builder shifted(axis_size - 1);
+            for (size_t i = 1; i < axis_size; ++i)
+                shifted.put(nb::cast<int>(axis[i]) - 1);
+            axis = shifted.commit();
         }
 
         // The remaining axes reduce partial counts, which requires a sum

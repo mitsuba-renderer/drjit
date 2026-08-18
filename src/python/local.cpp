@@ -278,19 +278,21 @@ static nb::object traverse(nb::handle tp, nb::handle v1, nb::handle v2,
                 raise_size_mismatch_error(tp, size, size2);
         }
 
-        if (ret)
-            result = nb::list();
+        nb::list_builder builder(ret ? size : 0);
 
         for (size_t i = 0; i < size; ++i) {
             nb::object v1_i = v1[i];
             nb::object v2_i = v2.is_valid() ? v2[i] : nb::object();
             nb::object r_i = traverse(v1_i.type(), v1_i, v2_i, ret, cb);
             if (ret)
-                nb::borrow<nb::list>(result).append(r_i);
+                builder.put(std::move(r_i));
         }
 
-        if (ret && tp.is(&PyTuple_Type))
-            result = nb::tuple(result);
+        if (ret) {
+            result = builder.commit();
+            if (tp.is(&PyTuple_Type))
+                result = nb::tuple(result);
+        }
     } else if (tp.is(&PyDict_Type)) {
         if (!v1.is_valid())
             raise_dynamic_size_error(tp);

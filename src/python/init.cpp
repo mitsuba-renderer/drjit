@@ -80,14 +80,10 @@ static int tp_init_array_impl(PyObject *self, PyObject *const *args,
             return 0;
         } else if (argc > 1) {
             // Initialize from argument list, e.g., ``Array3f(1, 2, 3)``
-            nb::object args_tuple = nb::steal(PyTuple_New(argc));
-            raise_if(!args_tuple.is_valid(),
-                     "Could not allocate argument tuple.");
-            for (Py_ssize_t i = 0; i < argc; ++i) {
-                PyObject *o = args[i];
-                Py_INCREF(o);
-                NB_TUPLE_SET_ITEM(args_tuple.ptr(), i, o);
-            }
+            nb::tuple_builder builder((size_t) argc);
+            for (Py_ssize_t i = 0; i < argc; ++i)
+                builder.put(nb::handle(args[i]));
+            nb::tuple args_tuple = builder.commit();
             raise_if(!array_init_from_seq(self, s, args_tuple.ptr()),
                      "Could not initialize array from argument list.");
             return 0;
@@ -418,7 +414,7 @@ int tp_init_array(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
 PyObject *tp_vectorcall_array(PyObject *type_o, PyObject *const *args,
                               size_t nargsf, PyObject *kwnames) noexcept {
     PyTypeObject *tp = (PyTypeObject *) type_o;
-    Py_ssize_t nargs = (Py_ssize_t) PyVectorcall_NARGS(nargsf);
+    Py_ssize_t nargs = NB_VECTORCALL_NARGS(nargsf);
 
     bool do_flip_axes = false;
     if (NB_UNLIKELY(kwnames)) {
@@ -455,7 +451,7 @@ PyObject *tp_vectorcall_array(PyObject *type_o, PyObject *const *args,
 PyObject *tp_vectorcall_tensor(PyObject *type_o, PyObject *const *args,
                                size_t nargsf, PyObject *kwnames) noexcept {
     PyTypeObject *tp = (PyTypeObject *) type_o;
-    Py_ssize_t nargs = (Py_ssize_t) PyVectorcall_NARGS(nargsf);
+    Py_ssize_t nargs = NB_VECTORCALL_NARGS(nargsf);
 
     PyObject *array = nullptr, *shape = nullptr, *flip_axes = nullptr;
 
@@ -634,7 +630,7 @@ static bool array_init_from_seq(PyObject *self, const ArraySupplement &s, PyObje
                 nb::object o = nb::steal(sq_item(seq, i));
 
                 void *ptr = nullptr;
-                if (!NB_CALL(nb_type_get)(&cpp_type, o.ptr(), 0, nullptr, &ptr)) {
+                if (!NB_CALL(nb_type_get)(NB_CTX, &cpp_type, o.ptr(), 0, nullptr, &ptr)) {
                     fail = true;
                     break;
                 }
@@ -709,7 +705,7 @@ nb::object import_ndarray(ArrayMeta m, PyObject *arg, vector<size_t> *shape_out,
     }
 
     nb::detail::ndarray_handle *th = NB_CALL(ndarray_import)(
-        arg, &conf, sizeof(conf), true, nullptr);
+        NB_CTX, arg, &conf, sizeof(conf), true, nullptr);
 
     if (!th && m.ndim > 1 && m.shape[m.ndim - 1] == DRJIT_DYNAMIC) {
         // Try conversion of scalar to vectorized representation. 'flip_axes'
@@ -717,7 +713,7 @@ nb::object import_ndarray(ArrayMeta m, PyObject *arg, vector<size_t> *shape_out,
         conf.ndim--;
         conf.shape += flip_axes;
         th = NB_CALL(ndarray_import)(
-            arg, &conf, sizeof(conf), true, nullptr);
+            NB_CTX, arg, &conf, sizeof(conf), true, nullptr);
         if (!th) {
             conf.ndim++;
             conf.shape -= flip_axes;

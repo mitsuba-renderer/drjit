@@ -5,7 +5,7 @@ endif()
 # The test modules must share the domain of the main extension (see the
 # equivalent logic in src/python/CMakeLists.txt)
 if (DRJIT_SPLIT_MODE)
-  set(DRJIT_NB_FLAGS BACKEND_MODULE nanobind_backend)
+  set(DRJIT_NB_FLAGS BACKEND_MODULE nanobind_backend NB_DOMAIN drjit)
 else()
   set(DRJIT_NB_FLAGS NB_DOMAIN drjit)
 endif()

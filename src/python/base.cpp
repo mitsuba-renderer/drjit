@@ -581,14 +581,12 @@ static nb::object tensor_transpose_mT(nb::handle_t<ArrayBase> h) {
     for (size_t i = 0; i < r - 2; ++i)
         batch *= shape[i];
 
-    nb::tuple shape_out = nb::steal<nb::tuple>(PyTuple_New((Py_ssize_t) r));
+    nb::tuple_builder shape_builder(r);
     for (size_t i = 0; i < r - 2; ++i)
-        NB_TUPLE_SET_ITEM(shape_out.ptr(), (Py_ssize_t) i,
-                         PyLong_FromSize_t(shape[i]));
-    NB_TUPLE_SET_ITEM(shape_out.ptr(), (Py_ssize_t) (r - 2),
-                     PyLong_FromSize_t(N));
-    NB_TUPLE_SET_ITEM(shape_out.ptr(), (Py_ssize_t) (r - 1),
-                     PyLong_FromSize_t(M));
+        shape_builder.put(shape[i]);
+    shape_builder.put(N);
+    shape_builder.put(M);
+    nb::tuple shape_out = shape_builder.commit();
 
     // Empty output: no underlying element, return a zero-valued tensor.
     // Also reached when either matrix dim is zero — the output is empty
@@ -954,17 +952,14 @@ nb::object matmul(nb::handle h0, nb::handle h1, bool At, bool Bt) {
                 {
                     size_t out_rank =
                         n + (a_is_1d ? 0 : 1) + (b_is_1d ? 0 : 1);
-                    nb::tuple t = nb::steal<nb::tuple>(
-                        PyTuple_New((Py_ssize_t) out_rank));
-                    Py_ssize_t pos = 0;
+                    nb::tuple_builder builder(out_rank);
                     for (size_t d = 0; d < n; ++d)
-                        NB_TUPLE_SET_ITEM(t.ptr(), pos++,
-                                         PyLong_FromSize_t((size_t) gb.extent[n - 1 - d]));
+                        builder.put((size_t) gb.extent[n - 1 - d]);
                     if (!a_is_1d)
-                        NB_TUPLE_SET_ITEM(t.ptr(), pos++, PyLong_FromSize_t(M));
+                        builder.put(M);
                     if (!b_is_1d)
-                        NB_TUPLE_SET_ITEM(t.ptr(), pos++, PyLong_FromSize_t(N));
-                    shape_out = std::move(t);
+                        builder.put(N);
+                    shape_out = builder.commit();
                 }
 
                 // Short-circuit cases that skip the kernel and return a

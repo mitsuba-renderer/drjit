@@ -105,7 +105,7 @@ nb::object bind(const ArrayBinding &b) {
     if (!b.value_type) {
         val_t_o = scalar_t_o;
     } else {
-        val_t_o = nb::borrow(NB_CALL(nb_type_lookup)(b.value_type));
+        val_t_o = nb::borrow(NB_CALL(nb_type_lookup)(NB_CTX, b.value_type));
         if (!val_t_o.is_valid())
             nb::raise(
                 "nanobind.detail.bind(\"%s\"): element type \"%s\" not found.",
@@ -228,14 +228,14 @@ nb::object bind(const ArrayBinding &b) {
     d.base_py = (PyTypeObject *) base_o.ptr();
 
     // Type was already bound, let's create an alias
-    nb::handle existing = NB_CALL(nb_type_lookup)(b.array_type);
+    nb::handle existing = NB_CALL(nb_type_lookup)(NB_CTX, b.array_type);
     if (existing) {
         nb::handle(d.scope).attr(name.c_str()) = existing;
         return nb::borrow(existing);
     }
 
     // Create a new type and update its supplemental information
-    nb::object tp = nb::steal(NB_CALL(nb_type_new)(&d));
+    nb::object tp = nb::steal(NB_CALL(nb_type_new)(NB_CTX, &d));
     ArraySupplement &s = nb::type_supplement<ArraySupplement>(tp);
     s = b;
 
@@ -275,7 +275,7 @@ nb::object bind(const ArrayBinding &b) {
         return false;
     };
 
-    NB_CALL(implicitly_convertible)(b.array_type, (void *) pred,
+    NB_CALL(implicitly_convertible)(NB_CTX, b.array_type, (void *) pred,
                                     /* is_predicate = */ true);
 
     s.value = val_t_o.ptr();

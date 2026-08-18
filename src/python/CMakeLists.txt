@@ -6,10 +6,10 @@ endif()
 
 # Split mode delegates to a backend module shipped as a separate Python
 # package; the extension then targets the Python 3.10 stable ABI. The
-# non-split configuration statically links libnanobind within an isolated
-# 'drjit' domain.
+# non-split configuration statically links libnanobind. Either way, the
+# bindings live in an isolated 'drjit' domain.
 if (DRJIT_SPLIT_MODE)
-  set(DRJIT_NB_FLAGS BACKEND_MODULE nanobind_backend)
+  set(DRJIT_NB_FLAGS BACKEND_MODULE nanobind_backend NB_DOMAIN drjit)
 else()
   set(DRJIT_NB_FLAGS NB_DOMAIN drjit NB_STATIC)
 endif()

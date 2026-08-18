@@ -946,13 +946,12 @@ void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
                 // this dimension is reconstructed from the width of the
                 // underlying array.
 
-                nb::list inner_shape;
-                if (full_shape.size() > 0)
-                    for (uint32_t i = 1; i < full_shape.size(); i++) {
-                        inner_shape.append(full_shape[i]);
-                    }
+                size_t ndim = full_shape.size();
+                nb::tuple_builder inner_shape(ndim > 0 ? ndim - 1 : 0);
+                for (size_t i = 1; i < ndim; ++i)
+                    inner_shape.put(full_shape[i]);
 
-                layout_.py_object = nb::tuple(inner_shape);
+                layout_.py_object = inner_shape.commit();
 
                 traverse(nb::steal(array), ctx);
             } else if (s.ndim != 1) {
@@ -1119,13 +1118,12 @@ nb::object FlatVariables::construct() {
                 auto first_dim   = prod(shape(array), nb::none())
                                      .floor_div(prod(inner_shape, nb::none()));
 
-                nb::list full_shape;
-                full_shape.append(first_dim);
-                for (uint32_t i = 0; i < inner_shape.size(); i++) {
-                    full_shape.append(inner_shape[i]);
-                }
+                nb::tuple_builder full_shape(inner_shape.size() + 1);
+                full_shape.put(first_dim);
+                for (size_t i = 0; i < inner_shape.size(); ++i)
+                    full_shape.put(inner_shape[i]);
 
-                nb::object tensor = layout_.type(array, nb::tuple(full_shape));
+                nb::object tensor = layout_.type(array, full_shape.commit());
                 return tensor;
             } else if (s.ndim != 1) {
                 auto result      = nb::inst_alloc_zero(layout_.type);
@@ -1144,17 +1142,15 @@ nb::object FlatVariables::construct() {
                 return construct_ad_var(layout_);
             }
         } else if (layout_.type.is(&PyTuple_Type)) {
-            nb::list list;
-            for (uint32_t i = 0; i < layout_.num; ++i) {
-                list.append(construct());
-            }
-            return nb::tuple(list);
+            nb::tuple_builder tuple(layout_.num);
+            for (uint32_t i = 0; i < layout_.num; ++i)
+                tuple.put(construct());
+            return tuple.commit();
         } else if (layout_.type.is(&PyList_Type)) {
-            nb::list list;
-            for (uint32_t i = 0; i < layout_.num; ++i) {
-                list.append(construct());
-            }
-            return std::move(list);
+            nb::list_builder list(layout_.num);
+            for (uint32_t i = 0; i < layout_.num; ++i)
+                list.put(construct());
+            return list.commit();
         } else if (layout_.type.is(&PyDict_Type)) {
             nb::dict dict;
             for (auto k : layout_.fields)

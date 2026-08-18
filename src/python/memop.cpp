@@ -62,10 +62,11 @@ nb::object gather(nb::type_object dtype, nb::object source,
     // Recurse through pytrees
     if (!is_drjit_source_1d && source_tp.is(dtype)) {
         if (PySequence_Check(source.ptr())) {
-            nb::list result;
+            nb::list_builder builder(nb::len(source));
             for (nb::handle value : source)
-                result.append(gather(nb::borrow<nb::type_object>(value.type()),
-                                     nb::borrow(value), index, active, mode));
+                builder.put(gather(nb::borrow<nb::type_object>(value.type()),
+                                   nb::borrow(value), index, active, mode));
+            nb::list result = builder.commit();
 
             if (!dtype.is(&PyList_Type))
                 return dtype(result);
@@ -89,14 +90,14 @@ nb::object gather(nb::type_object dtype, nb::object source,
                 }
                 return out;
             } else if (nb::object df = get_dataclass_fields(dtype); df.is_valid()) {
-                nb::list l;
+                nb::tuple_builder builder(nb::len(df));
                 for (nb::handle field : df) {
                     nb::object k = field.attr(DR_STR(name));
                     nb::object v = nb::getattr(source, k);
-                    l.append(gather(nb::borrow<nb::type_object>(v.type()), v, index, active, mode));
+                    builder.put(gather(nb::borrow<nb::type_object>(v.type()), v, index, active, mode));
                 }
                 // Python unpack args
-                return dtype(*l);
+                return dtype(*builder.commit());
             }
         }
     }
@@ -745,15 +746,14 @@ static nb::object unravel_recursive(nb::handle dtype,
     } else {
         const ArraySupplement &s = supp(dtype);
 
-        nb::list result_list;
+        nb::list_builder result(shape[depth]);
         for (Py_ssize_t i = 0; i < shape[depth]; ++i) {
-            result_list.append(
-                unravel_recursive(s.value, value, index_dtype, shape, strides,
-                                  offset, depth + 1, stop_depth));
+            result.put(unravel_recursive(s.value, value, index_dtype, shape,
+                                         strides, offset, depth + 1, stop_depth));
             offset += strides[depth];
         }
 
-        return dtype(result_list);
+        return dtype(result.commit());
     }
 }
 
@@ -888,16 +888,16 @@ nb::object slice(nb::handle h, nb::handle index) {
     } else if (tp.is(&PyTuple_Type)) {
         nb::tuple t = nb::borrow<nb::tuple>(h);
         size_t size = nb::len(t);
-        result = nb::steal(PyTuple_New(size));
-        if (!result.is_valid())
-            nb::raise_python_error();
+        nb::tuple_builder tb(size);
         for (size_t i = 0; i < size; ++i)
-            NB_TUPLE_SET_ITEM(result.ptr(), i, slice(t[i], index).release().ptr());
+            tb.put(slice(t[i], index));
+        result = tb.commit();
     } else if (tp.is(&PyList_Type)) {
-        nb::list tmp;
-        for (nb::handle item : nb::borrow<nb::list>(h))
-            tmp.append(slice(item, index));
-        result = std::move(tmp);
+        nb::list l = nb::borrow<nb::list>(h);
+        nb::list_builder lb(nb::len(l));
+        for (nb::handle item : l)
+            lb.put(slice(item, index));
+        result = lb.commit();
     } else if (tp.is(&PyDict_Type)) {
         nb::dict tmp;
         for (auto [k, v] : nb::borrow<nb::dict>(h))
@@ -1027,17 +1027,19 @@ static nb::object reshape(nb::type_object dtype, nb::handle value,
 
                 nb::raise("unsupported input.");
             } else if (tp.is(&PyList_Type)) {
-                nb::list tmp;
-                for (nb::handle item : nb::borrow<nb::list>(value))
-                    tmp.append(reshape(nb::borrow<nb::type_object>(item.type()),
-                                       item, target_shape, order, shrink));
-                return std::move(tmp);
+                nb::list l = nb::borrow<nb::list>(value);
+                nb::list_builder lb(nb::len(l));
+                for (nb::handle item : l)
+                    lb.put(reshape(nb::borrow<nb::type_object>(item.type()),
+                                   item, target_shape, order, shrink));
+                return lb.commit();
             } else if (tp.is(&PyTuple_Type)) {
-                nb::list tmp;
-                for (nb::handle item : nb::borrow<nb::tuple>(value))
-                    tmp.append(reshape(nb::borrow<nb::type_object>(item.type()),
-                                       item, target_shape, order, shrink));
-                return nb::tuple(tmp);
+                nb::tuple t = nb::borrow<nb::tuple>(value);
+                nb::tuple_builder tb(nb::len(t));
+                for (nb::handle item : t)
+                    tb.put(reshape(nb::borrow<nb::type_object>(item.type()),
+                                   item, target_shape, order, shrink));
+                return tb.commit();
             } else if (tp.is(&PyDict_Type)) {
                 nb::dict tmp;
                 for (auto [k, v] : nb::borrow<nb::dict>(value))

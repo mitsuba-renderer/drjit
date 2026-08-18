@@ -45,9 +45,10 @@ inline nb::object tuple_call(nb::handle callable, nb::handle tuple) {
 
 /// Call 'callable' with one positional argument, returning a null object when
 /// the call fails. Uses the vector call protocol and works in the limited API.
-NB_NOINLINE inline nb::object call_one_arg(nb::handle callable, nb::handle arg) {
-    return nb::steal(
-        PyObject_CallFunctionObjArgs(callable.ptr(), arg.ptr(), nullptr));
+inline nb::object call_one_arg(nb::handle callable, nb::handle arg) {
+    PyObject *args[2] = { nullptr, arg.ptr() };
+    return nb::steal(nb::detail::vectorcall(
+        callable.ptr(), args + 1, 1 | NB_VECTORCALL_ARGUMENTS_OFFSET, nullptr));
 }
 
 #define raise_if(expr, ...)                                                    \

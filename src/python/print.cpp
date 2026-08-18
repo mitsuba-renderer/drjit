@@ -139,11 +139,10 @@ PyObject *tp_repr(PyObject *self) noexcept {
             buffer.put("[ragged array]");
         } else {
             nb::object zero = nb::int_(0);
-            nb::list index;
+            nb::list_builder builder(shape.size());
             for (size_t i = 0; i < shape.size(); ++i)
-                index.append(zero);
-            if (!index.is_valid())
-                nb::raise_python_error();
+                builder.put(zero);
+            nb::list index = builder.commit();
             schedule(self);
             repr_array(buffer, self, 0, 20, shape, 0, index);
         }
@@ -173,11 +172,10 @@ void repr_general(Buffer &buffer, nb::handle h, size_t indent_, size_t threshold
             buffer.put("[ragged array]");
         } else {
             nb::object zero = nb::int_(0);
-            nb::list index;
+            nb::list_builder builder(shape.size());
             for (size_t i = 0; i < shape.size(); ++i)
-                index.append(zero);
-            if (!index.is_valid())
-                nb::raise_python_error();
+                builder.put(zero);
+            nb::list index = builder.commit();
             repr_array(buffer, h, indent_, threshold, shape, 0, index);
         }
     } else if (tp.is(&PyUnicode_Type)) {
@@ -580,14 +578,14 @@ static nb::object format_impl(const char *name, const std::string &fmt,
                     };
 
                     scoped_default_mask mask_guard(examine.backend, len);
-                    nb::list args2;
+                    nb::tuple_builder args2(nb::len(args));
                     nb::dict kwargs2;
                     for (nb::handle h: args) {
                         nb::object v = nb::borrow(h);
                         try {
                             v = ::slice(v, indices);
                         } catch (...) { }
-                        args2.append(v);
+                        args2.put(std::move(v));
                     }
                     for (nb::handle kv: kwargs.items()) {
                         nb::object k = kv[0], v = kv[1];
@@ -596,9 +594,10 @@ static nb::object format_impl(const char *name, const std::string &fmt,
                         } catch (...) { }
                         kwargs2[k] = v;
                     }
-                    schedule(args2);
+                    nb::tuple args2_t = args2.commit();
+                    schedule(args2_t);
                     schedule(kwargs2);
-                    args = nb::borrow<nb::args>(nb::tuple(args2));
+                    args = nb::borrow<nb::args>(args2_t);
                     kwargs = nb::borrow<nb::kwargs>(std::move(kwargs2));
                 } catch (...) { }
             } else {
