@@ -13,28 +13,6 @@
 
 static bool running_in_jupyter_notebook = false;
 
-#if PY_VERSION_HEX < 0x030A0000
-// Emulate PyGC_Enable()/ PyGC_Disable() on Python < 3.10
-static PyCFunction pygc_enable = nullptr, pygc_disable = nullptr,
-                   pygc_isenabled = nullptr;
-
-static void PyGC_Enable() {
-    pygc_enable(nullptr, nullptr);
-}
-
-static int PyGC_Disable() {
-    pygc_disable(nullptr, nullptr);
-    PyObject *value = pygc_isenabled(nullptr, nullptr);
-    long value_l = PyLong_AsLong(value);
-    if (value_l != 0 && value_l != 1) {
-        fprintf(stderr, "PyGC_Disable() emulation: invalid state!");
-        abort();
-    }
-    Py_DECREF(value);
-    return (int) value_l;
-}
-#endif
-
 int disable_gc_scope = 0;
 
 struct scoped_disable_gc {
@@ -66,8 +44,15 @@ static void log_callback(LogLevel level, const char *msg) {
         return;
     }
 
-    // Must hold the GIL to access the functionality below
+    // Must hold the GIL to access the functionality below. Acquisition can
+    // fail when the interpreter has begun to shut down, in which case the
+    // message goes to stderr as well.
     nb::gil_scoped_acquire guard_1;
+    if (!guard_1.is_valid()) {
+        fputs(msg, stderr);
+        fflush(stderr);
+        return;
+    }
 
     // Temporarily disable the GC. Otherwise we can have situations where a log
     // message printed by a function that holds the Dr.Jit mutex triggers a
@@ -106,45 +91,25 @@ static void log_callback(LogLevel level, const char *msg) {
 /// Defined in init.cpp
 extern int drjit_py_is_alive;
 
-void export_log(nb::module_ &m, PyModuleDef &pmd) {
-#if PY_VERSION_HEX < 0x030A0000
-    // Emulate PyGC_Enable()/ PyGC_Disable() on Python < 3.10
-
-    nb::module_ gc_module = nb::module_::import_("gc");
-    nb::object f_enable  = gc_module.attr("enable"),
-               f_disable = gc_module.attr("disable"),
-               f_isenabled = gc_module.attr("isenabled");
-
-    if (Py_TYPE(f_enable.ptr()) != &PyCFunction_Type ||
-        Py_TYPE(f_disable.ptr()) != &PyCFunction_Type ||
-        Py_TYPE(f_isenabled.ptr()) != &PyCFunction_Type ||
-        PyCFunction_GET_FLAGS(f_enable.ptr()) != METH_NOARGS ||
-        PyCFunction_GET_FLAGS(f_disable.ptr()) != METH_NOARGS ||
-        PyCFunction_GET_FLAGS(f_isenabled.ptr()) != METH_NOARGS) {
-        fprintf(stderr, "drjit: could not interface with garbage collector!");
-        abort();
-    }
-
-    pygc_enable = (PyCFunction) PyCFunction_GET_FUNCTION(f_enable.ptr());
-    pygc_disable = (PyCFunction) PyCFunction_GET_FUNCTION(f_disable.ptr());
-    pygc_isenabled = (PyCFunction) PyCFunction_GET_FUNCTION(f_isenabled.ptr());
-#endif
-
+void export_log(nb::module_ &m, nb::handle self) {
     nb::dict modules = nb::borrow<nb::dict>(PySys_GetObject("modules"));
     running_in_jupyter_notebook = modules.contains("ipykernel");
 
     jit_set_log_level_stderr(LogLevel::Disable);
     jit_set_log_level_callback(LogLevel::Warn, log_callback);
 
-    pmd.m_free = [](void *) {
-        // Switch from the Python logger to standard stderr output
-        jit_set_log_level_stderr(LogLevel::Warn);
-        jit_set_log_level_callback(LogLevel::Disable, nullptr);
-    };
+    // Switch from the Python logger to standard stderr output once the
+    // extension module goes away
+    NB_CALL(keep_alive_ptr)(self.ptr(), (void *) log_callback,
+                            [](void *) noexcept {
+                                jit_set_log_level_stderr(LogLevel::Warn);
+                                jit_set_log_level_callback(LogLevel::Disable,
+                                                           nullptr);
+                            });
 
     // Shut down the Dr.Jit component when the Python interpreter
-    // has been fully wound down. Doing it above (in pmd.m_free)
-    // can lead to leak warnings.
+    // has been fully wound down. Doing it above (in the module cleanup
+    // handler) can lead to leak warnings.
     (void) Py_AtExit([] { drjit_py_is_alive = 0; jit_shutdown(false); });
 
     nb::enum_<LogLevel>(m, "LogLevel")

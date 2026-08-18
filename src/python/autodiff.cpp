@@ -446,7 +446,7 @@ static nb::object backward_to_2(nb::args args, nb::kwargs kwargs) {
 }
 
 class PyCustomOp : public drjit::detail::CustomOpBase {
-    NB_TRAMPOLINE(drjit::detail::CustomOpBase, 3);
+    NB_TRAMPOLINE(drjit::detail::CustomOpBase);
 public:
     PyCustomOp() = default;
     using ticket = nb::detail::ticket;
@@ -454,7 +454,7 @@ public:
     nb::str type_name() const { return nb::inst_name(nb_trampoline.base()); }
 
     void forward() override {
-        ticket t(nb_trampoline, "forward", false);
+        ticket t(nb_trampoline, "forward", nb::detail::str_hash("forward"), false);
         if (t.key.is_valid()) {
             nb_trampoline.base().attr(t.key)();
         } else {
@@ -464,7 +464,7 @@ public:
     }
 
     void backward() override {
-        ticket t(nb_trampoline, "backward", false);
+        ticket t(nb_trampoline, "backward", nb::detail::str_hash("backward"), false);
         if (t.key.is_valid()) {
             nb_trampoline.base().attr(t.key)();
         } else {
@@ -481,7 +481,7 @@ public:
         if (!m_name_cache.empty())
             return m_name_cache.c_str();
 
-        ticket t(nb_trampoline, "name", false);
+        ticket t(nb_trampoline, "name", nb::detail::str_hash("name"), false);
         if (t.key.is_valid()) {
             m_name_cache = nb::cast<const char *>(nb_trampoline.base().attr(t.key)());
         } else {

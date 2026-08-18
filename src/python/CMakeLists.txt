@@ -3,8 +3,15 @@ if (SKBUILD)
   set(DRJIT_DIST_FLAGS LTO)
 endif()
 
-if (SKBUILD AND DRJIT_STABLE_ABI)
-    list(APPEND DRJIT_DIST_FLAGS STABLE_ABI)
+
+# Split mode delegates to a backend module shipped as a separate Python
+# package; the extension then targets the Python 3.10 stable ABI. The
+# non-split configuration statically links libnanobind within an isolated
+# 'drjit' domain.
+if (DRJIT_SPLIT_MODE)
+  set(DRJIT_NB_FLAGS BACKEND_MODULE nanobind_backend)
+else()
+  set(DRJIT_NB_FLAGS NB_DOMAIN drjit NB_STATIC)
 endif()
 
 # ------------------- Copy Python resources -------------------
@@ -48,8 +55,7 @@ add_custom_target(drjit-copy-python-src ALL DEPENDS ${PY_FILES_OUT})
 nanobind_add_module(
   drjit-python
 
-  NB_DOMAIN drjit
-  NB_STATIC
+  ${DRJIT_NB_FLAGS}
   ${DRJIT_DIST_FLAGS}
 
   # Entry point

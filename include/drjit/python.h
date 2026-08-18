@@ -472,7 +472,7 @@ template <typename T> NB_INLINE void bind_base(ArrayBinding &b) {
             nb::detail::make_caster<Value> in;
 
             bool success = value != Py_None && in.from_python(
-                value, (uint8_t) nb::detail::cast_flags::convert, &cleanup);
+                value, (uint32_t) nb::detail::cast_flags::convert, &cleanup);
             if (success) {
                 using Intrinsic = nb::detail::intrinsic_t<Value>;
                 using Out = std::conditional_t<std::is_pointer_v<Value>, Intrinsic*, Intrinsic &>;
@@ -523,8 +523,8 @@ template <typename T> NB_INLINE void bind_base(ArrayBinding &b) {
                 }
                 if (!nb::try_cast(nb::handle(h), scalar)) {
                     nb::str tp_name = nb::inst_name(h);
-                    nb::detail::raise("Could not initialize element with a "
-                                      "value of type '%s'.", tp_name.c_str());
+                    nb::raise("Could not initialize element with a "
+                              "value of type '%s'.", tp_name.c_str());
                 }
                 if (opaque)
                     new (a) T(drjit::opaque<T>(scalar, size));

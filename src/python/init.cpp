@@ -76,7 +76,7 @@ static int tp_init_array_impl(PyObject *self, PyObject *const *args,
     try {
         if (argc == 0) {
             // Default initialization, e.g., ``Array3f()``
-            nb::detail::nb_inst_zero(self);
+            nb::inst_zero(self);
             return 0;
         } else if (argc > 1) {
             // Initialize from argument list, e.g., ``Array3f(1, 2, 3)``
@@ -114,7 +114,7 @@ static int tp_init_array_impl(PyObject *self, PyObject *const *args,
                 const ArraySupplement &s_arg = supp(arg_tp);
                 // Copy-constructor
                 if (arg_tp == self_tp) {
-                    nb::detail::nb_inst_copy(self, arg);
+                    nb::inst_copy(self, arg);
                     return 0;
                 } else if (s_arg.is_tensor) {
                     is_drjit_tensor = true;
@@ -306,10 +306,7 @@ static int tp_init_array_impl(PyObject *self, PyObject *const *args,
                     (s.is_class && arg == Py_None)) {
                 element = nb::borrow(arg);
             } else {
-                PyObject *args2[2] = { nullptr, arg };
-                element = nb::steal(
-                    PyObject_Vectorcall((PyObject *) value_tp, args2 + 1,
-                                  1 | PY_VECTORCALL_ARGUMENTS_OFFSET, nullptr));
+                element = call_one_arg((PyObject *) value_tp, arg);
                 if (NB_UNLIKELY(!element.is_valid())) {
                     nb::error_scope scope;
                     nb::raise("Broadcast from type '%s' to type '%s' failed.%s",
@@ -440,7 +437,7 @@ PyObject *tp_vectorcall_array(PyObject *type_o, PyObject *const *args,
 
     PyObject *self;
     try {
-        self = nb::detail::nb_inst_alloc(tp);
+        self = nb::inst_alloc((PyObject *) tp).release().ptr();
     } catch (nb::python_error &e) {
         e.restore();
         return nullptr;
@@ -509,7 +506,7 @@ PyObject *tp_vectorcall_tensor(PyObject *type_o, PyObject *const *args,
 
     PyObject *self;
     try {
-        self = nb::detail::nb_inst_alloc(tp);
+        self = nb::inst_alloc((PyObject *) tp).release().ptr();
     } catch (nb::python_error &e) {
         e.restore();
         return nullptr;
@@ -602,7 +599,7 @@ static bool array_init_from_seq(PyObject *self, const ArraySupplement &s, PyObje
                 nb::object o = nb::steal(sq_item(seq, i));                 \
                 if (NB_UNLIKELY(!o.is_valid() ||                           \
                     !caster.from_python(o,                                 \
-                                        (uint8_t) nb::detail::cast_flags:: \
+                                        (uint32_t) nb::detail::cast_flags::\
                                             convert, nullptr))) {          \
                     fail = true;                                           \
                     break;                                                 \
@@ -637,7 +634,7 @@ static bool array_init_from_seq(PyObject *self, const ArraySupplement &s, PyObje
                 nb::object o = nb::steal(sq_item(seq, i));
 
                 void *ptr = nullptr;
-                if (!nb::detail::nb_type_get(&cpp_type, o.ptr(), 0, nullptr, &ptr)) {
+                if (!NB_CALL(nb_type_get)(&cpp_type, o.ptr(), 0, nullptr, &ptr)) {
                     fail = true;
                     break;
                 }
@@ -711,16 +708,16 @@ nb::object import_ndarray(ArrayMeta m, PyObject *arg, vector<size_t> *shape_out,
         conf.ndim -= 1;
     }
 
-    nb::detail::ndarray_handle *th = nb::detail::ndarray_import(
-        arg, &conf, (uint8_t) nb::detail::cast_flags::convert, nullptr);
+    nb::detail::ndarray_handle *th = NB_CALL(ndarray_import)(
+        arg, &conf, sizeof(conf), true, nullptr);
 
     if (!th && m.ndim > 1 && m.shape[m.ndim - 1] == DRJIT_DYNAMIC) {
         // Try conversion of scalar to vectorized representation. 'flip_axes'
         // moved the dynamic dimension to the front.
         conf.ndim--;
         conf.shape += flip_axes;
-        th = nb::detail::ndarray_import(
-            arg, &conf, (uint8_t) nb::detail::cast_flags::convert, nullptr);
+        th = NB_CALL(ndarray_import)(
+            arg, &conf, sizeof(conf), true, nullptr);
         if (!th) {
             conf.ndim++;
             conf.shape -= flip_axes;
@@ -888,8 +885,10 @@ void python_cleanup_thread_main() {
         lock.unlock();
 
         nb::gil_scoped_acquire guard;
-        for (auto p: todo)
-            nb::detail::ndarray_dec_ref(p);
+        if (guard.is_valid()) {
+            for (auto p: todo)
+                NB_CALL(ndarray_dec_ref)(p);
+        }
         if (python_cleanup_thread_stop)
             break;
     }
@@ -930,7 +929,7 @@ static void ndarray_free_cb_2(void *p) {
 
     // If we're currently holding the GIL, then, release the array right now
     if (!disable_gc_scope && py_gilstate_check && py_gilstate_check())
-        nb::detail::ndarray_dec_ref((nb::detail::ndarray_handle *) p);
+        NB_CALL(ndarray_dec_ref)((nb::detail::ndarray_handle *) p);
     else
         enqueue_python_cleanup((nb::detail::ndarray_handle *) p);
 }
@@ -964,7 +963,7 @@ static void ndarray_keep_alive(JitBackend backend, uint32_t index, nb::detail::n
     if ((int) backend > 7)
         jit_raise("ndarray_keep_alive(): internal error, backend index too large.");
 
-    nb::detail::ndarray_inc_ref(p);
+    NB_CALL(ndarray_inc_ref)(p);
 
     // Pack pointer + backend ID and send to ndarray_free_cb (asynchronously)
     uintptr_t msg = (uintptr_t) p;
@@ -1015,7 +1014,7 @@ static int tp_init_tensor_impl(PyObject *self, PyObject *array, PyObject *shape,
                  "drjit.cuda.Array3f).");
 
         if (!shape && !array) {
-            nb::detail::nb_inst_zero(self);
+            nb::inst_zero(self);
             s.tensor_shape(inst_ptr(self)).push_back(0);
             return 0;
         }
@@ -1032,11 +1031,11 @@ static int tp_init_tensor_impl(PyObject *self, PyObject *array, PyObject *shape,
                 nb::raise("The flip_axes argument is only supported when "
                           "constructing tensors from N-D arrays or cooperative "
                           "vectors");
-            nb::detail::nb_inst_copy(self, array);
+            nb::inst_copy(self, array);
             return 0;
         }
 
-        nb::detail::nb_inst_zero(self);
+        nb::inst_zero(self);
         vector<size_t> &shape_vec = s.tensor_shape(inst_ptr(self));
 
         // Storage argument forwarded to the underlying 1D array initializer.

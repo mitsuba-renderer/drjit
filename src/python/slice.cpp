@@ -110,9 +110,9 @@ slice_index(const nb::type_object_t<ArrayBase> &dtype,
             components.emplace_back(Component::Integer, v, 1, 1, size);
             continue;
         } else if (tp.is(&PySlice_Type)) {
-            Py_ssize_t start, stop, step;
-            size_t slice_length;
-            nb::detail::slice_compute(h.ptr(), size, start, stop, step, slice_length);
+            auto [start, stop, step, slice_length] =
+                nb::borrow<nb::slice>(h).compute((size_t) size);
+            (void) stop;
             components.emplace_back(Component::Slice, start, step, (Py_ssize_t) slice_length, size);
             continue;
         } else if (is_drjit_type(tp)) {
@@ -167,7 +167,7 @@ slice_index(const nb::type_object_t<ArrayBase> &dtype,
             --shape_offset;
             for (size_t i = 0; i <indices_to_add; ++i) {
                 if (shape_offset >= shape_len)
-                    nb::detail::fail("slice_index(): internal error.");
+                    nb::raise("slice_index(): internal error.");
                 size = nb::cast<Py_ssize_t>(shape[shape_offset++]);
                 components.emplace_back(Component::Slice, 0, 1, size, size);
             }

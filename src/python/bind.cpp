@@ -105,9 +105,9 @@ nb::object bind(const ArrayBinding &b) {
     if (!b.value_type) {
         val_t_o = scalar_t_o;
     } else {
-        val_t_o = nb::borrow(nb::detail::nb_type_lookup(b.value_type));
+        val_t_o = nb::borrow(NB_CALL(nb_type_lookup)(b.value_type));
         if (!val_t_o.is_valid())
-            nb::detail::raise(
+            nb::raise(
                 "nanobind.detail.bind(\"%s\"): element type \"%s\" not found.",
                 name.c_str(), b.value_type->name());
         scalar_t_o = nb::borrow(scalar_t(val_t_o));
@@ -153,7 +153,7 @@ nb::object bind(const ArrayBinding &b) {
         mask_t_o = nb::borrow(meta_get_type(m2));
     }
 
-    nb::detail::type_init_data d;
+    nb::detail::type_data_init d { };
 
     d.flags = (uint32_t) nb::detail::type_init_flags::has_supplement |
               (uint32_t) nb::detail::type_init_flags::has_base_py |
@@ -182,7 +182,11 @@ nb::object bind(const ArrayBinding &b) {
     d.flags |= (uint32_t) nb::detail::type_flags::pooled;
     d.pool_capacity = 128;
 
-    d.align = b.talign;
+    uint32_t align_log2 = 0;
+    while ((1u << align_log2) != b.talign)
+        align_log2++;
+
+    d.align_log2 = align_log2;
     d.size = b.tsize_rel * b.talign;
     d.name = name.c_str();
     d.type = b.array_type;
@@ -224,20 +228,22 @@ nb::object bind(const ArrayBinding &b) {
     d.base_py = (PyTypeObject *) base_o.ptr();
 
     // Type was already bound, let's create an alias
-    nb::handle existing = nb::detail::nb_type_lookup(b.array_type);
+    nb::handle existing = NB_CALL(nb_type_lookup)(b.array_type);
     if (existing) {
         nb::handle(d.scope).attr(name.c_str()) = existing;
         return nb::borrow(existing);
     }
 
     // Create a new type and update its supplemental information
-    nb::object tp = nb::steal(nb::detail::nb_type_new(&d));
+    nb::object tp = nb::steal(NB_CALL(nb_type_new)(&d));
     ArraySupplement &s = nb::type_supplement<ArraySupplement>(tp);
     s = b;
 
     // Register implicit cast predicate
-    auto pred = [](PyTypeObject *tp_, PyObject *o,
-                   nb::detail::cleanup_list *) -> bool {
+    bool (*pred)(PyTypeObject *, PyObject *,
+                 nb::detail::cleanup_list *) noexcept =
+        [](PyTypeObject *tp_, PyObject *o,
+           nb::detail::cleanup_list *) noexcept -> bool {
         const ArraySupplement &s = supp(tp_);
 
         PyTypeObject *tp_o  = Py_TYPE(o),
@@ -269,7 +275,8 @@ nb::object bind(const ArrayBinding &b) {
         return false;
     };
 
-    nb::detail::implicitly_convertible(pred, b.array_type);
+    NB_CALL(implicitly_convertible)(b.array_type, (void *) pred,
+                                    /* is_predicate = */ true);
 
     s.value = val_t_o.ptr();
     s.array = is_special ? plain_t_o.ptr() : tp.ptr();

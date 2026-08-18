@@ -24,6 +24,14 @@ DrJit 1.6.0 (unreleased)
   textures with filtered texture lookups. See the associated
   :ref:`documentation section <texture_laplacian>` for more details.
 
+- The Python bindings now build against nanobind 3 and use its new `split mode
+  <https://nanobind.readthedocs.io/en/latest/split_mode.html>`__, which
+  significantly reduces the number of binary wheels that must be compiled for
+  each release. Set the CMake option ``DRJIT_SPLIT_MODE=OFF`` to disable this
+  and perform a regular static build.
+
+- Python 3.9 is no longer supported. Dr.Jit now requires Python 3.10 or newer.
+
 - Fixed an issue where forward-mode derivative propagation through symbolic operations
   (:py:func:`drjit.while_loop`, :py:func:`drjit.if_stmt`,
   :py:func:`drjit.switch`) could fail with an error message when the operation

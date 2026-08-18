@@ -59,11 +59,10 @@ static void set_flag_py(JitFlag flag, bool value) {
 }
 
 NB_MODULE(_drjit_ext, m_) {
-    (void) m_;
     nb::module_ m = nb::module_::import_("drjit");
     m.doc() = "A Just-In-Time-Compiler for Differentiable Rendering";
 
-    export_log(m, nanobind__drjit_ext_module);
+    export_log(m, m_);
 
     uint32_t backends = 0;
 
@@ -228,13 +227,15 @@ NB_MODULE(_drjit_ext, m_) {
     nb::intrusive_init(
         [](PyObject *o) noexcept {
             nb::gil_scoped_acquire guard;
-            Py_INCREF(o);
+            if (guard.is_valid())
+                Py_INCREF(o);
         },
         [](PyObject *o) noexcept {
             if (!nb::is_alive())
                 return;
             nb::gil_scoped_acquire guard;
-            Py_DECREF(o);
+            if (guard.is_valid())
+                Py_DECREF(o);
         });
 
     nb::class_<nb::intrusive_base> ib(

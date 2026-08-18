@@ -288,6 +288,8 @@ struct DelayedPrint {
 
     static void callback(uint32_t, int free, void *p) {
         nb::gil_scoped_acquire guard;
+        if (!guard.is_valid())
+            return; // Interpreter shutdown, skip the work (and leak)
         try {
             DelayedPrint *d = (DelayedPrint *) p;
             if (free) {

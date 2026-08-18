@@ -28,9 +28,12 @@ option(DRJIT_ENABLE_AUTODIFF      "Build Dr.Jit automatic differentation library
 option(DRJIT_ENABLE_PYTHON        "Build Python extension library?" ON)
 option(DRJIT_ENABLE_TESTS         "Build Dr.Jit test suite? (Warning, this takes *very* long to compile)" OFF)
 option(DRJIT_ENABLE_LEAK_WARNINGS "Emit DrJit and nanobind leak warnings? By default, leak warnings are disabled automatically when building PyPi wheels." ${DRJIT_ENABLE_LEAK_WARNINGS_DEFAULT})
+option(DRJIT_SPLIT_MODE           "Build the Python extension in nanobind split mode? This requires the 'nanobind-backend' package at runtime." ON)
 
-option(DRJIT_STABLE_ABI       "Build Python extension using the CPython stable ABI? (Only relevant when using scikit-build)" OFF)
-mark_as_advanced(DRJIT_STABLE_ABI)
+# Wheels are always built in split mode
+if (SKBUILD)
+  set(DRJIT_SPLIT_MODE ON)
+endif()
 
 # ----------------------------------------------------------
 #  Check if submodules have been checked out, or fail early
