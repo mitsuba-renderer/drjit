@@ -7082,6 +7082,9 @@
     texture API instead of using the hardware texture units. In other modes,
     this argument has no effect.
 
+    A ``writable`` texture can be modified using :py:func:`write()`. Such
+    a texture cannot be MIP-mapped.
+
     The ``filter_mode`` parameter defines the interpolation method to be used
     in all evaluation routines. By default, the texture is linearly
     interpolated. Besides nearest/linear filtering, the implementation also
@@ -7091,8 +7094,9 @@
     (hence, linear filtering must be enabled to use this feature).
 
     When evaluating the texture outside of its boundaries, the ``wrap_mode``
-    defines the wrapping method. The default behavior is ``drjit.WrapMode.Clamp``,
-    which indefinitely extends the colors on the boundary along each dimension.
+    defines the wrapping method. The default behavior is
+    :py:attr:`drjit.WrapMode.Clamp`, which indefinitely extends the colors on
+    the boundary along each dimension.
 
     On the CUDA and Metal backends, hardware texture units resolve the sub-texel
     position using reduced-precision fixed-point weights (8 fractional bits on
@@ -7107,29 +7111,35 @@
     of four the first three are decoded and the fourth (alpha) is left linear
     (e.g. channel 3 is linear for a 6-channel texture).
 
-    A ``mip_filter`` other than ``drjit.MipFilter.Disabled`` equips the texture
-    with a MIP pyramid for the filtered lookup methods :py:func:`eval_lod()`
-    and :py:func:`eval_filtered()`. The pyramid reaches down to a single texel
-    and is regenerated from the base level by :py:func:`set_value()` /
-    :py:func:`set_tensor()` using a box filter that averages two texels per
-    axis (applied in linear space for sRGB textures). ``max_aniso`` bounds the number of anisotropic taps
-    that :py:func:`eval_filtered()` may take; the value 1 selects isotropic
-    filtering, and values above the hardware limit of 16 raise an error.
-    MIP-mapped textures cannot be ``writable``.
+    A ``mip_filter`` other than :py:attr:`drjit.MipFilter.Disabled` equips the
+    texture with a MIP pyramid for the filtered lookup methods
+    :py:func:`eval_lod()` and :py:func:`eval_filtered()`. The functions
+    :py:func:`set_value()` / :py:func:`set_tensor()` regenerate it from the
+    base level using a box filter that averages two texels per axis (applied in
+    linear space for sRGB textures). MIP-mapped textures cannot be
+    ``writable``. See the section on :ref:`MIP-mapped filtering
+    <texture_mipmap>` for details.
 
-    A MIP-mapped texture can additionally choose a ``mip_basis``. The
-    default ``drjit.MipBasis.Standard`` treats the base image as the
-    authoritative representation and derives the coarser levels from it, so
-    derivatives of filtered lookups flow into the base texels. With
-    ``drjit.MipBasis.Laplacian``, the texture instead stores one
-    coefficient tensor per pyramid level (see :py:func:`tensor()`), and the
-    sampled pyramid is reconstructed from them by upsampling and summation.
-    Derivatives of a lookup at level ``k`` then flow into the coefficients of
-    level ``k`` and all coarser ones, which makes this basis an
-    effective multiscale preconditioner for texture optimization. Laplacian
-    mode requires a MIP-mapped texture with floating-point storage on a JIT
-    backend and does not support migration (pass ``migrate=False`` when
-    constructing from a tensor).
+    The ``max_aniso`` parameter only applies to MIP-mapped textures and
+    controls the number of taps that anisotropic filtering in
+    :py:func:`eval_filtered()` may use. The value 1 selects isotropic
+    filtering, and values above the hardware limit of 16 raise an error.
+
+    The ``mip_basis`` parameter determines the internal representation of
+    MIP-mapped textures. The default :py:attr:`drjit.MipBasis.Standard`
+    derives a standard MIP pyramid from the base image.
+
+    When ``mip_basis`` is set to :py:attr:`drjit.MipBasis.Laplacian`, the
+    authoritative representation is no longer the base image but a set of
+    per-level coefficient tensors (see :py:func:`tensor()`). The MIP pyramid
+    uploaded to the GPU is then derived from these tensors by repeated
+    upsampling and summation. This choice is mainly useful for workloads that
+    perform gradient-based optimization of textures with filtered texture
+    lookups. See the section on the :ref:`Laplacian basis
+    <texture_laplacian>` for additional detail. Laplacian mode requires a
+    MIP-mapped texture with floating-point storage on a JIT backend and does
+    not support migration (pass ``migrate=False`` when constructing from a
+    tensor).
 
 .. topic:: Texture_init_tensor
 
@@ -7137,16 +7147,20 @@
 
     This constructor allocates texture memory just like the previous
     constructor, extracting shape information from ``tensor``. It then also
-    invokes ``set_tensor(tensor)`` to fill the texture memory with the provided
-    tensor.
+    invokes :py:func:`set_tensor()` to fill the texture memory with the
+    provided tensor.
 
     When ``migrate`` is set to ``True`` (the default), Dr.Jit moves the
     texture to the GPU backends to avoid redundant storage. Values like
     :py:func:`tensor()` and :py:func:`value()` then produce a differentiable
-    symbolic view of the migrated memory.
+    symbolic view of the migrated memory. See the section on :ref:`migration
+    <texture_migration>` for details.
 
-    Both the ``filter_mode`` and ``wrap_mode`` have the same defaults and
-    behaviors as for the previous constructor.
+    The ``use_accel``, ``filter_mode``, ``wrap_mode``, ``srgb``,
+    ``mip_filter``, ``max_aniso``, and ``mip_basis`` parameters have the same
+    defaults and behaviors as in the shape-based constructor. This overload
+    infers the shape and channel count from the tensor and does not accept
+    ``writable``.
 
 .. topic:: Texture_set_value
 
@@ -7155,10 +7169,10 @@
     When ``migrate`` is set, the CUDA and Metal backends migrate the texture
     data into the GPU's native texture format to avoid redundant storage.
 
-    With ``drjit.MipBasis.Laplacian``, the array is first decomposed into
-    per-level coefficients, so a subsequent :py:func:`tensor()` reproduces it
-    up to floating point rounding. Migration is unavailable in that case and
-    raises an exception.
+    With :py:attr:`drjit.MipBasis.Laplacian`, the array is first decomposed
+    into per-level coefficients. A subsequent :py:func:`value()` then
+    reproduces it up to floating point rounding. Migration is unavailable in
+    that case and raises an exception.
 
 .. topic:: Texture_set_value_2
 
@@ -7169,7 +7183,7 @@
 
     .. code-block:: python
 
-       texture.set_value(value)
+       texture.set_value(value, migrate)
        event.record()
 
     This combination is helpful for interactive workflows, where a producer
@@ -7187,14 +7201,14 @@
     synchronizes the GPU pipeline).
 
     When ``migrate`` is set to ``True`` on the CUDA and Metal backends, the
-    texture information is *fully* migrated to GPU texture memory to avoid
+    texture information is migrated to GPU texture memory to avoid
     redundant storage.
 
-    With ``drjit.MipBasis.Laplacian``, the tensor is first
-    decomposed into the per-level coefficient tensors (a detached analysis
-    step), and the sampled pyramid is then rebuilt from them. A subsequent
-    :py:func:`tensor()` therefore reproduces the input up to floating point
-    rounding.
+    With :py:attr:`drjit.MipBasis.Laplacian`, the tensor is first decomposed
+    into the per-level coefficient tensors, and the
+    sampled pyramid is then rebuilt from them. A subsequent :py:func:`tensor()`
+    reproduces the input up to floating point rounding. Migration is
+    unavailable in that case and raises an exception.
 
 .. topic:: Texture_set_tensor_level
 
@@ -7204,10 +7218,11 @@
     The tensor shape must match the level. Resolution changes go through the
     whole-image :py:func:`set_tensor()`.
 
-    Passing ``rebuild=False`` only rebinds the coefficient tensor, which
-    costs no computation; the sampled pyramid is then refreshed by a later
-    call to :py:func:`update_inplace()`. An optimization loop should assign
-    all levels this way and rebuild once per iteration.
+    Passing ``rebuild=False`` only rebinds the coefficient tensor, which costs
+    no computation. The sampled pyramid is then refreshed by a later call to
+    :py:func:`update_inplace()`. An optimization loop should assign all levels
+    this way and rebuild once per iteration, see the section on the
+    :ref:`Laplacian basis <texture_laplacian>` for a worked example.
 
 .. topic:: Texture_update_inplace
 
@@ -7221,15 +7236,15 @@
     texture's internal state.
 
     When ``migrate`` is set to ``True`` on the CUDA and Metal backends, the
-    texture information is *fully* migrated to GPU texture memory to avoid
-    redundant storage. The Laplacian basis does not support migration and
-    raises an exception in that case.
+    texture information is migrated to GPU texture memory to avoid
+    redundant storage.
 
-    With ``drjit.MipBasis.Laplacian``, the per-level coefficient
+    With :py:attr:`drjit.MipBasis.Laplacian`, the per-level coefficient
     tensors (see :py:func:`tensor()`) are the authoritative state instead, and
     this method rebuilds the sampled pyramid from their current contents. An
     optimization loop should write the coefficient tensors in place and call
-    this method once per step.
+    this method once per step. Migration is unavailable in that case and
+    raises an exception.
 
 .. topic:: Texture_value
 
@@ -7282,9 +7297,12 @@
 
     Return the texture shape
 
+    The returned tuple has one entry per texture dimension followed by the
+    channel count.
+
 .. topic:: Texture_channel_count
 
-    Return the number of channels (equals ``shape()[ndim()-1]``)
+    Return the number of channels (equals ``shape[-1]``)
 
 .. topic:: Texture_eval
 
@@ -7299,44 +7317,38 @@
     Evaluate the texture at an explicit MIP level of detail.
 
     A fractional ``lod`` blends the two enclosing pyramid levels under
-    ``drjit.MipFilter.Linear`` and rounds to the nearest level under
-    ``drjit.MipFilter.Nearest``; out-of-range values are clamped to the
-    pyramid. ``lod`` is filtering metadata and detached from derivative
-    tracking; derivatives flow through ``pos`` and the texture data
-    (including the pyramid generation). On a texture without a MIP pyramid,
-    the lookup degrades to a base-level :py:func:`eval()`.
+    :py:attr:`drjit.MipFilter.Linear` and rounds to the nearest level under
+    :py:attr:`drjit.MipFilter.Nearest`. Out-of-range values are clamped.
+
+    The method is differentiable with respect to the query position and
+    texture data (including derivative propagation through the MIP pyramid
+    construction) but not with respect to the \c lod argument
+
+    On a texture without a MIP pyramid, the lookup degrades to a regular
+    non-filtered :py:func:`eval()`.
 
 .. topic:: Texture_eval_filtered
 
-    Anisotropically filtered lookup driven by a screen-space footprint.
+    Perform an anisotropically filtered texture lookup
 
-    ``ddx`` and ``ddy`` are the derivatives of the texture coordinate with
-    respect to the two screen dimensions. They span the pixel's elliptical
-    footprint, whose semi-axes ``P_major``/``P_minor`` (measured in texels
-    of the base level) determine the filter:
+    Besides the query position, this function additionally takes
+    texture-space differentials ``ddx`` and ``ddy`` that span the pixel's
+    elliptical footprint. The method averages up to ``max_aniso`` trilinear
+    taps that are distributed along the major ellipse axis. For ``max_aniso``
+    equal to 1, it performs an ordinary trilinear lookup.
 
-    .. code-block:: text
+    Hardware anisotropic filtering (if enabled via the ``use_accel``
+    constructor argument) is approximate and vendor specific. Results may
+    deviate from the software path by several percent for off-axis
+    footprints. Pass ``use_accel=false`` if it is important that the output
+    remains consistent across backends.
 
-        lod = clip(log2(max(P_minor, P_major / max_aniso)), 0, levels - 1)
-        N   = min(ceil(P_major / 2^lod), max_aniso)
+    The method is differentiable with respect to the query position and
+    texture data (including derivative propagation through the MIP pyramid
+    construction) but not with respect to the ``ddx`` and ``ddy`` argument.
 
-    and the result averages ``N`` trilinear taps distributed along the major
-    ellipse axis. The footprint, LOD, and tap count follow the reference
-    algorithm of the Direct3D 11.3 functional specification (section
-    7.18.11), which matches measured GPU texture unit behavior.
-    ``max_aniso=1`` collapses this to an ordinary trilinear lookup.
-
-    The scheme above describes the software implementation, which also
-    serves as the derivative of hardware-accelerated lookups. Hardware
-    anisotropic filtering (the ``use_accel`` constructor flag) is
-    approximate and vendor specific; results may deviate from the software
-    path by several percent for off-axis footprints. Pass
-    ``use_accel=False`` for reproducible output.
-
-    ``ddx``/``ddy`` are filtering metadata and detached from derivative
-    tracking; derivatives flow through ``pos`` and the texture data. On a
-    texture without a MIP pyramid, the lookup degrades to a base-level
-    :py:func:`eval()`.
+    On a texture without a MIP pyramid, the lookup degrades to a regular
+    non-filtered :py:func:`eval()`.
 
 .. topic:: Texture_mip_filter
 
@@ -7381,6 +7393,9 @@
     calls :py:func:`eval_cubic_helper()` function to replace the AD graph with a
     direct evaluation of the B-Spline basis functions in that case.
 
+    Setting ``force_nonaccel`` to ``True`` bypasses the hardware texture units
+    even when they are available, which is mainly useful for testing.
+
 .. topic:: Texture_eval_cubic_grad
 
     Evaluate the positional gradient of a cubic B-Spline
@@ -7388,9 +7403,8 @@
     This implementation computes the result directly from explicit
     differentiated basis functions. It has no autodiff support.
 
-    The resulting gradient and hessian have been multiplied by the spatial extents
-    to count for the transformation from the unit size volume to the size of its
-    shape.
+    The resulting gradient has been multiplied by the spatial extents to count
+    for the transformation from the unit size volume to the size of its shape.
 
 .. topic:: Texture_eval_cubic_hessian
 
@@ -7423,15 +7437,17 @@
 
 .. topic:: Texture_write
 
-    Store values into a writable hardware texture
+    Store values into a writable texture
 
     The per-channel values in ``value`` are written to the texel addressed by
     the integer coordinates ``pos``. The texture must have been created with
-    ``writable=True``.
+    ``writable=True``, must live on a JIT backend, and ``value`` must supply
+    one entry per channel.
 
-    This is a hardware texture store (a side effect): it is not differentiable,
-    and the written texture is meant for display / external sampling rather than
-    :py:func:`eval()`.
+    The store is a side effect and not differentiable. Backends providing a
+    hardware texture write into it, and such a texture is meant for display /
+    external sampling rather than :py:func:`eval()`. Without one (LLVM, or
+    double precision), the values are scattered into the backing storage.
 
     Reading the texture after writing to it (via :py:func:`value()`,
     :py:func:`tensor()`, or the ``eval_*()`` methods) requires an intermediate
@@ -7452,6 +7468,10 @@
     (:py:func:`eval()`). If ``True`` it is wrapped for *rendering into* via
     :py:func:`write()`, and the native texture must allow shader writes / surface
     stores. On CUDA such a wrap is bound as a surface and cannot also be sampled.
+
+    The ``filter_mode`` and ``wrap_mode`` parameters behave as in the regular
+    constructors. Setting ``srgb`` requests that samples be decoded from sRGB
+    to linear and is only allowed for 8-bit textures.
 
     A texture wrapping a cross-API handle (OpenGL on CUDA) requires a
     :py:func:`map()` / :py:func:`unmap()` pair around each use; on Metal those

@@ -85,6 +85,9 @@ public:
      * texture API instead of using the hardware texture units. In other modes,
      * this argument has no effect.
      *
+     * A \c writable texture can be modified using \ref write(). Such a
+     * texture cannot be MIP-mapped.
+     *
      * The \c filter_mode parameter defines the interpolation method to be used
      * in all evaluation routines. By default, the texture is linearly
      * interpolated. Besides nearest/linear filtering, the implementation also
@@ -114,8 +117,10 @@ public:
      *
      * Specifying a \c mip_filter causes the implementation to create a MIP
      * pyramid for filtered lookups via \ref eval_lod() and \ref
-     * eval_filtered(). The function \ref set_value() / \ref set_tensor()
-     * regenerate the pyramid. MIP-mapped textures cannot be \c writable.
+     * eval_filtered(). The functions \ref set_value() / \ref set_tensor()
+     * regenerate it from the base level using a box filter that averages two
+     * texels per axis (applied in linear space for sRGB textures). MIP-mapped
+     * textures cannot be \c writable.
      *
      * The \c max_aniso parameter only applies to MIP-mapped textures and
      * controls the number of taps that anisotropic filtering in \ref
@@ -129,12 +134,12 @@ public:
      * When \c mip_basis is set to \ref MipBasis::Laplacian, the authoritative
      * representation is no longer the base image but a set of per-level
      * coefficient tensors (see \ref tensor(size_t)). The MIP pyramid uploaded
-     * to the GPU is then derived from these tensors by repeated upsampling
-     * and summation. This choice is mainly useful for workloads that perform
+     * to the GPU is then derived from these tensors by repeated upsampling and
+     * summation. This choice is mainly useful for workloads that perform
      * gradient-based optimization of textures with filtered texture lookups.
-     * See the Dr.Jit documentation on textures for additional detail.
-     * Laplacian mode requires a MIP-mapped texture with floating-point storage
-     * on a JIT backend and does not support migration.
+     * See the Dr.Jit documentation on textures for additional detail. Laplacian
+     * mode requires a MIP-mapped texture with floating-point storage on a JIT
+     * backend and does not support migration.
      */
     Texture(const size_t shape[Dimension], size_t channels,
             bool use_accel = true,
@@ -163,8 +168,10 @@ public:
      * tensor(), \ref value() then produce a differentiable symbolic view of
      * the migrated memory.
      *
-     * Both the \c filter_mode and \c wrap_mode have the same defaults and
-     * behaviors as for the previous constructor.
+     * The \c use_accel, \c filter_mode, \c wrap_mode, \c srgb, \c mip_filter,
+     * \c max_aniso, and \c mip_basis parameters have the same defaults and
+     * behaviors as in the shape-based constructor. This overload infers the
+     * shape and channel count from the tensor and does not accept \c writable.
      */
     template <typename TensorT>
     Texture(TensorT &&tensor, bool use_accel = true, bool migrate = true,
@@ -341,6 +348,11 @@ public:
      *
      * When \c migrate is set, the CUDA and Metal backends migrate the texture
      * data into the GPU's native texture format to avoid redundant storage.
+     *
+     * With \ref MipBasis::Laplacian, the array is first decomposed into
+     * per-level coefficients. A subsequent \ref value() then reproduces it up
+     * to floating point rounding. Migration is unavailable in that case and
+     * raises an exception.
      */
     template <typename StorageT>
     void set_value(StorageT &&value, bool migrate = false) {
@@ -423,8 +435,14 @@ public:
      * synchronizes the GPU pipeline).
      *
      * When \c migrate is set to \c true on the CUDA and Metal backends, the
-     * texture information is *fully* migrated to GPU texture memory to avoid
+     * texture information is migrated to GPU texture memory to avoid
      * redundant storage.
+     *
+     * With \ref MipBasis::Laplacian, the tensor is first decomposed into the
+     * per-level coefficient tensors, and the sampled pyramid is then rebuilt
+     * from them. A subsequent \ref tensor() reproduces the input up to floating
+     * point rounding. Migration is unavailable in that case and raises an
+     * exception.
      */
     template <typename TensorT>
     void set_tensor(TensorT &&tensor, bool migrate = false) {
@@ -468,13 +486,20 @@ public:
      *
      * A tensor representation of this texture object can be retrieved with
      * \ref tensor(). That representation can be modified, but in order to apply
-     * it successfully to the texture, this method must also be called. In short,
-     * this method will use the tensor representation to update the texture's
-     * internal state.
+     * it successfully to the texture, this method must also be called. In
+     * short, this method will use the tensor representation to update the
+     * texture's internal state.
      *
      * When \c migrate is set to \c true on the CUDA and Metal backends, the
-     * texture information is *fully* migrated to GPU texture memory to avoid
-     * redundant storage.
+     * texture information is migrated to GPU texture memory to avoid redundant
+     * storage.
+     *
+     * With \ref MipBasis::Laplacian, the per-level coefficient tensors (see
+     * \ref tensor(size_t)) are the authoritative state instead, and this
+     * method rebuilds the sampled pyramid from their current contents. An
+     * optimization loop should write the coefficient tensors in place and call
+     * this method once per step. Migration is unavailable in that case and
+     * raises an exception.
      */
     void update_inplace(bool migrate = false) {
         if (m_mip_basis == MipBasis::Laplacian) {
@@ -555,7 +580,7 @@ public:
      *
      * Although the returned object is not const, changes to it are only fully
      * propagated to the Texture instance when a subsequent call to
-     * \ref set_tensor() is made.
+     * \ref update_inplace() is made.
      */
     TensorXf &tensor() {
         return const_cast<TensorXf &>(
@@ -700,8 +725,9 @@ public:
      * \ref MipFilter::Linear and rounds to the nearest level under \ref
      * MipFilter::Nearest. Out-of-range values are clamped.
      *
-     * The evaluation is differentiable with respect to query position
-     * and texture data but not the ``lod`` parameter.
+     * The method is differentiable with respect to the query position and
+     * texture data (including derivative propagation through the MIP pyramid
+     * construction) but not with respect to the \c lod argument
      *
      * On a texture without a MIP pyramid, the lookup degrades to a regular
      * non-filtered \ref eval().
@@ -751,20 +777,19 @@ public:
      *
      * Besides the query position, this function additionally takes
      * texture-space differentials ``ddx`` and ``ddy`` that span the pixel's
-     * elliptical footprint and control the MIP level and anisotropic filter
-     * shape. Filtering uses up to \ref max_aniso() trilinear taps along the
-     * major ellipse axis.
+     * elliptical footprint. The method averages up to \c max_aniso trilinear
+     * taps that are distributed along the major ellipse axis. For \c max_aniso
+     * equal to 1, it performs an ordinary trilinear lookup.
      *
-     * Depending on backend availability and settings (the ``use_accel``
-     * constructor flag), the implementation either uses the GPU hardware
-     * instruction for anisotropic filtering, or it falls back to a software
-     * implementation of the Direct3D 11.3 reference algorithm. Hardware
-     * anisotropic filtering is approximate and vendor specific. Results may
+     * Hardware anisotropic filtering (if enabled via the \c use_accel
+     * constructor argument) is approximate and vendor specific. Results may
      * deviate from the software path by several percent for off-axis
-     * footprints. Pass ``use_accel=False`` for reproducible output.
+     * footprints. Pass ``use_accel=false`` if it is important that the output
+     * remains consistent across backends.
      *
-     * The evaluation is differentiable with respect to query position
-     * and texture data but not the ``ddx`` and ``ddy`` parameters.
+     * The method is differentiable with respect to the query position and
+     * texture data (including derivative propagation through the MIP pyramid
+     * construction) but not with respect to the \c ddx and \c ddy argument.
      *
      * On a texture without a MIP pyramid, the lookup degrades to a regular
      * non-filtered \ref eval().
@@ -817,15 +842,16 @@ public:
     }
 
     /**
-     * \brief Store values into a writable hardware texture
+     * \brief Store values into a writable texture
      *
      * The per-channel values in \c value are written to the texel addressed by
      * the integer coordinates \c pos. The texture must have been created with
      * <tt>writable = true</tt>.
      *
-     * This is a hardware texture store (a side effect): it is not
-     * differentiable, and the written texture is meant for display / external
-     * sampling rather than \ref eval().
+     * The store is a side effect and not differentiable. Backends providing a
+     * hardware texture write into it, and such a texture is meant for display
+     * / external sampling rather than \ref eval(). Without one (LLVM, or
+     * double precision), the values are scattered into the backing storage.
      *
      * Reading the texture after writing to it (via \ref value(), \ref
      * tensor(), or the ``eval_*()`` methods) requires an intermediate
@@ -1029,9 +1055,9 @@ public:
      * This implementation computes the result directly from explicit
      * differentiated basis functions. It has no autodiff support.
      *
-     * The resulting gradient and hessian have been multiplied by the spatial extents
-     * to count for the transformation from the unit size volume to the size of its
-     * shape.
+     * The resulting gradient has been multiplied by the spatial extents to
+     * count for the transformation from the unit size volume to the size of
+     * its shape.
      */
     template <typename Output>
     CubicGrad<Output> eval_cubic_grad(const position_for<Output> &pos,
@@ -1512,7 +1538,7 @@ private:
     }
 
     /// Laplacian mode: initialize the coefficient tensors from a physical
-    /// image (a detached analysis step)
+    /// image
     void decompose(const Storage &value) {
         DRJIT_MARK_USED(value);
         if constexpr (is_jit_v<Storage_>) {
