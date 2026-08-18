@@ -83,8 +83,22 @@ def test03_packet_scatter_ptr():
     assert list(result) == [0, 0, 0, 1, 2, 3]
 
 
+def test04_nested_packet_scatter_ptr():
+    with dr.detail.scoped_rtld_deepbind():
+        pkg = pytest.importorskip("memop_ext")
+
+    result = pkg.nested_packet_scatter_ptr()
+
+    assert list(result) == [
+        1, 5, 9, 13,
+        2, 6, 10, 14,
+        3, 7, 11, 15,
+        4, 8, 12, 16,
+    ]
+
+
 @pytest.test_arrays('float32,is_diff,shape=(*)')
-def test04_packet_scatter_assign(t):
+def test05_packet_scatter_assign(t):
     pkg = get_pkg(t)
     UInt32 = sys.modules[t.__module__].UInt32
     target = dr.zeros(t, 4)

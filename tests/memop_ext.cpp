@@ -35,7 +35,7 @@ template <JitBackend Backend> void bind(nb::module_ m) {
     });
 
     m.def("packet_scatter_assign", [](Float target, Float v0, Float v1, UInt32 index) {
-        dr::scatter(target, Array2f(v0, v1), index);
+        dr::scatter<Float>(target, Array2f(v0, v1), index);
         return target;
     });
 
@@ -58,6 +58,22 @@ NB_MODULE(memop_ext, m) {
     m.def("packet_scatter_ptr", []() {
         std::array<float, 6> target { };
         dr::scatter(target.data(), dr::Packet<float, 3>(1.f, 2.f, 3.f), 1u);
+        return target;
+    });
+
+    m.def("nested_packet_scatter_ptr", []() {
+        using FloatP = dr::Packet<float, 4>;
+        using UInt32P = dr::Packet<uint32_t, 4>;
+        using Vector4fP = dr::Array<FloatP, 4>;
+
+        std::array<float, 16> target { };
+        Vector4fP value(
+            FloatP(1.f, 2.f, 3.f, 4.f),
+            FloatP(5.f, 6.f, 7.f, 8.f),
+            FloatP(9.f, 10.f, 11.f, 12.f),
+            FloatP(13.f, 14.f, 15.f, 16.f));
+
+        dr::scatter(target.data(), value, UInt32P(0u, 1u, 2u, 3u));
         return target;
     });
 
