@@ -201,7 +201,6 @@ if (MSVC)
       TARGET copy-targets-drjit POST_BUILD
       COMMAND ${CMAKE_COMMAND} -E copy_if_different
         $<TARGET_FILE:${target}> ${COPY_TARGET_DESTINATION}
-      DEPENDS ${target}
     )
   endforeach(target)
 
