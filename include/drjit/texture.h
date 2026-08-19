@@ -1455,7 +1455,7 @@ private:
                 type_v<scalar_t<Storage_>>, (uint32_t) Dimension,
                 (uint32_t) m_channels_storage, (uint32_t) channels_out,
                 (int) m_srgb, m_handle, resolution_indices().data(),
-                m_size / m_channels_storage)));
+                idiv_indices().data(), m_size / m_channels_storage)));
         } else {
             (void) channels_out;
             return Storage();

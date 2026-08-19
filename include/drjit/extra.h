@@ -425,7 +425,8 @@ ad_tex_write(uint32_t channels_stored, uint32_t channels_out,
 extern DRJIT_EXTRA_EXPORT uint32_t
 ad_tex_readback(VarType storage_type, uint32_t dimension,
                 uint32_t channels_stored, uint32_t channels_out, int srgb,
-                void *handle, const uint32_t *res, size_t n_texels);
+                void *handle, const uint32_t *res, const uint32_t *idiv,
+                size_t n_texels);
 
 /**
  * \brief Re-pack channel-interleaved texture data to a different channel width

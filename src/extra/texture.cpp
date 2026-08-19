@@ -422,7 +422,8 @@ void ad_tex_eval(VarType query_type, uint32_t dim, uint32_t channels_stored,
                      ops.active, result.data());
     } else {
         // AD case: perform a non-accelerated lookup with gradient tracking and
-        // splice the accelerated result into the primal component if possible.
+        // splice the accelerated result into the primal component when
+        // hardware texture lookups are used.
         Float *scratch_mem = (Float *) alloca(sizeof(Float) * channels_out);
         tex_scratch<Float> scratch(scratch_mem, channels_out);
         dr::detail::tex_eval(ops, pos, result.data(), scratch.data());
@@ -674,18 +675,16 @@ uint64_t ad_tex_mipmap_from_base(uint32_t dim, uint32_t channels_stored, int srg
                                          prev, lres + 3 * (l - 1), lres + 3 * l,
                                          dim, C, unorm8, srgb != 0);
 
-        // Append the level to the pyramid buffer. The appended ranges never
-        // overlap, which permits ReduceMode::Permute.
+        // Append the level to the pyramid buffer
         U32 dst = U32::steal(jit_var_counter(backend, (size_t) n * C)) +
                   offset * C;
+
         mip = Float::steal(ad_var_scatter(mip.index_combined(),
                                           level.index_combined(), dst.index(),
                                           all.index(), ReduceOp::Identity,
                                           ReduceMode::Permute));
 
-        // Materialize the level (one kernel that also performs the append);
-        // the next level's taps then read from memory instead of expanding
-        // recursively in the symbolic gather rewriter
+        // Materialize the level
         jit_var_eval(level.index());
 
         offset += n;
@@ -825,7 +824,8 @@ void ad_tex_eval_lod(VarType query_type, uint32_t dim, uint32_t channels_stored,
                                result.data());
         } else {
             // AD case: perform a non-accelerated lookup with gradient tracking
-            // and splice the accelerated result into the primal if possible.
+            // and splice the accelerated result into the primal component when
+            // hardware texture lookups are used.
             dr::detail::tex_eval_lod(ops, pos, lod, n_levels,
                                      (dr::MipFilter) mip_filter,
                                      result.data(), scratch.data());
@@ -883,7 +883,8 @@ void ad_tex_eval_filtered(VarType query_type, uint32_t dim,
                                 result.data());
         } else {
             // AD case: perform a non-accelerated lookup with gradient tracking
-            // and splice the accelerated result into the primal result.
+            // and splice the accelerated result into the primal component when
+            // hardware texture lookups are used.
             dr::detail::tex_eval_filtered(ops, pos, ddx, ddy, n_levels,
                                           (dr::MipFilter) mip_filter,
                                           max_aniso, result.data());
@@ -983,7 +984,7 @@ void ad_tex_wrap(uint32_t dim, int wrap_mode, const uint32_t *res_idx,
                  const uint32_t *idiv_idx, const uint32_t *pos_idx,
                  uint32_t *out_idx) {
     // Only the integer-coordinate parts of ``JitOps`` are needed here (res_i,
-    // idiv, wrap_mode); the float/gather machinery is left default-initialized.
+    // idiv, wrap_mode). Leave the float/gather machinery default-initialized.
     JitOps ops;
     ops.backend = jit_set_backend(res_idx[0]).backend;
     ops.dim = dim;
@@ -1000,8 +1001,6 @@ void ad_tex_wrap(uint32_t dim, int wrap_mode, const uint32_t *res_idx,
         }
     }
 
-    // The result is a pure integer variable (no AD component); hand back the
-    // owning JIT index.
     for (uint32_t k = 0; k < dim; ++k)
         out_idx[k] = (uint32_t) dr::detail::tex_wrap(ops, pos[k], k).release();
 }
@@ -1072,10 +1071,10 @@ void ad_tex_cubic(VarType query_type, uint32_t dim, uint32_t channels_stored,
         for (uint32_t ch = 0; ch < channels_out; ++ch)
             result[ch] = f[ch];
 
-        // The coordinate warp is non-linear in `pos`, so its AD graph gives the
-        // wrong derivative. When gradients are tracked, recompute via the
-        // directly-differentiable B-spline path and splice its gradient onto the
-        // fast primal with replace_grad() (reusing the now-dead `f` as scratch).
+        // The accelerated lookups above aren't AD-attached. The code below
+        // splices in the right derivatives by performing a regular cubic
+        // lookup (without the GPU gems trick) and then capturing the AD
+        // graph of that. (reusing the now-dead `f` as scratch).
         if (any_grad(value, pos_idx, dim)) {
             Float *scratch_mem = (Float *) alloca(sizeof(Float) * channels_out);
             tex_scratch<Float> scratch(scratch_mem, channels_out);
@@ -1130,8 +1129,9 @@ void ad_tex_write(uint32_t channels_stored, uint32_t channels_out,
     using F32 = GenericArray<float>;
     JitBackend backend = jit_set_backend(pos_idx[0]).backend;
 
-    // CUDA stores 8-bit textures as raw unorm8 bytes, so clip and sRGB-encode in
-    // software (codegen scales to 0..255); Metal does this in hardware.
+    // CUDA stores 8-bit textures as raw unorm8 bytes. We must clip and
+    // sRGB-encode in software. Scaling to 0..255 is done by the
+    // jit_text_write() step. Metal does this all in hardware.
     bool quantize = backend == JitBackend::CUDA &&
                     storage_type == VarType::UInt8;
 
@@ -1160,28 +1160,35 @@ void ad_tex_write(uint32_t channels_stored, uint32_t channels_out,
 uint32_t ad_tex_readback(VarType storage_type, uint32_t dim,
                          uint32_t channels_stored, uint32_t channels_out,
                          int srgb, void *handle, const uint32_t *res_idx,
-                         size_t n_texels) {
+                         const uint32_t *idiv_idx, size_t n_texels) {
     using F32 = GenericArray<float>;
+    using I32 = GenericArray<int32_t>;
     using U32 = GenericArray<uint32_t>;
 
     JitBackend backend = jit_set_backend(res_idx[0]).backend;
     uint32_t C  = channels_out,
              Cs = channels_stored;
 
+    dr::divisor<uint32_t> div_c(C);
     U32 i     = U32::steal(jit_var_counter(backend, n_texels * C)),
-        texel = i / C,
+        texel = div_c(i),
         ch    = i - texel * C;
 
     // Texel-center coordinates, fastest-varying dimension first
     F32 pos[MaxDim];
     uint32_t pos_idx[MaxDim];
-    U32 rem = texel;
+    I32 rem = I32(texel);
     for (uint32_t k = 0; k < dim; ++k) {
-        U32 res   = U32::borrow(res_idx[k]),
-            next  = rem / res,
+        dr::divisor<I32> div_r;
+        div_r.multiplier = I32::borrow(idiv_idx[2 * k + 0]);
+        div_r.shift      = I32::borrow(idiv_idx[2 * k + 1]);
+
+        I32 res   = I32(U32::borrow(res_idx[k])),
+            next  = div_r(rem),
             coord = rem - next * res;
         rem = next;
-        pos[k] = (F32(coord) + 0.5f) / F32(res);
+        F32 inv = dr::rcp(F32(res));
+        pos[k] = (F32(coord) + 0.5f) * inv;
         pos_idx[k] = pos[k].index();
     }
 
