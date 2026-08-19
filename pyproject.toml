@@ -87,7 +87,7 @@ input = "include/drjit/fwd.h"
 regex = '''(?sx)
 \#define \s+ DRJIT_VERSION_MAJOR \s+ (?P<major>\d+) .*?
 \#define \s+ DRJIT_VERSION_MINOR \s+ (?P<minor>\d+) .*?
-\#define \s+ DRJIT_VERSION_PATCH \s+ (?P<patch>\d+) .*?
+\#define \s+ DRJIT_VERSION_PATCH \s+ (?P<patch>\d+ (?: \.[a-zA-Z]+\d* )? ) .*?
 '''
 result = "{major}.{minor}.{patch}"
 
