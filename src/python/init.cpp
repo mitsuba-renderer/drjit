@@ -10,15 +10,10 @@
 */
 
 #include <algorithm>
+#include <atomic>
 #include <condition_variable>
 #include <mutex>
 #include <thread>
-
-#if defined(_WIN32)
-#  include <windows.h>
-#else
-#  include <dlfcn.h>
-#endif
 
 #include <utility>
 #include <vector>
@@ -847,22 +842,20 @@ nb::object import_ndarray(ArrayMeta m, PyObject *arg, vector<size_t> *shape_out,
 }
 
 // The ndarray release sequence implemented by the following callbacks is
-// paranoid but needed in some case. When Dr.Jit wants to release an array, it
-// might still be accessed by concurrently running code (this is particularly
-// relevant for LLVM mode, where both host and "device" share the same address
-// space). Decreasing the reference count is therefore done by enqueueuing a
-// host function that is called after Dr.Jit is guaranteed to have finished
-// accessing the array. But this presents another problem: decreasing the
-// DLPack reference count might involve CPython API calls that require holding
-// the GIL, which is not a nice requirement for things running in the
-// CUDA-internal message queue thread or nanothread worker due to a danger of
-// deadlocks. We therefore manage the array cleanup calls in a separate thread.
-// This thread will *eventually* decrease the reference count of the array.
-// This is similar to Py_AddPendingCall, but avoids the issue where
-// Py_AddPendingCall is not always serviced, see also
+// paranoid but needed in some cases. In LLVM mode, an array that Dr.Jit wants
+// to release might still be accessed by concurrently running code, since host
+// and "device" share the same address space. Decreasing the reference count is
+// therefore done by enqueuing a host function that runs once Dr.Jit is
+// guaranteed to have finished accessing the array. But this presents another
+// problem: decreasing the DLPack reference count might involve CPython API
+// calls that require holding the GIL, which is not a nice requirement for a
+// nanothread worker due to a danger of deadlocks. We therefore manage the
+// array cleanup calls in a separate thread that is launched when this
+// situation arises for the first time. This thread will *eventually* decrease
+// the reference count of the array. This is similar to Py_AddPendingCall, but
+// avoids the issue where Py_AddPendingCall is not always serviced, see also
 // https://github.com/python/cpython/issues/95820.
 
-using CleanupCallback = void(*)(void*);
 static std::mutex python_cleanup_queue_mutex;
 static std::condition_variable python_cleanup_queue_cond;
 static bool python_cleanup_thread_stop = false;
@@ -878,6 +871,7 @@ void python_cleanup_thread_main() {
 
         std::vector<nb::detail::ndarray_handle*> todo;
         todo.swap(python_cleanup_queue);
+        bool stop = python_cleanup_thread_stop;
         lock.unlock();
 
         nb::gil_scoped_acquire guard;
@@ -885,19 +879,18 @@ void python_cleanup_thread_main() {
             for (auto p: todo)
                 NB_CALL(ndarray_dec_ref)(p);
         }
-        if (python_cleanup_thread_stop)
+        if (stop)
             break;
     }
-}
-
-void python_cleanup_thread_static_initialization() {
-    python_cleanup_thread = std::thread(&python_cleanup_thread_main);
 }
 
 void python_cleanup_thread_static_shutdown() {
     {
         std::scoped_lock lock(python_cleanup_queue_mutex);
         python_cleanup_thread_stop = true;
+
+        if (!python_cleanup_thread.joinable())
+            return;
     }
     nb::gil_scoped_release guard;
     python_cleanup_queue_cond.notify_one();
@@ -906,24 +899,29 @@ void python_cleanup_thread_static_shutdown() {
 
 void enqueue_python_cleanup(nb::detail::ndarray_handle *p) {
     std::scoped_lock lock(python_cleanup_queue_mutex);
+
+    // Nothing left to do if the interpreter is already shutting down
+    if (python_cleanup_thread_stop)
+        return;
+
+    if (!python_cleanup_thread.joinable())
+        python_cleanup_thread = std::thread(&python_cleanup_thread_main);
+
     python_cleanup_queue.emplace_back(p);
     python_cleanup_queue_cond.notify_one();
 }
 
-int drjit_py_is_alive = 1;
-
-// Resolved at init time via dlsym (see export_init). Returns nonzero when the
-// *calling* thread holds the GIL, allowing synchronous ndarray cleanup.
-extern "C" {
-    static int (*py_gilstate_check)() = nullptr;
-}
+// Cleared by a Py_AtExit() handler in log.cpp, which runs before nanobind's
+// own teardown. Until then, nb::is_alive() still reports success even though
+// entering Python is no longer safe.
+std::atomic<bool> drjit_py_is_alive { true };
 
 static void ndarray_free_cb_2(void *p) {
     if (!nb::is_alive() || !drjit_py_is_alive)
         return;
 
     // If we're currently holding the GIL, then, release the array right now
-    if (py_gilstate_check && py_gilstate_check())
+    if (NB_CALL(gil_check)())
         NB_CALL(ndarray_dec_ref)((nb::detail::ndarray_handle *) p);
     else
         enqueue_python_cleanup((nb::detail::ndarray_handle *) p);
@@ -943,7 +941,7 @@ static void ndarray_free_cb(uint32_t, int free, void *p) {
 
     if (backend == JitBackend::LLVM) {
         // Variable is potentially used concurrently. Enqueue a host function
-        // to relesae it asynchronously
+        // to release it asynchronously
         jit_enqueue_host_func(backend, ndarray_free_cb_2, p2);
     } else {
         // Immediately try to release it
@@ -1408,20 +1406,6 @@ nb::object extract_type(nb::object tp) {
 }
 
 void export_init(nb::module_ &m) {
-    // PyGILState_Check() is used by ndarray_free_cb to detect whether the
-    // *calling* thread holds the GIL, enabling synchronous cleanup. It is
-    // excluded from the limited API headers but still exported by libpython,
-    // so we resolve it at runtime via dlsym.
-    {
-        const char *name = "PyGILState_Check";
-#if defined(_WIN32)
-        void *h = (void *) GetProcAddress(GetModuleHandleA(nullptr), name);
-#else
-        void *h = dlsym(RTLD_DEFAULT, name);
-#endif
-        py_gilstate_check = (int (*)()) h;
-    }
-
     m.def("empty",
           [](nb::type_object dtype, size_t size) {
               return full("empty", dtype, nb::handle(), size);

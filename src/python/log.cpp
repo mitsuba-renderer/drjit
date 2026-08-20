@@ -10,6 +10,7 @@
 */
 
 #include "log.h"
+#include <atomic>
 #include <string>
 
 static bool running_in_jupyter_notebook = false;
@@ -70,7 +71,7 @@ static void log_callback(LogLevel level, const char *msg) {
 }
 
 /// Defined in init.cpp
-extern int drjit_py_is_alive;
+extern std::atomic<bool> drjit_py_is_alive;
 
 void export_log(nb::module_ &m, nb::handle self) {
     nb::dict modules = nb::borrow<nb::dict>(PySys_GetObject("modules"));
@@ -91,7 +92,7 @@ void export_log(nb::module_ &m, nb::handle self) {
     // Shut down the Dr.Jit component when the Python interpreter
     // has been fully wound down. Doing it above (in the module cleanup
     // handler) can lead to leak warnings.
-    (void) Py_AtExit([] { drjit_py_is_alive = 0; jit_shutdown(false); });
+    (void) Py_AtExit([] { drjit_py_is_alive = false; jit_shutdown(false); });
 
     nb::enum_<LogLevel>(m, "LogLevel")
         .value("Disable", LogLevel::Disable)
