@@ -122,7 +122,7 @@ drjit.(step)$:
     @overload
     def \1(arg0: SelfCpT, arg1: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], /) -> SelfT: ...
 
-drjit.(minimum|maximum)$:
+drjit.(minimum|maximum|fmin|fmax)$:
     @overload
     def \1(arg0: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], arg1: SelfCpT, /) -> SelfT:
         \doc
@@ -132,6 +132,7 @@ drjit.(minimum|maximum)$:
     def \1(arg0: CoopVec[ArrayT], arg1: object) -> CoopVec[ArrayT]: ...
     @overload
     def \1(arg0: object, arg1: CoopVec[ArrayT]) -> CoopVec[ArrayT]: ...
+    @overload
     def \1(arg0: T, arg1: T, /) -> T: ...
 
 drjit.(empty|zeros|ones)$:
@@ -140,7 +141,7 @@ drjit.(empty|zeros|ones)$:
 
 drjit.full$:
     @overload
-    def full(dtype: type[ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT]], value: ValCpT | tuple | list, shape: int | Sequence[int] = 1) -> SelfT:
+    def full(dtype: type[ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT]], value: ValCpT | tuple[Any, ...] | list[Any], shape: int | Sequence[int] = 1) -> SelfT:
         \doc
     @overload
     def full(dtype: type[T], value: T, shape: int | Sequence[int]) -> T: ...
@@ -150,7 +151,7 @@ drjit.opaque$:
     def opaque(arg: T) -> T:
         \doc
     @overload
-    def opaque(dtype: type[ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT]], value: ValCpT | tuple | list, shape: int | Sequence[int] = 1) -> SelfT: ...
+    def opaque(dtype: type[ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT]], value: ValCpT | tuple[Any, ...] | list[Any], shape: int | Sequence[int] = 1) -> SelfT: ...
     @overload
     def opaque(dtype: type[T], value: T, shape: int | Sequence[int]) -> T: ...
 
@@ -662,7 +663,7 @@ drjit.(cuda|llvm|metal|auto).*__getitem__:
     pass
 
 PCG32.__isub__:
-    def __isub__(self, arg: Int64, /) -> PCG32: # type: ignore
+    def __isub__(self, arg: drjit.AnyArray | int, /) -> PCG32: # type: ignore
         \doc
 
 drjit.scalar.__prefix__:

@@ -667,7 +667,7 @@ void export_autodiff(nb::module_ &m) {
           nb::sig("def accum_grad(target: T, source: T) -> None"))
      .def("clear_grad", &::clear_grad, doc_clear_grad)
      .def("replace_grad", &::replace_grad, doc_replace_grad,
-          nb::sig("def replace_grad(arg0: T, arg1: T, /) -> None"))
+          nb::sig("def replace_grad(arg0: T, arg1: T, /) -> T"))
      .def("grad", &::grad, "arg"_a, "preserve_type"_a = true, doc_grad,
           nb::sig("def grad(arg: T, preserve_type: bool = True) -> T"))
      .def("detach", &::detach, "arg"_a, "preserve_type"_a = true, doc_detach,

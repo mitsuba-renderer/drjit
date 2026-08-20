@@ -3,7 +3,6 @@ import drjit
 import sys
 from collections.abc import MutableMapping
 from .hashgrid import HashGridEncoding, PermutoEncoding
-from . import hashgrid
 
 if sys.version_info < (3, 11):
     from typing_extensions import Tuple, Sequence, Union, Type, TypeAlias, Optional, Any, Dict, Iterator, TypeVar
@@ -735,7 +734,7 @@ class HashEncodingLayer(Module):
 
     def __init__(
         self,
-        encoding: hashgrid.HashEncoding,
+        encoding: drjit.hashgrid.HashEncoding,
     ) -> None:
         self.encoding = encoding
 

@@ -270,10 +270,14 @@ if (NOT (DRJIT_SANITIZE_ASAN OR DRJIT_SANITIZE_UBSAN))
     ${STUB_ARGS}
   )
 
-  # Generate the 'auto' version of the stubs using string replacement
+  # Generate the 'auto' version of the stubs using string replacement. The
+  # recursive stub generator also visits 'drjit.auto' and writes placeholders
+  # into these files, so the dependency must be on the LLVM stubs themselves.
+  # Naming the 'drjit-stubs' target here would only order the two commands
+  # without ever marking the output as outdated.
   add_custom_command(
     OUTPUT ${DRJIT_PYTHON_DST_DIR}/auto/__init__.pyi
-    DEPENDS drjit-stubs
+    DEPENDS ${DRJIT_PYTHON_DST_DIR}/llvm/__init__.pyi
     COMMAND cmake -P ${CMAKE_CURRENT_SOURCE_DIR}/../../resources/auto-stub.cmake
       ${DRJIT_PYTHON_DST_DIR}/llvm/__init__.pyi
       ${DRJIT_PYTHON_DST_DIR}/auto/__init__.pyi
@@ -281,7 +285,7 @@ if (NOT (DRJIT_SANITIZE_ASAN OR DRJIT_SANITIZE_UBSAN))
 
   add_custom_command(
     OUTPUT ${DRJIT_PYTHON_DST_DIR}/auto/ad.pyi
-    DEPENDS drjit-stubs
+    DEPENDS ${DRJIT_PYTHON_DST_DIR}/llvm/ad.pyi
     COMMAND cmake -P ${CMAKE_CURRENT_SOURCE_DIR}/../../resources/auto-stub.cmake
       ${DRJIT_PYTHON_DST_DIR}/llvm/ad.pyi
       ${DRJIT_PYTHON_DST_DIR}/auto/ad.pyi

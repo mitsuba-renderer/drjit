@@ -44,7 +44,7 @@ void export_resample(nb::module_ &) {
                 "convolve"_a = false, "boundary"_a = "zero", "normalize"_a = true,
                 "symbolic"_a = false)
         .def("__init__", [](Resampler *self, uint32_t source_res, uint32_t target_res,
-                            nb::typed<nb::callable, float, float> filter, double filter_radius,
+                            nb::typed<nb::callable, float(float)> filter, double filter_radius,
                             bool convolve, const char *boundary, bool normalize,
                             bool symbolic) {
                  Resampler::Filter filter_cb = [](double v, const void *ptr) -> double {

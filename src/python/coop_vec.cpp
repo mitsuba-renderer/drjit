@@ -587,7 +587,8 @@ void export_coop_vec(nb::module_ &m) {
         .def("__rmul__", &coop_vec_binary_op<JitOp::Mul>,
              nb::sig("def __rmul__(self, arg: CoopVec[T] | T | float | int, /) -> CoopVec[T]"))
         .def_prop_ro("index", [](const CoopVec &v) { return v.m_index; })
-        .def_prop_ro("type", [](const CoopVec &v) { return v.m_type; })
+        .def_prop_ro("type", [](const CoopVec &v) { return v.m_type; },
+                     nb::sig("def type(self, /) -> type[T]"))
         .def("__len__", [](const CoopVec &v) { return v.m_size; })
         .def("__abs__", &coopvec_abs_workaround)
         .def("__repr__",
@@ -652,7 +653,9 @@ void export_coop_vec(nb::module_ &m) {
         .def("__matmul__", [](const MatrixView &self, const CoopVec &x) { return matvec(self, x, {}, false); },
              nb::sig("def __matmul__(self, arg: CoopVec[T], /) -> CoopVec[T]"))
         .def_rw("buffer", &MatrixView::buffer,
-                doc_nn_MatrixView_buffer)
+                doc_nn_MatrixView_buffer,
+                nb::for_getter(nb::sig("def buffer(self, /) -> drjit.AnyArray")),
+                nb::for_setter(nb::sig("def buffer(self, value: drjit.AnyArray, /) -> None")))
         .def_prop_ro("T",
                      [](MatrixView &v) {
                          MatrixView r;
@@ -735,13 +738,17 @@ void export_coop_vec(nb::module_ &m) {
     m.def("fmin", &coop_vec_binary_op<JitOp::FMin>);
     m.def("fmax", &coop_vec_binary_op<JitOp::FMax>);
     m.def("step", &coop_vec_binary_op<JitOp::Step>, doc_step);
-    m.def("log2", &coop_vec_unary_op<JitOp::Log2>);
-    m.def("exp2", &coop_vec_unary_op<JitOp::Exp2>);
-    m.def("tanh", &coop_vec_unary_op<JitOp::Tanh>);
+    m.def("log2", &coop_vec_unary_op<JitOp::Log2>,
+          nb::sig("def log2(arg: drjit.nn.CoopVec[T], /) -> drjit.nn.CoopVec[T]"));
+    m.def("exp2", &coop_vec_unary_op<JitOp::Exp2>,
+          nb::sig("def exp2(arg: drjit.nn.CoopVec[T], /) -> drjit.nn.CoopVec[T]"));
+    m.def("tanh", &coop_vec_unary_op<JitOp::Tanh>,
+          nb::sig("def tanh(arg: drjit.nn.CoopVec[T], /) -> drjit.nn.CoopVec[T]"));
     m.def("step", [](nb::handle h0, nb::handle h1) {
         return select(
             nb::steal(PyObject_RichCompare(h0.ptr(), h1.ptr(), Py_LT)),
             nb::int_(0), nb::int_(1));
     });
-    m.def("abs", coopvec_abs_workaround);
+    m.def("abs", coopvec_abs_workaround,
+          nb::sig("def abs(arg: drjit.nn.CoopVec[T], /) -> drjit.nn.CoopVec[T]"));
 }

@@ -275,7 +275,10 @@ void export_traits(nb::module_ &m) {
                   tp = meta_get_type(m);
               }
               return nb::borrow(tp);
-          }, doc_replace_shape_t, nb::arg(), nb::arg(), nb::arg() = nb::none());
+          }, doc_replace_shape_t, nb::arg(), nb::arg(), nb::arg() = nb::none(),
+          nb::sig("def replace_shape_t(arg0: object, arg1: Sequence[int], "
+                  "arg2: Literal['array', 'matrix', 'quaternion', 'complex'] "
+                  "| None = None, /) -> type"));
 
     m.def("backend_v",
           [](nb::handle h) {

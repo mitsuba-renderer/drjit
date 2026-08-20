@@ -698,5 +698,7 @@ int sq_ass_item_tensor(PyObject *self, Py_ssize_t index, PyObject *value) noexce
 
 void export_slice(nb::module_&m) {
     m.def("slice_index", &slice_index, doc_slice_index, "dtype"_a, "shape"_a,
-          "indices"_a);
+          "indices"_a,
+          nb::sig("def slice_index(dtype: typing.Type[ArrayT], shape: "
+                  "Sequence[int], indices: tuple) -> tuple[tuple[int, ...], ArrayT]"));
 }

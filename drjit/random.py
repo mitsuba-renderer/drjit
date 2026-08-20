@@ -40,7 +40,7 @@ class Generator:
         """
         raise NotImplementedError("random(): use a subclass that implements this function")
 
-    def uniform(self, dtype: typing.Type[ArrayT], shape: Shape, low: ArrayOrFloat = 0.0, high: ArrayOrFloat = 1.0):
+    def uniform(self, dtype: typing.Type[ArrayT], shape: Shape, low: ArrayOrFloat = 0.0, high: ArrayOrFloat = 1.0) -> ArrayT:
         """
         Return a Dr.Jit array or tensor containing uniformly distributed
         pseudorandom variates.

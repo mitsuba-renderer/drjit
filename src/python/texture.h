@@ -240,13 +240,6 @@ void bind_texture(nb::module_ &m, const char *name) {
                  t.set_value(value, migrate);
              },
              "value"_a, "migrate"_a = false, doc_Texture_set_value)
-        .def("set_value_with_event",
-             [](Tex &t, const typename Tex::Storage &value,
-                Event<Tex::Backend> &event, bool migrate) {
-                 t.set_value(value, migrate);
-                 event.record();
-             },
-             "value"_a, "event"_a, "migrate"_a = false, doc_Texture_set_value_2)
         .def("set_tensor",
              [](Tex &t, const typename Tex::TensorXf &tensor, bool migrate) {
                  t.set_tensor(tensor, migrate);
@@ -296,7 +289,8 @@ void bind_texture(nb::module_ &m, const char *name) {
             for (size_t i = 0; i < t.ndim(); ++i)
                 shape.put(t.shape()[i]);
             return shape.commit();
-        }, doc_Texture_shape)
+        }, doc_Texture_shape,
+        nb::sig("def shape(self, /) -> tuple[int, ...]"))
         .def("channel_count", &Tex::channel_count, doc_Texture_channel_count)
         .def_tex_eval(Float32)
         .def_tex_eval(Float64)
@@ -316,6 +310,17 @@ void bind_texture(nb::module_ &m, const char *name) {
         .def_tex_eval_cubic_hessian(Float64)
         .def_tex_eval_cubic_helper(Float32)
         .def_tex_eval_cubic_helper(Float64);
+
+    // 'Event' only exists on the JIT backends
+    if constexpr (dr::is_jit_v<typename Tex::Storage>)
+        tex.def("set_value_with_event",
+                [](Tex &t, const typename Tex::Storage &value,
+                   Event<Tex::Backend> &event, bool migrate) {
+                    t.set_value(value, migrate);
+                    event.record();
+                },
+                "value"_a, "event"_a, "migrate"_a = false,
+                doc_Texture_set_value_2);
 
     tex.attr("IsTexture") = true;
 

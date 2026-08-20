@@ -63,7 +63,9 @@ void export_history(nb::module_ &m) {
             free(data);
             return history;
         },
-        "types"_a = nb::list(), doc_kernel_history);
+        "types"_a = nb::list(), doc_kernel_history,
+        nb::sig("def kernel_history(types: Sequence[KernelType] = []) "
+                "-> list[dict[str, Any]]"));
 
     m.def("kernel_history_clear", &jit_kernel_history_clear,
           doc_kernel_history_clear);

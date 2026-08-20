@@ -739,14 +739,14 @@ void export_print(nb::module_ &m) {
                                  kwargs);
           },
           "fmt"_a.noconvert(), "args"_a, "kwargs"_a, doc_format,
-          nb::sig("def format(fmt: str, *args, limit: int = 20, **kwargs)"))
+          nb::sig("def format(fmt: str, *args, limit: int = 20, **kwargs) -> str"))
       .def("format",
            [](nb::handle value, nb::kwargs kwargs) {
                return format_impl("drjit.format", "{}", nb::handle(),
                                   nb::borrow<nb::args>(nb::make_tuple(value)),
                                   kwargs);
            }, "value"_a, "kwargs"_a,
-          nb::sig("def format(value: object, *, limit: int = 20, **kwargs)"))
+          nb::sig("def format(value: object, *, limit: int = 20, **kwargs) -> str"))
       .def("print", &print_impl, "fmt"_a.noconvert(), "args"_a, "kwargs"_a,
            doc_print,
            nb::sig("def print(fmt: str, *args, active: drjit.ArrayBase | "

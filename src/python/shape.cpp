@@ -285,5 +285,6 @@ void export_shape(nb::module_ &m) {
     m.def("shape", &shape, doc_shape, nb::sig("def shape(arg: object) -> tuple[int, ...]"));
     m.def("width", &width, doc_width)
      .def("width", [](nb::args args) { return width(args); });
-    m.def("opaque_width", &opaque_width);
+    m.def("opaque_width", &opaque_width,
+          nb::sig("def opaque_width(arg: object, /) -> AnyArray"));
 }

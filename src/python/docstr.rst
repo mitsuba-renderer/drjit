@@ -262,7 +262,7 @@
 
     .. code-block:: python
 
-        assert dr.leaf_t(dr.leaf.Array3f) is dr.leaf.Array3f
+        assert dr.leaf_t(dr.scalar.Array3f) is dr.scalar.Array3f
         assert dr.leaf_t(dr.cuda.Array3i) is dr.cuda.Int
         assert dr.leaf_t(dr.cuda.Matrix4f) is dr.cuda.Float
         assert dr.leaf_t(dr.cuda.TensorXf) is dr.cuda.Float

@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+# Annotations below spell cross-module names fully qualified, as in
+# 'drjit.detail.X'. The stub generator only recognizes that form, which it
+# rewrites into a stub-local reference plus a matching import. This import
+# keeps the spelling valid at runtime.
+import drjit
 from . import detail
 
 with detail.scoped_rtld_deepbind():
@@ -487,7 +492,7 @@ def lerp(a, b, t):
 
     return fma(b, t, fma(a, -t, a))
 
-def relative_grad(x: dr.ArrayBase):
+def relative_grad(x: ArrayBase):
     """
     Create a factor with primal value ``1`` that injects a *relative*
     first-order derivative with respect to ``x``.
@@ -574,7 +579,7 @@ def imag(arg, /):
         return tp(0)
 
 
-def conj(arg, /):
+def conj(arg: T, /) -> T:
     '''
     Returns the conjugate of the provided complex or quaternion-valued array.
     For all other types, it returns the input unchanged.
@@ -696,7 +701,7 @@ def diag(arg, /):
         raise Exception('drjit.diag(): unsupported type!')
 
 
-def identity(dtype, size=1):
+def identity(dtype: Type[T], size: int = 1) -> T:
     '''
     Return the identity array of the desired type and size
 
@@ -773,7 +778,7 @@ def frob(a, /):
     return sum(result)
 
 
-def polar_decomp(arg, it=10):
+def polar_decomp(arg: T, it: int = 10) -> Tuple[T, T]:
     '''
     Returns the polar decomposition of the provided Dr.Jit matrix.
 
@@ -949,7 +954,7 @@ inv_sqrt_two          = 0.70710678118654752440  # noqa
 inf                   = float('inf')  # noqa
 nan                   = float('nan')  # noqa
 
-def epsilon(arg, /):
+def epsilon(arg: object, /) -> float:
     '''
     Returns the machine epsilon.
 
@@ -974,7 +979,7 @@ def epsilon(arg, /):
         raise TypeError("epsilon(): input is not a Dr.Jit array or array type!")
 
 
-def one_minus_epsilon(arg, /):
+def one_minus_epsilon(arg: object, /) -> float:
     '''
     Returns one minus the machine epsilon value.
 
@@ -996,7 +1001,7 @@ def one_minus_epsilon(arg, /):
         raise TypeError("one_minus_epsilon(): input is not a Dr.Jit array or array type!")
 
 
-def recip_overflow(arg, /):
+def recip_overflow(arg: object, /) -> float:
     '''
     Returns the reciprocal overflow threshold value.
 
@@ -1021,7 +1026,7 @@ def recip_overflow(arg, /):
         raise TypeError("recip_overflow(): input is not a Dr.Jit array or array type!")
 
 
-def smallest(arg, /):
+def smallest(arg: object, /) -> float:
     '''
     Returns the smallest representable normalized floating point value.
 
@@ -1042,7 +1047,7 @@ def smallest(arg, /):
     else:
         raise TypeError("smallest(): input is not a Dr.Jit array or array type!")
 
-def largest(arg, /):
+def largest(arg: object, /) -> float:
     '''
     Returns the largest representable finite floating point value for `t`.
 
@@ -1069,7 +1074,7 @@ def largest(arg, /):
 # -------------------------------------------------------------------
 
 
-def suspend_grad(*args, when=True):
+def suspend_grad(*args: object, when: bool = True) -> drjit.detail.ADContextManager:
     """
     Python context manager to temporarily disable gradient tracking globally,
     or for a specific set of variables.
@@ -1142,7 +1147,7 @@ def suspend_grad(*args, when=True):
     return detail.ADContextManager(detail.ADScope.Suspend, array_indices)
 
 
-def resume_grad(*args, when=True):
+def resume_grad(*args: object, when: bool = True) -> drjit.detail.ADContextManager:
     """
     Python context manager to temporarily resume gradient tracking globally,
     or for a specific set of variables.
@@ -1195,7 +1200,7 @@ def resume_grad(*args, when=True):
     return detail.ADContextManager(detail.ADScope.Resume, array_indices)
 
 
-def isolate_grad(when=True):
+def isolate_grad(when: bool = True) -> drjit.detail.ADContextManager:
     """
     Python context manager to isolate and partition AD traversals into multiple
     distinct phases.
@@ -1252,7 +1257,7 @@ def isolate_grad(when=True):
 #      Miscellaneous
 # -------------------------------------------------------------------
 
-def sign(arg, /):
+def sign(arg: T, /) -> T:
     r'''
     sign(arg, /)
     Return the element-wise sign of the provided array.
@@ -1983,7 +1988,7 @@ def hypot(a, b):
     )
 
 
-def reverse(value, axis: int = 0):
+def reverse(value: T, axis: int = 0) -> T:
     '''
     Reverses the given Dr.Jit array or Python sequence along the
     specified axis.
@@ -3111,7 +3116,7 @@ def _normalize_axis_tuple(t: Union[int, Tuple[int, ...]], ndim: int, name: str) 
     return axes
 
 
-def moveaxis(arg: ArrayBase, /, source: Union[int, Tuple[int, ...]], destination: Union[int, Tuple[int, ...]]):
+def moveaxis(arg: ArrayT, /, source: Union[int, Tuple[int, ...]], destination: Union[int, Tuple[int, ...]]) -> ArrayT:
     """
     Move one or more axes of an input tensor to another position.
 
@@ -3701,7 +3706,7 @@ def repeat(value: T,
     return _map_arrays(value, lambda leaf: _repeat_leaf(leaf, repeats, axis))
 
 
-def rng(seed: Union[ArrayBase, int] = 0, method='philox4x32', symbolic: bool = False) -> random.Generator:
+def rng(seed: Union[ArrayBase, int] = 0, method='philox4x32', symbolic: bool = False) -> drjit.random.Generator:
     '''
     Return a seeded random number generator.
 
@@ -4104,9 +4109,6 @@ def freeze(
         return decorator
 
 
-del F
-del F2
-
 def assert_true(
     cond,
     fmt: Optional[str] = None,
@@ -4114,7 +4116,7 @@ def assert_true(
     tb_depth: int = 3,
     tb_skip: int = 0,
     **kwargs,
-):
+) -> None:
     """
     Generate an assertion failure message when any of the entries in ``cond``
     are ``False``.
@@ -4223,7 +4225,7 @@ def assert_false(
     tb_depth: int = 3,
     tb_skip: int = 0,
     **kwargs,
-):
+) -> None:
     """
     Equivalent to :py:func:`assert_true` with a flipped condition ``cond``.
     Please refer to the documentation of this function for further details.
@@ -4245,7 +4247,7 @@ def assert_equal(
     limit: int = 3,
     tb_skip: int = 0,
     **kwargs,
-):
+) -> None:
     """
     Equivalent to :py:func:`assert_true` with the condition ``arg0==arg1``.
     Please refer to the documentation of this function for further details.
@@ -4522,11 +4524,21 @@ def unit_angle(a, b):
     temp = 2 * asin(.5 * norm(b - mulsign(a, dot_uv)))
     return select(dot_uv >= 0, temp, pi - temp)
 
+@overload
+def func(f: None = None, *, backend: Optional[JitBackend] = None) -> Callable[[F], F]:
+    ...
+
+
+@overload
+def func(f: F, *, backend: Optional[JitBackend] = None) -> F:
+    ...
+
+
 def func(
     f: Optional[F] = None,
     *,
     backend: Optional[JitBackend] = None
-):
+) -> Union[F, Callable[[F2], F2]]:
     """
     Decorator that prevents the body of the decorated function from being
     inlined into the caller, emitting it as a separate callable in the
@@ -4636,4 +4648,4 @@ newaxis = None
 from . import hashgrid as hashgrid
 from . import nn as nn
 
-del overload, Optional
+del overload, Optional, F, F2
