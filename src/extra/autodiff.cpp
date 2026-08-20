@@ -657,6 +657,18 @@ struct LocalState {
 static State state;
 static thread_local LocalState local_state;
 
+/// Postpone log message delivery until leaving the AD lock, if it is held
+static int ad_log_defer() {
+    if (state.lock.owner.load(std::memory_order_relaxed) != thread_id())
+        return 0;
+    lock_set_pending(state.lock);
+    return 1;
+}
+
+static struct ADLogDeferInit {
+    ADLogDeferInit() { jit_set_log_defer_callback(ad_log_defer); }
+} ad_log_defer_init;
+
 #if defined(DRJIT_SANITIZE_INTENSE)
 static void ad_sanitation_checkpoint_variables() {
     state.variables.emplace_back();

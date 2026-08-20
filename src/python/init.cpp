@@ -917,14 +917,13 @@ int drjit_py_is_alive = 1;
 extern "C" {
     static int (*py_gilstate_check)() = nullptr;
 }
-extern int disable_gc_scope;
 
 static void ndarray_free_cb_2(void *p) {
     if (!nb::is_alive() || !drjit_py_is_alive)
         return;
 
     // If we're currently holding the GIL, then, release the array right now
-    if (!disable_gc_scope && py_gilstate_check && py_gilstate_check())
+    if (py_gilstate_check && py_gilstate_check())
         NB_CALL(ndarray_dec_ref)((nb::detail::ndarray_handle *) p);
     else
         enqueue_python_cleanup((nb::detail::ndarray_handle *) p);
