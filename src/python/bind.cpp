@@ -155,7 +155,8 @@ nb::object bind(const ArrayBinding &b) {
 
     nb::detail::type_data_init d { };
 
-    d.flags = (uint32_t) nb::detail::type_init_flags::has_supplement |
+    d.flags = NB_ABI_TAG |
+              (uint32_t) nb::detail::type_init_flags::has_supplement |
               (uint32_t) nb::detail::type_init_flags::has_base_py |
               (uint32_t) nb::detail::type_init_flags::has_type_slots |
               (uint32_t) nb::detail::type_flags::is_final |
@@ -182,12 +183,7 @@ nb::object bind(const ArrayBinding &b) {
     d.flags |= (uint32_t) nb::detail::type_flags::pooled;
     d.pool_capacity = 128;
 
-    uint32_t align_log2 = 0;
-    while ((1u << align_log2) != b.talign)
-        align_log2++;
-
-    d.align_log2 = align_log2;
-    d.size = b.tsize_rel * b.talign;
+    d.size_align = nb::detail::type_size_align(b.tsize_rel * b.talign, b.talign);
     d.name = name.c_str();
     d.type = b.array_type;
     d.supplement_size = sizeof(ArraySupplement);

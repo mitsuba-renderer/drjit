@@ -67,7 +67,7 @@ template <typename Value>
 class PyCustomBase : public CustomBase<Value>{
 public:
     using Base = CustomBase<Value>;
-    NB_TRAMPOLINE(Base, 1);
+    NB_TRAMPOLINE(Base);
 
     PyCustomBase(const Value &base_value) : Base(base_value) {}
 

@@ -705,7 +705,7 @@ nb::object import_ndarray(ArrayMeta m, PyObject *arg, vector<size_t> *shape_out,
     }
 
     nb::detail::ndarray_handle *th = NB_CALL(ndarray_import)(
-        NB_CTX, arg, &conf, sizeof(conf), true, nullptr);
+        NB_CTX, arg, &conf, true, nullptr);
 
     if (!th && m.ndim > 1 && m.shape[m.ndim - 1] == DRJIT_DYNAMIC) {
         // Try conversion of scalar to vectorized representation. 'flip_axes'
@@ -713,7 +713,7 @@ nb::object import_ndarray(ArrayMeta m, PyObject *arg, vector<size_t> *shape_out,
         conf.ndim--;
         conf.shape += flip_axes;
         th = NB_CALL(ndarray_import)(
-            NB_CTX, arg, &conf, sizeof(conf), true, nullptr);
+            NB_CTX, arg, &conf, true, nullptr);
         if (!th) {
             conf.ndim++;
             conf.shape -= flip_axes;
