@@ -1106,6 +1106,8 @@ void scatter(Target &target, const Value &value, const Index &index,
                 TargetD::template scatter_packet_<Value::Size>(
                     target, value, uint32_array_t<value_t<Value>>(index), mask, mode);
             } else {
+                // Use the outer static array to select the generic element-wise
+                // fallback; JIT/AD packet scatter requires an array target.
                 using ValueD = std::decay_t<Value>;
                 static_assert(ValueD::Size != Dynamic,
                               "Raw-pointer packet scatter requires a statically sized value");
