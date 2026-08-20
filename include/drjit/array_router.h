@@ -1109,8 +1109,9 @@ void scatter(Target &target, const Value &value, const Index &index,
                 using ValueD = std::decay_t<Value>;
                 static_assert(ValueD::Size != Dynamic,
                               "Raw-pointer packet scatter requires a statically sized value");
-                ValueD::template scatter_packet_<ValueD::Size>(
-                    target, value, index, mask, mode);
+                if constexpr (ValueD::Size != Dynamic)
+                    ValueD::template scatter_packet_<ValueD::Size>(
+                        target, value, index, mask, mode);
             }
         }
     } else if constexpr (is_drjit_struct_v<Value>) {
