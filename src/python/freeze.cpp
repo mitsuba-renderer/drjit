@@ -1518,6 +1518,15 @@ bool log_diff(LogLevel level, const FlatVariables &curr,
               const FlatVariables &prev, uint32_t &index,
               TraverseContext &ctx) {
 
+    // A subtree can contribute a different number of entries and desync the walk
+    if (index >= curr.layout.size() || index >= prev.layout.size()) {
+        jit_log(level,
+                "%s: The two inputs are structured differently, the comparison "
+                "cannot continue past this point.",
+                ctx.path.get());
+        return false;
+    }
+
     const Layout &curr_l = curr.layout[index];
     const Layout &prev_l = prev.layout[index];
     index++;
@@ -1593,6 +1602,7 @@ bool log_diff(LogLevel level, const FlatVariables &curr,
         }
     }
 
+    // Stop at the first difference; beyond it the two walks are out of sync
     if (curr_l.fields.size() > 0) {
         for (uint32_t i = 0; i < curr_l.fields.size(); i++) {
             auto &field = curr_l.fields[i];
@@ -1600,13 +1610,15 @@ bool log_diff(LogLevel level, const FlatVariables &curr,
             scoped_path ps(ctx, nb::str(field).c_str(),
                            curr_l.type.is(&PyDict_Type));
 
-            log_diff(level, curr, prev, index, ctx);
+            if (!log_diff(level, curr, prev, index, ctx))
+                return false;
         }
     } else {
         for (uint32_t i = 0; i < curr_l.num; i++) {
             scoped_path ps(ctx, (uint32_t) i);
 
-            log_diff(level, curr, prev, index, ctx);
+            if (!log_diff(level, curr, prev, index, ctx))
+                return false;
         }
     }
 
@@ -1630,14 +1642,15 @@ bool log_diff(LogLevel level, const FlatVariables &curr,
     if (curr.layout.size() != prev.layout.size()) {
         jit_log(level,
                 "The number of elements in the input changed from %u to %u.",
-                prev.layout.size(), curr.layout.size());
+                (uint32_t) prev.layout.size(), (uint32_t) curr.layout.size());
         return false;
     }
     if (curr.var_layout.size() != prev.var_layout.size()) {
         jit_log(level,
                 "The number of opaque variables in the input changed from %u "
                 "to %u.",
-                prev.var_layout.size(), curr.var_layout.size());
+                (uint32_t) prev.var_layout.size(),
+                (uint32_t) curr.var_layout.size());
         return false;
     }
 
@@ -1743,34 +1756,46 @@ size_t FlatVariablesHasher::operator()(
 nb::object FunctionRecording::record(nb::callable func,
                                      FrozenFunction *frozen_func,
                                      nb::dict input,
-                                     const FlatVariables &in_variables) {
+                                     const FlatVariables &in_variables,
+                                     bool after_dry_run) {
     ProfilerPhase profiler("record");
     JitBackend backend = in_variables.backend;
 
     frozen_func->recording_counter++;
+    // The in-flight recording is counted but not cached yet; any further gap
+    // beyond LRU evictions means a recording was discarded.
+    uint32_t prev_recordings =
+        frozen_func->recording_counter - 1 - frozen_func->evicted_counter;
     if (frozen_func->recording_counter > frozen_func->warn_recording_count &&
-        frozen_func->recordings.size() >= 1) {
-        if (frozen_func->recordings.size() < frozen_func->recording_counter) {
+        prev_recordings >= 1) {
+        if (after_dry_run) {
             jit_log(LogLevel::Warn,
-                    "The frozen function has been recorded %u times, this "
-                    "indicates a problem with how the frozen function is being "
-                    "called. The number of cached recordings %u is smaller "
-                    "than the number of times this function has been recorded "
-                    "%u, indicating that dry-running the recording failed at "
-                    "least %u times.",
+                    "This frozen function was traced %u times. A recorded "
+                    "operation could not handle the sizes of the current "
+                    "arguments, so its recording was overwritten by a new "
+                    "trace. This happens for example when a block reduction "
+                    "receives an input whose size is not divisible by the "
+                    "block size.",
+                    frozen_func->recording_counter);
+        } else if (frozen_func->recordings.size() < prev_recordings) {
+            jit_log(LogLevel::Warn,
+                    "This frozen function was traced %u times, and %u of those "
+                    "traces had to be thrown away because the recorded code "
+                    "called ``jit_freeze_discard()``. Calls that reach such "
+                    "code can never be served from the cache and pay the full "
+                    "tracing cost every time.",
                     frozen_func->recording_counter,
-                    frozen_func->recordings.size(),
-                    frozen_func->recording_counter,
-                    frozen_func->recording_counter -
-                        frozen_func->recordings.size());
+                    prev_recordings -
+                        (uint32_t) frozen_func->recordings.size());
         } else {
             jit_log(
                 LogLevel::Warn,
-                "The frozen function has been recorded %u times, this "
-                "indicates a problem with how the frozen function is being "
-                "called. For example, calling it with changing python values "
-                "such as an index. For more information about which variables "
-                "changed set the log level to ``LogLevel::Debug``.",
+                "This frozen function was traced %u times. Tracing repeatedly "
+                "defeats the purpose of freezing it, and normally means that "
+                "its arguments keep changing in a way that no cached recording "
+                "covers, for instance a Python value such as an index. Call "
+                "``dr.set_log_level(dr.LogLevel.Info)`` to see how the "
+                "arguments differ from the previous call.",
                 frozen_func->recording_counter);
         }
         log_diff(LogLevel::Info, in_variables, *frozen_func->prev_key);
@@ -1929,7 +1954,7 @@ nb::object FunctionRecording::replay(nb::callable func,
         jit_log(LogLevel::Info, "Dry run failed! re-recording");
         this->clear();
         try {
-            return this->record(func, frozen_func, input, in_variables);
+            return this->record(func, frozen_func, input, in_variables, true);
         } catch (nb::python_error &e) {
             nb::raise_from(e, PyExc_RuntimeError,
                            "replay(): error encountered while re-recording a "
@@ -2108,6 +2133,7 @@ nb::object FrozenFunction::operator()(nb::dict input) {
                 }
             }
             recordings.erase_fast(lru_it);
+            evicted_counter++;
 
             it = this->recordings.find(in_variables);
         }
@@ -2174,6 +2200,7 @@ void FrozenFunction::clear() {
     prev_key          = std::make_shared<FlatVariables>(FlatVariables());
     recording_counter = 0;
     call_counter      = 0;
+    evicted_counter   = 0;
 }
 
 /**

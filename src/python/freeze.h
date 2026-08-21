@@ -583,9 +583,13 @@ struct FunctionRecording {
 
     /*
      * Record a function, given its python input and flattened input.
+     *
+     * ``after_dry_run`` marks a re-recording that replaces a cached entry whose
+     * dry run failed. The counts cannot tell: it re-records in place.
      */
     nb::object record(nb::callable func, FrozenFunction *frozen_func,
-                      nb::dict input, const FlatVariables &in_variables);
+                      nb::dict input, const FlatVariables &in_variables,
+                      bool after_dry_run = false);
     /*
      * Replays the recording.
      *
@@ -621,6 +625,9 @@ struct FrozenFunction {
     /// differ from the number of recordings actually cached in \c recordings,
     /// when dry running recordings failed.
     uint32_t recording_counter    = 0;
+
+    /// Number of recordings evicted by the LRU cache (a benign cache-size gap)
+    uint32_t evicted_counter      = 0;
 
     /// A counter, incremented whenever this function is called. It is used to
     /// determine the least recently used recording in order to evict it if the

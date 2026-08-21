@@ -3928,10 +3928,11 @@ def freeze(
           ...
           >>> f(Int(1))
           >>> f(Float(1))
-          The frozen function has been recorded 2 times, this indicates a problem
-          with how the frozen function is being called. For example, calling it
-          with changing python values such as an index. For more information about
-          which variables changed set the log level to ``LogLevel::Debug``.
+          This frozen function was traced 2 times. Tracing repeatedly defeats the
+          purpose of freezing it, and normally means that its arguments keep
+          changing in a way that no cached recording covers, for instance a Python
+          value such as an index. Call ``dr.set_log_level(dr.LogLevel.Info)`` to
+          see how the arguments differ from the previous call.
 
     - **Limiting memory usage**. Storing kernels for many possible input
       configuration requires device memory, which can become problematic. Set the
