@@ -1013,7 +1013,8 @@ void export_tracker(nb::module_ &m) {
             ad_var_inc_ref(value);
             ad_var_dec_ref(v[i]);
             v[i] = value;
-        });
+        })
+        .freeze();
 
     auto trk = nb::class_<VariableTracker>(m, "VariableTracker",
                                            doc_detail_VariableTracker)
@@ -1054,5 +1055,9 @@ void export_tracker(nb::module_ &m) {
 
     nb::class_<VariableTracker::Context>(trk, "Context")
         .def("_traverse_read", &VariableTracker::Context::_traverse_read)
-        .def("_traverse_write", &VariableTracker::Context::_traverse_write);
+        .def("_traverse_write", &VariableTracker::Context::_traverse_write)
+        .freeze();
+
+    // Only now, after the nested 'Context' class was installed on it
+    trk.freeze();
 }

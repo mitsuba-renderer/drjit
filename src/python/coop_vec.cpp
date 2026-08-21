@@ -596,7 +596,8 @@ void export_coop_vec(nb::module_ &m) {
                  return nb::str("drjit.nn.CoopVec[{}, shape=({}, {})]")
                      .format(nb::type_name(v.m_type), v.m_size,
                              jit_var_size((uint32_t) v.m_index));
-             });
+             })
+        .freeze();
 
     view_type = nb::class_<MatrixView>(nn, "MatrixView", doc_nn_MatrixView)
         .def(nb::init<>())
@@ -684,6 +685,7 @@ void export_coop_vec(nb::module_ &m) {
     drjit_struct["stride"] = nb::handle(&PyLong_Type);
     drjit_struct["transpose"] = nb::handle(&PyBool_Type);
     view_type.attr("DRJIT_STRUCT") = drjit_struct;
+    nb::type_freeze(view_type);
 
     nn.def("view", &view,
            doc_nn_view);

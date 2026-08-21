@@ -932,9 +932,10 @@ template <typename T> void bind_complex(ArrayBinding &b) {
 }
 
 
+/// Bind an array type. The type is made immutable if ``freeze==true``.
 template <typename T>
 nanobind::object bind_array(ArrayBinding &b, nanobind::handle scope = {},
-                            const char *name = nullptr) {
+                            const char *name = nullptr, bool freeze = true) {
     namespace nb = nanobind;
 
     bind_init<T>(b, scope, name);
@@ -1016,14 +1017,19 @@ nanobind::object bind_array(ArrayBinding &b, nanobind::handle scope = {},
         result.attr("Domain") = T::CallSupport::Domain;
     }
 
+    if (freeze)
+        nb::type_freeze(result);
+
     return result;
 }
 
+/// Variant of ``bind_array()`` that returns a mutable ``nb::class_<T>`` so that
+/// the caller can add further members. Conclude the chain with ``.freeze()``.
 template <typename T>
 nanobind::class_<T> bind_array_t(ArrayBinding &b, nanobind::handle scope = {},
                                  const char *name = nullptr) {
         return nanobind::borrow<nanobind::class_<T>>(
-            bind_array<T>(b, scope, name));
+            bind_array<T>(b, scope, name, /* freeze = */ false));
 }
 
 /// Run bind_array() for many different plain array types

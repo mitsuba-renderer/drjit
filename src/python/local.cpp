@@ -394,7 +394,8 @@ void export_local(nb::module_ &m) {
         .def("write", &Local::write, "value"_a, "index"_a, "active"_a = true,
              nb::sig("def write(self, value: T, index: int | AnyArray, active: "
                      "bool | AnyArray = True) -> None"), doc_Local_write)
-        .def("__repr__", &Local::repr);
+        .def("__repr__", &Local::repr)
+        .freeze();
 
     m.def(
         "alloc_local",

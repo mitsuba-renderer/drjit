@@ -53,5 +53,5 @@ void export_iter(nb::module_ &m) {
         { 0, nullptr }
     };
 
-    nb::class_<dr_iterator>(m, "dr_iterator", nb::type_slots(iter_slots));
+    nb::class_<dr_iterator>(m, "dr_iterator", nb::type_slots(iter_slots)).freeze();
 }

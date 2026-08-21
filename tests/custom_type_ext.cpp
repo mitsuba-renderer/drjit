@@ -120,7 +120,8 @@ template <JitBackend Backend> void bind(nb::module_ &m) {
             [](Color3f &c, Float &value) { c.g() = value; })
         .def_prop_rw("b",
             [](Color3f &c) -> Float & { return c.b(); },
-            [](Color3f &c, Float &value) { c.b() = value; });
+            [](Color3f &c, Float &value) { c.b() = value; })
+        .freeze();
 
     using CustomFloatHolder = CustomHolder<Float>;
     nb::class_<CustomFloatHolder>(m, "CustomFloatHolder")

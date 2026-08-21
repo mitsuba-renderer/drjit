@@ -715,7 +715,8 @@ void export_autodiff(nb::module_ &m) {
         .def(nb::init<>())
         .def("__enter__", [](NullContextManager&) { })
         .def("__exit__", [](NullContextManager&, nb::handle, nb::handle, nb::handle) {
-             }, nb::arg().none(), nb::arg().none(), nb::arg().none());
+             }, nb::arg().none(), nb::arg().none(), nb::arg().none())
+        .freeze();
 
     nb::class_<ADContextManager>(detail, "ADContextManager")
         .def(nb::init<dr::ADScope, dr::vector<uint64_t>>())
@@ -726,7 +727,8 @@ void export_autodiff(nb::module_ &m) {
         .def("__exit__",
              [](ADContextManager &, nb::handle exc_type, nb::handle, nb::handle) {
                  ad_scope_leave(exc_type.is(nb::none()));
-             }, nb::arg().none(), nb::arg().none(), nb::arg().none());
+             }, nb::arg().none(), nb::arg().none(), nb::arg().none())
+        .freeze();
 
     detail.def("new_grad", &new_grad);
 
@@ -741,7 +743,8 @@ void export_autodiff(nb::module_ &m) {
         .def("grad_out", &PyCustomOp::grad_out, doc_CustomOp_grad_out)
         .def("set_grad_out", &PyCustomOp::set_grad_out, doc_CustomOp_set_grad_out)
         .def("add_input", &PyCustomOp::add_input, doc_CustomOp_add_input)
-        .def("add_output", &PyCustomOp::add_output, doc_CustomOp_add_output);
+        .def("add_output", &PyCustomOp::add_output, doc_CustomOp_add_output)
+        .freeze();
 
     m.def("custom", &custom, doc_custom);
 }

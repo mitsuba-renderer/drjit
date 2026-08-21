@@ -135,6 +135,7 @@ void export_resample(nb::module_ &) {
                     + ", target_res=" + std::to_string(r.target_res())
                     + ", taps=" + std::to_string(r.taps())
                     + "]";
-              });
+              })
+         .freeze();
 }
 

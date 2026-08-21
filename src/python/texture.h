@@ -324,7 +324,7 @@ void bind_texture(nb::module_ &m, const char *name) {
 
     tex.attr("IsTexture") = true;
 
-    drjit::bind_traverse(tex);
+    drjit::bind_traverse(tex).freeze();
 }
 
 template <typename Type>

@@ -144,7 +144,8 @@ void export_cuda(nb::module_ &m) {
         .def_static("from_texture", &GLInterop::from_texture, doc_cuda_GLInterop_from_texture)
         .def("map", &GLInterop::map, "mip_level"_a = 0, nb::rv_policy::none, doc_cuda_GLInterop_map)
         .def("upload", &GLInterop::upload, nb::rv_policy::none, doc_cuda_GLInterop_upload)
-        .def("unmap", &GLInterop::unmap, nb::rv_policy::none, doc_cuda_GLInterop_unmap);
+        .def("unmap", &GLInterop::unmap, nb::rv_policy::none, doc_cuda_GLInterop_unmap)
+        .freeze();
 
     bind_event<JitBackend::CUDA>(m, "Event");
 
@@ -161,6 +162,7 @@ void export_cuda(nb::module_ &m) {
         .def_prop_ro("remaining_ctx", &PyGreenContext::remaining_ctx, doc_cuda_green_context_remaining_ctx)
         .def_prop_ro("sm_count", &PyGreenContext::sm_count, doc_cuda_green_context_sm_count)
         .def_prop_ro("requested_sm_count", &PyGreenContext::requested_sm_count,
-                     doc_cuda_green_context_requested_sm_count);
+                     doc_cuda_green_context_requested_sm_count)
+        .freeze();
  }
 #endif

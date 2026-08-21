@@ -328,7 +328,8 @@ void bind(nb::module_ &m) {
         .def("get_self", [](BaseArray &self) { return self->get_self(); })
         .def("gather_packet", [](BaseArray &self, UInt32 i) { return self->gather_packet(i); })
         .def("scatter_packet", [](BaseArray &self, UInt32 i, dr::Array<Float, 4> arg) { self->scatter_packet(i, arg); })
-        .def("scatter_add_packet", [](BaseArray &self, UInt32 i, dr::Array<Float, 4> arg) { self->scatter_add_packet(i, arg); });
+        .def("scatter_add_packet", [](BaseArray &self, UInt32 i, dr::Array<Float, 4> arg) { self->scatter_add_packet(i, arg); })
+        .freeze();
 
 
     dr::ArrayBinding a_ptr_b;
@@ -339,7 +340,8 @@ void bind(nb::module_ &m) {
              }, "mask"_a = true)
         .def("a_gather_extra_value", [](APtr &self, const UInt32 &idx, const Mask &m) {
                 return self->a_gather_extra_value(idx, m);
-             }, "idx"_a, "mask"_a);
+             }, "idx"_a, "mask"_a)
+        .freeze();
 }
 
 NB_MODULE(call_ext, m) {

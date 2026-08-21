@@ -2229,8 +2229,7 @@ static PyType_Slot slots[] = { { Py_tp_traverse,
 void export_freeze(nb::module_ & /*m*/) {
 
     nb::module_ d = nb::module_::import_("drjit.detail");
-    auto traversable_base =
-        nb::class_<drjit::TraversableBase>(d, "TraversableBase");
+    nb::class_<drjit::TraversableBase>(d, "TraversableBase").freeze();
     nb::class_<FrozenFunction>(d, "FrozenFunction", nb::type_slots(slots))
         .def(nb::init<nb::callable, int, uint32_t, JitBackend, bool>())
         .def_prop_ro(
@@ -2238,7 +2237,8 @@ void export_freeze(nb::module_ & /*m*/) {
             [](FrozenFunction &self) { return self.n_cached_recordings(); })
         .def_ro("n_recordings", &FrozenFunction::recording_counter)
         .def("clear", &FrozenFunction::clear)
-        .def("__call__", &FrozenFunction::operator());
+        .def("__call__", &FrozenFunction::operator())
+        .freeze();
 }
 
 #ifdef _MSC_VER

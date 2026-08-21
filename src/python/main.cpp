@@ -221,7 +221,8 @@ NB_MODULE(_drjit_ext, m_) {
         .def(nb::init<JitFlag, bool>(), "flag"_a, "value"_a = true)
         .def("__enter__", &scoped_set_flag_py::__enter__)
         .def("__exit__", &scoped_set_flag_py::__exit__, nb::arg().none(),
-             nb::arg().none(), nb::arg().none());
+             nb::arg().none(), nb::arg().none())
+        .freeze();
 
     // Intrusive reference counting
     nb::intrusive_init(
@@ -244,6 +245,7 @@ NB_MODULE(_drjit_ext, m_) {
             [](nb::intrusive_base *o, PyObject *po) noexcept {
                 o->set_self_py(po);
             }), doc_intrusive_base);
+    ib.freeze();
 
     jit_init_async(backends);
 
@@ -266,6 +268,11 @@ NB_MODULE(_drjit_ext, m_) {
     export_memop(m);
     export_slice(m);
     export_dlpack(m);
+
+    // 'export_dlpack()' is the last step that touches 'dr.ArrayBase'. Freezing
+    // it here is a prerequisite for freezing the array types created below.
+    nb::type_freeze(array_base);
+
     export_autodiff(m);
     export_inspect(m);
     export_detail(m);

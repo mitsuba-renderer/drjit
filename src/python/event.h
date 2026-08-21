@@ -69,5 +69,6 @@ void bind_event(nb::module_ &m, const char* name) {
         .def("elapsed_time", &EventType::elapsed_time, "end_event"_a,
              doc_Event_elapsed_time,
              nb::call_guard<nb::gil_scoped_release>())
-        .def_prop_ro("handle", &EventType::handle, doc_Event_handle);
+        .def_prop_ro("handle", &EventType::handle, doc_Event_handle)
+        .freeze();
 }

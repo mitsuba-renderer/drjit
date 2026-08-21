@@ -225,6 +225,7 @@ void bind_rng(nb::module_ &m) {
     fields["state"] = u64;
     fields["inc"] = u64;
     pcg32.attr("DRJIT_STRUCT") = fields;
+    pcg32.freeze();
 
     using Philox4x32 = dr::Philox4x32<UInt32>;
 
@@ -252,5 +253,6 @@ void bind_rng(nb::module_ &m) {
              doc_Philox4x32_next_float64x2_normal)
         .def_rw("seed", &Philox4x32::seed)
         .def_rw("counter", &Philox4x32::counter)
-        .def_rw("iterations", &Philox4x32::iterations);
+        .def_rw("iterations", &Philox4x32::iterations)
+        .freeze();
 }
