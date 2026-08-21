@@ -858,3 +858,339 @@ def test31_wrap_backend_preservation(t):
     dr.enable_grad(x)
     y = f(x)
     assert dr.backend_v(y) == dr.backend_v(x)
+
+
+# ---------------------------------------------------------------------------
+#  SymPy wrapper tests (source='drjit', target='sympy')
+# ---------------------------------------------------------------------------
+
+import sys
+
+try:
+    import sympy as sp
+    has_sympy = True
+except ImportError:
+    has_sympy = False
+
+
+@pytest.mark.skipif(not has_sympy, reason="sympy not available")
+@pytest.test_arrays("float,shape=(*),jit")
+def test32_sympy_quadratic(t):
+    rng = dr.rng()
+
+    @dr.wrap(source="drjit", target="sympy")
+    def f(x):
+        return x**2 + 2 * x + 1
+
+    def f_drjit(x):
+        return x**2 + 2 * x + 1
+
+    x = rng.uniform(t, 10)
+    assert dr.allclose(f(x), f_drjit(x))
+
+
+@pytest.mark.skipif(not has_sympy, reason="sympy not available")
+@pytest.test_arrays("float,shape=(*),jit")
+def test33_sympy_trig(t):
+    rng = dr.rng()
+
+    @dr.wrap(source="drjit", target="sympy")
+    def f(x):
+        return sp.sin(x) ** 2 + sp.cos(x) ** 2
+
+    def f_drjit(x):
+        return dr.sin(x) ** 2 + dr.cos(x) ** 2
+
+    x = rng.uniform(t, 10)
+    assert dr.allclose(f(x), f_drjit(x))
+
+
+@pytest.mark.skipif(not has_sympy, reason="sympy not available")
+@pytest.test_arrays("float,shape=(*),jit")
+def test34_sympy_output(t):
+    rng = dr.rng()
+
+    @dr.wrap(source="drjit", target="sympy")
+    def f(x):
+        return [sp.sin(x), (sp.cos(x), x**2)]
+
+    def f_drjit(x):
+        return [dr.sin(x), (dr.cos(x), x**2)]
+
+    x = rng.uniform(t, 10)
+    assert dr.allclose(f(x), f_drjit(x))
+
+
+@pytest.mark.skipif(not has_sympy, reason="sympy not available")
+@pytest.test_arrays("float,shape=(*),jit")
+def test35_sympy_caching(t):
+    call_count = 0
+
+    @dr.wrap(source="drjit", target="sympy")
+    def f(x, y):
+        nonlocal call_count
+        call_count += 1
+        return x + y
+
+    f(t(1.0), t(2.0))
+    f(t(3.0), t(4.0))
+    assert call_count == 1
+
+
+@pytest.mark.skipif(not has_sympy, reason="sympy not available")
+@pytest.test_arrays("float,shape=(*),jit")
+def test36_sympy_matrix_output(t):
+    @dr.wrap(source="drjit", target="sympy")
+    def f(x, y):
+        return sp.Matrix([[x + y, x - y], [x * y, x / y]])
+
+    result = f(t(6.0), t(3.0))
+    assert isinstance(result, list) and len(result) == 2 and len(result[0]) == 2
+
+
+@pytest.mark.skipif(not has_sympy, reason="sympy not available")
+@pytest.test_arrays("float,shape=(*),jit")
+def test37_sympy_nested(t):
+    @dr.wrap(source="drjit", target="sympy")
+    def inner(x):
+        return x**2
+
+    @dr.wrap(source="drjit", target="sympy")
+    def outer(x):
+        return inner(x) + 1
+
+    assert dr.allclose(outer(t(3.0)), t(10.0))
+
+
+@pytest.mark.skipif(not has_sympy, reason="sympy not available")
+@pytest.test_arrays("float,shape=(*),jit,diff")
+def test38_sympy_ad_backward(t):
+    @dr.wrap(source="drjit", target="sympy")
+    def f(x):
+        return x**2 + 2 * x + 1
+
+    def f_drjit(x):
+        return x**2 + 2 * x + 1
+
+    x = t(3.0)
+    dr.enable_grad(x)
+    dr.backward(f(x))
+    grad_res = dr.grad(x)
+
+    x = t(3.0)
+    dr.enable_grad(x)
+    dr.backward(f_drjit(x))
+    grad_ref = dr.grad(x)
+
+    assert dr.allclose(grad_res, grad_ref)
+
+
+@pytest.mark.skipif(not has_sympy, reason="sympy not available")
+@pytest.test_arrays("float,shape=(*),jit,diff")
+def test39_sympy_grad(t):
+    @dr.wrap(source="drjit", target="sympy")
+    def f(x):
+        return x**2 + 2 * x + 1
+
+    @dr.wrap(source="drjit", target="sympy")
+    def f_grad(x):
+        y = f(x)
+        return sp.diff(y, x)
+
+    def f_drjit(x):
+        return x**2 + 2 * x + 1
+
+    x = t(3.0)
+    grad_res = f_grad(x)
+
+    x = t(3.0)
+    dr.enable_grad(x)
+    dr.backward(f_drjit(x))
+    grad_ref = dr.grad(x)
+
+    assert dr.allclose(grad_res, grad_ref)
+
+
+@pytest.mark.skipif(not has_sympy, reason="sympy not available")
+@pytest.test_arrays("float,shape=(*),jit")
+def test40_sympy_promote_vector(t):
+    mod = sys.modules[t.__module__]
+
+    @dr.wrap(source="drjit", target="sympy")
+    def f(v):
+        return v.norm()
+
+    def f_drjit(v):
+        return dr.norm(v)
+
+    v = mod.Array3f(1, 2, 3)
+    assert dr.allclose(f(v), f_drjit(v))
+
+
+@pytest.mark.skipif(not has_sympy, reason="sympy not available")
+@pytest.test_arrays("float,shape=(*),jit")
+def test41_sympy_vector_dot(t):
+    mod = sys.modules[t.__module__]
+    rng = dr.rng()
+
+    @dr.wrap(source="drjit", target="sympy")
+    def f(a, b):
+        return a.dot(b)
+
+    def f_drjit(a, b):
+        return dr.dot(a, b)
+
+    a = rng.random(mod.Array3f, (3, 8))
+    b = rng.random(mod.Array3f, (3, 8))
+    assert dr.allclose(f(a, b), f_drjit(a, b))
+
+
+@pytest.mark.skipif(not has_sympy, reason="sympy not available")
+@pytest.test_arrays("float,shape=(*),jit")
+def test42_sympy_promote_arrayXf(t):
+    mod = sys.modules[t.__module__]
+    rng = dr.rng()
+
+    @dr.wrap(source="drjit", target="sympy")
+    def f(a, b):
+        return a.dot(b)
+
+    def f_drjit(a, b):
+        return dr.dot(a, b)
+
+    a = rng.random(mod.ArrayXf, (6, 8))
+    b = rng.random(mod.ArrayXf, (6, 8))
+    assert dr.allclose(f(a, b), f_drjit(a, b))
+
+
+@pytest.mark.skipif(not has_sympy, reason="sympy not available")
+@pytest.test_arrays("float,shape=(*),jit")
+def test43_sympy_promote_matrix(t):
+    mod = sys.modules[t.__module__]
+    rng = dr.rng()
+
+    @dr.wrap(source="drjit", target="sympy")
+    def f(a, b):
+        return a * b
+
+    def f_drjit(a, b):
+        return a @ b
+
+    a = rng.random(mod.Matrix4f, (4, 4, 8))
+    b = rng.random(mod.Matrix4f, (4, 4, 8))
+
+    res = mod.Matrix4f(f(a, b))
+    ref = f_drjit(a, b)
+    assert dr.allclose(res, ref)
+
+
+@pytest.mark.skipif(not has_sympy, reason="sympy not available")
+@pytest.test_arrays("float,shape=(*),jit")
+def test44_sympy_matrix_vector(t):
+    mod = sys.modules[t.__module__]
+    rng = dr.rng()
+
+    @dr.wrap(source="drjit", target="sympy")
+    def f(a, v):
+        return a * v
+
+    def f_drjit(a, v):
+        return a @ v
+
+    a = rng.random(mod.Matrix4f, (4, 4, 8))
+    v = rng.random(mod.Array4f, (4, 8))
+    assert dr.allclose(f(a, v), f_drjit(a, v))
+
+
+@pytest.mark.skipif(not has_sympy, reason="sympy not available")
+@pytest.test_arrays("float,shape=(*),jit")
+def test45_sympy_kwargs(t):
+    @dr.wrap(source="drjit", target="sympy")
+    def f(x, y):
+        return x + y
+
+    assert dr.allclose(f(x=t(3.0), y=t(4.0)), t(7.0))
+    assert dr.allclose(f(t(3.0), y=t(4.0)), t(7.0))
+
+
+@pytest.mark.skipif(not has_sympy, reason="sympy not available")
+@pytest.test_arrays("float,shape=(*),jit")
+def test46_sympy_pytree_dict(t):
+    @dr.wrap(source="drjit", target="sympy")
+    def f(x):
+        return {
+            "sum": x[0]["a"] + x[1]["b"],
+            "prod": x[0]["a"] * x[1]["b"],
+        }
+
+    def f_drjit(x):
+        return {
+            "sum": x[0]["a"] + x[1]["b"],
+            "prod": x[0]["a"] * x[1]["b"],
+        }
+
+    xt = [{"a": t(3.0)}, {"b": t(4.0)}]
+    res = f(xt)
+    ref = f_drjit(xt)
+    assert dr.allclose(res["sum"], ref["sum"])
+    assert dr.allclose(res["prod"], ref["prod"])
+
+
+@pytest.mark.skipif(not has_sympy, reason="sympy not available")
+@pytest.test_arrays("float,shape=(*),jit")
+def test47_sympy_pytree_nested(t):
+    rng = dr.rng()
+
+    @dr.wrap(source="drjit", target="sympy")
+    def f(x):
+        return {"r": (x[0]["a"] + 2 * x[1]["b"][0],)}
+
+    def f_drjit(x):
+        return {"r": (x[0]["a"] + 2 * x[1]["b"][0],)}
+
+    a = rng.uniform(t, 8)
+    b = rng.uniform(t, 8)
+    xt = [{"a": a}, {"b": (b,)}]
+    assert dr.allclose(f(xt)["r"][0], f_drjit(xt)["r"][0])
+
+
+@pytest.mark.skipif(not has_sympy, reason="sympy not available")
+@pytest.test_arrays("float,shape=(*),jit")
+def test48_sympy_pytree_tuple_output(t):
+    rng = dr.rng()
+
+    @dr.wrap(source="drjit", target="sympy")
+    def f(x, y):
+        return (x + y, {"diff": x - y})
+
+    def f_drjit(x, y):
+        return (x + y, {"diff": x - y})
+
+    x = rng.uniform(t, 8)
+    y = rng.uniform(t, 8)
+    res = f(x, y)
+    ref = f_drjit(x, y)
+    assert dr.allclose(res[0], ref[0])
+    assert dr.allclose(res[1]["diff"], ref[1]["diff"])
+
+
+@pytest.mark.skipif(not has_sympy, reason="sympy not available")
+@pytest.test_arrays("float,shape=(*),jit")
+def test49_sympy_second_derivative(t):
+    rng = dr.rng()
+
+    @dr.wrap(source="drjit", target="sympy")
+    def f(x):
+        return sp.sin(x) * sp.exp(x)
+
+    @dr.wrap(source="drjit", target="sympy")
+    def f_dd(x):
+        y = f(x)
+        return sp.diff(y, x, 2)
+
+    x = rng.uniform(t, 10)
+
+    # d/dx[sin(x)*exp(x)] = exp(x)*(sin(x) + cos(x))
+    # d2/dx2[sin(x)*exp(x)] = 2*exp(x)*cos(x)
+    ref = 2 * dr.exp(x) * dr.cos(x)
+    assert dr.allclose(f_dd(x), ref)
