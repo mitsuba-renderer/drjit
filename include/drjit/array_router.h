@@ -1109,13 +1109,11 @@ void scatter(Target &target, const Value &value, const Index &index,
                 // Use the outer static array to select the generic element-wise
                 // fallback; JIT/AD packet scatter requires an array target.
                 using ValueD = std::decay_t<Value>;
-                if constexpr (ValueD::Size == Dynamic) {
-                    static_assert(ValueD::Size != Dynamic,
-                                  "Raw-pointer packet scatter requires a statically sized value");
-                } else if constexpr (is_jit_v<ValueD>) {
-                    static_assert(!is_jit_v<ValueD>,
-                                  "Raw-pointer packet scatter does not support JIT/AD values");
-                } else {
+                constexpr bool Supported =
+                    ValueD::Size != Dynamic && !is_jit_v<ValueD>;
+                static_assert(Supported,
+                              "Raw-pointer packet scatter requires a statically sized non-JIT value");
+                if constexpr (Supported) {
                     ValueD::template scatter_packet_<ValueD::Size>(
                         target, value, uint32_array_t<value_t<Value>>(index),
                         mask, mode);
@@ -1145,6 +1143,8 @@ void scatter(Target &target, const Value &value, const Index &index,
     }
 }
 
+// Accept pointer prvalues such as buffer.data() without changing lvalue
+// overload resolution.
 template <typename Target, typename Value, typename Index,
           typename Mask = mask_t<Index>,
           enable_if_t<std::is_pointer_v<Target>> * = nullptr>
