@@ -57,13 +57,13 @@ NB_MODULE(memop_ext, m) {
 
     m.def("packet_scatter_ptr", []() {
         std::array<float, 6> target { };
-        dr::scatter(target.data(), dr::Packet<float, 3>(1.f, 2.f, 3.f), 1u);
+        dr::scatter(target.data(), dr::Packet<float, 3>(1.f, 2.f, 3.f), int32_t(1));
         return target;
     });
 
     m.def("nested_packet_scatter_ptr", []() {
         using FloatP = dr::Packet<float, 4>;
-        using UInt32P = dr::Packet<uint32_t, 4>;
+        using Int32P = dr::Packet<int32_t, 4>;
         using Vector4fP = dr::Array<FloatP, 4>;
 
         std::array<float, 16> target { };
@@ -73,7 +73,7 @@ NB_MODULE(memop_ext, m) {
             FloatP(9.f, 10.f, 11.f, 12.f),
             FloatP(13.f, 14.f, 15.f, 16.f));
 
-        dr::scatter(target.data(), value, UInt32P(0u, 1u, 2u, 3u));
+        dr::scatter(target.data(), value, Int32P(0, 1, 2, 3));
         return target;
     });
 

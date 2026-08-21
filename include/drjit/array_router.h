@@ -1113,7 +1113,8 @@ void scatter(Target &target, const Value &value, const Index &index,
                               "Raw-pointer packet scatter requires a statically sized value");
                 if constexpr (ValueD::Size != Dynamic)
                     ValueD::template scatter_packet_<ValueD::Size>(
-                        target, value, index, mask, mode);
+                        target, value, uint32_array_t<value_t<Value>>(index),
+                        mask, mode);
             }
         }
     } else if constexpr (is_drjit_struct_v<Value>) {
