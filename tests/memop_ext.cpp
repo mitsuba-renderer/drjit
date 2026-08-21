@@ -77,6 +77,41 @@ NB_MODULE(memop_ext, m) {
         return target;
     });
 
+    m.def("deep_nested_packet_scatter_ptr", []() {
+        using FloatP = dr::Packet<float, 4>;
+        using Int32P = dr::Packet<int32_t, 4>;
+        using Vector2fP = dr::Array<FloatP, 2>;
+        using Matrix2fP = dr::Array<Vector2fP, 2>;
+
+        std::array<float, 16> target { };
+        Matrix2fP value(
+            Vector2fP(FloatP(1.f, 5.f, 9.f, 13.f),
+                      FloatP(2.f, 6.f, 10.f, 14.f)),
+            Vector2fP(FloatP(3.f, 7.f, 11.f, 15.f),
+                      FloatP(4.f, 8.f, 12.f, 16.f)));
+
+        dr::scatter(target.data(), value, Int32P(0, 1, 2, 3));
+        return target;
+    });
+
+    m.def("nested_dynamic_scatter_ptr", []() {
+        using FloatD = dr::DynamicArray<float>;
+        using UInt32D = dr::DynamicArray<uint32_t>;
+        using Vector3fD = dr::Array<FloatD, 3>;
+
+        FloatD x = dr::empty<FloatD>(2),
+               y = dr::empty<FloatD>(2),
+               z = dr::empty<FloatD>(2);
+        x.entry(0) = 1.f; x.entry(1) = 4.f;
+        y.entry(0) = 2.f; y.entry(1) = 5.f;
+        z.entry(0) = 3.f; z.entry(1) = 6.f;
+
+        UInt32D index = dr::arange<UInt32D>(2);
+        std::array<float, 6> target { };
+        dr::scatter(target.data(), Vector3fD(x, y, z), index);
+        return target;
+    });
+
 #if defined(DRJIT_ENABLE_LLVM)
     bind<JitBackend::LLVM>(m.def_submodule("llvm"));
 #endif

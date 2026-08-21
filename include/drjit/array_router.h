@@ -1107,15 +1107,21 @@ void scatter(Target &target, const Value &value, const Index &index,
                     target, value, uint32_array_t<value_t<Value>>(index), mask, mode);
             } else {
                 // Use the outer static array to select the generic element-wise
-                // fallback; JIT/AD packet scatter requires an array target.
+                // fallback. Nested native dynamic elements recurse through
+                // scatter_(), while JIT/AD elements require an array target.
                 using ValueD = std::decay_t<Value>;
-                constexpr bool Supported = !is_dynamic_v<ValueD>;
-                static_assert(Supported,
-                              "Raw-pointer packet scatter requires a fully statically sized value");
-                if constexpr (Supported) {
+                constexpr bool StaticOuter = ValueD::Size != Dynamic;
+                constexpr bool NativeValue =
+                    !is_jit_v<ValueD> && !is_diff_v<ValueD>;
+                if constexpr (StaticOuter && NativeValue) {
+                    // Keep the index depth so each nested packet layer applies
+                    // its own flattening stride during recursive dispatch.
                     ValueD::template scatter_packet_<ValueD::Size>(
-                        target, value, uint32_array_t<value_t<Value>>(index),
+                        target, value, uint32_array_t<Index>(index),
                         mask, mode);
+                } else {
+                    static_assert(detail::false_v<ValueD>,
+                                  "Raw-pointer packet scatter requires a statically sized non-JIT/AD value");
                 }
             }
         }

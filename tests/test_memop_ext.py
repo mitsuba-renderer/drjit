@@ -97,8 +97,26 @@ def test04_nested_packet_scatter_ptr():
     ]
 
 
+def test05_deep_nested_packet_scatter_ptr():
+    with dr.detail.scoped_rtld_deepbind():
+        pkg = pytest.importorskip("memop_ext")
+
+    result = pkg.deep_nested_packet_scatter_ptr()
+
+    assert list(result) == list(range(1, 17))
+
+
+def test06_nested_dynamic_scatter_ptr():
+    with dr.detail.scoped_rtld_deepbind():
+        pkg = pytest.importorskip("memop_ext")
+
+    result = pkg.nested_dynamic_scatter_ptr()
+
+    assert list(result) == [1, 2, 3, 4, 5, 6]
+
+
 @pytest.test_arrays('float32,is_diff,shape=(*)')
-def test05_packet_scatter_assign(t):
+def test07_packet_scatter_assign(t):
     pkg = get_pkg(t)
     UInt32 = sys.modules[t.__module__].UInt32
     target = dr.zeros(t, 4)
