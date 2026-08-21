@@ -155,7 +155,7 @@ nb::object bind(const ArrayBinding &b) {
 
     nb::detail::type_data_init d { };
 
-    d.flags = NB_ABI_TAG |
+    d.flags = NB_ABI_MINOR_TAG |
               (uint32_t) nb::detail::type_init_flags::has_supplement |
               (uint32_t) nb::detail::type_init_flags::has_base_py |
               (uint32_t) nb::detail::type_init_flags::has_type_slots |

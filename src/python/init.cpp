@@ -671,7 +671,7 @@ nb::object import_ndarray(ArrayMeta m, PyObject *arg, vector<size_t> *shape_out,
     flip_axes &= !m.is_complex;
 
     int64_t shape[4];
-    nb::detail::ndarray_config conf { };
+    nb::detail::ndarray_config conf { nb::detail::ndarray_config_t<>() };
     conf.order = 'C';
     conf.ro = true;
 
