@@ -2160,3 +2160,16 @@ def test138_relative_grad(t):
     assert dr.allclose(y_replaced, dr.ones_like(y))
     dr.backward(y_replaced)
     assert dr.allclose(dr.grad(x), 2 * x / dr.square(x))
+
+@pytest.test_arrays('is_diff,float,shape=(*)')
+def test139_zero_derivative_stays_attached(t):
+    # A derivative that works out to zero should still stay in the AD graph.
+    # Otherwise it looks like a variable that was never attached, and
+    # dr.backward() wrongly complains about its argument.
+    with dr.scoped_set_flag(dr.JitFlag.SymbolicCalls, True):
+        a, b = t(1.0), t(1.0)
+        dr.enable_grad(a)
+        loss = dr.square(a - b)  # d/da is 2*(a-b), which is 0 here
+        assert dr.grad_enabled(loss)
+        dr.backward(loss)
+        assert dr.allclose(dr.grad(a), 0.0)
