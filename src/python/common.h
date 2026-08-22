@@ -74,6 +74,7 @@ enum class LazyImport {
     DataclassesFields,   // dataclasses.fields
     TypingGetTypeHints,  // typing.get_type_hints
     TypingGetArgs,       // typing.get_args
+    DataclassesField,    // dataclasses._FIELD (marker of ordinary fields)
     Count
 };
 
@@ -116,6 +117,27 @@ inline nb::object get_dataclass_fields(nb::handle tp) {
         }
     }
     return result;
+}
+
+/// Retrieve the ``__dataclass_fields__`` of a dataclass type.
+inline nb::dict get_dataclass_field_dict(nb::handle tp) {
+    nb::object result = nb::getattr(tp, DR_STR(__dataclass_fields__), nb::handle());
+    if (result.is_valid() && !result.type().is(&PyDict_Type))
+        result = nb::object();
+    return nb::borrow<nb::dict>(result);
+}
+
+/// Use this function to skip non-field entries returned by \ref get_dataclass_field_dict
+inline bool is_dataclass_field(nb::handle field) {
+    return nb::getattr(field, "_field_type", nb::handle())
+        .is(lazy_import(LazyImport::DataclassesField));
+}
+
+/// Detect builtin scalar types (``float``, ``int``, ``bool``, ``str``, ``None``).
+inline bool is_builtin_scalar(nb::handle tp) {
+    PyTypeObject *t = (PyTypeObject *) tp.ptr();
+    return t == &PyFloat_Type || t == &PyLong_Type || t == &PyBool_Type ||
+           t == &PyUnicode_Type || t == Py_TYPE(Py_None);
 }
 
 /// Python equality that never raises. A failing comparison counts as unequal.

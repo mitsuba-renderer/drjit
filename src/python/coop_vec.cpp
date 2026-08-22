@@ -459,12 +459,11 @@ static nb::object repack_impl(const char *name, MatrixLayout layout,
         for (auto [k, v] : ds)
             nb::setattr(tmp, k, repack_impl(name, layout, nb::getattr(arg, k), offset, items));
         return tmp;
-    } else if (nb::object df = get_dataclass_fields(arg_tp); df.is_valid()) {
-        nb::object tmp = nb::dict();
-        for (nb::handle field : df) {
-            nb::object k = field.attr(DR_STR(name));
-            tmp[k] = repack_impl(name, layout, nb::getattr(arg, k), offset, items);
-        }
+    } else if (nb::dict df = get_dataclass_field_dict(arg_tp); df.is_valid()) {
+        nb::dict tmp;
+        for (auto [k, field] : df)
+            if (is_dataclass_field(field))
+                tmp[k] = repack_impl(name, layout, nb::getattr(arg, k), offset, items);
         return arg_tp(**tmp);
     } else {
         return nb::borrow(arg);

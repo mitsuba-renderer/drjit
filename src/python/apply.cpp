@@ -637,7 +637,9 @@ void traverse(const char *op, TraverseCallback &tc, nb::handle h, bool rw) {
     nb::handle tp = h.type();
 
     try {
-        if (is_drjit_type(tp)) {
+        if (is_builtin_scalar(tp)) {
+            tc.traverse_unknown(h);
+        } else if (is_drjit_type(tp)) {
             const ArraySupplement &s = supp(tp);
             if (s.is_tensor) {
                 tc(nb::steal(s.tensor_array(h.ptr())));
@@ -663,11 +665,10 @@ void traverse(const char *op, TraverseCallback &tc, nb::handle h, bool rw) {
         } else if (nb::dict ds = get_drjit_struct(tp); ds.is_valid()) {
             for (auto [k, v] : ds)
                 traverse(op, tc, nb::getattr(h, k), rw);
-        } else if (nb::object df = get_dataclass_fields(tp); df.is_valid()) {
-            for (nb::handle field : df) {
-                nb::object k = field.attr(DR_STR(name));
-                traverse(op, tc, nb::getattr(h, k), rw);
-            }
+        } else if (nb::dict df = get_dataclass_field_dict(tp); df.is_valid()) {
+            for (auto [k, field] : df)
+                if (is_dataclass_field(field))
+                    traverse(op, tc, nb::getattr(h, k), rw);
         } else if (auto traversable = get_traversable_base(h); traversable) {
             struct Payload {
                 TraverseCallback &tc;
@@ -825,7 +826,9 @@ void traverse_pair_impl(const char *op, TraversePairCallback &tc, nb::handle h1,
             name.resize(name_size);
         }
     } else {
-        if (nb::dict ds = get_drjit_struct(tp1); ds.is_valid()) {
+        nb::dict ds, df;
+        bool scalar = is_builtin_scalar(tp1);
+        if (!scalar && (ds = get_drjit_struct(tp1)).is_valid()) {
             for (auto [k, v] : ds) {
                 name.put('.', nb::str(k).c_str());
                 traverse_pair_impl(op, tc, nb::getattr(h1, k),
@@ -833,22 +836,20 @@ void traverse_pair_impl(const char *op, TraversePairCallback &tc, nb::handle h1,
                                    report_inconsistencies, width_consistency);
                 name.resize(name_size);
             }
-        } else if (nb::object df = get_dataclass_fields(tp1); df.is_valid()) {
-            for (nb::handle field : df) {
-                nb::object k = field.attr(DR_STR(name));
+        } else if (!scalar && (df = get_dataclass_field_dict(tp1)).is_valid()) {
+            for (auto [k, field] : df) {
+                if (!is_dataclass_field(field))
+                    continue;
                 name.put('.', nb::str(k).c_str());
                 traverse_pair_impl(op, tc, nb::getattr(h1, k),
                                    nb::getattr(h2, k), name, stack,
                                    report_inconsistencies, width_consistency);
                 name.resize(name_size);
             }
-        } else if (!h1.is(h2) && !h1.equal(h2)) {
-            if (report_inconsistencies)
-                nb::raise(
-                    "inconsistent scalar Python object of type '%s' for field '%s'.",
-                    nb::type_name(tp1).c_str(), name.c_str());
-            else
-                return;
+        } else if (report_inconsistencies && !py_equal(h1, h2)) {
+            nb::raise(
+                "inconsistent scalar Python object of type '%s' for field '%s'.",
+                nb::type_name(tp1).c_str(), name.c_str());
         }
     }
     stack.pop_back();
@@ -890,7 +891,9 @@ nb::object transform(const char *op, TransformCallback &tc, nb::handle h) {
     try {
         nb::object result;
 
-        if (is_drjit_type(tp)) {
+        if (is_builtin_scalar(tp)) {
+            result = tc.transform_unknown(h);
+        } else if (is_drjit_type(tp)) {
             nb::handle tp2 = tc.transform_type(tp);
             if (!tp2.is_valid())
                 return nb::none();
@@ -947,12 +950,11 @@ nb::object transform(const char *op, TransformCallback &tc, nb::handle h) {
             for (auto [k, v] : ds)
                 nb::setattr(tmp, k, transform(op, tc, nb::getattr(h, k)));
             result = std::move(tmp);
-        } else if (nb::object df = get_dataclass_fields(tp); df.is_valid()) {
-            nb::object tmp = nb::dict();
-            for (nb::handle field : df) {
-                nb::object k = field.attr(DR_STR(name));
-                tmp[k]       = transform(op, tc, nb::getattr(h, k));
-            }
+        } else if (nb::dict df = get_dataclass_field_dict(tp); df.is_valid()) {
+            nb::dict tmp;
+            for (auto [k, field] : df)
+                if (is_dataclass_field(field))
+                    tmp[k] = transform(op, tc, nb::getattr(h, k));
             result = tp(**tmp);
         } else if (nb::object cb = get_traverse_cb_rw(tp); cb.is_valid()) {
             cb(h, nb::cpp_function([&](uint64_t index, const char *,
@@ -1082,6 +1084,8 @@ nb::object transform_pair(const char *op, TransformPairCallback &tc,
                 result[k] = transform_pair(op, tc, d1[k], d2[k]);
 
             return std::move(result);
+        } else if (is_builtin_scalar(tp1)) {
+            return tc.transform_unknown(h1, h2);
         } else {
             if (nb::dict ds = get_drjit_struct(tp1); ds.is_valid()) {
                 nb::object result = tp1();
@@ -1090,13 +1094,12 @@ nb::object transform_pair(const char *op, TransformPairCallback &tc,
                                 transform_pair(op, tc, nb::getattr(h1, k),
                                                nb::getattr(h2, k)));
                 return result;
-            } else if (nb::object df = get_dataclass_fields(tp1); df.is_valid()) {
+            } else if (nb::dict df = get_dataclass_field_dict(tp1); df.is_valid()) {
                 nb::dict result;
-                for (nb::handle field : df) {
-                    nb::object k = field.attr(DR_STR(name));
-                    result[k] = transform_pair(op, tc, nb::getattr(h1, k),
-                                               nb::getattr(h2, k));
-                }
+                for (auto [k, field] : df)
+                    if (is_dataclass_field(field))
+                        result[k] = transform_pair(op, tc, nb::getattr(h1, k),
+                                                   nb::getattr(h2, k));
                 return tp1(**result);
             } else {
                 return tc.transform_unknown(h1, h2);

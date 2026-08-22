@@ -231,6 +231,18 @@ struct ScopedAppendLabel {
     size_t length;
 };
 
+/// Report a non-array state variable whose value changed in strict mode
+static void raise_changed(const dr::string &label, nb::handle tp, nb::handle h,
+                          nb::handle prev) {
+    dr::string s0, s1;
+    try { s0 = nb::str(prev).c_str(); } catch (...) { }
+    try { s1 = nb::str(h).c_str(); } catch (...) { }
+    nb::raise("the non-array state variable '%s' of type '%s' changed from "
+              "'%s' to '%s'. You can annotate the loop/conditional with "
+              "``strict=False`` to disable this check.",
+              label.c_str(), nb::type_name(tp).c_str(), s0.c_str(), s1.c_str());
+}
+
 VariableTracker::VariableTracker(bool strict, bool check_size)
     : m_impl(new Impl(strict, check_size)) {
 }
@@ -600,6 +612,9 @@ bool VariableTracker::Impl::traverse(Context &ctx, nb::handle h) {
                 v->index = vec->m_index;
             }
         }
+    } else if (is_builtin_scalar(tp)) {
+        if (strict && !new_variable && !py_equal(h, prev))
+            raise_changed(ctx.label, tp, h, prev);
     } else {
         nb::object traverse_cb = nb::getattr(
             h, ctx.write ? DR_STR(_traverse_1_cb_rw) : DR_STR(_traverse_1_cb_ro),
@@ -615,22 +630,15 @@ bool VariableTracker::Impl::traverse(Context &ctx, nb::handle h) {
             traverse_cb(
                 nb::cast(ctx, nb::rv_policy::reference)
                     .attr(ctx.write ? DR_STR(_traverse_write) : DR_STR(_traverse_read)));
-        } else if (nb::object df = get_dataclass_fields(tp); df.is_valid()) {
-            for (nb::handle field : df) {
-                nb::object k = field.attr(DR_STR(name));
+        } else if (nb::dict df = get_dataclass_field_dict(tp); df.is_valid()) {
+            for (auto [k, field] : df) {
+                if (!is_dataclass_field(field))
+                    continue;
                 ScopedAppendLabel guard(ctx, ".", nb::str(k).c_str());
                 changed |= traverse(ctx, nb::getattr(h, k));
             }
         } else if (strict && !new_variable && !py_equal(h, prev)) {
-            dr::string s0, s1;
-            try { s0 = nb::str(prev).c_str(); } catch (...) { }
-            try { s1 = nb::str(h).c_str(); } catch (...) { }
-            nb::raise(
-                "the non-array state variable '%s' of type '%s' changed "
-                "from '%s' to '%s'. You can annotate the loop/conditional "
-                "with ``strict=False`` to disable this check.",
-                ctx.label.c_str(), nb::type_name(tp).c_str(), s0.c_str(),
-                s1.c_str());
+            raise_changed(ctx.label, tp, h, prev);
         }
     }
 
@@ -804,15 +812,16 @@ nb::object VariableTracker::Impl::restore(dr::string &label) {
         ad_var_inc_ref(v->index_orig);
         ad_var_dec_ref(vec->m_index);
         vec->m_index = v->index_orig;
-    } else {
+    } else if (!is_builtin_scalar(tp)) {
         if (nb::dict ds = get_drjit_struct(tp); ds.is_valid()) {
             for (auto [k, _] : ds) {
                 ScopedAppendLabel guard(label, ".", nb::str(k).c_str());
                 nb::setattr(value, k, restore(label));
             }
-        } else if (nb::object df = get_dataclass_fields(tp); df.is_valid()) {
-            for (nb::handle field : df) {
-                nb::object k = field.attr(DR_STR(name));
+        } else if (nb::dict df = get_dataclass_field_dict(tp); df.is_valid()) {
+            for (auto [k, field] : df) {
+                if (!is_dataclass_field(field))
+                    continue;
                 ScopedAppendLabel guard(label, ".", nb::str(k).c_str());
                 nb::setattr(value, k, restore(label));
             }
@@ -935,6 +944,11 @@ std::pair<nb::object, bool> VariableTracker::Impl::rebuild(dr::string &label) {
 
         value = nb::cast(CoopVec(builder.commit()));
         new_object = true;
+    } else if (is_builtin_scalar(tp)) {
+        if (!value.is(v->value)) {
+            value = v->value;
+            new_object = true;
+        }
     } else if (nb::dict ds = get_drjit_struct(tp); ds.is_valid()) {
         nb::object tmp = tp();
         for (auto [k, _] : ds) {
@@ -952,10 +966,11 @@ std::pair<nb::object, bool> VariableTracker::Impl::rebuild(dr::string &label) {
                 value = tmp;
             }
         }
-    } else if (nb::object df = get_dataclass_fields(tp); df.is_valid()) {
+    } else if (nb::dict df = get_dataclass_field_dict(tp); df.is_valid()) {
         nb::dict tmp;
-        for (auto field : df) {
-            nb::object k = field.attr(DR_STR(name));
+        for (auto [k, field] : df) {
+            if (!is_dataclass_field(field))
+                continue;
             ScopedAppendLabel guard(label, ".", nb::str(k).c_str());
             auto [o, n] = rebuild(label);
             tmp[k] = o;
@@ -963,10 +978,8 @@ std::pair<nb::object, bool> VariableTracker::Impl::rebuild(dr::string &label) {
         }
         if (new_object) {
             if (mutate) {
-                for (auto field : df) {
-                    nb::object k = field.attr(DR_STR(name));
-                    nb::setattr(value, k, tmp[k]);
-                }
+                for (auto [k, o] : tmp)
+                    nb::setattr(value, k, o);
                 new_object = false;
             } else {
                 value = tp(**tmp);

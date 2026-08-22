@@ -272,12 +272,11 @@ static void scatter_generic(const char *name, ReduceOp op, nb::object target,
             return;
         }
 
-        if (nb::object df = get_dataclass_fields(target_tp); df.is_valid()) {
-            for (nb::handle field : df) {
-                nb::object k = field.attr(DR_STR(name));
-                scatter_generic(name, op, nb::getattr(target, k),
-                                nb::getattr(value, k), index, active, mode);
-            }
+        if (nb::dict df = get_dataclass_field_dict(target_tp); df.is_valid()) {
+            for (auto [k, field] : df)
+                if (is_dataclass_field(field))
+                    scatter_generic(name, op, nb::getattr(target, k),
+                                    nb::getattr(value, k), index, active, mode);
 
             return;
         }
