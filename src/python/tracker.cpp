@@ -588,7 +588,7 @@ bool VariableTracker::Impl::traverse(Context &ctx, nb::handle h) {
                 changed |= traverse(ctx, state.find(ctx.label)->second.value);
             }
         } else {
-            nb::list l(h), r;
+            nb::list l(h);
             for (size_t i = 0; i < size; ++i) {
                 ScopedAppendLabel guard(ctx, "[", i, "]");
                 changed |= traverse(ctx, l[i]);
@@ -621,23 +621,16 @@ bool VariableTracker::Impl::traverse(Context &ctx, nb::handle h) {
                 ScopedAppendLabel guard(ctx, ".", nb::str(k).c_str());
                 changed |= traverse(ctx, nb::getattr(h, k));
             }
-        } else if (strict && !new_variable && !h.is(prev)) {
-            bool is_same = false;
-            try {
-                is_same = h.equal(prev);
-            } catch (...) { }
-
-            if (!is_same) {
-                dr::string s0, s1;
-                try { s0 = nb::str(prev).c_str(); } catch (...) { }
-                try { s1 = nb::str(h).c_str(); } catch (...) { }
-                nb::raise(
-                    "the non-array state variable '%s' of type '%s' changed "
-                    "from '%s' to '%s'. You can annotate the loop/conditional "
-                    "with ``strict=False`` to disable this check.",
-                    ctx.label.c_str(), nb::type_name(tp).c_str(), s0.c_str(),
-                    s1.c_str());
-            }
+        } else if (strict && !new_variable && !py_equal(h, prev)) {
+            dr::string s0, s1;
+            try { s0 = nb::str(prev).c_str(); } catch (...) { }
+            try { s1 = nb::str(h).c_str(); } catch (...) { }
+            nb::raise(
+                "the non-array state variable '%s' of type '%s' changed "
+                "from '%s' to '%s'. You can annotate the loop/conditional "
+                "with ``strict=False`` to disable this check.",
+                ctx.label.c_str(), nb::type_name(tp).c_str(), s0.c_str(),
+                s1.c_str());
         }
     }
 

@@ -117,6 +117,21 @@ inline nb::object get_dataclass_fields(nb::handle tp) {
     }
     return result;
 }
+
+/// Python equality that never raises. A failing comparison counts as unequal.
+inline bool py_equal(nb::handle a, nb::handle b) {
+    if (a.ptr() == b.ptr())
+        return true;
+    if (!a.is_valid() || !b.is_valid())
+        return false;
+    int rv = PyObject_RichCompareBool(a.ptr(), b.ptr(), Py_EQ);
+    if (rv == -1) {
+        PyErr_Clear();
+        return false;
+    }
+    return rv == 1;
+}
+
 /// Return a pointer to the underlying C++ class if the Python object inherits
 /// from TraversableBase or null otherwise
 inline drjit::TraversableBase *get_traversable_base(nb::handle h) {
