@@ -1,8 +1,8 @@
 [build-system]
 requires = [
     "scikit-build-core",
-    "nanobind==3.0.0.dev5",
-    "nanobind-backend>=1.0.0.dev5",
+    "nanobind==3.0.0.dev6",
+    "nanobind-backend>=1.0.0.dev6",
     "typing_extensions",
     "hatch-fancy-pypi-readme"
 ]
@@ -15,7 +15,7 @@ dynamic = ["version", "readme"]
 description = "Dr.Jit: A Just-In-Time Compiler for Differentiable Rendering"
 dependencies = [
   "typing_extensions;python_version<\"3.11\"",
-  "nanobind-backend>=1.0.0.dev5"
+  "nanobind-backend>=1.0.0.dev6"
 ]
 requires-python = ">=3.10"
 authors = [
