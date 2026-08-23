@@ -4088,3 +4088,40 @@ def test108_tensor_slicing_advanced_trailing(t, auto_opaque):
 
         assert dr.allclose(res, ref)
 
+
+@pytest.test_arrays("uint32, jit, shape=(*)")
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test109_replay_frees_temporaries(t, auto_opaque):
+    """
+    Tests that replaying a frozen function frees intermediate buffers as
+    soon as they are no longer needed instead of keeping the whole chain
+    alive until the end of the replay.
+    """
+    n = 1024 * 1024
+    nbytes = n * 4
+    steps = 16
+
+    @dr.freeze(auto_opaque=auto_opaque)
+    def func(x):
+        for _ in range(steps):
+            x = x + 1
+            dr.eval(x)
+        return x
+
+    x = dr.arange(t, n)
+    dr.eval(x)
+    func(x)
+    assert func.n_recordings == 1
+
+    # The watermark only grows on fresh allocations, so empty the cache first
+    backend = dr.backend_v(t)
+    dr.flush_malloc_cache()
+    dr.detail.malloc_clear_statistics()
+    base = dr.detail.malloc_watermark(backend)
+
+    y = func(x)
+    dr.eval(y)
+    assert func.n_recordings == 1
+    assert dr.all(y == x + steps)
+
+    assert dr.detail.malloc_watermark(backend) - base < 6 * nbytes
