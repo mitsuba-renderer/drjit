@@ -385,7 +385,6 @@ void export_detail(nb::module_ &m) {
 
     d.def("leak_warnings", &leak_warnings, doc_leak_warnings);
     d.def("set_leak_warnings", &set_leak_warnings, doc_set_leak_warnings);
-    d.def("freeze_discard", jit_freeze_discard);
 
     d.def("block_mkperm",
           [](nb::handle_t<dr::ArrayBase> values, uint32_t block_size,

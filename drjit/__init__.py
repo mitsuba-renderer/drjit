@@ -1,9 +1,5 @@
 from __future__ import annotations
 
-# Annotations below spell cross-module names fully qualified, as in
-# 'drjit.detail.X'. The stub generator only recognizes that form, which it
-# rewrites into a stub-local reference plus a matching import. This import
-# keeps the spelling valid at runtime.
 import drjit
 from . import detail
 
@@ -3874,8 +3870,9 @@ def freeze(
     - Changes in the **length** of a container (``list``, ``tuple``, ``dict``).
     - Changes of **dictionary keys**  or **field names** of dataclasses.
     - Changes in the AD status (:py:func:`dr.grad_enabled() <drjit.grad_enabled>`) of a variable.
-    - Changes of (non-PyTree) **Python objects**, as detected by mismatching ``hash()``
-      or ``id()`` if they are not hashable.
+    - Changes of (non-PyTree) **Python objects**, as detected by an equality
+      comparison with the value seen when recording (a comparison that raises
+      counts as unequal).
 
     The following more technical conditions also trigger re-tracing:
 
@@ -3972,137 +3969,8 @@ def freeze(
     backend = backend if backend is not None else JitBackend.Invalid
 
     def decorator(f):
-        """
-        Internal decorator, returned in ``dr.freeze`` was used with arguments.
-        """
-        import functools
-        import inspect
-
-        # Capturing closure variables lets the frozen function detect when
-        # nonlocal/global symbols change.
-        _cv = inspect.getclosurevars(f)
-        _global_names = tuple(frozenset(_cv.globals) | frozenset(_cv.unbound))
-        _free_vars = f.__code__.co_freevars
-
-        def capture_closure():
-            g = f.__globals__
-            globals_ = {n: g[n] for n in _global_names if n in g}
-            cells = f.__closure__
-            nonlocals_ = {} if cells is None else {
-                n: c.cell_contents for n, c in zip(_free_vars, cells)
-            }
-            return globals_, nonlocals_
-
-        def inner(input: dict):
-            """
-            This inner function is the one that is actually frozen, and it calls
-            the wrapped function. It receives the input such as args, kwargs and
-            any additional input such as closures or state specified with the ``state``
-            lambda, and makes its traversal possible.
-            """
-            args = input["args"]
-            kwargs = input["kwargs"]
-            return f(*args, **kwargs)
-
-        class FrozenFunction:
-            # If this bool is true, the function will be frozen, otherwise the
-            # call will be forwarded to the inner function.
-            enabled: bool
-
-            def __init__(self, f) -> None:
-                self.f = f
-                self.frozen = detail.FrozenFunction(
-                    inner, limit, warn_after, backend, auto_opaque
-                )
-                self.enabled = enabled
-
-            def __call__(self, *args, **kwargs):
-                if not self.enabled:
-                    return self.f(*args, **kwargs)
-
-                globals_, nonlocals_ = capture_closure()
-                input = {
-                    "globals": globals_,
-                    "nonlocals": nonlocals_,
-                    "args": args,
-                    "kwargs": kwargs,
-                }
-                if state_fn is not None:
-                    input["state_fn"] = state_fn(*args, **kwargs)
-
-                return self.frozen(input)
-
-            @property
-            def n_recordings(self):
-                """
-                Represents the number of times the function was recorded. This
-                includes occasions where it was recorded due to a dry-run failing.
-                It does not necessarily correspond to the number of recordings
-                currently cached see ``n_cached_recordings`` for that.
-                """
-                return self.frozen.n_recordings
-
-            @property
-            def n_cached_recordings(self):
-                """
-                Represents the number of recordings currently cached of the frozen
-                function. If a recording fails in dry-run mode, it will not create
-                a new recording, but replace the recording that was attemted to be
-                replayed. The number of recordings can also be limited with
-                the ``max_cache_size`` argument.
-                """
-                return self.frozen.n_cached_recordings
-
-            def clear(self):
-                """
-                Clears the recordings of the frozen function, and resets the
-                ``n_recordings`` counter. The reference to the function is still
-                kept, and the frozen function can be called again to re-trace
-                new recordings.
-                """
-                return self.frozen.clear()
-
-            def __get__(self, obj, type=None):
-                if obj is None:
-                    return self
-                else:
-                    return FrozenMethod(self.f, self.frozen, obj)
-
-        class FrozenMethod(FrozenFunction):
-            """
-            A FrozenMethod currying the object into the __call__ method.
-
-            If the ``freeze`` decorator is applied to a method of some class, it has
-            to call the internal frozen function with the ``self`` argument. To this
-            end we implement the ``__get__`` method of the frozen function, to
-            return a ``FrozenMethod``, which holds a reference to the object.
-            The ``__call__`` method of the ``FrozenMethod`` then supplies the object
-            in addition to the arguments to the internal function.
-            """
-            def __init__(self, f, frozen, obj) -> None:
-                self.f = f
-                self.obj = obj
-                self.frozen = frozen
-                self.enabled = enabled
-
-            def __call__(self, *args, **kwargs):
-                if not self.enabled:
-                    return self.f(self.obj, *args, **kwargs)
-
-                # self.f is the same function object captured by capture_closure
-                # above (its __globals__/__closure__ are identical).
-                globals_, nonlocals_ = capture_closure()
-                input = {
-                        "globals": globals_,
-                        "nonlocals": nonlocals_,
-                        "args": [self.obj, *args],
-                        "kwargs": kwargs,
-                    }
-                if state_fn is not None:
-                    input["state_fn"] = state_fn(self.obj, *args, **kwargs)
-                return self.frozen(input)
-
-        return functools.wraps(f)(FrozenFunction(f))
+        return wraps(f)(FrozenFunction(f, state_fn, limit, warn_after,
+                                       backend, auto_opaque, enabled))
 
     if f is not None:
         return decorator(f)
@@ -4649,4 +4517,4 @@ newaxis = None
 from . import hashgrid as hashgrid
 from . import nn as nn
 
-del overload, Optional, F, F2
+del F, F2

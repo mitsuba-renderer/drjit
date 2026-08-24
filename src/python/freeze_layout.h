@@ -127,57 +127,51 @@
     pointer arrays seen in the input. Each entry is described like any other
     object (or by a ``RecursiveRef``).
 
-    4. Recording: describing the result and the modified inputs
-    -----------------------------------------------------------
+    4. Recording: the result and modified inputs
+    --------------------------------------------
 
-    A replay must reproduce the variables making up the function result, and
-    inputs modified in place (e.g., ``x += 1`` on an argument or an updated
-    member of a C++ object). ``build_output_layout()`` describes the result
-    and the input as it looks after the call in one ``Layout``, as two
-    consecutive DFS trees: the nodes before ``Layout::input_begin`` describe
-    the result, and the nodes from ``input_begin`` on describe the input
-    (including the registry).
+    A replay must reproduce the function result and any inputs modified in
+    place (e.g., ``x += 1`` on an argument). ``build_output_layout()``
+    describes both in one ``Layout`` holding two consecutive DFS trees: the
+    result before ``Layout::input_begin``, and the post-call input (including
+    the registry) from there on.
 
-    ``plan_outputs()`` then compares the input part of this layout against
-    the input layout, position by position. The function may assign new
-    arrays to the leaves of its input, but it must not change anything else
-    about it (the entries of containers, dictionary keys, tensor shapes, the
-    Python values it holds, ...), since a replay cannot reproduce such a
-    change. ``plan_outputs()`` raises when it finds one. Leaves whose
-    variable changed, and AD leaves whose gradient edges were postponed by
-    the isolated gradient scope (``Postponed``), are flagged ``Dirty`` and
-    their ancestors ``DirtySubtree``. The slots that a replay must produce,
-    namely everything in the result and the dirty input leaves, receive output
-    positions (``slot_output``, ``n_outputs``), and the corresponding
-    variables are registered as outputs of the backend recording. The common
-    case of a large input that the function reads but does not modify costs
-    nothing on replay.
+    ``plan_outputs()`` compares the input part of this layout against the
+    input layout position by position. The function may assign new arrays to
+    input leaves, but any other change (container entries, dictionary keys,
+    tensor shapes, Python values, ...) cannot be replayed. In that case
+    ``plan_outputs()`` throws ``InputChanged`` and the caller records the
+    function once more, which handles callables that initialize part of
+    their input on the first call.
+
+    Leaves whose variable changed, and AD leaves with ``Postponed`` gradient
+    edges, are flagged ``Dirty`` and their ancestors ``DirtySubtree``. The
+    result slots and the dirty input leaves receive output positions
+    (``slot_output``, ``n_outputs``) and become outputs of the backend
+    recording. Inputs that the function only reads cost nothing on replay.
 
     5. Replay: constructing the result and updating the input
     ---------------------------------------------------------
 
     ``jit_freeze_replay()`` returns one variable per output position.
     ``construct_output()`` rebuilds the result from the output layout, and
-    ``update_input()`` walks the input part of the output layout in
-    lockstep with the live input and assigns the dirty leaves, skipping
-    subtrees without the ``DirtySubtree`` flag. Both functions also run once
-    right after recording, so that errors surface when recording rather than
-    when replaying.
+    ``update_input()`` walks the input part in lockstep with the live input
+    and assigns the dirty leaves, skipping subtrees without ``DirtySubtree``.
+    Both also run once right after recording so that errors surface early.
 
     6. Auto-opaque literals
     -----------------------
 
     A literal whose value differs between calls would force a new recording
     every time. With ``auto_opaque`` enabled, the builder compares each
-    literal against the layout of the previous recording (``prev``) at the
-    same node position and makes it opaque (``jit_var_schedule_force()``)
-    when the value changed. It then becomes an ordinary slot flagged
-    ``ForceOpaque``. A build also reads this flag from ``prev``, so forced
-    positions accumulate across recordings, and the verifier makes a literal
-    arriving at such a position opaque as well. Either walker writes the
-    opaque variable into the Python array or C++ object right away, which is
-    safe even if the walk fails later on, since the variable holds the same
-    contents as the literal.
+    literal against the previous recording's layout (``prev``) at the same
+    node position and makes it opaque (``jit_var_schedule_force()``) when
+    the value changed. The slot is then flagged ``ForceOpaque``. This flag
+    is also inherited from ``prev``, so forced positions accumulate across
+    recordings, and the verifier makes literals at such positions opaque as
+    well. The opaque variable is written back into the Python array or C++
+    object right away, which is safe even if the walk fails later since it
+    holds the same contents as the literal.
 */
 
 #pragma once
@@ -189,6 +183,7 @@
 #include <drjit/python.h>
 #include <drjit/traversable_base.h>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <tsl/robin_set.h>
 #include <typeinfo>
@@ -460,7 +455,16 @@ struct SlotBindings {
     /// the bound variables have been used.
     drjit::vector<nb::object> keep_alive;
 
+    /// AD variables of the input whose gradients are enabled (owning
+    /// references), each paired with the gradient it held before the call
+    drjit::vector<std::pair<uint64_t, uint32_t>> grads;
+
+    /// Reset the gradients of the AD variables to their state before the
+    /// call, which undoes the accumulation performed by an aborted recording
+    void restore_grads();
+
     void release();
+    ~SlotBindings() { release(); }
 };
 
 /// Working memory of \ref verify_layout(), reused across calls
@@ -562,8 +566,12 @@ build_output_layout(nb::handle output, nb::handle input, nb::tuple arg_names,
  * ``Dirty`` and their ancestors ``DirtySubtree``, and assigns output
  * positions to the slots that a replay must produce (``slot_output``,
  * ``n_outputs``). Returns the variables that the backend recording must
- * return, in output order. Raises if the function changed anything but the
- * variables of its input (see section 4 of the overview).
+ * return, in output order.
+ *
+ * Throws ``InputChanged`` when the callable changed anything but the
+ * variables of its input (see section 4 of the overview). The caller records
+ * the function once more in that case, since the change is usually a
+ * one-time initialization that the next call no longer performs.
  *
  * \param out
  *     Output layout of the recording, as returned by ``build_output_layout()``
@@ -580,6 +588,12 @@ build_output_layout(nb::handle output, nb::handle input, nb::tuple arg_names,
 extern drjit::vector<uint32_t>
 plan_outputs(Layout &out, const uint32_t *out_bindings, const Layout &in,
              const uint32_t *in_bindings);
+
+/// Thrown by ``plan_outputs()`` when the function changed the structure of
+/// its input or the Python values it holds
+struct InputChanged : std::runtime_error {
+    using std::runtime_error::runtime_error;
+};
 
 /**
  * \brief Construct the result of a frozen function from its output layout

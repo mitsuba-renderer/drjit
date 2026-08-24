@@ -72,6 +72,7 @@ enum class LazyImport {
     TypingGetTypeHints,  // typing.get_type_hints
     TypingGetArgs,       // typing.get_args
     DataclassesField,    // dataclasses._FIELD (marker of ordinary fields)
+    TypesMethodType,     // types.MethodType
     Count
 };
 

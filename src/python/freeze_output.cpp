@@ -34,23 +34,19 @@ drjit::vector<uint32_t> plan_outputs(Layout &out, const uint32_t *out_bindings,
     // lockstep, flagging the leaves whose variable changed. A leaf may gain or
     // lose its gradient (an AD leaf is written back as a whole, so value and
     // gradient share the flag). Everything else must match.
-    uint32_t j = begin, k = 0;
-    for (; j < end && k < n_in; ++j, ++k) {
-        Node &a = out.nodes[j];
-        const Node &b = in.nodes[k];
+    uint32_t ji = begin, ki = 0;
+    for (; ji < end && ki < n_in; ++ji, ++ki) {
+        Node &a = out.nodes[ji];
+        const Node &b = in.nodes[ki];
 
-        std::string diff = node_difference(out, j, in, k, begin);
+        std::string diff = node_difference(out, ji, in, ki, begin);
         if (!diff.empty()) {
             if (out.types[a.type_id].cls == TypeClass::Registry)
-                nb::raise("the function registered or unregistered instances "
-                          "of a class that its input refers to through "
-                          "pointer arrays, which a replay cannot reproduce.");
-            nb::raise("the function changed its input at %s (%s). A frozen "
-                      "function may assign new arrays to its input, but it "
-                      "must not change the structure of the input or the "
-                      "Python values it holds, since a replay cannot "
-                      "reproduce such a change.",
-                      out.node_path(j).c_str(), diff.c_str());
+                throw InputChanged(
+                    "the function registered or unregistered instances of a "
+                    "class that its input refers to through pointer arrays");
+            throw InputChanged("the function changed its input at " +
+                               out.node_path(ji) + " (" + diff + ")");
         }
 
         if (!is_leaf(out, a))
@@ -66,8 +62,8 @@ drjit::vector<uint32_t> plan_outputs(Layout &out, const uint32_t *out_bindings,
             a.set(NodeFlag::Dirty);
     }
 
-    if (j != end || k != n_in)
-        nb::raise("freeze(): internal error, the input layouts are not "
+    if (ji != end || ki != n_in)
+        nb::raise("drjit.freeze(): internal error, the input layouts are not "
                   "isomorphic.");
 
     // Propagate to the ancestors
@@ -141,7 +137,7 @@ struct OutputWalker {
 
         uint32_t pos = s.slot_output[v.ref];
         if (pos == Layout::NoOutput)
-            jit_raise("freeze(): internal error, no output recorded for "
+            jit_raise("drjit.freeze(): internal error, no output recorded for "
                       "slot %u.", v.ref);
         return jit_var_inc_ref(values[pos]);
     }
@@ -341,7 +337,7 @@ struct InputUpdater : OutputWalker {
             visit(d);
 
         if (cur != n.next)
-            jit_raise("freeze(): internal error, the members of a C++ object "
+            jit_raise("drjit.freeze(): internal error, the members of a C++ object "
                       "changed while the input was written back.");
     }
 
@@ -408,7 +404,7 @@ struct InputUpdater : OutputWalker {
                 break;
 
             default:
-                nb::raise("freeze(): internal error, unexpected node while "
+                nb::raise("drjit.freeze(): internal error, unexpected node while "
                           "writing the input back.");
         }
     }
