@@ -211,3 +211,25 @@ void for_each_member(drjit::TraversableBase *obj, drjit::TraverseRole role,
 /// Raise if the nanobind binding of type ``tp`` implements the traversal
 /// interface without declaring drjit::TraversableBase as a base class
 extern void raise_if_unbound_traversable(nb::handle tp);
+
+/// Cheap check that skips the construction of log messages in hot paths
+inline bool log_enabled(LogLevel level) {
+    return level <= jit_log_level_callback() || level <= jit_log_level_stderr();
+}
+
+/// RAII helpers to acquire/release the Dr.Jit state lock
+struct state_lock_guard {
+    state_lock_guard() { jit_state_lock(); }
+    ~state_lock_guard() { jit_state_unlock(); }
+};
+
+struct state_unlock_guard {
+    state_unlock_guard() { jit_state_unlock(); }
+    ~state_unlock_guard() { jit_state_lock(); }
+};
+
+/// Reports the enclosing scope as a range to an attached profiler
+struct ProfilerPhase {
+    ProfilerPhase(const char *name) { jit_profile_range_push(name); }
+    ~ProfilerPhase() { jit_profile_range_pop(); }
+};

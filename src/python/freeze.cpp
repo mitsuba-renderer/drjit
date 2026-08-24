@@ -148,48 +148,6 @@
 
 using Buffer = nanobind::detail::Buffer;
 
-/// Cheap check, used to skip construction of expensive log messages in hot
-/// paths when they would be discarded anyway.
-static bool log_enabled(LogLevel level) {
-    return level <= jit_log_level_callback() || level <= jit_log_level_stderr();
-}
-
-/**
- * \brief Helper struct to profile and log frozen functions.
- */
-struct ProfilerPhase {
-    std::string m_message;
-    ProfilerPhase(const char *message) {
-        if (log_enabled(LogLevel::Debug)) {
-            m_message = message;
-            jit_log(LogLevel::Debug, "profiler start: %s", message);
-        }
-#if defined(DRJIT_ENABLE_NVTX)
-        jit_profile_range_push(message);
-#endif
-    }
-
-    ProfilerPhase(const drjit::TraversableBase *traversable) {
-        char message[1024] = { 0 };
-        const char *name   = typeid(*traversable).name();
-        snprintf(message, 1024, "traverse_cb %s", name);
-
-        if (log_enabled(LogLevel::Debug)) {
-            m_message = message;
-            jit_log(LogLevel::Debug, "profiler start: %s", message);
-        }
-        jit_profile_range_push(message);
-    }
-
-    ~ProfilerPhase() {
-#if defined(DRJIT_ENABLE_NVTX)
-        jit_profile_range_pop();
-#endif
-        if (!m_message.empty())
-            jit_log(LogLevel::Debug, "profiler end: %s", m_message.c_str());
-    }
-};
-
 struct ADScopeContext {
     bool process_postponed;
     ADScopeContext(drjit::ADScope type, size_t size, const uint64_t *indices,
@@ -198,30 +156,6 @@ struct ADScopeContext {
         ad_scope_enter(type, size, indices, symbolic);
     }
     ~ADScopeContext() { ad_scope_leave(process_postponed); }
-};
-
-struct scoped_set_flag {
-    uint32_t backup;
-    scoped_set_flag(JitFlag flag, bool enabled) : backup(jit_flags()) {
-        uint32_t flags = backup;
-        if (enabled)
-            flags |= (uint32_t) flag;
-        else
-            flags &= ~(uint32_t) flag;
-
-        jit_set_flags(flags);
-    }
-
-    ~scoped_set_flag() { jit_set_flags(backup); }
-};
-
-struct state_lock_guard {
-    state_lock_guard() { jit_state_lock(); }
-    ~state_lock_guard() { jit_state_unlock(); }
-};
-struct state_unlock_guard {
-    state_unlock_guard() { jit_state_unlock(); }
-    ~state_unlock_guard() { jit_state_lock(); }
 };
 
 using namespace detail;
