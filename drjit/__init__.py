@@ -3909,6 +3909,26 @@ def freeze(
     **Advanced features**. The :py:func:`@dr.freeze <drjit.freeze>` decorator takes
     several optional parameters that are helpful in certain situations.
 
+    - **Additional state**: The ``state_fn`` parameter identifies values that
+      Dr.Jit cannot discover on its own. It receives the same arguments as the
+      frozen function and returns a :ref:`PyTree <pytrees>` that is treated as an
+      additional input. For example, it can expose attributes of an ordinary
+      Python class:
+
+      .. code-block:: python
+
+         class Scaler:
+             def __init__(self, scale: Float):
+                 self.scale = scale
+
+             @dr.freeze(state_fn=lambda self, x: self.scale)
+             def apply(self, x: Float):
+                 return self.scale * x
+
+      Alternatively, adding a :ref:`DRJIT_STRUCT annotation <custom_types_py>`
+      to ``Scaler`` would make it a PyTree and let Dr.Jit discover ``scale``
+      without a ``state_fn``.
+
     - **Warning when re-tracing happens too often**: Incompatible arguments trigger
       re-tracing, which can mask issues where *accidentally* incompatible arguments
       keep :py:func:`@dr.freeze <drjit.freeze>` from producing the expected
@@ -3945,11 +3965,10 @@ def freeze(
           Dr.Jit will generate a warning that explains which variables changed
           between calls to the function.
 
-        state_fn (Optional[Callable]): This optional callable can specify additional
-          state to identifies the configuration. ``state_fn`` will be called with
-          the same arguments as that of the decorated function. It should return a
-          traversable object (e.g., a list or tuple) that is conceptually treated
-          as if it was another input of the function.
+        state_fn (Optional[Callable]): An optional callable that specifies additional
+          state used to identify the configuration. It receives the same arguments as
+          the decorated function and should return a traversable object, such as a list
+          or tuple, that is treated as an additional input.
 
         backend (Optional[JitBackend]): If no inputs are given when calling the
           frozen function, the backend used has to be specified using this argument.
