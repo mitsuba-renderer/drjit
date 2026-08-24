@@ -65,7 +65,7 @@ static void set_grad_enabled(nb::handle h, bool enable_) {
     };
 
     SetGradEnabled sge(enable_);
-    traverse("drjit.set_grad_enabled", sge, h);
+    traverse("drjit.set_grad_enabled", sge, h, dr::TraverseRole::Gradient);
 }
 
 static nb::object new_grad(nb::handle h) {
@@ -90,7 +90,7 @@ static nb::object new_grad(nb::handle h) {
         }
     } ng;
 
-    return transform("drjit.detail.new_grad", ng, h);
+    return transform("drjit.detail.new_grad", ng, h, dr::TraverseRole::Gradient);
 }
 
 static void enable_grad(nb::handle h) { set_grad_enabled(h, true); }
@@ -115,7 +115,7 @@ bool grad_enabled(nb::handle h) {
     };
 
     GradEnabled ge;
-    traverse("drjit.grad_enabled", ge, h);
+    traverse("drjit.grad_enabled", ge, h, dr::TraverseRole::Gradient);
     return ge.result;
 }
 
@@ -131,7 +131,7 @@ static bool has_grad(nb::handle h) {
     };
 
     HasGrad ge;
-    traverse("drjit.has_grad", ge, h);
+    traverse("drjit.has_grad", ge, h, dr::TraverseRole::Gradient);
     return ge.result;
 }
 
@@ -178,7 +178,7 @@ static nb::object detach(nb::handle h, bool preserve_type_ = true) {
         return nb::borrow(h);
 
     Detach d(preserve_type_);
-    return transform("drjit.detach", d, h);
+    return transform("drjit.detach", d, h, dr::TraverseRole::Gradient);
 }
 
 nb::object grad(nb::handle h, bool preserve_type_) {
@@ -229,7 +229,7 @@ nb::object grad(nb::handle h, bool preserve_type_) {
     };
 
     Grad g(preserve_type_);
-    return transform("drjit.grad", g, h);
+    return transform("drjit.grad", g, h, dr::TraverseRole::Gradient);
 }
 
 static void clear_grad(nb::handle dst) {
@@ -241,7 +241,7 @@ static void clear_grad(nb::handle dst) {
         }
     } cg;
 
-    traverse("drjit.clear_grad", cg, dst);
+    traverse("drjit.clear_grad", cg, dst, dr::TraverseRole::Gradient);
 }
 
 static void accum_grad(nb::handle target, nb::handle source) {
@@ -337,7 +337,7 @@ static void enqueue_impl(dr::ADMode mode_, nb::handle h_) {
     };
 
     Enqueue e(mode_);
-    traverse("drjit.enqueue", e, h_);
+    traverse("drjit.enqueue", e, h_, dr::TraverseRole::Gradient);
 }
 
 static bool check_grad_enabled(const char *name, nb::handle h, uint32_t flags) {
@@ -520,7 +520,7 @@ public:
         };
 
         AddInOut aio(*this, input_);
-        return transform(name, aio, h);
+        return transform(name, aio, h, dr::TraverseRole::Gradient);
     }
 
     nb::object grad_in(nb::handle key) {

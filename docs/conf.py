@@ -152,7 +152,7 @@ def _class_members(name):
         else:
             continue
         # Keep ``__init__`` and operator dunders (``__add__`` etc.), but drop
-        # private helpers such as ``_traverse_1_cb_ro``.
+        # private helpers such as ``_traverse_cb``.
         if member.startswith("_") and not (
             member.startswith("__") and member.endswith("__")
         ):

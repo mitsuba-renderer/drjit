@@ -922,7 +922,8 @@ void traverse(ADMode mode, uint32_t flags = (uint32_t) ADFlag::Default) {
 
 namespace detail {
     template <bool IncRef, typename T>
-    void collect_indices(const T &value, vector<uint64_t> &indices);
+    void collect_indices(const T &value, vector<uint64_t> &indices,
+                         TraverseRole role);
 }
 
 template <typename T> struct suspend_grad {
@@ -937,7 +938,8 @@ template <typename T> struct suspend_grad {
         if constexpr (Enabled) {
             if (condition) {
                 vector<uint64_t> indices;
-                (detail::collect_indices<false>(args, indices), ...);
+                (detail::collect_indices<false>(args, indices,
+                                                TraverseRole::Gradient), ...);
                 ad_scope_enter(
                     ADScope::Suspend, indices.size(), indices.data(), -1);
             }
@@ -969,7 +971,8 @@ template <typename T> struct resume_grad {
         if constexpr (Enabled) {
             if (condition) {
                 vector<uint64_t> indices;
-                (detail::collect_indices<false>(args, indices), ...);
+                (detail::collect_indices<false>(args, indices,
+                                                TraverseRole::Gradient), ...);
                 ad_scope_enter(
                     ADScope::Resume, indices.size(), indices.data(), -1);
             }
@@ -1066,15 +1069,15 @@ void forward(T &value, uint32_t flags = (uint32_t) ADFlag::Default) {
 NAMESPACE_BEGIN(detail)
 
 /// Internal operations for traversing nested data structures and fetching or
-/// storing indices. Used in ``call.h`` and ``loop.h``.
+/// storing indices. Used in ``call.h``, ``while_loop.h`` and ``if_stmt.h``.
 
 template <bool IncRef>
-void collect_indices_fn(void *p, uint64_t index, const char * /*variant*/,
-                        const char * /*domain*/) {
+uint64_t collect_indices_fn(void *p, uint64_t index, const char * /*name*/,
+                            const char * /*variant*/,
+                            const char * /*domain*/) {
     vector<uint64_t> &indices = *(vector<uint64_t> *) p;
-    if constexpr (IncRef)
-        index = ad_var_inc_ref(index);
-    indices.push_back(index);
+    indices.push_back(IncRef ? ad_var_inc_ref(index) : index);
+    return index;
 }
 
 struct update_indices_payload {
@@ -1082,26 +1085,32 @@ struct update_indices_payload {
     size_t &pos;
 };
 
-inline uint64_t update_indices_fn(void *p, uint64_t, const char * /*variant*/,
+inline uint64_t update_indices_fn(void *p, uint64_t, const char * /*name*/,
+                                  const char * /*variant*/,
                                   const char * /*domain*/) {
     update_indices_payload &payload = *(update_indices_payload *) p;
     return payload.indices[payload.pos++];
 }
 
 template <bool IncRef, typename Value>
-void collect_indices(const Value &value, vector<uint64_t> &indices) {
-    traverse_1_fn_ro(value, (void *) &indices, collect_indices_fn<IncRef>);
+void collect_indices(const Value &value, vector<uint64_t> &indices,
+                     TraverseRole role) {
+    traverse_fn(value, (void *) &indices,
+                TraverseVisitor { role, collect_indices_fn<IncRef>, nullptr });
 }
 
 template <typename Value>
-void update_indices(Value &value, const vector<uint64_t> &indices, size_t &pos) {
+void update_indices(Value &value, const vector<uint64_t> &indices, size_t &pos,
+                    TraverseRole role) {
     update_indices_payload payload { indices, pos };
-    traverse_1_fn_rw(value, (void *) &payload, update_indices_fn);
+    traverse_fn(value, (void *) &payload,
+                TraverseVisitor { role, update_indices_fn, nullptr });
 }
 
-template <typename T> void update_indices(T &value, const vector<uint64_t> &indices) {
+template <typename T>
+void update_indices(T &value, const vector<uint64_t> &indices, TraverseRole role) {
     size_t pos = 0;
-    update_indices(value, indices, pos);
+    update_indices(value, indices, pos, role);
 #if !defined(NDEBUG)
     if (pos != indices.size())
         drjit_fail("update_indices(): did not consume the expected number of indices!");

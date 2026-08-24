@@ -171,6 +171,9 @@ struct TraverseContext {
     /// might be traversed multiple times.
     bool deduplicate_pytree = true;
     uint32_t recursion_level = 0;
+    /// C++ objects visited so far. Shared objects are visited once, which
+    /// also terminates reference cycles.
+    tsl::robin_set<const drjit::TraversableBase *, PointerHasher> visited_cpp;
     Buffer path;
 
     TraverseContext() : path(1024) {}
@@ -503,7 +506,7 @@ struct FlatVariables {
      * Assigns variables using its `traverse_cb_rw` callback.
      * This corresponds to `traverse_cb`.
      */
-    void assign_cb(drjit::TraversableBase *traversable);
+    void assign_cb(drjit::TraversableBase *traversable, TraverseContext &ctx);
 
     /**
      * Assigns the flattened variables to an already existing PyTree.

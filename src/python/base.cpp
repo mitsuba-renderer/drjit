@@ -1369,10 +1369,6 @@ nb::handle DR_STR(DRJIT_STRUCT);
 nb::handle DR_STR(__dataclass_fields__);
 nb::handle DR_STR(name);
 nb::handle DR_STR(type);
-nb::handle DR_STR(_traverse_write);
-nb::handle DR_STR(_traverse_read);
-nb::handle DR_STR(_traverse_1_cb_rw);
-nb::handle DR_STR(_traverse_1_cb_ro);
 
 /// Cache backing lazy_import(), indexed by LazyImport. Populated on demand and
 /// released by lazy_import_shutdown().
@@ -1411,10 +1407,6 @@ void export_base(nb::module_ &m) {
     DR_STR(__dataclass_fields__) = PyUnicode_InternFromString("__dataclass_fields__");
     DR_STR(name) = PyUnicode_InternFromString("name");
     DR_STR(type) = PyUnicode_InternFromString("type");
-    DR_STR(_traverse_write) = PyUnicode_InternFromString("_traverse_write");
-    DR_STR(_traverse_read) = PyUnicode_InternFromString("_traverse_read");
-    DR_STR(_traverse_1_cb_rw) = PyUnicode_InternFromString("_traverse_1_cb_rw");
-    DR_STR(_traverse_1_cb_ro) = PyUnicode_InternFromString("_traverse_1_cb_ro");
 
     // Generic type variable used in many places
     for (const char *name :

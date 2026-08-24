@@ -43,7 +43,11 @@ public:
     /*
      * \brief Create a new variable tracker
      *
-     * The constructor accepts two parameters:
+     * The constructor accepts three parameters:
+     *
+     * - ``role``: The purpose of the traversal that is reported to C++
+     *   objects (see ``drjit::TraverseRole``), e.g. ``Loop`` when tracking
+     *   the state of a symbolic loop.
      *
      * - ``strict``: Certain types of Python objects (e.g. custom Python classes
      *   without ``DRJIT_STRUCT`` field, scalar Python numeric types) are not
@@ -58,7 +62,8 @@ public:
      *   inactive elements are pruned, which causes the array size to
      *   progressively shrink).
      */
-    VariableTracker(bool strict = true, bool check_size = true);
+    VariableTracker(dr::TraverseRole role, bool strict = true,
+                    bool check_size = true);
 
     /// Free all state, decrease reference counts, etc.
     ~VariableTracker();

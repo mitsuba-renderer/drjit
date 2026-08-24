@@ -772,36 +772,51 @@ void FlatVariables::assign_ad_var(Layout &layout_, nb::handle dst) {
 }
 
 /**
- * Traverse a C++ tree using its `traverse_1_cb_ro` callback.
+ * Traverse a C++ tree using its `traverse_cb` callback.
  */
 void FlatVariables::traverse_cb(const drjit::TraversableBase *traversable,
                                 TraverseContext &ctx, nb::object type) {
-    // ProfilerPhase profiler(traversable);
-
     uint32_t layout_index_ = (uint32_t) this->layout.size();
     Layout &layout_        = this->layout.emplace_back();
-    layout_.type           = nb::borrow<nb::type_object>(type);
 
-    struct Payload {
-        TraverseContext &ctx;
-        FlatVariables *flat_variables = nullptr;
-        uint32_t num_fields           = 0;
-    };
+    // Objects without a Python counterpart are deduplicated here, objects
+    // with one by the ``visited`` map of the Python-level traversal.
+    if (!ctx.visited_cpp.insert(traversable).second) {
+        layout_.flags |= (uint32_t) LayoutFlag::RecursiveRef;
+        return;
+    }
+    layout_.type = nb::borrow<nb::type_object>(type);
 
-    Payload p{ ctx, this, 0 };
-
-    traversable->traverse_1_cb_ro(
-        (void *) &p,
-        [](void *p, uint64_t index, const char *variant_, const char *domain) {
-            if (!index)
-                return;
-            Payload *payload = (Payload *) p;
-            payload->flat_variables->add_domain(variant_, domain);
-            payload->flat_variables->traverse_ad_index(index, payload->ctx);
-            payload->num_fields++;
+    uint32_t num_fields = 0;
+    for_each_member(
+        const_cast<drjit::TraversableBase *>(traversable),
+        drjit::TraverseRole::Freeze,
+        [&](uint64_t index, const char *, const char *variant_,
+            const char *domain) {
+            if (index) {
+                add_domain(variant_, domain);
+                traverse_ad_index(index, ctx);
+                num_fields++;
+            }
+            return index;
+        },
+        [&](drjit::TraversableBase *child, const char *) {
+            num_fields++;
+            if (PyObject *self = child->self_py())
+                traverse(self, ctx);
+            else
+                traverse_cb(child, ctx);
         });
 
-    this->layout[layout_index_].num = p.num_fields;
+    // Attributes of a Python subclass instance
+    if (nb::dict dict = traversable_dict(traversable); dict.is_valid()) {
+        for (nb::handle value : dict.values()) {
+            num_fields++;
+            traverse(value, ctx);
+        }
+    }
+
+    this->layout[layout_index_].num = num_fields;
 }
 
 /**
@@ -828,36 +843,53 @@ uint64_t FlatVariables::assign_cb_internal(uint64_t index,
  * Assigns variables using its `traverse_cb_rw` callback.
  * This corresponds to `traverse_cb`.
  */
-void FlatVariables::assign_cb(drjit::TraversableBase *traversable) {
+void FlatVariables::assign_cb(drjit::TraversableBase *traversable,
+                              TraverseContext &ctx) {
     Layout &layout_ = this->layout[layout_index++];
 
-    struct Payload {
-        FlatVariables *flat_variables = nullptr;
-        Layout &layout;
-        index64_vector tmp;
-        uint32_t field_counter = 0;
-    };
-    Payload p{ this, layout_, index64_vector(), 0 };
-    traversable->traverse_1_cb_rw(
-        (void *) &p,
-        [](void *p, uint64_t index, const char *, const char *) {
-        if (!index)
-            return index;
-        Payload *payload = (Payload *) p;
-        if (payload->field_counter >= payload->layout.num)
-            jit_raise("While traversing an object "
-                      "for assigning inputs, the number of variables to "
-                      "assign (>%u) did not match the number of variables "
-                      "traversed when recording (%u)!",
-                      payload->field_counter, payload->layout.num);
-        payload->field_counter++;
-        return payload->flat_variables->assign_cb_internal(index, payload->tmp);
-    });
+    if (layout_.flags & (uint32_t) LayoutFlag::RecursiveRef)
+        return;
 
-    if (p.field_counter != layout_.num)
-        jit_raise("While traversing and object for assigning inputs, the "
-                  "number of variables to assign did not match the number "
-                  "of variables traversed when recording!");
+    index64_vector tmp;
+    uint32_t num = layout_.num, field_counter = 0;
+    auto count = [&] {
+        if (field_counter >= num)
+            jit_raise("While traversing an object for assigning inputs, "
+                      "the number of variables to assign (>%u) did not "
+                      "match the number of variables traversed when "
+                      "recording (%u)!",
+                      field_counter, num);
+        field_counter++;
+    };
+
+    for_each_member(
+        traversable, drjit::TraverseRole::Freeze,
+        [&](uint64_t index, const char *, const char *, const char *) {
+            if (!index)
+                return index;
+            count();
+            return assign_cb_internal(index, tmp);
+        },
+        [&](drjit::TraversableBase *child, const char *) {
+            count();
+            if (PyObject *self = child->self_py())
+                assign(self, ctx);
+            else
+                assign_cb(child, ctx);
+        });
+
+    if (nb::dict dict = traversable_dict(traversable); dict.is_valid()) {
+        for (nb::handle value : dict.values()) {
+            count();
+            assign(value, ctx);
+        }
+    }
+
+    if (field_counter != num)
+        jit_raise("While traversing an object for assigning inputs, the "
+                  "number of variables to assign (%u) did not match the "
+                  "number of variables traversed when recording (%u)!",
+                  field_counter, num);
 }
 
 /**
@@ -907,8 +939,6 @@ struct scoped_path {
  * about the drjit variable in the layout. Therefore, the layout can be used
  * as an identifier to the recording of the frozen function.
  */
-// NOTE: callers of this function (from outside of its recursion) have to set
-// the ``JitFlag::EnableObjectTraversal`` flag (see ``traverse_with_registry``)
 void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
     if (recursion_level == 0)
         m_log_enabled = log_enabled(LogLevel::Debug);
@@ -1015,7 +1045,7 @@ void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
                 scoped_path ps(ctx, nb::str(k).c_str());
                 traverse(nb::getattr(h, k), ctx);
             }
-        } else if (nb::object df = get_dataclass_fields(tp); df.is_valid()) {
+        } else if (nb::object df = dataclass_fields(tp); df.is_valid()) {
 
             for (auto field : df) {
                 nb::object k = field.attr(DR_STR(name));
@@ -1028,27 +1058,11 @@ void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
                 scoped_path ps(ctx, nb::str(k).c_str());
                 traverse(nb::getattr(h, k), ctx);
             }
-        } else if (auto traversable = get_traversable_base(h); traversable) {
+        } else if (auto traversable = traversable_ptr(h); traversable) {
             traverse_cb(traversable, ctx, nb::borrow<nb::type_object>(tp));
-        } else if (auto cb = get_traverse_cb_ro(tp); cb.is_valid()) {
-            ProfilerPhase profiler2("traverse cb");
-
-            uint32_t num_fields = 0;
-
-            // Traverse the opaque C++ object
-            cb(h, nb::cpp_function([&](uint64_t index, const char *variant_,
-                                       const char *domain) {
-                   if (!index)
-                       return;
-                   add_domain(variant_, domain);
-                   num_fields++;
-                   this->traverse_ad_index(index, ctx, nb::none());
-                   return;
-               }));
-
-            // Update layout number of fields
-            this->layout[layout_index_].num = num_fields;
         } else {
+            raise_if_unbound_traversable(tp);
+
             jit_log(LogLevel::Debug,
                     "traverse(): You passed a value of type %s to a frozen "
                     "function, it could not be converted to a Dr.Jit type. "
@@ -1162,7 +1176,7 @@ nb::object FlatVariables::construct() {
             for (auto k : layout_.fields)
                 nb::setattr(tmp, k, construct());
             return tmp;
-        } else if (nb::object df = get_dataclass_fields(layout_.type);
+        } else if (nb::object df = dataclass_fields(layout_.type);
                    df.is_valid()) {
             nb::dict dict;
             for (auto k : layout_.fields)
@@ -1195,8 +1209,6 @@ nb::object FlatVariables::construct() {
  * Assigns the flattened variables to an already existing PyTree.
  * This is used when input variables have changed.
  */
-// NOTE: callers of this function (from outside of its recursion) have to set
-// the ``JitFlag::EnableObjectTraversal`` flag (see ``assign_with_registry``)
 void FlatVariables::assign(nb::handle dst, TraverseContext &ctx) {
     if (recursion_level == 0)
         m_log_enabled = log_enabled(LogLevel::Debug);
@@ -1283,7 +1295,7 @@ void FlatVariables::assign(nb::handle dst, TraverseContext &ctx) {
                 else
                     nb::setattr(dst, k, construct());
             }
-        } else if (nb::object df = get_dataclass_fields(tp); df.is_valid()) {
+        } else if (nb::object df = dataclass_fields(tp); df.is_valid()) {
             for (auto k : layout_.fields) {
                 scoped_path ps(ctx, nb::str(k).c_str());
                 if (nb::hasattr(dst, k))
@@ -1291,38 +1303,8 @@ void FlatVariables::assign(nb::handle dst, TraverseContext &ctx) {
                 else
                     nb::setattr(dst, k, construct());
             }
-        } else if (auto traversable = get_traversable_base(dst); traversable) {
-            assign_cb(traversable);
-        } else if (nb::object cb = get_traverse_cb_rw(tp); cb.is_valid()) {
-            index64_vector tmp;
-            uint32_t num_fields = 0;
-
-            cb(dst, nb::cpp_function([&](uint64_t index, const char *,
-                                         const char *) {
-                   if (!index)
-                       return index;
-                   jit_log(LogLevel::Debug,
-                           "assign(): traverse_cb[%u] was a%u r%u", num_fields,
-                           (uint32_t) (index >> 32), (uint32_t) index);
-                   num_fields++;
-                   if (num_fields > layout_.num)
-                       jit_raise(
-                           "While traversing the object of type %s at location "
-                           "%s for assigning inputs, the number of variables "
-                           "to assign (>%u) did not match the number of "
-                           "variables traversed when recording(%u)!",
-                           ctx.path.get(), nb::str(tp).c_str(), num_fields,
-                           layout_.num);
-                   return assign_cb_internal(index, tmp);
-               }));
-            if (num_fields != layout_.num)
-                jit_raise(
-                    "While traversing the object of type %s at location %s "
-                    "for assigning inputs, the number of variables "
-                    "to assign did not match the number of variables "
-                    "traversed when recording!",
-                    ctx.path.get(), nb::str(tp).c_str());
-        } else {
+        } else if (auto traversable = traversable_ptr(dst); traversable) {
+            assign_cb(traversable, ctx);
         }
     } catch (nb::python_error &e) {
         nb::raise_from(e, PyExc_RuntimeError,
@@ -1348,8 +1330,6 @@ void FlatVariables::assign(nb::handle dst, TraverseContext &ctx) {
  * additional data to vcalls is tracked correctly.
  */
 void FlatVariables::traverse_with_registry(nb::handle h, TraverseContext &ctx) {
-    scoped_set_flag traverse_scope(JitFlag::EnableObjectTraversal, true);
-
     // Traverse the handle
     traverse(h, ctx);
 
@@ -1407,8 +1387,6 @@ void FlatVariables::traverse_with_registry(nb::handle h, TraverseContext &ctx) {
  * Corresponds to `traverse_with_registry`.
  */
 void FlatVariables::assign_with_registry(nb::handle dst, TraverseContext &ctx) {
-    scoped_set_flag traverse_scope(JitFlag::EnableObjectTraversal, true);
-
     // Assign the handle
     assign(dst, ctx);
 
@@ -1458,7 +1436,7 @@ void FlatVariables::assign_with_registry(nb::handle dst, TraverseContext &ctx) {
             if (self)
                 assign(self, ctx);
             else
-                assign_cb(traversable);
+                assign_cb(traversable, ctx);
         }
         jit_log(LogLevel::Debug, "}");
     }
@@ -1834,8 +1812,6 @@ nb::object FunctionRecording::record(nb::callable func,
         ADScopeContext ad_scope(drjit::ADScope::Resume, 0, nullptr, -1, false);
 
         {
-            scoped_set_flag traverse_scope(JitFlag::EnableObjectTraversal,
-                                           true);
             TraverseContext ctx;
             ctx.postponed          = &postponed;
             ctx.deduplicate_pytree = false;
@@ -1915,8 +1891,6 @@ nb::object FunctionRecording::record(nb::callable func,
         }
         // NOTE: temporarily disable this to not enqueue twice
         try {
-            scoped_set_flag traverse_scope(JitFlag::EnableObjectTraversal,
-                                           true);
             TraverseContext ctx;
             out_variables.assign(input, ctx);
         } catch (std::exception &) {
@@ -2256,7 +2230,6 @@ static PyType_Slot slots[] = { { Py_tp_traverse,
 void export_freeze(nb::module_ & /*m*/) {
 
     nb::module_ d = nb::module_::import_("drjit.detail");
-    nb::class_<drjit::TraversableBase>(d, "TraversableBase").freeze();
     nb::class_<FrozenFunction>(d, "FrozenFunction", nb::type_slots(slots))
         .def(nb::init<nb::callable, int, uint32_t, JitBackend, bool>())
         .def_prop_ro(

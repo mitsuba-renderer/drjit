@@ -1249,7 +1249,7 @@ nb::object full(const char *name, nb::handle dtype, nb::handle value,
                 }
 
                 return result;
-            } else if (nb::object df = get_dataclass_fields(dtype); df.is_valid()) {
+            } else if (nb::object df = dataclass_fields(dtype); df.is_valid()) {
                 nb::object result = nb::dict();
 
                 for (auto field : df) {

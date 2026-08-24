@@ -208,7 +208,7 @@ void bind_texture(nb::module_ &m, const char *name) {
     using Float32 = dr::replace_scalar_t<QueryArray, float>;
     using Float64 = dr::replace_scalar_t<QueryArray, double>;
 
-    auto tex = nb::class_<Tex>(m, name)
+    auto tex = nb::class_<Tex, drjit::TraversableBase>(m, name)
         .def("__init__", [](Tex* t, const dr::vector<size_t>& shape,
                          size_t channels, bool use_accel,
                          dr::FilterMode filter_mode, dr::WrapMode wrap_mode,
@@ -274,8 +274,13 @@ void bind_texture(nb::module_ &m, const char *name) {
         .def("use_accel", &Tex::use_accel, doc_Texture_use_accel)
         .def("writable", &Tex::writable, doc_Texture_writable)
         .def("srgb", &Tex::srgb, doc_Texture_srgb)
-        .def_static("from_native_handle", &Tex::from_native_handle, "handle"_a,
-             "writable"_a = false,
+        .def_static("from_native_handle",
+             [](uintptr_t handle, bool writable, dr::FilterMode filter_mode,
+                dr::WrapMode wrap_mode, bool srgb) {
+                 return new Tex(Tex::from_native_handle(
+                     handle, writable, filter_mode, wrap_mode, srgb));
+             },
+             "handle"_a, "writable"_a = false,
              "filter_mode"_a = dr::FilterMode::Linear,
              "wrap_mode"_a = dr::WrapMode::Clamp, "srgb"_a = false,
              doc_Texture_from_native_handle)
