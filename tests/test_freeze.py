@@ -4173,3 +4173,69 @@ def test111_cpp_objects(t, auto_opaque):
         assert dr.all(r1 == (value + 1) * (base_value + 1))
 
     assert func.n_recordings == 1
+
+
+def test120_function_environment():
+    """
+    ``FunctionEnvironment`` extracts what a frozen function reads from the
+    callable that it wraps: the names of its positional parameters, of the
+    global variables that it loads and of its closure variables. The
+    extraction reaches into CPython internals, hence this test.
+    """
+    env = dr.detail.FunctionEnvironment
+
+    # Only the positional parameters are named, in declaration order.
+    # Keyword-only parameters, ``*args`` and ``**kwargs`` are left out: a
+    # call passes them by name, or beyond the end of the parameter list.
+    def f0(a, b, /, c, d=1, *rest, e, g=2, **kw):
+        pass
+
+    assert env(f0).arg_names == ("a", "b", "c", "d")
+    assert env(lambda: None).arg_names == ()
+    assert env(lambda *args, **kwargs: None).arg_names == ()
+
+    # The object of a method is an ordinary parameter
+    class MyClass:
+        def method(self, x):
+            pass
+
+    assert env(MyClass.method).arg_names == ("self", "x")
+
+    # A global that the function reads is captured, an attribute name that
+    # happens to look like one is not
+    ns = dict(scale=1, zeros=2)
+    exec("def func(x):\n    return x * scale + dr.zeros(x, 3)\n", ns)
+    e = env(ns["func"])
+    assert "scale" in e.global_names
+    assert "dr" in e.global_names
+    assert "zeros" not in e.global_names
+
+    # Builtins cannot change and are skipped
+    exec("def func2(x):\n    return len(x) + scale\n", ns)
+    assert env(ns["func2"]).global_names == ("scale",)
+
+    # The captured values are read when the call happens
+    assert e.capture()["scale"] == 1
+    ns["scale"] = 5
+    assert e.capture()["scale"] == 5
+
+    # A global that only a nested code object reads (a lambda, a
+    # comprehension or a nested function) is captured too
+    exec("def func3(x):\n"
+         "    fn = lambda y: y * inner\n"
+         "    return [fn(y) + comp for y in x]\n", ns)
+    names = env(ns["func3"]).global_names
+    assert "inner" in names and "comp" in names
+
+    # Closure variables are captured by name as well
+    def outer():
+        captured = 7
+
+        def inner(y):
+            return y + captured
+
+        return inner
+
+    e = env(outer())
+    assert e.free_names == ("captured",)
+    assert e.capture()["captured"] == 7

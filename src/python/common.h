@@ -63,6 +63,7 @@ extern nb::handle DR_STR(DRJIT_STRUCT);
 extern nb::handle DR_STR(__dataclass_fields__);
 extern nb::handle DR_STR(name);
 extern nb::handle DR_STR(type);
+extern nb::handle DR_STR(cell_contents);
 
 /// Dr.Jit can lazily import and then cache the following objects to avoid
 /// costly nb::module_::import() calls.
