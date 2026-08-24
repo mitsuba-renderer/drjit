@@ -60,6 +60,70 @@ DRJIT_INLINE void traverse_3(T1 &&v1, T2 &&v2, T3 &&v3, F &&f) {
     }
 }
 
+struct TraversableBase;
+
+/**
+ * \brief Purpose of a traversal
+ *
+ * This enumeration characterizes the different roles of an object traversal
+ * conducted through the \ref TraversableBase interface. An object may then choose
+ * to expose or withhold certain attributes based on the role.
+ */
+enum class TraverseRole : uint32_t {
+    /// Catch-all for generic operations like: ``dr.width()``, ``dr.copy()``, etc.
+    Generic,
+
+    /// Scheduling and evaluation
+    Eval,
+
+    /// Automatic differentiation
+    Gradient,
+
+    /// Symbolic loop state tracking (``dr.while_loop()``)
+    Loop,
+
+    /// Symbolic conditional state tracking (``dr.if_stmt()``)
+    Conditional,
+
+    /// Symbolic call state tracking (``dr.switch()``, ``dr.dispatch()``)
+    Call,
+
+    /// Inputs and outputs of a frozen function (``dr.freeze()``)
+    Freeze
+};
+
+/**
+ * \brief Callbacks invoked by the traversal of a C++ object (see \ref
+ * TraversableBase::traverse_cb)
+ *
+ * ``var`` receives the index of each JIT array held by the object and returns
+ * the index that the object holds from now on. A read-only traversal should
+ * simply return the index it was given. A traversal that replaces arrays must
+ * return a borrowed index. This means a callback that callbacks creates a new
+ * variable must keep it alive until the traversal has returns.
+ * When the array is a class pointer array, ``variant`` and ``domain`` identify
+ * its ``CallSupport``, otherwise both are "".
+ *
+ * ``child`` receives each directly held child object (a member deriving from
+ * \ref TraversableBase, whether held by value, pointer, or smart pointer). A
+ * null ``child`` callback requests a deep traversal that descends into every
+ * child object in place.
+ *
+ * Both callbacks receive the ``name`` of the member that the array or child
+ * object was reached through, which \ref DR_TRAVERSE_CB obtains by
+ * stringifying its arguments. It is a compile-time string that the callback
+ * may store without copying it, or an empty string when the traversal does not
+ * name its members. A member expanding into several arrays or child objects
+ * (a container, a nested array, a ``DRJIT_STRUCT``) reports the same name for
+ * each of them.
+ */
+struct TraverseVisitor {
+    TraverseRole role;
+    uint64_t (*var)(void *payload, uint64_t index, const char *name,
+                    const char *variant, const char *domain);
+    void (*child)(void *payload, TraversableBase *obj, const char *name);
+};
+
 namespace detail {
     // Traversal helper for objects that cannot be traversed
     template <typename T, typename SFINAE = int> struct traversable {
@@ -134,18 +198,22 @@ namespace detail {
     };
 
     template <typename T>
-    using det_traverse_1_cb_ro =
-        decltype(T(nullptr)->traverse_1_cb_ro(nullptr, nullptr));
+    static constexpr bool is_traversable_object_v =
+        std::is_base_of_v<TraversableBase, std::remove_cv_t<T>>;
 
+    /// Report a \ref TraversableBase instance to ``cb.child``, or descend
+    /// into it when the callback requests a deep traversal
     template <typename T>
-    using det_traverse_1_cb_rw =
-        decltype(T(nullptr)->traverse_1_cb_rw(nullptr, nullptr));
+    void traverse_child(T *obj, void *payload, const TraverseVisitor &cb,
+                         const char *name) {
+        if (cb.child)
+            cb.child(payload, obj, name);
+        else
+            obj->traverse_cb(payload, cb);
+    }
 
     template <typename T>
     using det_get = decltype(std::declval<T&>().get());
-
-    template <typename T>
-    using det_const_get = decltype(std::declval<const T &>().get());
 
     template<typename T>
     using det_begin = decltype(std::declval<T &>().begin());
@@ -193,117 +261,97 @@ template <typename T> auto labels(const T &v) {
 }
 
 /**
- * This function traverses C++ objects, that have one of the following features:
+ * \brief Traverse the JIT arrays and child objects of a C++ value
  *
- * 1. They represent Jit arrays, in which case the callback is called with
+ * The function handles values with one of the following features:
+ *
+ * 1. They represent Jit arrays, in which case ``cb.var`` is called with
  *    optional domain and variant arguments.
  * 2. They fall under the \c traversable trait (see above), for example
- *    DRJIT_STRUCTs or tuples
+ *    DRJIT_STRUCTs or tuples, whether held by value or by pointer.
  * 3. They represent dynamic arrays.
- * 4. They themselves implement the function \c traverse_1_cb_ro, in which case
- *    this function is called.
+ * 4. They derive from \ref TraversableBase, whether held by value, by
+ *    pointer, or by a smart pointer.
  * 5. They represent iterables with a \c begin and \c end function, such as
  *    \c std::vector or \c drjit::vector.
- * 6. They represent unique pointers, with a constant get method, such as
- *    \c std::unique_ptr.
+ * 6. They represent smart pointers with a \c get method, such as
+ *    \c std::unique_ptr or \c nb::ref.
+ *
+ * Objects deriving from \ref TraversableBase are not descended into. They are
+ * reported through ``cb.child`` instead, and the caller decides whether to
+ * descend into them. This is what lets the caller deduplicate shared objects
+ * and handle reference cycles. A null ``cb.child`` descends in place, which
+ * is a deep traversal that visits shared objects once per reference. Every
+ * other class is a transparent aggregate: it adds no object of its own, and
+ * exposes its members through \ref DRJIT_TRAVERSE.
+ *
+ * The index returned by ``cb.var`` replaces the traversed array if it differs
+ * from the current one. A const value is traversed read-only: the returned
+ * indices are ignored, and child objects are reached through a const cast
+ * with the understanding that the callback returns their indices unchanged.
+ *
+ * ``name`` is the compile-time name of the member holding ``value``, which the
+ * function passes on to every array and child object it finds below it.
  */
-template <typename Value>
-void traverse_1_fn_ro(const Value &value, void *payload,
-                      void (*fn)(void *, uint64_t, const char *,
-                                 const char *)) {
+template <typename Value_>
+void traverse_fn(Value_ &&value, void *payload, const TraverseVisitor &cb,
+                 const char *name = "") {
+    using Value   = std::remove_reference_t<Value_>;
+    using ValueNC = std::remove_cv_t<Value>;
+    using Pointee = std::remove_cv_t<std::remove_pointer_t<ValueNC>>;
+    constexpr bool Write = !std::is_const_v<Value>;
+
     DRJIT_MARK_USED(payload);
-    DRJIT_MARK_USED(fn);
-    if constexpr (is_jit_v<Value> && depth_v<Value> == 1) {
-        if constexpr(Value::IsClass)
-            fn(payload, value.index_combined(), Value::CallSupport::Variant,
-               Value::CallSupport::Domain);
+    DRJIT_MARK_USED(cb);
+    DRJIT_MARK_USED(name);
+
+    if constexpr (is_jit_v<ValueNC> && depth_v<ValueNC> == 1) {
+        uint64_t index = value.index_combined(), index_new;
+        if constexpr (ValueNC::IsClass)
+            index_new = cb.var(payload, index, name,
+                               ValueNC::CallSupport::Variant,
+                               ValueNC::CallSupport::Domain);
         else
-            fn(payload, value.index_combined(), "", "");
-    } else if constexpr (is_traversable_v<Value>) {
-        traverse_1(fields(value), [payload, fn](auto &x) {
-            traverse_1_fn_ro(x, payload, fn);
+            index_new = cb.var(payload, index, name, "", "");
+
+        if constexpr (Write) {
+            if (index_new != index)
+                value = ValueNC::borrow((typename ValueNC::Index) index_new);
+        } else {
+            (void) index_new;
+        }
+    } else if constexpr (is_traversable_v<ValueNC>) {
+        traverse_1(fields(value), [payload, &cb, name](auto &x) {
+            traverse_fn(x, payload, cb, name);
         });
-    } else if constexpr (is_dynamic_traversable_v<Value>) {
+    } else if constexpr (is_dynamic_traversable_v<ValueNC>) {
         for (size_t i = 0; i < value.size(); ++i) {
-            traverse_1(drjit::tie(value.entry(i)), [payload, fn](auto &x) {
-                traverse_1_fn_ro(x, payload, fn);
+            traverse_1(drjit::tie(value.entry(i)), [payload, &cb, name](auto &x) {
+                traverse_fn(x, payload, cb, name);
             });
         }
     } else if constexpr (std::is_array_v<Value>) {
         for (size_t i = 0; i < std::extent_v<Value>; ++i)
-            traverse_1_fn_ro(value[i], payload, fn);
-    } else if constexpr (std::is_pointer_v<Value> &&
-                         is_detected_v<detail::det_traverse_1_cb_ro, Value>) {
+            traverse_fn(value[i], payload, cb, name);
+    } else if constexpr (std::is_pointer_v<ValueNC> &&
+                         detail::is_traversable_object_v<Pointee>) {
         if (value)
-            value->traverse_1_cb_ro(payload, fn);
-
+            detail::traverse_child(const_cast<Pointee *>(value), payload, cb,
+                                    name);
+    } else if constexpr (std::is_pointer_v<ValueNC> &&
+                         is_traversable_v<Pointee>) {
+        if (value)
+            traverse_fn(*value, payload, cb, name);
     } else if constexpr (is_detected_v<detail::det_begin, Value> &&
                          is_detected_v<detail::det_end, Value>) {
-        for (auto elem : value)
-            traverse_1_fn_ro(elem, payload, fn);
-    } else if constexpr (is_detected_v<detail::det_const_get, Value>) {
-        const auto *tmp = value.get();
-        traverse_1_fn_ro(tmp, payload, fn);
-    } else if constexpr (is_detected_v<detail::det_traverse_1_cb_ro, Value *>) {
-        value.traverse_1_cb_ro(payload, fn);
-    }
-}
-
-/**
- * This function traverses C++ objects, that have one of the following features:
- *
- * 1. They represent Jit arrays, in which case the callback is called with
- *    optional domain and variant arguments.
- * 2. They fall under the \c traversable trait (see above), for example
- *    DRJIT_STRUCTs or tuples
- * 3. They represent dynamic arrays.
- * 4. They themselves implement the function \c traverse_1_cb_rw, in which case
- *    this function is called.
- * 5. They represent iterables with a \c begin and \c end function, such as
- *    \c std::vector or \c drjit::vector.
- * 6. They represent unique pointers, with a get method, such as
- *    \c std::unique_ptr.
- */
-template <typename Value>
-void traverse_1_fn_rw(Value &value, void *payload,
-                      uint64_t (*fn)(void *, uint64_t, const char *,
-                                     const char *)) {
-    DRJIT_MARK_USED(payload);
-    DRJIT_MARK_USED(fn);
-    if constexpr (is_jit_v<Value> && depth_v<Value> == 1) {
-        if constexpr(Value::IsClass)
-            value = Value::borrow((typename Value::Index) fn(
-                payload, value.index_combined(), Value::CallSupport::Variant,
-                Value::CallSupport::Domain));
-        else
-            value = Value::borrow((typename Value::Index) fn(
-                payload, value.index_combined(), "", ""));
-    } else if constexpr (is_traversable_v<Value>) {
-        traverse_1(fields(value), [payload, fn](auto &x) {
-            traverse_1_fn_rw(x, payload, fn);
-        });
-    } else if constexpr (is_dynamic_traversable_v<Value>) {
-        for (size_t i = 0; i < value.size(); ++i) {
-            traverse_1(drjit::tie(value.entry(i)), [payload, fn](auto &x) {
-                traverse_1_fn_rw(x, payload, fn);
-            });
-        }
-    } else if constexpr (std::is_array_v<Value>) {
-        for (size_t i = 0; i < std::extent_v<Value>; ++i)
-            traverse_1_fn_rw(value[i], payload, fn);
-    } else if constexpr (std::is_pointer_v<Value> &&
-                         is_detected_v<detail::det_traverse_1_cb_rw, Value>) {
-        if (value)
-            value->traverse_1_cb_rw(payload, fn);
-    } else if constexpr (is_detected_v<detail::det_begin, Value> &&
-                         is_detected_v<detail::det_end, Value>) {
-        for (auto elem : value)
-            traverse_1_fn_rw(elem, payload, fn);
+        for (auto &elem : value)
+            traverse_fn(elem, payload, cb, name);
     } else if constexpr (is_detected_v<detail::det_get, Value>) {
         auto *tmp = value.get();
-        traverse_1_fn_rw(tmp, payload, fn);
-    } else if constexpr (is_detected_v<detail::det_traverse_1_cb_rw, Value *>) {
-        value.traverse_1_cb_rw(payload, fn);
+        traverse_fn(tmp, payload, cb, name);
+    } else if constexpr (detail::is_traversable_object_v<ValueNC>) {
+        detail::traverse_child(const_cast<ValueNC *>(&value), payload, cb,
+                                name);
     }
 }
 

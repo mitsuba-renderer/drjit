@@ -325,7 +325,7 @@ static nb::object traverse(nb::handle tp, nb::handle v1, nb::handle v2,
             if (ret)
                 nb::setattr(result, k, r_k);
         }
-    } else if (nb::object df = get_dataclass_fields(tp); df.is_valid()) {
+    } else if (nb::object df = dataclass_fields(tp); df.is_valid()) {
         if (ret)
             result = nb::dict();
         nb::dict d;

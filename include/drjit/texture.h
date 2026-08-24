@@ -30,7 +30,7 @@
 
 NAMESPACE_BEGIN(drjit)
 
-template <typename Storage_, size_t Dimension> class Texture : TraversableBase {
+template <typename Storage_, size_t Dimension> class Texture : public TraversableBase {
 public:
     static constexpr bool IsCUDA = is_cuda_v<Storage_>;
     static constexpr bool IsMetal = is_metal_v<Storage_>;
@@ -1951,35 +1951,14 @@ private:
     vector<TensorXf> m_levels;
 
 public:
-    void
-    traverse_1_cb_ro(void *payload,
-                     drjit ::detail ::traverse_callback_ro fn) const override {
-        // Traverse the function to react to changes when freezing code via
-        // @dr.freeze. In all other contexts, the texture is read-only and does
-        // not require traversal
-        if (!jit_flag(JitFlag::EnableObjectTraversal))
+    void traverse_cb(void *payload, const drjit::TraverseVisitor &cb) override {
+        // The texture data only takes part in frozen functions, which must
+        // react to changes of the underlying arrays. In every other context
+        // (loops, calls, evaluation) the texture is a read-only resource.
+        if (cb.role != TraverseRole::Freeze)
             return;
 
-        DRJIT_MAP(DR_TRAVERSE_MEMBER_RO, m_padded_tensor, m_tensor,
-                  m_resolution_opaque, m_inv_resolution, m_mip, m_mip_table,
-                  m_levels);
-        if constexpr (HasGPUTexture) {
-            uint32_t n_indices = tex_n_indices();
-            uint32_t *indices = (uint32_t *) alloca(sizeof(uint32_t) * n_indices);
-            jit_tex_get_indices(m_handle, indices);
-            for (uint32_t i = 0; i < n_indices; i++)
-                fn(payload, indices[i], "", "");
-        }
-    }
-    void traverse_1_cb_rw(void *payload,
-                          drjit ::detail ::traverse_callback_rw fn) override {
-        // Only traverse the scene for frozen functions, since accidentally
-        // traversing the scene in loops or vcalls can cause errors with
-        // variable size mismatches, and backpropagation of gradients.
-        if (!jit_flag(JitFlag::EnableObjectTraversal))
-            return;
-
-        DRJIT_MAP(DR_TRAVERSE_MEMBER_RW, m_padded_tensor, m_tensor,
+        DRJIT_MAP(DR_TRAVERSE_MEMBER, m_padded_tensor, m_tensor,
                   m_resolution_opaque, m_inv_resolution, m_mip, m_mip_table,
                   m_levels);
 
@@ -1988,7 +1967,8 @@ public:
             uint32_t *indices = (uint32_t *) alloca(sizeof(uint32_t) * n_indices);
             jit_tex_get_indices(m_handle, indices);
             for (uint32_t i = 0; i < n_indices; i++) {
-                uint64_t new_index = fn(payload, indices[i], "", "");
+                uint64_t new_index =
+                    cb.var(payload, indices[i], "m_handle", "", "");
                 if (new_index != indices[i])
                     jit_raise("A texture was changed by traversing it. This is "
                               "not supported!");

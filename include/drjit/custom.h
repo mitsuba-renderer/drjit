@@ -12,7 +12,9 @@
 
 #pragma once
 
-#define NB_INTRUSIVE_EXPORT DRJIT_EXTRA_EXPORT
+#if !defined(NB_INTRUSIVE_EXPORT)
+#  define NB_INTRUSIVE_EXPORT DRJIT_EXTRA_EXPORT
+#endif
 
 #include <drjit/autodiff.h>
 #include <drjit/extra.h>

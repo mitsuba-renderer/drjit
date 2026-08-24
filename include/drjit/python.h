@@ -1123,93 +1123,27 @@ template <typename T> void bind_all(ArrayBinding &b) {
     bind_array<Tensor<float64_array_t<T2>>>(b);
 }
 
-// Expose already existing object tree traversal callbacks (T::traverse_1_..) in Python.
-// This functionality is needed to traverse custom/opaque C++ classes and correctly
-// update their members when they are used in vectorized loops, function calls, etc.
-template <typename T, typename... Args> auto &bind_traverse(nanobind::class_<T, Args...> &cls)
-{
+// Expose deep object tree traversal as ``_traverse_cb(role, callback)``
+template <typename T, typename... Args> auto &bind_traverse(nanobind::class_<T, Args...> &cls) {
     namespace nb = nanobind;
-    struct Payload {
-        nb::callable c;
-    };
+    struct Payload { nb::callable c; };
 
     static_assert(std::is_base_of_v<TraversableBase, T>);
 
-    cls.def("_traverse_1_cb_ro", [](const T *self, nb::callable c) {
+    cls.def("_traverse_cb", [](T *self, TraverseRole role, nb::callable c) {
         Payload payload{ std::move(c) };
-        self->traverse_1_cb_ro((void *) &payload,
-            [](void *p, uint64_t index, const char *variant, const char *domain) {
-                ((Payload *) p)->c(index, variant, domain);
-            });
-    });
-
-    cls.def("_traverse_1_cb_rw", [](T *self, nb::callable c) {
-        Payload payload{ std::move(c) };
-        self->traverse_1_cb_rw((void *) &payload, [](void *p, uint64_t index,
-                                                     const char *variant,
-                                                     const char *domain) {
-            return nb::cast<uint64_t>(
-                ((Payload *) p)->c(index, variant, domain));
-        });
+        traverse_fn(self, (void *) &payload,
+            TraverseVisitor {
+                role,
+                [](void *p, uint64_t index, const char *name,
+                   const char *variant, const char *domain) {
+                    return nb::cast<uint64_t>(
+                        ((Payload *) p)->c(index, name, variant, domain));
+                },
+                nullptr });
     });
 
     return cls;
-}
-
-/**
- * \brief This function traverses a python object, that inherits from a
- * trampoline class.
- *
- * Internally, this function calls the ``traverse_py_cb_ro_impl`` function,
- * exposed through ``drjit.detail``, with the object and the callback.
- */
-inline void traverse_py_cb_ro(const TraversableBase *base, void *payload,
-                              void (*fn)(void *, uint64_t, const char *variant,
-                                         const char *domain)) {
-    namespace nb    = nanobind;
-    nb::gil_scoped_acquire guard;
-
-    nb::handle self = base->self_py();
-    if (!self)
-        return;
-
-    // Resolved once; non-owning reference, kept alive by drjit.detail's module dict.
-    static nb::handle traverse_py_cb_ro_fn =
-        nb::module_::import_("drjit.detail").attr("traverse_py_cb_ro");
-
-    traverse_py_cb_ro_fn(self,
-        nb::cpp_function([&](uint64_t index, const char *variant,
-                           const char *domain) {
-            fn(payload, index, variant, domain);
-        }));
-}
-
-/**
- * \brief This function traverses a python object, that inherits from a
- * trampoline class.
- *
- * Internally, this function calls the ``traverse_py_cb_rw_impl`` function,
- * exposed through ``drjit.detail``, with the object and the callback.
- */
-inline void traverse_py_cb_rw(TraversableBase *base, void *payload,
-                              uint64_t (*fn)(void *, uint64_t, const char *,
-                                             const char *)) {
-    namespace nb    = nanobind;
-    nb::gil_scoped_acquire guard;
-
-    nb::handle self = base->self_py();
-    if (!self)
-        return;
-
-    // Resolved once; non-owning reference, kept alive by drjit.detail's module dict.
-    static nb::handle traverse_py_cb_rw_fn =
-        nb::module_::import_("drjit.detail").attr("traverse_py_cb_rw");
-
-    traverse_py_cb_rw_fn(self,
-    nb::cpp_function([&](uint64_t index, const char *variant,
-                       const char *domain) {
-        return fn(payload, index, variant, domain);
-    }));
 }
 
 NAMESPACE_END(drjit)

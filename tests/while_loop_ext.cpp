@@ -36,17 +36,9 @@ struct Sampler {
 
     T next() { return rng.next_float32(); }
 
-    void traverse_1_cb_ro(void *payload,
-                          dr::detail::traverse_callback_ro fn) const {
-        traverse_1_fn_ro(rng, payload, fn);
-    }
-
-    void traverse_1_cb_rw(void *payload,
-                          dr::detail::traverse_callback_rw fn) {
-        traverse_1_fn_rw(rng, payload, fn);
-    }
-
     dr::PCG32<dr::uint64_array_t<T>> rng;
+
+    DRJIT_TRAVERSE(Sampler, rng)
 };
 
 template <typename UInt> UInt loop_with_rng() {

@@ -63,10 +63,6 @@ extern nb::handle DR_STR(DRJIT_STRUCT);
 extern nb::handle DR_STR(__dataclass_fields__);
 extern nb::handle DR_STR(name);
 extern nb::handle DR_STR(type);
-extern nb::handle DR_STR(_traverse_write);
-extern nb::handle DR_STR(_traverse_read);
-extern nb::handle DR_STR(_traverse_1_cb_rw);
-extern nb::handle DR_STR(_traverse_1_cb_ro);
 
 /// Dr.Jit can lazily import and then cache the following objects to avoid
 /// costly nb::module_::import() calls.
@@ -93,7 +89,7 @@ inline nb::dict get_drjit_struct(nb::handle tp) {
 }
 
 /// Extract the dataclass fields element of a custom data structure type, if available
-inline nb::object get_dataclass_fields(nb::handle tp) {
+inline nb::object dataclass_fields(nb::handle tp) {
     nb::object result = nb::getattr(tp, DR_STR(__dataclass_fields__), nb::handle());
     if (result.is_valid()) {
         result = lazy_import(LazyImport::DataclassesFields)(tp);
@@ -120,14 +116,14 @@ inline nb::object get_dataclass_fields(nb::handle tp) {
 }
 
 /// Retrieve the ``__dataclass_fields__`` of a dataclass type.
-inline nb::dict get_dataclass_field_dict(nb::handle tp) {
+inline nb::dict dataclass_field_dict(nb::handle tp) {
     nb::object result = nb::getattr(tp, DR_STR(__dataclass_fields__), nb::handle());
     if (result.is_valid() && !result.type().is(&PyDict_Type))
         result = nb::object();
     return nb::borrow<nb::dict>(result);
 }
 
-/// Use this function to skip non-field entries returned by \ref get_dataclass_field_dict
+/// Use this function to skip non-field entries returned by \ref dataclass_field_dict
 inline bool is_dataclass_field(nb::handle field) {
     return nb::getattr(field, "_field_type", nb::handle())
         .is(lazy_import(LazyImport::DataclassesField));
@@ -154,20 +150,63 @@ inline bool py_equal(nb::handle a, nb::handle b) {
     return rv == 1;
 }
 
+/// Python type object of ``drjit::TraversableBase``, set by ``export_detail()``
+extern nb::handle traversable_base_type;
+
 /// Return a pointer to the underlying C++ class if the Python object inherits
 /// from TraversableBase or null otherwise
-inline drjit::TraversableBase *get_traversable_base(nb::handle h) {
-    drjit::TraversableBase *result = nullptr;
-    nb::try_cast(h, result);
-    return result;
+inline drjit::TraversableBase *traversable_ptr(nb::handle h) {
+    if (!PyType_IsSubtype(Py_TYPE(h.ptr()),
+                          (PyTypeObject *) traversable_base_type.ptr()) ||
+        !nb::inst_ready(h))
+        return nullptr;
+    return nb::inst_ptr<drjit::TraversableBase>(h);
 }
 
-/// Extract a read-only callback to traverse custom data structures
-inline nb::object get_traverse_cb_ro(nb::handle tp) {
-    return nb::getattr(tp, DR_STR(_traverse_1_cb_ro), nb::handle());
+/**
+ * \brief Return the instance dictionary of a traversable object, if available.
+ *
+ * Given a ``drjit::TraversableBase``-derived instance, this function checks
+ * if the type has been subclassed in Python. In that case, it returns the
+ * instance's dictionary. Otherwise, it returns an invalid handle.
+ */
+inline nb::dict traversable_dict(const drjit::TraversableBase *obj) {
+    nb::handle self = obj->self_py();
+    if (!self.is_valid() || !NB_CALL(nb_inst_python_derived)(self.ptr()))
+        return nb::steal<nb::dict>(nb::handle());
+    return nb::inst_dict(self);
 }
 
-/// Extract a read-write callback to traverse custom data structures
-inline nb::object get_traverse_cb_rw(nb::handle tp) {
-    return nb::getattr(tp, DR_STR(_traverse_1_cb_rw), nb::handle());
+/**
+ * \brief Run the traversal callback of a C++ object
+ *
+ * Calls ``var(index, name, variant, domain)`` for every JIT array held by
+ * ``obj`` (the return value is the index that the object holds from now on,
+ * see \ref drjit::TraverseVisitor) and ``child(obj, name)`` for every directly
+ * held child object. This is the one place that turns the C callback interface
+ * of ``traverse_cb()`` into lambdas; all drivers build on it.
+ */
+template <typename Var, typename Child>
+void for_each_member(drjit::TraversableBase *obj, drjit::TraverseRole role,
+                     Var &&var, Child &&child) {
+    struct Payload {
+        Var &var;
+        Child &child;
+    } p { var, child };
+
+    obj->traverse_cb(
+        &p,
+        drjit::TraverseVisitor {
+            role,
+            [](void *p, uint64_t index, const char *name, const char *variant,
+               const char *domain) -> uint64_t {
+                return ((Payload *) p)->var(index, name, variant, domain);
+            },
+            [](void *p, drjit::TraversableBase *child, const char *name) {
+                ((Payload *) p)->child(child, name);
+            } });
 }
+
+/// Raise if the nanobind binding of type ``tp`` implements the traversal
+/// interface without declaring drjit::TraversableBase as a base class
+extern void raise_if_unbound_traversable(nb::handle tp);

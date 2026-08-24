@@ -459,7 +459,7 @@ static nb::object repack_impl(const char *name, MatrixLayout layout,
         for (auto [k, v] : ds)
             nb::setattr(tmp, k, repack_impl(name, layout, nb::getattr(arg, k), offset, items));
         return tmp;
-    } else if (nb::dict df = get_dataclass_field_dict(arg_tp); df.is_valid()) {
+    } else if (nb::dict df = dataclass_field_dict(arg_tp); df.is_valid()) {
         nb::dict tmp;
         for (auto [k, field] : df)
             if (is_dataclass_field(field))

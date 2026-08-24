@@ -31,7 +31,7 @@ struct IfState {
         : args(std::move(args)), true_fn(std::move(true_fn)),
           false_fn(std::move(false_fn)),
           arg_labels(std::move(arg_labels)), rv_labels(std::move(rv_labels)),
-          tracker(strict) { }
+          tracker(dr::TraverseRole::Conditional, strict) { }
 };
 
 static void if_stmt_body_cb(void *p, bool cond_val,

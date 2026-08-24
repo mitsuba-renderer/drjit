@@ -60,11 +60,13 @@ StateD while_loop_impl(std::index_sequence<Is...>, State &&state_, Cond &&cond,
         };
 
         ad_loop_read read_cb = [](void *p, vector<uint64_t> &indices) {
-            detail::collect_indices<true>(((Payload *) p)->state, indices);
+            detail::collect_indices<true>(((Payload *) p)->state, indices,
+                                          TraverseRole::Loop);
         };
 
         ad_loop_write write_cb = [](void *p, const vector<uint64_t> &indices, bool) {
-            detail::update_indices(((Payload *) p)->state, indices);
+            detail::update_indices(((Payload *) p)->state, indices,
+                                   TraverseRole::Loop);
         };
 
         ad_loop_cond cond_cb = [](void *p) -> uint32_t {

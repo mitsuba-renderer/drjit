@@ -4125,3 +4125,51 @@ def test109_replay_frees_temporaries(t, auto_opaque):
     assert dr.all(y == x + steps)
 
     assert dr.detail.malloc_watermark(backend) - base < 6 * nbytes
+
+
+def get_custom_type_pkg(t):
+    with dr.detail.scoped_rtld_deepbind():
+        m = pytest.importorskip("custom_type_ext")
+    backend = dr.backend_v(t)
+    if backend == dr.JitBackend.LLVM:
+        return m.llvm
+    elif backend == dr.JitBackend.CUDA:
+        return m.cuda
+    elif backend == dr.JitBackend.Metal:
+        return getattr(m, "metal", None)
+
+
+@pytest.test_arrays("float32, jit, -is_diff, shape=(*)")
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test111_cpp_objects(t, auto_opaque):
+    """
+    Tests frozen functions whose inputs are C++ objects: an object that is
+    reachable through several references, and a Python subclass of a C++
+    class with Dr.Jit arrays in its attributes.
+    """
+    pkg = get_custom_type_pkg(t)
+
+    class Holder(pkg.CustomBase):
+        def __init__(self, value, base_value):
+            super().__init__(base_value)
+            self.v = value
+
+        def value(self):
+            return self.v
+
+    @dr.freeze(auto_opaque=auto_opaque)
+    def func(nested, a, h):
+        return a.value() + a.base_value(), h.value() * h.base_value()
+
+    for i in range(3):
+        value = dr.arange(t, 4) + i
+        base_value = dr.arange(t, 4) * 2 + i
+        a = pkg.CustomA(value, base_value)
+        nested = pkg.Nested(a, a)
+        h = Holder(value + 1, base_value + 1)
+
+        r0, r1 = func(nested, a, h)
+        assert dr.all(r0 == value + base_value)
+        assert dr.all(r1 == (value + 1) * (base_value + 1))
+
+    assert func.n_recordings == 1

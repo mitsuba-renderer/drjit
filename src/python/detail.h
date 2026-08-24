@@ -23,8 +23,10 @@ struct StashRef {
 
 // See misc.cpp for documentation of these functions
 extern void collect_indices(nb::handle, dr::vector<uint64_t> &,
+                            dr::TraverseRole role = dr::TraverseRole::Generic,
                             bool inc_ref = false);
-extern nb::object update_indices(nb::handle, const dr::vector<uint64_t> &);
+extern nb::object update_indices(nb::handle, const dr::vector<uint64_t> &,
+                                 dr::TraverseRole role = dr::TraverseRole::Generic);
 extern void check_compatibility(nb::handle, nb::handle, bool, const char *);
 extern void stash_ref(nb::handle h, dr::vector<StashRef> &);
 

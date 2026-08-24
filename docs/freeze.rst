@@ -885,18 +885,11 @@ traversable.
          "x": Float
       }
 
-Finally, C++ classes may additionally implement the ``TraversableBase`` class
-to make them traversable. Python classes, inheriting from these classes through
-trampolines are automatically traversed. This is useful when implementing your
-own subclasses with indirect function calls.
-
-.. code-block:: python
-
-   # If BSDF is a traversable trampoline class,
-   # then member variables of MyClass will also be traversed.
-   class MyClass(mi.BSDF):
-      x: Float
-
+Finally, C++ classes may additionally inherit from ``drjit::TraversableBase``
+and list their members using the ``DR_TRAVERSE_CB`` macro to make them
+traversable. For C++ types subclassed in Python, Dr.Jit will explore both
+members listed via ``DR_TRAVERSE_CB`` and members in the Python instance
+dictionary.
 
 Output construction
 ~~~~~~~~~~~~~~~~~~~

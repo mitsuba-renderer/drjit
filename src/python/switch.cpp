@@ -133,7 +133,7 @@ nb::object switch_impl(nb::handle index_, nb::sequence targets,
             nb::gil_scoped_acquire guard;
             State &state = *(State *) ptr;
             state.args_o =
-                nb::borrow<nb::tuple>(update_indices(state.args_o, args_i));
+                nb::borrow<nb::tuple>(update_indices(state.args_o, args_i, dr::TraverseRole::Call));
 
             uintptr_t index = (uintptr_t) self;
             nb::object result =
@@ -143,7 +143,7 @@ nb::object switch_impl(nb::handle index_, nb::sequence targets,
                 check_compatibility(result, state.rv_o, false, "result");
 
             state.rv_o = std::move(result);
-            ::collect_indices(state.rv_o, rv_i);
+            ::collect_indices(state.rv_o, rv_i, dr::TraverseRole::Call);
         };
 
         State *state =
@@ -158,7 +158,7 @@ nb::object switch_impl(nb::handle index_, nb::sequence targets,
 
         vector<uint64_t> args_i;
         dr::detail::index64_vector rv_i;
-        ::collect_indices(state->args_o, args_i);
+        ::collect_indices(state->args_o, args_i, dr::TraverseRole::Call);
 
         if (mask.is_valid() && mask.type().is(&PyBool_Type)) {
             nb::type_object mask_tp = nb::borrow<nb::type_object>(s.mask);
@@ -172,7 +172,7 @@ nb::object switch_impl(nb::handle index_, nb::sequence targets,
             mask.is_valid() ? ((uint32_t) s.index(inst_ptr(mask))) : 0u, args_i,
             rv_i, state, func, cleanup, true);
 
-        nb::object result = ::update_indices(state->rv_o, rv_i);
+        nb::object result = ::update_indices(state->rv_o, rv_i, dr::TraverseRole::Call);
 
         if (done)
             cleanup(state);
@@ -237,7 +237,7 @@ nb::object dispatch_impl(nb::handle_t<dr::ArrayBase> inst,
             nb::gil_scoped_acquire guard;
             State &state = *(State *) ptr;
             state.args_o =
-                nb::borrow<nb::tuple>(update_indices(state.args_o, args_i));
+                nb::borrow<nb::tuple>(update_indices(state.args_o, args_i, dr::TraverseRole::Call));
 
             if (!self) {
                 self = jit_registry_peek(state.variant_name.c_str(),
@@ -255,7 +255,7 @@ nb::object dispatch_impl(nb::handle_t<dr::ArrayBase> inst,
                 check_compatibility(result, state.rv_o, false, "result");
 
             state.rv_o = std::move(result);
-            ::collect_indices(state.rv_o, rv_i);
+            ::collect_indices(state.rv_o, rv_i, dr::TraverseRole::Call);
         };
 
         State *state = new State {
@@ -277,7 +277,7 @@ nb::object dispatch_impl(nb::handle_t<dr::ArrayBase> inst,
 
         vector<uint64_t> args_i;
         dr::detail::index64_vector rv_i;
-        ::collect_indices(state->args_o, args_i);
+        ::collect_indices(state->args_o, args_i, dr::TraverseRole::Call);
 
         if (mask.is_valid() && mask.type().is(&PyBool_Type)) {
             nb::type_object mask_tp = nb::borrow<nb::type_object>(s.mask);
@@ -291,7 +291,7 @@ nb::object dispatch_impl(nb::handle_t<dr::ArrayBase> inst,
                     mask.is_valid() ? ((uint32_t) s.index(inst_ptr(mask))) : 0u,
                     args_i, rv_i, state, target_cb, cleanup, true);
 
-        nb::object result = ::update_indices(state->rv_o, rv_i);
+        nb::object result = ::update_indices(state->rv_o, rv_i, dr::TraverseRole::Call);
 
         if (done)
             cleanup(state);

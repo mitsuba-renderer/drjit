@@ -67,14 +67,14 @@ auto if_stmt_impl(std::index_sequence<Is...>, Args &&args, const Mask &cond,
                                   vector<uint64_t> &rv_i) {
             IfStmtData *isd = (IfStmtData *) p;
 
-            update_indices(isd->args, args_i);
+            update_indices(isd->args, args_i, TraverseRole::Conditional);
 
             if (value)
                 isd->rv = isd->true_fn(get<Is>(isd->args)...);
             else
                 isd->rv = isd->false_fn(get<Is>(isd->args)...);
 
-            collect_indices<true>(isd->rv, rv_i);
+            collect_indices<true>(isd->rv, rv_i, TraverseRole::Conditional);
         };
 
         ad_cond_delete delete_cb = [](void *p) { delete (IfStmtData *) p; };
@@ -86,7 +86,8 @@ auto if_stmt_impl(std::index_sequence<Is...>, Args &&args, const Mask &cond,
                             Return() });
 
         detail::index64_vector args_i, rv_i;
-        detail::collect_indices<true>(isd->args, args_i);
+        detail::collect_indices<true>(isd->args, args_i,
+                                      TraverseRole::Conditional);
 
         bool all_done = ad_cond(Mask::Backend, -1, name, isd.get(), cond.index(),
                                 args_i, rv_i, body_cb, delete_cb, true);
@@ -96,7 +97,7 @@ auto if_stmt_impl(std::index_sequence<Is...>, Args &&args, const Mask &cond,
         if (!all_done)
             isd.release();
 
-        detail::update_indices(rv, rv_i);
+        detail::update_indices(rv, rv_i, TraverseRole::Conditional);
 
         return rv;
     }

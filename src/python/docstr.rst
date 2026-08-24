@@ -5811,6 +5811,16 @@
     raised if there is a mismatch of the vectorization widths of any Dr.Jit type
     in the pytrees.
 
+.. topic:: detail_TraverseRole
+
+    Purpose of a traversal of a :ref:`PyTree <pytrees>`.
+
+    Dr.Jit traverses PyTrees and C++ objects for many reasons: to evaluate
+    their arrays, to gather the state of a symbolic loop, to describe the
+    input of a frozen function, and so on. The role is reported to C++ objects
+    deriving from ``drjit::TraversableBase`` so that they can decide which of
+    their members take part in a particular traversal.
+
 .. topic:: detail_collect_indices
 
     Return Dr.Jit variable indices associated with the provided data structure.
@@ -5820,7 +5830,8 @@
     variables (in the order of traversal, may contain duplicates). The index
     information is returned as a list of encoded 64 bit integers, where each
     contains the AD variable index in the upper 32 bits and the JIT variable
-    index in the lower 32 bit.
+    index in the lower 32 bit. The ``role`` parameter is reported to C++
+    objects (see :py:class:`drjit.detail.TraverseRole`).
 
     This function exists for Dr.Jit-internal use. You probably should not
     call it in your own application code.
@@ -6435,15 +6446,6 @@
 
     User code may query this flag to conditionally optimize kernels for frozen
     function recording, such as re-seeding the sampler, used for rendering.
-
-.. topic:: JitFlag_EnableObjectTraversal
-
-    This flag is set to ``True`` when Dr.Jit is currently traversing
-    inputs and outputs of a frozen function. The flag is automatically managed
-    and should not be updated by application code.
-
-    When enabled, traversal of complex objects, that usually are opaque to
-    loops and conditionals, is enabled.
 
 .. topic:: JitFlag_SpillToSharedMemory
 
@@ -8977,7 +8979,11 @@
 
    Create a new variable tracker.
 
-   The constructor accepts two parameters:
+   The constructor accepts three parameters:
+
+   - ``role``: The purpose of the traversal that is reported to C++ objects
+     (see :py:class:`drjit.detail.TraverseRole`), for example ``Loop`` when
+     tracking the state of a symbolic loop.
 
    - ``strict``: Certain types of Python objects (e.g. custom Python classes
      without ``DRJIT_STRUCT`` field, scalar Python numeric types) are not

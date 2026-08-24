@@ -1139,7 +1139,7 @@ def suspend_grad(*args: object, when: bool = True) -> drjit.detail.ADContextMana
     if not when:
         return detail.NullContextManager()
 
-    array_indices = detail.collect_indices(args)
+    array_indices = detail.collect_indices(args, detail.TraverseRole.Gradient)
 
     if len(args) > 0 and len(array_indices) == 0:
         array_indices.append(0)
@@ -1192,7 +1192,7 @@ def resume_grad(*args: object, when: bool = True) -> drjit.detail.ADContextManag
         return detail.NullContextManager()
 
     array_indices = []
-    array_indices = detail.collect_indices(args)
+    array_indices = detail.collect_indices(args, detail.TraverseRole.Gradient)
 
     if len(args) > 0 and len(array_indices) == 0:
         array_indices.append(0)

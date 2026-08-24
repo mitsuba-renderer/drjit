@@ -89,7 +89,7 @@ nb::object gather(nb::type_object dtype, nb::object source,
                     nb::setattr(out, k, gather(sub_dtype, nb::getattr(source, k), index, active, mode));
                 }
                 return out;
-            } else if (nb::object df = get_dataclass_fields(dtype); df.is_valid()) {
+            } else if (nb::object df = dataclass_fields(dtype); df.is_valid()) {
                 nb::tuple_builder builder(nb::len(df));
                 for (nb::handle field : df) {
                     nb::object k = field.attr(DR_STR(name));
@@ -272,7 +272,7 @@ static void scatter_generic(const char *name, ReduceOp op, nb::object target,
             return;
         }
 
-        if (nb::dict df = get_dataclass_field_dict(target_tp); df.is_valid()) {
+        if (nb::dict df = dataclass_field_dict(target_tp); df.is_valid()) {
             for (auto [k, field] : df)
                 if (is_dataclass_field(field))
                     scatter_generic(name, op, nb::getattr(target, k),

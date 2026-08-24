@@ -247,7 +247,7 @@ void bind(nb::module_ &m) {
     using UInt32 = dr::uint32_array_t<Float>;
     using Sampler = ::Sampler<Float>;
 
-    auto sampler = nb::class_<Sampler>(m, "Sampler")
+    auto sampler = nb::class_<Sampler, dr::TraversableBase>(m, "Sampler")
         .def(nb::init<>())
         .def(nb::init<size_t>())
         .def("next", &Sampler::next)
@@ -255,7 +255,7 @@ void bind(nb::module_ &m) {
 
     bind_traverse(sampler);
 
-    auto base_cls = nb::class_<BaseT, nb::intrusive_base>(m, "Base")
+    auto base_cls = nb::class_<BaseT, drjit::TraversableBase>(m, "Base")
         .def("f", &BaseT::f)
         .def("f_masked", &BaseT::f_masked)
         .def("g", &BaseT::g)

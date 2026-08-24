@@ -38,7 +38,7 @@ bool schedule(nb::handle h) {
     };
 
     ScheduleCallback sc{ result_ };
-    traverse("drjit.schedule", sc, h);
+    traverse("drjit.schedule", sc, h, dr::TraverseRole::Eval);
     return result_;
 }
 
@@ -81,7 +81,7 @@ static void make_opaque(nb::handle h) {
     };
 
     ScheduleForceCallback sfc;
-    traverse("drjit.make_opaque", sfc, h);
+    traverse("drjit.make_opaque", sfc, h, dr::TraverseRole::Eval);
     if (sfc.result) {
         nb::gil_scoped_release guard;
         jit_eval();
@@ -128,7 +128,7 @@ nb::object opaque(nb::handle h) {
     eval(h);
 
     OpaqueOp op;
-    return transform("drjit.opaque", op, h);
+    return transform("drjit.opaque", op, h, dr::TraverseRole::Eval);
 }
 
 bool eval(nb::handle h) {

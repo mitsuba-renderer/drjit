@@ -47,7 +47,7 @@ struct LoopState {
     LoopState(nb::tuple &&state, nb::callable &&cond, nb::callable &&body,
               dr::vector<dr::string> &&labels, bool strict, bool check_size)
         : state(std::move(state)), cond(std::move(cond)), body(std::move(body)),
-          labels(std::move(labels)), tracker(strict, check_size), active_size(1) { }
+          labels(std::move(labels)), tracker(dr::TraverseRole::Loop, strict, check_size), active_size(1) { }
 };
 
 /// Helper function to check that the type+size of the state variable returned
@@ -135,7 +135,7 @@ static void while_loop_read_cb(void *p, dr::vector<uint64_t> &indices) {
         };
 
         DealiasShareOp op;
-        ls->state = nb::borrow<nb::tuple>(transform("drjit.while_loop.dealias", op, ls->state));
+        ls->state = nb::borrow<nb::tuple>(transform("drjit.while_loop.dealias", op, ls->state, dr::TraverseRole::Loop));
         ls->dealiased = true;
     }
 

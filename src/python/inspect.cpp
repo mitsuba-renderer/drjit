@@ -87,7 +87,7 @@ void set_label(nb::handle h, nb::str label) {
         if (nb::dict ds = get_drjit_struct(tp); ds.is_valid()) {
             for (auto [k, v] : ds)
                 set_label(nb::getattr(h, k), nb::str("{}_{}").format(label, k));
-        } else if (nb::dict df = get_dataclass_field_dict(tp); df.is_valid()) {
+        } else if (nb::dict df = dataclass_field_dict(tp); df.is_valid()) {
             for (auto [k, field] : df)
                 if (is_dataclass_field(field))
                     set_label(nb::getattr(h, k), nb::str("{}_{}").format(label, k));

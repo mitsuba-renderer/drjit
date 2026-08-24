@@ -88,29 +88,18 @@ def test04_traverse_opaque(t):
 
 
 @pytest.test_arrays("float32,-diff,shape=(*),jit")
-def test05_traverse_py(t):
+def test05_shared_object_traversal(t):
     """
-    Tests the implementation of ``traverse_py_cb_ro``, which is used to traverse
-    python objects in trampoline classes.
+    Tests that an object reachable through several references is traversed
+    once.
     """
+    pkg = get_pkg(t)
     Float = t
 
-    v = dr.arange(Float, 10)
+    a = pkg.CustomA(dr.arange(Float, 10), dr.arange(Float, 10) + 1)
+    nested = pkg.Nested(a, a)
 
-    class PyClass:
-        def __init__(self, v) -> None:
-            self.v = v
-
-    c = PyClass(v)
-
-    result = []
-
-    def callback(index, domain, variant):
-        result.append(index)
-
-    dr.detail.traverse_py_cb_ro(c, callback)
-
-    assert result == [v.index]
+    assert dr.detail.collect_indices(nested) == dr.detail.collect_indices(a)
 
 
 @pytest.test_arrays("float32,-diff,shape=(*),jit")
@@ -167,9 +156,8 @@ def test07_nested_traversal(t):
 @pytest.test_arrays("float32,-diff,shape=(*),jit")
 def test08_custom_type_refcycle(t):
     """
-    Tests that it is possible to collect indices from PyTrees with refcycles,
-    without throwing runaway recursion errors, if ``EnableObjectTraversal`` is
-    set to ``True``.
+    Tests that it is possible to collect indices from PyTrees with refcycles
+    through C++ objects. Each object is visited once.
     """
     pkg = get_pkg(t)
     Float = t
@@ -199,6 +187,106 @@ def test08_custom_type_refcycle(t):
     c = C(value, base_value, b)
     b.child = c
 
-    with pytest.raises(RuntimeError):
-        indices = dr.detail.collect_indices(b)
+    assert dr.detail.collect_indices(b) == [
+        base_value.index, value.index, base_value.index, value.index
+    ]
 
+
+@pytest.test_arrays("float32,-diff,shape=(*),jit")
+def test09_python_subclass_loop_state(t):
+    """
+    Tests that the Dr.Jit attributes of a Python subclass of a C++ class are
+    tracked as state of a symbolic loop.
+    """
+    pkg = get_pkg(t)
+    UInt32 = dr.uint32_array_t(t)
+
+    class Holder(pkg.CustomBase):
+        def __init__(self, value, base_value):
+            super().__init__(base_value)
+            self.v = value
+
+    def body(i, h):
+        h.v = h.v + 2
+        return i + 1, h
+
+    results = []
+    for symbolic in [False, True]:
+        h = Holder(dr.arange(t, 4), dr.full(t, 2, 4))
+        with dr.scoped_set_flag(dr.JitFlag.SymbolicLoops, symbolic):
+            _, h = dr.while_loop((UInt32(0), h), lambda i, h: i < 3, body)
+        results.append(h.v)
+
+    assert dr.all(results[0] == dr.arange(t, 4) + 6)
+    assert dr.all(results[1] == results[0])
+
+
+@pytest.test_arrays("float32,-diff,shape=(*),jit")
+def test10_python_subclass_traversal(t):
+    """
+    Tests that a Python subclass of a C++ class is traversed on both sides:
+    the members of the C++ base and the Python attributes.
+    """
+    pkg = get_pkg(t)
+
+    class Holder(pkg.CustomBase):
+        def __init__(self, value, base_value):
+            super().__init__(base_value)
+            self.v = value
+
+    value, base_value = dr.arange(t, 4), dr.arange(t, 4) * 2
+    h = Holder(value, base_value)
+    assert dr.detail.collect_indices(h) == [base_value.index, value.index]
+
+
+@pytest.test_arrays("float32,-diff,shape=(*),jit")
+def test11_python_subclass_as_child_loop_state(t):
+    """
+    Tests that the Python attributes of a Python subclass instance that is
+    reached through another C++ object are tracked as symbolic loop state.
+    """
+    pkg = get_pkg(t)
+    UInt32 = dr.uint32_array_t(t)
+
+    class Holder(pkg.CustomBase):
+        def __init__(self, value, base_value):
+            super().__init__(base_value)
+            self.v = value
+
+    def body(i, n):
+        h = n.child(0)
+        h.v = h.v + 2
+        return i + 1, n
+
+    results = []
+    for symbolic in [False, True]:
+        h = Holder(dr.arange(t, 4), dr.full(t, 2, 4))
+        n = pkg.Nested(h, h)
+        with dr.scoped_set_flag(dr.JitFlag.SymbolicLoops, symbolic):
+            _, n = dr.while_loop((UInt32(0), n), lambda i, n: i < 3, body)
+        results.append(n.child(0).v)
+
+    assert dr.all(results[0] == dr.arange(t, 4) + 6)
+    assert dr.all(results[1] == results[0])
+
+
+
+@pytest.test_arrays("float32,-diff,shape=(*),jit")
+def test12_python_subclass_transform_in_place(t):
+    """
+    Tests that transformations (``dr.detach()``, ``dr.grad()``) treat a
+    Python subclass of a C++ class like the C++ object itself: the object is
+    returned as is, and its attributes are left alone.
+    """
+    pkg = get_pkg(t)
+
+    class Holder(pkg.CustomBase):
+        def __init__(self, value, base_value):
+            super().__init__(base_value)
+            self.v = value
+
+    v = dr.arange(t, 4)
+    h = Holder(v, dr.arange(t, 4) + 1)
+
+    assert dr.detach(h) is h and h.v is v
+    assert dr.grad(h) is h and h.v is v

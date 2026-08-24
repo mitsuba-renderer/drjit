@@ -21,6 +21,9 @@
 #include <string_view>
 #include <drjit/autodiff.h>
 #include <tsl/robin_map.h>
+#include <tsl/robin_set.h>
+#include <drjit-core/hash.h>
+#include "apply.h"
 
 // #define DEBUG_TRACKER
 
@@ -119,8 +122,11 @@ using VariableMap =
 // so that callers don't inherit the STL header file dependencies required
 // by the VariableMap declaration above
 struct VariableTracker::Impl {
-    Impl(bool strict, bool check_size)
-        : strict(strict), check_size(check_size) { }
+    Impl(dr::TraverseRole role, bool strict, bool check_size)
+        : role(role), strict(strict), check_size(check_size) { }
+
+    /// Purpose of the traversal, reported to C++ objects
+    dr::TraverseRole role;
 
     /// Pointer to a hash table storing the variable state
     VariableMap state;
@@ -243,8 +249,9 @@ static void raise_changed(const dr::string &label, nb::handle tp, nb::handle h,
               label.c_str(), nb::type_name(tp).c_str(), s0.c_str(), s1.c_str());
 }
 
-VariableTracker::VariableTracker(bool strict, bool check_size)
-    : m_impl(new Impl(strict, check_size)) {
+VariableTracker::VariableTracker(dr::TraverseRole role, bool strict,
+                                 bool check_size)
+    : m_impl(new Impl(role, strict, check_size)) {
 }
 
 VariableTracker::~VariableTracker() {
@@ -616,21 +623,38 @@ bool VariableTracker::Impl::traverse(Context &ctx, nb::handle h) {
         if (strict && !new_variable && !py_equal(h, prev))
             raise_changed(ctx.label, tp, h, prev);
     } else {
-        nb::object traverse_cb = nb::getattr(
-            h, ctx.write ? DR_STR(_traverse_1_cb_rw) : DR_STR(_traverse_1_cb_ro),
-            nb::handle());
+        if (dr::TraversableBase *tb = traversable_ptr(h); tb) {
+            // The arrays of the object graph are tracked under one label,
+            // and the Python side of each object under its own
+            struct State {
+                Impl &impl;
+                Context &ctx;
+                bool &changed;
+                dr::TraverseRole role;
+                tsl::robin_set<dr::TraversableBase *, PointerHasher> visited;
+                uint32_t n_objects = 0;
 
-        if (nb::dict ds = get_drjit_struct(tp); ds.is_valid()) {
+                uint64_t var(uint64_t idx, const char *v, const char *d) {
+                    if (ctx.write)
+                        return ctx._traverse_write(idx, v, d);
+                    ctx._traverse_read(idx, v, d);
+                    return idx;
+                }
+
+                void py(nb::dict d) {
+                    ScopedAppendLabel guard(ctx, ".__dict__", n_objects++);
+                    changed |= impl.traverse(ctx, d);
+                }
+            } st { *this, ctx, changed, role, {} };
+
+            ScopedAppendLabel guard(ctx, "._traverse_cb()");
+            traverse_object(st, tb);
+        } else if (nb::dict ds = get_drjit_struct(tp); ds.is_valid()) {
             for (auto [k, _] : ds) {
                 ScopedAppendLabel guard(ctx, ".", nb::str(k).c_str());
                 changed |= traverse(ctx, nb::getattr(h, k));
             }
-        } else if (traverse_cb.is_valid()) {
-            ScopedAppendLabel guard(ctx, "._traverse_cb()");
-            traverse_cb(
-                nb::cast(ctx, nb::rv_policy::reference)
-                    .attr(ctx.write ? DR_STR(_traverse_write) : DR_STR(_traverse_read)));
-        } else if (nb::dict df = get_dataclass_field_dict(tp); df.is_valid()) {
+        } else if (nb::dict df = dataclass_field_dict(tp); df.is_valid()) {
             for (auto [k, field] : df) {
                 if (!is_dataclass_field(field))
                     continue;
@@ -818,7 +842,7 @@ nb::object VariableTracker::Impl::restore(dr::string &label) {
                 ScopedAppendLabel guard(label, ".", nb::str(k).c_str());
                 nb::setattr(value, k, restore(label));
             }
-        } else if (nb::dict df = get_dataclass_field_dict(tp); df.is_valid()) {
+        } else if (nb::dict df = dataclass_field_dict(tp); df.is_valid()) {
             for (auto [k, field] : df) {
                 if (!is_dataclass_field(field))
                     continue;
@@ -966,7 +990,7 @@ std::pair<nb::object, bool> VariableTracker::Impl::rebuild(dr::string &label) {
                 value = tmp;
             }
         }
-    } else if (nb::dict df = get_dataclass_field_dict(tp); df.is_valid()) {
+    } else if (nb::dict df = dataclass_field_dict(tp); df.is_valid()) {
         nb::dict tmp;
         for (auto [k, field] : df) {
             if (!is_dataclass_field(field))
@@ -1024,8 +1048,8 @@ void export_tracker(nb::module_ &m) {
 
     auto trk = nb::class_<VariableTracker>(m, "VariableTracker",
                                            doc_detail_VariableTracker)
-        .def(nb::init<bool, bool>(),
-             "strict"_a = true, "check_size"_a = true,
+        .def(nb::init<dr::TraverseRole, bool, bool>(),
+             "role"_a, "strict"_a = true, "check_size"_a = true,
              doc_detail_VariableTracker_VariableTracker)
         .def("write",
              [](VariableTracker &vt, nb::handle state,
@@ -1059,11 +1083,5 @@ void export_tracker(nb::module_ &m) {
              "default_label"_a = "state",
              doc_detail_VariableTracker_rebuild);
 
-    nb::class_<VariableTracker::Context>(trk, "Context")
-        .def("_traverse_read", &VariableTracker::Context::_traverse_read)
-        .def("_traverse_write", &VariableTracker::Context::_traverse_write)
-        .freeze();
-
-    // Only now, after the nested 'Context' class was installed on it
     trk.freeze();
 }

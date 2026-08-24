@@ -73,7 +73,7 @@ public:
 
     Value &value() override { NB_OVERRIDE_PURE(value); }
 
-    DR_TRAMPOLINE_TRAVERSE_CB(Base);
+    DR_TRAVERSE_CB(Base)
 };
 
 template <typename Value>
@@ -92,7 +92,7 @@ private:
 };
 
 template<typename Value>
-class Nested: Object{
+class Nested : public Object {
     using Base = Object;
 
     std::vector<std::pair<nb::ref<Object>, size_t>> m_nested;
@@ -102,6 +102,8 @@ public:
         m_nested.push_back(std::make_pair(a, 0));
         m_nested.push_back(std::make_pair(b, 1));
     }
+
+    nb::ref<Object> child(size_t i) const { return m_nested.at(i).first; }
 
     DR_TRAVERSE_CB(Base, m_nested);
 };
@@ -133,7 +135,7 @@ template <JitBackend Backend> void bind(nb::module_ &m) {
     using CustomA      = CustomA<Float>;
     using Nested       = Nested<Float>;
 
-    auto object = nb::class_<Object>(
+    auto object = nb::class_<Object, drjit::TraversableBase>(
         m, "Object",
         nb::intrusive_ptr<Object>(
             [](Object *o, PyObject *po) noexcept { o->set_self_py(po); }));
@@ -151,8 +153,9 @@ template <JitBackend Backend> void bind(nb::module_ &m) {
 
     drjit::bind_traverse(a);
 
-    auto nested = nb::class_<Nested>(m, "Nested")
-                      .def(nb::init<nb::ref<Object>, nb::ref<Object>>());
+    auto nested = nb::class_<Nested, Object>(m, "Nested")
+                      .def(nb::init<nb::ref<Object>, nb::ref<Object>>())
+                      .def("child", &Nested::child);
 
     drjit::bind_traverse(nested);
 
