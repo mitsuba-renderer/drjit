@@ -76,6 +76,9 @@ nanobind_add_module(
   eval.h        eval.cpp
   funcenv.h     funcenv.cpp
   freeze.h      freeze.cpp
+  freeze_layout.h freeze_layout.cpp
+  freeze_output.cpp
+  freeze_verify.cpp
   memop.h       memop.cpp
   slice.h       slice.cpp
   dlpack.h      dlpack.cpp
