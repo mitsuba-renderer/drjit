@@ -159,6 +159,13 @@ template <JitBackend Backend> void bind(nb::module_ &m) {
 
     drjit::bind_traverse(nested);
 
+    // Creates the children on the C++ side so that they have no Python
+    // counterpart until they are accessed from Python
+    m.def("make_nested", [](const Float &value, const Float &base_value) {
+        return nb::ref<Nested>(new Nested(new CustomA(value, base_value),
+                                          new CustomA(value + 1, base_value + 1)));
+    });
+
     m.def("cpp_make_opaque",
           [](CustomFloatHolder &holder) { dr::make_opaque(holder); }
     );

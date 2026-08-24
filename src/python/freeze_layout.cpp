@@ -133,7 +133,7 @@ std::string Layout::node_path(uint32_t node) const {
             result += root_label(ordinal);
         } else if (entry != RootEntryNone) {
             if (entry == 0 && ordinal < arg_names.size())
-                result += nb::str(arg_names[ordinal]).c_str();
+                result += nb::str(nb::handle(arg_names[ordinal])).c_str();
             else if (entry == 0)
                 result += "args[" + std::to_string(ordinal) + "]";
             else
@@ -474,6 +474,7 @@ struct LayoutBuilder {
 
             grad = ad_grad(index);
             bindings.owned.push_back(grad);
+            bindings.grads.emplace_back(ad_var_inc_ref(index), grad);
             bind_var(s.grads.emplace_back(), pg, node, grad, grad_forced);
         }
 
@@ -765,7 +766,18 @@ build_input_layout(nb::handle root, nb::tuple arg_names, JitBackend backend,
     return layout;
 }
 
+void SlotBindings::restore_grads() {
+    for (auto [index, grad] : grads) {
+        ad_clear_grad(index);
+        if (grad)
+            ad_accum_grad(index, grad);
+    }
+}
+
 void SlotBindings::release() {
+    for (auto [index, grad] : grads)
+        ad_var_dec_ref(index);
+    grads.clear();
     owned.release();
     indices.clear();
     keep_alive.clear();

@@ -284,9 +284,18 @@ Watch out for following pitfalls when using :py:func:`@dr.freeze <freeze>` decor
 Implicit inputs
 ~~~~~~~~~~~~~~~
 
-A class can hold JIT arrays as members, and its methods can use them. Likewise,
-a function can access variables of the outer scope (closures). These types of
-implicit inputs to a frozen function are generally not supported:
+A frozen function may read more than its arguments: global variables,
+variables of an enclosing scope (closures), and the members of an object whose
+method is frozen. The values of the global and closure variables that the
+function itself reads are captured on every call and become part of the
+input, so that a change of such a variable is detected. This includes the
+bodies written inside the function, such as comprehensions, generator
+expressions, lambdas and nested functions. The members of the object of a
+frozen method are visible when the object is a valid :ref:`PyTree <pytrees>`
+(a dataclass, a class with a ``DRJIT_STRUCT`` annotation, or a traversable C++
+object), since ``self`` is an ordinary argument in that case.
+
+Other implicit inputs are not visible to the freezing mechanism:
 
 .. code-block:: python
 
@@ -296,27 +305,24 @@ implicit inputs to a frozen function are generally not supported:
 
       @dr.freeze
       def method(self, a: Float):
-         # The `self.state` variable is an implicit input to the frozen function.
-         # Attempting to record this function will raise an exception!
+         # ``MyClass`` is not a PyTree, so `self.state` is an implicit input
+         # that the frozen function cannot see. Attempting to record this
+         # function will raise an exception!
          return self.state + a
 
    ...
 
    local_var = Float([1, 2, 3])
    def func(a: Float):
-      # `local_var` is an implicit input to the frozen function (closure variable).
       return local_var + a
 
    @dr.freeze
    def func2(b: Float):
+      # `local_var` is read by `func`, not by the frozen function itself, so
+      # it is not captured.
       return func(b) + b
 
-   # This will raise an exception. Closure variables are not supported except
-   # in the most straightforward cases.
-   func2(Float([4, 5, 6]))
-
-When freezing such a method or function, these implicit inputs need to be made
-visible to the freezing mechanism. There are two recommended ways to do so:
+There are two recommended ways to make such inputs visible:
 
 1. Turn the class into a valid :ref:`PyTree <pytrees>`, e.g., a dataclass
    (:py:class:`@dataclass`) or a  ``DRJIT_STRUCT``.
@@ -534,22 +540,19 @@ literals and their "paths" in the input arguments if they are detected:
       l = [Float(1), Float(i)]
       c = MyClass(Float(i))
 
-      # The function can be called with arguments and keyword arguments. They will
-      # show up as a tuple in the path.
+      # Arguments and keyword arguments are both referred to by their name
       frozen(x, y, l, c = c)
 
 The above code will print the following message, when the function is called the second time:
 
 .. code-block:: text
 
-   While traversing the frozen function input, new literal variables have
-   been discovered which changed from one call to another. These will be made
-   opaque, and the input will be traversed again. This will incur some
-   overhead. To prevent this, make those variables opaque in beforehand. Below,
-   a list of variables that changed will be shown.
-   args[1][0]: The literal value of this variable changed from 0x0 to 0x3f800000
-   args[2][1][0]: The literal value of this variable changed from 0x0 to 0x3f800000
-   kwargs["c"].z[0]: The literal value of this variable changed from 0x0 to 0x3f800000
+   drjit.freeze(): the literal values below changed between calls and are made
+   opaque, which requires a new recording. Making them opaque beforehand avoids
+   this overhead.
+    - y
+    - l[1]
+    - c.z
 
 This output can be used to determine which literal where made opaque.
 As stated above, it can be beneficial to make these literals opaque beforehand.
@@ -836,20 +839,38 @@ can occur when using custom BSDFs in Mitsuba 3.
 Implementation details
 ----------------------
 
-Every time the annotated function is called, its inputs are analyzed. All JIT
-variables are extracted into a flattened and de-duplicated array. Additionally,
-a key describing the "layout" of the inputs is generated. This key will be used
-to distinguish between different recordings of the same frozen function, in case
-some of its inputs qualitatively change in subsequent calls.
+When the annotated function is called for the first time, its inputs are
+analyzed: the PyTree is traversed, its JIT variables are extracted into a
+flattened and de-duplicated array, and a *layout* describing the structure and
+types of the input, its literal values, and the sizes of its variables is
+built. The layout serves as a key that distinguishes different recordings of
+the same frozen function, in case some of its inputs qualitatively change in
+subsequent calls.
 
-If no recording is found for the current key, Dr.Jit enters a "kernel recording"
-mode (:py:obj:`drjit.JitFlag.FreezingScope`) and the actual function code is
-executed. In this mode, all device level operations, such as kernel launches are
-recorded as well as executed normally.
+If no recording exists for the current layout, Dr.Jit enters a "kernel
+recording" mode (:py:obj:`drjit.JitFlag.FreezingScope`) and the actual
+function code is executed. In this mode, all device level operations, such as
+kernel launches are recorded as well as executed normally. After the call, the
+result and the inputs are analyzed once more, so that the recording knows
+which variables it must produce when it is replayed: the ones making up the
+result, and inputs that the function modified. A frozen function may assign
+new arrays to its inputs (e.g., ``x += 1`` on an argument, or an updated
+member of an object), but it must not change anything else about them: the
+entries of containers, dictionary keys and their order, tensor shapes and the
+Python values held by the input must stay as they are, since the replay could
+not reproduce such a change. Recording a function that does so raises an
+exception naming the changed entry. A common case is state that is
+initialized lazily, such as a generator ``dr.rng()`` seeded with an
+integer, which converts its seed to an array when it is first used. Seed
+it with an array (``dr.rng(UInt64(0))``) or use it once before the frozen
+call.
 
-The next time the function is called, the newly-provided inputs are traversed,
-and the layout is used to look up compatible recordings. If such a recording is
-found, any tracing is skipped: the various recorded operations and kernels are
+The next time the function is called, the inputs are verified against the
+layout of the recording used by the previous call. The verification walks the
+input alongside the layout, and on success replays the recording right away.
+Otherwise the input is analyzed again and the resulting layout is compared
+against all recordings of the function. If a compatible recording is found,
+any tracing is skipped: the various recorded operations and kernels are
 directly replayed.
 
 Traversal

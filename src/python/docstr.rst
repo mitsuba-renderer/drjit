@@ -9221,6 +9221,20 @@
 
    Query whether leak warnings are enabled. See :py:func:`drjit.detail.set_leak_warnings()`.
 
+.. topic:: FrozenFunction
+
+   Callable returned by :py:func:`drjit.freeze`.
+
+   Besides being callable like the decorated function, it exposes the
+   following members:
+
+   - ``enabled``: when set to ``False``, calls are forwarded to the decorated
+     function without freezing.
+   - ``n_recordings``: the number of times the function was recorded,
+     including re-recordings after a failed dry run.
+   - ``n_cached_recordings``: the number of recordings currently cached.
+   - ``clear()``: drops all recordings and resets the counters.
+
 .. topic:: step
 
    Step function.

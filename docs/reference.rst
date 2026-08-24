@@ -214,6 +214,7 @@ Function freezing
 -----------------
 
 .. autofunction:: freeze
+.. autoclass:: FrozenFunction
 
 Type traits
 -----------

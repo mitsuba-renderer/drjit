@@ -223,7 +223,7 @@ struct JitOps {
         ad_loop_write write_cb = [](void *q, const dr::vector<uint64_t> &indices,
                                     bool) {
             Payload *pl = (Payload *) q;
-            pl->i = Int::borrow(indices[0]);
+            pl->i = Int::borrow((uint32_t) indices[0]);
             for (uint32_t j = 0; j < pl->n_state; ++j)
                 pl->state[j] = Float::borrow(indices[j + 1]);
         };

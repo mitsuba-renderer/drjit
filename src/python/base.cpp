@@ -1386,6 +1386,8 @@ nb::handle lazy_import(LazyImport value) {
                 module_name = "typing"; attr_name = "get_type_hints"; break;
             case LazyImport::TypingGetArgs:
                 module_name = "typing"; attr_name = "get_args"; break;
+            case LazyImport::TypesMethodType:
+                module_name = "types"; attr_name = "MethodType"; break;
             case LazyImport::DataclassesField:
                 module_name = "dataclasses"; attr_name = "_FIELD"; break;
             default:
