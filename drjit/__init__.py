@@ -3797,7 +3797,7 @@ def freeze(
     *,
     state_fn: Optional[Callable],
     limit: Optional[int] = None,
-    warn_after: int = 10,
+    warn_after: Optional[int] = 10,
     backend: Optional[JitBackend] = None,
     auto_opaque: bool = True,
     enabled: bool = True,
@@ -3811,7 +3811,7 @@ def freeze(
     *,
     state_fn: Optional[Callable] = None,
     limit: Optional[int] = None,
-    warn_after: int = 10,
+    warn_after: Optional[int] = 10,
     backend: Optional[JitBackend] = None,
     auto_opaque: bool = True,
     enabled: bool = True,
@@ -3824,7 +3824,7 @@ def freeze(
     *,
     state_fn: Optional[Callable] = None,
     limit: Optional[int] = None,
-    warn_after: int = 10,
+    warn_after: Optional[int] = 10,
     backend: Optional[JitBackend] = None,
     auto_opaque: bool = True,
     enabled: bool = True,
@@ -3961,9 +3961,10 @@ def freeze(
           stored configurations. Once this limit is reached, incompatible calls
           requiring re-tracing will cause the last used configuration to be dropped.
 
-        warn_after (int): When the number of re-tracing steps exceeds this value,
-          Dr.Jit will generate a warning that explains which variables changed
-          between calls to the function.
+        warn_after (Optional[int]): When the number of re-tracing steps exceeds
+          this value, Dr.Jit will generate a warning that explains which
+          variables changed between calls to the function. Pass ``None`` to
+          disable the warning, e.g. when re-tracing is expected.
 
         state_fn (Optional[Callable]): An optional callable that specifies additional
           state used to identify the configuration. It receives the same arguments as
@@ -3985,6 +3986,7 @@ def freeze(
     """
 
     limit = limit if limit is not None else -1
+    warn_after = warn_after if warn_after is not None else 0xffffffff
     backend = backend if backend is not None else JitBackend.Invalid
 
     def decorator(f):
