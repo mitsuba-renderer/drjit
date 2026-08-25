@@ -114,6 +114,13 @@ private:
     size_t m_size;
 };
 
+/// Reduce a texel-space coordinate to the range that \c Int can represent, so
+/// that ``pos_f - to_float(floor2int(pos_f))`` cannot blow up to inf or NaN
+template <typename Ops>
+typename Ops::Float tex_clamp_pos(const Ops &ops, const typename Ops::Float &pos_f) {
+    return clip(pos_f, ops.lit(-0x1p30), ops.lit(0x1p30));
+}
+
 /// Apply the wrapping mode to one integer coordinate along dimension \c k
 template <typename Ops>
 typename Ops::Int tex_wrap(const Ops &ops, const typename Ops::Int &pos, uint32_t k) {
@@ -327,8 +334,9 @@ void tex_eval(const Ops &ops, const typename Ops::Float *pos,
     Float pos_f[MaxDim];
     Int pos_i[MaxDim];
     for (uint32_t k = 0; k < dim; ++k) {
-        pos_f[k] = nearest ? pos[k] * ops.res_f(k)
-                           : fmadd(pos[k], ops.res_f(k), ops.lit(-0.5));
+        pos_f[k] = tex_clamp_pos(ops, nearest
+                                     ? pos[k] * ops.res_f(k)
+                                     : fmadd(pos[k], ops.res_f(k), ops.lit(-0.5)));
         pos_i[k] = floor2int<Int>(pos_f[k]);
     }
 
@@ -594,7 +602,8 @@ void tex_eval_cubic(const Ops &ops, const typename Ops::Float *pos,
     Int pos_i[MaxDim];
     Float w[MaxDim][4];
     for (uint32_t k = 0; k < dim; ++k) {
-        Float pos_f = fmadd(pos[k], ops.res_f(k), ops.lit(-0.5));
+        Float pos_f = tex_clamp_pos(
+            ops, fmadd(pos[k], ops.res_f(k), ops.lit(-0.5)));
         pos_i[k] = floor2int<Int>(pos_f);
         tex_cubic_weights(ops, pos_f - ops.to_float(pos_i[k]), w[k]);
     }
@@ -634,7 +643,8 @@ void tex_eval_cubic_deriv(const Ops &ops, const typename Ops::Float *pos,
     Int pos_i[MaxDim];
     Float wv[MaxDim][4], wg[MaxDim][4], wh[MaxDim][4];
     for (uint32_t k = 0; k < dim; ++k) {
-        Float pos_f = fmadd(pos[k], ops.res_f(k), ops.lit(-0.5));
+        Float pos_f = tex_clamp_pos(
+            ops, fmadd(pos[k], ops.res_f(k), ops.lit(-0.5)));
         pos_i[k] = floor2int<Int>(pos_f);
         Float alpha = pos_f - ops.to_float(pos_i[k]);
         tex_cubic_weights(ops, alpha, wv[k]);
@@ -727,7 +737,8 @@ void tex_fetch(const Ops &ops,
 
     Int pos_i[MaxDim];
     for (uint32_t k = 0; k < dim; ++k) {
-        Float pos_f = fmadd(pos[k], ops.res_f(k), ops.lit(-0.5));
+        Float pos_f = tex_clamp_pos(
+            ops, fmadd(pos[k], ops.res_f(k), ops.lit(-0.5)));
         pos_i[k] = floor2int<Int>(pos_f);
     }
 
