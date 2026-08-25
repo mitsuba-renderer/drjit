@@ -131,7 +131,16 @@ NAMESPACE_END(detail)
  */
 template <typename T, bool Positive = false, typename = int> struct divisor;
 
-// Partial template overload for unsigned host-side arrays
+/**
+ * Partial template overload for unsigned host-side arrays
+ *
+ * Bit 0 of the \c shift field holds a pre-shift of the intermediate result,
+ * and the remaining bits hold the final shift. This encoding covers the
+ * general, power of two, and ``div == 1`` cases with the same sequence of
+ * operations, which lets the JIT variant below work with constants that are
+ * only known at runtime (e.g. gathered from memory). Both variants use this
+ * sequence without any branches.
+ */
 template <typename T, bool Positive>
 struct divisor<T, Positive, enable_if_t<std::is_unsigned_v<T>>> {
     T div;
@@ -140,39 +149,29 @@ struct divisor<T, Positive, enable_if_t<std::is_unsigned_v<T>>> {
 
     divisor() = default;
 
-    divisor(T div) : div(div) {
-        shift = (uint8_t) log2i(div);
+    divisor(T div) : div(div), multiplier(0) {
+        uint8_t l = (uint8_t) log2i(div);
+        shift = l << 1;
 
-        if ((div & (div - 1)) == 0) {
-            // Power of two
-            multiplier = 0;
-            shift--;
-        } else {
-            // General case
-            auto [m, rem] = detail::div_wide(T(1) << shift, T(0), div);
+        if ((div & (div - 1)) != 0) {
+            // Not a power of two, requires a multiplication and pre-shift
+            auto [m, rem] = detail::div_wide(T(1) << l, T(0), div);
             multiplier = m * 2 + 1;
 
             T rem2 = rem * 2;
             if (rem2 >= div || rem2 < rem)
                 multiplier += 1;
+
+            shift |= 1;
         }
     }
 
     template <typename Value>
     DRJIT_INLINE DRJIT_NO_UBSAN Value operator()(const Value &value) const {
-        // Division by 1 is not supported by the approach below
-        if (div == 1)
-            return value;
-
-        if constexpr (is_dynamic_v<Value>) {
-            if (multiplier == 0)
-                return value >> (shift + 1);
-        }
-
         // UBSAN must be locally turned off for this line (overflows)
         Value q = mul_hi(multiplier, value);
-        Value t = sr<1>(value - q) + q;
-        return t >> shift;
+        Value t = ((value - q) >> (shift & 1)) + q;
+        return t >> (shift >> 1);
     }
 } DRJIT_PACK;
 
@@ -207,10 +206,6 @@ struct divisor<T, Positive, enable_if_t<std::is_signed_v<T>>> {
     }
 
     template <typename Value> DRJIT_INLINE DRJIT_NO_UBSAN Value operator()(const Value &value) const {
-        // Fast path for the identity divisor
-        if (div == 1)
-            return value;
-
         // UBSAN must be locally turned off for this line (overflows)
         Value q = mul_hi(multiplier, value) + value;
         Value q_sign = sr<sizeof(T) * 8 - 1>(q);
@@ -225,36 +220,35 @@ struct divisor<T, Positive, enable_if_t<std::is_signed_v<T>>> {
 } DRJIT_PACK;
 
 
-// Partial template overload for unsigned host-side arrays
+// Partial template overload for unsigned JIT arrays
 template <typename T, bool Positive>
 struct divisor<T, Positive, enable_if_t<is_jit_v<T> && std::is_unsigned_v<scalar_t<T>>>> {
     using Scalar = scalar_t<T>;
 
     T multiplier;
     T shift;
-    bool one = false;
 
     divisor(Scalar div) {
         drjit::divisor<Scalar> d(div);
         multiplier = d.multiplier;
         shift      = Scalar(d.shift);
-        one        = div == 1;
     }
 
+    /// Construct from constants of a ``divisor<Scalar>`` that are already JIT variables
+    divisor(const T &multiplier, const T &shift)
+        : multiplier(multiplier), shift(shift) { }
+
     template <typename Value> Value operator()(const Value &value) const {
-        // Division by 1 is not supported by the approach below
-        if (one)
-            return value;
         Value m = Value(multiplier), s = Value(shift),
-              q = mul_hi(m, value);
-        Value t = sr<1>(value - q) + q;
-        return t >> s;
+              q = mul_hi(m, value),
+              t = ((value - q) >> (s & Value(1))) + q;
+        return t >> (s >> Value(1));
     }
 
     DRJIT_STRUCT(divisor, multiplier, shift)
 };
 
-// Partial template overload for signed host-side arrays
+// Partial template overload for signed JIT arrays
 template <typename T, bool Positive>
 struct divisor<T, Positive, enable_if_t<is_jit_v<T> && std::is_signed_v<scalar_t<T>>>> {
     using Scalar = scalar_t<T>;
@@ -287,6 +281,11 @@ struct divisor<T, Positive, enable_if_t<is_jit_v<T> && std::is_signed_v<scalar_t
 
 template <typename Value> DRJIT_INLINE Value idiv(const Value &a, const divisor<scalar_t<Value>> &div) {
     static_assert(std::is_integral_v<scalar_t<Value>>, "idiv(): requires integral operands!");
+    return div(a);
+}
+
+template <typename Value, enable_if_t<is_jit_v<Value>> = 0>
+DRJIT_INLINE Value idiv(const Value &a, const divisor<Value> &div) {
     return div(a);
 }
 
