@@ -20,6 +20,10 @@ would go undetected if the test were changed or removed.
 import drjit as dr
 import pytest
 
+# The Accelerate BLAS kernels used by NumPy's '@' operator on macOS/arm64 leave
+# the hardware floating point exception flags set for masked-off SIMD lanes.
+pytestmark = pytest.mark.filterwarnings("ignore:.*encountered in matmul:RuntimeWarning")
+
 
 _TOL_BY_TYPE = {
     dr.VarType.Float16: 1e-1,
