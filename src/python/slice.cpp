@@ -17,6 +17,7 @@
 #include "base.h"
 #include "slice.h"
 #include "meta.h"
+#include "apply.h"
 #include <algorithm>
 #include <vector>
 
@@ -578,8 +579,47 @@ int mp_ass_subscript(PyObject *self, PyObject *key, PyObject *value) noexcept {
                 nb::borrow<nb::type_object_t<ArrayBase>>(s.tensor_index),
                 nb::borrow<nb::tuple>(shape(self)), key2);
 
-            nb::object target = nb::steal(s.tensor_array(self));
-            scatter(target, nb::borrow(value), out_index, nb::borrow(Py_True));
+            nb::object target = nb::steal(s.tensor_array(self)),
+                       value_o = nb::borrow(value);
+            nb::handle value_tp = value_o.type();
+
+            // Scalars broadcast natively within scatter(). Everything else
+            // is converted to a tensor and broadcast to the slice's shape.
+            if (!value_tp.is(&PyLong_Type) && !value_tp.is(&PyFloat_Type) &&
+                !value_tp.is(&PyBool_Type)) {
+                if (!value_tp.is(self_tp))
+                    value_o = self_tp(value_o);
+
+                const dr::vector<size_t> &shape_src =
+                    s.tensor_shape(inst_ptr(value_o));
+                dr::vector<size_t> shape_dst, shape_src_ext;
+
+                for (nb::handle h : out_shape)
+                    shape_dst.push_back(nb::cast<size_t>(h));
+
+                size_t ndim = shape_dst.size();
+                bool compatible = shape_src.size() <= ndim;
+                if (compatible) {
+                    shape_src_ext.resize(ndim, 1);
+                    memcpy(shape_src_ext.data() + ndim - shape_src.size(),
+                           shape_src.data(), sizeof(size_t) * shape_src.size());
+                    for (size_t i = 0; i < ndim; ++i)
+                        compatible &= shape_src_ext[i] == shape_dst[i] ||
+                                      shape_src_ext[i] == 1;
+                }
+
+                if (!compatible)
+                    nb::raise("cannot broadcast a value of shape %s to a "
+                              "slice of shape %s.",
+                              nb::str(cast_shape(shape_src)).c_str(),
+                              nb::str(out_shape).c_str());
+
+                nb::object array = nb::steal(s.tensor_array(value_o.ptr()));
+                tensor_broadcast(value_o, array, shape_src_ext, shape_dst);
+                value_o = std::move(array);
+            }
+
+            scatter(target, value_o, out_index, nb::borrow(Py_True));
 
             return 0;
         }

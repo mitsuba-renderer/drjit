@@ -52,6 +52,11 @@ PyObject *apply(ArrayOp op, Func func, std::index_sequence<Is...>,
 extern nb::object apply_ret_pair(ArrayOp op, const char *name,
                                  nb::handle_t<dr::ArrayBase> h);
 
+/// Broadcast the flat 'array' of 'tensor' from 'shape_src' to 'shape_dst' (equal ndim)
+extern void tensor_broadcast(nb::object &tensor, nb::object &array,
+                             const vector<size_t> &shape_src,
+                             const vector<size_t> &shape_dst);
+
 /// Callback for the ``traverse()`` operation below
 struct TraverseCallback {
     // Virtual destructor

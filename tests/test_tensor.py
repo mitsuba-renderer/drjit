@@ -1234,3 +1234,26 @@ def test47_init_from_tensor_convert(t):
             y = target(tensor_t(ref, flip_axes=True), flip_axes=True)
             assert dr.all(x == target(ref), axis=None)
             assert dr.all(y == target(ref), axis=None)
+
+
+@pytest.test_arrays('is_tensor, -bool, is_jit')
+def test48_slice_assign_tensor(t):
+    v = t([[0, 0, 0], [0, 0, 0], [0, 0, 0]])
+
+    # Same shape, broadcast along a row, broadcast along a column
+    v[0] = t([1, 2, 3])
+    v[1:, 1:] = t([[4]])
+    v[:, 0] = t([5, 6, 7])
+    assert str(v) == "[[5, 2, 3],\n [6, 4, 4],\n [7, 4, 4]]"
+
+    # Advanced index with a broadcast 1D tensor
+    idx = dr.uint32_array_t(t)([0, 2])
+    v[idx, :] = t([[8, 9, 10]])
+    assert str(v) == "[[8, 9, 10],\n [6, 4, 4],\n [8, 9, 10]]"
+
+    # 0D tensor
+    v[1, :] = t(0)
+    assert str(v) == "[[8, 9, 10],\n [0, 0, 0],\n [8, 9, 10]]"
+
+    with pytest.raises(TypeError, match="cannot broadcast"):
+        v[0, :] = t([1, 2])
