@@ -517,8 +517,8 @@ def _tri_encode_tensor(arg, O, shift):
     out = drjit.empty(tensor_tp, (C * 2 * O, N))
     for i in range(O):
         s, c = _sincos_tri(drjit.fma(arg, 2.0 ** i, shift * i))
-        out[2 * i::2 * O, :] = s.array
-        out[2 * i + 1::2 * O, :] = c.array
+        out[2 * i::2 * O, :] = s
+        out[2 * i + 1::2 * O, :] = c
     return out
 
 
@@ -567,13 +567,13 @@ def _sin_encode_tensor(arg, O, shift):
         return drjit.zeros(tensor_tp, (0, N))
     out = drjit.empty(tensor_tp, (C * 2 * O, N))
     s, c = drjit.sincos(arg * (2 * drjit.pi))
-    out[0::2 * O, :] = s.array
-    out[1::2 * O, :] = c.array
+    out[0::2 * O, :] = s
+    out[1::2 * O, :] = c
     rots = _sin_encode_rotations(shift, O)
     for i in range(1, O):
         s, c = _sin_encode_step(s, c, rots[i - 1] if rots else None)
-        out[2 * i::2 * O, :] = s.array
-        out[2 * i + 1::2 * O, :] = c.array
+        out[2 * i::2 * O, :] = s
+        out[2 * i + 1::2 * O, :] = c
     return out
 
 

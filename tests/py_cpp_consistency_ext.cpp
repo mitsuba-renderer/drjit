@@ -35,7 +35,7 @@ Matrix4 transform_compose(Matrix3 m, Quaternion q, Array tr) {
 template <typename UInt32>
 std::pair<uint32_t, uint32_t> divisor_constants(uint32_t d) {
     dr::divisor<uint32_t> div(d);
-    return { div.multiplier, div.shift };
+    return { (uint32_t) div.multiplier, (uint32_t) div.shift };
 }
 
 template <typename UInt32>
