@@ -575,14 +575,14 @@ def test16_optimize_away(t, variant):
     a = Int(1, 2, 3, 4)
     b = Int(1, 4, 1, 2)
 
-    with dr.scoped_set_flag(dr.JitFlag.KernelHistory):
+    with dr.kernel_history() as kh:
         a, b = dr.switch(index, c, a, b^1)
         if variant == 0:
             b = None
         dr.eval(a, b)
-        hist = dr.kernel_history((dr.KernelType.JIT,))
+    hist = [k for k in kh if k.type == dr.KernelType.JIT]
 
-    ir = hist[0]['ir'].getvalue()
+    ir = hist[0].source
 
     if dr.backend_v(t) is dr.JitBackend.LLVM:
         assert ir.count(' = xor') == 2*variant

@@ -12,26 +12,67 @@ How to do it
 ------------
 
 The recommended way to measure GPU kernel runtimes is the
-:py:func:`drjit.kernel_history` API. While the :py:attr:`drjit.JitFlag.KernelHistory`
-flag is set, Dr.Jit records performance metadata for every launched kernel,
-including a high-resolution, *device-side* timing (captured via CUDA events on
-CUDA, and GPU timestamps on Metal). This sidesteps the pitfalls described below.
+:py:class:`drjit.kernel_history` context manager. Within its scope, Dr.Jit
+records performance metadata for every launched kernel, including a
+high-resolution, *device-side* timing (captured via CUDA events on CUDA, and
+GPU timestamps on Metal). This sidesteps the pitfalls described below.
 
 .. code-block:: python
 
    # Record kernel metadata for the region of interest.
-   with dr.scoped_set_flag(dr.JitFlag.KernelHistory):
+   with dr.kernel_history() as kh:
        y = f(x)
        dr.eval(y)
 
-   hist = dr.kernel_history()
-   total = sum(k["execution_time"] for k in hist)
-   print(f"{total:.3f} ms across {len(hist)} operations(s)")
+   print(kh)
 
-Each entry is a dictionary; ``execution_time`` is given in milliseconds. See
-:py:func:`drjit.kernel_history` for the full set of fields (kernel hash, IR,
-cache hits, code generation and backend compilation times, etc.). Note that
-calling :py:func:`drjit.kernel_history` also *clears* the recorded history.
+Printing the object renders a table of the captured launches, for example:
+
+.. code-block:: text
+
+   Kernel history (2 entries, total device time: 29.8 µs)
+   #  Type           Size  In  Out  Ops  Cache  Codegen  Compile  Execute  Hash
+   -  -----------  ------  --  ---  ---  -----  -------  -------  -------  ----------------
+   0  JIT          100000   0    1    6  hit      41 µs        -  10.6 µs  826339ae739b7c61
+   1  BlockReduce  100000   1    1    -  -            -        -  19.2 µs  -
+
+The object is also a sequence of :py:class:`drjit.KernelHistoryEntry` objects,
+whose attributes provide the details of each launch:
+
+.. code-block:: python
+
+   total = sum(k.execution_time for k in kh)
+   print(f"{total:.3f} ms across {len(kh)} operation(s)")
+
+The available attributes are:
+
+- :py:attr:`backend <KernelHistoryEntry.backend>`: Dr.Jit backend (e.g., CUDA, Metal, etc.).
+- :py:attr:`type <KernelHistoryEntry.type>`: type of the operation (JIT
+  kernel, reduction, memory copy, etc.).
+- :py:attr:`recording_mode <KernelHistoryEntry.recording_mode>`: was the
+  launch recorded or replayed by a frozen function?
+- :py:attr:`size <KernelHistoryEntry.size>`: launch width.
+- :py:attr:`input_count <KernelHistoryEntry.input_count>` /
+  :py:attr:`output_count <KernelHistoryEntry.output_count>`: number of kernel
+  inputs and outputs, as well as the number of operations with side effects.
+- :py:attr:`hash <KernelHistoryEntry.hash>`: hash code identifying a JIT
+  kernel.
+- :py:attr:`operation_count <KernelHistoryEntry.operation_count>`: number of
+  low-level IR operations.
+- :py:attr:`cache_hit <KernelHistoryEntry.cache_hit>` /
+  :py:attr:`cache_disk <KernelHistoryEntry.cache_disk>`: kernel cache status.
+- :py:attr:`uses_optix <KernelHistoryEntry.uses_optix>`: was this kernel
+  dispatched via OptiX?
+- :py:attr:`codegen_time <KernelHistoryEntry.codegen_time>`: time spent
+  generating the kernel IR.
+- :py:attr:`backend_time <KernelHistoryEntry.backend_time>`: time spent
+  compiling the kernel.
+- :py:attr:`execution_time <KernelHistoryEntry.execution_time>`: device-side
+  runtime.
+- :py:attr:`source <KernelHistoryEntry.source>`: kernel source code (PTX,
+  LLVM IR, or Metal Shading Language).
+
+All times are given in milliseconds.
 
 How **not** to do it
 --------------------
@@ -81,8 +122,8 @@ However, the above is an *anti-pattern*. It is bad because:
 3. Measurements are noisy because of OS scheduling and CPU/GPU communication.
 
 The recommended way to measure the runtime of a set of kernels is the
-:py:func:`drjit.kernel_history` API, which returns a list kernel calls with
-high-resolution timing data.
+:py:class:`drjit.kernel_history` API, which captures every kernel call along
+with high-resolution timing data.
 
 Events
 ------
@@ -129,7 +170,7 @@ elapsed device-side time between them:
 
    The Metal backend supports event synchronization but *not* timing:
    ``elapsed_time()`` raises, and the ``enable_timing`` constructor flag is
-   ignored. Use :py:func:`drjit.kernel_history` for portable kernel timing.
+   ignored. Use :py:class:`drjit.kernel_history` for portable kernel timing.
 
 Integration
 -----------

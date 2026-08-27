@@ -3838,32 +3838,26 @@ def test100_kernel_history(t, auto_opaque, recorded_func):
     x = dr.arange(t, 4)
     dr.make_opaque(x)
 
-    with dr.scoped_set_flag(dr.JitFlag.KernelHistory, True):
+    with dr.kernel_history() as history_record:
         frozen(x)
 
-        history_record = dr.kernel_history()
-
+    with dr.kernel_history() as history_replay:
         frozen(x)
 
-        history_replay = dr.kernel_history()
-
-        assert len(history_record) == len(history_replay)
-        for i in range(len(history_record)):
-            k1 = history_record[i]
-            k2 = history_replay[i]
-
-            assert k1["backend"] == k2["backend"]
-            assert k1["type"] == k2["type"]
-            if recorded_func == "kernel":
-                assert k1["hash"] == k2["hash"]
-                assert k1["uses_optix"] == k2["uses_optix"]
-            assert k1["size"] == k2["size"]
-            assert k1["input_count"] == k2["input_count"]
-            assert k1["output_count"] == k2["output_count"]
-            if (k1["type"] == dr.KernelType.JIT):
-                assert k1["operation_count"] == k2["operation_count"]
-            assert k1["recording_mode"] == dr.KernelRecordingMode.Recorded
-            assert k2["recording_mode"] == dr.KernelRecordingMode.Replayed
+    assert len(history_record) == len(history_replay)
+    for k1, k2 in zip(history_record, history_replay):
+        assert k1.backend == k2.backend
+        assert k1.type == k2.type
+        if recorded_func == "kernel":
+            assert k1.hash == k2.hash
+            assert k1.uses_optix == k2.uses_optix
+        assert k1.size == k2.size
+        assert k1.input_count == k2.input_count
+        assert k1.output_count == k2.output_count
+        if k1.type == dr.KernelType.JIT:
+            assert k1.operation_count == k2.operation_count
+        assert k1.recording_mode == dr.KernelRecordingMode.Recorded
+        assert k2.recording_mode == dr.KernelRecordingMode.Replayed
 
 
 @pytest.mark.parametrize("auto_opaque", [False, True])

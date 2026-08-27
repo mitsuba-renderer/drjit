@@ -51,14 +51,14 @@ To use this feature, place the computation in a function and apply the
    value_1 = f(Float(...)) # 🔴 record
    value_2 = f(Float(...)) # ▶️ replay
 
-Methods can be frozen in the same way using :py:func:`@dr.freeze <freeze>`.
-Here, ``self`` is treated like any other argument. Dr.Jit only tracks its
-attributes when the object is a :ref:`PyTree <pytrees>`. With an ordinary Python
-class, changes to these attributes may be missed, causing a recording to replay
-with stale values.
+Methods can be frozen by decorating them in the same way.
 
-Make the class a dataclass or list its traversable members using a
-:ref:`DRJIT_STRUCT annotation <custom_types_py>`:
+One potential gotcha is that :py:func:`@dr.freeze <freeze>` only reacts to
+changes in :ref:`PyTree <pytrees>` arguments. If ``self`` is not a PyTree, the
+frozen method will read stale instance values. To avoid this, make the
+surrounding class a `dataclass
+<https://docs.python.org/3/library/dataclasses.html>`__, or list its members
+using a :ref:`DRJIT_STRUCT annotation <custom_types_py>`:
 
 .. code-block:: python
 
@@ -73,13 +73,13 @@ Make the class a dataclass or list its traversable members using a
            return self.scale * x
 
    scaler = Scaler(Float(2))
-   scaler.apply(Float(1))  # returns [2]
+   scaler.apply(Float(1))  # 🔴 record, returns [2]
 
    scaler.scale = Float(3)
-   scaler.apply(Float(1))  # returns [3]
+   scaler.apply(Float(1))  # ▶️ replay, returns [3]
 
-The frozen function ``f`` behaves like the wrapped Python callable and also
-provides the following attributes and methods:
+A frozen function ``f`` behaves like the wrapped Python callable. It
+additionally provides several attributes and methods:
 
 - ``f.enabled``: set this to ``False`` to disable function freezing
   so that calls directly reach the wrapped function.
