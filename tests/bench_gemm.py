@@ -159,10 +159,9 @@ def _bench_cell(size, runs, backends, torch, torch_device, cfg, torch_dtype,
     flops = 2.0 * size ** 3
 
     def time_dr(call, count):
-        with dr.scoped_set_flag(dr.JitFlag.KernelHistory, True):
+        with dr.kernel_history() as history:
             for _ in range(count):
                 call()
-            history = dr.kernel_history()
         # Each matmul emits a fixed number of kernel entries (pack-B +
         # row-sweep per K-segment), so the history splits evenly.
         assert len(history) % count == 0, (
@@ -170,7 +169,7 @@ def _bench_cell(size, runs, backends, torch, torch_device, cfg, torch_dtype,
             f"count {count}: each call is expected to emit the same "
             f"number of kernel entries")
         k = len(history) // count
-        return [sum(history[i * k + j]['execution_time'] for j in range(k))
+        return [sum(history[i * k + j].execution_time for j in range(k))
                 for i in range(count)]
 
     def time_np(call, count):

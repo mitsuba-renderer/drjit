@@ -8,6 +8,52 @@ Changelog
 DrJit 1.6.0 (unreleased)
 ------------------------
 
+- New kernel history benchmarking API. Measuring kernel runtimes previously
+  required changing JIT flags and then extracting fields from dictionaries,
+  which was awkward (untyped, no code completion, etc.):
+
+  .. code-block:: python
+
+     with dr.scoped_set_flag(dr.JitFlag.KernelHistory, True):
+         # ... code to be benchmarked ...
+
+     time = 0
+     for kernel in dr.kernel_history():
+         time += kernel["execution_time"]
+     print(time)
+
+  :py:class:`drjit.kernel_history` is now a context manager that automates the
+  flag adjustment. It is iterable and provides typed
+  :py:class:`drjit.KernelHistoryEntry` instances with attribute access:
+
+  .. code-block:: python
+
+     with dr.kernel_history() as hist:
+         # ... code to be benchmarked ...
+
+     time = 0
+     for kernel in hist:
+         time += kernel.execution_time
+     print(time)
+
+  Directly printing the ``hist`` object renders a formatted table of the
+  captured launches:
+
+  .. code-block:: text
+
+     Kernel history (2 entries, total device time: 29.8 µs)
+     #  Type           Size  In  Out  Ops  Cache  Codegen  Compile  Execute  Hash
+     -  -----------  ------  --  ---  ---  -----  -------  -------  -------  ----------------
+     0  JIT          100000   0    1    6  hit      41 µs        -  10.6 µs  826339ae739b7c61
+     1  BlockReduce  100000   1    1    -  -            -        -  19.2 µs  -
+
+  Kernel history scopes may now be nested, in which case the outer scope also
+  captures the kernels of the inner one. It is furthermore legal to use the
+  kernel history from multiple threads at once. Expensive per-launch
+  information (device timings, kernel source code) is materialized on demand.
+  See the :ref:`benchmarking documentation <bench>` for details. Code using
+  the old interface continues to work but raises a ``DeprecationWarning``.
+
 - The texture classes (e.g., :py:class:`Texture2f <drjit.auto.Texture2f>`) now
   support anisotropic MIP-mapped filtering in 1-3 dimensions. The
   implementation uses hardware functionality when available or emulates it
@@ -395,7 +441,7 @@ DrJit 1.4.0 (June 25, 2026)
     `beca8c <https://github.com/mitsuba-renderer/nanothread/commit/beca8c6635d458a2db027a7ecc0659a6e32134f3>`__).
 
   - **Fixed timing glitches**: timing information reported by
-    :py:func:`dr.kernel_history() <kernel_history>` would occasionally
+    :py:class:`dr.kernel_history() <kernel_history>` would occasionally
     report nonsensical values close to ``2^64`` due to a race condition
     that is now fixed.
     (`f11692 <https://github.com/mitsuba-renderer/nanothread/commit/f1169296bb4af6ee1e553e3b331be8ec4275e399>`__).
@@ -480,7 +526,7 @@ DrJit 1.4.0 (June 25, 2026)
   `#483 <https://github.com/mitsuba-renderer/drjit/pull/483>`__).
 
 - **Release the GIL while waiting for kernel history**: Retrieving timing data
-  via :py:func:`dr.kernel_history() <kernel_history>` now releases the GIL while
+  via :py:class:`dr.kernel_history() <kernel_history>` now releases the GIL while
   waiting for the asynchronous results to arrive, allowing other Python threads
   to make progress in the meantime.
   (commits `766e1e <https://github.com/mitsuba-renderer/drjit/commit/766e1e9ade4c722a88d1a1dd18d7d5140115ab8f>`__,

@@ -13,13 +13,13 @@ def test01_basic(t):
     x = t(1, 2, 3)
 
     # Without dr.func
-    with dr.scoped_set_flag(dr.JitFlag.KernelHistory):
+    with dr.kernel_history() as kh:
         result_plain = f(x)
         dr.eval(result_plain)
-        hist_plain = dr.kernel_history((dr.KernelType.JIT,))
+    hist_plain = [k for k in kh if k.type == dr.KernelType.JIT]
 
     assert dr.allclose(result_plain, t(3, 6, 9))
-    ir_plain = hist_plain[0]['ir'].getvalue()
+    ir_plain = hist_plain[0].source
     if dr.backend_v(t) is dr.JitBackend.LLVM:
         assert '@func_' not in ir_plain
         assert 'define fastcc' not in ir_plain
@@ -27,13 +27,13 @@ def test01_basic(t):
         assert 'call.uni' not in ir_plain
 
     # With dr.func
-    with dr.scoped_set_flag(dr.JitFlag.KernelHistory):
+    with dr.kernel_history() as kh:
         result_wrapped = f_wrapped(x)
         dr.eval(result_wrapped)
-        hist_wrapped = dr.kernel_history((dr.KernelType.JIT,))
+    hist_wrapped = [k for k in kh if k.type == dr.KernelType.JIT]
 
     assert dr.allclose(result_wrapped, t(3, 6, 9))
-    ir_wrapped = hist_wrapped[0]['ir'].getvalue()
+    ir_wrapped = hist_wrapped[0].source
     if dr.backend_v(t) is dr.JitBackend.LLVM:
         assert '@func_' in ir_wrapped
         assert ir_wrapped.count('define fastcc') == 1
@@ -52,15 +52,15 @@ def test02_explicit_backend(t):
 
     x = t(1, 2, 3)
 
-    with dr.scoped_set_flag(dr.JitFlag.KernelHistory):
+    with dr.kernel_history() as kh:
         result = f(x)
         dr.eval(result)
-        hist = dr.kernel_history((dr.KernelType.JIT,))
+    hist = [k for k in kh if k.type == dr.KernelType.JIT]
 
     assert dr.allclose(result, t(3, 6, 9))
     assert len(hist) == 1
 
-    ir = hist[0]['ir'].getvalue()
+    ir = hist[0].source
     if dr.backend_v(t) is dr.JitBackend.LLVM:
         assert '@func_' in ir
     elif dr.backend_v(t) is dr.JitBackend.CUDA:
@@ -77,15 +77,15 @@ def test03_pytree_input(t):
     x = t(1, 2, 3)
     y = t(4, 5, 6)
 
-    with dr.scoped_set_flag(dr.JitFlag.KernelHistory):
+    with dr.kernel_history() as kh:
         result = f({'x': x, 'y': y})
         dr.eval(result)
-        hist = dr.kernel_history((dr.KernelType.JIT,))
+    hist = [k for k in kh if k.type == dr.KernelType.JIT]
 
     assert dr.allclose(result, t(5, 7, 9))
     assert len(hist) == 1
 
-    ir = hist[0]['ir'].getvalue()
+    ir = hist[0].source
     if dr.backend_v(t) is dr.JitBackend.LLVM:
         assert '@func_' in ir
     elif dr.backend_v(t) is dr.JitBackend.CUDA:
