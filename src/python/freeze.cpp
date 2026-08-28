@@ -79,10 +79,26 @@ struct freeze_abort_guard {
     }
 };
 
+/// Suspends the cyclic garbage collector while a recording is in progress
+struct gc_disable_guard {
+    bool enabled = PyGC_IsEnabled();
+    gc_disable_guard() {
+        if (enabled)
+            PyGC_Disable();
+    }
+    ~gc_disable_guard() {
+        if (enabled)
+            PyGC_Enable();
+    }
+};
+
 nb::object FunctionRecording::record(nb::handle func, nb::handle root,
                                      const uint32_t *inputs) {
     JitBackend backend = layout->backend;
     uint32_t n_inputs  = (uint32_t) layout->slots.size();
+
+    // Avoid unrelated activity from GC passes from being fused into the recording
+    gc_disable_guard gc_guard;
 
     jit_freeze_start(backend, inputs, n_inputs);
     freeze_abort_guard abort_guard { backend };
