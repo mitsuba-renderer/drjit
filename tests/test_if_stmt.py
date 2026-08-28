@@ -703,3 +703,23 @@ def test24_partially_evaluated_outputs(t, mode, index):
     assert dr.all(a == t(2, 20, 4, 40))
     assert dr.all(b == t(3, 40, 5, 80))
     assert dr.all(r == t(203, 2040, 405, 4080))
+
+
+@pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
+@pytest.test_arrays('float32,is_jit,shape=(*)')
+def test25_size1_cond_broadcast(t, mode):
+    # A size-1 condition broadcasts against wider state variables; the
+    # conditional's outputs must take the state size, not the condition's.
+    cond = dr.opaque(dr.mask_t(t), True)
+    x = dr.arange(t, 10)
+
+    r = dr.if_stmt(
+        args = (x,),
+        cond = cond,
+        true_fn = lambda x: x + 1,
+        false_fn = lambda x: x - 1,
+        mode = mode
+    )
+
+    dr.eval(r)
+    assert dr.all(r == dr.arange(t, 10) + 1)
