@@ -391,8 +391,11 @@ public:
                     "Texture::set_value(): unexpected array size (%zu vs %zu)!",
                     padded_value.size(), m_size);
 
-            // Stash the AD index of the unpadded `value`.
-            // The updates to `m_tensor` below re-attach it.
+            drjit::eval(padded_value);
+
+            // Stash the AD index of ``value``, which is the differentiable
+            // identity of the texture's contents. Operations like
+            // ``reset_tensor()`` and ``update_tensor()`` preserve it.
             if constexpr (IsDiff) {
                 if (grad_enabled(value))
                     m_tensor.array() =
@@ -419,9 +422,9 @@ public:
                 }
             }
 
-            m_padded_tensor.array() = padded_value;
+            m_padded_tensor.array() = std::move(padded_value);
             m_migrated = false;
-            update_tensor();
+            reset_tensor();
         }
     }
 
@@ -460,19 +463,12 @@ public:
             return;
         }
 
-        bool shape_changed = false;
-        for (size_t i = 0; i < Dimension + 1; ++i) {
-            if (m_shape[i] != tensor.shape(i)) {
-                shape_changed = true;
-                break;
-            }
-        }
-
-        // Only update tensors & CUDA texture if shape changed
-        init(tensor.shape().data(), tensor.shape(Dimension),
-             m_use_accel, m_filter_mode, m_wrap_mode, shape_changed,
-             m_writable, nullptr, m_mip_filter, m_max_aniso,
-             m_mip_basis);
+        // Only reconfigure tensors & hardware texture if the shape changed
+        if (shape_differs(tensor))
+            init(tensor.shape().data(), tensor.shape(Dimension),
+                 m_use_accel, m_filter_mode, m_wrap_mode,
+                 /* init_tensor = */ true, m_writable, nullptr, m_mip_filter,
+                 m_max_aniso, m_mip_basis);
 
         if constexpr (std::is_lvalue_reference_v<TensorT>)
             set_value(tensor.array(), migrate);
@@ -513,43 +509,36 @@ public:
             return;
         }
 
-        if (m_tensor.ndim() != Dimension + 1)
+        const TensorXf &pub = tensor();
+
+        if (pub.ndim() != Dimension + 1)
             jit_raise("Texture::update_inplace(): tensor dimension must equal "
                       "texture dimension plus one (channels).");
 
-        bool shape_changed = false;
-        for (size_t i = 0; i < Dimension + 1; ++i) {
-            if (m_shape[i] != m_tensor.shape(i)) {
-                shape_changed = true;
-                break;
-            }
-        }
+        bool shape_changed = shape_differs(pub);
 
         if constexpr (!is_jit_v<Storage_>) {
-            if (shape_changed) {
-                init(m_tensor.shape().data(),
-                     m_tensor.shape(Dimension), m_use_accel, m_filter_mode,
-                     m_wrap_mode, true, m_writable, nullptr, m_mip_filter,
-                     m_max_aniso, m_mip_basis);
-            } else {
+            if (!shape_changed) {
                 // Only the MIP pyramid must be refreshed
                 build_mipmap(m_padded_tensor.array());
                 return;
             }
-        } else {
-            // `Texture::init` might overwrite `m_tensor` with a
-            // zero-initialized tensor, so let's copy it first
-            TensorXf inbound_tensor(m_tensor);
-
-            init(m_tensor.shape().data(),
-                 m_tensor.shape(Dimension), m_use_accel, m_filter_mode,
-                 m_wrap_mode, shape_changed, m_writable, nullptr, m_mip_filter,
-                 m_max_aniso, m_mip_basis);
-
-            m_tensor.array() = inbound_tensor;
         }
 
-        set_value(m_tensor.array(), migrate);
+        // Keep the current contents across init(), which recreates the
+        // tensor members when the shape changed
+        Storage data;
+        if constexpr (is_jit_v<Storage_>)
+            data = m_tensor.array();
+        else
+            data = std::move(m_padded_tensor.array());
+
+        if (shape_changed)
+            init(pub.shape().data(), pub.shape(Dimension), m_use_accel,
+                 m_filter_mode, m_wrap_mode, /* init_tensor = */ true,
+                 m_writable, nullptr, m_mip_filter, m_max_aniso, m_mip_basis);
+
+        set_value(std::move(data), migrate);
     }
 
     /// Return the texture data as an array object. See the remark in \ref tensor()
@@ -881,9 +870,10 @@ public:
                          pos_idx, val_idx, active.index());
         } else {
             // No hardware texture (LLVM, or double precision): scatter into the
-            // backing storage instead.
+            // backing storage instead. Dropping the unpadded view beforehand
+            // lets the scatter update the buffer in place.
+            reset_tensor();
             write_nonaccel(pos, value, active);
-            m_tensor_dirty = true;
         }
     }
 
@@ -1397,12 +1387,45 @@ private:
             } else {
                 m_tensor.array() = m_padded_tensor.array();
             }
+
+            // The freshly installed views are current
+            m_tensor_dirty = false;
         }
+    }
+
+    /// Does the shape of \c t differ from the texture's current shape?
+    bool shape_differs(const TensorXf &t) const {
+        for (size_t i = 0; i < Dimension + 1; ++i)
+            if (m_shape[i] != t.shape(i))
+                return true;
+        return false;
+    }
+
+    /// Drop the cached unpadded view and mark it for rebuild in refresh().
+    /// The placeholder releases the view's reference to the storage buffer,
+    /// letting write() update the buffer in place. The view's AD index is
+    /// carried over: it identifies the public tensor as a differentiable
+    /// variable across rebuilds. The carry-over runs under a resume scope
+    /// since it restores existing state rather than tracking a new operation.
+    void reset_tensor() {
+        Storage placeholder =
+            empty<Storage>(m_size / m_channels_storage * m_channels);
+        if constexpr (IsDiff) {
+            resume_grad<Storage> guard;
+            placeholder = replace_grad(placeholder, m_tensor.array());
+        }
+        m_tensor.array() = std::move(placeholder);
+        m_tensor_dirty = true;
     }
 
     /// Recompute the public tensor from the padded storage, re-attaching
     /// the AD identity of \ref m_tensor (see \ref set_value())
     void update_tensor() const {
+        // Rebuilding the cached view restores existing state. The resume
+        // scope makes the result independent of any grad suspension active
+        // at the (arbitrary) time this deferred rebuild runs.
+        resume_grad<Storage> guard;
+
         if (m_channels == m_channels_storage) {
             m_tensor.array() = m_padded_tensor.array();
         } else {
@@ -1862,35 +1885,34 @@ private:
     /// Unpadded shape of texture
     size_t m_shape[Dimension + 1] = {};
 
-    /* Texel storage model: the two tensor members below always hold valid
-       (possibly unevaluated) data, in one of three regimes.
+    /* Texel storage model: the interpretation of the data members below
+       depends on how the texture is configured:
 
-       1. Buffer-backed (LLVM, use_accel=false, or migrate=false):
-          m_padded_tensor stores the texels and is authoritative; the hardware
-          texture, when present, is a sampling copy of it. The public
-          tensor may lag a write() into the buffer (m_tensor_dirty).
+       1. Buffer-backed (LLVM, ``use_accel=false``, or ``migrate=false``):
+          ``m_padded_tensor`` is the authoritative source of texture data and
+          evaluated. If a hardware texture is present, it merely stores a copy.
+          The primal part of ``m_tensor`` _may_ provide a symbolic unpadded view
+          of the padded data (created on demand by ``refresh()``). ``m_tensor``
+          also keeps track of the AD index associated with the texture's
+          public (unpadded) tensor.
 
-       2. Migrated (set_value() with migrate=true): the hardware texture is
-          authoritative and no buffer is retained. Both members hold
-          symbolic readback expressions (see readback_view()) that fetch the
-          texels once evaluated. The contents only change through another
-          set_value(), which reinstalls the views.
+       2. Migrated (``migrate=true``): the native GPU texture representation
+          becomes authoritative. Both ``m_tensor`` and ``m_padded_tensor`` hold
+          symbolic readback expressions (see ``readback_view()``).
 
-       3. Hardware-mutable (m_hw_mutable: writable or wrapped textures):
-          like (2), but the hardware contents can also change behind our
-          back. refresh() swaps out views that were already materialized and
-          are therefore pinned to old contents.
+       3. Writable or wrapped textures (``m_hw_mutable=true``): like (2), but
+          the hardware contents can also change behind our back. ``refresh()``
+          swaps out views that were already materialized and are therefore
+          pinned to old contents.
 
-       In regimes (2) and (3), a tensor returned by tensor() reflects the
+       In cases (2) and (3), a tensor returned by tensor() reflects the
        texture contents at the time it is evaluated. */
-
-    /// Storage tensor with the channel count padded to a power of two. This
-    /// backs the sampling code and the AD graph. In scalar modes the padding
-    /// is the identity, and this member doubles as the public tensor.
-    mutable TensorXf m_padded_tensor;
 
     /// Public-facing tensor in the unpadded shape, returned by \ref tensor()
     mutable TensorXf m_tensor;
+
+    /// Storage tensor with the channel count padded to a power of two
+    mutable TensorXf m_padded_tensor;
 
     // Stored in this order: width, height, depth
     Array<UInt32, Dimension> m_resolution_opaque;
@@ -1921,8 +1943,8 @@ private:
     /// hold readback views that \ref refresh() keeps current
     bool m_hw_mutable = false;
 
-    /// \ref m_tensor lags a \ref write() into the storage buffer and is
-    /// recomputed by \ref refresh()
+    /// Set when \ref m_tensor is out of date following calls to
+    /// \ref set_value() or \ref write(). \ref refresh() rebuilds it
     mutable bool m_tensor_dirty = false;
 
     /// MIP level selection mode of filtered lookups
