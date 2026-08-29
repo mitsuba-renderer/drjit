@@ -3733,20 +3733,20 @@ def rng(seed: Union[ArrayBase, int] = 0, method='philox4x32', symbolic: bool = F
         raise RuntimeError("Only generator='philox4x32' is currently supported.")
 
 
-def binary_search(start, end, pred):
+def binary_search(start: Union[ArrayBase, int], end: Union[ArrayBase, int], pred: Callable) -> Union[ArrayBase, int]:
     '''
     Perform a binary search over a range given a predicate ``pred``, which
     monotonically decreases over this range (i.e. max one ``True`` -> ``False``
     transition).
 
-    Given a (scalar) ``start`` and ``end`` index of a range, this function
-    evaluates a predicate ``floor(log2(end-start) + 1)`` times with index
-    values on the interval [start, end] (inclusive) to find the first index
-    that no longer satisfies it. Note that the template parameter ``Index`` is
-    automatically inferred from the supplied predicate. Specifically, the
-    predicate takes an index array as input argument. When ``pred`` is ``False``
-    for all entries, the function returns ``start``, and when it is ``True`` for
-    all cases, it returns ``end``.
+    Given ``start`` and ``end`` indices of a range, this function evaluates a
+    predicate ``floor(log2(end-start) + 1)`` times with index values on the
+    interval [start, end] (inclusive) to find the first index that no longer
+    satisfies it. Note that the template parameter ``Index`` is automatically
+    inferred from the supplied predicate. Specifically, the predicate takes an
+    index array as input argument. When ``pred`` is ``False`` for all entries,
+    the function returns ``start``, and when it is ``True`` for all cases, it
+    returns ``end``.
 
     The following code example shows a typical use case: ``data`` contains a
     sorted list of floating point numbers, and the goal is to map floating
@@ -3765,23 +3765,46 @@ def binary_search(start, end, pred):
         )
 
     Args:
-        start (int): Starting index for the search range
-        end (int): Ending index for the search range
+        start (int | drjit.ArrayBase): Starting index for the search range.
+            Can be a scalar Python ``int`` or a Dr.Jit integer array.
+        end (int | drjit.ArrayBase): Ending index for the search range.
+            Can be a scalar Python ``int`` or a Dr.Jit integer array.
         pred (function): The predicate function to be evaluated
 
     Returns:
         Index array resulting from the binary search
     '''
-    assert isinstance(start, int) and isinstance(end, int)
+    if depth_v(start) > 1 or depth_v(end) > 1 :
+        raise ValueError(f"`start` and `end` arguments should have depth <= 1, got {depth_v(start)} and {depth_v(end)}")
 
-    iterations = log2i(end - start) + 1 if start < end else 0
+    # Transform range indices to a consistent type
+    tp = expr_t(start, end)
+    start = tp(start)
+    end = tp(end)
 
-    for _ in range(iterations):
+    iterations = select(start < end, log2i(abs(end - start)) + 1, 0)
+    index = zeros(type(iterations))
+
+    def cond_fn(start, end, index):
+        return index < iterations
+
+    def body_fn(start, end, index):
         middle = (start + end) >> 1
 
         cond = pred(middle)
         start = select(cond, minimum(middle + 1, end), start)
         end = select(cond, end, middle)
+
+        index = index + 1
+        return start, end, index
+
+    start, end, index = while_loop(
+        state=(start, end, index),
+        cond=cond_fn,
+        body=body_fn,
+        labels=("start", "end", "index"),
+        label="dr.binary_search()"
+    )
 
     return start
 
