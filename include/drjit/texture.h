@@ -10,6 +10,8 @@
     license that can be found in the LICENSE file.
 */
 
+#pragma once
+
 #include <drjit/array.h>
 #include <drjit-core/half.h>
 #include <drjit-core/texture.h>
@@ -25,8 +27,6 @@
 #include <array>
 #include <cassert>
 #include <memory>
-
-#pragma once
 
 NAMESPACE_BEGIN(drjit)
 
@@ -139,7 +139,7 @@ public:
      * gradient-based optimization of textures with filtered texture lookups.
      * See the Dr.Jit documentation on textures for additional detail. Laplacian
      * mode requires a MIP-mapped texture with floating-point storage on a JIT
-     * backend and does not support migration.
+     * backend.
      */
     Texture(const size_t shape[Dimension], size_t channels,
             bool use_accel = true,
@@ -150,9 +150,8 @@ public:
             size_t max_aniso = 8,
             MipBasis mip_basis = MipBasis::Standard)
         : m_srgb(srgb) {
-        init(shape, channels, use_accel, filter_mode, wrap_mode,
-             /* init_tensor = */ true, writable, /* external = */ nullptr,
-             mip_filter, max_aniso, mip_basis);
+        init(shape, channels, use_accel, filter_mode, wrap_mode, writable,
+             /* external = */ nullptr, mip_filter, max_aniso, mip_basis);
     }
 
     /**
@@ -163,10 +162,10 @@ public:
      * invokes <tt>set_tensor(tensor)</tt> to fill the texture memory with the
      * provided tensor.
      *
-     * When ``migrate`` is set to ``true`` (the default), Dr.Jit moves the
-     * texture to the GPU backends to avoid redundant storage. Values like \ref
-     * tensor(), \ref value() then produce a differentiable symbolic view of
-     * the migrated memory.
+     * On the CUDA and Metal backends, Dr.Jit migrates the data to GPU
+     * texture memory, which then holds the only copy. Values like \ref
+     * tensor() and \ref value() produce a differentiable symbolic view of
+     * this memory that occupies no storage of its own.
      *
      * The \c use_accel, \c filter_mode, \c wrap_mode, \c srgb, \c mip_filter,
      * \c max_aniso, and \c mip_basis parameters have the same defaults and
@@ -174,7 +173,7 @@ public:
      * shape and channel count from the tensor and does not accept \c writable.
      */
     template <typename TensorT>
-    Texture(TensorT &&tensor, bool use_accel = true, bool migrate = true,
+    Texture(TensorT &&tensor, bool use_accel = true,
             FilterMode filter_mode = FilterMode::Linear,
             WrapMode wrap_mode = WrapMode::Clamp, bool srgb = false,
             MipFilter mip_filter = MipFilter::Disabled, size_t max_aniso = 8,
@@ -183,14 +182,10 @@ public:
         if (tensor.ndim() != Dimension + 1)
             jit_raise("Texture::Texture(): tensor dimension must equal "
                         "texture dimension plus one.");
-        if (mip_basis == MipBasis::Laplacian && migrate)
-            jit_raise("Texture(): migration is not supported in Laplacian "
-                      "mode, please pass migrate=false.");
         init(tensor.shape().data(), tensor.shape(Dimension), use_accel,
-             filter_mode, wrap_mode, /* init_tensor = */ true,
-             /* writable = */ false, /* external = */ nullptr,
-             mip_filter, max_aniso, mip_basis);
-        set_tensor(std::forward<TensorT>(tensor), migrate);
+             filter_mode, wrap_mode, /* writable = */ false,
+             /* external = */ nullptr, mip_filter, max_aniso, mip_basis);
+        set_tensor(std::forward<TensorT>(tensor));
     }
 
     /**
@@ -231,10 +226,8 @@ public:
     Texture &operator=(const Texture &) = delete;
 
     ~Texture() {
-        if constexpr (HasGPUTexture) {
-            if (m_use_accel)
-                jit_tex_destroy(m_handle);
-        }
+        if constexpr (HasGPUTexture)
+            jit_tex_destroy(m_handle);
     }
 
 private:
@@ -260,8 +253,7 @@ private:
                 tensor_shape[i] = shape_tex[Dimension - 1 - i];
 
             init(tensor_shape, channels, /* use_accel = */ true, filter_mode,
-                 wrap_mode, /* init_tensor = */ true, writable,
-                 /* external = */ h);
+                 wrap_mode, writable, /* external = */ h);
         } else {
             (void) handle; (void) writable; (void) filter_mode; (void) wrap_mode;
             (void) srgb;
@@ -301,10 +293,6 @@ public:
 
     /// Return the MIP basis of the texture
     MipBasis mip_basis() const { return m_mip_basis; }
-
-    /// Is the texture data held exclusively in GPU texture memory? True
-    /// after a migration, and for writable/wrapped textures.
-    bool migrated() const { return m_migrated || m_hw_mutable; }
 
     /// Are hardware texture units used for evaluation?
     bool use_accel() const { return m_use_accel; }
@@ -346,16 +334,15 @@ public:
      * \brief Overwrite the texture contents with the provided linearized 1D
      * array
      *
-     * When \c migrate is set, the CUDA and Metal backends migrate the texture
-     * data into the GPU's native texture format to avoid redundant storage.
+     * On the CUDA and Metal backends, the update migrates the texture data
+     * into the GPU's native texture format, which then holds the only copy.
      *
      * With \ref MipBasis::Laplacian, the array is first decomposed into
      * per-level coefficients. A subsequent \ref value() then reproduces it up
-     * to floating point rounding. Migration is unavailable in that case and
-     * raises an exception.
+     * to floating point rounding.
      */
     template <typename StorageT>
-    void set_value(StorageT &&value, bool migrate = false) {
+    void set_value(StorageT &&value) {
         if constexpr (!is_jit_v<Storage_>) {
             if (value.size() != m_size)
                 jit_raise("Texture::set_value(): unexpected array size!");
@@ -363,15 +350,11 @@ public:
             build_mipmap(m_padded_tensor.array());
         } else /* JIT variant */ {
             if (m_mip_basis == MipBasis::Laplacian) {
-                if (migrate)
-                    jit_raise("Texture::set_value(): migration is not "
-                              "supported in Laplacian mode.");
-                size_t unpadded_size = m_size / m_channels_storage * m_channels;
-                if (value.size() != unpadded_size)
+                if (value.size() != unpadded_size())
                     jit_raise("Texture::set_value(): unexpected array size "
-                              "(%zu vs %zu)!", value.size(), unpadded_size);
+                              "(%zu vs %zu)!", value.size(), unpadded_size());
                 decompose(value);
-                rebuild();
+                rebuild_pyramid();
                 return;
             }
 
@@ -379,8 +362,7 @@ public:
 
             if (m_channels_storage != m_channels) {
                 padded_value = steal_storage(ad_tex_repack(
-                    combined_index(value),
-                    (uint32_t) (m_size / m_channels_storage),
+                    combined_index(value), (uint32_t) texel_count(),
                     (uint32_t) m_channels_storage, (uint32_t) m_channels));
             } else {
                 padded_value = value;
@@ -394,8 +376,8 @@ public:
             drjit::eval(padded_value);
 
             // Stash the AD index of ``value``, which is the differentiable
-            // identity of the texture's contents. Operations like
-            // ``reset_tensor()`` and ``update_tensor()`` preserve it.
+            // identity of the texture's contents. The view installed below
+            // preserves it.
             if constexpr (IsDiff) {
                 if (grad_enabled(value))
                     m_tensor.array() =
@@ -407,24 +389,14 @@ public:
             if constexpr (HasGPUTexture) {
                 if (m_use_accel) {
                     upload_levels(padded_value);
-
-                    // Hardware-mutable textures (writable/ wrapped) keep their
-                    // authoritative copy in the hardware texture and retain no
-                    // buffer, regardless of `migrate`. For them, every update
-                    // therefore takes the migration path, which replaces the
-                    // tensor members with symbolic views of the uploaded data.
-                    if (migrate || m_hw_mutable) {
-                        m_padded_tensor.array() = padded_value;
-                        install_views();
-                        m_migrated = migrate;
-                        return;
-                    }
+                    m_padded_tensor.array() = std::move(padded_value);
+                    install_readback_views();
+                    return;
                 }
             }
 
             m_padded_tensor.array() = std::move(padded_value);
-            m_migrated = false;
-            reset_tensor();
+            install_unpadded_view();
         }
     }
 
@@ -433,22 +405,19 @@ public:
      *
      * This method updates the values of all texels. Changing the texture
      * resolution or its number of channels is also supported. However, on the
-     * CUDA and Metal backends, such operations have a significantly larger
-     * overhead (new hardware texture objects must be created; on CUDA this also
-     * synchronizes the GPU pipeline).
+     * CUDA and Metal backends, the latter is significantly more costly as a
+     * new texture object must be created. On the CUDA backend, this further
+     * synchronizes the GPU pipeline.
      *
-     * When \c migrate is set to \c true on the CUDA and Metal backends, the
-     * texture information is migrated to GPU texture memory to avoid
-     * redundant storage.
+     * On the CUDA and Metal backends, the update migrates the texture data
+     * into the GPU's native texture format, which then holds the only copy.
      *
      * With \ref MipBasis::Laplacian, the tensor is first decomposed into the
      * per-level coefficient tensors, and the sampled pyramid is then rebuilt
-     * from them. A subsequent \ref tensor() reproduces the input up to floating
-     * point rounding. Migration is unavailable in that case and raises an
-     * exception.
+     * from them.
      */
     template <typename TensorT>
-    void set_tensor(TensorT &&tensor, bool migrate = false) {
+    void set_tensor(TensorT &&tensor) {
         if (tensor.ndim() != Dimension + 1)
             jit_raise("Texture::set_tensor(): tensor dimension must equal "
                       "texture dimension plus one (channels).");
@@ -457,7 +426,7 @@ public:
             jit_log(::LogLevel::Warn,
                     "Texture::set_tensor(): the `tensor` argument is a "
                     "reference to this texture's own tensor representation "
-                    "(obtained through `Texture::tensor()`. Such an update "
+                    "(obtained through `Texture::tensor()`). Such an update "
                     "must be applied with the `Texture::update_inplace()` "
                     "method.");
             return;
@@ -466,14 +435,13 @@ public:
         // Only reconfigure tensors & hardware texture if the shape changed
         if (shape_differs(tensor))
             init(tensor.shape().data(), tensor.shape(Dimension),
-                 m_use_accel, m_filter_mode, m_wrap_mode,
-                 /* init_tensor = */ true, m_writable, nullptr, m_mip_filter,
-                 m_max_aniso, m_mip_basis);
+                 m_use_accel, m_filter_mode, m_wrap_mode, m_writable,
+                 nullptr, m_mip_filter, m_max_aniso, m_mip_basis);
 
         if constexpr (std::is_lvalue_reference_v<TensorT>)
-            set_value(tensor.array(), migrate);
+            set_value(tensor.array());
         else
-            set_value(std::move(tensor.array()), migrate);
+            set_value(std::move(tensor.array()));
     }
 
     /**
@@ -486,26 +454,21 @@ public:
      * short, this method will use the tensor representation to update the
      * texture's internal state.
      *
-     * When \c migrate is set to \c true on the CUDA and Metal backends, the
-     * texture information is migrated to GPU texture memory to avoid redundant
-     * storage.
+     * On the CUDA and Metal backends, the update migrates the texture data
+     * into the GPU's native texture format, which then holds the only copy.
      *
      * With \ref MipBasis::Laplacian, the per-level coefficient tensors (see
      * \ref tensor(size_t)) are the authoritative state instead, and this
      * method rebuilds the sampled pyramid from their current contents. An
      * optimization loop should write the coefficient tensors in place and call
-     * this method once per step. Migration is unavailable in that case and
-     * raises an exception.
+     * this method once per step.
      */
-    void update_inplace(bool migrate = false) {
+    void update_inplace() {
         if (m_mip_basis == MipBasis::Laplacian) {
             // The coefficient tensors are the authoritative state; rebuild
             // the sampled pyramid from their current (possibly externally
             // modified) contents.
-            if (migrate)
-                jit_raise("Texture::update_inplace(): migration is not "
-                          "supported in Laplacian mode.");
-            rebuild();
+            rebuild_pyramid();
             return;
         }
 
@@ -514,6 +477,14 @@ public:
         if (pub.ndim() != Dimension + 1)
             jit_raise("Texture::update_inplace(): tensor dimension must equal "
                       "texture dimension plus one (channels).");
+
+        if constexpr (is_jit_v<Storage_>) {
+            // Nothing to do: the public tensor still matches the storage array.
+            if (!m_hw_mutable &&
+                combined_index(m_tensor.array()) ==
+                    combined_index(m_padded_tensor.array()))
+                return;
+        }
 
         bool shape_changed = shape_differs(pub);
 
@@ -525,8 +496,12 @@ public:
             }
         }
 
-        // Keep the current contents across init(), which recreates the
-        // tensor members when the shape changed
+        // Move the shape and contents into locals: init() below replaces
+        // the tensor members, including the one that ``pub`` references
+        size_t shape[Dimension + 1];
+        for (size_t i = 0; i < Dimension + 1; ++i)
+            shape[i] = pub.shape(i);
+
         Storage data;
         if constexpr (is_jit_v<Storage_>)
             data = m_tensor.array();
@@ -534,11 +509,11 @@ public:
             data = std::move(m_padded_tensor.array());
 
         if (shape_changed)
-            init(pub.shape().data(), pub.shape(Dimension), m_use_accel,
-                 m_filter_mode, m_wrap_mode, /* init_tensor = */ true,
-                 m_writable, nullptr, m_mip_filter, m_max_aniso, m_mip_basis);
+            init(shape, shape[Dimension], m_use_accel, m_filter_mode,
+                 m_wrap_mode, m_writable, nullptr, m_mip_filter, m_max_aniso,
+                 m_mip_basis);
 
-        set_value(std::move(data), migrate);
+        set_value(std::move(data));
     }
 
     /// Return the texture data as an array object. See the remark in \ref tensor()
@@ -548,18 +523,18 @@ public:
      * \brief Return the texture data as a tensor object
      *
      * \remark
-     *    When the texture was migrated to the GPU, this function returns a
-     *    symbolic view that occupies no actual storage. Its evaluation will
-     *    query the migrated hardware texture. Changing the texture contents
-     *    via \ref set_tensor(), \ref write(), etc., will also change this
-     *    view, so be sure to evaluate beforehand.
+     *    When the texture data resides in GPU texture memory, this function
+     *    returns a symbolic view that occupies no actual storage. Its
+     *    evaluation will query the hardware texture. Changing the texture
+     *    contents via \ref set_tensor(), \ref write(), etc., will also change
+     *    this view, so be sure to evaluate beforehand.
      */
     const TensorXf &tensor() const {
         if constexpr (!is_jit_v<Storage_>) {
             // Scalar storage is always unpadded, and ``m_tensor`` is unused.
             return m_padded_tensor;
         } else {
-            refresh();
+            sync_views();
             return m_tensor;
         }
     }
@@ -567,9 +542,8 @@ public:
     /**
      * \brief Return the texture data as a tensor object
      *
-     * Although the returned object is not const, changes to it are only fully
-     * propagated to the Texture instance when a subsequent call to
-     * \ref update_inplace() is made.
+     * Changes to this tensor are only guaranteed to influence texture
+     * queries following a subsequent call to \ref update_inplace().
      */
     TensorXf &tensor() {
         return const_cast<TensorXf &>(
@@ -581,8 +555,10 @@ public:
      * basis only)
      *
      * The tensor uses the resolution of pyramid level \c level and the
-     * public (unpadded) channel count. Changes to it are only propagated to
-     * the texture by a subsequent call to \ref update_inplace().
+     * public (unpadded) channel count.
+     *
+     * Changes to this tensor are only guaranteed to influence texture
+     * queries following a subsequent call to \ref update_inplace().
      */
     const TensorXf &tensor(size_t level) const {
         check_level_access("tensor", level);
@@ -598,12 +574,13 @@ public:
      * \brief Overwrite the coefficient tensor of one pyramid level and
      * rebuild the sampled pyramid (Laplacian basis only)
      *
-     * The tensor shape must match the level; resolution changes go through
-     * the whole-image \ref set_tensor(). Passing ``rebuild = false`` only
-     * rebinds the coefficient tensor, which costs no computation; the
-     * sampled pyramid is then refreshed by a later call to \ref
-     * update_inplace(). An optimization loop should assign all levels this
-     * way and rebuild once per iteration.
+     * The tensor shape must match the level. To change texture resolution,
+     * use the whole-image assignment \ref set_tensor().
+     *
+     * Passing ``rebuild = false`` only updates the coefficient tensor
+     * without rebuilding the pyramid. This can then be done with a later
+     * call to \ref update_inplace(). An optimization loop should assign all
+     * levels this way and rebuild once per iteration.
      */
     template <typename TensorT>
     void set_tensor(size_t level, TensorT &&tensor, bool rebuild = true) {
@@ -618,12 +595,22 @@ public:
                           "whole-image set_tensor()).", level);
         m_levels[level] = std::forward<TensorT>(tensor);
         if (rebuild)
-            this->rebuild();
+            rebuild_pyramid();
     }
 
-    /// Overwrite the coefficients of one pyramid level with the provided
-    /// linearized 1D array (Laplacian basis only). See the tensor variant for
-    /// the meaning of ``rebuild``.
+    /**
+     * \brief Overwrite the coefficients of one pyramid level with a
+     * linearized 1D array and rebuild the sampled pyramid
+     * (Laplacian basis only)
+     *
+     * The tensor shape must match the level. To change texture resolution,
+     * use the whole-image assignment \ref set_tensor().
+     *
+     * Passing ``rebuild = false`` only updates the coefficients
+     * without rebuilding the pyramid. This can then be done with a later
+     * call to \ref update_inplace(). An optimization loop should assign all
+     * levels this way and rebuild once per iteration.
+     */
     template <typename StorageT>
     void set_value(size_t level, StorageT &&value, bool rebuild = true) {
         check_level_access("set_value", level);
@@ -632,7 +619,7 @@ public:
                       "(%zu vs %zu)!", value.size(), m_levels[level].size());
         m_levels[level].array() = std::forward<StorageT>(value);
         if (rebuild)
-            this->rebuild();
+            rebuild_pyramid();
     }
 
     /**
@@ -673,9 +660,9 @@ public:
      * This is an implementation detail, please use \ref eval() that may
      * dispatch to this function depending on its inputs.
      *
-     * If the texture was migrated to the native GPU format (see \c migrate in
-     * \c Texture constructors), this function evaluates the hardware texture
-     * by querying it at pixel centers and then interpolating manually.
+     * If the texture was migrated to the native GPU format, this function
+     * evaluates the hardware texture by querying it at pixel centers and
+     * then interpolating manually.
      */
     template <typename Output>
     Output eval_nonaccel(const position_for<Output> &pos,
@@ -716,7 +703,7 @@ public:
      *
      * The method is differentiable with respect to the query position and
      * texture data (including derivative propagation through the MIP pyramid
-     * construction) but not with respect to the \c lod argument
+     * construction) but not with respect to the \c lod argument.
      *
      * On a texture without a MIP pyramid, the lookup degrades to a regular
      * non-filtered \ref eval().
@@ -839,8 +826,9 @@ public:
      *
      * The store is a side effect and not differentiable. Backends providing a
      * hardware texture write into it, and such a texture is meant for display
-     * / external sampling rather than \ref eval(). Without one (LLVM, or
-     * double precision), the values are scattered into the backing storage.
+     * / external sampling rather than \ref eval(). Without one (LLVM,
+     * ``use_accel=false``, or double precision), the values are scattered
+     * into the backing storage.
      *
      * Reading the texture after writing to it (via \ref value(), \ref
      * tensor(), or the ``eval_*()`` methods) requires an intermediate
@@ -857,24 +845,31 @@ public:
                       "writable=true.");
 
         if constexpr (HasGPUTexture) {
-            uint32_t pos_idx[Dimension];
-            for (size_t i = 0; i < Dimension; ++i)
-                pos_idx[i] = pos[i].index();
+            if (m_use_accel) {
+                uint32_t pos_idx[Dimension];
+                for (size_t i = 0; i < Dimension; ++i)
+                    pos_idx[i] = pos[i].index();
 
-            uint64_t *val_idx = (uint64_t *) alloca(sizeof(uint64_t) * m_channels);
-            for (size_t ch = 0; ch < m_channels; ++ch)
-                val_idx[ch] = (uint64_t) value[ch].index();
+                uint64_t *val_idx = (uint64_t *) alloca(sizeof(uint64_t) * m_channels);
+                for (size_t ch = 0; ch < m_channels; ++ch)
+                    val_idx[ch] = (uint64_t) value[ch].index();
 
-            ad_tex_write((uint32_t) m_channels_storage, (uint32_t) m_channels,
-                         type_v<scalar_t<Storage_>>, (int) m_srgb, m_handle,
-                         pos_idx, val_idx, active.index());
-        } else {
-            // No hardware texture (LLVM, or double precision): scatter into the
-            // backing storage instead. Dropping the unpadded view beforehand
-            // lets the scatter update the buffer in place.
-            reset_tensor();
-            write_nonaccel(pos, value, active);
+                ad_tex_write((uint32_t) m_channels_storage, (uint32_t) m_channels,
+                             type_v<scalar_t<Storage_>>, (int) m_srgb, m_handle,
+                             pos_idx, val_idx, active.index());
+                return;
+            }
         }
+
+        // No hardware texture, scatter into the backing storage instead
+        Storage placeholder = empty<Storage>(unpadded_size());
+        if constexpr (IsDiff) {
+            resume_grad<Storage> guard;
+            placeholder = replace_grad(placeholder, m_tensor.array());
+        }
+        m_tensor.array() = std::move(placeholder);
+        write_nonaccel(pos, value, active);
+        install_unpadded_view();
     }
 
     /**
@@ -1204,8 +1199,7 @@ public:
 protected:
     void init(const size_t *shape, size_t channels, bool use_accel,
               FilterMode filter_mode, WrapMode wrap_mode,
-              bool init_tensor = true, bool writable = false,
-              void *external = nullptr,
+              bool writable = false, void *external = nullptr,
               MipFilter mip_filter = MipFilter::Disabled, size_t max_aniso = 8,
               MipBasis mip_basis = MipBasis::Standard) {
         if (channels == 0)
@@ -1252,7 +1246,6 @@ protected:
         }
 
         m_size = m_channels_storage;
-        size_t unpadded_size = m_channels;
         size_t tensor_shape[Dimension + 1]{};
         for (size_t i = 0; i < Dimension; ++i) {
             tensor_shape[i] = shape[i];
@@ -1260,7 +1253,6 @@ protected:
             m_resolution_opaque[Dimension - 1 - i] = opaque<UInt32>((uint32_t) shape[i]);
             m_inv_resolution[Dimension - 1 - i] = Divisor((int32_t) shape[i]);
             m_size *= shape[i];
-            unpadded_size *= shape[i];
         }
 
         // Only make the divisor opaque when it is actually used
@@ -1278,39 +1270,38 @@ protected:
 
         init_mip_table();
 
-        if (init_tensor) {
-            if constexpr (is_jit_v<Storage_>) {
-                m_padded_tensor =
-                    TensorXf(empty<Storage>(m_size), Dimension + 1, tensor_shape);
-                m_tensor =
-                    TensorXf(empty<Storage>(unpadded_size), Dimension + 1, m_shape);
+        if constexpr (is_jit_v<Storage_>) {
+            m_padded_tensor =
+                TensorXf(empty<Storage>(m_size), Dimension + 1, tensor_shape);
+            m_tensor =
+                TensorXf(empty<Storage>(unpadded_size()), Dimension + 1, m_shape);
+            install_unpadded_view();
 
-                // Zero-initialized coefficient tensors, one per pyramid level
-                m_levels.clear();
-                if (m_mip_basis == MipBasis::Laplacian) {
-                    for (uint32_t l = 0; l < m_level_count; ++l) {
-                        size_t level_shape[Dimension + 1], n = m_channels;
-                        for (size_t i = 0; i < Dimension; ++i) {
-                            size_t r = m_shape[i] >> l;
-                            level_shape[i] = r > 0 ? r : 1;
-                            n *= level_shape[i];
-                        }
-                        level_shape[Dimension] = m_channels;
-                        m_levels.push_back(TensorXf(zeros<Storage>(n),
-                                                    Dimension + 1, level_shape));
+            // Zero-initialized coefficient tensors, one per pyramid level
+            m_levels.clear();
+            if (m_mip_basis == MipBasis::Laplacian) {
+                for (uint32_t l = 0; l < m_level_count; ++l) {
+                    size_t level_shape[Dimension + 1], n = m_channels;
+                    for (size_t i = 0; i < Dimension; ++i) {
+                        size_t r = m_shape[i] >> l;
+                        level_shape[i] = r > 0 ? r : 1;
+                        n *= level_shape[i];
                     }
+                    level_shape[Dimension] = m_channels;
+                    m_levels.push_back(TensorXf(zeros<Storage>(n),
+                                                Dimension + 1, level_shape));
                 }
-            } else {
-                // Don't allocate memory in scalar modes
-                m_padded_tensor =
-                    TensorXf(Storage::map_(nullptr, m_size), Dimension + 1, tensor_shape);
-                m_tensor =
-                    TensorXf(Storage::map_(nullptr, unpadded_size), Dimension + 1, m_shape);
             }
+        } else {
+            // Don't allocate memory in scalar modes
+            m_padded_tensor =
+                TensorXf(Storage::map_(nullptr, m_size), Dimension + 1, tensor_shape);
+            m_tensor =
+                TensorXf(Storage::map_(nullptr, unpadded_size()), Dimension + 1, m_shape);
         }
 
         if constexpr (HasGPUTexture) {
-            if (m_use_accel && init_tensor) {
+            if (m_use_accel) {
                 if (m_handle)
                     jit_tex_destroy(m_handle);
 
@@ -1331,7 +1322,7 @@ protected:
                 m_hw_mutable = (m_writable || external_wrap) &&
                                !(IsCUDA && external_wrap && m_writable);
                 if (m_hw_mutable)
-                    install_views();
+                    install_readback_views();
             }
         }
     }
@@ -1346,7 +1337,7 @@ private:
         m_channels = other.m_channels;
         m_channels_storage = other.m_channels_storage;
         for (size_t i = 0; i < Dimension + 1; ++i)
-            m_shape[i] = std::move(other.m_shape[i]);
+            m_shape[i] = other.m_shape[i];
         m_padded_tensor = std::move(other.m_padded_tensor);
         m_tensor = std::move(other.m_tensor);
         m_resolution_opaque = std::move(other.m_resolution_opaque);
@@ -1357,9 +1348,7 @@ private:
         m_use_accel = other.m_use_accel;
         m_writable = other.m_writable;
         m_srgb = other.m_srgb;
-        m_migrated = other.m_migrated;
         m_hw_mutable = other.m_hw_mutable;
-        m_tensor_dirty = other.m_tensor_dirty;
         m_mip_filter = other.m_mip_filter;
         m_max_aniso = other.m_max_aniso;
         m_level_count = other.m_level_count;
@@ -1372,7 +1361,7 @@ private:
 
     /// Rebind the tensor members to fresh unevaluated readback expressions,
     /// carrying over their AD identity (see \ref readback_view()).
-    void install_views() const {
+    void install_readback_views() const {
         if constexpr (HasGPUTexture) {
             Storage view = readback_view(m_channels_storage);
             if constexpr (IsDiff)
@@ -1387,9 +1376,6 @@ private:
             } else {
                 m_tensor.array() = m_padded_tensor.array();
             }
-
-            // The freshly installed views are current
-            m_tensor_dirty = false;
         }
     }
 
@@ -1401,36 +1387,23 @@ private:
         return false;
     }
 
-    /// Drop the cached unpadded view and mark it for rebuild in refresh().
-    /// The placeholder releases the view's reference to the storage buffer,
-    /// letting write() update the buffer in place. The view's AD index is
-    /// carried over: it identifies the public tensor as a differentiable
-    /// variable across rebuilds. The carry-over runs under a resume scope
-    /// since it restores existing state rather than tracking a new operation.
-    void reset_tensor() {
-        Storage placeholder =
-            empty<Storage>(m_size / m_channels_storage * m_channels);
-        if constexpr (IsDiff) {
-            resume_grad<Storage> guard;
-            placeholder = replace_grad(placeholder, m_tensor.array());
-        }
-        m_tensor.array() = std::move(placeholder);
-        m_tensor_dirty = true;
-    }
+    /// Number of texels
+    size_t texel_count() const { return m_size / m_channels_storage; }
 
-    /// Recompute the public tensor from the padded storage, re-attaching
-    /// the AD identity of \ref m_tensor (see \ref set_value())
-    void update_tensor() const {
-        // Rebuilding the cached view restores existing state. The resume
-        // scope makes the result independent of any grad suspension active
-        // at the (arbitrary) time this deferred rebuild runs.
+    /// Element count of the unpadded tensor representation
+    size_t unpadded_size() const { return texel_count() * m_channels; }
+
+    /// Install an unevaluated unpadded view of the padded storage into the
+    /// public tensor, carrying over its AD identity (see \ref set_value())
+    void install_unpadded_view() const {
+        // Briefly reenter an AD-enabled gradient scope
         resume_grad<Storage> guard;
 
         if (m_channels == m_channels_storage) {
             m_tensor.array() = m_padded_tensor.array();
         } else {
             Storage u = steal_storage(ad_tex_repack(
-                value_index(), (uint32_t) (m_size / m_channels_storage),
+                value_index(), (uint32_t) texel_count(),
                 (uint32_t) m_channels, (uint32_t) m_channels_storage));
             if constexpr (IsDiff)
                 u = replace_grad(u, m_tensor.array());
@@ -1438,39 +1411,29 @@ private:
         }
     }
 
-    /// Bring the tensor members up to date before handing them out
-    void refresh() const {
+    /// Refresh the readback views of a hardware-mutable texture before
+    /// handing them out (other configurations keep them current at all times)
+    void sync_views() const {
         if constexpr (HasGPUTexture) {
             if (m_hw_mutable) {
-                // The hardware texture contents can change behind our back. A
-                // readback view that was already materialized pins the old
-                // contents, so swap in a fresh one. Unevaluated views need no
-                // refresh: they read the current contents once evaluated.
-                auto materialized = [](uint32_t index) {
+                // The hardware texture contents can change behind our back.
+                // An evaluated readback view would pin stale contents, so
+                // swap in a fresh one.
+                auto is_materialized = [](uint32_t index) {
                     VarState s = jit_var_state(index);
                     return s == VarState::Evaluated || s == VarState::Dirty;
                 };
 
-                if (materialized((uint32_t) m_padded_tensor.array().index()) ||
-                    materialized((uint32_t) m_tensor.array().index()))
-                    install_views();
-                return;
+                if (is_materialized((uint32_t) m_padded_tensor.array().index()) ||
+                    is_materialized((uint32_t) m_tensor.array().index()))
+                    install_readback_views();
             }
-        }
-
-        // Deferred unpadded update after a write() into the storage buffer
-        if (m_tensor_dirty) {
-            m_tensor_dirty = false;
-            update_tensor();
         }
     }
 
     /// Build an unevaluated expression that reads the texel data back from
-    /// GPU texture memory. Each texel is sampled at its center, which
-    /// reproduces the stored value exactly. The result interleaves
-    /// ``channels_out`` channels per texel in the row-major tensor layout
-    /// (``m_channels_storage`` yields the padded storage layout,
-    /// ``m_channels`` the public one).
+    /// GPU texture memory. The function reproduces the stored value exactly
+    /// by sampling each texel at its center.
     Storage readback_view(size_t channels_out) const {
         if constexpr (HasGPUTexture) {
             using Plain = detached_t<Storage>;
@@ -1478,7 +1441,7 @@ private:
                 type_v<scalar_t<Storage_>>, (uint32_t) Dimension,
                 (uint32_t) m_channels_storage, (uint32_t) channels_out,
                 (int) m_srgb, m_handle, resolution_indices().data(),
-                idiv_indices().data(), m_size / m_channels_storage)));
+                idiv_indices().data(), texel_count())));
         } else {
             (void) channels_out;
             return Storage();
@@ -1583,7 +1546,7 @@ private:
     /// Laplacian mode: run the differentiable synthesis that reconstructs the
     /// sampled pyramid from the coefficient tensors, refresh the tensor
     /// members, and upload the result to the hardware texture.
-    void rebuild() {
+    void rebuild_pyramid() {
         if constexpr (is_jit_v<Storage_>) {
             size_t res[Dimension];
             for (size_t i = 0; i < Dimension; ++i)
@@ -1611,12 +1574,12 @@ private:
 
             // The public tensor is attached through the (differentiable)
             // repacking of the synthesized base level rather than a stashed
-            // AD identity as in update_tensor()
+            // AD identity as in install_unpadded_view()
             if (m_channels == m_channels_storage)
                 m_tensor.array() = m_padded_tensor.array();
             else
                 m_tensor.array() = steal_storage(ad_tex_repack(
-                    value_index(), (uint32_t) (m_size / m_channels_storage),
+                    value_index(), (uint32_t) texel_count(),
                     (uint32_t) m_channels, (uint32_t) m_channels_storage));
         }
     }
@@ -1876,7 +1839,7 @@ private:
 
 private:
     void *m_handle = nullptr;
-    size_t m_size = 0;                       ///< Total size of array
+    size_t m_size = 0;                       ///< Element count of the padded storage
     size_t m_channels = 0;                   ///< Number of channels
 
     /// Rounded-up number of channels (depends on the backend)
@@ -1885,28 +1848,32 @@ private:
     /// Unpadded shape of texture
     size_t m_shape[Dimension + 1] = {};
 
-    /* Texel storage model: the interpretation of the data members below
-       depends on how the texture is configured:
+    /* Texel storage model
+       ===================
 
-       1. Buffer-backed (LLVM, ``use_accel=false``, or ``migrate=false``):
-          ``m_padded_tensor`` is the authoritative source of texture data and
-          evaluated. If a hardware texture is present, it merely stores a copy.
-          The primal part of ``m_tensor`` _may_ provide a symbolic unpadded view
-          of the padded data (created on demand by ``refresh()``). ``m_tensor``
-          also keeps track of the AD index associated with the texture's
-          public (unpadded) tensor.
+       The texture class can hold up to 3 different versions of a texture:
 
-       2. Migrated (``migrate=true``): the native GPU texture representation
-          becomes authoritative. Both ``m_tensor`` and ``m_padded_tensor`` hold
-          symbolic readback expressions (see ``readback_view()``).
+       - ``m_tensor``: the data assigned by the user. This is also the
+         main object receiving gradients in AD-enabled modes.
 
-       3. Writable or wrapped textures (``m_hw_mutable=true``): like (2), but
-          the hardware contents can also change behind our back. ``refresh()``
-          swaps out views that were already materialized and are therefore
-          pinned to old contents.
+       - ``m_padded_tensor``: texels with the channel count padded
+         to a power of two (required by the hardware).
 
-       In cases (2) and (3), a tensor returned by tensor() reflects the
-       texture contents at the time it is evaluated. */
+       - CUDA/Metal: a hardware-accelerated texture in its
+         native/proprietary representation.
+
+       Textures can be very large. To avoid tripling the memory requirements,
+       Dr.Jit generally ensures that only one of these three is authoritative.
+       In particular, once the texture has been uploaded to the device, it
+       installs symbolic readback views that reproduce the original
+       ``m_tensor`` and ``m_padded_tensor`` with a lossless texture lookup.
+       AD surgery via ``replace_grad()`` preserves the differentiable identity
+       of the variables during these steps.
+       From the outside, ``tensor()`` behaves as if nothing happened.
+
+       In the Laplacian MIP basis, the per-level coefficient tensors in
+       ``m_levels`` are authoritative instead, and the tensor members hold
+       buffers synthesized from them. */
 
     /// Public-facing tensor in the unpadded shape, returned by \ref tensor()
     mutable TensorXf m_tensor;
@@ -1935,17 +1902,10 @@ private:
     /// 8-bit textures: decode sRGB -> linear on sampling
     bool m_srgb = false;
 
-    /// Hardware-texture flag: is the data held exclusively on the device?
-    bool m_migrated = false;
-
     /// The hardware texture contents can change behind our back (the texture
     /// is writable or externally managed); the tensor members permanently
-    /// hold readback views that \ref refresh() keeps current
+    /// hold readback views that \ref sync_views() keeps current
     bool m_hw_mutable = false;
-
-    /// Set when \ref m_tensor is out of date following calls to
-    /// \ref set_value() or \ref write(). \ref refresh() rebuilds it
-    mutable bool m_tensor_dirty = false;
 
     /// MIP level selection mode of filtered lookups
     MipFilter m_mip_filter = MipFilter::Disabled;
@@ -1980,11 +1940,17 @@ public:
         if (cb.role != TraverseRole::Freeze)
             return;
 
+        // Refresh the readback views of a hardware-mutable texture so that
+        // the recording observes its current contents
+        sync_views();
+
         DRJIT_MAP(DR_TRAVERSE_MEMBER, m_padded_tensor, m_tensor,
                   m_resolution_opaque, m_inv_resolution, m_mip, m_mip_table,
                   m_levels);
 
         if constexpr (HasGPUTexture) {
+            if (!m_handle) // No hardware texture (use_accel=false)
+                return;
             uint32_t n_indices = tex_n_indices();
             uint32_t *indices = (uint32_t *) alloca(sizeof(uint32_t) * n_indices);
             jit_tex_get_indices(m_handle, indices);

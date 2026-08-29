@@ -186,11 +186,10 @@ def test04_interp_3d(t, wrap_mode, texture_type):
         assert(dr.allclose(result_no_accel, result_accel, 6e-3, 6e-3))
 
 
-@pytest.mark.parametrize("migrate", [True, False])
 @pytest.mark.parametrize("texture_type", ['Texture1f64', 'Texture1f', 'Texture1f16'])
 @pytest.test_arrays("is_diff, float32, shape=(*)")
 @pytest.skip_on(RuntimeError, "backend does not support the requested type of atomic reduction")
-def test05_grad(t, migrate, texture_type):
+def test05_grad(t, texture_type):
     _skip_metal_f64(t, texture_type)
     mod = sys.modules[t.__module__]
     Float = getattr(mod, 'Float')
@@ -202,7 +201,7 @@ def test05_grad(t, migrate, texture_type):
     tex = TexType([N], 1, True, dr.FilterMode.Linear, dr.WrapMode.Repeat)
     value = t(3, 5, 8)
     dr.enable_grad(value)
-    tex.set_value(value, migrate)
+    tex.set_value(value)
 
     pos = Array1f(1 / 6.0 * 0.25 + (1 / 6.0 + 1 / 3.0) * 0.75)
     expected = t(0.25 * 3 + 0.75 * 5)
@@ -393,7 +392,7 @@ def test10_cubic_interp_3d(t, texture_type):
     dr.scatter(tensor.array, StorageType(2.0),  UInt32(546)) # tensor[3, 3, 3, 0] = 2.0
     dr.scatter(tensor.array, StorageType(10.0), UInt32(727)) # tensor[4, 4, 3, 1] = 10.0
 
-    tex = TexType(tensor, True, False, dr.FilterMode.Linear, dr.WrapMode.Clamp)
+    tex = TexType(tensor, True, dr.FilterMode.Linear, dr.WrapMode.Clamp)
 
     ref = Array2f(0.71312, 1.86141)
     pos = Array3f(.49, .5, .5)
@@ -431,7 +430,7 @@ def test11_cubic_grad_pos(t, texture_type):
     dr.scatter(tensor.array, StorageType(3.0), UInt32(41))  # data[2, 2, 1] = 3.0
     dr.scatter(tensor.array, StorageType(4.0), UInt32(22))  # data[1, 1, 2] = 4.0
 
-    tex = TexType(tensor, True, False, dr.FilterMode.Linear, dr.WrapMode.Clamp)
+    tex = TexType(tensor, True, dr.FilterMode.Linear, dr.WrapMode.Clamp)
 
     pos = Array3f(.5, .5, .5)
     val_64, grad_64 = tex.eval_cubic_grad(pos)
@@ -475,7 +474,7 @@ def test12_cubic_hessian_pos(t, texture_type):
     # NOTE: Tensor has different index convention with Texture
     #       [2, 1, 1] is equivalent to (x=1, y=1, z=2) in the texture
 
-    tex = TexType(tensor, True, False, dr.FilterMode.Linear, dr.WrapMode.Clamp)
+    tex = TexType(tensor, True, dr.FilterMode.Linear, dr.WrapMode.Clamp)
 
     pos = Array3f(.5, .5, .5)
     val_64, grad_64 = tex.eval_cubic_grad(pos, True)
@@ -501,9 +500,8 @@ def test12_cubic_hessian_pos(t, texture_type):
 
 
 @pytest.mark.parametrize("texture_type", ['Texture1f64', 'Texture1f', 'Texture1f16'])
-@pytest.mark.parametrize("migrate", [True, False])
 @pytest.test_arrays("is_jit, float32, shape=(*)")
-def test15_tensor_value_1d(t, texture_type, migrate):
+def test15_tensor_value_1d(t, texture_type):
     _skip_metal_f64(t, texture_type)
     mod = sys.modules[t.__module__]
     TexType = getattr(mod, texture_type)
@@ -516,16 +514,15 @@ def test15_tensor_value_1d(t, texture_type, migrate):
 
         StorageType = dr.array_t(tex.value())
         tex_data = StorageType(rng.next_float32())
-        tex.set_value(tex_data, migrate=migrate)
+        tex.set_value(tex_data)
 
         assert dr.allclose(tex.value(), tex_data)
         assert dr.allclose(tex.tensor().array, tex_data)
 
 
 @pytest.mark.parametrize("texture_type", ['Texture2f64', 'Texture2f', 'Texture2f16'])
-@pytest.mark.parametrize("migrate", [True, False])
 @pytest.test_arrays("is_jit, float32, shape=(*)")
-def test16_tensor_value_2d(t, texture_type, migrate):
+def test16_tensor_value_2d(t, texture_type):
     _skip_metal_f64(t, texture_type)
     mod = sys.modules[t.__module__]
     TexType = getattr(mod, texture_type)
@@ -538,16 +535,15 @@ def test16_tensor_value_2d(t, texture_type, migrate):
 
         StorageType = dr.array_t(tex.value())
         tex_data = StorageType(rng.next_float32())
-        tex.set_value(tex_data, migrate=migrate)
+        tex.set_value(tex_data)
 
         assert dr.allclose(tex.value(), tex_data)
         assert dr.allclose(tex.tensor().array, tex_data)
 
 
 @pytest.mark.parametrize("texture_type", ['Texture3f64', 'Texture3f', 'Texture3f16'])
-@pytest.mark.parametrize("migrate", [True, False])
 @pytest.test_arrays("is_jit, float32, shape=(*)")
-def test17_tensor_value_3d(t, texture_type, migrate):
+def test17_tensor_value_3d(t, texture_type):
     _skip_metal_f64(t, texture_type)
     mod = sys.modules[t.__module__]
     TexType = getattr(mod, texture_type)
@@ -560,7 +556,7 @@ def test17_tensor_value_3d(t, texture_type, migrate):
 
         StorageType = dr.array_t(tex.value())
         tex_data = StorageType(rng.next_float32())
-        tex.set_value(tex_data, migrate=migrate)
+        tex.set_value(tex_data)
 
         assert dr.allclose(tex.value(), tex_data)
         assert dr.allclose(tex.tensor().array, tex_data)
@@ -685,25 +681,20 @@ def test20_fetch_3d(t, texture_type):
 
 
 @pytest.mark.parametrize("texture_type", ['Texture1f64', 'Texture1f', 'Texture1f16'])
-@pytest.mark.parametrize("migrate", [True, False])
 @pytest.test_arrays("is_jit, float32, shape=(*)")
-def test21_fetch_migrate(t, texture_type, migrate):
+def test21_fetch_migrate(t, texture_type):
     _skip_metal_f64(t, texture_type)
     mod = sys.modules[t.__module__]
     TexType = getattr(mod, texture_type)
     Array1f = getattr(mod, 'Array1f')
-    can_migrate = dr.backend_v(t) in (dr.JitBackend.CUDA, dr.JitBackend.Metal) \
-        and texture_type != "Texture1f64"
 
     N = 2
     tex = TexType([N], 1, True)
     tex_data = t(1.0, 2.0)
-    tex.set_value(tex_data, migrate)
-    assert tex.migrated() == (migrate and can_migrate)
+    tex.set_value(tex_data)
 
     pos = Array1f(0.5)
     out = tex.eval_fetch(pos)
-    assert tex.migrated() == (migrate and can_migrate)
 
     assert dr.allclose(out[0][0], 1.0)
     assert dr.allclose(out[1][0], 2.0)
@@ -814,29 +805,19 @@ def test24_set_tensor_ad(t, texture_type):
     dummy = TexType([2, 2], 1, True)
     TensorType = type(dummy.tensor())
 
-    # `set_tensor` (migrate=False) doesn't change index
-    tex = TexType([2, 2], 1, True)
-    new_tex_data = t(6.5, 6, 5.5, 5, 4.5, 4, 3.5, 3, 2.5, 2, 1.5, 1)
-    new_tensor = TensorType(new_tex_data, shape=(2, 3, 2))
-    dr.enable_grad(new_tensor)
-    new_tensor_index = new_tensor.array.index
-    tex.set_tensor(new_tensor, migrate=False)
-    tensor_after = tex.tensor()
-    assert tensor_after.array.index == new_tensor_index
-    assert tensor_after.array.index_ad > 0
-
-    # `set_tensor` (migrate=True) doesn't change AD index
+    # `set_tensor` doesn't change the AD index
     tex = TexType([2, 2], 1, True)
     new_tex_data = t(6.5, 6, 5.5, 5, 4.5, 4, 3.5, 3, 2.5, 2, 1.5, 1)
     new_tensor = TensorType(new_tex_data, shape=(2, 3, 2))
     dr.enable_grad(new_tensor)
     new_tensor_index_ad = new_tensor.array.index_ad
-    tex.set_tensor(new_tensor, migrate=True)
+    tex.set_tensor(new_tensor)
     tensor_after = tex.tensor()
     assert tensor_after.array.index_ad == new_tensor_index_ad
+    assert tensor_after.array.index_ad > 0
     assert dr.allclose(tensor_after, new_tensor)
 
-    # `set_tensor` (migrate=False) inplace doesn't change index
+    # `set_tensor` inplace doesn't change the AD index
     tex = TexType([2, 3], 2, True)
     new_tex_data = t(6.5, 6, 5.5, 5, 4.5, 4, 3.5, 3, 2.5, 2, 1.5, 1)
     new_tensor = TensorType(new_tex_data, shape=(2, 3, 2))
@@ -844,19 +825,7 @@ def test24_set_tensor_ad(t, texture_type):
     current_tensor = tex.tensor()
     dr.scatter(current_tensor.array, new_tensor.array, dr.arange(UInt32, 12))
     new_tensor_index_ad = current_tensor.array.index_ad
-    tex.update_inplace(migrate=False) # Signal update
-    assert tex.tensor().array.index_ad == new_tensor_index_ad
-    assert dr.allclose(tex.tensor(), new_tensor)
-
-    # `set_tensor` (migrate=True) inplace doesn't change index
-    tex = TexType([2, 3], 2, True)
-    new_tex_data = t(6.5, 6, 5.5, 5, 4.5, 4, 3.5, 3, 2.5, 2, 1.5, 1)
-    new_tensor = TensorType(new_tex_data, shape=(2, 3, 2))
-    dr.enable_grad(new_tensor)
-    current_tensor = tex.tensor()
-    dr.scatter(current_tensor.array, new_tensor.array, dr.arange(UInt32, 12))
-    new_tensor_index_ad = current_tensor.array.index_ad
-    tex.update_inplace(migrate=True) # Signal update
+    tex.update_inplace() # Signal update
     assert tex.tensor().array.index_ad == new_tensor_index_ad
     assert dr.allclose(tex.tensor(), new_tensor)
 
@@ -883,17 +852,14 @@ def test25_eval_ad_migrated(t, texture_type, init):
     tensor = TensorType(tex_data, shape=(2, 2, 1))
     dr.enable_grad(tensor)
     if init == 'constructor':
-        tex = TexType(tensor, use_accel=True, migrate=True)
+        tex = TexType(tensor, use_accel=True)
     elif init == 'set_tensor':
-        tex.set_tensor(tensor, migrate=True)
-    assert tex.migrated()
+        tex.set_tensor(tensor)
     pos = Array2f(0.5, 0)
     result = tex.eval(pos)
     dr.eval(result)
-    assert tex.migrated()
     dr.backward(result[0])
     dr.allclose(tensor.grad, [0.5, 0])
-    assert tex.migrated()
 
     # Differentiating the texture lookup position needs the primal texel data,
     # which the readback view provides without undoing the migration
@@ -901,16 +867,14 @@ def test25_eval_ad_migrated(t, texture_type, init):
     dr.enable_grad(pos)
     result = tex.eval(pos)
     dr.eval(result)
-    assert tex.migrated()
     dr.backward(result[0])
     assert dr.allclose(pos.grad, [2, 0])
 
 
 @pytest.mark.parametrize("texture_type", ['Texture1f64', 'Texture1f', 'Texture1f16'])
 @pytest.mark.parametrize("init", ['constructor', 'set_tensor'])
-@pytest.mark.parametrize("migrate", [True, False])
 @pytest.test_arrays("is_jit, float32, diff, shape=(*)")
-def test26_tensor_getter_does_not_drop_gradient_tracking(t, texture_type, init, migrate):
+def test26_tensor_getter_does_not_drop_gradient_tracking(t, texture_type, init):
     _skip_metal_f64(t, texture_type)
     # Regression test to insure that `Texture::tensor() doesn't accidentlly drop
     # gradient tracking on its internal members when called in a `suspend_grad`
@@ -925,15 +889,9 @@ def test26_tensor_getter_does_not_drop_gradient_tracking(t, texture_type, init, 
     tensor = TensorType(tex_data, shape=(1, 1))
     dr.enable_grad(tensor)
     if init == 'constructor':
-        tex = TexType(tensor, use_accel=True, migrate=migrate)
+        tex = TexType(tensor, use_accel=True)
     elif init == 'set_tensor':
-        tex.set_tensor(tensor, migrate=migrate)
-
-    if dr.backend_v(t) in (dr.JitBackend.CUDA, dr.JitBackend.Metal) \
-            and texture_type != "Texture1f64":
-        assert tex.migrated() == migrate
-    else:
-        assert tex.migrated() == False
+        tex.set_tensor(tensor)
 
     with dr.suspend_grad():
         tex.tensor() # Might mutate some internal state
@@ -1113,7 +1071,7 @@ def test32_from_native_handle(t, texture_type):
     H, W, C = 5, 7, 4
     data = mod.TensorXf(StorageType(PCG32(H * W * C).next_float32()),
                         shape=(H, W, C))
-    src = TexType(data, migrate=False)
+    src = TexType(data)
 
     h = src.native_handle()
     assert h != 0
@@ -1182,7 +1140,7 @@ def test33_uint8(t, channels, srgb):
             for i in range(H * W) for ch in range(channels)]
     data = mod.TensorXu8(UInt8(vals), shape=(H, W, channels))
 
-    tex = TexType(data, use_accel=True, migrate=False, srgb=srgb)
+    tex = TexType(data, use_accel=True, srgb=srgb)
     tex_soft = TexType(data, use_accel=False, srgb=srgb)
     tex_near = TexType(data, use_accel=False, srgb=srgb,
                        filter_mode=dr.FilterMode.Nearest)
@@ -1216,7 +1174,7 @@ def test34_uint8_eval_variants(t):
     vals = [(i * 29 + ch * 71) % 256
             for i in range(H * W) for ch in range(C)]
     data = mod.TensorXu8(UInt8(vals), shape=(H, W, C))
-    tex = TexType(data, use_accel=True, migrate=False)
+    tex = TexType(data, use_accel=True)
     tex_soft = TexType(data, use_accel=False)
     pos = Array2f([0.3, 0.6], [0.4, 0.7])
 
@@ -1259,7 +1217,7 @@ def test35_uint8_grad(t, use_accel):
     # Integer storage cannot be made differentiable
     assert not dr.grad_enabled(data.array)
 
-    tex = TexType(data, use_accel=use_accel, migrate=False)
+    tex = TexType(data, use_accel=use_accel)
     pos = Array2f(0.5, 0.5)
     dr.enable_grad(pos)
     out = tex.eval(pos)
@@ -1643,7 +1601,7 @@ def test44_mip_accel(t):
 
     vals = _test_grid(64, seed=5)
     tens = TensorXf(t(vals), shape=(8, 8, 1))
-    hw = TexType(tens, use_accel=True, migrate=False,
+    hw = TexType(tens, use_accel=True,
                  mip_filter=dr.MipFilter.Linear, max_aniso=4)
     sw = TexType(tens, use_accel=False,
                  mip_filter=dr.MipFilter.Linear, max_aniso=4)
@@ -1666,14 +1624,14 @@ def test44_mip_accel(t):
 
     # Fully migrated textures sample the pyramid from texture memory alone
     hw_m = TexType(TensorXf(t(vals), shape=(8, 8, 1)), use_accel=True,
-                   migrate=True, mip_filter=dr.MipFilter.Linear)
+                   mip_filter=dr.MipFilter.Linear)
     ref = (vals[0] + vals[1] + vals[8] + vals[9]) / 4  # level-1 texel (0, 0)
     assert dr.allclose(hw_m.eval_lod(Array2f(1 / 8, 1 / 8), 1.0)[0], ref,
                        rtol=3e-3, atol=3e-3)
 
     # AD: primal from the hardware, gradient from the arithmetic formulation
     dr.enable_grad(tens)
-    hw_ad = TexType(tens, use_accel=True, migrate=False,
+    hw_ad = TexType(tens, use_accel=True,
                     mip_filter=dr.MipFilter.Linear)
     out = hw_ad.eval_lod(Array2f(1 / 8, 1 / 8), 1.0)
     dr.backward(out[0])
@@ -1700,15 +1658,14 @@ def test45_migrated_tensor_semantics(t, texture_type):
     TensorType = type(tex.tensor())
 
     a = StorageType(1, 2, 3, 4)
-    tex.set_tensor(TensorType(a, shape=(2, 2, 1)), migrate=True)
-    assert tex.migrated()
+    tex.set_tensor(TensorType(a, shape=(2, 2, 1)))
     assert tex.tensor().array.state == dr.VarState.Unevaluated
 
     held = TensorType(tex.tensor())
     dr.eval(held)
 
     b = StorageType(5, 6, 7, 8)
-    tex.set_tensor(TensorType(b, shape=(2, 2, 1)), migrate=True)
+    tex.set_tensor(TensorType(b, shape=(2, 2, 1)))
     assert dr.all(held.array == a)
     assert dr.all(tex.tensor().array == b)
 
@@ -1785,7 +1742,7 @@ def test48_mip_accel_1d(t):
 
     vals = _test_grid(64, seed=8)
     tens = TensorXf(t(vals), shape=(64, 1))
-    hw = TexType(tens, use_accel=True, migrate=False,
+    hw = TexType(tens, use_accel=True,
                  mip_filter=dr.MipFilter.Linear, max_aniso=16)
     sw = TexType(tens, use_accel=False,
                  mip_filter=dr.MipFilter.Linear, max_aniso=16)
@@ -1813,7 +1770,7 @@ def test49_laplacian_roundtrip(t):
             for s in shape:
                 n *= s
             tens = TensorXf(t(_test_grid(n, seed=9)), shape=(*shape, channels))
-            tex = TexType(tens, use_accel=False, migrate=False,
+            tex = TexType(tens, use_accel=False,
                           mip_filter=dr.MipFilter.Linear,
                           mip_basis=dr.MipBasis.Laplacian)
             assert tex.mip_basis() == dr.MipBasis.Laplacian
@@ -1838,7 +1795,7 @@ def test50_laplacian_primal(t):
     tens = TensorXf(t(_test_grid(8 * 8 * 2, seed=10)), shape=(8, 8, 2))
     base = TexType(tens, use_accel=False, mip_filter=dr.MipFilter.Linear,
                    max_aniso=4)
-    lap = TexType(tens, use_accel=False, migrate=False,
+    lap = TexType(tens, use_accel=False,
                   mip_filter=dr.MipFilter.Linear, max_aniso=4,
                   mip_basis=dr.MipBasis.Laplacian)
 
@@ -1867,7 +1824,7 @@ def test51_laplacian_grad(t):
     Array2f = getattr(mod, 'Array2f')
 
     tens = TensorXf(t(_test_grid(64, seed=11)), shape=(8, 8, 1))
-    tex = TexType(tens, use_accel=False, migrate=False,
+    tex = TexType(tens, use_accel=False,
                   mip_filter=dr.MipFilter.Linear,
                   mip_basis=dr.MipBasis.Laplacian)
     n_levels = tex.mip_levels()
@@ -1912,19 +1869,15 @@ def test52_laplacian_validation(t):
                   mip_basis=lap)
 
     tens = TensorXf(t(_test_grid(16, seed=12)), shape=(4, 4, 1))
-    with pytest.raises(RuntimeError, match="migration is not supported"):
-        TexType(tens, mip_filter=dr.MipFilter.Linear, mip_basis=lap)
+    tex = TexType(tens, mip_filter=dr.MipFilter.Linear, mip_basis=lap)
+    tex.update_inplace()
 
-    tex = TexType(tens, migrate=False, mip_filter=dr.MipFilter.Linear,
-                  mip_basis=lap)
-    with pytest.raises(RuntimeError, match="migration is not supported"):
-        tex.update_inplace(migrate=True)
     with pytest.raises(RuntimeError, match="out of bounds"):
         tex.tensor(tex.mip_levels())
     with pytest.raises(RuntimeError, match="shape mismatch"):
         tex.set_tensor(0, TensorXf(dr.zeros(t, 4), shape=(2, 2, 1)))
 
-    base = TexType(tens, migrate=False, mip_filter=dr.MipFilter.Linear)
+    base = TexType(tens, mip_filter=dr.MipFilter.Linear)
     with pytest.raises(RuntimeError, match="Laplacian basis"):
         base.tensor(0)
 
@@ -1974,3 +1927,163 @@ def test53_laplacian_optimize(t):
         opt.step()
         losses.append(loss[0])
     assert losses[-1] < 0.05 * losses[0]
+
+
+@pytest.test_arrays("is_jit, float32, shape=(*)")
+@pytest.mark.parametrize("ch", [1, 3])  # ch=3 takes the channel-padded repack path
+@pytest.mark.parametrize("use_accel", [True, False])
+def test54_update_inplace_repeated(t, ch, use_accel):
+    # Repeated updates through a held tensor() reference: full overwrites, a
+    # partial scatter (which must combine with the previous contents), and
+    # reads through the held reference (which must show current contents).
+    # This exercises the invariant that the public tensor always evaluates
+    # to the texture contents, with and without hardware migration.
+    mod = sys.modules[t.__module__]
+    UInt32 = getattr(mod, 'UInt32')
+    Array2f = getattr(mod, 'Array2f')
+    TexType = getattr(mod, 'Texture2f')
+
+    tex = TexType([2, 2], ch, use_accel=use_accel)
+    held = tex.tensor()
+    n = 4 * ch
+    for v in (1.0, 2.0, 3.0):
+        dr.scatter(held.array, dr.full(t, v, n), dr.arange(UInt32, n))
+        tex.update_inplace()
+        assert dr.allclose(tex.eval(Array2f(0.5, 0.5)), v)
+
+    # The held reference reflects the current contents
+    assert dr.allclose(held.array, 3.0)
+
+    # A partial update combines with the current contents
+    dr.scatter(held.array, t(5.0), UInt32(0))
+    tex.update_inplace()
+    assert dr.allclose(tex.tensor().array, t([5.0] + [3.0] * (n - 1)))
+
+
+@pytest.test_arrays("is_jit, float32, shape=(*)")
+@pytest.mark.parametrize("ch", [1, 3])
+def test55_update_inplace_frozen(t, ch):
+    # A frozen function traverses the texture, and the traversal may replace
+    # variable indices. Updates through the tensor() reference must survive
+    # this, and reading the tensor back after a frozen call must yield the
+    # texture contents.
+    mod = sys.modules[t.__module__]
+    UInt32 = getattr(mod, 'UInt32')
+    Array2f = getattr(mod, 'Array2f')
+    TexType = getattr(mod, 'Texture2f')
+
+    @dr.freeze
+    def f(tex, pos):
+        return tex.eval(pos)
+
+    tex = TexType([2, 2], ch, use_accel=False)
+    held = tex.tensor()
+    pos = Array2f(0.5, 0.5)
+    n = 4 * ch
+    for v in (1.0, 2.0, 3.0):
+        dr.scatter(held.array, dr.full(t, v, n), dr.arange(UInt32, n))
+        tex.update_inplace()
+        assert dr.allclose(f(tex, pos)[0], v)
+        assert dr.allclose(tex.tensor().array, v)
+    assert f.n_recordings <= 2
+
+
+@pytest.test_arrays("is_jit, float32, shape=(*)")
+@pytest.mark.parametrize("ch", [1, 3])
+@pytest.mark.parametrize("use_accel", [True, False])
+def test56_update_inplace_untouched(t, ch, use_accel):
+    # update_inplace() on an untouched texture recognizes that the public
+    # tensor still aliases the storage (possible when the channel count
+    # needs no padding) and returns early; the padded case rebuilds. Both
+    # must preserve the contents and keep the update workflow functional.
+    mod = sys.modules[t.__module__]
+    UInt32 = getattr(mod, 'UInt32')
+    Array2f = getattr(mod, 'Array2f')
+    TexType = getattr(mod, 'Texture2f')
+
+    n = 4 * ch
+    tex = TexType([2, 2], ch, use_accel=use_accel)
+    tex.set_value(dr.full(t, 1.0, n))
+    tex.update_inplace()
+    tex.update_inplace()
+    assert dr.allclose(tex.eval(Array2f(0.5, 0.5)), 1.0)
+    assert dr.allclose(tex.tensor().array, 1.0)
+
+    # A subsequent modification through the tensor still applies
+    held = tex.tensor()
+    dr.scatter(held.array, dr.full(t, 2.0, n), dr.arange(UInt32, n))
+    tex.update_inplace()
+    assert dr.allclose(tex.eval(Array2f(0.5, 0.5)), 2.0)
+
+
+@pytest.test_arrays("is_jit, float32, shape=(*)")
+@pytest.mark.parametrize("ch", [1, 3])
+@pytest.mark.parametrize("use_accel", [True, False])
+def test57_update_inplace_resolution_change(t, ch, use_accel):
+    # Changing the texture resolution through the tensor representation, the
+    # way Mitsuba's SceneParameters do it: a whole-tensor assignment through
+    # a previously obtained tensor() reference (held[:] = ... maps to the
+    # C++ assignment operator), followed by update_inplace(). This used to
+    # fail with 'unexpected array size' (ch=1) and abort in replace_grad()
+    # (ch=3).
+    mod = sys.modules[t.__module__]
+    UInt32 = getattr(mod, 'UInt32')
+    Array2f = getattr(mod, 'Array2f')
+    TensorXf = getattr(mod, 'TensorXf')
+    TexType = getattr(mod, 'Texture2f')
+
+    tex = TexType([2, 2], ch, use_accel=use_accel)
+    held = tex.tensor()
+    dr.scatter(held.array, dr.full(t, 1.0, 4 * ch), dr.arange(UInt32, 4 * ch))
+    tex.update_inplace()
+    held[:] = TensorXf(dr.full(t, 2.0, 16 * ch), (4, 4, ch))
+    tex.update_inplace()
+    assert tex.shape == (4, 4, ch)
+    assert dr.allclose(tex.eval(Array2f(0.5, 0.5)), 2.0)
+    assert dr.allclose(tex.tensor().array, 2.0)
+
+
+@pytest.test_arrays("is_jit, float32, shape=(*)")
+def test58_write_no_accel(t):
+    # write() must take the buffer path when the texture was created with
+    # use_accel=False, also on GPU-capable backends (this used to
+    # dereference a null hardware-texture handle).
+    mod = sys.modules[t.__module__]
+    Array2u = getattr(mod, 'Array2u')
+    Array2f = getattr(mod, 'Array2f')
+    TexType = getattr(mod, 'Texture2f')
+
+    tex = TexType([2, 2], 1, use_accel=False, writable=True)
+    tex.set_value(dr.zeros(t, 4))
+    tex.write(Array2u(0, 0), [t(7.0)])
+    dr.eval()
+    assert dr.allclose(tex.eval(Array2f(0.25, 0.25)), 7.0)
+    assert dr.allclose(dr.sum(tex.tensor().array), 7.0)
+
+
+@pytest.test_arrays("is_jit, is_diff, float32, shape=(*)")
+@pytest.mark.parametrize("ch", [1, 3])
+@pytest.mark.parametrize("use_accel", [True, False])
+def test59_update_inplace_optimization(t, ch, use_accel):
+    # A gradient-based optimization step, the way Mitsuba performs it: assign
+    # a differentiable tensor wholesale through the tensor() reference, call
+    # update_inplace(), evaluate, and differentiate. The gradient must reach
+    # the assigned tensor on every iteration, with and without migration.
+    mod = sys.modules[t.__module__]
+    Array2f = getattr(mod, 'Array2f')
+    TensorXf = getattr(mod, 'TensorXf')
+    TexType = getattr(mod, 'Texture2f')
+
+    n = 4 * ch
+    tex = TexType([2, 2], ch, use_accel=use_accel)
+    held = tex.tensor()
+    for step in range(2):
+        theta = dr.full(t, 1.0 + step, n)
+        dr.enable_grad(theta)
+        held[:] = TensorXf(theta, (2, 2, ch))
+        tex.update_inplace()
+        out = tex.eval(Array2f(0.5, 0.5))
+        dr.backward(dr.sum(out))
+        # The lookup averages all four texels of each channel
+        assert dr.allclose(dr.grad(theta), 0.25)
+        assert dr.allclose(out, 1.0 + step)

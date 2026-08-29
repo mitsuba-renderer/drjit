@@ -226,25 +226,25 @@ void bind_texture(nb::module_ &m, const char *name) {
              "max_aniso"_a = 8,
              "mip_basis"_a = dr::MipBasis::Standard,
              doc_Texture_init)
-        .def(nb::init<const typename Tex::TensorXf &, bool, bool, dr::FilterMode,
+        .def(nb::init<const typename Tex::TensorXf &, bool, dr::FilterMode,
                       dr::WrapMode, bool, dr::MipFilter, size_t,
                       dr::MipBasis>(),
-             "tensor"_a, "use_accel"_a = true, "migrate"_a = true,
+             "tensor"_a, "use_accel"_a = true,
              "filter_mode"_a = dr::FilterMode::Linear,
              "wrap_mode"_a = dr::WrapMode::Clamp, "srgb"_a = false,
              "mip_filter"_a = dr::MipFilter::Disabled, "max_aniso"_a = 8,
              "mip_basis"_a = dr::MipBasis::Standard,
              doc_Texture_init_tensor)
         .def("set_value",
-             [](Tex &t, const typename Tex::Storage &value, bool migrate) {
-                 t.set_value(value, migrate);
+             [](Tex &t, const typename Tex::Storage &value) {
+                 t.set_value(value);
              },
-             "value"_a, "migrate"_a = false, doc_Texture_set_value)
+             "value"_a, doc_Texture_set_value)
         .def("set_tensor",
-             [](Tex &t, const typename Tex::TensorXf &tensor, bool migrate) {
-                 t.set_tensor(tensor, migrate);
+             [](Tex &t, const typename Tex::TensorXf &tensor) {
+                 t.set_tensor(tensor);
              },
-             "tensor"_a, "migrate"_a = false, doc_Texture_set_tensor)
+             "tensor"_a, doc_Texture_set_tensor)
         .def("set_tensor",
              [](Tex &t, size_t level, const typename Tex::TensorXf &tensor,
                 bool rebuild) {
@@ -252,7 +252,7 @@ void bind_texture(nb::module_ &m, const char *name) {
              },
              "level"_a, "tensor"_a, "rebuild"_a = true,
              doc_Texture_set_tensor_level)
-        .def("update_inplace", &Tex::update_inplace, "migrate"_a = false, doc_Texture_update_inplace)
+        .def("update_inplace", &Tex::update_inplace, doc_Texture_update_inplace)
         .def("value", &Tex::value, nb::rv_policy::reference_internal, doc_Texture_value)
         .def("tensor",
              nb::overload_cast<>(&Tex::tensor, nb::const_),
@@ -288,7 +288,6 @@ void bind_texture(nb::module_ &m, const char *name) {
         .def("unmap", &Tex::unmap, doc_Texture_unmap)
         .def("native_handle", &Tex::native_handle, "sub_index"_a = 0,
              doc_Texture_native_handle)
-        .def("migrated", &Tex::migrated, doc_Texture_migrated)
         .def_prop_ro("shape", [](const Tex &t) {
             nb::tuple_builder shape(t.ndim());
             for (size_t i = 0; i < t.ndim(); ++i)
@@ -320,11 +319,11 @@ void bind_texture(nb::module_ &m, const char *name) {
     if constexpr (dr::is_jit_v<typename Tex::Storage>)
         tex.def("set_value_with_event",
                 [](Tex &t, const typename Tex::Storage &value,
-                   Event<Tex::Backend> &event, bool migrate) {
-                    t.set_value(value, migrate);
+                   Event<Tex::Backend> &event) {
+                    t.set_value(value);
                     event.record();
                 },
-                "value"_a, "event"_a, "migrate"_a = false,
+                "value"_a, "event"_a,
                 doc_Texture_set_value_2);
 
     tex.attr("IsTexture") = true;

@@ -1312,8 +1312,11 @@ def test36_gather_packet(t, packet_size, force_optix):
     n = 240  # = lcm(1, 2, 3, 4, 5, 6, 12, 16)
 
     with dr.scoped_set_flag(dr.JitFlag.ForceOptiX, force_optix):
-        # Create source data, large enough for the largest packet size
+        # Create source data, large enough for the largest packet size. It
+        # must be evaluated, as gathers from unevaluated expressions are
+        # re-indexed instead of generating packet loads.
         source = dr.arange(t, n)
+        dr.eval(source)
 
         # Create indices for gathering - ensure they don't go out of bounds
         max_index = n // packet_size - 1

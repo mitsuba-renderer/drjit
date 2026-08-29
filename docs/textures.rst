@@ -141,13 +141,11 @@ these tensors by repeated upsampling and summation.
 
 .. code-block:: python
 
-   tex = Texture2f(tensor, migrate=False, mip_filter=dr.MipFilter.Linear,
+   tex = Texture2f(tensor, mip_filter=dr.MipFilter.Linear,
                    mip_basis=dr.MipBasis.Laplacian)
 
 This basis requires a MIP-mapped texture with floating-point storage on a JIT
-backend. The ``migrate=False`` argument is needed because the coefficient
-tensors must stay in ordinary memory (see :ref:`migration <texture_migration>`
-below).
+backend.
 
 The coefficients form a coarse-to-fine hierarchy. The coarsest level determines
 the overall appearance of the texture, and each finer level adds increasingly
@@ -224,24 +222,32 @@ around the underlying tensor representation, which remains accessible:
    tensor_data = tex.tensor() # Return the tensor backing this texture
    array_data = tex.value()   # Same, but in array form
 
-Hardware-accelerated Dr.Jit textures work differently: they *migrate* texture
-data into a CUDA texture object to avoid redundant storage. Methods such as
-:py:func:`.tensor() <drjit.cuda.Texture2f.tensor>` and :py:func:`.value()
-<drjit.cuda.Texture2f.value>` then return a symbolic view that occupies no
-actual storage. Evaluating the view fetches the texel data back from the
-hardware texture, and it reflects the texture contents at the time of that
-evaluation. Evaluate it before overwriting the texture when the current
-contents are needed.
+Hardware-accelerated Dr.Jit textures work differently: they *migrate* the
+texture data into a CUDA texture object. This
+avoids redundant storage and happens on every update, i.e., in the constructor
+and in :py:func:`.set_value() <drjit.cuda.Texture2f.set_value>`,
+:py:func:`.set_tensor() <drjit.cuda.Texture2f.set_tensor>`, and
+:py:func:`.update_inplace() <drjit.cuda.Texture2f.update_inplace>`.
 
-If you desire access to a hardware-accelerated texture *and* at the
-same time want the tensor representation to stay in ordinary memory,
-specify ``migrate=False`` to the texture constructor, i.e.,
+Methods such as :py:func:`.tensor() <drjit.cuda.Texture2f.tensor>` and
+:py:func:`.value() <drjit.cuda.Texture2f.value>` then return a symbolic view
+that occupies no actual storage. Evaluating the view fetches the texel data
+back from the hardware texture, and it reflects the texture contents at the
+time of that evaluation. Evaluate it before overwriting the texture when the
+current contents are needed.
 
 .. code-block:: python
 
-   tex = dr.cuda.Texture2f(tensor_data, use_accel=True, migrate=False)
+   tex = dr.cuda.Texture2f(tensor_data) # use_accel=True by default
 
-This, however, doubles the storage cost associated with the texture.
+   snapshot = TensorXf(tex.tensor()) # Copy of the symbolic view
+   dr.eval(snapshot)                 # Fetch the texel data from the texture
+
+   tex.set_value(new_data)           # 'snapshot' retains the old contents
+
+Specify ``use_accel=False`` if the tensor representation must stay in ordinary
+memory. Lookups then use the emulated implementation instead of the hardware
+texture units.
 
 Automatic differentiation
 ^^^^^^^^^^^^^^^^^^^^^^^^^

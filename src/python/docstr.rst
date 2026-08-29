@@ -7140,9 +7140,7 @@
     perform gradient-based optimization of textures with filtered texture
     lookups. See the section on the :ref:`Laplacian basis
     <texture_laplacian>` for additional detail. Laplacian mode requires a
-    MIP-mapped texture with floating-point storage on a JIT backend and does
-    not support migration (pass ``migrate=False`` when constructing from a
-    tensor).
+    MIP-mapped texture with floating-point storage on a JIT backend.
 
 .. topic:: Texture_init_tensor
 
@@ -7153,11 +7151,11 @@
     invokes :py:func:`set_tensor()` to fill the texture memory with the
     provided tensor.
 
-    When ``migrate`` is set to ``True`` (the default), Dr.Jit moves the
-    texture to the GPU backends to avoid redundant storage. Values like
-    :py:func:`tensor()` and :py:func:`value()` then produce a differentiable
-    symbolic view of the migrated memory. See the section on :ref:`migration
-    <texture_migration>` for details.
+    On the CUDA and Metal backends, Dr.Jit migrates the data to GPU texture
+    memory, which then holds the only copy. Values like :py:func:`tensor()`
+    and :py:func:`value()` produce a differentiable symbolic view of this
+    memory that occupies no storage of its own. See the section on
+    :ref:`migration <texture_migration>` for details.
 
     The ``use_accel``, ``filter_mode``, ``wrap_mode``, ``srgb``,
     ``mip_filter``, ``max_aniso``, and ``mip_basis`` parameters have the same
@@ -7169,13 +7167,12 @@
 
     Overwrite the texture contents with the provided linearized 1D array
 
-    When ``migrate`` is set, the CUDA and Metal backends migrate the texture
-    data into the GPU's native texture format to avoid redundant storage.
+    On the CUDA and Metal backends, the update migrates the texture data into
+    the GPU's native texture format, which then holds the only copy.
 
     With :py:attr:`drjit.MipBasis.Laplacian`, the array is first decomposed
     into per-level coefficients. A subsequent :py:func:`value()` then
-    reproduces it up to floating point rounding. Migration is unavailable in
-    that case and raises an exception.
+    reproduces it up to floating point rounding.
 
 .. topic:: Texture_set_value_2
 
@@ -7186,7 +7183,7 @@
 
     .. code-block:: python
 
-       texture.set_value(value, migrate)
+       texture.set_value(value)
        event.record()
 
     This combination is helpful for interactive workflows, where a producer
@@ -7203,15 +7200,13 @@
     overhead (new hardware texture objects must be created; on CUDA this also
     synchronizes the GPU pipeline).
 
-    When ``migrate`` is set to ``True`` on the CUDA and Metal backends, the
-    texture information is migrated to GPU texture memory to avoid
-    redundant storage.
+    On the CUDA and Metal backends, the update migrates the texture data into
+    the GPU's native texture format, which then holds the only copy.
 
     With :py:attr:`drjit.MipBasis.Laplacian`, the tensor is first decomposed
     into the per-level coefficient tensors, and the
     sampled pyramid is then rebuilt from them. A subsequent :py:func:`tensor()`
-    reproduces the input up to floating point rounding. Migration is
-    unavailable in that case and raises an exception.
+    reproduces the input up to floating point rounding.
 
 .. topic:: Texture_set_tensor_level
 
@@ -7238,16 +7233,17 @@
     short, this method will use the tensor representation to update the
     texture's internal state.
 
-    When ``migrate`` is set to ``True`` on the CUDA and Metal backends, the
-    texture information is migrated to GPU texture memory to avoid
-    redundant storage.
+    Previously obtained tensor representations remain valid and reflect the
+    updated contents afterwards (see the note in :py:func:`tensor()`).
+
+    On the CUDA and Metal backends, the update migrates the texture data into
+    the GPU's native texture format, which then holds the only copy.
 
     With :py:attr:`drjit.MipBasis.Laplacian`, the per-level coefficient
     tensors (see :py:func:`tensor()`) are the authoritative state instead, and
     this method rebuilds the sampled pyramid from their current contents. An
     optimization loop should write the coefficient tensors in place and call
-    this method once per step. Migration is unavailable in that case and
-    raises an exception.
+    this method once per step.
 
 .. topic:: Texture_value
 
@@ -7260,11 +7256,21 @@
 
     .. note::
 
-       When the texture was migrated to the GPU, this function returns a
-       symbolic view that occupies no actual storage. Its evaluation will
-       query the migrated hardware texture. Changing the texture contents via
+       When the texture data resides in GPU texture memory, this function
+       returns a symbolic view that occupies no actual storage. Its evaluation
+       will query the hardware texture. Changing the texture contents via
        :py:func:`set_tensor()`, :py:func:`write()`, etc., will also change
        this view, so be sure to evaluate beforehand.
+
+    .. note::
+
+       The returned object aliases the texture's internal tensor
+       representation, and changes to it are only fully propagated by a
+       subsequent call to :py:func:`update_inplace()`. The object stays
+       valid across updates and continues to reflect the texture contents:
+       each content update replaces it with a symbolic view of the new
+       storage. Both whole-tensor assignments and full or partial scatters
+       may therefore be applied through a previously obtained object.
 
 .. topic:: Texture_tensor_level
 
@@ -7290,11 +7296,6 @@
 .. topic:: Texture_use_accel
 
     Are hardware texture units used for evaluation?
-
-.. topic:: Texture_migrated
-
-    Is the texture data held exclusively in GPU texture memory? True after a
-    migration, and for writable/wrapped textures.
 
 .. topic:: Texture_shape
 
@@ -7325,7 +7326,7 @@
 
     The method is differentiable with respect to the query position and
     texture data (including derivative propagation through the MIP pyramid
-    construction) but not with respect to the \c lod argument
+    construction) but not with respect to the ``lod`` argument.
 
     On a texture without a MIP pyramid, the lookup degrades to a regular
     non-filtered :py:func:`eval()`.
@@ -7449,8 +7450,9 @@
 
     The store is a side effect and not differentiable. Backends providing a
     hardware texture write into it, and such a texture is meant for display /
-    external sampling rather than :py:func:`eval()`. Without one (LLVM, or
-    double precision), the values are scattered into the backing storage.
+    external sampling rather than :py:func:`eval()`. Without one (LLVM,
+    ``use_accel=False``, or double precision), the values are scattered into
+    the backing storage.
 
     Reading the texture after writing to it (via :py:func:`value()`,
     :py:func:`tensor()`, or the ``eval_*()`` methods) requires an intermediate
