@@ -6448,17 +6448,6 @@
     User code may query this flag to conditionally optimize kernels for frozen
     function recording, such as re-seeding the sampler, used for rendering.
 
-.. topic:: JitFlag_SpillToSharedMemory
-
-    Enable spilling of excess registers into shared memory.
-
-    This flag activates an optimization that stores registers in shared memory
-    when register pressure is high, reducing the need to spill to slower
-    local memory. This can improve performance by lowering memory latency on
-    register-intensive kernels. This flag only applies to the CUDA backend.
-
-    This flag is *enabled* by default.
-
 .. topic:: JitFlag_Default
 
     The default set of optimization flags consisting of

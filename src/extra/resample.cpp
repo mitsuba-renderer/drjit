@@ -608,7 +608,7 @@ void Resampler::resample(const Value *source, Value *target,
         for (uint32_t i = 0; i < outer_dim; ++i)
             callback(i, &task);
     } else {
-        task_submit_and_wait(nullptr, outer_dim, callback, &task);
+        task_submit_and_wait_exclusive(nullptr, outer_dim, callback, &task);
     }
 }
 

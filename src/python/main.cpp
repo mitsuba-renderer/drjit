@@ -122,7 +122,6 @@ NB_MODULE(_drjit_ext, m_) {
         .value("ShaderExecutionReordering", JitFlag::ShaderExecutionReordering, doc_JitFlag_ShaderExecutionReordering)
         .value("KernelFreezing", JitFlag::KernelFreezing, doc_JitFlag_KernelFreezing)
         .value("FreezingScope", JitFlag::FreezingScope, doc_JitFlag_FreezingScope)
-        .value("SpillToSharedMemory", JitFlag::SpillToSharedMemory, doc_JitFlag_SpillToSharedMemory)
         .value("Default", JitFlag::Default, doc_JitFlag_Default);
 
     nb::enum_<VarType>(m, "VarType", doc_VarType)
