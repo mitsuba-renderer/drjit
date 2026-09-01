@@ -364,10 +364,10 @@ def test06_select():
 
         assert dr.select(True, None, None) is None
         assert dr.select(l.Array1b(True), None, None) is None
-        class Dummy(int):
+        class Dummy:
             pass
         with pytest.raises(RuntimeError, match=r"encountered incompatible objects with an unknown type \(not a Dr.Jit array, not a PyTree\)."):
-            dr.select(l.Array2b(True, False), Dummy(1), Dummy(2))
+            dr.select(l.Array2b(True, False), Dummy(), Dummy())
 
 @pytest.test_arrays('type=float32,shape=(*)')
 def test07_power(t):
