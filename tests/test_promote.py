@@ -145,3 +145,27 @@ def test6_binop_promote_broadcast_and_convert(t):
     # Widening the result works in the same way
     x = Array3f(1, 2, 3) * Float64([2])
     assert type(x) is Array3f64 and dr.all(x == ref, axis=None)
+
+
+@pytest.test_arrays('uint32, shape=(*)')
+def test7_promote_index_convertible(t):
+    # Objects implementing __index__ (e.g. enums) promote like plain integers
+    import enum
+
+    class Mode(enum.IntEnum):
+        A = 3
+        B = 5
+
+    class Custom:
+        def __index__(self):
+            return 4
+
+    x = t(1, 2) + Mode.A
+    assert type(x) is t and dr.all(x == t(4, 5))
+
+    x = dr.select(t(1, 2) > 1, t(9), Custom())
+    assert type(x) is t and dr.all(x == t(4, 9))
+
+    # Same-typed scalars on both sides take the promotion path as well
+    x = dr.select(t(1, 2) > 1, Mode.B, Mode.A)
+    assert dr.all(x == t(3, 5))

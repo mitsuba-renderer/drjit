@@ -268,6 +268,9 @@ ArrayMeta meta_get(nb::handle h) noexcept {
     } else if (h.is_none() || nb::type_check(tp)) {
         m.type = (uint8_t) VarType::UInt32;
         m.is_class = true;
+    } else if (PyIndex_Check(h.ptr())) {
+        // Last resort for other int-convertible objects (e.g. enums)
+        m.type = (uint8_t) VarType::BaseInt;
     } else {
         m.is_valid = false;
     }

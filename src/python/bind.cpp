@@ -267,6 +267,9 @@ nb::object bind(const ArrayBinding &b) {
                 PyErr_Clear();
 
             return size == DRJIT_DYNAMIC || len == size;
+        } else if (PyIndex_Check(o) && !PyBool_Check(o)) {
+            // Int-convertible objects such as enums convert like integers
+            return (VarType) s.type != VarType::Bool;
         }
         return false;
     };
