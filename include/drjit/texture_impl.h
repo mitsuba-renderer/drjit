@@ -236,6 +236,18 @@ void tex_mipmap_from_base(const T *base, T *mip, const size_t *res_in,
     size_t res[3] = { 1, 1, 1 };
     for (uint32_t k = 0; k < dim; ++k)
         res[k] = res_in[k];
+    size_t n = res[0] * res[1] * res[2];
+
+    std::unique_ptr<Accum[]> lin;
+    if constexpr (IsUInt8) {
+        lin.reset(new Accum[n * channels]);
+        for (size_t i = 0; i < n * channels; ++i) {
+            Accum v = Accum(base[i]) * Accum(1.0 / 255.0);
+            if (srgb && (i % channels) % 4 != 3)
+                v = srgb_to_linear(v);
+            lin[i] = v;
+        }
+    }
 
     uint32_t n_corners = 1u << dim;
     const T *prev = base;
@@ -245,8 +257,10 @@ void tex_mipmap_from_base(const T *base, T *mip, const size_t *res_in,
         size_t prev_res[3] = { res[0], res[1], res[2] };
         for (int k = 0; k < 3; ++k)
             res[k] = res[k] > 1 ? res[k] >> 1 : 1;
-        size_t n = res[0] * res[1] * res[2];
+        n = res[0] * res[1] * res[2];
 
+        // In-place downsampling is safe: output texel 'o' only reads input
+        // texels at indices >= o, which have not been overwritten yet
         for (size_t o = 0; o < n; ++o) {
             size_t x = o % res[0], t = o / res[0],
                    y = t % res[1], z = t / res[1];
@@ -258,18 +272,15 @@ void tex_mipmap_from_base(const T *base, T *mip, const size_t *res_in,
                            sy = minimum(2 * y + ((corner >> 1) & 1), prev_res[1] - 1),
                            sz = minimum(2 * z + ((corner >> 2) & 1), prev_res[2] - 1),
                            idx = (sz * prev_res[1] + sy) * prev_res[0] + sx;
-
-                    Accum v = Accum(prev[idx * channels + ch]);
-                    if constexpr (IsUInt8) {
-                        v *= Accum(1.0 / 255.0);
-                        if (srgb && (ch % 4) != 3)
-                            v = srgb_to_linear(v);
-                    }
-                    acc += v;
+                    if constexpr (IsUInt8)
+                        acc += lin[idx * channels + ch];
+                    else
+                        acc += Accum(prev[idx * channels + ch]);
                 }
                 acc *= Accum(1) / Accum(n_corners);
 
                 if constexpr (IsUInt8) {
+                    lin[o * channels + ch] = acc;
                     acc = clip(acc, Accum(0), Accum(1));
                     if (srgb && (ch % 4) != 3)
                         acc = linear_to_srgb(acc);

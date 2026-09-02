@@ -550,20 +550,19 @@ static Float tex_upsample_bilinear(JitBackend backend, VarType accum_type,
  * When an input resolution is odd, the last tap along that axis is clamped
  * onto the boundary texel.
  *
- * The average is accumulated in ``accum_type``. If ``unorm8`` is set, the
- * texels are first decoded from their 8-bit normalized representation (and
- * from sRGB when ``srgb`` is set), and the result is re-encoded afterwards.
- * Every fourth channel holds alpha and bypasses the sRGB transfer function.
+ * The average is accumulated and returned in ``accum_type``. If ``unorm8``
+ * is set, the input texels are first decoded from their 8-bit normalized
+ * representation (and from sRGB when ``srgb`` is set). Every fourth channel
+ * holds alpha and bypasses the sRGB transfer function.
  *
  * The input ``prev`` holds ``stride`` interleaved channels at resolution
- * ``prev_res``. The return value is an unevaluated ``out_type`` expression
- * holding the ``res`` level in the same layout.
+ * ``prev_res``. The return value is an unevaluated expression holding the
+ * ``res`` level in the same layout.
  */
 static Float tex_downsample_box(JitBackend backend, VarType accum_type,
-                                VarType out_type, const Float &prev,
-                                const size_t *prev_res, const size_t *res,
-                                uint32_t dim, uint32_t stride, bool unorm8,
-                                bool srgb) {
+                                const Float &prev, const size_t *prev_res,
+                                const size_t *res, uint32_t dim,
+                                uint32_t stride, bool unorm8, bool srgb) {
     size_t n = res[0] * res[1] * res[2];
     uint32_t n_corners = 1u << dim;
     Mask all = Mask::steal(jit_var_bool(backend, true));
@@ -604,11 +603,28 @@ static Float tex_downsample_box(JitBackend backend, VarType accum_type,
         acc = acc + v;
     }
 
-    acc = acc * query_scalar(backend, accum_type, 1.0 / n_corners);
-    if (unorm8) {
+    return acc * query_scalar(backend, accum_type, 1.0 / n_corners);
+}
+
+/**
+ * Convert a pyramid level from ``accum_type`` to the storage representation
+ *
+ * For 8-bit storage, this clips the values to [0, 1], applies the sRGB
+ * transfer function to all channels except alpha when ``srgb`` is set, and
+ * rounds to the nearest code. ``n`` is the texel count of the level.
+ */
+static Float tex_encode_level(JitBackend backend, VarType accum_type,
+                              VarType storage_type, const Float &lin,
+                              size_t n, uint32_t stride, bool srgb) {
+    Float acc = lin;
+
+    if (storage_type == VarType::UInt8) {
         acc = dr::clip(acc, query_scalar(backend, accum_type, 0.0),
                        query_scalar(backend, accum_type, 1.0));
         if (srgb) {
+            U32 e = U32::steal(jit_var_counter(backend, n * stride)),
+                ch = e - (e / stride) * stride;
+            Mask is_alpha = (ch & 3u) == 3u;
             Float enc = Float::steal(
                 dr::linear_to_srgb(
                     TypedFloat<float>::borrow(acc.index_combined()))
@@ -619,7 +635,7 @@ static Float tex_downsample_box(JitBackend backend, VarType accum_type,
                         query_scalar(backend, accum_type, 0.5));
     }
 
-    return Float::steal(ad_var_cast(acc.index_combined(), out_type));
+    return Float::steal(ad_var_cast(acc.index_combined(), storage_type));
 }
 
 /// Fill ``lres`` with the ``n_levels`` per-level resolutions (3 entries per
@@ -671,9 +687,11 @@ uint64_t ad_tex_mipmap_from_base(uint32_t dim, uint32_t channels_stored, int srg
     for (uint32_t l = 1; l < n_levels; ++l) {
         uint32_t n = (uint32_t) (lres[3 * l] * lres[3 * l + 1] * lres[3 * l + 2]);
 
-        Float level = tex_downsample_box(backend, accum_type, storage_type,
-                                         prev, lres + 3 * (l - 1), lres + 3 * l,
-                                         dim, C, unorm8, srgb != 0);
+        Float lin = tex_downsample_box(backend, accum_type, prev,
+                                       lres + 3 * (l - 1), lres + 3 * l, dim,
+                                       C, unorm8 && l == 1, srgb != 0),
+              level = tex_encode_level(backend, accum_type, storage_type,
+                                       lin, n, C, srgb != 0);
 
         // Append the level to the pyramid buffer
         U32 dst = U32::steal(jit_var_counter(backend, (size_t) n * C)) +
@@ -684,11 +702,15 @@ uint64_t ad_tex_mipmap_from_base(uint32_t dim, uint32_t channels_stored, int srg
                                           all.index(), ReduceOp::Identity,
                                           ReduceMode::Permute));
 
-        // Materialize the level
+        // Materialize the level. 8-bit levels are chained through their
+        // linear-space copy, since re-quantizing them would compound the
+        // rounding error.
+        if (unorm8)
+            jit_var_schedule(lin.index());
         jit_var_eval(level.index());
 
         offset += n;
-        prev = level;
+        prev = unorm8 ? lin : level;
     }
 
     return mip.release();
@@ -775,7 +797,7 @@ void ad_tex_laplacian_from_base(uint32_t dim, uint32_t channels,
     g[0] = Float::steal(
         ad_var_cast((uint64_t) (uint32_t) value, accum_type));
     for (uint32_t l = 1; l < n_levels; ++l) {
-        g[l] = tex_downsample_box(backend, accum_type, accum_type, g[l - 1],
+        g[l] = tex_downsample_box(backend, accum_type, g[l - 1],
                                   lres + 3 * (l - 1), lres + 3 * l, dim, C,
                                   /* unorm8 = */ false, /* srgb = */ false);
         jit_var_eval(g[l].index());

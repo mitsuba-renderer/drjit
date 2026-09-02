@@ -1118,9 +1118,9 @@ def test32_from_native_handle(t, texture_type):
         TexType.from_native_handle(src.native_handle(), writable=True)
 
 
-def _srgb_to_linear(u):
-    x = u / 255.0
-    return x / 12.92 if x <= 0.04045 else ((x + 0.055) / 1.055) ** 2.4
+def _quantize_srgb8(t, x):
+    """Round linear values to the nearest 8-bit sRGB code and decode again"""
+    return dr.srgb_to_linear(dr.floor(dr.linear_to_srgb(t(x)) * 255 + 0.5) / 255)
 
 
 @pytest.mark.parametrize("srgb", [False, True])
@@ -1150,7 +1150,7 @@ def test33_uint8(t, channels, srgb):
     # sRGB decoding (like the hardware) skips each RGBA group's alpha channel.
     out0 = tex_near.eval(Array2f(0.5 / W, 0.5 / H))
     for ch in range(channels):
-        ref = (_srgb_to_linear(vals[ch]) if srgb and ch % 4 != 3
+        ref = (dr.srgb_to_linear(vals[ch] / 255.0) if srgb and ch % 4 != 3
                else vals[ch] / 255.0)
         assert dr.allclose(out0[ch], ref, 1e-3, 1e-3)
 
@@ -1512,17 +1512,28 @@ def test41_mip_uint8(t):
     tex = TexType(data, use_accel=False, srgb=True,
                   mip_filter=dr.MipFilter.Linear)
 
-    def linear_to_srgb(x):
-        return x * 12.92 if x <= 0.0031308 else 1.055 * x ** (1 / 2.4) - 0.055
-
-    lin = [_srgb_to_linear(v) for v in vals]
+    lin = list(dr.srgb_to_linear(t(vals) / 255))
     l1, _, _ = _box_downsample(lin, 4, 4)
-    ref = [_srgb_to_linear(round(linear_to_srgb(v) * 255)) for v in l1]
+    ref = _quantize_srgb8(t, l1)
 
     for y in range(2):
         for x in range(2):
             got = tex.eval_lod(Array2f((x + 0.5) / 2, (y + 0.5) / 2), 1.0)[0]
             assert dr.allclose(got, ref[y * 2 + x], atol=2e-3)
+
+    # Every level is quantized once from a linear-space pyramid
+    n = 32
+    vals = [(i * 7919 + 13) % 40 + 60 for i in range(n * n)]
+    data = mod.TensorXu8(UInt8(vals), shape=(n, n, 1))
+    tex = TexType(data, use_accel=False, srgb=True,
+                  mip_filter=dr.MipFilter.Nearest)
+    lin, w, h = list(dr.srgb_to_linear(t(vals) / 255)), n, n
+    for level in range(1, 6):
+        lin, w, h = _box_downsample(lin, w, h)
+        xs = t([(i % w + 0.5) / w for i in range(w * h)])
+        ys = t([(i // w + 0.5) / h for i in range(w * h)])
+        got = tex.eval_lod(Array2f(xs, ys), float(level))[0]
+        assert dr.allclose(got, _quantize_srgb8(t, lin), atol=1e-5)
 
     # Four-channel variant: the alpha channel averages without the sRGB
     # transfer function
@@ -1536,8 +1547,8 @@ def test41_mip_uint8(t):
         if ch == 3:
             ref_ch = int(sum(chan) / 4 + 0.5) / 255
         else:
-            m = sum(_srgb_to_linear(v) for v in chan) / 4
-            ref_ch = _srgb_to_linear(int(linear_to_srgb(m) * 255 + 0.5))
+            m = dr.mean(dr.srgb_to_linear(t(chan) / 255))
+            ref_ch = _quantize_srgb8(t, m)
         assert dr.allclose(got[ch], ref_ch, atol=2e-3)
 
 
