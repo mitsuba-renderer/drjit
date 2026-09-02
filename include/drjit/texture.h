@@ -1944,9 +1944,20 @@ public:
         // the recording observes its current contents
         sync_views();
 
-        DRJIT_MAP(DR_TRAVERSE_MEMBER, m_padded_tensor, m_tensor,
-                  m_resolution_opaque, m_inv_resolution, m_mip, m_mip_table,
-                  m_levels);
+        // Only traverse symbolic readback expression if they carry gradients
+        bool traverse_tensors = true;
+        if constexpr (HasGPUTexture && IsDiff)
+            traverse_tensors = !m_handle || grad_enabled(m_tensor.array()) ||
+                               grad_enabled(m_padded_tensor.array());
+        else if constexpr (HasGPUTexture)
+            traverse_tensors = !m_handle;
+
+        if (traverse_tensors) {
+            DRJIT_MAP(DR_TRAVERSE_MEMBER, m_padded_tensor, m_tensor);
+        }
+
+        DRJIT_MAP(DR_TRAVERSE_MEMBER, m_resolution_opaque, m_inv_resolution,
+                  m_mip, m_mip_table, m_levels);
 
         if constexpr (HasGPUTexture) {
             if (!m_handle) // No hardware texture (use_accel=false)
