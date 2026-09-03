@@ -475,12 +475,18 @@ template <typename Ops> struct TexMipSample {
     /// ``2 * channels_out`` values.
     void eval(const typename Ops::Float *pos, typename Ops::Float *out,
               typename Ops::Float *scratch) const {
+        eval(pos, frac, out, scratch);
+    }
+
+    /// Variant of \ref eval() with an explicit level blend weight
+    void eval(const typename Ops::Float *pos, const typename Ops::Float &frac_,
+              typename Ops::Float *out, typename Ops::Float *scratch) const {
         uint32_t ch = o0.channels_out;
         tex_eval(o0, pos, out, scratch + ch);
         if (linear) {
             tex_eval(o1, pos, scratch, scratch + ch);
             for (uint32_t c = 0; c < ch; ++c)
-                out[c] = fmadd(scratch[c] - out[c], frac, out[c]);
+                out[c] = fmadd(scratch[c] - out[c], frac_, out[c]);
         }
     }
 };
@@ -572,32 +578,41 @@ void tex_eval_filtered(const Ops &ops, const typename Ops::Float *pos,
     }
     Float scale = p_max * rcp(maximum(sqrt(vnorm2), ops.lit(1e-30)));
 
-    Float pos_v[MaxDim], step_uv[MaxDim], inv_n = rcp(n_f);
-    for (uint32_t k = 0; k < dim; ++k) {
-        pos_v[k] = pos[k];
-        step_uv[k] = fmadd(ca, ddx[k], cb * ddy[k]) * scale;
-    }
+    // Loop state: running sums, then the per-lookup constants read by each
+    // tap. This is needed to support derivatives wrt. the query position.
+    uint32_t n_const = 2 * dim + 2, n_state = ch + n_const;
+    Float *state_mem = (Float *) alloca(sizeof(Float) * n_state);
+    tex_scratch<Float> state(state_mem, n_state);
+    Float inv_n = rcp(n_f);
 
     for (uint32_t c = 0; c < ch; ++c)
-        out[c] = ops.lit(0.0);
+        state[c] = ops.lit(0.0);
+    for (uint32_t k = 0; k < dim; ++k) {
+        state[ch + k] = pos[k];
+        state[ch + dim + k] = fmadd(ca, ddx[k], cb * ddy[k]) * scale;
+    }
+    state[ch + 2 * dim] = inv_n;
+    state[ch + 2 * dim + 1] = sample.linear ? sample.frac : ops.lit(0.0);
 
     Int n = select(ops.active, floor2int<Int>(n_f), ops.lit_i(0));
-    ops.sum_loop(n, out, ch, 3 * ch,
-        [ops, sample, pos_v, step_uv, inv_n, dim, ch]
+    ops.sum_loop(n, state.data(), n_state, 3 * ch,
+        [ops, sample, dim, ch]
         (const Int &i, const Mask &m, Float *state, Float *scratch) {
+            const Float *pos_v = state + ch, *step_uv = pos_v + dim,
+                        &inv_n = step_uv[dim], &frac = step_uv[dim + 1];
             Float t = fmadd(ops.to_float(i) + ops.lit(0.5), inv_n, ops.lit(-0.5));
             Float p[MaxDim];
             for (uint32_t k = 0; k < dim; ++k)
                 p[k] = fmadd(step_uv[k], t, pos_v[k]);
 
             Float *tap = scratch + 2 * ch;
-            sample.eval(p, tap, scratch);
+            sample.eval(p, frac, tap, scratch);
             for (uint32_t c = 0; c < ch; ++c)
                 state[c] = state[c] + select(m, tap[c], ops.lit(0.0));
         });
 
     for (uint32_t c = 0; c < ch; ++c)
-        out[c] = out[c] * inv_n;
+        out[c] = state[c] * inv_n;
 }
 
 /// Cubic B-spline interpolation by direct evaluation of the basis functions.

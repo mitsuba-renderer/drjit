@@ -2098,3 +2098,48 @@ def test59_update_inplace_optimization(t, ch, use_accel):
         # The lookup averages all four texels of each channel
         assert dr.allclose(dr.grad(theta), 0.25)
         assert dr.allclose(out, 1.0 + step)
+
+
+@pytest.mark.parametrize('ad', ['fwd', 'bwd'])
+@pytest.test_arrays("is_diff, float32, shape=(*)")
+def test60_mip_filtered_grad_in_call(t, ad):
+    # The anisotropic tap loop of eval_filtered() reads the query position and
+    # footprint of the enclosing lookup. When the lookup runs inside a symbolic
+    # call, these are variables of the call rather than evaluated arrays, and
+    # derivatives must still match those of a direct lookup.
+    mod = sys.modules[t.__module__]
+    TexType = getattr(mod, 'Texture2f')
+    TensorXf = getattr(mod, 'TensorXf')
+    Array2f = getattr(mod, 'Array2f')
+    UInt32 = getattr(mod, 'UInt32')
+
+    tens = TensorXf(t(_test_grid(64, seed=3)), shape=(8, 8, 1))
+    dr.enable_grad(tens)
+    tex = TexType(tens, use_accel=False, mip_filter=dr.MipFilter.Linear,
+                  max_aniso=4)
+    ddx, ddy = Array2f(0.25, 0), Array2f(0, 1 / 8)
+
+    def lookup(p):
+        return tex.eval_filtered(p, ddx, ddy)[0]
+
+    p = Array2f(0.3, 0.4)
+    dr.enable_grad(p)
+    out = lookup(p)
+    if ad == 'fwd':
+        dr.forward_from(p.x)
+        ref = dr.grad(out)
+    else:
+        dr.backward(out)
+        ref, ref_tens = dr.grad(p), dr.grad(tens).array
+        dr.clear_grad(tens)
+
+    p = Array2f(0.3, 0.4)
+    dr.enable_grad(p)
+    out = dr.switch(UInt32(0), [lookup], p, mode='symbolic')
+    if ad == 'fwd':
+        dr.forward_from(p.x)
+        assert dr.allclose(dr.grad(out), ref)
+    else:
+        dr.backward(out)
+        assert dr.allclose(dr.grad(p), ref)
+        assert dr.allclose(dr.grad(tens).array, ref_tens)
