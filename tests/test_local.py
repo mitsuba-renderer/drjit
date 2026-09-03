@@ -309,3 +309,47 @@ def test16_local_in_call(t):
     x = t(1, 2, 3, 4)
     r = dr.switch(UInt32(0, 1, 0, 1), [f0, f1], x, mode='symbolic')
     assert dr.all(r == [3, 1110, 9, 1118])
+
+
+@pytest.test_arrays('jit,uint32,shape=(*)')
+@pytest.mark.parametrize('symbolic', [True, False])
+@dr.syntax
+def test17_loop_carried_index_from_literal(t, symbolic):
+    # The stack pointer starts out as a literal and stays size 1 within the
+    # symbolic loop, yet its lanes diverge after the first iteration. The
+    # backend must not treat it as a uniform index. Every lane runs a push/pop
+    # sequence given by the bits of 'pattern' and sums the values it pops.
+    Bool = dr.mask_t(t)
+    seed = dr.arange(t, 8)
+    pattern = seed & 3
+
+    with dr.scoped_set_flag(dr.JitFlag.SymbolicLoops, symbolic):
+        stack = dr.alloc_local(t, 8, value=t(0))
+        sp, step, total = t(0), t(0), t(0)
+        while step < 4:
+            top = stack[dr.select(sp > 0, sp - 1, t(0))]
+            push = (((pattern >> step) & 1) == 1) | (sp == 0)
+            total = dr.select(push, total, total + top)
+            stack[sp] = step * 7 + seed
+            sp = dr.select(push, sp + 1, sp - 1)
+            step += 1
+
+    assert dr.all(total == [14, 16, 11, 13, 22, 24, 19, 21])
+
+
+@pytest.test_arrays('jit,uint32,shape=(*)')
+def test18_loop_carried_index_in_call(t):
+    # Same as test17, but inside a symbolic call where all variables have size 1
+    @dr.syntax
+    def f(n):
+        tp = type(n)
+        local = dr.alloc_local(tp, 8, value=tp(0))
+        i = tp(0)
+        while i < n:
+            local[i] = i + 100
+            i += 1
+        return local[dr.select(n > 0, n - 1, tp(0))]
+
+    n = t(1, 2, 3, 4, 1, 2, 3, 4)
+    r = dr.switch(t(0), [f], n, mode='symbolic')
+    assert dr.all(r == n + 99)
