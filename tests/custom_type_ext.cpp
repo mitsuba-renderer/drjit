@@ -67,13 +67,13 @@ template <typename Value>
 class PyCustomBase : public CustomBase<Value>{
 public:
     using Base = CustomBase<Value>;
-    NB_TRAMPOLINE(Base, 1);
+    NB_TRAMPOLINE(Base);
 
     PyCustomBase(const Value &base_value) : Base(base_value) {}
 
     Value &value() override { NB_OVERRIDE_PURE(value); }
 
-    DR_TRAMPOLINE_TRAVERSE_CB(Base);
+    DR_TRAVERSE_CB(Base)
 };
 
 template <typename Value>
@@ -92,7 +92,7 @@ private:
 };
 
 template<typename Value>
-class Nested: Object{
+class Nested : public Object {
     using Base = Object;
 
     std::vector<std::pair<nb::ref<Object>, size_t>> m_nested;
@@ -102,6 +102,8 @@ public:
         m_nested.push_back(std::make_pair(a, 0));
         m_nested.push_back(std::make_pair(b, 1));
     }
+
+    nb::ref<Object> child(size_t i) const { return m_nested.at(i).first; }
 
     DR_TRAVERSE_CB(Base, m_nested);
 };
@@ -120,7 +122,8 @@ template <JitBackend Backend> void bind(nb::module_ &m) {
             [](Color3f &c, Float &value) { c.g() = value; })
         .def_prop_rw("b",
             [](Color3f &c) -> Float & { return c.b(); },
-            [](Color3f &c, Float &value) { c.b() = value; });
+            [](Color3f &c, Float &value) { c.b() = value; })
+        .freeze();
 
     using CustomFloatHolder = CustomHolder<Float>;
     nb::class_<CustomFloatHolder>(m, "CustomFloatHolder")
@@ -132,7 +135,7 @@ template <JitBackend Backend> void bind(nb::module_ &m) {
     using CustomA      = CustomA<Float>;
     using Nested       = Nested<Float>;
 
-    auto object = nb::class_<Object>(
+    auto object = nb::class_<Object, drjit::TraversableBase>(
         m, "Object",
         nb::intrusive_ptr<Object>(
             [](Object *o, PyObject *po) noexcept { o->set_self_py(po); }));
@@ -150,10 +153,18 @@ template <JitBackend Backend> void bind(nb::module_ &m) {
 
     drjit::bind_traverse(a);
 
-    auto nested = nb::class_<Nested>(m, "Nested")
-                      .def(nb::init<nb::ref<Object>, nb::ref<Object>>());
+    auto nested = nb::class_<Nested, Object>(m, "Nested")
+                      .def(nb::init<nb::ref<Object>, nb::ref<Object>>())
+                      .def("child", &Nested::child);
 
     drjit::bind_traverse(nested);
+
+    // Creates the children on the C++ side so that they have no Python
+    // counterpart until they are accessed from Python
+    m.def("make_nested", [](const Float &value, const Float &base_value) {
+        return nb::ref<Nested>(new Nested(new CustomA(value, base_value),
+                                          new CustomA(value + 1, base_value + 1)));
+    });
 
     m.def("cpp_make_opaque",
           [](CustomFloatHolder &holder) { dr::make_opaque(holder); }

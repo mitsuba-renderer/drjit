@@ -504,6 +504,39 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT {
 
     DRJIT_IMPLEMENT_BINARY(minimum, minimum(a, b), IsArithmetic)
     DRJIT_IMPLEMENT_BINARY(maximum, maximum(a, b), IsArithmetic)
+    DRJIT_IMPLEMENT_BINARY(fmin, fmin(a, b), IsFloat)
+    DRJIT_IMPLEMENT_BINARY(fmax, fmax(a, b), IsFloat)
+
+    Derived copysign_(const Derived &v) const {
+        DRJIT_CHKSCALAR("copysign_");
+
+        if constexpr (!IsArithmetic) {
+            drjit_fail("copysign_(): invalid operand type!");
+        } else if constexpr (IsJIT) {
+            // Recurse so that the leaves turn into dedicated 'copysign' IR nodes
+            size_t sa = derived().size(), sb = v.size(),
+                   sr = sa > sb ? sa : sb;
+
+            Derived result;
+            if constexpr (Derived::Size == Dynamic) {
+                if ((sa != sr && sa != 1) || (sb != sr && sb != 1))
+                    drjit_raise("copysign_() : incompatible input sizes "
+                                "(%zu and %zu)", sa, sb);
+                result = drjit::empty<Derived>(sr);
+            }
+
+            for (size_t i = 0; i < sr; ++i)
+                result.set_entry(i, copysign(derived().entry(i), v.entry(i)));
+
+            return result;
+        } else if constexpr (IsFloat) {
+            return detail::or_(abs(derived()),
+                               detail::and_(detail::sign_mask<Derived>(), v));
+        } else {
+            Derived a = abs(derived());
+            return select(v < Value(0), -a, a);
+        }
+    }
 
     DRJIT_IMPLEMENT_UNARY(rcp, rcp(a), IsFloat)
     DRJIT_IMPLEMENT_UNARY(rsqrt, rsqrt(a), IsFloat)
@@ -705,7 +738,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT {
 
             Value value = derived().entry(0);
             for (size_t i = 1; i < derived().size(); ++i)
-                value = minimum(value, derived().entry(i));
+                value = drjit::fmin(value, derived().entry(i));
             return value;
         } else {
             drjit_fail("min_(): invalid operand type!");
@@ -721,7 +754,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT {
 
             Value value = derived().entry(0);
             for (size_t i = 1; i < derived().size(); ++i)
-                value = maximum(value, derived().entry(i));
+                value = drjit::fmax(value, derived().entry(i));
             return value;
         } else {
             drjit_fail("max_(): invalid operand type!");

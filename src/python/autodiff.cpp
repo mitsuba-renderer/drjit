@@ -65,7 +65,7 @@ static void set_grad_enabled(nb::handle h, bool enable_) {
     };
 
     SetGradEnabled sge(enable_);
-    traverse("drjit.set_grad_enabled", sge, h);
+    traverse("drjit.set_grad_enabled", sge, h, dr::TraverseRole::Gradient);
 }
 
 static nb::object new_grad(nb::handle h) {
@@ -90,7 +90,7 @@ static nb::object new_grad(nb::handle h) {
         }
     } ng;
 
-    return transform("drjit.detail.new_grad", ng, h);
+    return transform("drjit.detail.new_grad", ng, h, dr::TraverseRole::Gradient);
 }
 
 static void enable_grad(nb::handle h) { set_grad_enabled(h, true); }
@@ -115,7 +115,7 @@ bool grad_enabled(nb::handle h) {
     };
 
     GradEnabled ge;
-    traverse("drjit.grad_enabled", ge, h);
+    traverse("drjit.grad_enabled", ge, h, dr::TraverseRole::Gradient);
     return ge.result;
 }
 
@@ -131,7 +131,7 @@ static bool has_grad(nb::handle h) {
     };
 
     HasGrad ge;
-    traverse("drjit.has_grad", ge, h);
+    traverse("drjit.has_grad", ge, h, dr::TraverseRole::Gradient);
     return ge.result;
 }
 
@@ -178,7 +178,7 @@ static nb::object detach(nb::handle h, bool preserve_type_ = true) {
         return nb::borrow(h);
 
     Detach d(preserve_type_);
-    return transform("drjit.detach", d, h);
+    return transform("drjit.detach", d, h, dr::TraverseRole::Gradient);
 }
 
 nb::object grad(nb::handle h, bool preserve_type_) {
@@ -229,7 +229,7 @@ nb::object grad(nb::handle h, bool preserve_type_) {
     };
 
     Grad g(preserve_type_);
-    return transform("drjit.grad", g, h);
+    return transform("drjit.grad", g, h, dr::TraverseRole::Gradient);
 }
 
 static void clear_grad(nb::handle dst) {
@@ -241,7 +241,7 @@ static void clear_grad(nb::handle dst) {
         }
     } cg;
 
-    traverse("drjit.clear_grad", cg, dst);
+    traverse("drjit.clear_grad", cg, dst, dr::TraverseRole::Gradient);
 }
 
 static void accum_grad(nb::handle target, nb::handle source) {
@@ -337,7 +337,7 @@ static void enqueue_impl(dr::ADMode mode_, nb::handle h_) {
     };
 
     Enqueue e(mode_);
-    traverse("drjit.enqueue", e, h_);
+    traverse("drjit.enqueue", e, h_, dr::TraverseRole::Gradient);
 }
 
 static bool check_grad_enabled(const char *name, nb::handle h, uint32_t flags) {
@@ -446,7 +446,7 @@ static nb::object backward_to_2(nb::args args, nb::kwargs kwargs) {
 }
 
 class PyCustomOp : public drjit::detail::CustomOpBase {
-    NB_TRAMPOLINE(drjit::detail::CustomOpBase, 3);
+    NB_TRAMPOLINE(drjit::detail::CustomOpBase);
 public:
     PyCustomOp() = default;
     using ticket = nb::detail::ticket;
@@ -454,7 +454,7 @@ public:
     nb::str type_name() const { return nb::inst_name(nb_trampoline.base()); }
 
     void forward() override {
-        ticket t(nb_trampoline, "forward", false);
+        ticket t(nb_trampoline, "forward", nb::detail::str_hash("forward"), false);
         if (t.key.is_valid()) {
             nb_trampoline.base().attr(t.key)();
         } else {
@@ -464,7 +464,7 @@ public:
     }
 
     void backward() override {
-        ticket t(nb_trampoline, "backward", false);
+        ticket t(nb_trampoline, "backward", nb::detail::str_hash("backward"), false);
         if (t.key.is_valid()) {
             nb_trampoline.base().attr(t.key)();
         } else {
@@ -481,7 +481,7 @@ public:
         if (!m_name_cache.empty())
             return m_name_cache.c_str();
 
-        ticket t(nb_trampoline, "name", false);
+        ticket t(nb_trampoline, "name", nb::detail::str_hash("name"), false);
         if (t.key.is_valid()) {
             m_name_cache = nb::cast<const char *>(nb_trampoline.base().attr(t.key)());
         } else {
@@ -520,7 +520,7 @@ public:
         };
 
         AddInOut aio(*this, input_);
-        return transform(name, aio, h);
+        return transform(name, aio, h, dr::TraverseRole::Gradient);
     }
 
     nb::object grad_in(nb::handle key) {
@@ -667,7 +667,7 @@ void export_autodiff(nb::module_ &m) {
           nb::sig("def accum_grad(target: T, source: T) -> None"))
      .def("clear_grad", &::clear_grad, doc_clear_grad)
      .def("replace_grad", &::replace_grad, doc_replace_grad,
-          nb::sig("def replace_grad(arg0: T, arg1: T, /) -> None"))
+          nb::sig("def replace_grad(arg0: T, arg1: T, /) -> T"))
      .def("grad", &::grad, "arg"_a, "preserve_type"_a = true, doc_grad,
           nb::sig("def grad(arg: T, preserve_type: bool = True) -> T"))
      .def("detach", &::detach, "arg"_a, "preserve_type"_a = true, doc_detach,
@@ -715,7 +715,8 @@ void export_autodiff(nb::module_ &m) {
         .def(nb::init<>())
         .def("__enter__", [](NullContextManager&) { })
         .def("__exit__", [](NullContextManager&, nb::handle, nb::handle, nb::handle) {
-             }, nb::arg().none(), nb::arg().none(), nb::arg().none());
+             }, nb::arg().none(), nb::arg().none(), nb::arg().none())
+        .freeze();
 
     nb::class_<ADContextManager>(detail, "ADContextManager")
         .def(nb::init<dr::ADScope, dr::vector<uint64_t>>())
@@ -726,7 +727,8 @@ void export_autodiff(nb::module_ &m) {
         .def("__exit__",
              [](ADContextManager &, nb::handle exc_type, nb::handle, nb::handle) {
                  ad_scope_leave(exc_type.is(nb::none()));
-             }, nb::arg().none(), nb::arg().none(), nb::arg().none());
+             }, nb::arg().none(), nb::arg().none(), nb::arg().none())
+        .freeze();
 
     detail.def("new_grad", &new_grad);
 
@@ -741,7 +743,8 @@ void export_autodiff(nb::module_ &m) {
         .def("grad_out", &PyCustomOp::grad_out, doc_CustomOp_grad_out)
         .def("set_grad_out", &PyCustomOp::set_grad_out, doc_CustomOp_set_grad_out)
         .def("add_input", &PyCustomOp::add_input, doc_CustomOp_add_input)
-        .def("add_output", &PyCustomOp::add_output, doc_CustomOp_add_output);
+        .def("add_output", &PyCustomOp::add_output, doc_CustomOp_add_output)
+        .freeze();
 
     m.def("custom", &custom, doc_custom);
 }

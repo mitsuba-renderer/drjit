@@ -176,13 +176,17 @@ template <bool IsMask_, typename Derived_> struct alignas(16)
     DRJIT_INLINE Derived neg_()      const { return vnegq_f32(m); }
     DRJIT_INLINE Derived not_()      const { return vreinterpretq_f32_s32(vmvnq_s32(vreinterpretq_s32_f32(m))); }
 
+    // ARMv8 'FMIN'/'FMAX' propagate NaNs, 'FMINNM'/'FMAXNM' ignore them
     DRJIT_INLINE Derived minimum_(Ref b) const { return vminq_f32(b.m, m); }
     DRJIT_INLINE Derived maximum_(Ref b) const { return vmaxq_f32(b.m, m); }
+    DRJIT_INLINE Derived fmin_(Ref b) const { return vminnmq_f32(b.m, m); }
+    DRJIT_INLINE Derived fmax_(Ref b) const { return vmaxnmq_f32(b.m, m); }
 
 #if defined(DRJIT_ARM_64)
     DRJIT_INLINE Derived round_()    const { return vrndnq_f32(m);     }
     DRJIT_INLINE Derived floor_()    const { return vrndmq_f32(m);     }
     DRJIT_INLINE Derived ceil_()     const { return vrndpq_f32(m);     }
+    DRJIT_INLINE Derived trunc_()    const { return vrndq_f32(m);      }
 #endif
 
     DRJIT_INLINE Derived sqrt_() const {
@@ -458,12 +462,15 @@ template <bool IsMask_, typename Derived_> struct alignas(16)
 
     DRJIT_INLINE Derived minimum_(Ref b) const { return vminq_f64(b.m, m); }
     DRJIT_INLINE Derived maximum_(Ref b) const { return vmaxq_f64(b.m, m); }
+    DRJIT_INLINE Derived fmin_(Ref b) const { return vminnmq_f64(b.m, m); }
+    DRJIT_INLINE Derived fmax_(Ref b) const { return vmaxnmq_f64(b.m, m); }
 
 #if defined(DRJIT_ARM_64)
     DRJIT_INLINE Derived sqrt_()     const { return vsqrtq_f64(m);     }
     DRJIT_INLINE Derived round_()    const { return vrndnq_f64(m);     }
     DRJIT_INLINE Derived floor_()    const { return vrndmq_f64(m);     }
     DRJIT_INLINE Derived ceil_()     const { return vrndpq_f64(m);     }
+    DRJIT_INLINE Derived trunc_()    const { return vrndq_f64(m);      }
 #endif
 
     DRJIT_INLINE Derived rcp_() const {
@@ -1047,6 +1054,8 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(16)
 
     DRJIT_INLINE Derived minimum_(Ref b) const { return Derived(minimum(entry(0), b.entry(0)), minimum(entry(1), b.entry(1))); }
     DRJIT_INLINE Derived maximum_(Ref b) const { return Derived(maximum(entry(0), b.entry(0)), maximum(entry(1), b.entry(1))); }
+    DRJIT_INLINE Derived fmin_(Ref b) const { return Derived(fmin(entry(0), b.entry(0)), fmin(entry(1), b.entry(1))); }
+    DRJIT_INLINE Derived fmax_(Ref b) const { return Derived(fmax(entry(0), b.entry(0)), fmax(entry(1), b.entry(1))); }
 
     template <typename Mask_>
     static DRJIT_INLINE Derived select_(const Mask_ &m, Ref t, Ref f) {

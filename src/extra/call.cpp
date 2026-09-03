@@ -658,7 +658,7 @@ public:
 
         // Enqueue implicit dependencies
         for (size_t i = m_input_offsets.size(); i < m_input_indices.size(); ++i)
-            ad_enqueue(dr::ADMode::Forward, combine(m_input_indices[i]));
+            ad_enqueue_scoped(dr::ADMode::Forward, combine(m_input_indices[i]));
 
         ad_traverse(dr::ADMode::Forward, (uint32_t) dr::ADFlag::ClearNone);
 

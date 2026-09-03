@@ -1,194 +1,63 @@
 /**
- * This file implements the frontend for the frozen function feature.
- * The `FrozenFunction` class represents a function that has been annotated with
- * the `@dr.freeze` decorator. When calling the `operator()` of this object for
- * the first time, the wrapped callable is recorded. On subsequent calls, the
- * input is checked, and if compatible, the previously recorded function is
- * replayed. The `FrozenFunction` class should not be used directly, and is
- * wrapped in a higher-level class in `__init__.py`.
+ * This file contains the frontend part of function freezing (``@dr.freeze()``).
  *
- * When calling the `operator()` of a `FrozenFunction` object, the
- * inputs of the function have to be traversed. This collects the JIT variables
- * in the input and information about the layout of the PyTree. We store
- * both in a `FlatVariables` struct. To evaluate all side effects, and so that
- * the freezing backend can handle these JIT variables, they are evaluated.
+ * It provides Python bindings of the ``FrozenFunction`` class, which is not
+ * used directly but rather via a higher-level wrapper in `__init__.py`.
+ * A ``FrozenFunction`` represents a function annotated with `@dr.freeze()`. A
+ * call to its `operator()` proceeds as follows:
  *
- * Only evaluated variables can change between calls to the function
- * without re-tracing it. Therefore, we need to make changing literals opaque.
- * The auto-opaque feature detects changes in literal variables from one call of
- * the function to another. For this reason, traversal of the input is split up
- * into six steps. These steps are performed every time the frozen function is
- * called, and depending on the result, a previous recording can be replayed or a
- * new recording has to be made.
+ * 1. If the wrapped callable was previously recorded, it walks through the
+ *    ``Layout`` representing the prior input configuration. While doing so, it
+ *    checks the current inputs for compatibility and binds detected variables.
+ *    If the input is deemed compatible, it launches the kernel graph directly.
  *
- * 1. The input is traversed using the `FlatVariables::traverse_with_registry`
- *    function. It traverses the PyTree, including a subset of the registry when
- *    class variables are present in the input (i.e., pointers to classes with
- *    Dr.Jit virtual function calls). Information about the layout of the PyTree
- *    is stored in the `Layout` structs of the `layout` vector of the
- *    `FlatVariables` class. If a JIT variable is encountered during this
- *    traversal step, its index will be stored in the `index` field of the
- *    corresponding `Layout` entry.
- * 2. If the `auto_opaque` feature is enabled, the key of the previous iteration
- *    is checked to see if it is compatible with the currently recorded key. If this
- *    is the case, the `opaque_mask` of the last iteration will be used in the
- *    next step; otherwise, it will be cleared.
- * 3. The flattened input variables are traversed by
- *    `FlatVariables::schedule_jit_variables`, and all JIT variables are either
- *    scheduled or force-scheduled, depending on the `opaque_mask` value for
- *    that layout node. After scheduling the variables, they are evaluated,
- *    clearing all side effects.
- * 4. In order to be able to record or replay the function, an array of
- *    deduplicated indices of evaluated JIT variables has to be provided to
- *    either `jit_freeze_start` or `jit_freeze_replay` respectively. The
- *    function `FlatVariables::record_jit_variables` iterates over the flattened
- *    variables, deduplicates indices of evaluated JIT variables, and
- *    additionally records information about them that only becomes available
- *    after evaluation. Additional information is stored in the
- *    `FlatVariables::var_layout` vector.
- * 5. If the `auto_opaque` feature is enabled, we create a mask of literal
- *    variables that have to be evaluated because they changed from one call
- *    to another. To this end, we use the `FlatVariables::fill_opaque_mask`
- *    function, which iterates over the flattened variables and finds such
- *    literals, setting the corresponding boolean to true.
- * 6. If we detect that the number of such literal variables changed, steps 1
- *    to 5 are repeated one time.
+ * 2. If no recording exists or the input is incompatible, it captures a new
+ *    ``Layout`` characterizing the input configuration. When the "auto-opaque"
+ *    feature is enabled, it may materialize literal input arrays into buffers.
+ *    It then compares the layout against a potentially larger set of cached
+ *    recordings, replays the match if found, or otherwise records.
  *
- * After traversing the input, the frozen function decides whether to record a
- * new version of the function or replay an old version. The
- * `FrozenFunction::recordings` hashmap is used to look up old versions of the
- * function. The flattened input PyTree serves as a key to the hashmap. However,
- * only a subset of the flattened PyTree is used for the key. Refer to the
- * `FlatVariables::operator==` function to see which changes to the input can
- * cause the function to be re-traced.
+ * The implementation optimizes for the fast path in (1) where a single
+ * recording is reused over and over again.
  *
- * If no matching recording was found in the hashmap, the following steps will
- * be executed to record the function. Steps 2 to 6 are located in the
- * `FunctionRecording::record` function and can be invoked from the
- * `FunctionRecording::replay` function as well if a dry-run failed.
+ * The interaction with the backend involves the following functions:
  *
- * 1. The flattened version of the input is assigned back to the input PyTree.
- *    This is required so that evaluating variables is reflected in the PyTree.
- * 2. Kernel recording is started with the `jit_freeze_start` function by
- *    providing it with the flattened evaluated variables of the input.
- * 3. The inner function is executed while recording all launched kernels.
- * 4. While kernels are still recorded, the outputs as well as the inputs of the
- *    function are traversed and collected into a single `FlatVariables`
- *    object. The inputs could have changed when executing the function, and we
- *    handle these new inputs in a similar manner to outputs of the function.
- *    Analogous to the above section, the outputs and new inputs are traversed,
- *    scheduled, evaluated, and recorded.
- * 5. Using the deduplicated JIT indices collected by traversing the outputs,
- *    kernel freezing is stopped with the `jit_freeze_stop` function.
- * 6. Finally, we catch any potential errors when assigning variables or
- *    constructing outputs early (i.e., after recording a function rather than
- *    after replaying it later). Therefore, we assign the flattened inputs to
- *    the input PyTree and construct the output from its flattened version. For
- *    assigning the input variables, `FlatVariables::assign_with_registry` is
- *    used. For constructing the output, `FlatVariables::construct` is used.
- *    The layout of the output is also stored in the recording.
+ * - ``jit_freeze_start()`` enters the recording mode, with the variables bound
+ *   to the layout's slots as inputs.
  *
- * In the above case, the new recording is added to the `recordings` hashmap
- * with the input `FlatVariables` as the key.
+ * - ``jit_freeze_stop()`` ends the recording and registers its outputs.
  *
- * If, on the other hand, the function has already been recorded with compatible
- * inputs, this recording will be replayed. The following steps outline
- * replaying a function recording:
+ * - ``jit_freeze_abort()`` discards a recording interrupted by an exception.
  *
- * 1. A dry-run of the recording is launched if this is required, using
- *    `jit_freeze_dry_run`.
- * 2. If the dry-run failed, the current recording will be overwritten by
- *    calling `FunctionRecording::record` on this recording, executing steps 2
- *    to 6 of the above section.
- * 3. If the dry-run succeeded, the recording will be replayed by calling
- *    `jit_freeze_replay` with the flattened evaluated variables of the input
- *    PyTree. The `variables` field of the output flat variables will be used to
- *    store the output variables from the replay.
- * 4. The output from replaying the recording as well as the stored layout is
- *    used to both construct the output PyTree and assign the JIT
- *    variables to the input PyTree.
+ * - ``jit_freeze_dry_run()`` checks whether a recording can be replayed with
+ *   the sizes of the current input. For example, block reductions may not be
+ *   compatible. If not, the function is recorded again in place.
+ *
+ * - ``jit_freeze_replay()`` launches the recorded kernels and returns the
+ *   outputs, from which the frontend constructs the result and writes modified
+ *   inputs back into the input PyTree.
+ *
+ * - ``jit_freeze_destroy()`` releases a recording.
  */
-
-#ifdef _MSC_VER
-#pragma warning(push)
-#pragma warning(disable: 4456) // declaration hides previous local declaration
-#pragma warning(disable: 4457) // declaration hides function parameter
-#pragma warning(disable: 4458) // declaration hides class member
-#endif
 
 #include "freeze.h"
 
-#include <drjit-core/hash.h>
 #include <drjit-core/jit.h>
-#include <drjit/array_router.h>
 #include <drjit/autodiff.h>
 #include <drjit/extra.h>
-#include <drjit/fwd.h>
-#include <drjit/traversable_base.h>
 #include <nanobind/nanobind.h>
-#include <xxh3.h>
-
-#include "autodiff.h"
-#include "base.h"
+#include <exception>
 #include "common.h"
-#include "listobject.h"
-#include "object.h"
-#include "pyerrors.h"
-#include "reduce.h"
-#include "shape.h"
-#include "tupleobject.h"
 
-#include "../ext/nanobind/src/buffer.h"
-
-#if defined(_MSC_VER)
-// Methods in this file will frequently use local variables, whose name matches class attributes.
-// This is intentional. The latter are prefixed with this->name. Tell MSVC not to warn about this.
-#  pragma warning(disable : 4458) /* disable: C4458: declaration of 'layout' hides class member */
-#endif
-
-using Buffer = nanobind::detail::Buffer;
-
-/// Cheap check, used to skip construction of expensive log messages in hot
-/// paths when they would be discarded anyway.
-static bool log_enabled(LogLevel level) {
-    return level <= jit_log_level_callback() || level <= jit_log_level_stderr();
+/// Call ``func`` with the positional and keyword arguments of the call
+static nb::object call_python(nb::handle func, nb::handle args,
+                              nb::handle kwargs) {
+    nb::object result =
+        nb::steal(PyObject_Call(func.ptr(), args.ptr(), kwargs.ptr()));
+    if (!result.is_valid())
+        nb::raise_python_error();
+    return result;
 }
-
-/**
- * \brief Helper struct to profile and log frozen functions.
- */
-struct ProfilerPhase {
-    std::string m_message;
-    ProfilerPhase(const char *message) {
-        if (log_enabled(LogLevel::Debug)) {
-            m_message = message;
-            jit_log(LogLevel::Debug, "profiler start: %s", message);
-        }
-#if defined(DRJIT_ENABLE_NVTX)
-        jit_profile_range_push(message);
-#endif
-    }
-
-    ProfilerPhase(const drjit::TraversableBase *traversable) {
-        char message[1024] = { 0 };
-        const char *name   = typeid(*traversable).name();
-        snprintf(message, 1024, "traverse_cb %s", name);
-
-        if (log_enabled(LogLevel::Debug)) {
-            m_message = message;
-            jit_log(LogLevel::Debug, "profiler start: %s", message);
-        }
-        jit_profile_range_push(message);
-    }
-
-    ~ProfilerPhase() {
-#if defined(DRJIT_ENABLE_NVTX)
-        jit_profile_range_pop();
-#endif
-        if (!m_message.empty())
-            jit_log(LogLevel::Debug, "profiler end: %s", m_message.c_str());
-    }
-};
 
 struct ADScopeContext {
     bool process_postponed;
@@ -200,1605 +69,50 @@ struct ADScopeContext {
     ~ADScopeContext() { ad_scope_leave(process_postponed); }
 };
 
-struct scoped_set_flag {
-    uint32_t backup;
-    scoped_set_flag(JitFlag flag, bool enabled) : backup(jit_flags()) {
-        uint32_t flags = backup;
+/// Aborts a recording when an exception unwinds the scope
+struct freeze_abort_guard {
+    JitBackend backend;
+    bool armed = true;
+    ~freeze_abort_guard() {
+        if (armed)
+            jit_freeze_abort(backend);
+    }
+};
+
+/// Suspends the cyclic garbage collector while a recording is in progress
+struct gc_disable_guard {
+    bool enabled = PyGC_IsEnabled();
+    gc_disable_guard() {
         if (enabled)
-            flags |= (uint32_t) flag;
-        else
-            flags &= ~(uint32_t) flag;
-
-        jit_set_flags(flags);
+            PyGC_Disable();
     }
-
-    ~scoped_set_flag() { jit_set_flags(backup); }
-};
-
-struct state_lock_guard {
-    state_lock_guard() { jit_state_lock(); }
-    ~state_lock_guard() { jit_state_unlock(); }
-};
-struct state_unlock_guard {
-    state_unlock_guard() { jit_state_unlock(); }
-    ~state_unlock_guard() { jit_state_lock(); }
-};
-
-using namespace detail;
-
-bool Layout::operator==(const Layout &rhs) const {
-    if (!this->type.is(rhs.type))
-        return false;
-
-    if (this->num != rhs.num)
-        return false;
-
-    if (this->fields.size() != rhs.fields.size())
-        return false;
-
-    for (uint32_t i = 0; i < this->fields.size(); ++i) {
-        if (this->fields[i].ptr() != rhs.fields[i].ptr() &&
-            !(this->fields[i].equal(rhs.fields[i])))
-            return false;
-    }
-
-    if (this->index != rhs.index)
-        return false;
-
-    if (this->flags != rhs.flags)
-        return false;
-
-    if (this->literal != rhs.literal)
-        return false;
-
-    if (this->vt != rhs.vt)
-        return false;
-
-    if (this->py_object.ptr() != rhs.py_object.ptr() &&
-        (((bool) this->py_object != (bool) rhs.py_object) ||
-         !this->py_object.equal(rhs.py_object)))
-        return false;
-
-    return true;
-}
-
-bool VarLayout::operator==(const VarLayout &rhs) const {
-    if (this->vt != rhs.vt)
-        return false;
-
-    if (this->vs != rhs.vs)
-        return false;
-
-    if (this->flags != rhs.flags)
-        return false;
-
-    if (this->size_index != rhs.size_index)
-        return false;
-
-    return true;
-}
-
-/**
- * \brief Add a variant domain pair to be traversed using the registry.
- *
- * When traversing a jit variable that references a pointer to a class, we
- * have to traverse all objects registered with that variant-domain pair in
- * the registry. This function adds the variant-domain pair, deduplicating
- * the domain. Whether a variable references a class is represented by its
- * ``IsClass`` const
- * attribute. If the domain is an empty string (""), this function skips
- * adding the variant-domain pair.
- */
-void FlatVariables::add_domain(const char *variant_, const char *domain) {
-    // Since it is not possible to pass nullptr strings to nanobind functions we
-    // assume, that a valid domain indicates a valid variant. If the variant is
-    // empty at the end of traversal, we know that no Class variable was
-    // traversed, and registry traversal is not necessary.
-    if (domain && variant_ && strcmp(domain, "") != 0) {
-        jit_log(LogLevel::Debug, "variant=%s, domain=%s", variant_, domain);
-
-        if (domains.empty()) {
-            this->variant = variant_;
-        } else if (this->variant != variant_)
-            jit_raise("traverse(): Variant mismatch! All arguments to a "
-                      "frozen function have to have the same variant. "
-                      "Variant %s of a previous argument does not match "
-                      "variant %s of this argument.",
-                      this->variant.c_str(), variant_);
-
-        bool contains = false;
-        for (std::string &d : domains) {
-            if (d == domain) {
-                contains = true;
-                break;
-            }
-        }
-        if (!contains)
-            domains.push_back(domain);
-    }
-}
-
-/**
- * Adds a jit index to the flattened array, deduplicating it.
- * This allows to check for aliasing conditions, where two variables
- * actually refer to the same index. The function should only be called for
- * scheduled non-literal variable indices.
- */
-uint32_t FlatVariables::add_jit_index(uint32_t index) {
-    uint32_t next_slot = (uint32_t) this->variables.size();
-    auto result        = this->index_to_slot.try_emplace(index, next_slot);
-    auto it            = result.first;
-    bool inserted      = result.second;
-
-    if (inserted) {
-        this->variables.push_back(index);
-        // Borrow the variable
-        jit_var_inc_ref(index);
-        this->var_layout.emplace_back();
-        return next_slot;
-    } else {
-        return it.value();
-    }
-}
-
-/**
- *
- * The auto opaque feature, is able to track changes of literal values in the
- * PyTree between calls to the function. If a literal value changes between two
- * calls, it should be made opaque before the second call. To accomplish this, a
- * boolean array (``opaque_mask``) is used, which indicates which variables
- * should be made opaque before recording a function. Tracking the literals,
- * which should be made opaque can only be done as long as the structure
- * of the input PyTree does not change significantly. If such a change is
- * detected, the opaque_mask is reset with ``false``, and the next call does not
- * force evaluate literals.
- * This function is responsible for detecting changes between two flattened
- * PyTrees (``FlatVariables``), that force us to reset the ``opaque_mask``
- * array.
- */
-bool compatible_auto_opaque(FlatVariables &cur, FlatVariables &prev) {
-    // NOTE: We only test the size of the layout, as a full test is somewhat
-    // expensive, and the worst case is that we make too many variables opaque,
-    // which does not impact correctness. If this causes problems, more
-    // extensive tests might have to be reintroduced.
-    if (cur.layout.size() != prev.layout.size()) {
-        return false;
-    }
-    return true;
-}
-
-bool FlatVariables::fill_opaque_mask(FlatVariables &prev,
-                                     drjit::vector<bool> &opaque_mask) {
-    // If we notice that only a literal has changed, we can set the
-    // corresponding bit in the mask, indicating that this literal should be
-    // made opaque next time.
-    uint32_t opaque_counter = 0;
-    bool new_opaques        = false;
-    for (uint32_t i = 0; i < this->layout.size(); i++) {
-        Layout &layout_     = this->layout[i];
-        Layout &prev_layout = prev.layout[i];
-
-        bool requires_opaque =
-            (layout_.flags & (uint32_t) LayoutFlag::Literal) &&
-            (prev_layout.flags & (uint32_t) LayoutFlag::Literal) &&
-            (layout_.literal != prev_layout.literal ||
-             layout_.literal_size != prev_layout.literal_size);
-
-        opaque_mask[i] |= requires_opaque;
-        new_opaques |= requires_opaque;
-        opaque_counter += requires_opaque;
-    }
-
-    jit_log(LogLevel::Debug,
-            "compare_opaque(): %u variables will be made opaque",
-            opaque_counter);
-
-    return new_opaques;
-}
-
-void FlatVariables::schedule_jit_variables(
-    bool schedule_force, const drjit::vector<bool> *opaque_mask) {
-
-    ProfilerPhase profiler("schedule_jit_variables");
-    for (uint32_t i = layout_index; i < layout.size(); i++) {
-        Layout &layout_ = this->layout[i];
-
-        if (!(layout_.flags & (uint32_t) LayoutFlag::JitIndex))
-            continue;
-
-        uint32_t index = layout_.index;
-
-        int rv = 0;
-        // Undefined variables (i.e. ones created with ``dr.empty``) are handled
-        // similarly to literals, and can be allocated when replaying.
-        if (schedule_force ||
-            (opaque_mask && (*opaque_mask)[i - layout_index])) {
-            // Returns owning reference
-            index = jit_var_schedule_force(index, &rv);
-        } else {
-            // Schedule and create owning reference
-            rv = jit_var_schedule(index);
-            jit_var_inc_ref(index);
-        }
-
-        VarInfo info = jit_var_info(index);
-        if (backend == info.backend || this->backend == JitBackend::None) {
-            backend = info.backend;
-        } else {
-            const char *info_name = "scalar", *bk_name = "scalar";
-            switch (info.backend) {
-                case JitBackend::CUDA:  info_name = "CUDA";  break;
-                case JitBackend::LLVM:  info_name = "LLVM";  break;
-                case JitBackend::Metal: info_name = "Metal"; break;
-                default: break;
-            }
-            switch (backend) {
-                case JitBackend::CUDA:  bk_name = "CUDA";  break;
-                case JitBackend::LLVM:  bk_name = "LLVM";  break;
-                case JitBackend::Metal: bk_name = "Metal"; break;
-                default: break;
-            }
-            jit_raise("freeze(): backend mismatch error (backend of this "
-                      "variable %s does not match backend of others %s)!",
-                      info_name, bk_name);
-        }
-
-        if (info.state == VarState::Literal) {
-            // Special case, where the variable is a literal.
-            layout_.literal = info.literal;
-            // Store size in index variable, as this is not used for literals.
-            layout_.literal_size  = (uint32_t) info.size;
-            layout_.vt            = (uint32_t) info.type;
-            layout_.literal_index = index;
-
-            layout_.flags |= (uint32_t) LayoutFlag::Literal;
-        } else if (info.state == VarState::Undefined) {
-            // Special case, where the variable is a literal.
-            // Store size in index variable, as this is not used for literals.
-            layout_.literal_size  = (uint32_t) info.size;
-            layout_.vt            = (uint32_t) info.type;
-            layout_.literal_index = index;
-
-            layout_.flags |= (uint32_t) LayoutFlag::Undefined;
-        } else {
-            layout_.index = this->add_jit_index(index);
-            layout_.vt    = (uint32_t) info.type;
-            jit_var_dec_ref(index);
-        }
-    }
-    layout_index = (uint32_t) layout.size();
-}
-
-/**
- * \brief Records information about jit variables, that have been traversed.
- *
- * After traversing the PyTree, collecting non-literal indices in
- * ``variables`` and evaluating the collected indices, we can collect
- * information about the underlying variables. This information is used in
- * the key of the ``RecordingMap`` to determine which recording should be
- * replayed or if the function has to be re-traced. This function iterates
- * over the collected indices and collects that information.
- */
-void FlatVariables::record_jit_variables() {
-    ProfilerPhase profiler("record_jit_variables");
-    assert(variables.size() == var_layout.size());
-    for (uint32_t i = 0; i < var_layout.size(); i++) {
-        uint32_t index     = variables[i];
-        VarLayout &layout_ = var_layout[i];
-
-        VarInfo info = jit_var_info(index);
-        if (info.type == VarType::Pointer) {
-            // We do not support pointers as inputs. It might be possible with
-            // some extra handling, but they are never used directly.
-            jit_raise("Pointer inputs not supported!");
-        }
-
-        layout_.vs         = info.state;
-        layout_.vt         = info.type;
-        layout_.size_index = this->add_size((uint32_t) info.size);
-
-        if (info.state == VarState::Evaluated) {
-            // Special case, handling evaluated/opaque variables.
-
-            layout_.flags |=
-                (info.size == 1 ? (uint32_t) LayoutFlag::SingletonArray : 0);
-            layout_.flags |=
-                (info.unaligned ? (uint32_t) LayoutFlag::Unaligned : 0);
-
-        } else {
-            jit_raise("collect(): found variable %u in unsupported state %u!",
-                      index, (uint32_t) info.state);
-        }
-    }
-}
-
-/**
- * This function returns an index of an equivalence class for the variable
- * size in the flattened variables.
- * It uses a hashmap and vector to deduplicate sizes.
- *
- * This is necessary, to catch cases, where two variables had the same size
- * when freezing a function and two different sizes when replaying.
- * In that case one kernel would be recorded, that evaluates both variables.
- * However, when replaying two kernels would have to be launched since the
- * now differently sized variables cannot be evaluated by the same kernel.
- */
-uint32_t FlatVariables::add_size(uint32_t size) {
-    uint32_t next_slot = (uint32_t) this->sizes.size();
-    auto result        = this->size_to_slot.try_emplace(size, next_slot);
-    auto it            = result.first;
-    bool inserted      = result.second;
-
-    if (inserted) {
-        this->sizes.push_back(size);
-        return next_slot;
-    } else {
-        return it.value();
-    }
-}
-
-/**
- * Traverse a variable referenced by a JIT index and add it to the flat
- * variables. An optional Python type can be supplied if it is known.
- * Depending on the ``TraverseContext::schedule_force`` the underlying
- * variable is either scheduled (``jit_var_schedule``) or force scheduled
- * (``jit_var_schedule_force``). If the variable after evaluation is a
- * literal, it is directly recorded in the ``layout``, otherwise it is added
- * to the ``variables`` array, allowing the variables to be used when
- * recording the frozen function.
- */
-void FlatVariables::traverse_jit_index(uint32_t index, TraverseContext &ctx,
-                                       nb::handle tp) {
-    (void) ctx;
-    Layout &layout_ = this->layout.emplace_back();
-
-    if (tp)
-        layout_.type = nb::borrow<nb::type_object>(tp);
-
-    layout_.flags |= (uint32_t) LayoutFlag::JitIndex;
-    layout_.index = index;
-    layout_.vt    = (uint32_t) jit_var_type(index);
-}
-
-/**
- * Construct a variable, given its layout.
- * This is the counterpart to `traverse_jit_index`.
- *
- * Optionally, the index of a variable can be provided that will be
- * overwritten with the result of this function. In that case, the function
- * will check for compatible variable types.
- */
-uint32_t FlatVariables::construct_jit_index(uint32_t prev_index) {
-    Layout &layout_ = this->layout[layout_index++];
-
-    uint32_t index;
-    VarType vt;
-    if ((layout_.flags & (uint32_t) LayoutFlag::Literal) ||
-        (layout_.flags & (uint32_t) LayoutFlag::Undefined)) {
-        index = layout_.literal_index;
-        jit_var_inc_ref(index);
-        vt = (VarType) layout_.vt;
-    } else {
-        VarLayout &var_layout_ = this->var_layout[layout_.index];
-        index                  = this->variables[layout_.index];
-        if (m_log_enabled)
-            jit_log(LogLevel::Debug, "    uses output[%u] = r%u",
-                    layout_.index, index);
-
-        jit_var_inc_ref(index);
-        vt = var_layout_.vt;
-    }
-
-    if (prev_index) {
-        if (vt != (VarType) jit_var_type(prev_index))
-            jit_raise("After replaying a frozen function, when updating"
-                      "its input a VarType mismatch occured %u != %u while"
-                      "assigning (r%u) -> (r%u). This likely occured because "
-                      "part of the frozen function could not be replayed "
-                      "resulting in a different input layout.",
-                      (uint32_t) vt, (uint32_t) jit_var_type(prev_index),
-                      (uint32_t) prev_index, (uint32_t) index);
-    }
-    return index;
-}
-
-/**
- * Add an AD variable by its index. Both the value and gradient are added
- * to the flattened variables. If the AD index has been marked as postponed
- * in the \c TraverseContext.postponed field, we mark the resulting layout
- * with that flag. This will cause the gradient edges to be propagated when
- * assigning to the input. The function takes an optional Python type if
- * it is known.
- */
-void FlatVariables::traverse_ad_index(uint64_t index, TraverseContext &ctx,
-                                      nb::handle tp) {
-    // NOTE: instead of emplacing a Layout representing the ad variable always,
-    // we only do so if the gradients have been enabled. We use this format,
-    // since most variables will not be ad enabled. The layout therefore has to
-    // be peeked in ``construct_ad_index`` before deciding if an ad or jit
-    // index should be constructed/assigned.
-    int grad_enabled = ad_grad_enabled(index);
-    if (grad_enabled) {
-        Layout &layout_   = this->layout.emplace_back();
-        uint32_t ad_index = (uint32_t) (index >> 32);
-
-        if (tp)
-            layout_.type = nb::borrow<nb::type_object>(tp);
-        layout_.num = 2;
-
-        // Set flags
-        layout_.flags |= (uint32_t) LayoutFlag::GradEnabled;
-        // If the edge with this node as its target has been postponed by
-        // the isolate gradient scope, it has been enqueued and we mark the
-        // ad variable as such.
-        if (ctx.postponed && ctx.postponed->contains(ad_index)) {
-            layout_.flags |= (uint32_t) LayoutFlag::Postponed;
-        }
-
-        traverse_jit_index((uint32_t) index, ctx, tp);
-        uint32_t grad = ad_grad(index);
-        traverse_jit_index(grad, ctx, tp);
-        ctx.free_list.push_back_steal(grad);
-    } else {
-        traverse_jit_index((uint32_t) index, ctx, tp);
-    }
-}
-
-/**
- * Construct/assign the variable index given a layout.
- * This corresponds to `traverse_ad_index`.
- *
- * This function is also used for assignment to AD variables.
- * If a `prev_index` is provided, and it is an AD variable, the gradient and
- * value of the flat variables will be applied to the AD variable,
- * preserving the `ad_index`.
- *
- * It returns an owning reference.
- */
-uint64_t FlatVariables::construct_ad_index(uint64_t prev_index) {
-    Layout &layout1 = this->layout[this->layout_index];
-
-    uint64_t index;
-    if ((layout1.flags & (uint32_t) LayoutFlag::GradEnabled) != 0) {
-        Layout &layout2 = this->layout[this->layout_index++];
-        bool postponed = (layout2.flags & (uint32_t) LayoutFlag::Postponed);
-
-        uint32_t val  = construct_jit_index((uint32_t) prev_index);
-        uint32_t grad = construct_jit_index((uint32_t) prev_index);
-
-        // Resize the gradient if it is a literal
-        if ((VarState) jit_var_state(grad) == VarState::Literal) {
-            uint32_t new_grad = jit_var_resize(grad, jit_var_size(val));
-            jit_var_dec_ref(grad);
-            grad = new_grad;
-        }
-
-        // If the prev_index variable is provided we assign the new value
-        // and gradient to the ad variable of that index instead of creating
-        // a new one.
-        uint32_t ad_index = (uint32_t) (prev_index >> 32);
-        if (ad_index) {
-            index = (((uint64_t) ad_index) << 32) | ((uint64_t) val);
-            ad_var_inc_ref(index);
-        } else
-            index = ad_var_new(val);
-
-        if (m_log_enabled)
-            jit_log(LogLevel::Debug, " -> ad_var r%zu", index);
-        jit_var_dec_ref(val);
-
-        // Equivalent to set_grad
-        ad_clear_grad(index);
-        ad_accum_grad(index, grad);
-        jit_var_dec_ref(grad);
-
-        // Variables, that have been postponed by the isolate gradient scope
-        // will be enqueued, which propagates their gradient to previous
-        // functions.
-        if (ad_index && postponed) {
-            ad_enqueue(drjit::ADMode::Backward, index);
-        }
-    } else {
-        index = construct_jit_index((uint32_t) prev_index);
-    }
-
-    return index;
-}
-
-/**
- * Wrapper around traverse_ad_index for a Python handle.
- */
-void FlatVariables::traverse_ad_var(nb::handle h, TraverseContext &ctx) {
-    auto s = supp(h.type());
-
-    if (s.is_class) {
-        auto variant_ = nb::borrow<nb::str>(nb::getattr(h, "Variant"));
-        auto domain   = nb::borrow<nb::str>(nb::getattr(h, "Domain"));
-        add_domain(variant_.c_str(), domain.c_str());
-    }
-
-    raise_if(s.index == nullptr, "freeze(): ArraySupplement index function "
-                                 "pointer is nullptr.");
-
-    uint64_t index = s.index(inst_ptr(h));
-
-    this->traverse_ad_index(index, ctx, h.type());
-}
-
-/**
- * Construct an AD variable given its layout.
- * This corresponds to `traverse_ad_var`.
- */
-nb::object FlatVariables::construct_ad_var(const Layout &layout_) {
-    uint64_t index = construct_ad_index();
-
-    auto result              = nb::inst_alloc_zero(layout_.type);
-    const ArraySupplement &s = supp(result.type());
-    s.init_index(index, inst_ptr(result));
-    nb::inst_mark_ready(result);
-
-    // We have to release the reference, since assignment will borrow from
-    // it.
-    ad_var_dec_ref(index);
-
-    return result;
-}
-
-/**
- * Assigns an AD variable.
- * Corresponds to `traverse_ad_var`.
- * This uses `construct_ad_index` to either construct a new AD variable or
- * assign the value and gradient to an already existing one.
- */
-void FlatVariables::assign_ad_var(Layout &layout_, nb::handle dst) {
-    const ArraySupplement &s = supp(layout_.type);
-
-    uint64_t index;
-    if (s.index) {
-        // ``construct_ad_index`` is used for assignment
-        index = construct_ad_index(s.index(inst_ptr(dst)));
-    } else
-        index = construct_ad_index();
-
-    s.reset_index(index, inst_ptr(dst));
-    if (m_log_enabled)
-        jit_log(LogLevel::Debug,
-                "index=%zu, grad_enabled=%u, ad_grad_enabled=%u", index,
-                grad_enabled(dst), ad_grad_enabled(index));
-
-    // Release reference, since ``construct_ad_index`` returns owning
-    // reference and ``s.reset_index`` borrows from it.
-    ad_var_dec_ref(index);
-}
-
-/**
- * Traverse a C++ tree using its `traverse_1_cb_ro` callback.
- */
-void FlatVariables::traverse_cb(const drjit::TraversableBase *traversable,
-                                TraverseContext &ctx, nb::object type) {
-    // ProfilerPhase profiler(traversable);
-
-    uint32_t layout_index_ = (uint32_t) this->layout.size();
-    Layout &layout_        = this->layout.emplace_back();
-    layout_.type           = nb::borrow<nb::type_object>(type);
-
-    struct Payload {
-        TraverseContext &ctx;
-        FlatVariables *flat_variables = nullptr;
-        uint32_t num_fields           = 0;
-    };
-
-    Payload p{ ctx, this, 0 };
-
-    traversable->traverse_1_cb_ro(
-        (void *) &p,
-        [](void *p, uint64_t index, const char *variant_, const char *domain) {
-            if (!index)
-                return;
-            Payload *payload = (Payload *) p;
-            payload->flat_variables->add_domain(variant_, domain);
-            payload->flat_variables->traverse_ad_index(index, payload->ctx);
-            payload->num_fields++;
-        });
-
-    this->layout[layout_index_].num = p.num_fields;
-}
-
-/**
- * Helper function, used to assign a callback variable.
- *
- * \param tmp
- *     This vector is populated with the indices to variables that have been
- *     constructed. It is required to release the references, since the
- *     references created by `construct_ad_index` are owning and they are
- *     borrowed after the callback returns.
- */
-uint64_t FlatVariables::assign_cb_internal(uint64_t index,
-                                           index64_vector &tmp) {
-    if (!index)
-        return index;
-
-    uint64_t new_index = this->construct_ad_index(index);
-
-    tmp.push_back_steal(new_index);
-    return new_index;
-}
-
-/**
- * Assigns variables using its `traverse_cb_rw` callback.
- * This corresponds to `traverse_cb`.
- */
-void FlatVariables::assign_cb(drjit::TraversableBase *traversable) {
-    Layout &layout_ = this->layout[layout_index++];
-
-    struct Payload {
-        FlatVariables *flat_variables = nullptr;
-        Layout &layout;
-        index64_vector tmp;
-        uint32_t field_counter = 0;
-    };
-    Payload p{ this, layout_, index64_vector(), 0 };
-    traversable->traverse_1_cb_rw(
-        (void *) &p,
-        [](void *p, uint64_t index, const char *, const char *) {
-        if (!index)
-            return index;
-        Payload *payload = (Payload *) p;
-        if (payload->field_counter >= payload->layout.num)
-            jit_raise("While traversing an object "
-                      "for assigning inputs, the number of variables to "
-                      "assign (>%u) did not match the number of variables "
-                      "traversed when recording (%u)!",
-                      payload->field_counter, payload->layout.num);
-        payload->field_counter++;
-        return payload->flat_variables->assign_cb_internal(index, payload->tmp);
-    });
-
-    if (p.field_counter != layout_.num)
-        jit_raise("While traversing and object for assigning inputs, the "
-                  "number of variables to assign did not match the number "
-                  "of variables traversed when recording!");
-}
-
-/**
- * Helper struct to construct path strings to variables.
- * Used to provide helpful logs and error messages.
- */
-struct scoped_path {
-    TraverseContext &m_ctx;
-
-    uint32_t m_size;
-    scoped_path(TraverseContext &ctx, const char *suffix, bool dict = false)
-        : m_ctx(ctx), m_size((uint32_t) ctx.path.size()) {
-        if (dict) {
-            if (ctx.recursion_level == 0) {
-                ctx.path.put_dstr(suffix);
-            } else {
-                ctx.path.put("[\"");
-                ctx.path.put_dstr(suffix);
-                ctx.path.put("\"]");
-            }
-        } else {
-            ctx.path.put('.');
-            ctx.path.put_dstr(suffix);
-        }
-        ctx.recursion_level++;
-    }
-    scoped_path(TraverseContext &ctx, uint32_t suffix)
-        : m_ctx(ctx), m_size((uint32_t) ctx.path.size()) {
-        ctx.path.put('[');
-        ctx.path.put_uint32(suffix);
-        ctx.path.put(']');
-        ctx.recursion_level++;
-    }
-    ~scoped_path() {
-        m_ctx.path.rewind(m_ctx.path.size() - m_size);
-        m_ctx.recursion_level--;
+    ~gc_disable_guard() {
+        if (enabled)
+            PyGC_Enable();
     }
 };
 
-/**
- * Traverses a PyTree in DFS order, and records its layout in the
- * `layout` vector.
- *
- * When hitting a drjit primitive type, it calls the
- * `traverse_dr_var` method, which will add their indices to the
- * `flat_variables` vector. The collect method will also record metadata
- * about the drjit variable in the layout. Therefore, the layout can be used
- * as an identifier to the recording of the frozen function.
- */
-// NOTE: callers of this function (from outside of its recursion) have to set
-// the ``JitFlag::EnableObjectTraversal`` flag (see ``traverse_with_registry``)
-void FlatVariables::traverse(nb::handle h, TraverseContext &ctx) {
-    if (recursion_level == 0)
-        m_log_enabled = log_enabled(LogLevel::Debug);
-    recursion_guard guard(this);
+nb::object FunctionRecording::record(nb::handle func, nb::handle root,
+                                     const uint32_t *inputs) {
+    JitBackend backend = layout->backend;
+    uint32_t n_inputs  = (uint32_t) layout->slots.size();
 
-    ProfilerPhase profiler("traverse");
-    nb::handle tp = h.type();
+    // Avoid unrelated activity from GC passes from being fused into the recording
+    gc_disable_guard gc_guard;
 
-    if (m_log_enabled)
-        jit_log(LogLevel::Debug, "FlatVariables::traverse(): %s {",
-                nb::type_name(tp).c_str());
+    jit_freeze_start(backend, inputs, n_inputs);
+    freeze_abort_guard abort_guard { backend };
 
-    uint32_t layout_index_ = (uint32_t) this->layout.size();
-    Layout &layout_        = this->layout.emplace_back();
-
-    const void *key     = h.ptr();
-    auto [it, inserted] = ctx.visited.try_emplace(key, nb::borrow(h));
-    if (!inserted) {
-        layout_.flags |= (uint32_t) LayoutFlag::RecursiveRef;
-        return;
-    }
-    try {
-        layout_.type = nb::borrow<nb::type_object>(tp);
-        if (is_drjit_type(tp)) {
-            const ArraySupplement &s = supp(tp);
-            if (s.is_tensor) {
-                nb::handle array = s.tensor_array(h.ptr());
-
-                auto full_shape = nb::borrow<nb::tuple>(shape(h));
-
-                // Instead of adding the whole shape of a tensor to the key, we
-                // only add the inner part, not containing dimension 0. When
-                // indexing into a tensor, this is the only dimension that is
-                // not used in the index calculation. When constructing a tensor
-                // this dimension is reconstructed from the width of the
-                // underlying array.
-
-                nb::list inner_shape;
-                if (full_shape.size() > 0)
-                    for (uint32_t i = 1; i < full_shape.size(); i++) {
-                        inner_shape.append(full_shape[i]);
-                    }
-
-                layout_.py_object = nb::tuple(inner_shape);
-
-                traverse(nb::steal(array), ctx);
-            } else if (s.ndim != 1) {
-                Py_ssize_t len = s.shape[0];
-                if (len == DRJIT_DYNAMIC)
-                    len = s.len(inst_ptr(h));
-
-                layout_.num = (uint32_t) len;
-
-                for (Py_ssize_t i = 0; i < len; ++i) {
-                    scoped_path ps(ctx, (uint32_t) i);
-                    traverse(nb::steal(s.item(h.ptr(), i)), ctx);
-                }
-            } else {
-                layout_.num = 1;
-                traverse_ad_var(h, ctx);
-            }
-        } else if (tp.is(&PyTuple_Type)) {
-            nb::tuple tuple = nb::borrow<nb::tuple>(h);
-
-            layout_.num = (uint32_t) tuple.size();
-
-            for (uint32_t i = 0; i < tuple.size(); i++) {
-                scoped_path ps(ctx, (uint32_t) i);
-                auto h2 = tuple[i];
-                traverse(h2, ctx);
-            }
-        } else if (tp.is(&PyList_Type)) {
-            nb::list list = nb::borrow<nb::list>(h);
-
-            layout_.num = (uint32_t) list.size();
-
-            for (uint32_t i = 0; i < list.size(); i++) {
-                scoped_path ps(ctx, (uint32_t) i);
-                auto h2 = list[i];
-                traverse(h2, ctx);
-            }
-        } else if (tp.is(&PyDict_Type)) {
-            nb::dict dict = nb::borrow<nb::dict>(h);
-
-            layout_.num = (uint32_t) dict.size();
-            layout_.fields.reserve(layout_.num);
-            // Note: these loops look mergeable but are not. traverse() may
-            // leave layout_ dangling.
-            for (auto [k, v] : dict)
-                layout_.fields.push_back(nb::borrow(k));
-
-            for (auto [k, v] : dict) {
-                scoped_path ps(ctx, nb::str(k).c_str(), true);
-                traverse(v, ctx);
-            }
-        } else if (nb::dict ds = get_drjit_struct(tp); ds.is_valid()) {
-
-            layout_.num = (uint32_t) ds.size();
-            layout_.fields.reserve(layout_.num);
-            for (auto k : ds.keys()) {
-                layout_.fields.push_back(nb::borrow(k));
-            }
-
-            for (auto [k, v] : ds) {
-                scoped_path ps(ctx, nb::str(k).c_str());
-                traverse(nb::getattr(h, k), ctx);
-            }
-        } else if (nb::object df = get_dataclass_fields(tp); df.is_valid()) {
-
-            for (auto field : df) {
-                nb::object k = field.attr(DR_STR(name));
-                layout_.fields.push_back(nb::borrow(k));
-            }
-            layout_.num = (uint32_t) layout_.fields.size();
-
-            for (nb::handle field : df) {
-                nb::object k = field.attr(DR_STR(name));
-                scoped_path ps(ctx, nb::str(k).c_str());
-                traverse(nb::getattr(h, k), ctx);
-            }
-        } else if (auto traversable = get_traversable_base(h); traversable) {
-            traverse_cb(traversable, ctx, nb::borrow<nb::type_object>(tp));
-        } else if (auto cb = get_traverse_cb_ro(tp); cb.is_valid()) {
-            ProfilerPhase profiler2("traverse cb");
-
-            uint32_t num_fields = 0;
-
-            // Traverse the opaque C++ object
-            cb(h, nb::cpp_function([&](uint64_t index, const char *variant_,
-                                       const char *domain) {
-                   if (!index)
-                       return;
-                   add_domain(variant_, domain);
-                   num_fields++;
-                   this->traverse_ad_index(index, ctx, nb::none());
-                   return;
-               }));
-
-            // Update layout number of fields
-            this->layout[layout_index_].num = num_fields;
-        } else {
-            jit_log(LogLevel::Debug,
-                    "traverse(): You passed a value of type %s to a frozen "
-                    "function, it could not be converted to a Dr.Jit type. "
-                    "Changing this value in future calls to the frozen "
-                    "function will cause it to be re-traced. The value is "
-                    "located at %s.",
-                    nb::str(tp).c_str(), ctx.path.get());
-
-            layout_.py_object = nb::borrow<nb::object>(h);
-        }
-    } catch (nb::python_error &e) {
-        auto ts = nb::str(tp);
-        nb::raise_from(
-            e, PyExc_RuntimeError,
-            "FlatVariables::traverse(): error encountered while "
-            "processing an argument of type '%s' at location %s (see above).",
-            ts.c_str(), ctx.path.get());
-    } catch (const std::exception &e) {
-        auto ts = nb::str(tp);
-        nb::chain_error(
-            PyExc_RuntimeError,
-            "FlatVariables::traverse(): error encountered "
-            "while processing an argument of type '%s' at location %s: %s",
-            ts.c_str(), ctx.path.get(), e.what());
-        nb::raise_python_error();
-    }
-
-    if (!ctx.deduplicate_pytree)
-        ctx.visited.erase(key);
-
-    if (m_log_enabled)
-        jit_log(LogLevel::Debug, "}");
-}
-
-/**
- * This is the counterpart to the ``traverse`` method, used to construct the
- * output of a frozen function. Given a layout vector and flat_variables, it
- * re-constructs the PyTree.
- */
-nb::object FlatVariables::construct() {
-    if (recursion_level == 0)
-        m_log_enabled = log_enabled(LogLevel::Debug);
-    recursion_guard guard(this);
-
-    if (this->layout.size() == 0) {
-        return nb::none();
-    }
-
-    const Layout &layout_ = this->layout[layout_index++];
-
-    if (m_log_enabled)
-        jit_log(LogLevel::Debug, "FlatVariables::construct(): %s {",
-                nb::type_name(layout_.type).c_str());
-
-    if (layout_.type.is(nb::none().type())) {
-        return nb::none();
-    }
-    try {
-        if (is_drjit_type(layout_.type)) {
-            const ArraySupplement &s = supp(layout_.type);
-            if (s.is_tensor) {
-                nb::object array = construct();
-
-                // Reconstruct the full shape from the inner part, stored in the
-                // layout and the width of the underlying array.
-                auto inner_shape = nb::borrow<nb::tuple>(layout_.py_object);
-                auto first_dim   = prod(shape(array), nb::none())
-                                     .floor_div(prod(inner_shape, nb::none()));
-
-                nb::list full_shape;
-                full_shape.append(first_dim);
-                for (uint32_t i = 0; i < inner_shape.size(); i++) {
-                    full_shape.append(inner_shape[i]);
-                }
-
-                nb::object tensor = layout_.type(array, nb::tuple(full_shape));
-                return tensor;
-            } else if (s.ndim != 1) {
-                auto result      = nb::inst_alloc_zero(layout_.type);
-                dr::ArrayBase *p = inst_ptr(result);
-                size_t size      = s.shape[0];
-                if (size == DRJIT_DYNAMIC) {
-                    size = layout_.num;
-                    s.init(size, p);
-                }
-                for (size_t i = 0; i < size; ++i) {
-                    result[i] = construct();
-                }
-                nb::inst_mark_ready(result);
-                return result;
-            } else {
-                return construct_ad_var(layout_);
-            }
-        } else if (layout_.type.is(&PyTuple_Type)) {
-            nb::list list;
-            for (uint32_t i = 0; i < layout_.num; ++i) {
-                list.append(construct());
-            }
-            return nb::tuple(list);
-        } else if (layout_.type.is(&PyList_Type)) {
-            nb::list list;
-            for (uint32_t i = 0; i < layout_.num; ++i) {
-                list.append(construct());
-            }
-            return std::move(list);
-        } else if (layout_.type.is(&PyDict_Type)) {
-            nb::dict dict;
-            for (auto k : layout_.fields)
-                dict[k] = construct();
-            return std::move(dict);
-        } else if (nb::dict ds = get_drjit_struct(layout_.type); ds.is_valid()) {
-            nb::object tmp = layout_.type();
-            // TODO: validation against `ds`
-            for (auto k : layout_.fields)
-                nb::setattr(tmp, k, construct());
-            return tmp;
-        } else if (nb::object df = get_dataclass_fields(layout_.type);
-                   df.is_valid()) {
-            nb::dict dict;
-            for (auto k : layout_.fields)
-                dict[k] = construct();
-            return layout_.type(**dict);
-        } else if (layout_.py_object) {
-            return layout_.py_object;
-        } else {
-            nb::raise("Tried to construct a variable of type %s that is not "
-                      "constructable!",
-                      nb::type_name(layout_.type).c_str());
-        }
-    } catch (nb::python_error &e) {
-        nb::raise_from(e, PyExc_RuntimeError,
-                       "FlatVariables::construct(): error encountered while "
-                       "processing an argument of type '%U' (see above).",
-                       nb::type_name(layout_.type).ptr());
-    } catch (const std::exception &e) {
-        nb::chain_error(PyExc_RuntimeError,
-                        "FlatVariables::construct(): error encountered "
-                        "while processing an argument of type '%U': %s",
-                        nb::type_name(layout_.type).ptr(), e.what());
-        nb::raise_python_error();
-    }
-
-    // jit_log(LogLevel::Debug, "}"); // Never executed error
-}
-
-/**
- * Assigns the flattened variables to an already existing PyTree.
- * This is used when input variables have changed.
- */
-// NOTE: callers of this function (from outside of its recursion) have to set
-// the ``JitFlag::EnableObjectTraversal`` flag (see ``assign_with_registry``)
-void FlatVariables::assign(nb::handle dst, TraverseContext &ctx) {
-    if (recursion_level == 0)
-        m_log_enabled = log_enabled(LogLevel::Debug);
-    recursion_guard guard(this);
-
-    nb::handle tp  = dst.type();
-    Layout &layout_ = this->layout[layout_index++];
-
-    if (layout_.flags & (uint32_t) LayoutFlag::RecursiveRef)
-        return;
-
-    if (m_log_enabled)
-        jit_log(LogLevel::Debug, "FlatVariables::assign(): %s with %s {",
-                nb::type_name(tp).c_str(),
-                nb::type_name(layout_.type).c_str());
-
-    if (!layout_.type.equal(tp))
-        jit_raise("Type mismatch! Type of the object at location %s when "
-                  "recording (%s) does not match type of object that is "
-                  "assigned (%s).",
-                  ctx.path.get(), nb::type_name(tp).c_str(),
-                  nb::type_name(layout_.type).c_str());
-
-    try {
-        if (is_drjit_type(tp)) {
-            const ArraySupplement &s = supp(tp);
-
-            if (s.is_tensor) {
-                nb::handle array = s.tensor_array(dst.ptr());
-                assign(nb::steal(array), ctx);
-            } else if (s.ndim != 1) {
-                Py_ssize_t len = s.shape[0];
-                if (len == DRJIT_DYNAMIC)
-                    len = s.len(inst_ptr(dst));
-
-                for (Py_ssize_t i = 0; i < len; ++i) {
-                    scoped_path ps(ctx, (uint32_t) i);
-                    assign(dst[i], ctx);
-                }
-            } else {
-                assign_ad_var(layout_, dst);
-            }
-        } else if (tp.is(&PyTuple_Type)) {
-            nb::tuple tuple = nb::borrow<nb::tuple>(dst);
-            raise_if(
-                tuple.size() != layout_.num,
-                "The number of objects in this tuple changed from %u to %u "
-                "while recording the function.",
-                layout_.num, (uint32_t) tuple.size());
-
-            for (uint32_t i = 0; i < tuple.size(); i++) {
-                scoped_path ps(ctx, (uint32_t) i);
-                auto h2 = tuple[i];
-                assign(h2, ctx);
-            }
-        } else if (tp.is(&PyList_Type)) {
-            nb::list list = nb::borrow<nb::list>(dst);
-            raise_if(
-                list.size() != layout_.num,
-                "The number of objects in a list at %s changed from %u to %u "
-                "while recording the function.",
-                ctx.path.get(), layout_.num, (uint32_t) list.size());
-
-            for (uint32_t i = 0; i < list.size(); i++) {
-                scoped_path ps(ctx, (uint32_t) i);
-                auto h2 = list[i];
-                assign(h2, ctx);
-            }
-        } else if (tp.is(&PyDict_Type)) {
-            nb::dict dict = nb::borrow<nb::dict>(dst);
-            for (auto &k : layout_.fields) {
-                scoped_path ps(ctx, nb::str(k).c_str(), true);
-                nb::object value = dict.get(k, nb::handle());
-                if (value.is_valid())
-                    assign(value, ctx);
-                else
-                    dst[k] = construct();
-            }
-        } else if (nb::dict ds = get_drjit_struct(dst); ds.is_valid()) {
-            for (auto &k : layout_.fields) {
-                scoped_path ps(ctx, nb::str(k).c_str());
-                if (nb::hasattr(dst, k))
-                    assign(nb::getattr(dst, k), ctx);
-                else
-                    nb::setattr(dst, k, construct());
-            }
-        } else if (nb::object df = get_dataclass_fields(tp); df.is_valid()) {
-            for (auto k : layout_.fields) {
-                scoped_path ps(ctx, nb::str(k).c_str());
-                if (nb::hasattr(dst, k))
-                    assign(nb::getattr(dst, k), ctx);
-                else
-                    nb::setattr(dst, k, construct());
-            }
-        } else if (auto traversable = get_traversable_base(dst); traversable) {
-            assign_cb(traversable);
-        } else if (nb::object cb = get_traverse_cb_rw(tp); cb.is_valid()) {
-            index64_vector tmp;
-            uint32_t num_fields = 0;
-
-            cb(dst, nb::cpp_function([&](uint64_t index, const char *,
-                                         const char *) {
-                   if (!index)
-                       return index;
-                   jit_log(LogLevel::Debug,
-                           "assign(): traverse_cb[%u] was a%u r%u", num_fields,
-                           (uint32_t) (index >> 32), (uint32_t) index);
-                   num_fields++;
-                   if (num_fields > layout_.num)
-                       jit_raise(
-                           "While traversing the object of type %s at location "
-                           "%s for assigning inputs, the number of variables "
-                           "to assign (>%u) did not match the number of "
-                           "variables traversed when recording(%u)!",
-                           ctx.path.get(), nb::str(tp).c_str(), num_fields,
-                           layout_.num);
-                   return assign_cb_internal(index, tmp);
-               }));
-            if (num_fields != layout_.num)
-                jit_raise(
-                    "While traversing the object of type %s at location %s "
-                    "for assigning inputs, the number of variables "
-                    "to assign did not match the number of variables "
-                    "traversed when recording!",
-                    ctx.path.get(), nb::str(tp).c_str());
-        } else {
-        }
-    } catch (nb::python_error &e) {
-        nb::raise_from(e, PyExc_RuntimeError,
-                       "FlatVariables::assign(): error encountered while "
-                       "processing an argument at %s "
-                       "of type '%U' (see above).",
-                       ctx.path.get(), nb::type_name(tp).ptr());
-    } catch (const std::exception &e) {
-        nb::chain_error(PyExc_RuntimeError,
-                        "FlatVariables::assign(): error encountered "
-                        "while processing an argument at %s "
-                        "of type '%U': %s",
-                        ctx.path.get(), nb::type_name(tp).ptr(), e.what());
-        nb::raise_python_error();
-    }
-
-    if (m_log_enabled)
-        jit_log(LogLevel::Debug, "}");
-}
-
-/**
- * First traverses the PyTree, then the registry. This ensures that
- * additional data to vcalls is tracked correctly.
- */
-void FlatVariables::traverse_with_registry(nb::handle h, TraverseContext &ctx) {
-    scoped_set_flag traverse_scope(JitFlag::EnableObjectTraversal, true);
-
-    // Traverse the handle
-    traverse(h, ctx);
-
-    // Traverse the registry (if a class variable was traversed)
-    if (!domains.empty()) {
-        ProfilerPhase profiler("traverse_registry");
-        uint32_t layout_index_ = (uint32_t) this->layout.size();
-        Layout &layout_        = this->layout.emplace_back();
-        layout_.type           = nb::borrow<nb::type_object>(nb::none());
-
-        uint32_t num_fields = 0;
-
-        jit_log(LogLevel::Debug, "registry{");
-
-        drjit::vector<void *> registry_pointers;
-        for (std::string &domain : domains) {
-            uint32_t registry_bound =
-                jit_registry_id_bound(variant.c_str(), domain.c_str());
-            uint32_t offset = (uint32_t) registry_pointers.size();
-            registry_pointers.resize(registry_pointers.size() + registry_bound,
-                                     nullptr);
-            jit_registry_get_pointers(variant.c_str(), domain.c_str(),
-                                      &registry_pointers[offset]);
-        }
-
-        jit_log(LogLevel::Debug, "registry_bound=%u", registry_pointers.size());
-        jit_log(LogLevel::Debug, "layout_index=%u", this->layout.size());
-        for (void *ptr : registry_pointers) {
-            jit_log(LogLevel::Debug, "ptr=%p", ptr);
-            if (!ptr)
-                continue;
-
-            // WARN: very unsafe cast!
-            // We assume, that any object added to the registry inherits from
-            // TraversableBase. This is ensured by the signature of the
-            // ``drjit::registry_put`` function.
-            auto traversable = (drjit::TraversableBase *) ptr;
-            auto self        = traversable->self_py();
-
-            if (self)
-                traverse(self, ctx);
-            else
-                traverse_cb(traversable, ctx);
-
-            num_fields++;
-        }
-        jit_log(LogLevel::Debug, "}");
-
-        this->layout[layout_index_].num = num_fields;
-    }
-}
-
-/**
- * First assigns the registry and then the PyTree.
- * Corresponds to `traverse_with_registry`.
- */
-void FlatVariables::assign_with_registry(nb::handle dst, TraverseContext &ctx) {
-    scoped_set_flag traverse_scope(JitFlag::EnableObjectTraversal, true);
-
-    // Assign the handle
-    assign(dst, ctx);
-
-    // Assign registry (if a class variable was traversed)
-    if (!domains.empty()) {
-        Layout &layout_ = this->layout[layout_index++];
-
-        jit_log(LogLevel::Debug, "registry{");
-
-        drjit::vector<void *> registry_pointers;
-        for (std::string &domain : domains) {
-            uint32_t registry_bound =
-                jit_registry_id_bound(variant.c_str(), domain.c_str());
-            uint32_t offset = (uint32_t) registry_pointers.size();
-            registry_pointers.resize(registry_pointers.size() + registry_bound,
-                                     nullptr);
-            jit_registry_get_pointers(variant.c_str(), domain.c_str(),
-                                      &registry_pointers[offset]);
-        }
-
-        uint32_t num_fields = 0;
-
-        for (void *ptr : registry_pointers)
-            if (ptr)
-                num_fields++;
-
-        if (num_fields != layout_.num)
-            jit_raise("assign_with_registry(): The number of registry "
-                      "entries (%zu) did not match the number of registry "
-                      "entries recorded (%u)!",
-                      registry_pointers.size(), layout_.num);
-
-        jit_log(LogLevel::Debug, "registry_bound=%u", registry_pointers.size());
-        jit_log(LogLevel::Debug, "layout_index=%u", this->layout_index);
-        for (void *ptr : registry_pointers) {
-            jit_log(LogLevel::Debug, "ptr=%p", ptr);
-            if (!ptr)
-                continue;
-
-            // WARN: very unsafe cast!
-            // We assume, that any object added to the registry inherits from
-            // TraversableBase. This is ensured by the signature of the
-            // ``drjit::registry_put`` function.
-            auto traversable = (drjit::TraversableBase *) ptr;
-            auto self        = traversable->self_py();
-
-            if (self)
-                assign(self, ctx);
-            else
-                assign_cb(traversable);
-        }
-        jit_log(LogLevel::Debug, "}");
-    }
-}
-
-FlatVariables::~FlatVariables() {
-    state_lock_guard guard;
-    for (uint32_t i = 0; i < layout.size(); ++i) {
-        Layout &l = layout[i];
-        if (((l.flags & (uint32_t) LayoutFlag::Literal) ||
-             (l.flags & (uint32_t) LayoutFlag::Undefined)) &&
-            l.literal_index) {
-            jit_var_dec_ref(l.literal_index);
-        }
-    }
-}
-
-void FlatVariables::borrow() {
-    state_lock_guard guard;
-    for (uint32_t &index : this->variables)
-        jit_var_inc_ref(index);
-}
-
-void FlatVariables::release() {
-    state_lock_guard guard;
-    for (uint32_t &index : this->variables)
-        jit_var_dec_ref(index);
-}
-
-bool log_diff_variable(LogLevel level, const FlatVariables &curr,
-                       const FlatVariables &prev, uint32_t slot,
-                       TraverseContext &ctx) {
-    const VarLayout &curr_l = curr.var_layout[slot];
-    const VarLayout &prev_l = prev.var_layout[slot];
-
-    if (curr_l.vt != prev_l.vt) {
-        jit_log(level, "%s: The variable type changed from %u to %u.",
-                ctx.path.get(), prev_l.vt, curr_l.vt);
-        return false;
-    }
-    if (curr_l.size_index != prev_l.size_index) {
-        jit_log(level,
-                "%s: The size equivalence class of the variable changed from "
-                "%u to %u.",
-                ctx.path.get(), prev_l.size_index, curr_l.size_index);
-        return false;
-    }
-
-    return true;
-}
-
-/**
- * Log the difference of the layout nodes at ``index`` for the two
- * FlatVariables.
- */
-bool log_diff(LogLevel level, const FlatVariables &curr,
-              const FlatVariables &prev, uint32_t &index,
-              TraverseContext &ctx) {
-
-    const Layout &curr_l = curr.layout[index];
-    const Layout &prev_l = prev.layout[index];
-    index++;
-
-    if (curr_l.flags != prev_l.flags) {
-        jit_log(level, "%s: The flags of this node changed from 0x%lx to 0x%lx",
-                ctx.path.get(), prev_l.flags, curr_l.flags);
-        return false;
-    }
-
-    if (curr_l.index != prev_l.index) {
-        jit_log(level,
-                "%s: The index into the array of deduplicated variables "
-                "changed from s%u to s%u. This can occur if two variables "
-                "referred to the same JIT index, but do no longer.",
-                ctx.path.get(), prev_l.index, curr_l.index);
-        return false;
-    }
-
-    if (curr_l.flags & (uint32_t) LayoutFlag::JitIndex &&
-        !(curr_l.flags & (uint32_t) LayoutFlag::Literal) &&
-        !(curr_l.flags & (uint32_t) LayoutFlag::Undefined)) {
-        uint32_t slot = curr_l.index;
-        if (!log_diff_variable(level, curr, prev, slot, ctx))
-            return false;
-    }
-
-    if (((bool) curr_l.type != (bool) prev_l.type) ||
-        !(curr_l.type.equal(prev_l.type))) {
-        jit_log(level, "%s: The type of this node changed from %s to %s",
-                ctx.path.get(), nb::str(prev_l.type).c_str(),
-                nb::str(curr_l.type).c_str());
-        return false;
-    }
-
-    if (curr_l.literal != prev_l.literal) {
-        jit_log(level,
-                "%s: The literal value of this variable changed from 0x%llx to "
-                "0x%llx",
-                ctx.path.get(), prev_l.literal, curr_l.literal);
-        return false;
-    }
-
-    if (((bool) curr_l.py_object != (bool) prev_l.py_object) ||
-        !curr_l.py_object.equal(prev_l.py_object)) {
-        jit_log(level, "%s: The object changed from %s to %s", ctx.path.get(),
-                nb::str(prev_l.py_object).c_str(),
-                nb::str(curr_l.py_object).c_str());
-        return false;
-    }
-
-    if (curr_l.num != prev_l.num) {
-        jit_log(level,
-                "%s: The number of elements of this container changed from %u "
-                "to %u",
-                ctx.path.get(), prev_l.num, curr_l.num);
-        return false;
-    }
-
-    if (curr_l.fields.size() != prev_l.fields.size()) {
-        jit_log(level,
-                "%s: The number of elements of this container changed from %u "
-                "to %u",
-                ctx.path.get(), prev_l.fields.size(), curr_l.fields.size());
-        return false;
-    }
-
-    for (uint32_t i = 0; i < curr_l.fields.size(); ++i) {
-        if (!(curr_l.fields[i].equal(prev_l.fields[i]))) {
-            jit_log(level, "%s: The %ith key changed from \"%s\" to \"%s\"",
-                    ctx.path.get(), i, nb::str(curr_l.fields[i]).c_str(),
-                    nb::str(prev_l.fields[i]).c_str());
-        }
-    }
-
-    if (curr_l.fields.size() > 0) {
-        for (uint32_t i = 0; i < curr_l.fields.size(); i++) {
-            auto &field = curr_l.fields[i];
-
-            scoped_path ps(ctx, nb::str(field).c_str(),
-                           curr_l.type.is(&PyDict_Type));
-
-            log_diff(level, curr, prev, index, ctx);
-        }
-    } else {
-        for (uint32_t i = 0; i < curr_l.num; i++) {
-            scoped_path ps(ctx, (uint32_t) i);
-
-            log_diff(level, curr, prev, index, ctx);
-        }
-    }
-
-    return true;
-}
-
-/**
- * Log the difference of the two FlatVariables.
- */
-bool log_diff(LogLevel level, const FlatVariables &curr,
-              const FlatVariables &prev) {
-    // Skip expensive logging if set log level is not high enough.
-    if (level > jit_log_level_callback() && level > jit_log_level_stderr())
-        return true;
-
-    if (curr.flags != prev.flags) {
-        jit_log(level, "The flags of the input changed from %lx to %lx",
-                prev.flags, curr.flags);
-        return false;
-    }
-    if (curr.layout.size() != prev.layout.size()) {
-        jit_log(level,
-                "The number of elements in the input changed from %u to %u.",
-                prev.layout.size(), curr.layout.size());
-        return false;
-    }
-    if (curr.var_layout.size() != prev.var_layout.size()) {
-        jit_log(level,
-                "The number of opaque variables in the input changed from %u "
-                "to %u.",
-                prev.var_layout.size(), curr.var_layout.size());
-        return false;
-    }
-
-    uint32_t index = 0;
-    TraverseContext ctx;
-    log_diff(level, curr, prev, index, ctx);
-
-    return true;
-}
-
-size_t FlatVariablesHasher::operator()(
-    const std::shared_ptr<FlatVariables> &key) const {
-    ProfilerPhase profiler("hash");
-    // Hash the layout
-
-    drjit::vector<uint64_t> &data = scratch;
-    data.clear();
-    data.reserve(2 + key->layout.size() * 4 + key->var_layout.size());
-
-    data.push_back(key->flags);
-    data.push_back((uint64_t) (key->layout.size() << 32) |
-                   (uint64_t) (key->var_layout.size() << 2));
-
-    for (const Layout &layout_ : key->layout) {
-        // If layout.fields is not 0 then layout.num == layout.fields.size()
-        // therefore we can omit layout.fields.size().
-        // This makes the assumption that we don't have more than 2^27-1
-        // elements in one layout or variables in the FlatVariables. If more
-        // elements are part of the layout, hash collisions might occur,
-        // impacting performance but not correctness.
-        if (layout_.num >> 26)
-            jit_log(LogLevel::Warn,
-                    "The layout consists of more than 100M elements, which "
-                    "might lead to hash collisions when looking up previous "
-                    "recordings of frozen functions.");
-        if (layout_.index >> 26 &&
-            !(layout_.flags & ((uint32_t) LayoutFlag::Undefined |
-                               (uint32_t) LayoutFlag::Literal))) {
-            jit_log(
-                LogLevel::Warn,
-                "The layout consists of more than 100M opaque variables, which "
-                "might lead to hash collisions when looking up previous "
-                "recordings of frozen functions.");
-        }
-        union {
-            struct {
-                uint64_t num : 26;
-                uint64_t index : 26;
-                uint64_t flags : 8;
-                uint64_t vt : 4;
-            };
-            uint64_t data;
-        } lkey;
-        static_assert(sizeof(lkey) == sizeof(uint64_t));
-        lkey.num   = layout_.num;
-        lkey.index = layout_.index;
-        lkey.flags = layout_.flags;
-        lkey.vt    = layout_.vt;
-
-        data.push_back(lkey.data);
-        if (layout_.flags & (uint32_t) LayoutFlag::JitIndex)
-            data.push_back(layout_.literal);
-
-        uint32_t type_hash = 0;
-        if (layout_.type)
-            type_hash = (uint32_t) nb::hash(layout_.type);
-
-        uint32_t object_hash = 0;
-        if (layout_.py_object) {
-            PyObject *ptr = layout_.py_object.ptr();
-            Py_hash_t rv  = PyObject_Hash(ptr);
-
-            // Try to hash the object, and otherwise fallback to ``id()``
-            if (rv == -1 && PyErr_Occurred()) {
-                PyErr_Clear();
-                object_hash = (uint32_t) (uintptr_t) ptr;
-            } else {
-                object_hash = (uint32_t) rv;
-            }
-        }
-        if (type_hash && object_hash)
-            data.push_back(((uint64_t) type_hash << 32) |
-                           ((uint64_t) (uint32_t) object_hash));
-        for (auto &field : layout_.fields)
-            data.push_back(nb::hash(field.ptr()));
-    }
-
-    for (const VarLayout &layout_ : key->var_layout) {
-        // layout_.vt: 4
-        // layout_.vs: 4
-        // layout_.flags: 8
-        data.push_back(((uint64_t) layout_.size_index << 32) |
-                       ((uint64_t) layout_.flags << 8) |
-                       ((uint64_t) layout_.vs << 4) | ((uint64_t) layout_.vt));
-    }
-
-    return (size_t) XXH3_64bits(data.data(), data.size() * sizeof(uint64_t));
-}
-
-/*
- * Record a function, given its python input and flattened input.
- */
-nb::object FunctionRecording::record(nb::callable func,
-                                     FrozenFunction *frozen_func,
-                                     nb::dict input,
-                                     const FlatVariables &in_variables) {
-    ProfilerPhase profiler("record");
-    JitBackend backend = in_variables.backend;
-
-    frozen_func->recording_counter++;
-    if (frozen_func->recording_counter > frozen_func->warn_recording_count &&
-        frozen_func->recordings.size() >= 1) {
-        if (frozen_func->recordings.size() < frozen_func->recording_counter) {
-            jit_log(LogLevel::Warn,
-                    "The frozen function has been recorded %u times, this "
-                    "indicates a problem with how the frozen function is being "
-                    "called. The number of cached recordings %u is smaller "
-                    "than the number of times this function has been recorded "
-                    "%u, indicating that dry-running the recording failed at "
-                    "least %u times.",
-                    frozen_func->recording_counter,
-                    frozen_func->recordings.size(),
-                    frozen_func->recording_counter,
-                    frozen_func->recording_counter -
-                        frozen_func->recordings.size());
-        } else {
-            jit_log(
-                LogLevel::Warn,
-                "The frozen function has been recorded %u times, this "
-                "indicates a problem with how the frozen function is being "
-                "called. For example, calling it with changing python values "
-                "such as an index. For more information about which variables "
-                "changed set the log level to ``LogLevel::Debug``.",
-                frozen_func->recording_counter);
-        }
-        log_diff(LogLevel::Info, in_variables, *frozen_func->prev_key);
-    }
-
-    jit_log(LogLevel::Debug,
-            "Recording (n_inputs=%u):", in_variables.variables.size());
-    jit_freeze_start(backend, in_variables.variables.data(),
-                     (uint32_t) in_variables.variables.size());
-
-    // Record the function
     nb::object output;
     {
-        ProfilerPhase profiler2("function");
+        ProfilerPhase profiler2("dr.freeze(): executing function");
         state_unlock_guard guard;
-        output = func(input);
+        output = call_python(func,
+                             PyTuple_GetItem(root.ptr(), 0),
+                             PyTuple_GetItem(root.ptr(), 1));
     }
 
-    // Collect nodes, that have been postponed by the `Isolate` scope in a
-    // hash set.
-    // These are the targets of postponed edges, as the isolate gradient
-    // scope only handles backward mode differentiation.
-    // If they are, then we have to enqueue them when replaying the
-    // recording.
+    // Collect AD nodes postponed by the isolation scope.
     tsl::robin_set<uint32_t, UInt32Hasher> postponed;
     {
         drjit::vector<uint32_t> postponed_vec;
@@ -1807,444 +121,411 @@ nb::object FunctionRecording::record(nb::callable func,
             postponed.insert(index);
     }
 
+    // Describe the result and the input after the call
+    SlotBindings out_bindings;
     {
-        ProfilerPhase profiler2("traverse output");
         // Enter Resume scope, so we can track gradients
         ADScopeContext ad_scope(drjit::ADScope::Resume, 0, nullptr, -1, false);
-
-        {
-            scoped_set_flag traverse_scope(JitFlag::EnableObjectTraversal,
-                                           true);
-            TraverseContext ctx;
-            ctx.postponed          = &postponed;
-            ctx.deduplicate_pytree = false;
-            out_variables.traverse(output, ctx);
-            out_variables.schedule_jit_variables(false, nullptr);
-        }
-
-        {
-            TraverseContext ctx;
-            ctx.postponed = &postponed;
-            out_variables.traverse_with_registry(input, ctx);
-            out_variables.schedule_jit_variables(false, nullptr);
-        }
-
-        out_variables.layout_index = 0;
-
-        {
-            state_unlock_guard guard;
-            { // Evaluate the variables, scheduled when traversing
-                nb::gil_scoped_release guard2;
-                jit_eval();
-            }
-        }
-
-        out_variables.record_jit_variables();
+        out_layout = build_output_layout(output, root, layout->arg_names,
+                                         backend, postponed, out_bindings);
     }
+
+    drjit::vector<uint32_t> outputs =
+        plan_outputs(out_layout, out_bindings.indices.data(), *layout, inputs);
 
     jit_freeze_pause(backend);
 
-    if ((out_variables.variables.size() > 0 &&
-         in_variables.variables.size() > 0) &&
-        out_variables.backend != backend) {
-        Recording *recording_ = jit_freeze_stop(backend, nullptr, 0);
-        jit_freeze_destroy(recording_);
+    // Exceptions raised by the recorded functions are re-raised here
+    recording = jit_freeze_stop(backend, outputs.data(),
+                                (uint32_t) outputs.size());
+    abort_guard.armed = false;
 
-        nb::raise(
-            "freeze(): backend mismatch error (backend %u of "
-            "output variables did not match backend %u of input variables)",
-            (uint32_t) out_variables.backend, (uint32_t) backend);
-    }
-
-    // Exceptions, thrown by the recording functions will be recorded and
-    // re-thrown when calling ``jit_freeze_stop``. Since the output variables
-    // are borrowed, we have to release them in that case, and catch these
-    // exceptions.
-    try {
-        recording = jit_freeze_stop(backend, out_variables.variables.data(),
-                                    (uint32_t) out_variables.variables.size());
-    } catch (nb::python_error &e) {
-        out_variables.release();
-        nb::raise_from(e, PyExc_RuntimeError,
-                       "record(): error encountered while recording a function "
-                       "(see above).");
-    } catch (const std::exception &e) {
-        out_variables.release();
-        nb::chain_error(PyExc_RuntimeError, "record(): %s", e.what());
-        nb::raise_python_error();
-    }
-
-    jit_log(LogLevel::Debug, "Recording done (n_outputs=%u)",
-            out_variables.variables.size());
-
-    // For catching input assignment mismatches, we assign the input and
-    // output
+    // Construct the result and write the input back right away, so that
+    // errors surface when recording rather than when replaying
     {
-        state_lock_guard guard;
-        // Enter Resume scope, so we can track gradients
         ADScopeContext ad_scope(drjit::ADScope::Resume, 0, nullptr, -1, false);
-
-        out_variables.layout_index = 0;
-        jit_log(LogLevel::Debug, "Construct:");
-        try {
-            output = nb::borrow<nb::object>(out_variables.construct());
-        } catch (std::exception &) {
-            out_variables.release();
-            throw;
-        }
-        // NOTE: temporarily disable this to not enqueue twice
-        try {
-            scoped_set_flag traverse_scope(JitFlag::EnableObjectTraversal,
-                                           true);
-            TraverseContext ctx;
-            out_variables.assign(input, ctx);
-        } catch (std::exception &) {
-            out_variables.release();
-            throw;
-        }
-        out_variables.layout_index = 0;
+        output = construct_output(out_layout, outputs.data());
+        update_input(out_layout, root, outputs.data());
     }
-
-    // Traversal takes owning references, so here we need to release them.
-    out_variables.release();
 
     return output;
 }
-/*
- * Replays the recording.
- *
- * This constructs the output and re-assigns the input.
- */
-nb::object FunctionRecording::replay(nb::callable func,
-                                     FrozenFunction *frozen_func,
-                                     nb::dict input,
-                                     const FlatVariables &in_variables) {
-    ProfilerPhase profiler("replay");
 
-    jit_log(LogLevel::Info, "Replaying:");
-    int dryrun_success;
+bool FunctionRecording::dry_run(const uint32_t *inputs) {
+    return jit_freeze_dry_run(recording, inputs) != 0;
+}
+
+nb::object FunctionRecording::replay(nb::handle root, const uint32_t *inputs) {
+    drjit::detail::index32_vector out_values(out_layout.n_outputs);
     {
-        ProfilerPhase profiler2("dry run");
-        dryrun_success =
-            jit_freeze_dry_run(recording, in_variables.variables.data());
-    }
-    if (!dryrun_success) {
-        // Dry run has failed. Re-record the function.
-        jit_log(LogLevel::Info, "Dry run failed! re-recording");
-        this->clear();
-        try {
-            return this->record(func, frozen_func, input, in_variables);
-        } catch (nb::python_error &e) {
-            nb::raise_from(e, PyExc_RuntimeError,
-                           "replay(): error encountered while re-recording a "
-                           "function (see above).");
-        } catch (const std::exception &e) {
-            jit_freeze_abort(in_variables.backend);
-
-            nb::chain_error(PyExc_RuntimeError, "record(): %s", e.what());
-            nb::raise_python_error();
-        }
-    } else {
-        ProfilerPhase profiler2("jit replay");
         state_unlock_guard guard;
-        {
-            nb::gil_scoped_release guard2;
-            jit_freeze_replay(recording, in_variables.variables.data(),
-                              out_variables.variables.data());
-        }
+        nb::gil_scoped_release guard2;
+        jit_freeze_replay(recording, inputs, out_values.data());
     }
-    jit_log(LogLevel::Info, "Replaying done:");
 
-    // Construct Output variables
     nb::object output;
     {
-        state_lock_guard guard;
         // Enter Resume scope, so we can track gradients
         ADScopeContext ad_scope(drjit::ADScope::Resume, 0, nullptr, -1, false);
-        out_variables.layout_index = 0;
-        try {
-            ProfilerPhase profiler2("construct output");
-            output = nb::borrow<nb::object>(out_variables.construct());
-        } catch (std::exception &) {
-            out_variables.release();
-            throw;
-        }
-        try {
-            ProfilerPhase profiler2("assign input");
-            TraverseContext ctx;
-            out_variables.assign_with_registry(input, ctx);
-        } catch (std::exception &) {
-            out_variables.release();
-            throw;
-        }
+        output = construct_output(out_layout, out_values.data());
+        update_input(out_layout, root, out_values.data());
     }
-
-    // out_variables is assigned by ``jit_record_replay``, which transfers
-    // ownership to this array. Therefore, we have to drop the variables
-    // afterwards.
-    out_variables.release();
 
     return output;
 }
 
-nb::object FrozenFunction::operator()(nb::dict input) {
-    ProfilerPhase profiler("frozen function");
+nb::object FrozenFunction::operator()(nb::args args, nb::kwargs kwargs) {
+    if (!enabled)
+        return call_python(env.func, args, kwargs);
+
+    ProfilerPhase profiler("drjit.freeze()");
+
+    // Kernel freezing can be disabled with ``JitFlag::KernelFreezing``. Nested
+    // calls to frozen functions are ignored and baked into the current
+    // recording.
+    bool freeze = jit_flag(JitFlag::KernelFreezing) &&
+                  !jit_flag(JitFlag::FreezingScope) && max_cache_size != 0;
+
+    // Call the function without recording it
+    if (!freeze) {
+        ProfilerPhase profiler2("drjit.freeze(): executing function");
+        state_lock_guard guard;
+        ADScopeContext ad_scope(drjit::ADScope::Isolate, 0, nullptr, -1, true);
+        state_unlock_guard guard2;
+        return call_python(env.func, args, kwargs);
+    }
+
+    // The input of the call: its arguments, the values of the globals and
+    // closure variables that the function reads, and the optional state
+    nb::object state =
+        state_fn.is_none() ? nb::none() : call_python(state_fn, args, kwargs);
+    nb::tuple root = nb::make_tuple(args, kwargs, env.capture(), state);
+
     state_lock_guard guard;
     nb::object result;
     {
-        // Enter Isolate grad scope, so that gradients are not propagated
-        // outside of the function scope.
-        ADScopeContext ad_scope(drjit::ADScope::Isolate, 0, nullptr, -1, true);
-
-        // Kernel freezing can be enabled or disabled with the
-        // ``JitFlag::KernelFreezing``. Alternatively, when calling a frozen
-        // function from another one, we simply record the inner function.
-        if (!jit_flag(JitFlag::KernelFreezing) ||
-            jit_flag(JitFlag::FreezingScope) || max_cache_size == 0) {
-            ProfilerPhase profiler2("function");
-            state_unlock_guard guard2;
-            return func(input);
-        }
-
         call_counter++;
 
-        auto in_variables =
-            std::make_shared<FlatVariables>(FlatVariables(in_heuristics));
-        uint32_t flags        = jit_flags();
-        in_variables->flags   = flags;
-        in_variables->backend = this->default_backend;
-        // Evaluate and traverse input variables (args and kwargs)
-        // Repeat this a max of 2 times if the number of variables that should
-        // be made opaque changed.
-        for (uint32_t i = 0; i < 2; i++) {
-            // Enter Resume scope, so we can track gradients
+        // RAII helper to release references in the SlotBindings
+        struct release_bindings {
+            SlotBindings &b;
+            ~release_bindings() { b.release(); }
+        } guard2 { bindings };
+
+        // Fast path: verify the input against the recording used by the
+        // previous call and replay it with the resulting slot bindings. The
+        // Isolate scope keeps gradients from propagating outside of the
+        // function, and ``call_slow()`` opens its own one.
+        if (last_recording) {
+            ADScopeContext ad_scope(drjit::ADScope::Isolate, 0, nullptr, -1,
+                                    true);
             ADScopeContext ad_scope2(drjit::ADScope::Resume, 0, nullptr, 0,
                                      true);
+            FunctionRecording *rec = last_recording;
 
-            // Traverse input variables
-            ProfilerPhase profiler2("traverse input");
-
-            TraverseContext ctx;
-            // Preallocate based on the number of layout entries
-            ctx.visited.reserve(in_heuristics.layout);
-            in_variables->traverse_with_registry(input, ctx);
-
-            // If this is the first time the frozen function has been called or
-            // the layout is not compatible with the previous one, we clear the
-            // opaque_mask.
-            bool auto_opaque_ = false;
-            if (prev_key) {
-                auto_opaque_ = compatible_auto_opaque(*in_variables, *prev_key);
-                if (!auto_opaque_) {
-                    // The mask is reset if they are not compatible
-                    opaque_mask.resize(in_variables->layout.size());
-                    for (uint32_t i2 = 0; i2 < opaque_mask.size(); i2++)
-                        opaque_mask[i2] = false;
-                    jit_log(LogLevel::Debug, "auto-opaque incompatible");
-                }
-            } else
-                opaque_mask.resize(in_variables->layout.size(), false);
-
-            in_variables->schedule_jit_variables(!this->auto_opaque,
-                                                 &opaque_mask);
-
-            in_variables->layout_index = 0;
-
-            {
-                state_unlock_guard guard3;
-                { // Evaluate the variables, scheduled when traversing
-                    ProfilerPhase profiler3("eval");
-                    nb::gil_scoped_release guard2;
-                    jit_eval();
-                }
-            }
-
-            in_variables->record_jit_variables();
-            bool new_opaques = false;
-            if (prev_key && auto_opaque_)
-                new_opaques =
-                    in_variables->fill_opaque_mask(*prev_key, opaque_mask);
-
-            if (new_opaques) {
-                // If new variables have been discovered that should be made
-                // opaque, we repeat traversal of the input to make them opaque.
-                // This reduces the number of variants that are saved by one.
-                jit_log(LogLevel::Info,
-                        "While traversing the frozen function input, new "
-                        "literal variables have been discovered which changed "
-                        "from one call to another. These will be made opaque, "
-                        "and the input will be traversed again. This will "
-                        "incur some overhead. To prevent this, make those "
-                        "variables opaque in beforehand. Below, a list of "
-                        "variables that changed will be shown.");
-                if (prev_key)
-                    log_diff(LogLevel::Info, *in_variables, *prev_key);
-                in_variables->release();
-                in_variables = std::make_shared<FlatVariables>(
-                    FlatVariables(in_heuristics));
-                in_variables->flags = flags;
-            } else {
-                break;
+            if (verify_layout(*rec->layout, root, scratch, bindings) &&
+                rec->dry_run(bindings.indices.data())) {
+                rec->last_used = call_counter;
+                result = rec->replay(root, bindings.indices.data());
             }
         }
 
-        in_heuristics = in_heuristics.max(in_variables->heuristic());
-
-        raise_if(in_variables->backend == JitBackend::None,
-                 "freeze(): Cannot infer backend without providing input "
-                 "variable to frozen function!");
-
-        auto it = this->recordings.find(in_variables);
-
-        // Evict the least recently used recording if the cache is "full"
-        if (max_cache_size > 0 &&
-            recordings.size() >= (uint32_t) max_cache_size &&
-            it == this->recordings.end()) {
-
-            uint32_t lru_last_used        = UINT32_MAX;
-            RecordingMap::iterator lru_it = recordings.begin();
-
-            for (auto it2 = recordings.begin(); it2 != recordings.end(); it2++) {
-                auto &recording = it2.value();
-                if (recording->last_used < lru_last_used) {
-                    lru_last_used = recording->last_used;
-                    lru_it        = it2;
-                }
-            }
-            recordings.erase_fast(lru_it);
-
-            it = this->recordings.find(in_variables);
-        }
-
-        if (it == this->recordings.end()) {
-            {
-                // TODO: single traverse
-                ADScopeContext ad_scope2(drjit::ADScope::Resume, 0, nullptr, 0,
-                                         true);
-                TraverseContext ctx;
-                in_variables->assign_with_registry(input, ctx);
-            }
-
-            // FunctionRecording recording;
-            auto recording       = std::make_unique<FunctionRecording>();
-            recording->last_used = call_counter - 1;
-
-            try {
-                result = recording->record(func, this, input, *in_variables);
-            } catch (nb::python_error &e) {
-                in_variables->release();
-                jit_freeze_abort(in_variables->backend);
-                nb::raise_from(
-                    e, PyExc_RuntimeError,
-                    "record(): error encountered while recording a frozen "
-                    "function (see above).");
-            } catch (const std::exception &e) {
-                in_variables->release();
-                jit_freeze_abort(in_variables->backend);
-
-                nb::chain_error(PyExc_RuntimeError, "record(): %s", e.what());
-                nb::raise_python_error();
-            };
-
-            in_variables->release();
-
-            this->prev_key = in_variables;
-            if (!jit_freeze_discarded(recording->recording))
-                this->recordings.insert(
-                    { std::move(in_variables), std::move(recording) });
-        } else {
-            FunctionRecording *recording = it.value().get();
-
-            recording->last_used = call_counter - 1;
-
-            try {
-                result = recording->replay(func, this, input, *in_variables);
-            } catch (std::exception &) {
-                in_variables->release();
-                throw;
-            }
-
-            // Drop references to variables
-            in_variables->release();
-        }
+        if (!result.is_valid())
+            result = call_slow(root);
     }
     ad_traverse(drjit::ADMode::Backward,
                 (uint32_t) drjit::ADFlag::ClearVertices);
     return result;
 }
 
+std::shared_ptr<Layout> FrozenFunction::build_layout(nb::handle root) {
+    // Enter Resume scope to track gradients
+    ADScopeContext ad_scope(drjit::ADScope::Resume, 0, nullptr, 0, true);
+
+    // The layout of the previous recording flags the literals made opaque by
+    // the auto-opaque feature so far, and the builder compares literals
+    // against it to detect changing ones
+    const Layout *prev = auto_opaque ? prev_layout.get() : nullptr;
+    std::shared_ptr<Layout> layout =
+        build_input_layout(root, env.arg_names, default_backend, prev,
+                           !auto_opaque, bindings);
+
+    // A previous layout with a different structure may have forced literals
+    // at unrelated positions, in which case the layout is built again
+    // without it
+    if (prev && layout->nodes.size() != prev->nodes.size()) {
+        bool forced = false;
+        for (const Node &n : layout->nodes)
+            forced |= n.has(NodeFlag::ForceOpaque);
+        if (forced)
+            layout = build_input_layout(root, env.arg_names, default_backend,
+                                        nullptr, false, bindings);
+    }
+
+    raise_if(layout->backend == JitBackend::None,
+             "drjit.freeze(): Cannot infer backend without providing input "
+             "variable to frozen function!");
+
+    return layout;
+}
+
+void FrozenFunction::warn_recordings(const Layout &layout, bool retried,
+                                     bool evicted) {
+    if (recording_counter <= warn_recording_count || recording_counter < 2)
+        return;
+
+    if (retried) {
+        jit_log(LogLevel::Warn,
+                "This frozen function was traced %u times. A recorded "
+                "operation could not handle the sizes of the current "
+                "arguments, so its recording was overwritten by a new "
+                "trace. This happens for example when a block reduction "
+                "receives an input whose size is not divisible by the "
+                "block size.",
+                recording_counter);
+        return;
+    }
+
+    // Name the input that differs from the one of the previous recording
+    std::string reason;
+    if (prev_layout)
+        reason = layout_diff(layout, *prev_layout);
+    if (reason.empty())
+        reason = "unknown";
+
+    // A full cache had to evict a recording to make room for this one, so
+    // that the two keep replacing each other
+    if (evicted)
+        jit_log(LogLevel::Warn,
+                "This frozen function was traced %u times, while its cache "
+                "holds at most %i recording(s) (``limit=%i`` was passed to "
+                "@dr.freeze). Recordings are therefore evicted and traced "
+                "again. Repeated tracing defeats the purpose of function "
+                "freezing and is caused by structural changes of the "
+                "function's inputs. The change that triggered this recording "
+                "was: %s.",
+                recording_counter, max_cache_size, max_cache_size,
+                reason.c_str());
+    else
+        jit_log(LogLevel::Warn,
+                "This frozen function was traced %u times. Repeated tracing "
+                "defeats the purpose of function freezing and is caused by "
+                "structural changes of the function's inputs. The change that "
+                "triggered this recording was: %s.",
+                recording_counter, reason.c_str());
+}
+
+nb::object FrozenFunction::call_slow(nb::handle root) {
+    // Detect structural changes in the input and potentially
+    // try recording once more
+    for (bool retried = false;; retried = true) {
+        ADScopeContext ad_scope(drjit::ADScope::Isolate, 0, nullptr, -1, true);
+
+        std::shared_ptr<Layout> layout = build_layout(root);
+        const uint32_t *inputs = bindings.indices.data();
+
+        // Drops the cache entry at position ``i``
+        auto erase = [&](size_t i) {
+            if (recordings[i].get() == last_recording)
+                last_recording = nullptr;
+            recordings[i] = std::move(recordings.back());
+            recordings.pop_back();
+        };
+
+        // Replay the cached recording if its dry run succeeds. Otherwise,
+        // drop the cache entry and record once more.
+        bool retry = false;
+        for (size_t i = 0; i < recordings.size(); ++i) {
+            FunctionRecording *rec = recordings[i].get();
+            if (!layout_equal(*rec->layout, *layout))
+                continue;
+            if (rec->dry_run(inputs)) {
+                rec->last_used = call_counter;
+                last_recording = rec;
+                return rec->replay(root, inputs);
+            }
+            jit_log(LogLevel::Info, "drjit.freeze(): dry run failed, re-recording.");
+            erase(i);
+            retry = true;
+            break;
+        }
+
+        // Evict the least recently used recording if the cache is "full"
+        bool evicted =
+            max_cache_size > 0 && recordings.size() >= (uint32_t) max_cache_size;
+        if (evicted) {
+            size_t lru = 0;
+            for (size_t i = 1; i < recordings.size(); ++i)
+                if (recordings[i]->last_used < recordings[lru]->last_used)
+                    lru = i;
+            erase(lru);
+        }
+
+        auto rec = std::make_unique<FunctionRecording>();
+        rec->last_used = call_counter;
+        rec->layout    = layout;
+
+        recording_counter++;
+        warn_recordings(*layout, retry, evicted);
+
+        nb::object result;
+        try {
+            result = rec->record(env.func, root, inputs);
+        } catch (const InputChanged &e) {
+            if (retried)
+                nb::raise("drjit.freeze(): %s, and did so again when it was "
+                          "recorded a second time. A frozen function may assign "
+                          "new arrays to its input, but it must not change the "
+                          "structure of the input or the Python values it holds, "
+                          "since a replay cannot reproduce such a change.",
+                          e.what());
+            jit_log(LogLevel::Info, "drjit.freeze(): %s, re-recording.", e.what());
+
+            // Restore gradient state
+            bindings.restore_grads();
+            ad_scope.process_postponed = false;
+            continue;
+        } catch (nb::python_error &e) {
+            nb::raise_from(e, PyExc_RuntimeError,
+                           "drjit.freeze(): error encountered while recording a frozen "
+                           "function (see above).");
+        } catch (const std::exception &e) {
+            nb::chain_error(PyExc_RuntimeError,
+                            "drjit.freeze(): error encountered while recording a frozen "
+                            "function: %s", e.what());
+            nb::raise_python_error();
+        }
+
+        prev_layout = layout;
+        last_recording = rec.get();
+        recordings.push_back(std::move(rec));
+
+        return result;
+    }
+}
+
 void FrozenFunction::clear() {
+    last_recording = nullptr;
+    bindings.release();
     recordings.clear();
-    prev_key          = std::make_shared<FlatVariables>(FlatVariables());
+    prev_layout.reset();
     recording_counter = 0;
     call_counter      = 0;
 }
 
-/**
- * This function inspects the content of the frozen function to detect reference
- * cycles, that could lead to memory or type leaks. It can be called by the
- * garbage collector by adding it to the ``type_slots`` of the
- * ``FrozenFunction`` definition.
- */
-int frozen_function_tp_traverse(PyObject *self, visitproc visit, void *arg) {
+/// Offset of the instance dictionary (``nb::dynamic_attr()``)
+static Py_ssize_t dict_offset = 0;
+
+static PyObject **inst_dict_ptr(PyObject *self) {
+    return (PyObject **) ((char *) self + dict_offset);
+}
+
+/// Enable Python's GC to collect reference cycles involving frozen functions
+int frozen_function_tp_traverse(PyObject *self, visitproc visit,
+                                void *arg) noexcept {
+    Py_VISIT(Py_TYPE(self));
+    Py_VISIT(*inst_dict_ptr(self));
+
+    // The C++ constructor may not have run yet
+    if (!nb::inst_ready(self))
+        return 0;
+
     FrozenFunction *f = nb::inst_ptr<FrozenFunction>(self);
 
-    nb::handle func = nb::find(f->func);
-    Py_VISIT(func.ptr());
+    int rv = f->env.tp_traverse(visit, arg);
+    if (rv)
+        return rv;
+    Py_VISIT(f->state_fn.ptr());
 
-    for (auto &it : f->recordings) {
-        for (auto &layout : it.first->layout) {
-            nb::handle type = nb::find(layout.type);
-            Py_VISIT(type.ptr());
-            nb::handle object = nb::find(layout.py_object);
-            Py_VISIT(object.ptr());
-        }
-        for (auto &layout : it.second->out_variables.layout) {
-            nb::handle type = nb::find(layout.type);
-            Py_VISIT(type.ptr());
-            nb::handle object = nb::find(layout.py_object);
-            Py_VISIT(object.ptr());
-        }
+    for (auto &rec : f->recordings) {
+        rv = rec->layout->tp_traverse(visit, arg);
+        if (rv)
+            return rv;
+        rv = rec->out_layout.tp_traverse(visit, arg);
+        if (rv)
+            return rv;
     }
 
+    if (f->prev_layout.use_count() == 1)
+        return f->prev_layout->tp_traverse(visit, arg);
+
     return 0;
 }
 
-/**
- * This function releases the internal function of the ``FrozenFunction``
- * object. It is used by the garbage collector to "break" potential reference
- * cycles, resulting from the frozen function being referenced in the closure of
- * the wrapped variable.
- */
-int frozen_function_clear(PyObject *self) {
+/// Enable Python's GC to clear reference cycles involving frozen functions
+int frozen_function_tp_clear(PyObject *self) noexcept {
+    Py_CLEAR(*inst_dict_ptr(self));
+
+    if (!nb::inst_ready(self))
+        return 0;
+
     FrozenFunction *f = nb::inst_ptr<FrozenFunction>(self);
-
-    f->func.release();
-
+    f->clear();
+    f->env.tp_clear();
+    f->state_fn.reset();
     return 0;
 }
 
-// Slot data structure referencing the above two functions
-static PyType_Slot slots[] = { { Py_tp_traverse,
-                                 (void *) frozen_function_tp_traverse },
-                               { Py_tp_clear, (void *) frozen_function_clear },
-                               { 0, nullptr } };
-
-void export_freeze(nb::module_ & /*m*/) {
-
-    nb::module_ d = nb::module_::import_("drjit.detail");
-    auto traversable_base =
-        nb::class_<drjit::TraversableBase>(d, "TraversableBase");
-    nb::class_<FrozenFunction>(d, "FrozenFunction", nb::type_slots(slots))
-        .def(nb::init<nb::callable, int, uint32_t, JitBackend, bool>())
-        .def_prop_ro(
-            "n_cached_recordings",
-            [](FrozenFunction &self) { return self.n_cached_recordings(); })
-        .def_ro("n_recordings", &FrozenFunction::recording_counter)
-        .def("clear", &FrozenFunction::clear)
-        .def("__call__", &FrozenFunction::operator());
+/// ``tp_descr_get`` slot. When ``@dr.freeze`` decorates a method, accessing
+/// the frozen function through an instance must produce a bound method, just
+/// as accessing a plain function would. This reimplements the ``__get__``
+/// behavior of Python functions using ``types.MethodType``.
+PyObject *frozen_function_descr_get(PyObject *self, PyObject *obj,
+                                    PyObject *) noexcept {
+    if (!obj || obj == Py_None)
+        return Py_NewRef(self);
+    return PyObject_CallFunctionObjArgs(
+        lazy_import(LazyImport::TypesMethodType).ptr(), self, obj, nullptr);
 }
 
-#ifdef _MSC_VER
-#pragma warning(pop)
-#endif
+PyObject *frozen_function_tp_call(PyObject *self, PyObject *args,
+                                  PyObject *kwargs) noexcept {
+    FrozenFunction *f = nb::inst_ptr<FrozenFunction>(self);
+    try {
+        // Python passes no dictionary when the call site has no keyword
+        // arguments, while both the layout and ``PyObject_Call()`` want one
+        nb::kwargs kwargs_o = kwargs ? nb::borrow<nb::kwargs>(kwargs)
+                                     : nb::kwargs();
+        return (*f)(nb::borrow<nb::args>(args), std::move(kwargs_o))
+            .release().ptr();
+    } catch (nb::python_error &e) {
+        e.restore();
+    } catch (const std::exception &e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+    } catch (...) {
+        PyErr_SetString(PyExc_RuntimeError,
+                        "FrozenFunction.__call__(): uncaught exception!");
+    }
+    return nullptr;
+}
+
+// Python type slots for frozen functions
+static PyType_Slot slots[] = {
+    { Py_tp_traverse, (void *) frozen_function_tp_traverse },
+    { Py_tp_clear, (void *) frozen_function_tp_clear },
+    { Py_tp_descr_get, (void *) frozen_function_descr_get },
+    { Py_tp_call, (void *) frozen_function_tp_call },
+    { 0, nullptr }
+};
+
+void export_freeze(nb::module_ &m) {
+    // The instance dictionary lets ``functools.wraps()`` copy the metadata
+    // of the decorated function (``__name__``, ``__doc__``, ``__wrapped__``, ..)
+    nb::class_<FrozenFunction> cls(m, "FrozenFunction", nb::type_slots(slots),
+                                   nb::dynamic_attr(),
+                                   nb::is_weak_referenceable(),
+                                   doc_FrozenFunction);
+    cls.def(nb::init<nb::callable, nb::object, int, uint32_t, JitBackend, bool,
+                     bool>(),
+            "func"_a, "state_fn"_a.none(), "limit"_a, "warn_after"_a,
+            "backend"_a, "auto_opaque"_a, "enabled"_a)
+       .def_prop_ro(
+           "n_cached_recordings",
+           [](FrozenFunction &self) { return self.recordings.size(); })
+       .def_ro("n_recordings", &FrozenFunction::recording_counter)
+       .def_rw("enabled", &FrozenFunction::enabled)
+       .def("clear", &FrozenFunction::clear)
+       .freeze();
+
+    dict_offset = nb::cast<Py_ssize_t>(cls.attr("__dictoffset__"));
+}

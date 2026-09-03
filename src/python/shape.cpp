@@ -127,18 +127,10 @@ bool shape_impl(nb::handle h, vector<size_t> &result) {
 }
 
 nb::tuple cast_shape(const vector<size_t> &shape) {
-    nb::tuple o = nb::steal<nb::tuple>(PyTuple_New((Py_ssize_t) shape.size()));
-    if (!o.is_valid())
-        nb::raise_python_error();
-
-    for (size_t i = 0; i < shape.size(); ++i) {
-        PyObject *l = PyLong_FromSize_t(shape[i]);
-        if (!l)
-            nb::raise_python_error();
-        NB_TUPLE_SET_ITEM(o.ptr(), (Py_ssize_t) i, l);
-    }
-
-    return o;
+    nb::tuple_builder builder(shape.size());
+    for (size_t i = 0; i < shape.size(); ++i)
+        builder.put(shape[i]);
+    return builder.commit();
 }
 
 nb::object shape(nb::handle h) {
@@ -293,5 +285,6 @@ void export_shape(nb::module_ &m) {
     m.def("shape", &shape, doc_shape, nb::sig("def shape(arg: object) -> tuple[int, ...]"));
     m.def("width", &width, doc_width)
      .def("width", [](nb::args args) { return width(args); });
-    m.def("opaque_width", &opaque_width);
+    m.def("opaque_width", &opaque_width,
+          nb::sig("def opaque_width(arg: object, /) -> AnyArray"));
 }

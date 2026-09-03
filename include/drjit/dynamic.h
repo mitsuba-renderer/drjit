@@ -266,14 +266,15 @@ struct DynamicArray
                             value *= m_data[j];
                     break;
 
+                    // Reductions ignore NaNs
                     case ReduceOp::Min:
                         for (size_t j = start + 1; j != end; ++j)
-                            value = drjit::minimum(value, m_data[j]);
+                            value = drjit::fmin(value, m_data[j]);
                         break;
 
                     case ReduceOp::Max:
                         for (size_t j = start + 1; j != end; ++j)
-                            value = drjit::maximum(value, m_data[j]);
+                            value = drjit::fmax(value, m_data[j]);
                         break;
 
                     case ReduceOp::Or:

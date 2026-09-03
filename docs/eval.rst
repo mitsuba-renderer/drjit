@@ -277,6 +277,29 @@ The Metal backend does not currently persist compiled kernels to disk. Its
 kernels are retained in an in-memory cache that benefits repeated computation
 within a session, but a new session always recompiles them from scratch.
 
+.. _cache_config:
+
+Cache configuration
+~~~~~~~~~~~~~~~~~~~
+
+The following environment variables control the behavior of the on-disk cache
+maintained by Dr.Jit. They do not affect the CUDA compute cache, which NVIDIA's
+driver manages separately.
+
+- ``DRJIT_CACHE_DIR``: overrides the default cache directory. The OptiX cache
+  database follows this location as well.
+
+- ``DRJIT_CACHE_MAXSIZE``: the maximum size of the cache directory (``1G``,
+  i.e. 1 GiB, by default). Dr.Jit evicts the least recently used entries once
+  the directory exceeds this bound. Set the variable to ``0`` to disable
+  eviction and let the cache grow without limit.
+
+- ``DRJIT_CACHE_VERBOSE``: set this to ``1`` to print a summary of each
+  eviction pass.
+
+Eviction happens on a background thread spawned on demand, at most once per
+hour.
+
 Analyzing JIT behavior
 ----------------------
 
@@ -414,15 +437,15 @@ end up dominating the computation time and lead to poor device utilization.
 Here, it would have been better to compile a single kernel that can handle
 any possible value of ``i``.
 
-To do so, use the function :py:func:`dr.opaque() <drjit.opaque>`, which creates
-an evaluated variable containing the given constant. With this change, the
-counter is no longer a literal constant, which collapses all loop iterations to
-a single consistent cache entry.
+To do so, use the function :py:func:`dr.opaque() <drjit.opaque>`, which returns
+an opaque copy of its argument. With this change, the counter is no longer a
+literal constant, which collapses all loop iterations to a single consistent
+cache entry.
 
 .. code-block:: python
 
    for i in range(1000):
-       i2 = dr.opaque(Int, i)
+       i2 = dr.opaque(Int(i))
        y = f(y, i2)
        dr.eval(y)
 
@@ -430,7 +453,7 @@ Alternatively, the following also works
 
 .. code-block:: python
 
-   i = dr.opaque(Int, 0)
+   i = dr.opaque(Int(0))
    for _ in range(1000):
        y = f(y, i)
        i += 1

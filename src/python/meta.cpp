@@ -268,6 +268,9 @@ ArrayMeta meta_get(nb::handle h) noexcept {
     } else if (h.is_none() || nb::type_check(tp)) {
         m.type = (uint8_t) VarType::UInt32;
         m.is_class = true;
+    } else if (PyIndex_Check(h.ptr())) {
+        // Last resort for other int-convertible objects (e.g. enums)
+        m.type = (uint8_t) VarType::BaseInt;
     } else {
         m.is_valid = false;
     }
@@ -472,15 +475,9 @@ void promote(nb::object *o, size_t n, bool select) {
                 }
             }
 
-            PyObject *args[2];
-            args[0] = nullptr;
-            args[1] = o[i].ptr();
+            nb::object res = call_one_arg(h2, o[i]);
 
-            PyObject *res =
-                PyObject_Vectorcall(h2.ptr(), args + 1,
-                              PY_VECTORCALL_ARGUMENTS_OFFSET | 1, nullptr);
-
-            if (NB_UNLIKELY(!res)) {
+            if (NB_UNLIKELY(!res.is_valid())) {
                 nb::str type_name_i = nb::type_name(o[i].type()),
                         type_name_o = nb::type_name(h2);
 
@@ -488,7 +485,7 @@ void promote(nb::object *o, size_t n, bool select) {
                           type_name_i.c_str(), type_name_o.c_str());
             }
 
-            o[i] = nb::steal(res);
+            o[i] = std::move(res);
         }
     }
 }

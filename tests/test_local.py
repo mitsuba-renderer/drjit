@@ -215,14 +215,16 @@ def test11_write_mask_simple(t):
 
     assert dr.all(s[0] == [1, 0, 1])
 
-@pytest.test_arrays('jit,uint32,shape=(*)')
+@pytest.test_arrays('jit,uint32,shape=(*)', 'jit,bool,shape=(*)')
 @dr.syntax
 def test12_write_mask_conditional(t):
     Bool = dr.mask_t(t)
+    UInt32 = dr.uint32_array_t(t)
+
     s = dr.alloc_local(t, 1, value = dr.zeros(t))
     mask = Bool(True, False, True)
 
-    i = t(0, 1, 1)
+    i = UInt32(0, 1, 1)
 
     if i > 0:
         s.write(t(1), t(0), active=mask) 
@@ -275,3 +277,79 @@ def test15_zero_init_dynamic_readback(t):
     s[idx % 4] = idx + 1
     assert dr.all(s[idx % 4] == idx + 1)     # written slots (dynamic gather)
     assert dr.all(s[(idx % 4) + 4] == 0)     # never-written slots -> zero-init
+
+
+@pytest.test_arrays('jit,-diff,float32,shape=(*)')
+def test16_local_in_call(t):
+    # Local memory allocated inside of a symbolic call must be materialized
+    # within the generated function. The second callable also exercises the
+    # copy elision state machine: it reads the original buffer after a
+    # modified copy was written, which requires a real copy.
+    UInt32 = dr.uint32_array_t(t)
+
+    @dr.syntax
+    def f0(x):
+        tp = type(x)
+        local = dr.alloc_local(tp, 4, value=tp(0))
+        i = dr.uint32_array_t(tp)(0)
+        while i < 3:
+            local[i] = x * tp(i)
+            i += 1
+        return local[0] + local[1] + local[2]
+
+    def f1(x):
+        s0 = dr.alloc_local(t, 2)
+        s0[0] = x
+        s0[1] = x + 1
+        s1 = dr.Local(s0)
+        s1[0] += 100
+        s0[0] += 1000
+        return s0[0] + s0[1] + s1[0] + s1[1]
+
+    x = t(1, 2, 3, 4)
+    r = dr.switch(UInt32(0, 1, 0, 1), [f0, f1], x, mode='symbolic')
+    assert dr.all(r == [3, 1110, 9, 1118])
+
+
+@pytest.test_arrays('jit,uint32,shape=(*)')
+@pytest.mark.parametrize('symbolic', [True, False])
+@dr.syntax
+def test17_loop_carried_index_from_literal(t, symbolic):
+    # The stack pointer starts out as a literal and stays size 1 within the
+    # symbolic loop, yet its lanes diverge after the first iteration. The
+    # backend must not treat it as a uniform index. Every lane runs a push/pop
+    # sequence given by the bits of 'pattern' and sums the values it pops.
+    Bool = dr.mask_t(t)
+    seed = dr.arange(t, 8)
+    pattern = seed & 3
+
+    with dr.scoped_set_flag(dr.JitFlag.SymbolicLoops, symbolic):
+        stack = dr.alloc_local(t, 8, value=t(0))
+        sp, step, total = t(0), t(0), t(0)
+        while step < 4:
+            top = stack[dr.select(sp > 0, sp - 1, t(0))]
+            push = (((pattern >> step) & 1) == 1) | (sp == 0)
+            total = dr.select(push, total, total + top)
+            stack[sp] = step * 7 + seed
+            sp = dr.select(push, sp + 1, sp - 1)
+            step += 1
+
+    assert dr.all(total == [14, 16, 11, 13, 22, 24, 19, 21])
+
+
+@pytest.test_arrays('jit,uint32,shape=(*)')
+def test18_loop_carried_index_in_call(t):
+    # Same as test17, but inside a symbolic call where all variables have size 1
+    @dr.syntax
+    def f(n):
+        tp = type(n)
+        local = dr.alloc_local(tp, 8, value=tp(0))
+        i = tp(0)
+        while i < n:
+            local[i] = i + 100
+            i += 1
+        return local[dr.select(n > 0, n - 1, tp(0))]
+
+    n = t(1, 2, 3, 4, 1, 2, 3, 4)
+    r = dr.switch(t(0), [f], n, mode='symbolic')
+    assert dr.all(r == n + 99)

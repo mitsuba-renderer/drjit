@@ -52,6 +52,11 @@ PyObject *apply(ArrayOp op, Func func, std::index_sequence<Is...>,
 extern nb::object apply_ret_pair(ArrayOp op, const char *name,
                                  nb::handle_t<dr::ArrayBase> h);
 
+/// Broadcast the flat 'array' of 'tensor' from 'shape_src' to 'shape_dst' (equal ndim)
+extern void tensor_broadcast(nb::object &tensor, nb::object &array,
+                             const vector<size_t> &shape_src,
+                             const vector<size_t> &shape_dst);
+
 /// Callback for the ``traverse()`` operation below
 struct TraverseCallback {
     // Virtual destructor
@@ -131,6 +136,10 @@ struct TransformPairCallback {
  * \param callback:
  *     The \c TraverseCallback, called for every Jit variable in the pytree.
  *
+ * \param role:
+ *     Purpose of the traversal, passed on to C++ objects so that they can
+ *     decide which of their members take part (see \c drjit::TraverseRole).
+ *
  * \param rw:
  *     Boolean, indicating if C++ objects should be traversed in read-write
  *     mode. If this is set to \c true, the result from the method
@@ -139,7 +148,40 @@ struct TransformPairCallback {
  *     traversed.
  */
 extern void traverse(const char *op, TraverseCallback &callback, nb::handle h,
+                     dr::TraverseRole role = dr::TraverseRole::Generic,
                      bool rw = false);
+
+/**
+ * \brief Traverse the graph of C++ objects below ``obj``
+ *
+ * This is the one place that defines how Dr.Jit walks objects deriving from
+ * \c drjit::TraversableBase outside of frozen functions. The state type must
+ * provide:
+ *
+ * - ``role``: the \c drjit::TraverseRole reported to the objects
+ * - ``visited``: a set of ``drjit::TraversableBase *``; every object is
+ *   entered once, which deduplicates shared objects and terminates cycles
+ * - ``var(index, variant, domain)``: receives each JIT array and returns the
+ *   index that the object holds from now on
+ * - ``py(dict)``: receives the attribute dictionary of the Python side of an
+ *   object (see \c traversable_dict())
+ */
+template <typename State>
+void traverse_object(State &st, dr::TraversableBase *obj) {
+    if (!st.visited.insert(obj).second)
+        return;
+
+    for_each_member(
+        obj, st.role,
+        [&st](uint64_t index, const char *, const char *variant,
+              const char *domain) { return st.var(index, variant, domain); },
+        [&st](dr::TraversableBase *child, const char *) {
+            traverse_object(st, child);
+        });
+
+    if (nb::dict d = traversable_dict(obj); d.is_valid())
+        st.py(d);
+}
 
 /// Parallel traversal of two compatible pytrees 'h1' and 'h2'
 extern void traverse_pair(const char *op, TraversePairCallback &callback,
@@ -147,8 +189,12 @@ extern void traverse_pair(const char *op, TraversePairCallback &callback,
                           bool report_inconsistencies = true,
                           bool width_consistency = true);
 
-/// Transform an input pytree 'h' into an output pytree, potentially of a different type
-extern nb::object transform(const char *op, TransformCallback &callback, nb::handle h);
+/// Transform an input pytree 'h' into an output pytree, potentially of a
+/// different type. C++ objects are transformed in place; ``role`` is the
+/// purpose reported to them (see \c drjit::TraverseRole).
+extern nb::object transform(const char *op, TransformCallback &callback,
+                            nb::handle h,
+                            dr::TraverseRole role = dr::TraverseRole::Generic);
 
 /// Transform a pair of input pytrees 'h1' and 'h2' into an output pytree, potentially of a different type
 extern nb::object transform_pair(const char *op, TransformPairCallback &callback, nb::handle h1, nb::handle h2);

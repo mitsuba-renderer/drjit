@@ -4,7 +4,9 @@
 #include <drjit/packet.h>
 #include <drjit/matrix.h>
 #include <drjit/transform.h>
+#include <drjit/idiv.h>
 #include <nanobind/stl/tuple.h>
+#include <nanobind/stl/pair.h>
 
 namespace nb = nanobind;
 namespace dr = drjit;
@@ -30,6 +32,27 @@ Matrix4 transform_compose(Matrix3 m, Quaternion q, Array tr) {
     return dr::transform_compose<Matrix4>(m, q, tr);
 }
 
+template <typename UInt32>
+std::pair<uint32_t, uint32_t> divisor_constants(uint32_t d) {
+    dr::divisor<uint32_t> div(d);
+    return { (uint32_t) div.multiplier, (uint32_t) div.shift };
+}
+
+template <typename UInt32>
+UInt32 idiv_scalar(const UInt32 &value, uint32_t d) {
+    return dr::idiv(value, dr::divisor<uint32_t>(d));
+}
+
+template <typename UInt32>
+UInt32 idiv_jit(const UInt32 &value, const UInt32 &multiplier, const UInt32 &shift) {
+    return dr::idiv(value, dr::divisor<UInt32>(multiplier, shift));
+}
+
+template <typename Int32>
+Int32 idiv_signed(const Int32 &value, int32_t d) {
+    return dr::divisor<Int32>(d)(value);
+}
+
 template <typename Matrix4, typename Array>
 Matrix4 translate(Array tr) {
     return dr::translate<Matrix4>(tr);
@@ -47,6 +70,13 @@ template <JitBackend Backend> void bind(nb::module_ &m) {
     m.def("transform_decompose", &transform_decompose<Matrix4f, Matrix3f, Quaternion4f, Array3f>);
     m.def("transform_compose", &transform_compose<Matrix4f, Matrix3f, Quaternion4f, Array3f>);
     m.def("translate", &translate<Matrix4f, Array3f>);
+
+    using UInt32 = dr::DiffArray<Backend, uint32_t>;
+    using Int32 = dr::DiffArray<Backend, int32_t>;
+    m.def("divisor_constants", &divisor_constants<UInt32>);
+    m.def("idiv_scalar", &idiv_scalar<UInt32>);
+    m.def("idiv_jit", &idiv_jit<UInt32>);
+    m.def("idiv_signed", &idiv_signed<Int32>);
 }
 
 NB_MODULE(py_cpp_consistency_ext, m) {

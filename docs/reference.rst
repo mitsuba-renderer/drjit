@@ -214,6 +214,7 @@ Function freezing
 -----------------
 
 .. autofunction:: freeze
+.. autoclass:: FrozenFunction
 
 Type traits
 -----------
@@ -313,6 +314,8 @@ Standard mathematical functions
 .. autofunction:: abs
 .. autofunction:: minimum
 .. autofunction:: maximum
+.. autofunction:: fmin
+.. autofunction:: fmax
 .. autofunction:: sqrt
 .. autofunction:: cbrt
 .. autofunction:: rcp
@@ -658,6 +661,28 @@ Debugging
 Profiling
 ---------
 
+.. autoclass:: kernel_history
+.. autoclass:: KernelHistoryEntry
+
+    .. autoproperty:: backend
+    .. autoproperty:: type
+    .. autoproperty:: recording_mode
+    .. autoproperty:: size
+    .. autoproperty:: input_count
+    .. autoproperty:: output_count
+    .. autoproperty:: hash
+    .. autoproperty:: operation_count
+    .. autoproperty:: codegen_time
+    .. autoproperty:: backend_time
+    .. autoproperty:: uses_optix
+    .. autoproperty:: cache_hit
+    .. autoproperty:: cache_disk
+    .. autoproperty:: execution_time
+    .. autoproperty:: source
+
+.. autoenum:: KernelType
+.. autoenum:: KernelRecordingMode
+.. autofunction:: kernel_history_clear
 .. autoclass:: profile_enable
 .. autofunction:: profile_mark
 .. autoclass:: profile_range
@@ -671,6 +696,8 @@ enumerations provided here
 
 .. autoenum:: WrapMode
 .. autoenum:: FilterMode
+.. autoenum:: MipFilter
+.. autoenum:: MipBasis
 
 Low-level bits
 --------------
@@ -684,8 +711,6 @@ Low-level bits
 .. autofunction:: flush_malloc_cache
 .. autofunction:: expand_threshold
 .. autofunction:: set_expand_threshold
-.. autofunction:: kernel_history
-.. autofunction:: kernel_history_clear
 
 .. py:currentmodule:: drjit.detail
 .. autofunction:: set_leak_warnings

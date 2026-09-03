@@ -3,8 +3,15 @@ if (SKBUILD)
   set(DRJIT_DIST_FLAGS LTO)
 endif()
 
-if (SKBUILD AND DRJIT_STABLE_ABI)
-    list(APPEND DRJIT_DIST_FLAGS STABLE_ABI)
+
+# Split mode delegates to a backend module shipped as a separate Python
+# package; the extension then targets the Python 3.10 stable ABI. The
+# non-split configuration statically links libnanobind. Either way, the
+# bindings live in an isolated 'drjit' domain.
+if (DRJIT_SPLIT_MODE)
+  set(DRJIT_NB_FLAGS BACKEND_MODULE nanobind_backend NB_DOMAIN drjit)
+else()
+  set(DRJIT_NB_FLAGS NB_DOMAIN drjit NB_STATIC)
 endif()
 
 # ------------------- Copy Python resources -------------------
@@ -22,8 +29,9 @@ configure_file(
 
 set(PY_FILES
   config.py __init__.py ast.py detail.py interop.py dda.py opt.py nn.py
-  random.py hashgrid.py _sh_eval.py _reduce.py scalar/__init__.py scalar/ad.py
-  llvm/__init__.py llvm/ad.py cuda/__init__.py cuda/ad.py metal/__init__.py metal/ad.py)
+  random.py hashgrid.py _sh_eval.py _reduce.py scalar/__init__.py
+  scalar/ad.py llvm/__init__.py llvm/ad.py cuda/__init__.py cuda/ad.py
+  metal/__init__.py metal/ad.py)
 
 set(PY_FILES_OUT "")
 
@@ -48,8 +56,7 @@ add_custom_target(drjit-copy-python-src ALL DEPENDS ${PY_FILES_OUT})
 nanobind_add_module(
   drjit-python
 
-  NB_DOMAIN drjit
-  NB_STATIC
+  ${DRJIT_NB_FLAGS}
   ${DRJIT_DIST_FLAGS}
 
   # Entry point
@@ -68,7 +75,11 @@ nanobind_add_module(
   reduce.h      reduce.cpp
   apply.h       apply.cpp
   eval.h        eval.cpp
+  funcenv.h     funcenv.cpp
   freeze.h      freeze.cpp
+  freeze_layout.h freeze_layout.cpp
+  freeze_output.cpp
+  freeze_verify.cpp
   memop.h       memop.cpp
   slice.h       slice.cpp
   dlpack.h      dlpack.cpp
@@ -195,7 +206,6 @@ if (MSVC)
       TARGET copy-targets-drjit POST_BUILD
       COMMAND ${CMAKE_COMMAND} -E copy_if_different
         $<TARGET_FILE:${target}> ${COPY_TARGET_DESTINATION}
-      DEPENDS ${target}
     )
   endforeach(target)
 
@@ -265,10 +275,14 @@ if (NOT (DRJIT_SANITIZE_ASAN OR DRJIT_SANITIZE_UBSAN))
     ${STUB_ARGS}
   )
 
-  # Generate the 'auto' version of the stubs using string replacement
+  # Generate the 'auto' version of the stubs using string replacement. The
+  # recursive stub generator also visits 'drjit.auto' and writes placeholders
+  # into these files, so the dependency must be on the LLVM stubs themselves.
+  # Naming the 'drjit-stubs' target here would only order the two commands
+  # without ever marking the output as outdated.
   add_custom_command(
     OUTPUT ${DRJIT_PYTHON_DST_DIR}/auto/__init__.pyi
-    DEPENDS drjit-stubs
+    DEPENDS ${DRJIT_PYTHON_DST_DIR}/llvm/__init__.pyi
     COMMAND cmake -P ${CMAKE_CURRENT_SOURCE_DIR}/../../resources/auto-stub.cmake
       ${DRJIT_PYTHON_DST_DIR}/llvm/__init__.pyi
       ${DRJIT_PYTHON_DST_DIR}/auto/__init__.pyi
@@ -276,7 +290,7 @@ if (NOT (DRJIT_SANITIZE_ASAN OR DRJIT_SANITIZE_UBSAN))
 
   add_custom_command(
     OUTPUT ${DRJIT_PYTHON_DST_DIR}/auto/ad.pyi
-    DEPENDS drjit-stubs
+    DEPENDS ${DRJIT_PYTHON_DST_DIR}/llvm/ad.pyi
     COMMAND cmake -P ${CMAKE_CURRENT_SOURCE_DIR}/../../resources/auto-stub.cmake
       ${DRJIT_PYTHON_DST_DIR}/llvm/ad.pyi
       ${DRJIT_PYTHON_DST_DIR}/auto/ad.pyi
@@ -288,7 +302,8 @@ if (NOT (DRJIT_SANITIZE_ASAN OR DRJIT_SANITIZE_UBSAN))
       ${DRJIT_PYTHON_DST_DIR}/auto/__init__.py
       ${DRJIT_PYTHON_DST_DIR}/auto/ad.py
 
-    COMMAND cmake -E touch
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${DRJIT_PYTHON_DST_DIR}/auto
+    COMMAND ${CMAKE_COMMAND} -E touch
       ${DRJIT_PYTHON_DST_DIR}/auto/py.typed
       ${DRJIT_PYTHON_DST_DIR}/auto/__init__.py
       ${DRJIT_PYTHON_DST_DIR}/auto/ad.py

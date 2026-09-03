@@ -135,6 +135,25 @@ def test02d_assert_allclose_tensor(t):
     )
 
 
+@pytest.test_arrays('float32,shape=(3, *),jit,is_diff')
+def test02e_assert_allclose_nested(t):
+    a = t([1, 2], [2, 2], [3, 3])
+    dr.assert_allclose(a, t([1, 2], [2, 2], [3, 3]))
+
+    with pytest.raises(AssertionError) as ei:
+        dr.assert_allclose(a, t([1, 2], [2, 5], [3, 4]), rtol=0, atol=0)
+    assert str(ei.value) == (
+        "Arrays are not equal to tolerance rtol=0, atol=0\n"
+        "Mismatched elements: 2 / 6 (33.3%)\n"
+        "Max absolute difference: 3\n"
+        "Max relative difference: 0.6\n"
+        " ACTUAL: [[1, 2, 3],\n"
+        "          [2, 2, 3]]\n"
+        " DESIRED: [[1, 2, 3],\n"
+        "           [2, 5, 4]]"
+    )
+
+
 @pytest.test_arrays('-bool,shape=(3)', '-bool,shape=(3, *)', '-bool,shape=(*, *)')
 def test03_binop_simple(t):
     a = t(1, 2, 3)
@@ -345,10 +364,10 @@ def test06_select():
 
         assert dr.select(True, None, None) is None
         assert dr.select(l.Array1b(True), None, None) is None
-        class Dummy(int):
+        class Dummy:
             pass
         with pytest.raises(RuntimeError, match=r"encountered incompatible objects with an unknown type \(not a Dr.Jit array, not a PyTree\)."):
-            dr.select(l.Array2b(True, False), Dummy(1), Dummy(2))
+            dr.select(l.Array2b(True, False), Dummy(), Dummy())
 
 @pytest.test_arrays('type=float32,shape=(*)')
 def test07_power(t):
@@ -581,3 +600,159 @@ def test25_allclose_mixed_precision(t):
     a = t(1.0, 2.0, 3.0)
     b = np.array([1.0, 2.0, 3.0], dtype=np.float64)
     assert dr.allclose(a, b)
+
+@pytest.test_arrays('-bool, -uint, shape=(*)')
+def test26_copysign(t):
+    a, b = t(1, 2, 3, 4), t(1, -1, 1, -1)
+    assert dr.all(dr.copysign(a, b) == t(1, -2, 3, -4))
+    assert dr.all(dr.copysign(-a, b) == t(1, -2, 3, -4))
+    assert dr.all(dr.copysign(a, -b) == t(-1, 2, -3, 4))
+
+
+@pytest.test_arrays('float, shape=(*)')
+def test27_copysign_signed_zero(t):
+    # Unlike an 'arg >= 0' comparison, 'copysign' propagates negative zeros
+    assert dr.all(dr.copysign(t(1, 1), t(0.0, -0.0)) == t(1, -1))
+
+
+@pytest.test_arrays('float, shape=(3, *)')
+def test28_copysign_nested(t):
+    r = dr.copysign(t(1, 2, 3), t(-1, 1, -1))
+    assert dr.all(r == t(-1, 2, -3), axis=None)
+
+
+@pytest.test_arrays('float32, jit, is_diff, shape=(*)')
+def test29_copysign_grad(t):
+    a, b = t(1, -2, 3, -4), t(1, -1, -1, 1)
+    dr.enable_grad(a, b)
+    r = dr.copysign(a, b)
+    assert dr.all(r == t(1, -2, -3, 4))
+    dr.backward(r)
+
+    # d/da copysign(a, b) is sign(a)*sign(b), the derivative w.r.t. 'b' is zero
+    assert dr.all(dr.grad(a) == t(1, 1, -1, -1))
+    assert dr.all(dr.grad(b) == t(0, 0, 0, 0))
+
+
+@pytest.test_arrays('float32, jit, shape=(4, *)')
+def test30_assert_allclose_nested(t):
+    # A failed comparison reports an AssertionError, also for nested arrays
+    # whose reductions collapse to a plain Python scalar
+    mod = sys.modules[t.__module__]
+
+    for a, b, n in ((t(0, 0, 0, 0), t(1, 2, 3, 4), '4 / 4'),
+                    (mod.Float(0, 0), mod.Float(1, 1), '2 / 2')):
+        dr.assert_allclose(a, a)
+        with pytest.raises(AssertionError) as e:
+            dr.assert_allclose(a, b, atol=1e-4)
+        assert f'Mismatched elements: {n}' in str(e.value)
+
+
+@pytest.test_arrays('float, shape=(*)')
+def test_minmax_nan(t):
+    # 'minimum'/'maximum' propagate NaNs, 'fmin'/'fmax' ignore them
+    nan, inf = float('nan'), float('inf')
+    a, b = t(nan, 5, nan, 5), t(5, nan, nan, 1)
+
+    def check(value, ref):
+        assert dr.all(dr.isnan(value) == dr.isnan(t(*ref)))
+        assert dr.all((value == t(*ref)) | dr.isnan(value))
+
+    for x, y in ((a, b), (b, a)):
+        check(dr.minimum(x, y), (nan, nan, nan, 1))
+        check(dr.maximum(x, y), (nan, nan, nan, 5))
+        check(dr.fmin(x, y), (5, 5, nan, 1))
+        check(dr.fmax(x, y), (5, 5, nan, 5))
+
+    # Infinities must never swallow a NaN. The second entry avoids folding.
+    check(dr.minimum(t(nan, 1), t(-inf)), (nan, -inf))
+    check(dr.minimum(t(nan, 1), t(inf)), (nan, 1))
+    check(dr.maximum(t(nan, 1), t(inf)), (nan, inf))
+    check(dr.maximum(t(nan, 1), t(-inf)), (nan, 1))
+    check(dr.fmin(t(nan, 1), t(-inf)), (-inf, -inf))
+    check(dr.fmin(t(nan, 1), t(inf)), (inf, 1))
+    check(dr.fmax(t(nan, 1), t(inf)), (inf, inf))
+    check(dr.fmax(t(nan, 1), t(-inf)), (-inf, 1))
+
+    # A single literal is folded on the host and must agree with the above
+    check(dr.minimum(t(nan), t(5)), (nan,))
+    check(dr.minimum(t(5), t(nan)), (nan,))
+    check(dr.fmin(t(nan), t(5)), (5,))
+    check(dr.fmin(t(5), t(nan)), (5,))
+    check(dr.fmin(t(nan), t(nan)), (nan,))
+
+
+@pytest.test_arrays('int32, -uint32, shape=(*)')
+def test_minmax_nan_int(t):
+    # Integers have no NaNs
+    a, b = t(1, 5, -3, 7), t(5, 1, 2, 7)
+    assert dr.all(dr.fmin(a, b) == dr.minimum(a, b))
+    assert dr.all(dr.fmax(a, b) == dr.maximum(a, b))
+    assert dr.fmin(4, 7) == 4 and dr.fmax(4, 7) == 7
+
+
+def test_minmax_nan_packet():
+    # Same conventions at every packet width
+    nan = float('nan')
+
+    for name in ('Array2f', 'Array3f', 'Array4f', 'Array2f64', 'Array4f64',
+                 'Array4f16', 'Array2f16'):
+        t = getattr(dr.scalar, name)
+        n = dr.size_v(t)
+        pa, pb = (nan, 5, nan, 5), (5, nan, nan, 1)
+        a = t(*[pa[i % 4] for i in range(n)])
+        b = t(*[pb[i % 4] for i in range(n)])
+
+        def check(value, ref, op):
+            for i in range(n):
+                got, exp = float(value[i]), float(ref[i % 4])
+                assert (got != got and exp != exp) or got == exp, \
+                    f'{name}.{op} lane {i}: {got} != {exp}'
+
+        for x, y in ((a, b), (b, a)):
+            check(dr.minimum(x, y), (nan, nan, nan, 1), 'minimum')
+            check(dr.maximum(x, y), (nan, nan, nan, 5), 'maximum')
+            check(dr.fmin(x, y), (5, 5, nan, 1), 'fmin')
+            check(dr.fmax(x, y), (5, 5, nan, 5), 'fmax')
+
+    # Integers are unaffected
+    ti = dr.scalar.Array4i
+    a, b = ti(1, 5, -3, 7), ti(5, 1, 2, 7)
+    assert dr.all(dr.fmin(a, b) == dr.minimum(a, b))
+    assert dr.all(dr.fmax(a, b) == dr.maximum(a, b))
+
+
+@pytest.test_arrays('float32, shape=(*)')
+def test_minmax_nan_reduction(t):
+    # Reductions ignore NaNs, wherever the NaN sits
+    nan = float('nan')
+    for data in ((nan, 1, 2, 3), (1, nan, 2, 3), (1, 2, 3, nan)):
+        assert dr.min(t(*data)) == 1
+        assert dr.max(t(*data)) == 3
+
+    target = dr.zeros(t, 2)
+    index = dr.uint32_array_t(t)(0, 0)
+    dr.scatter_reduce(dr.ReduceOp.Min, target, t(nan, 5), index)
+    assert target[0] == 0
+
+
+@pytest.test_arrays('float32, jit, shape=(*)')
+def test_clip_float(t):
+    x = t(-5, -1, 0, 1.5, 3, 7)
+    assert dr.all(dr.clip(x, 0, 3) == t(0, 0, 0, 1.5, 3, 3))
+    assert dr.all(dr.clip(x, 5, 3) == t(3, 3, 3, 3, 3, 3))
+
+    # 'clip' builds on 'minimum'/'maximum' and therefore propagates NaNs
+    nan = float('nan')
+    r = dr.clip(t(nan, 9), 0, 3)
+    assert dr.isnan(r)[0] and r[1] == 3
+    assert dr.all(dr.isnan(dr.clip(t(nan, nan), 5, 3)))
+    assert dr.all(dr.isnan(dr.clip(x, nan, 3)))
+    assert dr.all(dr.isnan(dr.clip(x, 0, nan)))
+
+
+@pytest.test_arrays('int32, -uint32, jit, shape=(*)')
+def test_clip_int(t):
+    v = t(-40, -5, -2, 0, 3, 9, 40)
+    assert dr.all(dr.clip(v, -2, 9) == t(-2, -2, -2, 0, 3, 9, 9))
+    assert dr.all(dr.clip(v, 9, 2) == t(2, 2, 2, 2, 2, 2, 2))

@@ -10,6 +10,8 @@
     license that can be found in the LICENSE file.
 */
 
+#pragma once
+
 #include <drjit/array.h>
 #include <drjit-core/half.h>
 #include <drjit-core/texture.h>
@@ -24,12 +26,11 @@
 #include <drjit/traversable_base.h>
 #include <array>
 #include <cassert>
-
-#pragma once
+#include <memory>
 
 NAMESPACE_BEGIN(drjit)
 
-template <typename Storage_, size_t Dimension> class Texture : TraversableBase {
+template <typename Storage_, size_t Dimension> class Texture : public TraversableBase {
 public:
     static constexpr bool IsCUDA = is_cuda_v<Storage_>;
     static constexpr bool IsMetal = is_metal_v<Storage_>;
@@ -47,6 +48,12 @@ public:
     using UInt32 = uint32_array_t<Storage_>;
     using Storage = std::conditional_t<IsDynamic, Storage_, DynamicArray<Storage_>>;
     using TensorXf = Tensor<Storage>;
+
+    // Dynamic integer array holding the per-level MIP constant records
+    using Int32Buffer = int32_array_t<Storage>;
+
+    /// Stride of the records in \ref m_mip_table
+    static constexpr uint32_t MipStride = Dimension == 1 ? 4 : 8;
 
     // Precomputed reciprocal for the Repeat/Mirror wrap math.
     using Divisor = std::conditional_t<is_jit_v<Storage_>, divisor<Int32, true>,
@@ -78,6 +85,9 @@ public:
      * texture API instead of using the hardware texture units. In other modes,
      * this argument has no effect.
      *
+     * A \c writable texture can be modified using \ref write(). Such a
+     * texture cannot be MIP-mapped.
+     *
      * The \c filter_mode parameter defines the interpolation method to be used
      * in all evaluation routines. By default, the texture is linearly
      * interpolated. Besides nearest/linear filtering, the implementation also
@@ -96,22 +106,52 @@ public:
      * fractional bits on CUDA, i.e. 256 steps between texels). This does not
      * degrade the stored values or the interpolated quantity, only how finely
      * the fractional position within a texel is resolved. Set \c use_accel to
-     * \c false to disable the texture units and avoid this approximation at some
-     * cost in performance.
+     * \c false to disable the texture units and avoid this approximation at
+     * some cost in performance.
      *
      * For 8-bit textures, setting \c srgb additionally requests that samples
      * be decoded from sRGB to linear. Passing it for a floating-point texture
      * raises an error. Channels are grouped into hardware RGBA quads, so within
      * each group of four the first three are decoded and the fourth (alpha) is
      * left linear (e.g. channel 3 is linear for a 6-channel texture).
+     *
+     * Specifying a \c mip_filter causes the implementation to create a MIP
+     * pyramid for filtered lookups via \ref eval_lod() and \ref
+     * eval_filtered(). The functions \ref set_value() / \ref set_tensor()
+     * regenerate it from the base level using a box filter that averages two
+     * texels per axis (applied in linear space for sRGB textures). MIP-mapped
+     * textures cannot be \c writable.
+     *
+     * The \c max_aniso parameter only applies to MIP-mapped textures and
+     * controls the number of taps that anisotropic filtering in \ref
+     * eval_filtered() may use. The value 1 selects isotropic filtering, and
+     * values above the hardware limit of 16 raise an error.
+     *
+     * The \c mip_basis parameter determines the internal representation of
+     * MIP-mapped textures. The default \ref MipBasis::Standard derives a
+     * standard MIP pyramid from the base image.
+     *
+     * When \c mip_basis is set to \ref MipBasis::Laplacian, the authoritative
+     * representation is no longer the base image but a set of per-level
+     * coefficient tensors (see \ref tensor(size_t)). The MIP pyramid uploaded
+     * to the GPU is then derived from these tensors by repeated upsampling and
+     * summation. This choice is mainly useful for workloads that perform
+     * gradient-based optimization of textures with filtered texture lookups.
+     * See the Dr.Jit documentation on textures for additional detail. Laplacian
+     * mode requires a MIP-mapped texture with floating-point storage on a JIT
+     * backend.
      */
     Texture(const size_t shape[Dimension], size_t channels,
             bool use_accel = true,
             FilterMode filter_mode = FilterMode::Linear,
             WrapMode wrap_mode = WrapMode::Clamp,
-            bool writable = false, bool srgb = false) : m_srgb(srgb) {
-        init(shape, channels, use_accel, filter_mode, wrap_mode,
-             /* init_tensor = */ true, writable);
+            bool writable = false, bool srgb = false,
+            MipFilter mip_filter = MipFilter::Disabled,
+            size_t max_aniso = 8,
+            MipBasis mip_basis = MipBasis::Standard)
+        : m_srgb(srgb) {
+        init(shape, channels, use_accel, filter_mode, wrap_mode, writable,
+             /* external = */ nullptr, mip_filter, max_aniso, mip_basis);
     }
 
     /**
@@ -122,26 +162,30 @@ public:
      * invokes <tt>set_tensor(tensor)</tt> to fill the texture memory with the
      * provided tensor.
      *
-     * When \c migrate is set to \c true on a GPU backend, the texture is
-     * *fully* migrated to GPU texture memory to avoid redundant storage. Note
-     * that the texture is still differentiable even when migrated. The \ref
-     * value() and \ref tensor() operations will perform a reverse migration in
-     * this case.
+     * On the CUDA and Metal backends, Dr.Jit migrates the data to GPU
+     * texture memory, which then holds the only copy. Values like \ref
+     * tensor() and \ref value() produce a differentiable symbolic view of
+     * this memory that occupies no storage of its own.
      *
-     * Both the \c filter_mode and \c wrap_mode have the same defaults and
-     * behaviors as for the previous constructor.
+     * The \c use_accel, \c filter_mode, \c wrap_mode, \c srgb, \c mip_filter,
+     * \c max_aniso, and \c mip_basis parameters have the same defaults and
+     * behaviors as in the shape-based constructor. This overload infers the
+     * shape and channel count from the tensor and does not accept \c writable.
      */
     template <typename TensorT>
-    Texture(TensorT &&tensor, bool use_accel = true, bool migrate = true,
+    Texture(TensorT &&tensor, bool use_accel = true,
             FilterMode filter_mode = FilterMode::Linear,
-            WrapMode wrap_mode = WrapMode::Clamp, bool srgb = false)
+            WrapMode wrap_mode = WrapMode::Clamp, bool srgb = false,
+            MipFilter mip_filter = MipFilter::Disabled, size_t max_aniso = 8,
+            MipBasis mip_basis = MipBasis::Standard)
         : m_srgb(srgb) {
         if (tensor.ndim() != Dimension + 1)
             jit_raise("Texture::Texture(): tensor dimension must equal "
                         "texture dimension plus one.");
         init(tensor.shape().data(), tensor.shape(Dimension), use_accel,
-             filter_mode, wrap_mode);
-        set_tensor(std::forward<TensorT>(tensor), migrate);
+             filter_mode, wrap_mode, /* writable = */ false,
+             /* external = */ nullptr, mip_filter, max_aniso, mip_basis);
+        set_tensor(std::forward<TensorT>(tensor));
     }
 
     /**
@@ -182,10 +226,8 @@ public:
     Texture &operator=(const Texture &) = delete;
 
     ~Texture() {
-        if constexpr (HasGPUTexture) {
-            if (m_use_accel)
-                jit_tex_destroy(m_handle);
-        }
+        if constexpr (HasGPUTexture)
+            jit_tex_destroy(m_handle);
     }
 
 private:
@@ -211,8 +253,7 @@ private:
                 tensor_shape[i] = shape_tex[Dimension - 1 - i];
 
             init(tensor_shape, channels, /* use_accel = */ true, filter_mode,
-                 wrap_mode, /* init_tensor = */ true, writable,
-                 /* external = */ h);
+                 wrap_mode, writable, /* external = */ h);
         } else {
             (void) handle; (void) writable; (void) filter_mode; (void) wrap_mode;
             (void) srgb;
@@ -240,8 +281,18 @@ public:
     /// Return the boundary handling mode for out-of-bounds lookups
     WrapMode wrap_mode() const { return m_wrap_mode; }
 
-    /// Is the texture data held exclusively in GPU texture memory?
-    bool migrated() const { return m_migrated; }
+    /// Return the MIP level selection mode of filtered lookups
+    MipFilter mip_filter() const { return m_mip_filter; }
+
+    /// Return the number of MIP pyramid levels, including the base level
+    /// (1 when the texture is not MIP-mapped)
+    size_t mip_levels() const { return m_level_count; }
+
+    /// Return the anisotropic tap bound of \ref eval_filtered()
+    size_t max_aniso() const { return m_max_aniso; }
+
+    /// Return the MIP basis of the texture
+    MipBasis mip_basis() const { return m_mip_basis; }
 
     /// Are hardware texture units used for evaluation?
     bool use_accel() const { return m_use_accel; }
@@ -283,23 +334,35 @@ public:
      * \brief Overwrite the texture contents with the provided linearized 1D
      * array
      *
-     * When \c migrate is set to \c true on the CUDA and Metal backends, the
-     * texture information is *fully* migrated to GPU texture memory to avoid
-     * redundant storage.
+     * On the CUDA and Metal backends, the update migrates the texture data
+     * into the GPU's native texture format, which then holds the only copy.
+     *
+     * With \ref MipBasis::Laplacian, the array is first decomposed into
+     * per-level coefficients. A subsequent \ref value() then reproduces it up
+     * to floating point rounding.
      */
     template <typename StorageT>
-    void set_value(StorageT &&value, bool migrate = false) {
+    void set_value(StorageT &&value) {
         if constexpr (!is_jit_v<Storage_>) {
             if (value.size() != m_size)
                 jit_raise("Texture::set_value(): unexpected array size!");
-            m_value.array() = std::forward<StorageT>(value);
+            m_padded_tensor.array() = std::forward<StorageT>(value);
+            build_mipmap(m_padded_tensor.array());
         } else /* JIT variant */ {
+            if (m_mip_basis == MipBasis::Laplacian) {
+                if (value.size() != unpadded_size())
+                    jit_raise("Texture::set_value(): unexpected array size "
+                              "(%zu vs %zu)!", value.size(), unpadded_size());
+                decompose(value);
+                rebuild_pyramid();
+                return;
+            }
+
             Storage padded_value;
 
             if (m_channels_storage != m_channels) {
                 padded_value = steal_storage(ad_tex_repack(
-                    combined_index(value),
-                    (uint32_t) (m_size / m_channels_storage),
+                    combined_index(value), (uint32_t) texel_count(),
                     (uint32_t) m_channels_storage, (uint32_t) m_channels));
             } else {
                 padded_value = value;
@@ -310,40 +373,30 @@ public:
                     "Texture::set_value(): unexpected array size (%zu vs %zu)!",
                     padded_value.size(), m_size);
 
-            // Stash the AD index of the unpadded `value` and re-attach it in
-            // `tensor()` so gradients stay queryable via `tensor().grad`.
-            // Recomputing the unpadded values from the padded ones would
-            // instead overwrite `m_unpadded_value` (the gradient source) on the
-            // next `tensor()` call.
+            drjit::eval(padded_value);
+
+            // Stash the AD index of ``value``, which is the differentiable
+            // identity of the texture's contents. The view installed below
+            // preserves it.
             if constexpr (IsDiff) {
                 if (grad_enabled(value))
-                    m_unpadded_value.array() =
-                        replace_grad(m_unpadded_value.array(), value);
+                    m_tensor.array() =
+                        replace_grad(m_tensor.array(), value);
             }
+
+            build_mipmap(padded_value);
 
             if constexpr (HasGPUTexture) {
                 if (m_use_accel) {
-                    jit_tex_memcpy_d2t(padded_value.data(), m_handle);
-
-                    if (migrate) {
-                        // Fully migrate to texture memory, set m_value to zero
-                        Storage dummy = zeros<Storage>(m_size);
-
-                        if constexpr (IsDiff)
-                            m_value.array() = replace_grad(dummy, padded_value);
-                        else
-                            m_value.array() = dummy;
-
-                        m_migrated = true;
-                        m_tensor_dirty = true;
-
-                        return;
-                    }
+                    upload_levels(padded_value);
+                    m_padded_tensor.array() = std::move(padded_value);
+                    install_readback_views();
+                    return;
                 }
             }
 
-            m_value.array() = padded_value;
-            m_tensor_dirty = true;
+            m_padded_tensor.array() = std::move(padded_value);
+            install_unpadded_view();
         }
     }
 
@@ -352,46 +405,43 @@ public:
      *
      * This method updates the values of all texels. Changing the texture
      * resolution or its number of channels is also supported. However, on the
-     * CUDA and Metal backends, such operations have a significantly larger
-     * overhead (new hardware texture objects must be created; on CUDA this also
-     * synchronizes the GPU pipeline).
+     * CUDA and Metal backends, the latter is significantly more costly as a
+     * new texture object must be created. On the CUDA backend, this further
+     * synchronizes the GPU pipeline.
      *
-     * When \c migrate is set to \c true on the CUDA and Metal backends, the
-     * texture information is *fully* migrated to GPU texture memory to avoid
-     * redundant storage.
+     * On the CUDA and Metal backends, the update migrates the texture data
+     * into the GPU's native texture format, which then holds the only copy.
+     *
+     * With \ref MipBasis::Laplacian, the tensor is first decomposed into the
+     * per-level coefficient tensors, and the sampled pyramid is then rebuilt
+     * from them.
      */
     template <typename TensorT>
-    void set_tensor(TensorT &&tensor, bool migrate = false) {
+    void set_tensor(TensorT &&tensor) {
         if (tensor.ndim() != Dimension + 1)
             jit_raise("Texture::set_tensor(): tensor dimension must equal "
                       "texture dimension plus one (channels).");
 
-        if ((void *) &tensor == (void *) &m_unpadded_value) {
+        if ((void *) &tensor == (void *) &m_tensor) {
             jit_log(::LogLevel::Warn,
                     "Texture::set_tensor(): the `tensor` argument is a "
                     "reference to this texture's own tensor representation "
-                    "(obtained through `Texture::tensor()`. Such an update "
+                    "(obtained through `Texture::tensor()`). Such an update "
                     "must be applied with the `Texture::update_inplace()` "
                     "method.");
             return;
         }
 
-        bool shape_changed = false;
-        for (size_t i = 0; i < Dimension + 1; ++i) {
-            if (m_shape[i] != tensor.shape(i)) {
-                shape_changed = true;
-                break;
-            }
-        }
-
-        // Only update tensors & CUDA texture if shape changed
-        init(tensor.shape().data(), tensor.shape(Dimension),
-             m_use_accel, m_filter_mode, m_wrap_mode, shape_changed);
+        // Only reconfigure tensors & hardware texture if the shape changed
+        if (shape_differs(tensor))
+            init(tensor.shape().data(), tensor.shape(Dimension),
+                 m_use_accel, m_filter_mode, m_wrap_mode, m_writable,
+                 nullptr, m_mip_filter, m_max_aniso, m_mip_basis);
 
         if constexpr (std::is_lvalue_reference_v<TensorT>)
-            set_value(tensor.array(), migrate);
+            set_value(tensor.array());
         else
-            set_value(std::move(tensor.array()), migrate);
+            set_value(std::move(tensor.array()));
     }
 
     /**
@@ -400,99 +450,176 @@ public:
      *
      * A tensor representation of this texture object can be retrieved with
      * \ref tensor(). That representation can be modified, but in order to apply
-     * it successfully to the texture, this method must also be called. In short,
-     * this method will use the tensor representation to update the texture's
-     * internal state.
+     * it successfully to the texture, this method must also be called. In
+     * short, this method will use the tensor representation to update the
+     * texture's internal state.
      *
-     * When \c migrate is set to \c true on the CUDA and Metal backends, the
-     * texture information is *fully* migrated to GPU texture memory to avoid
-     * redundant storage.
+     * On the CUDA and Metal backends, the update migrates the texture data
+     * into the GPU's native texture format, which then holds the only copy.
+     *
+     * With \ref MipBasis::Laplacian, the per-level coefficient tensors (see
+     * \ref tensor(size_t)) are the authoritative state instead, and this
+     * method rebuilds the sampled pyramid from their current contents. An
+     * optimization loop should write the coefficient tensors in place and call
+     * this method once per step.
      */
-    void update_inplace(bool migrate = false) {
-        if (m_unpadded_value.ndim() != Dimension + 1)
+    void update_inplace() {
+        if (m_mip_basis == MipBasis::Laplacian) {
+            // The coefficient tensors are the authoritative state; rebuild
+            // the sampled pyramid from their current (possibly externally
+            // modified) contents.
+            rebuild_pyramid();
+            return;
+        }
+
+        const TensorXf &pub = tensor();
+
+        if (pub.ndim() != Dimension + 1)
             jit_raise("Texture::update_inplace(): tensor dimension must equal "
                       "texture dimension plus one (channels).");
 
-        bool shape_changed = false;
-        for (size_t i = 0; i < Dimension + 1; ++i) {
-            if (m_shape[i] != m_unpadded_value.shape(i)) {
-                shape_changed = true;
-                break;
+        if constexpr (is_jit_v<Storage_>) {
+            // Nothing to do: the public tensor still matches the storage array.
+            if (!m_hw_mutable &&
+                combined_index(m_tensor.array()) ==
+                    combined_index(m_padded_tensor.array()))
+                return;
+        }
+
+        bool shape_changed = shape_differs(pub);
+
+        if constexpr (!is_jit_v<Storage_>) {
+            if (!shape_changed) {
+                // Only the MIP pyramid must be refreshed
+                build_mipmap(m_padded_tensor.array());
+                return;
             }
         }
 
-        if constexpr (!is_jit_v<Storage_>) {
-            if (shape_changed)
-                init(m_unpadded_value.shape().data(),
-                     m_unpadded_value.shape(Dimension), m_use_accel, m_filter_mode,
-                     m_wrap_mode, true);
-            else
-                // Avoid unnecessary copy when working with `DynamicArray`
-                return;
-        } else {
-            // `Texture::init` might overwrite `m_unpadded_value` with a
-            // zero-initialized tensor, so let's copy it first
-            TensorXf inbound_tensor(m_unpadded_value);
+        // Move the shape and contents into locals: init() below replaces
+        // the tensor members, including the one that ``pub`` references
+        size_t shape[Dimension + 1];
+        for (size_t i = 0; i < Dimension + 1; ++i)
+            shape[i] = pub.shape(i);
 
-            init(m_unpadded_value.shape().data(),
-                 m_unpadded_value.shape(Dimension), m_use_accel, m_filter_mode,
-                 m_wrap_mode, shape_changed);
+        Storage data;
+        if constexpr (is_jit_v<Storage_>)
+            data = m_tensor.array();
+        else
+            data = std::move(m_padded_tensor.array());
 
-            m_unpadded_value.array() = inbound_tensor;
-        }
+        if (shape_changed)
+            init(shape, shape[Dimension], m_use_accel, m_filter_mode,
+                 m_wrap_mode, m_writable, nullptr, m_mip_filter, m_max_aniso,
+                 m_mip_basis);
 
-        set_value(m_unpadded_value.array(), migrate);
+        set_value(std::move(data));
     }
 
-    /// Return the texture data as an array object
+    /// Return the texture data as an array object. See the remark in \ref tensor()
     const Storage &value() const { return tensor().array(); }
 
-    /// Return the texture data as a tensor object
+    /**
+     * \brief Return the texture data as a tensor object
+     *
+     * \remark
+     *    When the texture data resides in GPU texture memory, this function
+     *    returns a symbolic view that occupies no actual storage. Its
+     *    evaluation will query the hardware texture. Changing the texture
+     *    contents via \ref set_tensor(), \ref write(), etc., will also change
+     *    this view, so be sure to evaluate beforehand.
+     */
     const TensorXf &tensor() const {
         if constexpr (!is_jit_v<Storage_>) {
-            return m_value;
+            // Scalar storage is always unpadded, and ``m_tensor`` is unused.
+            return m_padded_tensor;
         } else {
-            sync_device_data();
-            if (m_tensor_dirty) {
-                // We need to update the unpadded tensor representation
-                // (`m_unpadded_value`). We therefore override any ongoing AD
-                // scope, to guarantee that `m_unpadded_value` is always
-                // AD-enabled if the original data `m_value` is also AD-enabled.
-                resume_grad<Storage> ad_scope_guard;
-
-                if (m_channels != m_channels_storage) {
-                    Storage values = steal_storage(ad_tex_repack(
-                        value_index(), (uint32_t) (m_size / m_channels_storage),
-                        (uint32_t) m_channels, (uint32_t) m_channels_storage));
-
-                    // On the last call to `set_value` we saved the AD index
-                    // of the unpadded values. We can re-attach it here.
-                    if constexpr (IsDiff)
-                        m_unpadded_value.array() =
-                            replace_grad(values, m_unpadded_value.array());
-                    else
-                        m_unpadded_value.array() = values;
-                } else {
-                    m_unpadded_value.array() = m_value.array();
-                }
-
-                m_tensor_dirty = false;
-            }
-
-            return m_unpadded_value;
+            sync_views();
+            return m_tensor;
         }
     }
 
     /**
      * \brief Return the texture data as a tensor object
      *
-     * Although the returned object is not const, changes to it are only fully
-     * propagated to the Texture instance when a subsequent call to
-     * \ref set_tensor() is made.
+     * Changes to this tensor are only guaranteed to influence texture
+     * queries following a subsequent call to \ref update_inplace().
      */
     TensorXf &tensor() {
         return const_cast<TensorXf &>(
             const_cast<const Texture<Storage_, Dimension> *>(this)->tensor());
+    }
+
+    /**
+     * \brief Return the coefficient tensor of one pyramid level (Laplacian
+     * basis only)
+     *
+     * The tensor uses the resolution of pyramid level \c level and the
+     * public (unpadded) channel count.
+     *
+     * Changes to this tensor are only guaranteed to influence texture
+     * queries following a subsequent call to \ref update_inplace().
+     */
+    const TensorXf &tensor(size_t level) const {
+        check_level_access("tensor", level);
+        return m_levels[level];
+    }
+
+    TensorXf &tensor(size_t level) {
+        return const_cast<TensorXf &>(
+            const_cast<const Texture<Storage_, Dimension> *>(this)->tensor(level));
+    }
+
+    /**
+     * \brief Overwrite the coefficient tensor of one pyramid level and
+     * rebuild the sampled pyramid (Laplacian basis only)
+     *
+     * The tensor shape must match the level. To change texture resolution,
+     * use the whole-image assignment \ref set_tensor().
+     *
+     * Passing ``rebuild = false`` only updates the coefficient tensor
+     * without rebuilding the pyramid. This can then be done with a later
+     * call to \ref update_inplace(). An optimization loop should assign all
+     * levels this way and rebuild once per iteration.
+     */
+    template <typename TensorT>
+    void set_tensor(size_t level, TensorT &&tensor, bool rebuild = true) {
+        check_level_access("set_tensor", level);
+        if (tensor.ndim() != Dimension + 1)
+            jit_raise("Texture::set_tensor(): tensor dimension must equal "
+                      "texture dimension plus one (channels).");
+        for (size_t i = 0; i < Dimension + 1; ++i)
+            if (tensor.shape(i) != m_levels[level].shape(i))
+                jit_raise("Texture::set_tensor(): tensor shape mismatch at "
+                          "level %zu (resolution changes must use the "
+                          "whole-image set_tensor()).", level);
+        m_levels[level] = std::forward<TensorT>(tensor);
+        if (rebuild)
+            rebuild_pyramid();
+    }
+
+    /**
+     * \brief Overwrite the coefficients of one pyramid level with a
+     * linearized 1D array and rebuild the sampled pyramid
+     * (Laplacian basis only)
+     *
+     * The tensor shape must match the level. To change texture resolution,
+     * use the whole-image assignment \ref set_tensor().
+     *
+     * Passing ``rebuild = false`` only updates the coefficients
+     * without rebuilding the pyramid. This can then be done with a later
+     * call to \ref update_inplace(). An optimization loop should assign all
+     * levels this way and rebuild once per iteration.
+     */
+    template <typename StorageT>
+    void set_value(size_t level, StorageT &&value, bool rebuild = true) {
+        check_level_access("set_value", level);
+        if (value.size() != m_levels[level].size())
+            jit_raise("Texture::set_value(): unexpected array size "
+                      "(%zu vs %zu)!", value.size(), m_levels[level].size());
+        m_levels[level].array() = std::forward<StorageT>(value);
+        if (rebuild)
+            rebuild_pyramid();
     }
 
     /**
@@ -533,9 +660,9 @@ public:
      * This is an implementation detail, please use \ref eval() that may
      * dispatch to this function depending on its inputs.
      *
-     * This routine returns zero when the texture has been fully migrated to GPU
-     * texture memory (see the \c migrate argument of the constructors), as no
-     * host-side copy then remains to read from.
+     * If the texture was migrated to the native GPU format, this function
+     * evaluates the hardware texture by querying it at pixel centers and
+     * then interpolating manually.
      */
     template <typename Output>
     Output eval_nonaccel(const position_for<Output> &pos,
@@ -559,12 +686,6 @@ public:
     Output eval(const position_for<Output> &pos,
                 mask_for<Output> active = true) const {
         if constexpr (is_jit_v<Storage_>) {
-            // Derivatives w.r.t. `pos` require the primal texture data; sync it
-            // back if the texture was fully migrated to GPU texture memory.
-            if constexpr (HasGPUTexture) {
-                if (m_use_accel && grad_enabled(pos))
-                    sync_device_data();
-            }
             Output out = alloc_output<Output>();
             eval_jit(pos, out, active, m_use_accel);
             return out;
@@ -574,15 +695,145 @@ public:
     }
 
     /**
-     * \brief Store values into a writable hardware texture
+     * \brief Evaluate the texture at an explicit MIP level of detail
+     *
+     * A fractional ``lod`` blends the two enclosing pyramid levels under
+     * \ref MipFilter::Linear and rounds to the nearest level under \ref
+     * MipFilter::Nearest. Out-of-range values are clamped.
+     *
+     * The method is differentiable with respect to the query position and
+     * texture data (including derivative propagation through the MIP pyramid
+     * construction) but not with respect to the \c lod argument.
+     *
+     * On a texture without a MIP pyramid, the lookup degrades to a regular
+     * non-filtered \ref eval().
+     */
+    template <typename Output>
+    Output eval_lod(const position_for<Output> &pos,
+                    const value_t<Output> &lod,
+                    mask_for<Output> active = true) const {
+        if (m_level_count <= 1)
+            return eval<Output>(pos, active);
+
+        if constexpr (is_jit_v<Storage_>) {
+            using Value = value_t<Output>;
+
+            Output out = alloc_output<Output>();
+            uint64_t *o = (uint64_t *) alloca(sizeof(uint64_t) * m_channels);
+
+            ad_tex_eval_lod(type_v<scalar_t<Value>>, (uint32_t) Dimension,
+                (uint32_t) m_channels_storage, (uint32_t) m_channels,
+                (int) m_filter_mode, (int) m_wrap_mode, (int) m_srgb, m_handle,
+                (int) m_use_accel, value_index(), combined_index(m_mip),
+                m_mip_table.index(), m_level_count, (int) m_mip_filter,
+                resolution_indices().data(), idiv_indices().data(),
+                pos_indices(pos).data(), lod.index(), active.index(), o);
+
+            for (size_t ch = 0; ch < m_channels; ++ch)
+                out.set_entry(ch, steal_value<Value>(o[ch]));
+            return out;
+        } else {
+            using Value = value_t<Output>;
+            Output out = alloc_output<Output>();
+            Value *res_mem     = (Value *) alloca(sizeof(Value) * m_channels),
+                  *scratch_mem = (Value *) alloca(sizeof(Value) * 2 * m_channels);
+            detail::tex_scratch<Value> res(res_mem, m_channels),
+                                       scratch(scratch_mem, 2 * m_channels);
+            detail::tex_eval_lod(scalar_ops<Value>(active), pos.data(), lod,
+                                 m_level_count, m_mip_filter, res.data(),
+                                 scratch.data());
+            for (size_t ch = 0; ch < m_channels; ++ch)
+                out.set_entry(ch, res[ch]);
+            return out;
+        }
+    }
+
+    /**
+     * \brief Perform an anisotropically filtered texture lookup
+     *
+     * Besides the query position, this function additionally takes
+     * texture-space differentials ``ddx`` and ``ddy`` that span the pixel's
+     * elliptical footprint. The method averages up to \c max_aniso trilinear
+     * taps that are distributed along the major ellipse axis. For \c max_aniso
+     * equal to 1, it performs an ordinary trilinear lookup.
+     *
+     * Hardware anisotropic filtering (if enabled via the \c use_accel
+     * constructor argument) is approximate and vendor specific. Results may
+     * deviate from the software path by several percent for off-axis
+     * footprints. Pass ``use_accel=false`` if it is important that the output
+     * remains consistent across backends.
+     *
+     * The method is differentiable with respect to the query position and
+     * texture data (including derivative propagation through the MIP pyramid
+     * construction) but not with respect to the \c ddx and \c ddy argument.
+     *
+     * On a texture without a MIP pyramid, the lookup degrades to a regular
+     * non-filtered \ref eval().
+     */
+    template <typename Output>
+    Output eval_filtered(const position_for<Output> &pos,
+                         const position_for<Output> &ddx,
+                         const position_for<Output> &ddy,
+                         mask_for<Output> active = true) const {
+        if (m_level_count <= 1)
+            return eval<Output>(pos, active);
+
+        if constexpr (is_jit_v<Storage_>) {
+            using Value = value_t<Output>;
+
+            Output out = alloc_output<Output>();
+            uint64_t *o = (uint64_t *) alloca(sizeof(uint64_t) * m_channels);
+
+            // ``ddx``/``ddy`` are detached filtering metadata, hence plain
+            // JIT indices suffice
+            uint32_t ddx_i[Dimension], ddy_i[Dimension];
+            for (size_t k = 0; k < Dimension; ++k) {
+                ddx_i[k] = ddx[k].index();
+                ddy_i[k] = ddy[k].index();
+            }
+
+            ad_tex_eval_filtered(type_v<scalar_t<Value>>, (uint32_t) Dimension,
+                (uint32_t) m_channels_storage, (uint32_t) m_channels,
+                (int) m_filter_mode, (int) m_wrap_mode, (int) m_srgb, m_handle,
+                (int) m_use_accel, value_index(), combined_index(m_mip),
+                m_mip_table.index(), m_level_count, (int) m_mip_filter, m_max_aniso,
+                resolution_indices().data(), idiv_indices().data(),
+                pos_indices(pos).data(), ddx_i, ddy_i, active.index(), o);
+
+            for (size_t ch = 0; ch < m_channels; ++ch)
+                out.set_entry(ch, steal_value<Value>(o[ch]));
+            return out;
+        } else {
+            using Value = value_t<Output>;
+            Output out = alloc_output<Output>();
+            Value *res_mem = (Value *) alloca(sizeof(Value) * m_channels);
+            detail::tex_scratch<Value> res(res_mem, m_channels);
+            detail::tex_eval_filtered(scalar_ops<Value>(active), pos.data(),
+                                      ddx.data(), ddy.data(), m_level_count,
+                                      m_mip_filter, m_max_aniso, res.data());
+            for (size_t ch = 0; ch < m_channels; ++ch)
+                out.set_entry(ch, res[ch]);
+            return out;
+        }
+    }
+
+    /**
+     * \brief Store values into a writable texture
      *
      * The per-channel values in \c value are written to the texel addressed by
      * the integer coordinates \c pos. The texture must have been created with
      * <tt>writable = true</tt>.
      *
-     * This is a hardware texture store (a side effect): it is not
-     * differentiable, and the written texture is meant for display / external
-     * sampling rather than \ref eval().
+     * The store is a side effect and not differentiable. Backends providing a
+     * hardware texture write into it, and such a texture is meant for display
+     * / external sampling rather than \ref eval(). Without one (LLVM,
+     * ``use_accel=false``, or double precision), the values are scattered
+     * into the backing storage.
+     *
+     * Reading the texture after writing to it (via \ref value(), \ref
+     * tensor(), or the ``eval_*()`` methods) requires an intermediate
+     * ``drjit.eval()`` call. The write and the read may otherwise end up in
+     * the same kernel, where their relative order is undefined.
      */
     template <typename Value>
     void write(const Array<uint32_array_t<Value>, Dimension> &pos,
@@ -594,35 +845,36 @@ public:
                       "writable=true.");
 
         if constexpr (HasGPUTexture) {
-            uint32_t pos_idx[Dimension];
-            for (size_t i = 0; i < Dimension; ++i)
-                pos_idx[i] = pos[i].index();
+            if (m_use_accel) {
+                uint32_t pos_idx[Dimension];
+                for (size_t i = 0; i < Dimension; ++i)
+                    pos_idx[i] = pos[i].index();
 
-            uint64_t *val_idx = (uint64_t *) alloca(sizeof(uint64_t) * m_channels);
-            for (size_t ch = 0; ch < m_channels; ++ch)
-                val_idx[ch] = (uint64_t) value[ch].index();
+                uint64_t *val_idx = (uint64_t *) alloca(sizeof(uint64_t) * m_channels);
+                for (size_t ch = 0; ch < m_channels; ++ch)
+                    val_idx[ch] = (uint64_t) value[ch].index();
 
-            ad_tex_write((uint32_t) m_channels_storage, (uint32_t) m_channels,
-                         type_v<scalar_t<Storage_>>, (int) m_srgb, m_handle,
-                         pos_idx, val_idx, active.index());
-
-            // The GPU texture object is now the authoritative copy
-            m_migrated = true;
-        } else {
-            // No hardware texture (LLVM, or double precision): scatter into the
-            // backing storage instead.
-            write_nonaccel(pos, value, active);
+                ad_tex_write((uint32_t) m_channels_storage, (uint32_t) m_channels,
+                             type_v<scalar_t<Storage_>>, (int) m_srgb, m_handle,
+                             pos_idx, val_idx, active.index());
+                return;
+            }
         }
 
-        m_tensor_dirty = true;
+        // No hardware texture, scatter into the backing storage instead
+        Storage placeholder = empty<Storage>(unpadded_size());
+        if constexpr (IsDiff) {
+            resume_grad<Storage> guard;
+            placeholder = replace_grad(placeholder, m_tensor.array());
+        }
+        m_tensor.array() = std::move(placeholder);
+        write_nonaccel(pos, value, active);
+        install_unpadded_view();
     }
 
     /**
      * \brief Fetch the texels that would be referenced in a texture lookup with
      * linear interpolation without actually performing this interpolation.
-     *
-     * If the texture data is fully migrated to the GPU, this method will return
-     * zeroes.
      *
      * This is an implementation detail, please use \ref eval_fetch() that may
      * dispatch to this function depending on its inputs.
@@ -670,13 +922,6 @@ public:
         Array<Output, ncorner> out = alloc_fetch_output<Output>();
 
         if constexpr (is_jit_v<Storage_>) {
-            // Derivatives w.r.t. `pos` require the primal texture data; sync it
-            // back if the texture was fully migrated to GPU texture memory.
-            if constexpr (HasGPUTexture) {
-                if (m_use_accel && grad_enabled(pos))
-                    sync_device_data();
-            }
-
             uint64_t *o = (uint64_t *) alloca(sizeof(uint64_t) * ncorner *
                                               m_channels);
             ad_tex_fetch(type_v<scalar_t<Value>>, (uint32_t) Dimension,
@@ -763,16 +1008,6 @@ public:
         using Value = value_t<Output>;
         if constexpr (is_jit_v<Storage_>) {
             bool use_accel = m_use_accel && !force_nonaccel;
-            if constexpr (HasGPUTexture) {
-                if (m_migrated && force_nonaccel)
-                    jit_log(::LogLevel::Warn,
-                            "\"force_nonaccel\" is used while the data has been "
-                            "fully migrated to GPU texture memory");
-                // Derivatives w.r.t. `pos` require the primal texture data
-                if (use_accel && grad_enabled(pos))
-                    sync_device_data();
-            }
-
             Output out = alloc_output<Output>();
             uint64_t *o = (uint64_t *) alloca(sizeof(uint64_t) * m_channels);
             ad_tex_cubic(type_v<scalar_t<Value>>, (uint32_t) Dimension,
@@ -805,9 +1040,9 @@ public:
      * This implementation computes the result directly from explicit
      * differentiated basis functions. It has no autodiff support.
      *
-     * The resulting gradient and hessian have been multiplied by the spatial extents
-     * to count for the transformation from the unit size volume to the size of its
-     * shape.
+     * The resulting gradient has been multiplied by the spatial extents to
+     * count for the transformation from the unit size volume to the size of
+     * its shape.
      */
     template <typename Output>
     CubicGrad<Output> eval_cubic_grad(const position_for<Output> &pos,
@@ -878,7 +1113,7 @@ public:
         } else {
             auto ops = scalar_ops<float32_array_t<Int>>(true);
             T result;
-            for (size_t k = 0; k < Dimension; ++k)
+            for (uint32_t k = 0; k < Dimension; ++k)
                 result[k] = detail::tex_wrap(ops, pos[k], k);
             return result;
         }
@@ -899,27 +1134,33 @@ public:
         return v;
     }
 
-    /// Gather the channels at \c idx and cast them to the query precision.
-    /// ``CChannels`` is the channel count when statically known (fixed scratch,
-    /// unrolled loop); 0 selects the runtime ``alloca`` path.
+    /// Gather the channels at \c idx from \c src and cast them to the query
+    /// precision. ``CChannels`` is the channel count when statically known.
     template <uint32_t CChannels = 0, typename Value>
-    void gather_texel(const uint32_array_t<Value> &idx,
+    void gather_texel(const Storage &src, const uint32_array_t<Value> &idx,
                       const mask_t<Value> &active, Value *out) const {
         if constexpr (CChannels != 0) {
             // Scalar storage is unpadded, so m_channels_storage == CChannels.
             Storage_ packet[CChannels];
-            gather_packet_dynamic(CChannels, m_value.array(), idx, packet, active);
+            gather_packet_dynamic(CChannels, src, idx, packet, active);
             for (uint32_t ch = 0; ch < CChannels; ++ch)
                 out[ch] = convert_texel<Value>(packet[ch], ch);
         } else {
             // Per-channel packet scratch on the stack
             Storage_ *packet_mem = (Storage_ *) alloca(sizeof(Storage_) * m_channels_storage);
             detail::tex_scratch<Storage_> packet(packet_mem, m_channels_storage);
-            gather_packet_dynamic(m_channels_storage, m_value.array(), idx,
+            gather_packet_dynamic(m_channels_storage, src, idx,
                                   packet.data(), active);
             for (uint32_t ch = 0; ch < m_channels; ++ch)
                 out[ch] = convert_texel<Value>(packet[ch], ch);
         }
+    }
+
+    /// Overload of the above that reads the base texture storage
+    template <uint32_t CChannels = 0, typename Value>
+    void gather_texel(const uint32_array_t<Value> &idx,
+                      const mask_t<Value> &active, Value *out) const {
+        gather_texel<CChannels>(m_padded_tensor.array(), idx, active, out);
     }
 
     /// Convert a query-precision value to stored form (the inverse of \ref
@@ -952,14 +1193,15 @@ public:
         UInt base = pixel * (uint32_t) m_channels_storage;
 
         for (uint32_t ch = 0; ch < m_channels; ++ch)
-            scatter(m_value.array(), store_texel(value[ch], ch), base + ch, active);
+            scatter(m_padded_tensor.array(), store_texel(value[ch], ch), base + ch, active);
     }
 
 protected:
     void init(const size_t *shape, size_t channels, bool use_accel,
               FilterMode filter_mode, WrapMode wrap_mode,
-              bool init_tensor = true, bool writable = false,
-              void *external = nullptr) {
+              bool writable = false, void *external = nullptr,
+              MipFilter mip_filter = MipFilter::Disabled, size_t max_aniso = 8,
+              MipBasis mip_basis = MipBasis::Standard) {
         if (channels == 0)
             jit_raise("Texture::Texture(): must have at least 1 channel!");
 
@@ -967,8 +1209,32 @@ protected:
             jit_raise("Texture(): the 'srgb' flag is only supported for 8-bit "
                       "(UInt8) textures.");
 
+        if (mip_filter != MipFilter::Disabled) {
+            if (writable)
+                jit_raise("Texture(): MIP-mapped textures cannot be writable!");
+            if (max_aniso == 0 || max_aniso > 16)
+                jit_raise("Texture(): 'max_aniso' must be between 1 and 16 "
+                          "(the hardware limit), got %zu!", max_aniso);
+        }
+
+        if (mip_basis == MipBasis::Laplacian) {
+            if (!is_jit_v<Storage_>)
+                jit_raise("Texture(): the Laplacian basis requires "
+                          "a JIT backend (CUDA, Metal, or LLVM).");
+            if (IsUInt8)
+                jit_raise("Texture(): the Laplacian basis requires "
+                          "floating-point storage.");
+            if (mip_filter == MipFilter::Disabled)
+                jit_raise("Texture(): the Laplacian basis requires "
+                          "a MIP-mapped texture (mip_filter must not be "
+                          "MipFilter::Disabled).");
+        }
+
         m_writable = writable;
         m_channels = channels;
+        m_mip_filter = mip_filter;
+        m_max_aniso = (uint32_t) max_aniso;
+        m_mip_basis = mip_basis;
 
         // Determine padding used for channels depending on backend
         if constexpr (is_jit_v<Storage_>) {
@@ -980,7 +1246,6 @@ protected:
         }
 
         m_size = m_channels_storage;
-        size_t unpadded_size = m_channels;
         size_t tensor_shape[Dimension + 1]{};
         for (size_t i = 0; i < Dimension; ++i) {
             tensor_shape[i] = shape[i];
@@ -988,7 +1253,6 @@ protected:
             m_resolution_opaque[Dimension - 1 - i] = opaque<UInt32>((uint32_t) shape[i]);
             m_inv_resolution[Dimension - 1 - i] = Divisor((int32_t) shape[i]);
             m_size *= shape[i];
-            unpadded_size *= shape[i];
         }
 
         // Only make the divisor opaque when it is actually used
@@ -1004,27 +1268,45 @@ protected:
         m_filter_mode = filter_mode;
         m_wrap_mode = wrap_mode;
 
-        if (init_tensor) {
-            if constexpr (is_jit_v<Storage_>) {
-                m_value =
-                    TensorXf(empty<Storage>(m_size), Dimension + 1, tensor_shape);
-                m_unpadded_value =
-                    TensorXf(empty<Storage>(unpadded_size), Dimension + 1, m_shape);
-            } else {
-                // Don't allocate memory in scalar modes
-                m_value =
-                    TensorXf(Storage::map_(nullptr, m_size), Dimension + 1, tensor_shape);
-                m_unpadded_value =
-                    TensorXf(Storage::map_(nullptr, unpadded_size), Dimension + 1, m_shape);
+        init_mip_table();
+
+        if constexpr (is_jit_v<Storage_>) {
+            m_padded_tensor =
+                TensorXf(empty<Storage>(m_size), Dimension + 1, tensor_shape);
+            m_tensor =
+                TensorXf(empty<Storage>(unpadded_size()), Dimension + 1, m_shape);
+            install_unpadded_view();
+
+            // Zero-initialized coefficient tensors, one per pyramid level
+            m_levels.clear();
+            if (m_mip_basis == MipBasis::Laplacian) {
+                for (uint32_t l = 0; l < m_level_count; ++l) {
+                    size_t level_shape[Dimension + 1], n = m_channels;
+                    for (size_t i = 0; i < Dimension; ++i) {
+                        size_t r = m_shape[i] >> l;
+                        level_shape[i] = r > 0 ? r : 1;
+                        n *= level_shape[i];
+                    }
+                    level_shape[Dimension] = m_channels;
+                    m_levels.push_back(TensorXf(zeros<Storage>(n),
+                                                Dimension + 1, level_shape));
+                }
             }
+        } else {
+            // Don't allocate memory in scalar modes
+            m_padded_tensor =
+                TensorXf(Storage::map_(nullptr, m_size), Dimension + 1, tensor_shape);
+            m_tensor =
+                TensorXf(Storage::map_(nullptr, unpadded_size()), Dimension + 1, m_shape);
         }
 
         if constexpr (HasGPUTexture) {
-            if (m_use_accel && init_tensor) {
+            if (m_use_accel) {
                 if (m_handle)
                     jit_tex_destroy(m_handle);
 
-                if (external) {
+                bool external_wrap = external != nullptr;
+                if (external_wrap) {
                     // Wrap an externally-owned native texture (\ref from_native_handle).
                     m_handle = external;
                 } else {
@@ -1033,8 +1315,14 @@ protected:
                     m_handle = jit_tex_create(
                         Backend, Dimension, tex_shape, m_channels_storage,
                         (int) type_v<scalar_t<Storage_>>, (int) filter_mode,
-                        (int) wrap_mode, (int) m_writable, (int) m_srgb);
+                        (int) wrap_mode, (int) m_writable, (int) m_srgb,
+                        m_level_count, m_mip_filter == MipFilter::Nearest ? 0 : 1,
+                        m_max_aniso);
                 }
+                m_hw_mutable = (m_writable || external_wrap) &&
+                               !(IsCUDA && external_wrap && m_writable);
+                if (m_hw_mutable)
+                    install_readback_views();
             }
         }
     }
@@ -1049,9 +1337,9 @@ private:
         m_channels = other.m_channels;
         m_channels_storage = other.m_channels_storage;
         for (size_t i = 0; i < Dimension + 1; ++i)
-            m_shape[i] = std::move(other.m_shape[i]);
-        m_value = std::move(other.m_value);
-        m_unpadded_value = std::move(other.m_unpadded_value);
+            m_shape[i] = other.m_shape[i];
+        m_padded_tensor = std::move(other.m_padded_tensor);
+        m_tensor = std::move(other.m_tensor);
         m_resolution_opaque = std::move(other.m_resolution_opaque);
         for (size_t i = 0; i < Dimension; ++i)
             m_inv_resolution[i] = std::move(other.m_inv_resolution[i]);
@@ -1060,46 +1348,248 @@ private:
         m_use_accel = other.m_use_accel;
         m_writable = other.m_writable;
         m_srgb = other.m_srgb;
-        m_migrated = other.m_migrated;
-        m_tensor_dirty = other.m_tensor_dirty;
+        m_hw_mutable = other.m_hw_mutable;
+        m_mip_filter = other.m_mip_filter;
+        m_max_aniso = other.m_max_aniso;
+        m_level_count = other.m_level_count;
+        m_mip_texels = other.m_mip_texels;
+        m_mip = std::move(other.m_mip);
+        m_mip_table = std::move(other.m_mip_table);
+        m_mip_basis = other.m_mip_basis;
+        m_levels = std::move(other.m_levels);
     }
 
-    /// Updates the device-side padded tensor
-    void sync_device_data() const {
+    /// Rebind the tensor members to fresh unevaluated readback expressions,
+    /// carrying over their AD identity (see \ref readback_view()).
+    void install_readback_views() const {
         if constexpr (HasGPUTexture) {
-            // Writable textures always read back: the hardware holds the
-            // authoritative copy. We can't rely on write()'s m_migrated flag
-            // alone, as that host-side assignment is skipped when a frozen
-            // function is replayed.
-            if (m_use_accel && (m_migrated || m_writable)) {
-                Storage primal = empty<Storage>(m_size);
+            Storage view = readback_view(m_channels_storage);
+            if constexpr (IsDiff)
+                view = replace_grad(view, m_padded_tensor.array());
+            m_padded_tensor.array() = std::move(view);
 
-                /* The CUDA texture here is already padded with respect to the
-                 * m_channels_storage size so we directly copy into device
-                 * memory. Note, that for correct gradient tracking during
-                 * texture evaluation, we need the tensor to be on the device,
-                 * and moreover the padded storage allows us to leverage
-                 * PacketOps when performing gathers/scatters.
-                 */
-                jit_tex_memcpy_t2d(m_handle, primal.data());
-
+            if (m_channels_storage != m_channels) {
+                Storage uview = readback_view(m_channels);
                 if constexpr (IsDiff)
-                    m_value.array() = replace_grad(primal, m_value.array());
-                else
-                    m_value.array() = primal;
-
-                m_migrated = false;
-                m_tensor_dirty = true; // the unpadded view must be refreshed
+                    uview = replace_grad(uview, m_tensor.array());
+                m_tensor.array() = std::move(uview);
+            } else {
+                m_tensor.array() = m_padded_tensor.array();
             }
         }
     }
 
-    /// Helper function to reverse the tensor (\ref Texture.m_value) shape
+    /// Does the shape of \c t differ from the texture's current shape?
+    bool shape_differs(const TensorXf &t) const {
+        for (size_t i = 0; i < Dimension + 1; ++i)
+            if (m_shape[i] != t.shape(i))
+                return true;
+        return false;
+    }
+
+    /// Number of texels
+    size_t texel_count() const { return m_size / m_channels_storage; }
+
+    /// Element count of the unpadded tensor representation
+    size_t unpadded_size() const { return texel_count() * m_channels; }
+
+    /// Install an unevaluated unpadded view of the padded storage into the
+    /// public tensor, carrying over its AD identity (see \ref set_value())
+    void install_unpadded_view() const {
+        // Briefly reenter an AD-enabled gradient scope
+        resume_grad<Storage> guard;
+
+        if (m_channels == m_channels_storage) {
+            m_tensor.array() = m_padded_tensor.array();
+        } else {
+            Storage u = steal_storage(ad_tex_repack(
+                value_index(), (uint32_t) texel_count(),
+                (uint32_t) m_channels, (uint32_t) m_channels_storage));
+            if constexpr (IsDiff)
+                u = replace_grad(u, m_tensor.array());
+            m_tensor.array() = std::move(u);
+        }
+    }
+
+    /// Refresh the readback views of a hardware-mutable texture before
+    /// handing them out (other configurations keep them current at all times)
+    void sync_views() const {
+        if constexpr (HasGPUTexture) {
+            if (m_hw_mutable) {
+                // The hardware texture contents can change behind our back.
+                // An evaluated readback view would pin stale contents, so
+                // swap in a fresh one.
+                auto is_materialized = [](uint32_t index) {
+                    VarState s = jit_var_state(index);
+                    return s == VarState::Evaluated || s == VarState::Dirty;
+                };
+
+                if (is_materialized((uint32_t) m_padded_tensor.array().index()) ||
+                    is_materialized((uint32_t) m_tensor.array().index()))
+                    install_readback_views();
+            }
+        }
+    }
+
+    /// Build an unevaluated expression that reads the texel data back from
+    /// GPU texture memory. The function reproduces the stored value exactly
+    /// by sampling each texel at its center.
+    Storage readback_view(size_t channels_out) const {
+        if constexpr (HasGPUTexture) {
+            using Plain = detached_t<Storage>;
+            return Storage(Plain::steal(ad_tex_readback(
+                type_v<scalar_t<Storage_>>, (uint32_t) Dimension,
+                (uint32_t) m_channels_storage, (uint32_t) channels_out,
+                (int) m_srgb, m_handle, resolution_indices().data(),
+                idiv_indices().data(), texel_count())));
+        } else {
+            (void) channels_out;
+            return Storage();
+        }
+    }
+
+    /// Texel count of MIP level ``level``
+    size_t level_texels(uint32_t level) const {
+        size_t texels = 1;
+        for (size_t i = 0; i < Dimension; ++i) {
+            size_t r = m_shape[i] >> level;
+            texels *= r > 0 ? r : 1;
+        }
+        return texels;
+    }
+
+    /// Compute the MIP pyramid depth for the current shape and upload the
+    /// per-level constant table. Invoked by \ref init().
+    void init_mip_table() {
+        m_level_count = 1;
+        m_mip_texels = 0;
+
+        if (m_mip_filter == MipFilter::Disabled)
+            return;
+
+        std::unique_ptr<int32_t[]> table;
+        m_level_count = detail::tex_mip_table(table, m_mip_texels, m_shape,
+                                              (uint32_t) Dimension, MipStride);
+        if (m_level_count > 1)
+            m_mip_table = load<Int32Buffer>(table.get(),
+                                            (size_t) m_level_count * MipStride);
+    }
+
+    /// Upload the base texels and the MIP pyramid into the hardware texture
+    void upload_levels(const Storage &padded_value) {
+        jit_tex_memcpy_d2t(padded_value.data(), m_handle);
+
+        if (m_level_count > 1) {
+            const uint8_t *ptr = (const uint8_t *) m_mip.data();
+            size_t stride = m_channels_storage * sizeof(scalar_t<Storage_>);
+            for (uint32_t l = 1; l < m_level_count; ++l) {
+                jit_tex_memcpy_d2t(ptr, m_handle, l);
+                ptr += level_texels(l) * stride;
+            }
+        }
+    }
+
+    /// Regenerate the MIP pyramid
+    void build_mipmap(const Storage &base) {
+        if (m_level_count <= 1)
+            return;
+
+        // Resolutions with the width along ``x`` (fastest axis)
+        size_t res[Dimension];
+        for (size_t i = 0; i < Dimension; ++i)
+            res[Dimension - 1 - i] = m_shape[i];
+
+        if constexpr (is_jit_v<Storage_>) {
+            m_mip = steal_storage(ad_tex_mipmap_from_base(
+                (uint32_t) Dimension, (uint32_t) m_channels_storage,
+                (int) m_srgb, combined_index(base), res, m_level_count));
+        } else {
+            using T = scalar_t<Storage_>;
+            m_mip = empty<Storage>((size_t) m_mip_texels * m_channels_storage);
+            detail::tex_mipmap_from_base((const T *) base.data(), (T *) m_mip.data(),
+                                         res, (uint32_t) Dimension,
+                                         (uint32_t) m_channels_storage,
+                                         m_level_count, m_srgb);
+        }
+    }
+
+    /// Validate a level-indexed accessor call (Laplacian mode only)
+    void check_level_access(const char *name, size_t level) const {
+        if (m_mip_basis != MipBasis::Laplacian)
+            jit_raise("Texture::%s(): level-indexed access requires the "
+                      "Laplacian basis.", name);
+        if (level >= m_level_count)
+            jit_raise("Texture::%s(): level %zu is out of bounds (the "
+                      "pyramid has %u levels).", name, level, m_level_count);
+    }
+
+    /// Laplacian mode: initialize the coefficient tensors from a physical
+    /// image
+    void decompose(const Storage &value) {
+        DRJIT_MARK_USED(value);
+        if constexpr (is_jit_v<Storage_>) {
+            size_t res[Dimension];
+            for (size_t i = 0; i < Dimension; ++i)
+                res[Dimension - 1 - i] = m_shape[i];
+
+            uint64_t *out =
+                (uint64_t *) alloca(sizeof(uint64_t) * m_level_count);
+            ad_tex_laplacian_from_base((uint32_t) Dimension,
+                                       (uint32_t) m_channels,
+                                       combined_index(value), m_level_count,
+                                       res, out);
+            for (uint32_t l = 0; l < m_level_count; ++l)
+                m_levels[l].array() = steal_storage(out[l]);
+        }
+    }
+
+    /// Laplacian mode: run the differentiable synthesis that reconstructs the
+    /// sampled pyramid from the coefficient tensors, refresh the tensor
+    /// members, and upload the result to the hardware texture.
+    void rebuild_pyramid() {
+        if constexpr (is_jit_v<Storage_>) {
+            size_t res[Dimension];
+            for (size_t i = 0; i < Dimension; ++i)
+                res[Dimension - 1 - i] = m_shape[i];
+
+            uint64_t *coef =
+                (uint64_t *) alloca(sizeof(uint64_t) * m_level_count);
+            for (uint32_t l = 0; l < m_level_count; ++l)
+                coef[l] = combined_index(m_levels[l].array());
+
+            uint64_t out_base = 0, out_mip = 0;
+            ad_tex_mipmap_from_laplacian(
+                (uint32_t) Dimension, (uint32_t) m_channels,
+                (uint32_t) m_channels_storage, coef, m_level_count, res,
+                &out_base, &out_mip);
+
+            m_padded_tensor.array() = steal_storage(out_base);
+            if (m_level_count > 1)
+                m_mip = steal_storage(out_mip);
+
+            if constexpr (HasGPUTexture) {
+                if (m_use_accel)
+                    upload_levels(m_padded_tensor.array());
+            }
+
+            // The public tensor is attached through the (differentiable)
+            // repacking of the synthesized base level rather than a stashed
+            // AD identity as in install_unpadded_view()
+            if (m_channels == m_channels_storage)
+                m_tensor.array() = m_padded_tensor.array();
+            else
+                m_tensor.array() = steal_storage(ad_tex_repack(
+                    value_index(), (uint32_t) texel_count(),
+                    (uint32_t) m_channels, (uint32_t) m_channels_storage));
+        }
+    }
+
+    /// Helper function to reverse the tensor (\ref Texture.m_padded_tensor) shape
     void reverse_tensor_shape(size_t *output, bool include_channels) const {
         for (size_t i = 0; i < Dimension; ++i)
-            output[i] = m_value.shape(Dimension - 1 - i);
+            output[i] = m_padded_tensor.shape(Dimension - 1 - i);
         if (include_channels)
-            output[Dimension] = m_value.shape(Dimension);
+            output[Dimension] = m_padded_tensor.shape(Dimension);
     }
 
     /// Operations object for generating scalar texture evaluation code.
@@ -1120,13 +1610,61 @@ private:
         FilterMode filter_mode;
         WrapMode wrap_mode;
 
+        // Pyramid level binding (see the ``Ops`` contract in texture_impl.h)
+        detail::TexLevel<Int, UInt> lvl;
+
         Float lit(double v) const { return Value(v); }
-        Float res_f(uint32_t k) const { return Value(tex->m_resolution_opaque[k]); }
-        Int res_i(uint32_t k) const { return Int(tex->m_resolution_opaque[k]); }
+        Int lit_i(int32_t v) const { return Int(v); }
+        Float res_f(uint32_t k) const { return Value(res_i(k)); }
+        Int res_i(uint32_t k) const {
+            Int r = Int(tex->m_resolution_opaque[k]);
+            if (lvl.bound)
+                r = maximum(r >> lvl.level, Int(1));
+            return r;
+        }
         Float to_float(const Int &i) const { return Value(i); }
-        Int idiv(const Int &a, uint32_t k) const { return tex->m_inv_resolution[k](a); }
+        Int idiv(const Int &a, uint32_t k) const {
+            if (lvl.bound)
+                return detail::tex_idiv_dynamic(*this, lvl.div[k][0],
+                                                lvl.div[k][1], a);
+            return tex->m_inv_resolution[k](a);
+        }
         void gather(const UInt &idx, Float *out) const {
-            tex->template gather_texel<CChannels>(idx, active, out);
+            if (!lvl.bound) {
+                tex->template gather_texel<CChannels>(idx, active, out);
+                return;
+            }
+            UInt mip_idx = idx + lvl.offset;
+            if (lvl.includes_base) {
+                // The bound level may be the base level, whose texels live in
+                // the regular texture storage rather than the pyramid buffer
+                Mask is_base = lvl.level == 0;
+                tex->template gather_texel<CChannels>(idx, active && is_base, out);
+
+                uint32_t n = this->channels_out;
+                Float *tmp_mem = (Float *) alloca(sizeof(Float) * n);
+                detail::tex_scratch<Float> tmp(tmp_mem, n);
+                tex->template gather_texel<CChannels>(
+                    tex->m_mip, mip_idx, active && !is_base, tmp.data());
+                for (uint32_t ch = 0; ch < n; ++ch)
+                    out[ch] = select(is_base, out[ch], tmp[ch]);
+            } else {
+                tex->template gather_texel<CChannels>(tex->m_mip, mip_idx,
+                                                      active, out);
+            }
+        }
+
+        /// Load the constant record of MIP level ``l``
+        void mip_record(const Int &l, Int *rec) const {
+            auto r = drjit::gather<Array<Int, MipStride>>(tex->m_mip_table, UInt(l));
+            for (uint32_t j = 0; j < MipStride; ++j)
+                rec[j] = r[j];
+        }
+
+        template <typename Body>
+        void sum_loop(const Int &n, Float *state, uint32_t /* n_state */,
+                      uint32_t n_scratch, Body body) const {
+            detail::tex_sum_loop(*this, n, state, n_scratch, body);
         }
     };
 
@@ -1135,12 +1673,14 @@ private:
     ScalarOps<Value, CChannels> scalar_ops(mask_t<Value> active) const {
         if constexpr (!is_array_v<mask_t<Value>>)
             active = true;
-        if constexpr (CChannels != 0)
-            return ScalarOps<Value, CChannels>{ {}, this, active, m_filter_mode,
-                                                m_wrap_mode };
-        else
-            return ScalarOps<Value, 0>{ { (uint32_t) m_channels }, this, active,
-                                        m_filter_mode, m_wrap_mode };
+        ScalarOps<Value, CChannels> ops;
+        if constexpr (CChannels == 0)
+            ops.channels_out = (uint32_t) m_channels;
+        ops.tex = this;
+        ops.active = active;
+        ops.filter_mode = m_filter_mode;
+        ops.wrap_mode = m_wrap_mode;
+        return ops;
     }
 
     // -- Type-erased marshalling helpers backing the JIT ``ad_tex_*`` calls --
@@ -1155,14 +1695,11 @@ private:
 
     /// Adopt an owned combined index returned by an ``ad_tex_*`` call as Storage
     static Storage steal_storage(uint64_t index) {
-        if constexpr (is_diff_v<Storage_>)
-            return Storage::steal(index);
-        else
-            return Storage::steal((uint32_t) index);
+        return Storage::steal((typename Storage::Index) index);
     }
 
     /// Combined AD/JIT index of the padded texture storage tensor
-    uint64_t value_index() const { return combined_index(m_value.array()); }
+    uint64_t value_index() const { return combined_index(m_padded_tensor.array()); }
 
     /// JIT indices of the per-dimension opaque resolution variables
     std::array<uint32_t, Dimension> resolution_indices() const {
@@ -1302,7 +1839,7 @@ private:
 
 private:
     void *m_handle = nullptr;
-    size_t m_size = 0;                       ///< Total size of array
+    size_t m_size = 0;                       ///< Element count of the padded storage
     size_t m_channels = 0;                   ///< Number of channels
 
     /// Rounded-up number of channels (depends on the backend)
@@ -1311,11 +1848,38 @@ private:
     /// Unpadded shape of texture
     size_t m_shape[Dimension + 1] = {};
 
-    /// Tensor padded for packet size
-    mutable TensorXf m_value;
+    /* Texel storage model
+       ===================
 
-    /// Lazily computed if texture data is updated after initialization
-    mutable TensorXf m_unpadded_value;
+       The texture class can hold up to 3 different versions of a texture:
+
+       - ``m_tensor``: the data assigned by the user. This is also the
+         main object receiving gradients in AD-enabled modes.
+
+       - ``m_padded_tensor``: texels with the channel count padded
+         to a power of two (required by the hardware).
+
+       - CUDA/Metal: a hardware-accelerated texture in its
+         native/proprietary representation.
+
+       Textures can be very large. To avoid tripling the memory requirements,
+       Dr.Jit generally ensures that only one of these three is authoritative.
+       In particular, once the texture has been uploaded to the device, it
+       installs symbolic readback views that reproduce the original
+       ``m_tensor`` and ``m_padded_tensor`` with a lossless texture lookup.
+       AD surgery via ``replace_grad()`` preserves the differentiable identity
+       of the variables during these steps.
+       From the outside, ``tensor()`` behaves as if nothing happened.
+
+       In the Laplacian MIP basis, the per-level coefficient tensors in
+       ``m_levels`` are authoritative instead, and the tensor members hold
+       buffers synthesized from them. */
+
+    /// Public-facing tensor in the unpadded shape, returned by \ref tensor()
+    mutable TensorXf m_tensor;
+
+    /// Storage tensor with the channel count padded to a power of two
+    mutable TensorXf m_padded_tensor;
 
     // Stored in this order: width, height, depth
     Array<UInt32, Dimension> m_resolution_opaque;
@@ -1338,48 +1902,72 @@ private:
     /// 8-bit textures: decode sRGB -> linear on sampling
     bool m_srgb = false;
 
-    /// Hardware-texture flag: is the data held exclusively on the device?
-    mutable bool m_migrated = false;
+    /// The hardware texture contents can change behind our back (the texture
+    /// is writable or externally managed); the tensor members permanently
+    /// hold readback views that \ref sync_views() keeps current
+    bool m_hw_mutable = false;
 
-    /// Does the public-facing unpadded tensor need to be updated?
-    mutable bool m_tensor_dirty = false;
+    /// MIP level selection mode of filtered lookups
+    MipFilter m_mip_filter = MipFilter::Disabled;
+
+    /// Bound on the number of anisotropic taps of \ref eval_filtered()
+    uint32_t m_max_aniso = 1;
+
+    /// Number of MIP pyramid levels including the base (1 = no MIP mapping)
+    uint32_t m_level_count = 1;
+
+    /// Total texel count of the pyramid levels >= 1
+    uint32_t m_mip_texels = 0;
+
+    /// Channel-padded texels of the pyramid levels >= 1, stored back to back
+    Storage m_mip;
+
+    /// Per-level constants for the MIP lookup from \ref detail::tex_mip_table()
+    Int32Buffer m_mip_table;
+
+    /// Basis in which the texture stores its degrees of freedom
+    MipBasis m_mip_basis = MipBasis::Standard;
+
+    /// Laplacian mode: per-level coefficient tensors (finest first, unpadded
+    /// channel count). Empty in the standard basis.
+    vector<TensorXf> m_levels;
 
 public:
-    void
-    traverse_1_cb_ro(void *payload,
-                     drjit ::detail ::traverse_callback_ro fn) const override {
-        // Traverse the function to react to changes when freezing code via
-        // @dr.freeze. In all other contexts, the texture is read-only and does
-        // not require traversal
-        if (!jit_flag(JitFlag::EnableObjectTraversal))
+    void traverse_cb(void *payload, const drjit::TraverseVisitor &cb) override {
+        // The texture data only takes part in frozen functions, which must
+        // react to changes of the underlying arrays. In every other context
+        // (loops, calls, evaluation) the texture is a read-only resource.
+        if (cb.role != TraverseRole::Freeze)
             return;
 
-        DRJIT_MAP(DR_TRAVERSE_MEMBER_RO, m_value, m_unpadded_value,
-                  m_resolution_opaque, m_inv_resolution);
-        if constexpr (HasGPUTexture) {
-            uint32_t n_indices = tex_n_indices();
-            uint32_t *indices = (uint32_t *) alloca(sizeof(uint32_t) * n_indices);
-            jit_tex_get_indices(m_handle, indices);
-            for (uint32_t i = 0; i < n_indices; i++)
-                fn(payload, indices[i], "", "");
+        // Refresh the readback views of a hardware-mutable texture so that
+        // the recording observes its current contents
+        sync_views();
+
+        // Only traverse symbolic readback expression if they carry gradients
+        bool traverse_tensors = true;
+        if constexpr (HasGPUTexture && IsDiff)
+            traverse_tensors = !m_handle || grad_enabled(m_tensor.array()) ||
+                               grad_enabled(m_padded_tensor.array());
+        else if constexpr (HasGPUTexture)
+            traverse_tensors = !m_handle;
+
+        if (traverse_tensors) {
+            DRJIT_MAP(DR_TRAVERSE_MEMBER, m_padded_tensor, m_tensor);
         }
-    }
-    void traverse_1_cb_rw(void *payload,
-                          drjit ::detail ::traverse_callback_rw fn) override {
-        // Only traverse the scene for frozen functions, since accidentally
-        // traversing the scene in loops or vcalls can cause errors with
-        // variable size mismatches, and backpropagation of gradients.
-        if (!jit_flag(JitFlag::EnableObjectTraversal))
-            return;
 
-        DRJIT_MAP(DR_TRAVERSE_MEMBER_RW, m_value, m_unpadded_value,
-                  m_resolution_opaque, m_inv_resolution);
+        DRJIT_MAP(DR_TRAVERSE_MEMBER, m_resolution_opaque, m_inv_resolution,
+                  m_mip, m_mip_table, m_levels);
+
         if constexpr (HasGPUTexture) {
+            if (!m_handle) // No hardware texture (use_accel=false)
+                return;
             uint32_t n_indices = tex_n_indices();
             uint32_t *indices = (uint32_t *) alloca(sizeof(uint32_t) * n_indices);
             jit_tex_get_indices(m_handle, indices);
             for (uint32_t i = 0; i < n_indices; i++) {
-                uint64_t new_index = fn(payload, indices[i], "", "");
+                uint64_t new_index =
+                    cb.var(payload, indices[i], "m_handle", "", "");
                 if (new_index != indices[i])
                     jit_raise("A texture was changed by traversing it. This is "
                               "not supported!");

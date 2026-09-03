@@ -246,7 +246,7 @@ struct KMaskBase : StaticArrayBase<Value_, Size_, true, Derived_> {
             offset = Index(1) << (index_32 & (uint32_t) 0x7);
         }
 
-        return Derived(neq(gather<UInt32, 1>(ptr, index, mask) & offset, (uint32_t) 0));
+        return Derived((gather<UInt32, 1>(ptr, index, mask) & offset) != (uint32_t) 0);
     }
 #endif
 

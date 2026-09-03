@@ -728,3 +728,96 @@ def test32_gpu_ndarray_is_copy(t):
     v = t(a)
     a[0] = 999  # modify source
     assert v[0] == 1  # drjit array should be unchanged
+
+
+# Test that dr.opaque() gives each array in a PyTree storage of its own
+@pytest.test_arrays('float32, jit, shape=(*)')
+def test33_opaque_pytree(t):
+    Array3f = getattr(sys.modules[t.__module__], 'Array3f')
+
+    a = t(1, 2, 3)
+    b = dr.opaque(a)
+    assert b.state == dr.VarState.Evaluated and dr.all(a == b)
+
+    # The copy has separate storage
+    dr.scatter(b, t(0), dr.uint32_array_t(t)(0))
+    assert dr.all(a == [1, 2, 3]) and dr.all(b == [0, 2, 3])
+
+    # Repeated and literal-valued entries are not aliased
+    c = dr.opaque((a, a, Array3f(0, 1, 0)))
+    indices = [c[0].index, c[1].index] + [c[2][i].index for i in range(3)]
+    assert len(set(indices)) == 5
+    assert all(v.state == dr.VarState.Evaluated for v in (c[0], c[1], c[2][0]))
+
+    # Non-array leaves pass through, type objects are rejected
+    assert dr.opaque({'x': None}) == {'x': None}
+    with pytest.raises(RuntimeError, match='received a type object'):
+        dr.opaque(t)
+
+    if dr.is_diff_v(t):
+        d = t(1, 2, 3)
+        dr.enable_grad(d)
+        dr.backward(dr.opaque(d))
+        assert dr.all(dr.grad(d) == 1)
+
+
+# Test which single-argument inputs broadcast, and which ones are unpacked
+@pytest.test_arrays('float32, shape=(3, *), jit')
+def test34_init_broadcast_vs_unpack(t):
+    np = pytest.importorskip("numpy")
+    mod = sys.modules[t.__module__]
+
+    # A 1D array is replicated across all components, converting its element
+    # type as needed. The decision only depends on the depth of the argument
+    for arg in (mod.Float(1, 2, 3), mod.Float64(1, 2, 3), mod.Int(1, 2, 3)):
+        v = t(arg)
+        assert v.shape == (3, 3)
+        assert dr.all(v == t([1, 2, 3], [1, 2, 3], [1, 2, 3]), axis=None)
+
+    # Everything else is unpacked component by component: sequences,
+    # ndarrays, and arrays of equal depth
+    for arg in ([1, 2, 3], (1, 2, 3), np.array([1, 2, 3], dtype=np.float32),
+                mod.Array3f64(1, 2, 3)):
+        v = t(arg)
+        assert dr.all(v == t(1, 2, 3), axis=None)
+
+
+# Test 'flip_axes' when initializing from an ndarray
+@pytest.test_arrays('float32, shape=(3, *), jit')
+def test35_init_from_ndarray_flip_axes(t):
+    np = pytest.importorskip("numpy")
+    mod = sys.modules[t.__module__]
+
+    a = np.array([[1, 2, 3], [4, 5, 6]], dtype=np.float32)
+    ref = t([1, 4], [2, 5], [3, 6])
+
+    assert dr.all(t(a, flip_axes=True) == ref, axis=None)
+    assert dr.all(t(a.T.copy()) == ref, axis=None)
+
+    # The element type is converted just like everywhere else
+    assert dr.all(mod.Array3f64(a, flip_axes=True) == ref, axis=None)
+    assert dr.all(t(a.astype(np.float64), flip_axes=True) == ref, axis=None)
+
+    # An input that omits the vectorized dimension stays acceptable
+    assert dr.all(t(np.array([1, 2, 3], dtype=np.float32), flip_axes=True) ==
+                  t(1, 2, 3), axis=None)
+    assert dr.all(mod.Quaternion4f(np.array([1, 2, 3, 4], dtype=np.float32),
+                                   flip_axes=True) ==
+                  mod.Quaternion4f(1, 2, 3, 4), axis=None)
+
+    m = np.arange(16, dtype=np.float32).reshape(4, 4)
+    assert dr.all(mod.Matrix4f(m, flip_axes=True) == mod.Matrix4f(m.T.copy()),
+                  axis=None)
+
+    # A source shape that does not match once transposed is rejected
+    with pytest.raises(TypeError, match=r"shape=\(\*, 3\)"):
+        t(a.T.copy(), flip_axes=True)
+
+    # For complex arrays, 'flip_axes' refers to their interleaved storage
+    # format and does not transpose the input
+    c = mod.Complex2f(np.array((3+5j, 4+5j)))
+    assert dr.all(c == mod.Complex2f((3, 4), (5, 5)), axis=None)
+
+    # The number of entries is unrelated to the size of the complex axis
+    c = mod.Complex2f(np.array((1+2j, 3+4j, 5+6j)))
+    assert dr.all(c == mod.Complex2f((1, 3, 5), (2, 4, 6)), axis=None)

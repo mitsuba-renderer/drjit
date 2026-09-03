@@ -167,6 +167,9 @@ enum class ArrayOp {
 
     Minimum,
     Maximum,
+    FMin,
+    FMax,
+    Copysign,
     Atan2,
 
     // Binary bit/mask operations
@@ -469,7 +472,7 @@ template <typename T> NB_INLINE void bind_base(ArrayBinding &b) {
             nb::detail::make_caster<Value> in;
 
             bool success = value != Py_None && in.from_python(
-                value, (uint8_t) nb::detail::cast_flags::convert, &cleanup);
+                value, (uint32_t) nb::detail::cast_flags::convert, &cleanup);
             if (success) {
                 using Intrinsic = nb::detail::intrinsic_t<Value>;
                 using Out = std::conditional_t<std::is_pointer_v<Value>, Intrinsic*, Intrinsic &>;
@@ -520,8 +523,8 @@ template <typename T> NB_INLINE void bind_base(ArrayBinding &b) {
                 }
                 if (!nb::try_cast(nb::handle(h), scalar)) {
                     nb::str tp_name = nb::inst_name(h);
-                    nb::detail::raise("Could not initialize element with a "
-                                      "value of type '%s'.", tp_name.c_str());
+                    nb::raise("Could not initialize element with a "
+                              "value of type '%s'.", tp_name.c_str());
                 }
                 if (opaque)
                     new (a) T(drjit::opaque<T>(scalar, size));
@@ -558,6 +561,18 @@ template <typename T> void bind_arithmetic(ArrayBinding &b) {
 
     b[ArrayOp::Maximum] = (void *) +[](const T *a, const T *b, T *c) {
         new (c) T(drjit::maximum(*a, *b));
+    };
+
+    b[ArrayOp::FMin] = (void *) +[](const T *a, const T *b, T *c) {
+        new (c) T(drjit::fmin(*a, *b));
+    };
+
+    b[ArrayOp::FMax] = (void *) +[](const T *a, const T *b, T *c) {
+        new (c) T(drjit::fmax(*a, *b));
+    };
+
+    b[ArrayOp::Copysign] = (void *) +[](const T *a, const T *b, T *c) {
+        new (c) T(drjit::copysign(*a, *b));
     };
 
     // Ternary arithetic operations
@@ -640,7 +655,7 @@ inline void disable_cast(ArrayBinding &b) {
 inline void disable_arithmetic(ArrayBinding &b) {
     b[ArrayOp::Abs] = b[ArrayOp::Neg] = b[ArrayOp::Add] = b[ArrayOp::Sub] =
         b[ArrayOp::Mul] = b[ArrayOp::Minimum] = b[ArrayOp::Maximum] =
-        b[ArrayOp::Fma] = b[ArrayOp::Sum] = b[ArrayOp::Prod] =
+        b[ArrayOp::FMin] = b[ArrayOp::FMax] = b[ArrayOp::Copysign] = b[ArrayOp::Fma] = b[ArrayOp::Sum] = b[ArrayOp::Prod] =
         b[ArrayOp::Min] = b[ArrayOp::Max] = DRJIT_OP_NOT_IMPLEMENTED;
 }
 
@@ -917,9 +932,10 @@ template <typename T> void bind_complex(ArrayBinding &b) {
 }
 
 
+/// Bind an array type. The type is made immutable if ``freeze==true``.
 template <typename T>
 nanobind::object bind_array(ArrayBinding &b, nanobind::handle scope = {},
-                            const char *name = nullptr) {
+                            const char *name = nullptr, bool freeze = true) {
     namespace nb = nanobind;
 
     bind_init<T>(b, scope, name);
@@ -1001,14 +1017,19 @@ nanobind::object bind_array(ArrayBinding &b, nanobind::handle scope = {},
         result.attr("Domain") = T::CallSupport::Domain;
     }
 
+    if (freeze)
+        nb::type_freeze(result);
+
     return result;
 }
 
+/// Variant of ``bind_array()`` that returns a mutable ``nb::class_<T>`` so that
+/// the caller can add further members. Conclude the chain with ``.freeze()``.
 template <typename T>
 nanobind::class_<T> bind_array_t(ArrayBinding &b, nanobind::handle scope = {},
                                  const char *name = nullptr) {
         return nanobind::borrow<nanobind::class_<T>>(
-            bind_array<T>(b, scope, name));
+            bind_array<T>(b, scope, name, /* freeze = */ false));
 }
 
 /// Run bind_array() for many different plain array types
@@ -1102,93 +1123,27 @@ template <typename T> void bind_all(ArrayBinding &b) {
     bind_array<Tensor<float64_array_t<T2>>>(b);
 }
 
-// Expose already existing object tree traversal callbacks (T::traverse_1_..) in Python.
-// This functionality is needed to traverse custom/opaque C++ classes and correctly
-// update their members when they are used in vectorized loops, function calls, etc.
-template <typename T, typename... Args> auto &bind_traverse(nanobind::class_<T, Args...> &cls)
-{
+// Expose deep object tree traversal as ``_traverse_cb(role, callback)``
+template <typename T, typename... Args> auto &bind_traverse(nanobind::class_<T, Args...> &cls) {
     namespace nb = nanobind;
-    struct Payload {
-        nb::callable c;
-    };
+    struct Payload { nb::callable c; };
 
     static_assert(std::is_base_of_v<TraversableBase, T>);
 
-    cls.def("_traverse_1_cb_ro", [](const T *self, nb::callable c) {
+    cls.def("_traverse_cb", [](T *self, TraverseRole role, nb::callable c) {
         Payload payload{ std::move(c) };
-        self->traverse_1_cb_ro((void *) &payload,
-            [](void *p, uint64_t index, const char *variant, const char *domain) {
-                ((Payload *) p)->c(index, variant, domain);
-            });
-    });
-
-    cls.def("_traverse_1_cb_rw", [](T *self, nb::callable c) {
-        Payload payload{ std::move(c) };
-        self->traverse_1_cb_rw((void *) &payload, [](void *p, uint64_t index,
-                                                     const char *variant,
-                                                     const char *domain) {
-            return nb::cast<uint64_t>(
-                ((Payload *) p)->c(index, variant, domain));
-        });
+        traverse_fn(self, (void *) &payload,
+            TraverseVisitor {
+                role,
+                [](void *p, uint64_t index, const char *name,
+                   const char *variant, const char *domain) {
+                    return nb::cast<uint64_t>(
+                        ((Payload *) p)->c(index, name, variant, domain));
+                },
+                nullptr });
     });
 
     return cls;
-}
-
-/**
- * \brief This function traverses a python object, that inherits from a
- * trampoline class.
- *
- * Internally, this function calls the ``traverse_py_cb_ro_impl`` function,
- * exposed through ``drjit.detail``, with the object and the callback.
- */
-inline void traverse_py_cb_ro(const TraversableBase *base, void *payload,
-                              void (*fn)(void *, uint64_t, const char *variant,
-                                         const char *domain)) {
-    namespace nb    = nanobind;
-    nb::gil_scoped_acquire guard;
-
-    nb::handle self = base->self_py();
-    if (!self)
-        return;
-
-    // Resolved once; non-owning reference, kept alive by drjit.detail's module dict.
-    static nb::handle traverse_py_cb_ro_fn =
-        nb::module_::import_("drjit.detail").attr("traverse_py_cb_ro");
-
-    traverse_py_cb_ro_fn(self,
-        nb::cpp_function([&](uint64_t index, const char *variant,
-                           const char *domain) {
-            fn(payload, index, variant, domain);
-        }));
-}
-
-/**
- * \brief This function traverses a python object, that inherits from a
- * trampoline class.
- *
- * Internally, this function calls the ``traverse_py_cb_rw_impl`` function,
- * exposed through ``drjit.detail``, with the object and the callback.
- */
-inline void traverse_py_cb_rw(TraversableBase *base, void *payload,
-                              uint64_t (*fn)(void *, uint64_t, const char *,
-                                             const char *)) {
-    namespace nb    = nanobind;
-    nb::gil_scoped_acquire guard;
-
-    nb::handle self = base->self_py();
-    if (!self)
-        return;
-
-    // Resolved once; non-owning reference, kept alive by drjit.detail's module dict.
-    static nb::handle traverse_py_cb_rw_fn =
-        nb::module_::import_("drjit.detail").attr("traverse_py_cb_rw");
-
-    traverse_py_cb_rw_fn(self,
-    nb::cpp_function([&](uint64_t index, const char *variant,
-                       const char *domain) {
-        return fn(payload, index, variant, domain);
-    }));
 }
 
 NAMESPACE_END(drjit)

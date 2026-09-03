@@ -1,5 +1,6 @@
 import drjit as dr
 import pytest
+import sys
 
 @pytest.test_arrays('float32,shape=(3)', 'float32,shape=(*)',
                     'float32,shape=(3, *)', 'float32,shape=(*, *)')
@@ -124,3 +125,47 @@ def test5_half_precision_promotion(t):
     assert dr.type_v(x) == dr.VarType.Float16
     assert dr.type_v(y) == dr.VarType.Float16
     assert dr.type_v(z) == dr.VarType.Float16
+
+
+@pytest.test_arrays('float64, shape=(3, *), jit')
+def test6_binop_promote_broadcast_and_convert(t):
+    # An operand may simultaneously require a broadcast into a deeper array
+    # and a conversion of its element type
+    mod = sys.modules[t.__module__]
+    Array3f, Array3f64 = mod.Array3f, t
+    Float, Float64, Int = mod.Float, mod.Float64, mod.Int
+
+    ref = Array3f64(2, 4, 6)
+
+    for arg in (2, 2.0, Float([2]), Float64([2]), Int([2]),
+                Array3f(2, 2, 2), Array3f64(2, 2, 2)):
+        x = Array3f64(1, 2, 3) * arg
+        assert type(x) is Array3f64 and dr.all(x == ref, axis=None)
+
+    # Widening the result works in the same way
+    x = Array3f(1, 2, 3) * Float64([2])
+    assert type(x) is Array3f64 and dr.all(x == ref, axis=None)
+
+
+@pytest.test_arrays('uint32, shape=(*)')
+def test7_promote_index_convertible(t):
+    # Objects implementing __index__ (e.g. enums) promote like plain integers
+    import enum
+
+    class Mode(enum.IntEnum):
+        A = 3
+        B = 5
+
+    class Custom:
+        def __index__(self):
+            return 4
+
+    x = t(1, 2) + Mode.A
+    assert type(x) is t and dr.all(x == t(4, 5))
+
+    x = dr.select(t(1, 2) > 1, t(9), Custom())
+    assert type(x) is t and dr.all(x == t(4, 9))
+
+    # Same-typed scalars on both sides take the promotion path as well
+    x = dr.select(t(1, 2) > 1, Mode.B, Mode.A)
+    assert dr.all(x == t(3, 5))

@@ -14,4 +14,5 @@
 
 extern bool schedule(nb::handle);
 extern bool eval(nb::handle h);
+extern nb::object opaque(nb::handle h);
 extern void export_eval(nb::module_ &);

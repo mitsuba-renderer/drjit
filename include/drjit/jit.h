@@ -284,6 +284,18 @@ struct DRJIT_TRIVIAL_ABI JitArray
         return steal(jit_var_max(m_index, v.m_index));
     }
 
+    JitArray fmin_(const JitArray &v) const {
+        return steal(jit_var_fmin(m_index, v.m_index));
+    }
+
+    JitArray fmax_(const JitArray &v) const {
+        return steal(jit_var_fmax(m_index, v.m_index));
+    }
+
+    JitArray copysign_(const JitArray &v) const {
+        return steal(jit_var_copysign(m_index, v.m_index));
+    }
+
     JitArray round_() const { return steal(jit_var_round(m_index)); }
     template <typename T> T round2int_() const { return T(round(*this)); }
 

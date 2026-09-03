@@ -31,7 +31,7 @@ struct IfState {
         : args(std::move(args)), true_fn(std::move(true_fn)),
           false_fn(std::move(false_fn)),
           arg_labels(std::move(arg_labels)), rv_labels(std::move(rv_labels)),
-          tracker(strict) { }
+          tracker(dr::TraverseRole::Conditional, strict) { }
 };
 
 static void if_stmt_body_cb(void *p, bool cond_val,
@@ -148,6 +148,10 @@ nb::object if_stmt(nb::tuple args, nb::handle cond, nb::callable true_fn,
             ad_cond(backend, symbolic, name_cstr, is.get(), cond_index, args_i,
                     rv_i, if_stmt_body_cb, if_stmt_delete_cb, true);
 
+        // Record the conditional's outputs in the tracker. The shallow copy is
+        // needed to handle the case where the last branch returns an object
+        // that the caller still holds.
+        is->rv = copy(is->rv);
         is->tracker.write(is->rv, rv_i, false, is->rv_labels, "rv");
         is->rv.reset();
         is->sr.clear();

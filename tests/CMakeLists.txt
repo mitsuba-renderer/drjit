@@ -2,10 +2,18 @@ if (SKBUILD)
   set(DRJIT_DIST_FLAGS STABLE_ABI)
 endif()
 
+# The test modules must share the domain of the main extension (see the
+# equivalent logic in src/python/CMakeLists.txt)
+if (DRJIT_SPLIT_MODE)
+  set(DRJIT_NB_FLAGS BACKEND_MODULE nanobind_backend NB_DOMAIN drjit)
+else()
+  set(DRJIT_NB_FLAGS NB_DOMAIN drjit)
+endif()
+
 function(add_drjit_test NAME)
   nanobind_add_module(
     ${NAME}
-    NB_DOMAIN drjit
+    ${DRJIT_NB_FLAGS}
     ${DRJIT_DIST_FLAGS}
     ${ARGV}
   )

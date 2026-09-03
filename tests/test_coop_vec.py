@@ -41,6 +41,11 @@ def test02_add_sub(t, size):
     dr.schedule(r0, r1)
     assert dr.all((r0 == 18) & (r1 == 19))
 
+    # Reflected subtraction
+    r0, r1 = list(30 - x)[0:2]
+    dr.schedule(r0, r1)
+    assert dr.all((r0 == 25) & (r1 == 24))
+
 @pytest.mark.parametrize('size', [0, 20, 100])
 @pytest.test_arrays('jit,float16,shape=(*),-diff', 'jit,float32,shape=(*),-diff')
 def test03_min_max_fma_dot_abs(t, size):
@@ -130,6 +135,9 @@ def test04_pack_unpack(t, sub_slice):
         assert dr.all(m.TensorXf16(X2a) == X2[:, 0:32], axis=None)
 
 
+# NumPy's matmul reports spurious FP exceptions when built against Apple
+# Accelerate, whose GEMM kernels set the FPU status flags on SIMD padding lanes.
+@pytest.mark.filterwarnings('ignore:.*encountered in matmul:RuntimeWarning')
 @pytest.mark.parametrize('shape', [(2, 8), (5, 2), (16, 16)])
 @pytest.mark.parametrize('transpose', [False, True])
 @pytest.mark.parametrize('bias', [False, True])
@@ -187,7 +195,14 @@ def test05_matvec(t, shape, transpose, bias, pack):
     if bias:
         ref += b_n[:, None]
 
-    assert dr.allclose(r_n, ref)
+    # Both operands are NumPy arrays, so dr.allclose() cannot infer a suitable
+    # tolerance and defaults to double precision thresholds
+    if dr.type_v(t) == dr.VarType.Float16:
+        rtol, atol = 1e-2, 1e-2
+    else:
+        rtol, atol = 1e-3, 1e-5
+
+    assert dr.allclose(r_n, ref, rtol=rtol, atol=atol)
 
 
 @pytest.test_arrays('jit,shape=(*),float16,-diff', 'jit,shape=(*),float32,-diff')

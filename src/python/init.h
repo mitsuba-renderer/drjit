@@ -34,11 +34,9 @@ extern nb::object full(const char *name, nb::handle dtype, nb::handle value,
 
 extern nb::object import_ndarray(ArrayMeta m, PyObject *arg,
                                  dr::vector<size_t> *shape = nullptr,
-                                 bool force_ad = false);
+                                 bool force_ad = false, bool flip_axes = false);
 
 // Helper function to extract the type of constructs such as typing.Optional[T]
 extern nb::object extract_type(nb::object tp);
-
-extern void python_cleanup_thread_static_initialization();
 
 extern void python_cleanup_thread_static_shutdown();

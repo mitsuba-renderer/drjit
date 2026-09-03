@@ -575,14 +575,14 @@ def test16_optimize_away(t, variant):
     a = Int(1, 2, 3, 4)
     b = Int(1, 4, 1, 2)
 
-    with dr.scoped_set_flag(dr.JitFlag.KernelHistory):
+    with dr.kernel_history() as kh:
         a, b = dr.switch(index, c, a, b^1)
         if variant == 0:
             b = None
         dr.eval(a, b)
-        hist = dr.kernel_history((dr.KernelType.JIT,))
+    hist = [k for k in kh if k.type == dr.KernelType.JIT]
 
-    ir = hist[0]['ir'].getvalue()
+    ir = hist[0].source
 
     if dr.backend_v(t) is dr.JitBackend.LLVM:
         assert ir.count(' = xor') == 2*variant
@@ -872,3 +872,23 @@ def test21_switch_many_opaque(t, symbolic):
         res = dr.switch(idx, list(callables), x)
         ref = t([sums[s] + float(i) for i, s in enumerate(sel)])
         assert dr.allclose(res, ref)
+
+
+@pytest.mark.parametrize('symbolic', [True, False])
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+def test22_fwd_partial_seed_multiple_implicit(t, symbolic):
+    # Forward mode through a call whose targets implicitly capture several
+    # grad-enabled variables, of which only one is seeded (see the analogous
+    # loop test in test_while_loop_ad.py)
+    UInt32 = dr.uint32_array_t(t)
+
+    x, y = t(2), t(3)
+    dr.enable_grad(x, y)
+
+    with dr.scoped_set_flag(dr.JitFlag.SymbolicCalls, symbolic):
+        res = dr.switch(UInt32(0, 1),
+                        [lambda a: a * x * y, lambda a: a + x * y],
+                        t(1, 1))
+
+    dr.forward_from(x)
+    dr.assert_allclose(dr.grad(res), [3, 3])

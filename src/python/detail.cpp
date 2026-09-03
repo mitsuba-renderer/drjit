@@ -23,9 +23,6 @@
  * copies created via the ordinary copy constructor. It also rebuilds tuples,
  * lists, dictionaries, and custom data strutures.
  *
- * This function exists for Dr.Jit-internal use. You probably should not call
- * it in your own application code.
- *
  * (Note: this explanation is also part of src/python/docstr.rst -- please keep
  * them in sync in case you make a change here)
  */
@@ -37,7 +34,7 @@ nb::object copy(nb::handle h) {
     };
 
     CopyOp c;
-    return transform("drjit.detail.copy", c, h);
+    return transform("drjit.copy", c, h);
 }
 
 void stash_ref(nb::handle h, dr::vector<StashRef> &v) {
@@ -100,7 +97,8 @@ bool can_scatter_reduce(nb::type_object_t<dr::ArrayBase> tp, ReduceOp op) {
  * (Note: this explanation is also part of src/python/docstr.rst -- please keep
  * them in sync in case you make a change here)
 */
-void collect_indices(nb::handle h, dr::vector<uint64_t> &indices, bool inc_ref) {
+void collect_indices(nb::handle h, dr::vector<uint64_t> &indices,
+                     dr::TraverseRole role, bool inc_ref) {
     struct CollectIndices final : TraverseCallback {
         dr::vector<uint64_t> &result;
         bool inc_ref;
@@ -127,7 +125,7 @@ void collect_indices(nb::handle h, dr::vector<uint64_t> &indices, bool inc_ref) 
         return;
 
     CollectIndices ci { indices, inc_ref };
-    traverse("drjit.detail.collect_indices", ci, h);
+    traverse("drjit.detail.collect_indices", ci, h, role);
 }
 
 /**
@@ -150,7 +148,8 @@ void collect_indices(nb::handle h, dr::vector<uint64_t> &indices, bool inc_ref) 
  * (Note: this explanation is also part of src/python/docstr.rst -- please keep
  * them in sync in case you make a change here)
  */
-nb::object update_indices(nb::handle h, const dr::vector<uint64_t> &indices) {
+nb::object update_indices(nb::handle h, const dr::vector<uint64_t> &indices,
+                          dr::TraverseRole role) {
     struct UpdateIndicesOp final : TransformCallback {
         const dr::vector<uint64_t> &indices;
         size_t counter;
@@ -176,7 +175,7 @@ nb::object update_indices(nb::handle h, const dr::vector<uint64_t> &indices) {
         return nb::object();
 
     UpdateIndicesOp uio { indices };
-    nb::object result = transform("drjit.detail.update_indices", uio, h);
+    nb::object result = transform("drjit.detail.update_indices", uio, h, role);
 
     if (uio.counter != indices.size())
         nb::raise("drjit.detail.update_indices(): too many indices "
@@ -289,132 +288,47 @@ bool leak_warnings() {
     return nb::leak_warnings() || jit_leak_warnings() || ad_leak_warnings();
 }
 
-// Have to wrap this in an unnamed namespace to prevent collisions with the
-// other declaration of ``recursion_guard``.
-namespace {
-static int recursion_level = 0;
+nb::handle traversable_base_type;
 
-// PyTrees could theoretically include cycles. Catch infinite recursion below
-struct recursion_guard {
-    recursion_guard() {
-        if (recursion_level >= 50) {
-            PyErr_SetString(PyExc_RecursionError, "runaway recursion detected");
-            nb::raise_python_error();
-        }
-        // NOTE: the recursion_level has to be incremented after potentially
-        // throwing an exception, as throwing an exception in the constructor
-        // prevents the destructor from being called.
-        recursion_level++;
-    }
-    ~recursion_guard() { recursion_level--; }
-};
-} // namespace
-
-/**
- * \brief Traverses all variables of a python object.
- *
- * This function is used to traverse variables of python objects, inheriting
- * from trampoline classes. This allows the user to freeze a custom python
- * version of a C++ class, without having to declare its variables.
- */
-void traverse_py_cb_ro_impl(nb::handle self, nb::callable c) {
-    recursion_guard guard;
-
-    struct PyTraverseCallback : TraverseCallback {
-        void operator()(nb::handle h) override {
-            const ArraySupplement &s = supp(h.type());
-            auto index_fn = s.index;
-            if (index_fn){
-                if (s.is_class){
-                    nb::str variant =
-                        nb::borrow<nb::str>(nb::getattr(h, "Variant"));
-                    nb::str domain =
-                        nb::borrow<nb::str>(nb::getattr(h, "Domain"));
-                    operator()(index_fn(inst_ptr(h)), variant.c_str(),
-                               domain.c_str());
-                }
-                else
-                    operator()(index_fn(inst_ptr(h)), "", "");
-            }
-        }
-        uint64_t operator()(uint64_t index, const char *variant,
-                            const char *domain) override {
-            m_callback(index, variant, domain);
-            return 0;
-        }
-        nb::callable m_callback;
-
-        PyTraverseCallback(nb::callable c) : m_callback(c) {}
-    };
-
-    PyTraverseCallback traverse_cb(std::move(c));
-
-    if (nb::hasattr(self, "__dict__")) {
-        auto dict = nb::borrow<nb::dict>(nb::getattr(self, "__dict__"));
-        for (auto value : dict.values())
-            traverse("traverse_py_cb_ro", traverse_cb, value);
-    }
+void raise_if_unbound_traversable(nb::handle tp) {
+    if (nb::type_check(tp) && nb::hasattr(tp, "_traverse_cb"))
+        nb::raise("the type '%s' derives from drjit::TraversableBase, but its "
+                  "nanobind binding does not declare drjit::TraversableBase "
+                  "as a base class. Dr.Jit cannot traverse its variables. Bind "
+                  "it as nb::class_<T, drjit::TraversableBase>(...).",
+                  nb::type_name(tp).c_str());
 }
 
-/**
- * \brief Traverses all variables of a python object.
- *
- * This function is used to traverse variables of python objects, inheriting
- * from trampoline classes. This allows the user to freeze a custom python
- * version of a C++ class, without having to declare its variables.
- */
-void traverse_py_cb_rw_impl(nb::handle self, nb::callable c) {
-    recursion_guard guard;
-
-    struct PyTraverseCallback : TraverseCallback {
-        void operator()(nb::handle h) override {
-            const ArraySupplement &s = supp(h.type());
-            auto index_fn            = s.index;
-            if (index_fn){
-                uint64_t new_index;
-                if (s.is_class) {
-                    nb::str variant =
-                        nb::borrow<nb::str>(nb::getattr(h, "Variant"));
-                    nb::str domain = nb::borrow<nb::str>(nb::getattr(h, "Domain"));
-                    new_index   = operator()(index_fn(inst_ptr(h)),
-                                           variant.c_str(), domain.c_str());
-                } else
-                    new_index = operator()(index_fn(inst_ptr(h)), "", "");
-                s.reset_index(new_index, inst_ptr(h));
-            }
-        }
-        uint64_t operator()(uint64_t index, const char *variant, const char *domain) override {
-            return nb::cast<uint64_t>(m_callback(index, variant, domain));
-        }
-        nb::callable m_callback;
-
-        PyTraverseCallback(nb::callable c) : m_callback(c) {}
-    };
-
-    PyTraverseCallback traverse_cb(std::move(c));
-
-    if (nb::hasattr(self, "__dict__")) {
-        auto dict = nb::borrow<nb::dict>(nb::getattr(self, "__dict__"));
-        for (auto value : dict.values())
-            traverse("traverse_py_cb_rw", traverse_cb, value, true);
-    }
-}
-
-void export_detail(nb::module_ &) {
+void export_detail(nb::module_ &m) {
     nb::module_ d = nb::module_::import_("drjit.detail");
 
+    traversable_base_type =
+        nb::class_<drjit::TraversableBase, nb::intrusive_base>(d, "TraversableBase")
+            .freeze();
+
+    m.def("copy", &copy, "arg"_a, doc_copy,
+          nb::sig("def copy(arg: T, /) -> T"));
+
+    nb::enum_<dr::TraverseRole>(d, "TraverseRole", doc_detail_TraverseRole)
+        .value("Generic", dr::TraverseRole::Generic)
+        .value("Eval", dr::TraverseRole::Eval)
+        .value("Gradient", dr::TraverseRole::Gradient)
+        .value("Loop", dr::TraverseRole::Loop)
+        .value("Conditional", dr::TraverseRole::Conditional)
+        .value("Call", dr::TraverseRole::Call)
+        .value("Freeze", dr::TraverseRole::Freeze);
+
     d.def("collect_indices",
-          [](nb::handle h) {
+          [](nb::handle h, dr::TraverseRole role) {
               dr::vector<uint64_t> result;
-              collect_indices(h, result);
+              collect_indices(h, result, role);
               return result;
           },
+          "value"_a, "role"_a = dr::TraverseRole::Generic,
           doc_detail_collect_indices)
 
      .def("update_indices", &update_indices, "value"_a, "indices"_a,
-          doc_detail_update_indices)
-
-     .def("copy", &copy, "value"_a, doc_detail_copy)
+          "role"_a = dr::TraverseRole::Generic, doc_detail_update_indices)
 
      .def("check_compatibility", &check_compatibility,
           doc_detail_check_compatibility)
@@ -471,9 +385,6 @@ void export_detail(nb::module_ &) {
 
     d.def("leak_warnings", &leak_warnings, doc_leak_warnings);
     d.def("set_leak_warnings", &set_leak_warnings, doc_set_leak_warnings);
-    d.def("traverse_py_cb_ro", &traverse_py_cb_ro_impl);
-    d.def("traverse_py_cb_rw", &traverse_py_cb_rw_impl);
-    d.def("freeze_discard", jit_freeze_discard);
 
     d.def("block_mkperm",
           [](nb::handle_t<dr::ArrayBase> values, uint32_t block_size,

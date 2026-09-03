@@ -119,6 +119,24 @@ NAMESPACE_BEGIN(drjit)
         }                                                                      \
     }
 
+/// Like the above, but integer arguments are redirected to another operation
+#define DRJIT_ROUTE_BINARY_FALLBACK_INT(name, func, alt, expr)                 \
+    template <typename T1, typename T2>                                        \
+    DRJIT_INLINE auto name(const T1 &a1, const T2 &a2) {                       \
+        using E = expr_t<T1, T2>;                                              \
+        if constexpr (!is_floating_point_v<E>) {                               \
+            return alt(a1, a2);                                                \
+        } else if constexpr (is_array_any_v<T1, T2>) {                         \
+            if constexpr (std::is_same_v<T1, E> && std::is_same_v<T2, E>)      \
+                return a1.derived().func##_(a2.derived());                     \
+            else                                                               \
+                return name(static_cast<ref_cast_t<T1, E>>(a1),                \
+                            static_cast<ref_cast_t<T2, E>>(a2));               \
+        } else {                                                               \
+            return expr;                                                       \
+        }                                                                      \
+    }
+
 /// Define a ternary operation
 #define DRJIT_ROUTE_TERNARY_FALLBACK(name, func, expr)                         \
     template <typename T1, typename T2, typename T3>                           \
@@ -193,6 +211,10 @@ DRJIT_ROUTE_UNARY_FALLBACK(rsqrt, rsqrt, detail::rsqrt_(a))
 
 DRJIT_ROUTE_BINARY_FALLBACK(maximum, maximum, detail::maximum_((E) a1, (E) a2))
 DRJIT_ROUTE_BINARY_FALLBACK(minimum, minimum, detail::minimum_((E) a1, (E) a2))
+// Integers have no NaNs
+DRJIT_ROUTE_BINARY_FALLBACK_INT(fmax, fmax, maximum, detail::fmax_((E) a1, (E) a2))
+DRJIT_ROUTE_BINARY_FALLBACK_INT(fmin, fmin, minimum, detail::fmin_((E) a1, (E) a2))
+DRJIT_ROUTE_BINARY_FALLBACK(copysign, copysign, detail::copysign_((E) a1, (E) a2))
 DRJIT_ROUTE_BINARY_FALLBACK(mul_hi, mul_hi,     detail::mul_hi_((E) a1, (E) a2))
 DRJIT_ROUTE_BINARY_FALLBACK(mul_wide, mul_wide, detail::mul_wide_((E) a1, (E) a2))
 DRJIT_ROUTE_UNARY_FALLBACK(lzcnt, lzcnt, detail::lzcnt_(a))
@@ -229,18 +251,6 @@ DRJIT_INLINE auto operator/(const T1 &a1, const T2 &a2) {
     else
         return operator/(static_cast<ref_cast_t<T1, E>>(a1),
                          static_cast<ref_cast_t<T2, E>>(a2));
-}
-
-template <typename T1, typename T2>
-[[deprecated("drjit::eq is deprecated, please use the normal '==' operator.")]]
-auto eq(const T1 &a, const T2 &b) {
-    return a == b;
-}
-
-template <typename T1, typename T2>
-[[deprecated("drjit::neq is deprecated, please use the normal '!=' operator.")]]
-auto neq(const T1 &a, const T2 &b) {
-    return a != b;
 }
 
 template <typename T, enable_if_not_array_t<T> = 0> T andnot(const T &a1, const T &a2) {
@@ -323,12 +333,6 @@ DRJIT_INLINE bool reinterpret_array(const detail::MaskBit<Source> &src) {
     return (bool) src;
 }
 
-template <typename T>
-[[deprecated("drjit::sqr was replaced by drjit::square (to be consistent with NumPy and to avoid typos/mixups with drjit::sqrt).")]]
-DRJIT_INLINE auto sqr(const T &value) {
-    return value * value;
-}
-
 template <typename T> DRJIT_INLINE auto square(const T &value) {
     return value * value;
 }
@@ -354,13 +358,7 @@ auto lerp(const T1 &a, const T2 &b, const T3 &t) {
 /// Clip the value 'value' to the range [min, max]
 template <typename T1, typename T2, typename T3>
 auto clip(const T1 &value, const T2 &min, const T3 &max) {
-    return maximum(minimum(value, max), min);
-}
-
-template <typename T1, typename T2, typename T3>
-[[deprecated("drjit::clamp was replaced by drjit::clip (to be consistent with NumPy).")]]
-auto clamp(const T1 &value, const T2 &min, const T3 &max) {
-    return clip(value, min, max);
+    return minimum(maximum(value, min), max);
 }
 
 namespace detail {
@@ -383,23 +381,8 @@ template <typename T> DRJIT_INLINE mask_t<T> signbit(const T &v) {
 
 
 template <typename T1, typename T2>
-DRJIT_INLINE T1 copysign(const T1 &v1, const T2 &v2) {
-    T1 v1_a = abs(v1);
-
-    if constexpr (is_floating_point_v<scalar_t<T2>> && !is_diff_v<T2>)
-        return detail::or_(v1_a, detail::and_(detail::sign_mask<T2>(), v2));
-    else
-        return select(signbit(v2), -v1_a, v1_a);
-}
-
-template <typename T1, typename T2>
-DRJIT_INLINE T1 copysign_neg(const T1 &v1, const T2 &v2) {
-    T1 v1_a = abs(v1);
-
-    if constexpr (is_floating_point_v<scalar_t<T2>> && !is_diff_v<T2>)
-        return detail::or_(v1_a, detail::andnot_(detail::sign_mask<T2>(), v2));
-    else
-        return select(signbit(v2), v1_a, -v1_a);
+DRJIT_INLINE auto copysign_neg(const T1 &v1, const T2 &v2) {
+    return copysign(v1, -v2);
 }
 
 template <typename T1, typename T2>
@@ -1163,8 +1146,8 @@ void scatter_reduce(ReduceOp op, Target &target, const Value &value,
                         if constexpr (!std::is_same_v<Value, bool>)
                             return a * b;
                         break;
-                    case ReduceOp::Min: return minimum(a, b);
-                    case ReduceOp::Max: return maximum(a, b);
+                    case ReduceOp::Min: return drjit::fmin(a, b);
+                    case ReduceOp::Max: return drjit::fmax(a, b);
                     case ReduceOp::And:
                         if constexpr (is_integral_v<Value>)
                             return a & b;
@@ -1547,33 +1530,28 @@ void set_label(T &value, Labels... prefix) {
  * \brief Helper guard to mark scopes that are independent of any
  * ongoing symbolic computation
  *
- * Some scope of code might be traced as part of a symbolic section of code,
- * even though its functionality is independent of the actual symbolic
- * computations it is surrounded by. For example, consider a virtual function
- * call which initializes some data structure the first time it is called. This
- * initilization is completely detached from the symbolic inputs and is guarded
- * only by a scalar runtime check. In such a case, any evaluation which happens
- * in the initilization should be valid. Using this RAII helper will guarantee
- * this behavior.
+ * It is sometimes necessary to temporarily leave symbolic execution mode,
+ * e.g., to initialize a data structure that is accessed by symbolic code. This
+ * RAII wrapper legalizes such code regions, in which it is then possible to
+ * perform steps (e.g. variable evaluation) that are normally forbidden in
+ * symbolic regions.
  */
-template <typename T>
-struct scoped_disable_symbolic {
-
-    scoped_disable_symbolic() {
-        if constexpr(drjit::is_jit_v<T>) {
-            uint32_t index = jit_var_mask_default(T::Backend, 1);
-            jit_var_mask_push(T::Backend, index);
-            jit_var_dec_ref(index);
-        }
-    }
-
-    ~scoped_disable_symbolic() {
+template <typename T> struct scoped_eval_scope {
+    scoped_eval_scope() {
         if constexpr (drjit::is_jit_v<T>)
-            jit_var_mask_pop(T::Backend);
+            m_token = jit_eval_scope_enter(backend_v<T>);
     }
 
-    scoped_disable_symbolic(const scoped_disable_symbolic &) = delete;
-    scoped_disable_symbolic &operator=(const scoped_disable_symbolic &) = delete;
+    ~scoped_eval_scope() {
+        if constexpr (drjit::is_jit_v<T>)
+            jit_eval_scope_leave(backend_v<T>, m_token);
+    }
+
+    scoped_eval_scope(const scoped_eval_scope &) = delete;
+    scoped_eval_scope &operator=(const scoped_eval_scope &) = delete;
+
+private:
+    uint32_t m_token = 0;
 };
 
 template <typename T> bool grad_enabled(const T &value) {

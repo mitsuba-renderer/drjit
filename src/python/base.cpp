@@ -568,6 +568,100 @@ void complex_setter(nb::handle_t<ArrayBase> h, nb::handle value) {
         nb::raise_python_error();
 }
 
+// Specialized transpose/matrix multiplication implementations for scalar-mode
+// arrays which cannot use the ``ad_var_*`` functionality.
+
+/// Allocate an uninitialized flat array of the given type and length
+static nb::object alloc_flat(const ArraySupplement &s, nb::handle tp, size_t size) {
+    nb::object result = nb::inst_alloc(tp);
+    s.init(size, inst_ptr(result));
+    nb::inst_mark_ready(result);
+    return result;
+}
+
+/// Reference GEMM. ``GemmBatch`` reduce dims are not implemented (AD only).
+template <typename T>
+static void gemm_ref(const T *a, const T *b, T *c, bool At, bool Bt, size_t M,
+                     size_t N, size_t K, const GemmBatch *batch, size_t grid) {
+    // Half precision inputs accumulate at single precision, as in the JIT kernels
+    using Value = std::conditional_t<std::is_same_v<T, drjit::half>, float, T>;
+    size_t n = batch ? batch->n_bdims : 0;
+
+    for (size_t g = 0; g < grid; ++g) {
+        size_t lin = g, oa = 0, ob = 0;
+        for (size_t d = 0; d < n; ++d) {
+            oa += (lin % batch->extent[d]) * batch->a_stride[d];
+            ob += (lin % batch->extent[d]) * batch->b_stride[d];
+            lin /= batch->extent[d];
+        }
+
+        for (size_t i = 0; i < M; ++i) {
+            for (size_t j = 0; j < N; ++j) {
+                Value accum = 0;
+                for (size_t k = 0; k < K; ++k)
+                    accum += Value(a[oa + (At ? k * M + i : i * K + k)]) *
+                             Value(b[ob + (Bt ? j * K + k : k * N + j)]);
+                c[(g * M + i) * N + j] = T(accum);
+            }
+        }
+    }
+}
+
+/// Scalar-backend replacement for ``ad_var_batched_gemm()``, returns the flat
+/// array of the output tensor
+static nb::object gemm_scalar(nb::handle a, nb::handle b, bool At, bool Bt,
+                              size_t M, size_t N, size_t K,
+                              const GemmBatch *batch) {
+    nb::handle tp = a.type();
+    const ArraySupplement &s = supp(tp);
+
+    size_t grid = 1;
+    for (size_t d = 0, n = batch ? batch->n_bdims : 0; d < n; ++d)
+        grid *= batch->extent[d];
+
+    nb::object c = alloc_flat(s, tp, grid * M * N);
+
+    #define DR_GEMM_REF(T)                                                     \
+        gemm_ref((const T *) s.data(inst_ptr(a)),                              \
+                 (const T *) s.data(inst_ptr(b)),                              \
+                 (T *) s.data(inst_ptr(c)), At, Bt, M, N, K, batch, grid)
+
+    switch ((VarType) s.type) {
+        case VarType::Float16: DR_GEMM_REF(drjit::half); break;
+        case VarType::Float32: DR_GEMM_REF(float); break;
+        case VarType::Float64: DR_GEMM_REF(double); break;
+        default:
+            nb::raise("unsupported element type '%s'. The matrix "
+                      "multiplication only supports the floating point types "
+                      "Float16, Float32, and Float64.",
+                      jit_type_name((VarType) s.type));
+    }
+
+    #undef DR_GEMM_REF
+
+    return c;
+}
+
+/// Scalar-backend replacement for ``ad_var_transpose()``
+static nb::object transpose_scalar(nb::handle a, size_t batch, size_t M,
+                                   size_t N) {
+    nb::handle tp = a.type();
+    const ArraySupplement &s = supp(tp);
+    nb::object c = alloc_flat(s, tp, batch * M * N);
+
+    size_t tsize = jit_type_size((VarType) s.type), stride = tsize * M * N;
+    const uint8_t *src = (const uint8_t *) s.data(inst_ptr(a));
+    uint8_t *dst = (uint8_t *) s.data(inst_ptr(c));
+
+    for (size_t b = 0; b < batch; ++b, src += stride, dst += stride)
+        for (size_t i = 0; i < M; ++i)
+            for (size_t j = 0; j < N; ++j)
+                memcpy(dst + (j * M + i) * tsize, src + (i * N + j) * tsize,
+                       tsize);
+
+    return c;
+}
+
 // Transpose the last two dimensions of a row-major Dr.Jit tensor. The caller
 // must ensure ``shape.size() >= 2``.
 static nb::object tensor_transpose_mT(nb::handle_t<ArrayBase> h) {
@@ -581,14 +675,12 @@ static nb::object tensor_transpose_mT(nb::handle_t<ArrayBase> h) {
     for (size_t i = 0; i < r - 2; ++i)
         batch *= shape[i];
 
-    nb::tuple shape_out = nb::steal<nb::tuple>(PyTuple_New((Py_ssize_t) r));
+    nb::tuple_builder shape_builder(r);
     for (size_t i = 0; i < r - 2; ++i)
-        NB_TUPLE_SET_ITEM(shape_out.ptr(), (Py_ssize_t) i,
-                         PyLong_FromSize_t(shape[i]));
-    NB_TUPLE_SET_ITEM(shape_out.ptr(), (Py_ssize_t) (r - 2),
-                     PyLong_FromSize_t(N));
-    NB_TUPLE_SET_ITEM(shape_out.ptr(), (Py_ssize_t) (r - 1),
-                     PyLong_FromSize_t(M));
+        shape_builder.put(shape[i]);
+    shape_builder.put(N);
+    shape_builder.put(M);
+    nb::tuple shape_out = shape_builder.commit();
 
     // Empty output: no underlying element, return a zero-valued tensor.
     // Also reached when either matrix dim is zero — the output is empty
@@ -598,6 +690,9 @@ static nb::object tensor_transpose_mT(nb::handle_t<ArrayBase> h) {
 
     nb::object array_in = nb::steal(s.tensor_array(h.ptr()));
     const ArraySupplement &sa = supp(array_in.type());
+
+    if ((JitBackend) sa.backend == JitBackend::None)
+        return tp(transpose_scalar(array_in, batch, M, N), shape_out);
 
     uint64_t i_out = ad_var_transpose(sa.index(inst_ptr(array_in)),
                                       (uint32_t) batch,
@@ -954,17 +1049,14 @@ nb::object matmul(nb::handle h0, nb::handle h1, bool At, bool Bt) {
                 {
                     size_t out_rank =
                         n + (a_is_1d ? 0 : 1) + (b_is_1d ? 0 : 1);
-                    nb::tuple t = nb::steal<nb::tuple>(
-                        PyTuple_New((Py_ssize_t) out_rank));
-                    Py_ssize_t pos = 0;
+                    nb::tuple_builder builder(out_rank);
                     for (size_t d = 0; d < n; ++d)
-                        NB_TUPLE_SET_ITEM(t.ptr(), pos++,
-                                         PyLong_FromSize_t((size_t) gb.extent[n - 1 - d]));
+                        builder.put((size_t) gb.extent[n - 1 - d]);
                     if (!a_is_1d)
-                        NB_TUPLE_SET_ITEM(t.ptr(), pos++, PyLong_FromSize_t(M));
+                        builder.put(M);
                     if (!b_is_1d)
-                        NB_TUPLE_SET_ITEM(t.ptr(), pos++, PyLong_FromSize_t(N));
-                    shape_out = std::move(t);
+                        builder.put(N);
+                    shape_out = builder.commit();
                 }
 
                 // Short-circuit cases that skip the kernel and return a
@@ -981,6 +1073,13 @@ nb::object matmul(nb::handle h0, nb::handle h1, bool At, bool Bt) {
                            array_b = nb::steal(s1.tensor_array(h1.ptr()));
                 const ArraySupplement &sa = supp(array_a.type());
 
+                const GemmBatch *bp = (n == 0) ? nullptr : &gb;
+
+                if ((JitBackend) sa.backend == JitBackend::None)
+                    return tp0(
+                        gemm_scalar(array_a, array_b, At, Bt, M, N, K_a, bp),
+                        shape_out);
+
                 // 1-D x 1-D inner product (M = N = 1, no batch): dispatch
                 // to the fused multiply-and-reduce kernel instead of a
                 // GEMM with degenerate matrix dims.
@@ -990,7 +1089,6 @@ nb::object matmul(nb::handle h0, nb::handle h1, bool At, bool Bt) {
                         sa.index(inst_ptr(array_a)),
                         sa.index(inst_ptr(array_b)));
                 } else {
-                    const GemmBatch *bp = (n == 0) ? nullptr : &gb;
                     i_out = ad_var_batched_gemm(
                         sa.index(inst_ptr(array_a)),
                         sa.index(inst_ptr(array_b)),
@@ -1152,7 +1250,8 @@ nb::object select(nb::handle h0, nb::handle h1, nb::handle h2) {
     nb::handle tp = h1.type();
 
     if (is_drjit_type(tp) || !tp.is(h2.type()) ||
-        tp.is(&PyLong_Type) || tp.is(&PyFloat_Type) || tp.is(&PyBool_Type)) {
+        tp.is(&PyLong_Type) || tp.is(&PyFloat_Type) || tp.is(&PyBool_Type) ||
+        PyIndex_Check(h1.ptr())) {
         PyObject *o = apply<Select>(ArrayOp::Select, "select",
             std::make_index_sequence<3>(), h0.ptr(), h1.ptr(), h2.ptr());
 
@@ -1271,10 +1370,7 @@ nb::handle DR_STR(DRJIT_STRUCT);
 nb::handle DR_STR(__dataclass_fields__);
 nb::handle DR_STR(name);
 nb::handle DR_STR(type);
-nb::handle DR_STR(_traverse_write);
-nb::handle DR_STR(_traverse_read);
-nb::handle DR_STR(_traverse_1_cb_rw);
-nb::handle DR_STR(_traverse_1_cb_ro);
+nb::handle DR_STR(cell_contents);
 
 /// Cache backing lazy_import(), indexed by LazyImport. Populated on demand and
 /// released by lazy_import_shutdown().
@@ -1291,6 +1387,10 @@ nb::handle lazy_import(LazyImport value) {
                 module_name = "typing"; attr_name = "get_type_hints"; break;
             case LazyImport::TypingGetArgs:
                 module_name = "typing"; attr_name = "get_args"; break;
+            case LazyImport::TypesMethodType:
+                module_name = "types"; attr_name = "MethodType"; break;
+            case LazyImport::DataclassesField:
+                module_name = "dataclasses"; attr_name = "_FIELD"; break;
             default:
                 nb::raise("lazy_import(): invalid index!");
         }
@@ -1311,10 +1411,7 @@ void export_base(nb::module_ &m) {
     DR_STR(__dataclass_fields__) = PyUnicode_InternFromString("__dataclass_fields__");
     DR_STR(name) = PyUnicode_InternFromString("name");
     DR_STR(type) = PyUnicode_InternFromString("type");
-    DR_STR(_traverse_write) = PyUnicode_InternFromString("_traverse_write");
-    DR_STR(_traverse_read) = PyUnicode_InternFromString("_traverse_read");
-    DR_STR(_traverse_1_cb_rw) = PyUnicode_InternFromString("_traverse_1_cb_rw");
-    DR_STR(_traverse_1_cb_ro) = PyUnicode_InternFromString("_traverse_1_cb_ro");
+    DR_STR(cell_contents) = PyUnicode_InternFromString("cell_contents");
 
     // Generic type variable used in many places
     for (const char *name :
@@ -1564,6 +1661,18 @@ void export_base(nb::module_ &m) {
     m.def("maximum",
           [](Py_ssize_t a, Py_ssize_t b) { return dr::maximum(a, b); });
     DR_MATH_BINOP(maximum, ArrayOp::Maximum);
+
+    m.def("fmin",
+          [](Py_ssize_t a, Py_ssize_t b) { return dr::minimum(a, b); });
+    DR_MATH_BINOP(fmin, ArrayOp::FMin);
+
+    m.def("fmax",
+          [](Py_ssize_t a, Py_ssize_t b) { return dr::maximum(a, b); });
+    DR_MATH_BINOP(fmax, ArrayOp::FMax);
+
+    m.def("copysign",
+          [](Py_ssize_t a, Py_ssize_t b) { return dr::copysign(a, b); });
+    DR_MATH_BINOP(copysign, ArrayOp::Copysign);
 
     DR_MATH_BINOP(atan2, ArrayOp::Atan2);
 

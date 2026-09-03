@@ -657,6 +657,18 @@ struct LocalState {
 static State state;
 static thread_local LocalState local_state;
 
+/// Postpone log message delivery until leaving the AD lock, if it is held
+static int ad_log_defer() {
+    if (state.lock.owner.load(std::memory_order_relaxed) != thread_id())
+        return 0;
+    lock_set_pending(state.lock);
+    return 1;
+}
+
+static struct ADLogDeferInit {
+    ADLogDeferInit() { jit_set_log_defer_callback(ad_log_defer); }
+} ad_log_defer_init;
+
 #if defined(DRJIT_SANITIZE_INTENSE)
 static void ad_sanitation_checkpoint_variables() {
     state.variables.emplace_back();
@@ -1326,9 +1338,10 @@ Index ad_var_set_label(Index index, size_t argc, ...) {
 // Enqueuing of variables and edges
 // ==========================================================================
 
-/// Forward-mode DFS starting from 'index'
+/// Forward-mode DFS starting from 'index'. Edges whose target predates
+/// 'stop_before' are left unvisited (see \ref ad_enqueue_scoped()).
 static void ad_dfs_fwd(std::vector<EdgeRef> &todo, uint32_t index,
-                       ADVariable *v) {
+                       ADVariable *v, uint64_t stop_before = 0) {
     DRJIT_MARK_USED(index);
 
     uint32_t edge_id = v->next_fwd;
@@ -1336,17 +1349,20 @@ static void ad_dfs_fwd(std::vector<EdgeRef> &todo, uint32_t index,
         Edge &edge = state.edges[edge_id];
 
         if (!edge.visited) {
-            edge.visited = true;
-
-            ad_log("ad_dfs_fwd(): enqueuing edge a%u -> a%u", index,
-                   edge.target);
-
             ADVariable *v2 = state[edge.target];
-            ad_var_inc_ref_int(edge.target, v2);
-            todo.emplace_back(edge_id, edge.source, edge.target, v->counter,
-                              v2->counter);
 
-            ad_dfs_fwd(todo, edge.target, v2);
+            if (v2->counter >= stop_before) {
+                edge.visited = true;
+
+                ad_log("ad_dfs_fwd(): enqueuing edge a%u -> a%u", index,
+                       edge.target);
+
+                ad_var_inc_ref_int(edge.target, v2);
+                todo.emplace_back(edge_id, edge.source, edge.target, v->counter,
+                                  v2->counter);
+
+                ad_dfs_fwd(todo, edge.target, v2, stop_before);
+            }
         }
 
         edge_id = edge.next_fwd;
@@ -1399,6 +1415,28 @@ void ad_enqueue(dr::ADMode mode, Index index) {
         default:
             ad_raise("ad_enqueue(): invalid mode specified!");
     }
+}
+
+void ad_enqueue_scoped(dr::ADMode mode, Index index) {
+    uint32_t ad_index = ::ad_index(index);
+    if (ad_index == 0)
+        return;
+
+    if (mode != dr::ADMode::Forward)
+        ad_raise("ad_enqueue_scoped(): only forward mode is supported; "
+                 "backward replays rely on the edge postponing mechanism of "
+                 "the isolation scope.");
+
+    LocalState &ls = local_state;
+    uint64_t stop_before = 0;
+    if (!ls.scopes.empty() && ls.scopes.back().isolate)
+        stop_before = ls.scopes.back().counter;
+
+    ad_log("ad_enqueue_scoped(a%u, stop_before=%zu)", ad_index,
+           (size_t) stop_before);
+
+    lock_guard guard(state.lock);
+    ad_dfs_fwd(ls.todo, ad_index, state[ad_index], stop_before);
 }
 
 // ==========================================================================
@@ -2394,6 +2432,15 @@ Index ad_var_copy(Index i0) {
         return ad_var_new("copy", std::move(result), Arg(i0, 1.0));
 }
 
+Index ad_var_copy_opaque(Index i0) {
+    JitVar result = JitVar::steal(jit_var_copy_opaque(jit_index(i0)));
+
+    if (likely(is_detached(i0)))
+        return result.release();
+    else
+        return ad_var_new("copy", std::move(result), Arg(i0, 1.0));
+}
+
 // ==========================================================================
 
 Index ad_var_add(Index i0, Index i1) {
@@ -2847,6 +2894,66 @@ Index ad_var_max(Index i0, Index i1) {
         return ad_var_new("maximum", std::move(result),
                           Arg(i0, dr::select(mask, one, zero)),
                           Arg(i1, dr::select(mask, zero, one)));
+    }
+}
+
+// ==========================================================================
+
+Index ad_var_fmin(Index i0, Index i1) {
+    JitVar result = JitVar::steal(jit_var_fmin(jit_index(i0), jit_index(i1)));
+
+    if (is_detached(i0, i1)) {
+        return result.release();
+    } else {
+        JitVar v0 = JitVar::borrow(jit_index(i0)),
+               v1 = JitVar::borrow(jit_index(i1)),
+               zero = scalar(i0, 0.0),
+               one  = scalar(i0, 1.0);
+
+        JitMask mask = v0 <= v1;
+
+        return ad_var_new("fmin", std::move(result),
+                          Arg(i0, dr::select(mask, one, zero)),
+                          Arg(i1, dr::select(mask, zero, one)));
+    }
+}
+
+// ==========================================================================
+
+Index ad_var_fmax(Index i0, Index i1) {
+    JitVar result = JitVar::steal(jit_var_fmax(jit_index(i0), jit_index(i1)));
+
+    if (is_detached(i0, i1)) {
+        return result.release();
+    } else {
+        JitVar v0 = JitVar::borrow(jit_index(i0)),
+               v1 = JitVar::borrow(jit_index(i1)),
+               zero = scalar(i0, 0.0),
+               one  = scalar(i0, 1.0);
+
+        JitMask mask = v0 > v1;
+
+        return ad_var_new("fmax", std::move(result),
+                          Arg(i0, dr::select(mask, one, zero)),
+                          Arg(i1, dr::select(mask, zero, one)));
+    }
+}
+
+// ==========================================================================
+
+Index ad_var_copysign(Index i0, Index i1) {
+    JitVar result = JitVar::steal(jit_var_copysign(jit_index(i0), jit_index(i1)));
+
+    // The result only depends on the sign of the second argument
+    if (is_detached(i0)) {
+        return result.release();
+    } else {
+        JitVar v0 = JitVar::borrow(jit_index(i0)),
+               v1 = JitVar::borrow(jit_index(i1)),
+               one = scalar(i0, 1.0),
+               w0 = dr::copysign(one, v0) * dr::copysign(one, v1);
+
+        return ad_var_new("copysign", std::move(result), Arg(i0, std::move(w0)));
     }
 }
 

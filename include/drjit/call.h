@@ -187,11 +187,11 @@ template <typename Ret, typename... Args> struct CallState {
     }
 
     void update_args(const vector<uint64_t> &indices) {
-        update_indices(args, indices);
+        update_indices(args, indices, TraverseRole::Call);
     }
 
     void collect_rv(vector<uint64_t> &indices) const {
-        collect_indices<false>(rv, indices);
+        collect_indices<false>(rv, indices, TraverseRole::Call);
     }
 };
 
@@ -206,7 +206,7 @@ Ret call(const Self &self, const char *variant, const char *domain,
     Mask mask = extract_mask<Mask>(state->args);
 
     index64_vector args_i, rv_i;
-    collect_indices<true>(state->args, args_i);
+    collect_indices<true>(state->args, args_i, TraverseRole::Call);
     bool done = ad_call(Self::Backend, variant, domain, -1, 0, name, is_getter,
                         self.index(), mask.index(), args_i, rv_i, state,
                         callback, &CallStateT::cleanup, true);
@@ -214,7 +214,7 @@ Ret call(const Self &self, const char *variant, const char *domain,
     if constexpr (!std::is_same_v<Ret, void>) {
         Ret2 result(std::move(state->rv));
         if (!rv_i.empty())
-            update_indices(result, rv_i);
+            update_indices(result, rv_i, TraverseRole::Call);
         else
             result = zeros<Ret2>();
 

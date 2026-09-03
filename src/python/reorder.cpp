@@ -51,5 +51,6 @@ nb::object reorder_threads(nb::handle_t<dr::ArrayBase> key, int num_bits,
 
 void export_reorder(nb::module_ &m) {
     m.def("reorder_threads", &reorder_threads, "key"_a, "num_bits"_a, "value"_a,
-          doc_reorder_threads);
+          doc_reorder_threads,
+          nb::sig("def reorder_threads(key: ArrayBase, num_bits: int, value: T) -> T"));
 }

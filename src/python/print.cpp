@@ -139,11 +139,10 @@ PyObject *tp_repr(PyObject *self) noexcept {
             buffer.put("[ragged array]");
         } else {
             nb::object zero = nb::int_(0);
-            nb::list index;
+            nb::list_builder builder(shape.size());
             for (size_t i = 0; i < shape.size(); ++i)
-                index.append(zero);
-            if (!index.is_valid())
-                nb::raise_python_error();
+                builder.put(zero);
+            nb::list index = builder.commit();
             schedule(self);
             repr_array(buffer, self, 0, 20, shape, 0, index);
         }
@@ -173,11 +172,10 @@ void repr_general(Buffer &buffer, nb::handle h, size_t indent_, size_t threshold
             buffer.put("[ragged array]");
         } else {
             nb::object zero = nb::int_(0);
-            nb::list index;
+            nb::list_builder builder(shape.size());
             for (size_t i = 0; i < shape.size(); ++i)
-                index.append(zero);
-            if (!index.is_valid())
-                nb::raise_python_error();
+                builder.put(zero);
+            nb::list index = builder.commit();
             repr_array(buffer, h, indent_, threshold, shape, 0, index);
         }
     } else if (tp.is(&PyUnicode_Type)) {
@@ -288,6 +286,8 @@ struct DelayedPrint {
 
     static void callback(uint32_t, int free, void *p) {
         nb::gil_scoped_acquire guard;
+        if (!guard.is_valid())
+            return; // Interpreter shutdown, skip the work (and leak)
         try {
             DelayedPrint *d = (DelayedPrint *) p;
             if (free) {
@@ -578,14 +578,14 @@ static nb::object format_impl(const char *name, const std::string &fmt,
                     };
 
                     scoped_default_mask mask_guard(examine.backend, len);
-                    nb::list args2;
+                    nb::tuple_builder args2(nb::len(args));
                     nb::dict kwargs2;
                     for (nb::handle h: args) {
                         nb::object v = nb::borrow(h);
                         try {
                             v = ::slice(v, indices);
                         } catch (...) { }
-                        args2.append(v);
+                        args2.put(std::move(v));
                     }
                     for (nb::handle kv: kwargs.items()) {
                         nb::object k = kv[0], v = kv[1];
@@ -594,9 +594,10 @@ static nb::object format_impl(const char *name, const std::string &fmt,
                         } catch (...) { }
                         kwargs2[k] = v;
                     }
-                    schedule(args2);
+                    nb::tuple args2_t = args2.commit();
+                    schedule(args2_t);
                     schedule(kwargs2);
-                    args = nb::borrow<nb::args>(nb::tuple(args2));
+                    args = nb::borrow<nb::args>(args2_t);
                     kwargs = nb::borrow<nb::kwargs>(std::move(kwargs2));
                 } catch (...) { }
             } else {
@@ -738,14 +739,14 @@ void export_print(nb::module_ &m) {
                                  kwargs);
           },
           "fmt"_a.noconvert(), "args"_a, "kwargs"_a, doc_format,
-          nb::sig("def format(fmt: str, *args, limit: int = 20, **kwargs)"))
+          nb::sig("def format(fmt: str, *args, limit: int = 20, **kwargs) -> str"))
       .def("format",
            [](nb::handle value, nb::kwargs kwargs) {
                return format_impl("drjit.format", "{}", nb::handle(),
                                   nb::borrow<nb::args>(nb::make_tuple(value)),
                                   kwargs);
            }, "value"_a, "kwargs"_a,
-          nb::sig("def format(value: object, *, limit: int = 20, **kwargs)"))
+          nb::sig("def format(value: object, *, limit: int = 20, **kwargs) -> str"))
       .def("print", &print_impl, "fmt"_a.noconvert(), "args"_a, "kwargs"_a,
            doc_print,
            nb::sig("def print(fmt: str, *args, active: drjit.ArrayBase | "

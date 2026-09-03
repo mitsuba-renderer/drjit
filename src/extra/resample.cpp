@@ -20,6 +20,16 @@
 
 NAMESPACE_BEGIN(drjit)
 
+/// Period of the boundary extension ('0' if it does not repeat)
+static inline int32_t remap_period(int32_t R, Boundary boundary) {
+    switch (boundary) {
+        case Boundary::Wrap:    return R;
+        case Boundary::Reflect: return 2 * R;
+        case Boundary::Mirror:  return 2 * R - 2;
+        default:                return 0;
+    }
+}
+
 /// Internal representation of 'Resampler'
 struct Resampler::Impl {
     uint32_t source_res;
@@ -34,11 +44,19 @@ struct Resampler::Impl {
     // Codegen strategy: symbolic tap loop vs. unrolled + evaluated
     bool symbolic = false;
 
+    // Largest tap count that may use the unrolled path. Unrolling spills ~128
+    // bytes of stack per tap (AVX512). The LLVM backend on Windows cannot
+    // handle > 1 page (4KiB) spills in a kernel at the moment.
+    static constexpr uint32_t max_unrolled_taps = 32;
+
     // Transpose fast path: a shift-invariant operator (every window start equals
     // the affine 'j - conv_origin') has a windowed-convolution adjoint.
     bool shift_invariant = false;
     int32_t conv_origin = 0;
     mutable unique_ptr<Impl> transpose_impl;
+
+    // Whether taps can land outside '[-period, 2*period)', see \ref remap()
+    bool wide = false;
 
     // Interior fast path: the in-bounds run [interior_lo, interior_hi) shares the
     // weight row 'interior_weights', which resample_fwd() bakes as constants.
@@ -55,6 +73,8 @@ struct Resampler::Impl {
         : source_res(source_res), target_res(target_res), boundary(boundary) {
         if (source_res == 0 || target_res == 0)
             drjit_raise("drjit.Resampler(): source/target resolution cannot be zero!");
+        if (!(radius >= 0) || !(radius_scale > 0))
+            drjit_raise("drjit.Resampler(): the filter radius must be positive!");
 
         // Low-pass filter: scale reconstruction filters when downsampling
         double scale = (double) source_res / (double) target_res;
@@ -68,14 +88,27 @@ struct Resampler::Impl {
             // Convolution mode, adapt to filter size scale factor
             radius *= radius_scale;
             filter_scale /= radius_scale;
+
+            // Input and output samples coincide, hence the filter reduces to a
+            // discrete kernel holding its samples at the integers in [-r, r]
+            int32_t half = (int32_t) std::floor(radius);
+            uint32_t n = (uint32_t) (2 * half + 1);
+            unique_ptr<double[]> kernel(new double[n]);
+
+            for (uint32_t l = 0; l < n; l++)
+                kernel[l] = filter(((int32_t) l - half) * filter_scale, payload);
+
+            store_kernel(kernel.get(), n, half, normalize, flip);
+            configure();
+            return;
         }
 
         taps = (uint32_t) std::ceil(radius * 2);
 
         offset = unique_ptr<int32_t[]>(new int32_t[target_res]);
-        weights = unique_ptr<double[]>(new double[taps * target_res]);
+        weights = unique_ptr<double[]>(new double[(size_t) taps * target_res]);
 
-        // 'flip': convolve by flipping the sign of the filter kenrle
+        // 'flip': convolve by flipping the sign of the filter kernel
         double sign = flip ? -1.0 : 1.0;
 
         unique_ptr<double[]> raw(new double[taps]);
@@ -85,7 +118,7 @@ struct Resampler::Impl {
             double center = (i + 0.5) * scale;
 
             // Signed index of the first original sample that might contribute
-            int32_t start = (int32_t) (center - radius + .5);
+            int32_t start = (int32_t) std::floor(center - radius + .5);
 
             for (uint32_t l = 0; l < taps; l++) {
                 // Relative position of sample in the filter frame
@@ -107,39 +140,69 @@ struct Resampler::Impl {
             drjit_raise("drjit.Resampler(): source/target resolution cannot be zero!");
         if (kernel_size == 0)
             drjit_raise("drjit.Resampler(): the filter kernel cannot be empty!");
-        if (boundary != Boundary::Zero && kernel_size > res)
-            drjit_raise("drjit.Resampler(): the filter kernel cannot be larger "
-                        "than the array for this boundary mode!");
-
-        taps = (uint32_t) kernel_size;
-
-        offset = unique_ptr<int32_t[]>(new int32_t[res]);
-        weights = unique_ptr<double[]>(new double[taps * res]);
-
-        unique_ptr<double[]> raw(new double[taps]);
-
-        // 'flip': convolve by reversing the kernel and mirroring the origin.
-        int o = origin;
-        for (uint32_t l = 0; l < taps; l++)
-            raw[l] = flip ? kernel[taps - 1 - l] : kernel[l];
-        if (flip)
-            o = (int) (taps - 1) - origin;
-
-        for (uint32_t i = 0; i < res; i++)
-            store_row(i, (int32_t) i - o, raw.get(), normalize);
+        store_kernel(kernel, (uint32_t) kernel_size, origin, normalize, flip);
 
         configure();
     }
 
+    /// Populate the tables with a shift-invariant convolution by the discrete
+    /// ``kernel``, whose entry ``origin`` aligns with the output. ``flip``
+    /// reverses the kernel and mirrors the origin (convolution vs. correlation).
+    /// The function deletes leading/trailing zero-valued taps.
+    void store_kernel(const double *kernel, uint32_t n, int32_t origin,
+                      bool normalize, bool flip) {
+        unique_ptr<double[]> raw(new double[n]);
+        for (uint32_t l = 0; l < n; l++)
+            raw[l] = kernel[flip ? n - 1 - l : l];
+        if (flip)
+            origin = (int32_t) (n - 1) - origin;
+
+        uint32_t lo = 0, hi = n;
+        while (hi - lo > 1 && raw[lo] == 0) ++lo;
+        while (hi - lo > 1 && raw[hi - 1] == 0) --hi;
+
+        taps = hi - lo;
+        origin -= (int32_t) lo;
+
+        offset = unique_ptr<int32_t[]>(new int32_t[target_res]);
+        weights = unique_ptr<double[]>(new double[(size_t) taps * target_res]);
+
+        for (uint32_t i = 0; i < target_res; i++)
+            store_row(i, (int32_t) i - origin, raw.get() + lo, normalize);
+    }
+
     /// Populate the fast-path variables from the precomputed tables
     void configure() {
+        if (taps > max_unrolled_taps)
+            symbolic = true;
+
+        // 'Mirror' of a single sample has no period and coincides with 'Nearest'
+        if (boundary == Boundary::Mirror && source_res == 1)
+            boundary = Boundary::Nearest;
+
+        int32_t R = (int32_t) source_res,
+                period = remap_period(R, boundary);
+
+        wide = false;
+        if (period > 0) {
+            int32_t last = (int32_t) taps - 1,
+                    lo = offset[0], hi = offset[0] + last;
+
+            for (uint32_t i = 1; i < target_res; ++i) {
+                lo = std::min(lo, offset[i]);
+                hi = std::max(hi, offset[i] + last);
+            }
+
+            // One add or subtract only reaches '[-period, 2*period)'
+            wide = lo < -period || hi >= 2 * period;
+        }
+
         has_interior = false;
         shift_invariant = false;
         if (source_res != target_res || taps >= source_res)
             return;
 
         uint32_t res = target_res, mid = res / 2;
-        int32_t R = (int32_t) res;
         conv_origin = (int32_t) mid - offset[mid];
 
         // Shift-invariant if every window start is the affine 'j - conv_origin'.
@@ -320,29 +383,30 @@ static inline double sinc(double x) {
     return std::sin(x) / x;
 }
 
-/// Map an index to an in-bounds index in ``[0, R)`` according to the boundary mode
-static inline int32_t remap_scalar(int32_t g, int32_t R, Boundary boundary) {
-    switch (boundary) {
-        case Boundary::Wrap:    return g < 0 ? g + R     : (g >= R ? g - R         : g);
-        case Boundary::Reflect: return g < 0 ? -1 - g    : (g >= R ? 2 * R - 1 - g : g);
-        case Boundary::Mirror:  return g < 0 ? -g        : (g >= R ? 2 * R - 2 - g : g);
-        default:                return g < 0 ? 0         : (g >= R ? R - 1         : g);
-    }
-}
-
-/// Vectorized counterpart of \ref remap_scalar()
+/// Map an index into ``[0, R)`` according to the boundary mode. Set ``wide``
+/// for taps outside ``[-period, 2*period)``, which a single conditional add
+/// or subtract cannot bring back into range.
 template <typename Int32>
-static Int32 remap_array(const Int32 &g, int32_t R, Boundary boundary) {
-    switch (boundary) {
-        case Boundary::Wrap:
-            return select(g < 0, g + R, select(g >= R, g - R, g));
-        case Boundary::Reflect:
-            return select(g < 0, -1 - g, select(g >= R, 2 * R - 1 - g, g));
-        case Boundary::Mirror:
-            return select(g < 0, -g, select(g >= R, 2 * R - 2 - g, g));
-        default:
-            return clip(g, Int32(0), Int32(R - 1));
+static Int32 remap(const Int32 &g, int32_t R, Boundary boundary, bool wide) {
+    int32_t period = remap_period(R, boundary);
+    if (period <= 0) // 'Nearest' clamps, 'Zero' only gets here with in-bounds taps
+        return clip(g, Int32(0), Int32(R - 1));
+
+    Int32 m;
+    if (wide) {
+        m = g % period;
+        m = select(m < 0, m + period, m);
+    } else {
+        m = select(g < 0, g + period, select(g >= period, g - period, g));
     }
+
+    if (boundary == Boundary::Wrap)
+        return m; // 'period == R', hence already in bounds
+
+    // Reflection maps 'm' and 'fold - m' onto the same sample. The smaller of
+    // the two is the one inside the array.
+    int32_t fold = boundary == Boundary::Reflect ? period - 1 : period;
+    return minimum(m, fold - m);
 }
 
 /**
@@ -353,6 +417,7 @@ static Int32 remap_array(const Int32 &g, int32_t R, Boundary boundary) {
  * active.
  *
  * \param boundary Boundary handling mode
+ * \param wide Whether taps can land outside '[-period, 2*period)'
  * \param offset_j Window start of the output
  * \param l Tap index (compile-time in the unrolled path, traced in the symbolic one)
  * \param source_offset Signed ``Zero`` base ``(i_base + offset_j) * stride + k``
@@ -364,17 +429,17 @@ static Int32 remap_array(const Int32 &g, int32_t R, Boundary boundary) {
  * \return Source address for the tap
  */
 template <typename UInt32, typename Int32, typename L>
-static UInt32 tap_address(Boundary boundary, const Int32 &offset_j, const L &l,
-                          const UInt32 &source_offset, const UInt32 &i_base,
-                          const UInt32 &k, uint32_t stride, int32_t R,
-                          mask_t<UInt32> &active) {
+static UInt32 tap_address(Boundary boundary, bool wide, const Int32 &offset_j,
+                          const L &l, const UInt32 &source_offset,
+                          const UInt32 &i_base, const UInt32 &k, uint32_t stride,
+                          int32_t R, mask_t<UInt32> &active) {
     Int32 g = offset_j + Int32(l);
     if (boundary == Boundary::Zero) {
         active = (g >= 0) & (g < R);
         return source_offset + l * stride;
     }
     active = mask_t<UInt32>(true);
-    return (i_base + UInt32(remap_array(g, R, boundary))) * stride + k;
+    return (i_base + UInt32(remap(g, R, boundary, wide))) * stride + k;
 }
 
 Resampler::Resampler(uint32_t source_res, uint32_t target_res, const char *filter,
@@ -441,7 +506,8 @@ Resampler::Resampler(uint32_t source_res, uint32_t target_res, const char *filte
 
     d = new Impl(source_res, target_res, filter_cb, nullptr, radius, radius_scale,
                  boundary, normalize, /* flip */ false);
-    d->symbolic = symbolic;
+    // 'configure()' may already have forced the symbolic loop
+    d->symbolic = d->symbolic || symbolic;
 }
 
 Resampler::Resampler(uint32_t source_res, uint32_t target_res,
@@ -450,14 +516,16 @@ Resampler::Resampler(uint32_t source_res, uint32_t target_res,
                      bool symbolic)
     : d(new Impl(source_res, target_res, filter, payload, radius, 1.0,
                  boundary, normalize, flip)) {
-    d->symbolic = symbolic;
+    // 'configure()' may already have forced the symbolic loop
+    d->symbolic = d->symbolic || symbolic;
 }
 
 Resampler::Resampler(uint32_t res, const double *kernel, size_t kernel_size,
                      int origin, Boundary boundary, bool normalize, bool flip,
                      bool symbolic)
     : d(new Impl(res, kernel, kernel_size, origin, boundary, normalize, flip)) {
-    d->symbolic = symbolic;
+    // 'configure()' may already have forced the symbolic loop
+    d->symbolic = d->symbolic || symbolic;
 }
 
 Resampler::~Resampler() { }
@@ -473,6 +541,7 @@ void Resampler::resample(const Value *source, Value *target,
         uint32_t stride;
         uint32_t inner_dim;
         Boundary boundary;
+        bool wide;
         const int32_t *offset;
         const double *weights;
         const Value *in;
@@ -498,8 +567,8 @@ void Resampler::resample(const Value *source, Value *target,
                 for (uint32_t l = 0; l < t.taps; ++l) {
                     double weight = t.weights[j * t.taps + l];
                     if (weight != 0) {
-                        int32_t phys = remap_scalar(t.offset[j] + (int32_t) l,
-                                                    R, t.boundary);
+                        int32_t phys = remap(t.offset[j] + (int32_t) l, R,
+                                             t.boundary, t.wide);
                         Value value = t.in[(base + phys) * (int32_t) t.stride + k];
                         accum = fmadd((Accum) weight, (Accum) value, accum);
                     }
@@ -527,6 +596,7 @@ void Resampler::resample(const Value *source, Value *target,
         stride,
         inner_dim,
         d->boundary,
+        d->wide,
         d->offset.get(),
         d->weights.get(),
         source,
@@ -538,7 +608,7 @@ void Resampler::resample(const Value *source, Value *target,
         for (uint32_t i = 0; i < outer_dim; ++i)
             callback(i, &task);
     } else {
-        task_submit_and_wait(nullptr, outer_dim, callback, &task);
+        task_submit_and_wait_exclusive(nullptr, outer_dim, callback, &task);
     }
 }
 
@@ -560,6 +630,7 @@ Array Resampler::Impl::forward(const Array &source, uint32_t stride) const {
     decompose(target_size, stride, j, k, i_base);
 
     Boundary boundary_v = this->boundary;
+    bool wide_v = this->wide;
     int32_t R = (int32_t) source_res;
 
     Accum target = zeros<Accum>(target_size);
@@ -581,8 +652,8 @@ Array Resampler::Impl::forward(const Array &source, uint32_t stride) const {
             for (uint32_t l = 0; l < taps_v; ++l) {
                 Accum weight = gather<Accum>(weights_v, woff + l);
                 mask_t<UInt32> active;
-                UInt32 addr = tap_address(boundary_v, offj, l, soff, ibase, kk,
-                                          stride, R, active);
+                UInt32 addr = tap_address(boundary_v, wide_v, offj, l, soff,
+                                          ibase, kk, stride, R, active);
                 acc = fmadd(weight,
                             Accum(gather<Array>(source, addr, active)), acc);
             }
@@ -632,11 +703,12 @@ Array Resampler::Impl::forward(const Array &source, uint32_t stride) const {
             },
             // Loop body
             [source_offset, source, weight_offset, weights_v, stride, boundary_v,
-             offset_j, i_base, k, R](UInt32 &l, Accum &target) {
+             wide_v, offset_j, i_base, k, R](UInt32 &l, Accum &target) {
                 Accum weight = gather<Accum>(weights_v, weight_offset + l);
                 mask_t<UInt32> active;
-                UInt32 addr = tap_address(boundary_v, offset_j, l, source_offset,
-                                          i_base, k, stride, R, active);
+                UInt32 addr = tap_address(boundary_v, wide_v, offset_j, l,
+                                          source_offset, i_base, k, stride, R,
+                                          active);
                 target = fmadd(weight,
                                Accum(gather<Array>(source, addr, active)),
                                target);
@@ -689,6 +761,7 @@ Array Resampler::resample_bwd(const Array &target, uint32_t stride) const {
         (Int32(i_base) + offset_j) * (int32_t) stride + Int32(k));
 
     Boundary boundary = d->boundary;
+    bool wide = d->wide;
     int32_t R = (int32_t) d->source_res;
 
     Accum source = zeros<Accum>(source_size);
@@ -701,8 +774,9 @@ Array Resampler::resample_bwd(const Array &target, uint32_t stride) const {
         for (uint32_t l = 0; l < taps; ++l) {
             Accum weight = gather<Accum>(weights, weight_offset + l);
             mask_t<UInt32> active;
-            UInt32 addr = tap_address(boundary, offset_j, l, source_offset,
-                                      i_base, k, stride, R, active);
+            UInt32 addr = tap_address(boundary, wide, offset_j, l,
+                                      source_offset, i_base, k, stride, R,
+                                      active);
             scatter_add(source, Accum(target) * weight, addr, active);
         }
     } else {
@@ -715,11 +789,12 @@ Array Resampler::resample_bwd(const Array &target, uint32_t stride) const {
             },
             // Loop body
             [source_offset, target, weight_offset, weights, stride, boundary,
-             offset_j, i_base, k, R](UInt32 &l, Accum &source) {
+             wide, offset_j, i_base, k, R](UInt32 &l, Accum &source) {
                 Accum weight = gather<Accum>(weights, weight_offset + l);
                 mask_t<UInt32> active;
-                UInt32 addr = tap_address(boundary, offset_j, l, source_offset,
-                                          i_base, k, stride, R, active);
+                UInt32 addr = tap_address(boundary, wide, offset_j, l,
+                                          source_offset, i_base, k, stride, R,
+                                          active);
                 scatter_add(source, Accum(target) * weight, addr, active);
                 l += 1;
             });

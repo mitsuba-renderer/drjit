@@ -265,6 +265,14 @@ def test12_unravel_vec(t, drjit_verbose, capsys):
     with pytest.raises(TypeError, match="expected array of type"):
         dr.unravel(t, t(), order='C')
 
+    # The element type and AD flavor of the input are converted when needed
+    mod = sys.modules[t.__module__]
+    other = mod.Array3f64 if dr.type_v(t) != dr.VarType.Float64 else mod.Array3f
+    assert dr.all(dr.unravel(other, v0, order='C') ==
+                  other([1, 2, 3], [4, 5, 6], 7), axis=None)
+    assert dr.all(dr.unravel(t, dr.detach(dr.value_t(t)(v0)), order='C') ==
+                  t([1, 2, 3], [4, 5, 6], 7), axis=None)
+
     with pytest.raises(RuntimeError, match="order parameter must equal"):
         dr.unravel(t, vt(), order='Q')
 
@@ -403,6 +411,15 @@ def test17_slice(t):
 def versiontuple(v):
     return tuple(map(int, (v.split("."))))
 
+
+def gen_values(t, rng, size, signed):
+    """Generate scatter-reduction test values, optionally of mixed sign"""
+    if dr.type_v(t) == dr.VarType.Float16:
+        # Half precision needs a limited value range to remain exact
+        return t(rng.next_float32() * 2 - 1) if signed else dr.full(t, 1, size)
+    j = t(rng.next_uint32())
+    return j - 2**31 if signed else j
+
 @pytest.mark.parametrize('op',
     [dr.ReduceOp.Add, dr.ReduceOp.Min, dr.ReduceOp.Max,
      dr.ReduceOp.And, dr.ReduceOp.Or])
@@ -418,14 +435,16 @@ def test18_scatter_reduce(t, op):
         pytest.skip(f"Unsupported scatter combination: backend={dr.backend_v(t)}, type={dr.type_v(t)}, op={op}")
     identity = dr.detail.reduce_identity(t, op)
 
+    # Float min/max atomics may be emulated via integer atomics that
+    # dispatch on the sign, so generate values of both signs
+    signed = dr.is_float_v(t) and op in (dr.ReduceOp.Min, dr.ReduceOp.Max)
+
     for k in range(0, 10):
         k = 2**k
 
         rng = mod.PCG32(size)
-        j = t(rng.next_uint32())
         i = rng.next_uint32_bounded(k)
-        if dr.type_v(t) == dr.VarType.Float16:
-            j = dr.full(t, 1, size)
+        j = gen_values(t, rng, size, signed)
 
         buf_1 = dr.full(t, identity[0], k)
         dr.scatter_reduce(op, buf_1, index=i, value=j, mode=dr.ReduceMode.Direct)
@@ -469,9 +488,7 @@ def test18_scatter_reduce(t, op):
     perm = UInt32(np.random.permutation(size))
 
     rng = mod.PCG32(size)
-    j = t(rng.next_uint32())
-    if dr.type_v(t) == dr.VarType.Float16:
-        j = dr.full(t, 1, size)
+    j = gen_values(t, rng, size, signed)
     buf_1 = dr.full(t, identity[0], size)
     dr.scatter_reduce(op, buf_1, index=perm, value=j, mode=dr.ReduceMode.NoConflicts)
 
@@ -507,14 +524,12 @@ def test18b_scatter_reduce_packet(t, op):
     identity = dr.detail.reduce_identity(vt, op)[0]
     mod = sys.modules[t.__module__]
 
+    signed = dr.is_float_v(vt) and op in (dr.ReduceOp.Min, dr.ReduceOp.Max)
+
     for k in (1, 16, 1024):
         rng = mod.PCG32(size)
         i = rng.next_uint32_bounded(k)
-        if dr.type_v(vt) == dr.VarType.Float16:
-            cols = [dr.full(vt, 1, size) for _ in range(n)]
-        else:
-            cols = [vt(rng.next_uint32()) for _ in range(n)]
-        val = t(*cols)
+        val = t(*[gen_values(vt, rng, size, signed) for _ in range(n)])
 
         buf_local = dr.full(vt, identity, k * n)
         dr.scatter_reduce(op, buf_local, value=val, index=i, mode=dr.ReduceMode.Local)
@@ -771,7 +786,7 @@ def test25_block_reduce_intense(t, op):
 def test26_elide_scatter(t, variant):
     # Test that scatters are not performed when their result is not used
     UInt = dr.uint32_array_t(t)
-    with dr.scoped_set_flag(dr.JitFlag.KernelHistory):
+    with dr.kernel_history() as kh:
         v = dr.arange(t, 1000)
         dr.enable_grad(v)
 
@@ -784,11 +799,11 @@ def test26_elide_scatter(t, variant):
         assert dr.all(v.grad == 1)
         dr.eval()
 
-    hist = dr.kernel_history((dr.KernelType.JIT,))
+    hist = [k for k in kh if k.type == dr.KernelType.JIT]
     if variant == 0:
         assert len(hist) == 0
     else:
-        ir = hist[0]['ir'].getvalue()
+        ir = hist[0].source
         if dr.backend_v(t) is dr.JitBackend.CUDA:
             assert ir.count('st.global.b32') == 1
         elif dr.backend_v(t) is dr.JitBackend.LLVM:
@@ -800,7 +815,7 @@ def test26_elide_scatter(t, variant):
 def test27_elide_scatter_in_call(t, variant):
     # Test that scatters are not performed when their result is not used
     UInt = dr.uint32_array_t(t)
-    with dr.scoped_set_flag(dr.JitFlag.KernelHistory):
+    with dr.kernel_history() as kh:
         v = dr.arange(t, 1000)
         i = dr.arange(UInt, 1000)
         k = dr.opaque(UInt, 0, 1000)
@@ -815,9 +830,9 @@ def test27_elide_scatter_in_call(t, variant):
             del out
         dr.eval()
 
-    hist = dr.kernel_history((dr.KernelType.JIT,))
+    hist = [k for k in kh if k.type == dr.KernelType.JIT]
     assert len(hist) == 1
-    ir = hist[0]['ir'].getvalue()
+    ir = hist[0].source
     if dr.backend_v(t) is dr.JitBackend.CUDA:
         assert ir.count('st.global.b32') == variant
     elif dr.backend_v(t) is dr.JitBackend.LLVM:
@@ -930,23 +945,22 @@ def test30_packet_scatter(t, psize):
     dr.eval(target_1)
 
     with dr.scoped_set_flag(dr.JitFlag.PacketOps, True):
-        with dr.scoped_set_flag(dr.JitFlag.KernelHistory, True):
-            dr.kernel_history_clear()
+        with dr.kernel_history() as kh:
             dr.scatter(target_2, value_arr, perm, active=active)
             dr.eval(target_2)
-            history = dr.kernel_history((dr.KernelType.JIT,))
+    history = [k for k in kh if k.type == dr.KernelType.JIT]
 
     assert dr.all(target_1 == target_2)
 
     if dr.backend_v(t) is dr.JitBackend.Metal and history:
         # Check that vectorized stores are emitted (not a scalar fallback).
-        ir = "".join(h["ir"].getvalue() for h in history)
+        ir = "".join(h.source for h in history)
         assert ir.count("_base[") == metal_packet_chunk_count(tp, psize)
 
     if dr.backend_v(t) is dr.JitBackend.CUDA and tp in (dr.VarType.Float16, dr.VarType.Float32, dr.VarType.Float64) and history:
         compute_capability = dr.detail.cuda_compute_capability()
         supports_256bit = compute_capability >= 120
-        ir = history[0]["ir"].getvalue()
+        ir = history[0].source
 
         if tp == dr.VarType.Float16:
             if supports_256bit:
@@ -1157,23 +1171,22 @@ def test35_scatter_packet_reduce(t, reduce_op, packet_size, force_optix, mode):
 
     n = 3
 
-    with dr.scoped_set_flag(dr.JitFlag.KernelHistory, True):
-        with dr.scoped_set_flag(dr.JitFlag.ForceOptiX, force_optix):
+    with dr.scoped_set_flag(dr.JitFlag.ForceOptiX, force_optix):
 
-            target = dr.zeros(t, n * packet_size)
-            index = mod.UInt32(0, 1, 1, 2)
-            # Mask one lane and OOB on it to also test masked scatter_reduce.
-            active = mod.Bool(True, True, True, False)
-            index = dr.select(active, index, mod.UInt32(0xFFFFFFF0))
-            src = dr.rng().uniform(ArrayXf, (packet_size, dr.width(index)))
+        target = dr.zeros(t, n * packet_size)
+        index = mod.UInt32(0, 1, 1, 2)
+        # Mask one lane and OOB on it to also test masked scatter_reduce.
+        active = mod.Bool(True, True, True, False)
+        index = dr.select(active, index, mod.UInt32(0xFFFFFFF0))
+        src = dr.rng().uniform(ArrayXf, (packet_size, dr.width(index)))
 
-            op = getattr(dr.ReduceOp, reduce_op)
+        op = getattr(dr.ReduceOp, reduce_op)
 
-            dr.scatter_reduce(op, target, src, index, mode=mode, active=active)
+        dr.scatter_reduce(op, target, src, index, mode=mode, active=active)
 
-            dr.kernel_history_clear()
+        with dr.kernel_history() as kh:
             dr.eval(target)
-            history = dr.kernel_history((dr.KernelType.JIT,))
+        history = [k for k in kh if k.type == dr.KernelType.JIT]
 
     # Manually construct a reference, by scattering into a python list.
     ref = dr.zeros(t, n * packet_size)
@@ -1209,7 +1222,7 @@ def test35_scatter_packet_reduce(t, reduce_op, packet_size, force_optix, mode):
     # Test that we are actually using vector instructions on CUDA and LLVM
     if dr.backend_v(t) is dr.JitBackend.Metal:
         return
-    ir = history[0]["ir"].getvalue()
+    ir = history[0].source
     if dr.backend_v(t) is dr.JitBackend.CUDA:
         compute_capability = dr.detail.cuda_compute_capability()
         cuda_version = dr.detail.cuda_version()
@@ -1220,7 +1233,15 @@ def test35_scatter_packet_reduce(t, reduce_op, packet_size, force_optix, mode):
             (not force_optix or cuda_version >= (13, 2))
         if force_optix and tp == dr.VarType.Float16:
             supports_wide_vector_reduction = False
-        if supports_wide_vector_reduction:
+        # Float min/max atomics use a sign-predicated integer pair that cannot vectorize
+        emulated_minmax = reduce_op in ("Min", "Max") and \
+            tp in (dr.VarType.Float32, dr.VarType.Float64)
+        if emulated_minmax:
+            st, ut = ("s64", "u64") if tp == dr.VarType.Float64 else ("s32", "u32")
+            sop, uop = ("min", "max") if reduce_op == "Min" else ("max", "min")
+            assert ir.count(f"red.global.{sop}.{st}") == packet_size
+            assert ir.count(f"red.global.{uop}.{ut}") == packet_size
+        elif supports_wide_vector_reduction:
             if tp == dr.VarType.Float16:
                 n_regs = {1: 0, 2: 2, 3: 0, 4: 4, 5: 0, 6: 2, 12: 4, 16: 8}[packet_size]
                 n_inst = {1: 0, 2: 1, 3: 0, 4: 1, 5: 0, 6: 3, 12: 3, 16: 2}[packet_size]
@@ -1287,27 +1308,29 @@ def test36_gather_packet(t, packet_size, force_optix):
     elif tp == dr.VarType.Float64:
         ArrayXf = mod.ArrayXf64
 
-    # Make n divisible by packet_size to avoid gather packet errors
-    n = 16 * 16  # 256 - divisible by all packet sizes
+    # The source size must be divisible by every packet size tested above
+    n = 240  # = lcm(1, 2, 3, 4, 5, 6, 12, 16)
 
-    with dr.scoped_set_flag(dr.JitFlag.KernelHistory, True):
-        with dr.scoped_set_flag(dr.JitFlag.ForceOptiX, force_optix):
-            # Create source data, large enough for the largest packet size
-            source = dr.arange(t, n)
+    with dr.scoped_set_flag(dr.JitFlag.ForceOptiX, force_optix):
+        # Create source data, large enough for the largest packet size. It
+        # must be evaluated, as gathers from unevaluated expressions are
+        # re-indexed instead of generating packet loads.
+        source = dr.arange(t, n)
+        dr.eval(source)
 
-            # Create indices for gathering - ensure they don't go out of bounds
-            max_index = n // packet_size - 1
-            index = mod.UInt32(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
-            index = index % max(1, max_index)  # Ensure indices are within bounds
+        # Create indices for gathering - ensure they don't go out of bounds
+        max_index = n // packet_size - 1
+        index = mod.UInt32(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
+        index = index % max(1, max_index)  # Ensure indices are within bounds
 
-            # Perform packeted gather
-            result = dr.gather(
-                ArrayXf, source=source, index=index, shape=(packet_size, dr.width(index))
-            )
+        # Perform packeted gather
+        result = dr.gather(
+            ArrayXf, source=source, index=index, shape=(packet_size, dr.width(index))
+        )
 
-            dr.kernel_history_clear()
+        with dr.kernel_history() as kh:
             dr.eval(result)
-            history = dr.kernel_history((dr.KernelType.JIT,))
+        history = [k for k in kh if k.type == dr.KernelType.JIT]
 
     # Manual verification - gather the same values using regular indexing
     ref = dr.zeros(ArrayXf, (packet_size, dr.width(index)))
@@ -1319,10 +1342,10 @@ def test36_gather_packet(t, packet_size, force_optix):
 
     if dr.backend_v(t) is dr.JitBackend.Metal:
         # Check that vectorized loads are emitted (not a scalar fallback).
-        ir = "".join(h["ir"].getvalue() for h in history)
+        ir = "".join(h.source for h in history)
         assert ir.count("_base[") == metal_packet_chunk_count(tp, packet_size)
         return
-    ir = history[0]["ir"].getvalue()
+    ir = history[0].source
 
     if dr.backend_v(t) is dr.JitBackend.CUDA:
         compute_capability = dr.detail.cuda_compute_capability()
@@ -1631,3 +1654,41 @@ def test44_gather_size1_literal(t):
     for i in range(3):
         result = dr.gather(t, source, UInt32(i))
         assert result[0] == source.numpy()[i]
+
+
+@pytest.test_arrays('float32,jit,shape=(*)')
+@pytest.mark.parametrize('packet_ops', [True, False])
+@pytest.mark.parametrize('psize', [2, 3, 4])
+def test45_packet_scatter_fallback_merges(t, psize, packet_ops):
+    """A packet scatter that decomposes into individual scatters (e.g. because
+    the packet size is odd) must still fit into a single kernel. Conflicting
+    writes queued beforehand are flushed first, adding one kernel launch."""
+    mod = sys.modules[t.__module__]
+    UInt32 = dr.uint32_array_t(t)
+    ArrayXf = mod.ArrayXf
+
+    size = 128
+
+    def scatter(prior):
+        index = dr.arange(UInt32, size)
+        value = ArrayXf([t(i + 1) for i in range(psize)])
+        target = dr.zeros(t, size * psize)
+        dr.eval(target, index, value)
+
+        with dr.scoped_set_flag(dr.JitFlag.PacketOps, packet_ops):
+            with dr.kernel_history() as kh:
+                if prior:
+                    dr.scatter(target, t(7), UInt32(0))
+                dr.scatter(target, value, index)
+                dr.eval(target)
+            history = [k for k in kh if k.type == dr.KernelType.JIT]
+
+        ref = dr.zeros(t, size * psize)
+        for i in range(psize):
+            dr.scatter(ref, t(i + 1), dr.arange(UInt32, size) * psize + i)
+        assert dr.all(target == ref)
+
+        return len(history)
+
+    assert scatter(prior=False) == 1
+    assert scatter(prior=True) == 2

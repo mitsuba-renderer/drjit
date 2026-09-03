@@ -130,16 +130,16 @@ nb::list CoopVec::expand_to_list() const {
     uint64_t *tmp = (uint64_t *) alloca(m_size * sizeof(uint64_t));
     ad_coop_vec_unpack(m_index, m_size, tmp);
 
-    nb::list result;
+    nb::list_builder result(m_size);
     const ArraySupplement &s = supp(m_type);
     for (uint32_t i = 0; i < m_size; ++i) {
         nb::object o = nb::inst_alloc(m_type);
         s.init_index(tmp[i], inst_ptr(o));
         ad_var_dec_ref(tmp[i]);
         nb::inst_mark_ready(o);
-        result.append(std::move(o));
+        result.put(std::move(o));
     }
-    return result;
+    return result.commit();
 }
 
 /// Unpack a cooperative vector into a Dr.Jit array type like ArrayXf
@@ -192,12 +192,12 @@ static nb::object coop_vec_binary_op(nb::handle h0, nb::handle h1) {
         if (ptr[i])
             continue;
 
-        nb::list args;
+        nb::tuple_builder args(c->m_size);
         nb::object oi = c->m_type(o[i]);
         for (uint32_t j = 0; j < c->m_size; ++j)
-            args.append(oi);
+            args.put(oi);
 
-        o[i] = nb::cast(CoopVec(nb::borrow<nb::args>(nb::tuple(args))));
+        o[i] = nb::cast(CoopVec(nb::borrow<nb::args>(args.commit())));
         if (!nb::try_cast(o[i], ptr[i], false))
             nb::raise("CoopVec::binary_op(): internal error");
     }
@@ -232,11 +232,11 @@ static nb::object coop_vec_ternary_op(nb::handle h0, nb::handle h1,
         if (ptr[i])
             continue;
 
-        nb::list args;
+        nb::tuple_builder args(c->m_size);
         for (uint32_t j = 0; j < c->m_size; ++j)
-            args.append(c->m_type(o[i]));
+            args.put(c->m_type(o[i]));
 
-        o[i] = nb::cast(CoopVec(nb::borrow<nb::args>(nb::tuple(args))));
+        o[i] = nb::cast(CoopVec(nb::borrow<nb::args>(args.commit())));
         if (!nb::try_cast(o[i], ptr[i], false))
             nb::raise("CoopVec::ternary_op(): internal error");
     }
@@ -438,16 +438,16 @@ static nb::object repack_impl(const char *name, MatrixLayout layout,
         return result;
     } else if (arg_tp.is(&PyTuple_Type)) {
         nb::tuple t = nb::borrow<nb::tuple>(arg);
-        nb::list result;
+        nb::tuple_builder result(nb::len(t));
         for (nb::handle h : t)
-            result.append(repack_impl(name, layout, h, offset, items));
-        return nb::tuple(result);
+            result.put(repack_impl(name, layout, h, offset, items));
+        return result.commit();
     } else if (arg_tp.is(&PyList_Type)) {
         nb::list l = nb::borrow<nb::list>(arg);
-        nb::list result;
+        nb::list_builder result(nb::len(l));
         for (nb::handle h : l)
-            result.append(repack_impl(name, layout, h, offset, items));
-        return std::move(result);
+            result.put(repack_impl(name, layout, h, offset, items));
+        return result.commit();
     } else if (arg_tp.is(&PyDict_Type)) {
         nb::dict d = nb::borrow<nb::dict>(arg);
         nb::dict result;
@@ -459,12 +459,11 @@ static nb::object repack_impl(const char *name, MatrixLayout layout,
         for (auto [k, v] : ds)
             nb::setattr(tmp, k, repack_impl(name, layout, nb::getattr(arg, k), offset, items));
         return tmp;
-    } else if (nb::object df = get_dataclass_fields(arg_tp); df.is_valid()) {
-        nb::object tmp = nb::dict();
-        for (nb::handle field : df) {
-            nb::object k = field.attr(DR_STR(name));
-            tmp[k] = repack_impl(name, layout, nb::getattr(arg, k), offset, items);
-        }
+    } else if (nb::dict df = dataclass_field_dict(arg_tp); df.is_valid()) {
+        nb::dict tmp;
+        for (auto [k, field] : df)
+            if (is_dataclass_field(field))
+                tmp[k] = repack_impl(name, layout, nb::getattr(arg, k), offset, items);
         return arg_tp(**tmp);
     } else {
         return nb::borrow(arg);
@@ -551,10 +550,11 @@ static nb::object repack(const char *name, const char *layout_str, nb::handle ar
 }
 
 static CoopVec coopvec_abs_workaround(nb::handle_t<CoopVec> &v) {
-    nb::list result;
-    for (nb::handle h: v)
-        result.append(nb::steal(PyNumber_Absolute(h.ptr())));
-    return CoopVec(result);
+    nb::list entries = nb::cast<const CoopVec &>(v).expand_to_list();
+    nb::list_builder result(nb::len(entries));
+    for (nb::handle h: entries)
+        result.put(nb::steal(PyNumber_Absolute(h.ptr())));
+    return CoopVec(result.commit());
 }
 
 void export_coop_vec(nb::module_ &m) {
@@ -578,14 +578,16 @@ void export_coop_vec(nb::module_ &m) {
              nb::sig("def __radd__(self, arg: CoopVec[T] | T | float | int, /) -> CoopVec[T]"))
         .def("__sub__", &coop_vec_binary_op<JitOp::Sub>,
              nb::sig("def __sub__(self, arg: CoopVec[T] | T | float | int, /) -> CoopVec[T]"))
-        .def("__rsub__", &coop_vec_binary_op<JitOp::Sub>,
+        .def("__rsub__",
+             [](nb::handle h0, nb::handle h1) { return coop_vec_binary_op<JitOp::Sub>(h1, h0); },
              nb::sig("def __rsub__(self, arg: CoopVec[T] | T | float | int, /) -> CoopVec[T]"))
         .def("__mul__", &coop_vec_binary_op<JitOp::Mul>,
              nb::sig("def __mul__(self, arg: CoopVec[T] | T | float | int, /) -> CoopVec[T]"))
         .def("__rmul__", &coop_vec_binary_op<JitOp::Mul>,
              nb::sig("def __rmul__(self, arg: CoopVec[T] | T | float | int, /) -> CoopVec[T]"))
         .def_prop_ro("index", [](const CoopVec &v) { return v.m_index; })
-        .def_prop_ro("type", [](const CoopVec &v) { return v.m_type; })
+        .def_prop_ro("type", [](const CoopVec &v) { return v.m_type; },
+                     nb::sig("def type(self, /) -> type[T]"))
         .def("__len__", [](const CoopVec &v) { return v.m_size; })
         .def("__abs__", &coopvec_abs_workaround)
         .def("__repr__",
@@ -593,7 +595,8 @@ void export_coop_vec(nb::module_ &m) {
                  return nb::str("drjit.nn.CoopVec[{}, shape=({}, {})]")
                      .format(nb::type_name(v.m_type), v.m_size,
                              jit_var_size((uint32_t) v.m_index));
-             });
+             })
+        .freeze();
 
     view_type = nb::class_<MatrixView>(nn, "MatrixView", doc_nn_MatrixView)
         .def(nb::init<>())
@@ -650,7 +653,9 @@ void export_coop_vec(nb::module_ &m) {
         .def("__matmul__", [](const MatrixView &self, const CoopVec &x) { return matvec(self, x, {}, false); },
              nb::sig("def __matmul__(self, arg: CoopVec[T], /) -> CoopVec[T]"))
         .def_rw("buffer", &MatrixView::buffer,
-                doc_nn_MatrixView_buffer)
+                doc_nn_MatrixView_buffer,
+                nb::for_getter(nb::sig("def buffer(self, /) -> drjit.AnyArray")),
+                nb::for_setter(nb::sig("def buffer(self, value: drjit.AnyArray, /) -> None")))
         .def_prop_ro("T",
                      [](MatrixView &v) {
                          MatrixView r;
@@ -679,6 +684,7 @@ void export_coop_vec(nb::module_ &m) {
     drjit_struct["stride"] = nb::handle(&PyLong_Type);
     drjit_struct["transpose"] = nb::handle(&PyBool_Type);
     view_type.attr("DRJIT_STRUCT") = drjit_struct;
+    nb::type_freeze(view_type);
 
     nn.def("view", &view,
            doc_nn_view);
@@ -727,16 +733,23 @@ void export_coop_vec(nb::module_ &m) {
     );
 
     m.def("fma", &coop_vec_ternary_op<JitOp::Fma>);
+    // Cooperative vector min/max always ignore NaNs
     m.def("minimum", &coop_vec_binary_op<JitOp::Min>);
     m.def("maximum", &coop_vec_binary_op<JitOp::Max>);
+    m.def("fmin", &coop_vec_binary_op<JitOp::FMin>);
+    m.def("fmax", &coop_vec_binary_op<JitOp::FMax>);
     m.def("step", &coop_vec_binary_op<JitOp::Step>, doc_step);
-    m.def("log2", &coop_vec_unary_op<JitOp::Log2>);
-    m.def("exp2", &coop_vec_unary_op<JitOp::Exp2>);
-    m.def("tanh", &coop_vec_unary_op<JitOp::Tanh>);
+    m.def("log2", &coop_vec_unary_op<JitOp::Log2>,
+          nb::sig("def log2(arg: drjit.nn.CoopVec[T], /) -> drjit.nn.CoopVec[T]"));
+    m.def("exp2", &coop_vec_unary_op<JitOp::Exp2>,
+          nb::sig("def exp2(arg: drjit.nn.CoopVec[T], /) -> drjit.nn.CoopVec[T]"));
+    m.def("tanh", &coop_vec_unary_op<JitOp::Tanh>,
+          nb::sig("def tanh(arg: drjit.nn.CoopVec[T], /) -> drjit.nn.CoopVec[T]"));
     m.def("step", [](nb::handle h0, nb::handle h1) {
         return select(
             nb::steal(PyObject_RichCompare(h0.ptr(), h1.ptr(), Py_LT)),
             nb::int_(0), nb::int_(1));
     });
-    m.def("abs", coopvec_abs_workaround);
+    m.def("abs", coopvec_abs_workaround,
+          nb::sig("def abs(arg: drjit.nn.CoopVec[T], /) -> drjit.nn.CoopVec[T]"));
 }

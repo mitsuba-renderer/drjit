@@ -62,8 +62,8 @@
 #endif
 
 #define DRJIT_VERSION_MAJOR 1
-#define DRJIT_VERSION_MINOR 4
-#define DRJIT_VERSION_PATCH 0
+#define DRJIT_VERSION_MINOR 6
+#define DRJIT_VERSION_PATCH 0.dev1
 
 #define DRJIT_STRINGIFY(x) #x
 #define DRJIT_TOSTRING(x)  DRJIT_STRINGIFY(x)
@@ -280,6 +280,24 @@ enum class WrapMode : uint32_t {
     Repeat = 0, /// Repeats the texture
     Clamp = 1,  /// Replicates the edge color
     Mirror = 2  /// Mirrors the texture wrt. each edge
+};
+
+/// MIP level selection methods for filtered texture lookups
+enum class MipFilter : uint32_t {
+    Disabled = 0, /// No MIP hierarchy, lookups sample the base level
+    Nearest = 1,  /// Sample the nearest MIP level
+    Linear = 2    /// Blend between the two nearest MIP levels
+};
+
+/// Determines the basis representation of MIP-mapped textures
+enum class MipBasis : uint32_t {
+    /// Level 0 stores the texture image. Coarser levels are automatically
+    /// derived using a 2x2 box filter and are read-only.
+    Standard = 0,
+
+    /// Levels store the coefficients of a Laplacian decomposition and
+    /// can be modified. The MIP pyramid is automatically derived.
+    Laplacian = 1
 };
 
 NAMESPACE_END(drjit)

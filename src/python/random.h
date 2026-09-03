@@ -69,7 +69,8 @@ void bind_rng(nb::module_ &m) {
 
                  auto &&fn = self.attr(key);
                  return !mask.is(Py_True) ? fn(mask) : fn();
-             }, "dtype"_a, "mask"_a = true, doc_PCG32_next_float)
+             }, "dtype"_a, "mask"_a = true, doc_PCG32_next_float,
+             nb::sig("def next_float(self, dtype: type[T], mask: Bool | bool = True) -> T"))
         .def("prev_float",
              [](nb::handle self, nb::type_object dtype, nb::handle mask) {
                  const char *key = nullptr;
@@ -92,7 +93,8 @@ void bind_rng(nb::module_ &m) {
 
                  auto &&fn = self.attr(key);
                  return !mask.is(Py_True) ? fn(mask) : fn();
-             }, "dtype"_a, "mask"_a = true, doc_PCG32_prev_float)
+             }, "dtype"_a, "mask"_a = true, doc_PCG32_prev_float,
+             nb::sig("def prev_float(self, dtype: type[T], mask: Bool | bool = True) -> T"))
         .def("next_float16",
              nb::overload_cast<>(&PCG32::next_float16),
              doc_PCG32_next_float16)
@@ -145,7 +147,8 @@ void bind_rng(nb::module_ &m) {
 
                  auto &&fn = self.attr(key);
                  return !mask.is(Py_True) ? fn(mask) : fn();
-             }, "dtype"_a, "mask"_a = true, doc_PCG32_next_float_normal)
+             }, "dtype"_a, "mask"_a = true, doc_PCG32_next_float_normal,
+             nb::sig("def next_float_normal(self, dtype: type[T], mask: Bool | bool = True) -> T"))
          .def("prev_float_normal",
              [](nb::handle self, nb::type_object dtype, nb::handle mask) {
                  const char *key = nullptr;
@@ -168,7 +171,8 @@ void bind_rng(nb::module_ &m) {
 
                  auto &&fn = self.attr(key);
                  return !mask.is(Py_True) ? fn(mask) : fn();
-             }, "dtype"_a, "mask"_a = true, doc_PCG32_prev_float_normal)
+             }, "dtype"_a, "mask"_a = true, doc_PCG32_prev_float_normal,
+             nb::sig("def prev_float_normal(self, dtype: type[T], mask: Bool | bool = True) -> T"))
         .def("next_float16_normal",
              nb::overload_cast<>(&PCG32::next_float16_normal),
              doc_PCG32_next_float16_normal)
@@ -199,10 +203,14 @@ void bind_rng(nb::module_ &m) {
              nb::overload_cast<const Mask &>(&PCG32::next_float64_normal))
         .def("prev_float64_normal",
              nb::overload_cast<const Mask &>(&PCG32::prev_float64_normal))
-        .def("__add__", [](const PCG32 &a, const Int64 &x) -> PCG32 { return a + x; }, nb::is_operator(), doc_PCG32_add)
-        .def("__iadd__", [](PCG32 *a, const Int64 &x) -> PCG32* { *a += x; return a; }, nb::is_operator(), doc_PCG32_iadd)
-        .def("__sub__", [](const PCG32 &a, const Int64 &x) -> PCG32 { return a - x; }, nb::is_operator(), doc_PCG32_sub)
-        .def("__isub__", [](PCG32 *a, const Int64 &x) -> PCG32* { *a -= x; return a; }, nb::is_operator(), doc_PCG32_isub)
+        .def("__add__", [](const PCG32 &a, const Int64 &x) -> PCG32 { return a + x; }, nb::is_operator(), doc_PCG32_add,
+             nb::sig("def __add__(self, arg: drjit.AnyArray | int, /) -> PCG32"))
+        .def("__iadd__", [](PCG32 *a, const Int64 &x) -> PCG32* { *a += x; return a; }, nb::is_operator(), doc_PCG32_iadd,
+             nb::sig("def __iadd__(self, arg: drjit.AnyArray | int, /) -> PCG32"))
+        .def("__sub__", [](const PCG32 &a, const Int64 &x) -> PCG32 { return a - x; }, nb::is_operator(), doc_PCG32_sub,
+             nb::sig("def __sub__(self, arg: drjit.AnyArray | int, /) -> PCG32"))
+        .def("__isub__", [](PCG32 *a, const Int64 &x) -> PCG32* { *a -= x; return a; }, nb::is_operator(), doc_PCG32_isub,
+             nb::sig("def __isub__(self, arg: drjit.AnyArray | int, /) -> PCG32"))
         .def("__sub__", [](const PCG32 &a, const PCG32 &b) -> Int64 { return a - b; }, nb::is_operator())
         .def_rw("state", &PCG32::state, doc_PCG32_state)
         .def_rw("inc", &PCG32::inc, doc_PCG32_inc);
@@ -217,31 +225,34 @@ void bind_rng(nb::module_ &m) {
     fields["state"] = u64;
     fields["inc"] = u64;
     pcg32.attr("DRJIT_STRUCT") = fields;
+    pcg32.freeze();
 
     using Philox4x32 = dr::Philox4x32<UInt32>;
 
     auto philox = nb::class_<Philox4x32>(m, "Philox4x32", doc_Philox4x32)
         .def(nb::init<const UInt64 &, const UInt32 &, const UInt32 &, const UInt32 &, uint32_t>(),
-             "seed"_a, "counter_0"_a , "counter_1"_a = 0, "counter_2"_a = 0, "iterations"_a = 7,
+             "seed"_a, "counter_0"_a, "counter_1"_a.sig("UInt(0)") = 0,
+             "counter_2"_a.sig("UInt(0)") = 0, "iterations"_a = 7,
              doc_Philox4x32_Philox4x32)
         .def(nb::init<const Philox4x32 &>(), "Copy constructor")
-        .def("next_uint32x4", &Philox4x32::next_uint32x4, "mask"_a = true,
+        .def("next_uint32x4", &Philox4x32::next_uint32x4, "mask"_a.sig("Bool(True)") = true,
              doc_Philox4x32_next_uint32x4)
-        .def("next_uint64x2", &Philox4x32::next_uint64x2, "mask"_a = true,
+        .def("next_uint64x2", &Philox4x32::next_uint64x2, "mask"_a.sig("Bool(True)") = true,
              doc_Philox4x32_next_uint64x2)
-        .def("next_float16x4", &Philox4x32::next_float16x4, "mask"_a = true,
+        .def("next_float16x4", &Philox4x32::next_float16x4, "mask"_a.sig("Bool(True)") = true,
              doc_Philox4x32_next_float16x4)
-        .def("next_float32x4", &Philox4x32::next_float32x4, "mask"_a = true,
+        .def("next_float32x4", &Philox4x32::next_float32x4, "mask"_a.sig("Bool(True)") = true,
              doc_Philox4x32_next_float32x4)
-        .def("next_float64x2", &Philox4x32::next_float64x2, "mask"_a = true,
+        .def("next_float64x2", &Philox4x32::next_float64x2, "mask"_a.sig("Bool(True)") = true,
              doc_Philox4x32_next_float64x2)
-        .def("next_float16x4_normal", &Philox4x32::next_float16x4_normal, "mask"_a = true,
+        .def("next_float16x4_normal", &Philox4x32::next_float16x4_normal, "mask"_a.sig("Bool(True)") = true,
              doc_Philox4x32_next_float16x4_normal)
-        .def("next_float32x4_normal", &Philox4x32::next_float32x4_normal, "mask"_a = true,
+        .def("next_float32x4_normal", &Philox4x32::next_float32x4_normal, "mask"_a.sig("Bool(True)") = true,
              doc_Philox4x32_next_float32x4_normal)
-        .def("next_float64x2_normal", &Philox4x32::next_float64x2_normal, "mask"_a = true,
+        .def("next_float64x2_normal", &Philox4x32::next_float64x2_normal, "mask"_a.sig("Bool(True)") = true,
              doc_Philox4x32_next_float64x2_normal)
         .def_rw("seed", &Philox4x32::seed)
         .def_rw("counter", &Philox4x32::counter)
-        .def_rw("iterations", &Philox4x32::iterations);
+        .def_rw("iterations", &Philox4x32::iterations)
+        .freeze();
 }

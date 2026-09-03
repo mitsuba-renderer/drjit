@@ -17,6 +17,7 @@
 #include "base.h"
 #include "slice.h"
 #include "meta.h"
+#include "apply.h"
 #include <algorithm>
 #include <vector>
 
@@ -74,7 +75,6 @@ slice_index(const nb::type_object_t<ArrayBase> &dtype,
 
     size_t shape_offset = 0;
     size_t size_out = 1;
-    nb::list shape_out;
 
     // Preallocate memory for computed slicing components
     size_t shape_len = nb::len(shape),
@@ -110,9 +110,9 @@ slice_index(const nb::type_object_t<ArrayBase> &dtype,
             components.emplace_back(Component::Integer, v, 1, 1, size);
             continue;
         } else if (tp.is(&PySlice_Type)) {
-            Py_ssize_t start, stop, step;
-            size_t slice_length;
-            nb::detail::slice_compute(h.ptr(), size, start, stop, step, slice_length);
+            auto [start, stop, step, slice_length] =
+                nb::borrow<nb::slice>(h).compute((size_t) size);
+            (void) stop;
             components.emplace_back(Component::Slice, start, step, (Py_ssize_t) slice_length, size);
             continue;
         } else if (is_drjit_type(tp)) {
@@ -167,7 +167,7 @@ slice_index(const nb::type_object_t<ArrayBase> &dtype,
             --shape_offset;
             for (size_t i = 0; i <indices_to_add; ++i) {
                 if (shape_offset >= shape_len)
-                    nb::detail::fail("slice_index(): internal error.");
+                    nb::raise("slice_index(): internal error.");
                 size = nb::cast<Py_ssize_t>(shape[shape_offset++]);
                 components.emplace_back(Component::Slice, 0, 1, size, size);
             }
@@ -189,8 +189,6 @@ slice_index(const nb::type_object_t<ArrayBase> &dtype,
     // Build output shape following PyTorch/NumPy advanced indexing
     // rules: consecutive advanced indices produce a single dimension
     // in place; non-consecutive ones move it to the front.
-    shape_out.clear();
-
     bool has_advanced = false, consecutive = true, in_gap = false;
     for (const auto &c : components) {
         if (c.type == Component::Advanced) {
@@ -203,28 +201,35 @@ slice_index(const nb::type_object_t<ArrayBase> &dtype,
         }
     }
 
+    // Advanced indices collapse into a single output dimension
+    size_t shape_out_len = (size_t) has_advanced;
+    for (const auto &c : components)
+        shape_out_len += c.type == Component::None || c.type == Component::Slice;
+
+    nb::tuple_builder shape_builder(shape_out_len);
     bool advanced_added = false;
     if (has_advanced && !consecutive) {
         advanced_added = true;
-        shape_out.append(advanced_size);
+        shape_builder.put(advanced_size);
     }
     for (const auto &c : components) {
         if (c.type == Component::None)
-            shape_out.append(1);
+            shape_builder.put(1);
         else if (c.type == Component::Slice)
-            shape_out.append(c.slice_size);
+            shape_builder.put(c.slice_size);
         else if (c.type == Component::Advanced && !advanced_added) {
             advanced_added = true;
-            shape_out.append(advanced_size);
+            shape_builder.put(advanced_size);
         }
     }
+    nb::tuple shape_out = shape_builder.commit();
 
     size_out = 1;
     for (nb::handle h : shape_out)
         size_out *= nb::cast<size_t>(h);
 
     if (size_out == 0)
-        return { nb::tuple(shape_out), dtype() };
+        return { shape_out, dtype() };
 
     // A "passthrough" axis is a full `:` slice over a dim of its full
     // input size, e.g. axes 1 and 2 in `t[a, :, :]`. Such an axis is the
@@ -299,7 +304,7 @@ slice_index(const nb::type_object_t<ArrayBase> &dtype,
         // Non-consecutive: advanced dim is outermost.
         size_t rest_size = size_out / advanced_size;
         advanced_idx = index.floor_div(dtype(rest_size));
-        index = fma(advanced_idx, dtype(uint32_t(-rest_size)), index);
+        index = fma(advanced_idx, dtype(uint32_t(0) - uint32_t(rest_size)), index);
     }
 
     // Process axes from innermost to outermost, peeling one output
@@ -323,7 +328,8 @@ slice_index(const nb::type_object_t<ArrayBase> &dtype,
                         nb::object next =
                             index.floor_div(dtype(advanced_size));
                         advanced_idx = fma(
-                            next, dtype(uint32_t(-advanced_size)), index);
+                            next, dtype(uint32_t(0) - uint32_t(advanced_size)),
+                            index);
                         index = std::move(next);
                     }
                 }
@@ -349,7 +355,7 @@ slice_index(const nb::type_object_t<ArrayBase> &dtype,
         in_stride *= c.size;
     }
 
-    return { nb::tuple(shape_out), index_out };
+    return { shape_out, index_out };
 }
 
 PyObject *mp_subscript(PyObject *self, PyObject *key) noexcept {
@@ -573,8 +579,47 @@ int mp_ass_subscript(PyObject *self, PyObject *key, PyObject *value) noexcept {
                 nb::borrow<nb::type_object_t<ArrayBase>>(s.tensor_index),
                 nb::borrow<nb::tuple>(shape(self)), key2);
 
-            nb::object target = nb::steal(s.tensor_array(self));
-            scatter(target, nb::borrow(value), out_index, nb::borrow(Py_True));
+            nb::object target = nb::steal(s.tensor_array(self)),
+                       value_o = nb::borrow(value);
+            nb::handle value_tp = value_o.type();
+
+            // Scalars broadcast natively within scatter(). Everything else
+            // is converted to a tensor and broadcast to the slice's shape.
+            if (!value_tp.is(&PyLong_Type) && !value_tp.is(&PyFloat_Type) &&
+                !value_tp.is(&PyBool_Type)) {
+                if (!value_tp.is(self_tp))
+                    value_o = self_tp(value_o);
+
+                const dr::vector<size_t> &shape_src =
+                    s.tensor_shape(inst_ptr(value_o));
+                dr::vector<size_t> shape_dst, shape_src_ext;
+
+                for (nb::handle h : out_shape)
+                    shape_dst.push_back(nb::cast<size_t>(h));
+
+                size_t ndim = shape_dst.size();
+                bool compatible = shape_src.size() <= ndim;
+                if (compatible) {
+                    shape_src_ext.resize(ndim, 1);
+                    memcpy(shape_src_ext.data() + ndim - shape_src.size(),
+                           shape_src.data(), sizeof(size_t) * shape_src.size());
+                    for (size_t i = 0; i < ndim; ++i)
+                        compatible &= shape_src_ext[i] == shape_dst[i] ||
+                                      shape_src_ext[i] == 1;
+                }
+
+                if (!compatible)
+                    nb::raise("cannot broadcast a value of shape %s to a "
+                              "slice of shape %s.",
+                              nb::str(cast_shape(shape_src)).c_str(),
+                              nb::str(out_shape).c_str());
+
+                nb::object array = nb::steal(s.tensor_array(value_o.ptr()));
+                tensor_broadcast(value_o, array, shape_src_ext, shape_dst);
+                value_o = std::move(array);
+            }
+
+            scatter(target, value_o, out_index, nb::borrow(Py_True));
 
             return 0;
         }
@@ -693,5 +738,7 @@ int sq_ass_item_tensor(PyObject *self, Py_ssize_t index, PyObject *value) noexce
 
 void export_slice(nb::module_&m) {
     m.def("slice_index", &slice_index, doc_slice_index, "dtype"_a, "shape"_a,
-          "indices"_a);
+          "indices"_a,
+          nb::sig("def slice_index(dtype: typing.Type[ArrayT], shape: "
+                  "Sequence[int], indices: tuple) -> tuple[tuple[int, ...], ArrayT]"));
 }

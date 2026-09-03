@@ -18,6 +18,7 @@
 #include "apply.h"
 #include "detail.h"
 #include "coop_vec.h"
+#include "traits.h"
 #include <nanobind/stl/optional.h>
 
 using ReduceInit = nb::object();
@@ -61,14 +62,14 @@ static Reduction reductions[] = {
         "min",
         [](nb::handle tp) { return tp.is(&PyLong_Type) || tp.is(&PyFloat_Type); },
         []() -> nb::object { return nb::float_(INFINITY); },
-        [](nb::handle h1, nb::handle h2) { return array_module.attr("minimum")(h1, h2); }
+        [](nb::handle h1, nb::handle h2) { return array_module.attr("fmin")(h1, h2); }
     },
     {
         ArrayOp::Max,
         "max",
         [](nb::handle tp) { return tp.is(&PyLong_Type) || tp.is(&PyFloat_Type); },
         []() -> nb::object { return nb::float_(-INFINITY); },
-        [](nb::handle h1, nb::handle h2) { return array_module.attr("maximum")(h1, h2); }
+        [](nb::handle h1, nb::handle h2) { return array_module.attr("fmax")(h1, h2); }
     },
     {
         ArrayOp::And,
@@ -103,9 +104,7 @@ static Reduction reductions[] = {
         "count",
         [](nb::handle tp) { return tp.is(&PyBool_Type); },
         []() -> nb::object { return nb::int_(0); },
-        [](nb::handle h1, nb::handle h2) {
-            return h1 + array_module.attr("select")(h2, nb::int_(1), nb::int_(0));
-        }
+        [](nb::handle h1, nb::handle h2) { return h1 + h2; }
     }
 };
 
@@ -129,11 +128,24 @@ static_assert(sizeof(reductions) == sizeof(Reduction) * (size_t) ReduceOpExt::Op
 // Forward declaration
 nb::object reduce(uint32_t op, nb::handle h, nb::handle axis, nb::handle mode, bool keepdims);
 
+/// Turn a mask into an unsigned integer array of zeros and ones
+static nb::object count_promote(nb::handle h) {
+    nb::object tp = reinterpret_array_t(h, VarType::UInt32);
+    return array_module.attr("select")(h, tp(1), tp(0));
+}
+
+/// Handle a reduction that does not actually reduce anything
+static nb::object reduce_noop(uint32_t op, nb::handle h) {
+    if (op == (uint32_t) ReduceOpExt::Count)
+        return count_promote(h);
+    return nb::borrow(h);
+}
+
 nb::object reduce_seq(uint32_t op, nb::handle h, nb::handle axis, nb::handle mode) {
     Reduction red = reductions[(size_t) op];
 
     if (red.skip(h.type()))
-        return nb::borrow(h);
+        return reduce_noop(op, h);
 
     nb::object it;
     try {
@@ -152,7 +164,9 @@ nb::object reduce_seq(uint32_t op, nb::handle h, nb::handle axis, nb::handle mod
     for (nb::handle h2 : it) {
         nb::object o = nb::borrow(h2);
         if (axis.is_none())
-            o = reduce(op, o, axis, mode, false);
+            o = reduce(op, o, axis, mode, false); // yields a count already
+        else if (op == (uint32_t) ReduceOpExt::Count)
+            o = count_promote(o);
 
         if (i++ == 0)
             result = std::move(o);
@@ -175,7 +189,7 @@ nb::object prefix_reduce_seq(ReduceOp op, nb::handle h, int axis, bool exclusive
         nb::raise("for reductions over (non-Dr.Jit) iterable types, 'axis' must equal 0.");
 
     nb::object value = red.init();
-    nb::list result;
+    nb::list_builder builder(size);
 
     for (size_t i = 0; i < size; ++i) {
         nb::object o = nb::borrow(h[reverse ? size - 1 - i : i]);
@@ -186,11 +200,10 @@ nb::object prefix_reduce_seq(ReduceOp op, nb::handle h, int axis, bool exclusive
         else
             value = red.combine(value, o);
 
-        if (!result.is_valid())
-            nb::raise_python_error();
-
-        result.append(exclusive ? value_prev : value);
+        builder.put(exclusive ? value_prev : value);
     }
+
+    nb::list result = builder.commit();
 
     if (is_drjit_array(h))
         return h.type()(result);
@@ -228,7 +241,7 @@ nb::object reduce(uint32_t op, nb::handle h, nb::handle axis_, nb::handle mode, 
             // Accept 0-dim tensors and axis==0 (the default); return the
             // tensor without changes instead of failing with an error message.
             if (nb::try_cast(axis_, value) && value == 0)
-                return nb::borrow(h);
+                return reduce_noop(op, h);
         }
 
         // Number of axes along which to reduce (-1: all of them)
@@ -262,8 +275,9 @@ nb::object reduce(uint32_t op, nb::handle h, nb::handle axis_, nb::handle mode, 
             // bounds-check, then deduplicate and sort. Sorting is
             // required by the recursive reduction below, which assumes
             // ascending order; dedup avoids reducing a remapped axis.
-            nb::list new_axis;
-            for (nb::handle h2 : nb::borrow<nb::tuple>(axis)) {
+            nb::tuple axis_t = nb::borrow<nb::tuple>(axis);
+            nb::list_builder new_axis(nb::len(axis_t));
+            for (nb::handle h2 : axis_t) {
                 int value;
                 if (!nb::try_cast(h2, value))
                     nb::raise("%s", axis_type_msg);
@@ -272,16 +286,16 @@ nb::object reduce(uint32_t op, nb::handle h, nb::handle axis_, nb::handle mode, 
                 if (value < 0 || value >= ndim)
                     nb::raise("out-of-bounds axis (got %i, ndim=%i)",
                               value, ndim);
-                new_axis.append(value);
+                new_axis.put(value);
             }
-            nb::list l = nb::list(nb::set(new_axis));
+            nb::list l = nb::list(nb::set(new_axis.commit()));
             l.sort();
             axis = nb::tuple(l);
             axis_len = (int) nb::len(axis);
 
             if (axis_len == 0) {
                 // Nothing to do
-                return nb::borrow(h);
+                return reduce_noop(op, h);
             } else if (axis_len == ndim) {
                 // Special case: reducing over all dims
                 axis = nb::none();
@@ -310,6 +324,10 @@ nb::object reduce(uint32_t op, nb::handle h, nb::handle axis_, nb::handle mode, 
 
                 return tp(value, nb::tuple());
             } else {
+                if (op == (uint32_t) ReduceOpExt::Count)
+                    return reduce((uint32_t) ReduceOp::Add, count_promote(h),
+                                  axis, mode, keepdims);
+
                 if (op >= (uint32_t) ReduceOp::Count) {
                     if (axis_len == 1 && red_axis == 0)
                         return reduce_seq(op, h, nb::int_(0), mode);
@@ -426,6 +444,9 @@ nb::object reduce(uint32_t op, nb::handle h, nb::handle axis_, nb::handle mode, 
             // Reduce along an intermediate axis
 
             ArrayMeta m = s;
+            if (op == (uint32_t) ReduceOpExt::Count)
+                m.type = (uint16_t) VarType::UInt32;
+
             dr::vector<size_t> shape;
             shape_impl(h, shape);
 
@@ -460,11 +481,16 @@ nb::object reduce(uint32_t op, nb::handle h, nb::handle axis_, nb::handle mode, 
             // ones since their positions in ``result`` have shifted by
             // one. Axes are sorted ascending, so all entries beyond
             // index 0 are strictly greater than the reduced axis.
-            nb::list shifted;
-            for (size_t i = 1; i < nb::len(axis); ++i)
-                shifted.append(nb::int_(nb::cast<int>(axis[i]) - 1));
-            axis = nb::tuple(shifted);
+            size_t axis_size = nb::len(axis);
+            nb::tuple_builder shifted(axis_size - 1);
+            for (size_t i = 1; i < axis_size; ++i)
+                shifted.put(nb::cast<int>(axis[i]) - 1);
+            axis = shifted.commit();
         }
+
+        // The remaining axes reduce partial counts, which requires a sum
+        if (op == (uint32_t) ReduceOpExt::Count)
+            op = (uint32_t) ReduceOp::Add;
 
         return reduce(op, result, axis, mode, false);
     } catch (nb::python_error &e) {

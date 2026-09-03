@@ -69,6 +69,120 @@ somewhat higher cost.
     point. You may, e.g., want to use a 32-bit position to query a 16-bit
     texture to avoid a loss of accuracy.
 
+.. _texture_mipmap:
+
+MIP-mapped filtering
+--------------------
+
+Textures constructed with a ``mip_filter`` additionally maintain a sequence of
+progressively downscaled copies of the texture known as a *MIP pyramid*.
+
+.. code-block:: python
+
+   tex = Texture2f(tensor, mip_filter=dr.MipFilter.Linear, max_aniso=8)
+
+The ``mip_filter`` parameter (see :py:class:`dr.MipFilter <MipFilter>`) chooses
+how a filtered lookup turns a continuous level of detail into a sample of the
+pyramid:
+
+- ``MipFilter.Disabled`` is the default and omits the pyramid entirely. The
+  filtered lookups below then degrade to an ordinary base level
+  :py:func:`.eval() <drjit.auto.Texture2f.eval>`.
+
+- ``MipFilter.Nearest`` rounds to the closest level. This is the cheaper
+  option, but the level transitions tend to be visible.
+
+- ``MipFilter.Linear`` blends the two enclosing levels, which removes those
+  transitions at the cost of a second lookup.
+
+The ``max_aniso`` parameter bounds the number of taps of an anisotropic lookup
+and may range from 1 (isotropic filtering) to the hardware limit of 16.
+
+Calling :py:func:`.set_value() <drjit.auto.Texture2f.set_value>` or
+:py:func:`.set_tensor() <drjit.auto.Texture2f.set_tensor>` on an existing
+MIP-mapped texture rebuilds the pyramid.
+
+Two lookup methods consume this pyramid:
+
+- :py:func:`.eval_lod() <drjit.auto.Texture2f.eval_lod>` samples the texture at
+  an explicit *level of detail*, where a fractional level blends the two
+  enclosing pyramid levels.
+
+- :py:func:`.eval_filtered() <drjit.auto.Texture2f.eval_filtered>` implements
+  the standard anisotropic filtering scheme of graphics APIs. Given the
+  derivatives of the texture coordinate with respect to the two screen
+  dimensions, it selects a level of detail so that up to ``max_aniso``
+  trilinear taps along the major axis of the pixel footprint cover it without
+  aliasing.
+
+  .. code-block:: python
+
+     out = tex.eval_filtered(pos, ddx, ddy)
+
+Both methods are differentiable with respect to the query position and texture
+data, which includes derivative propagation through the MIP pyramid
+construction.
+
+.. _texture_laplacian:
+
+Laplacian basis
+---------------
+
+MIP-mapped textures can optionally adopt a *Laplacian pyramid* basis following
+the paper `Practical Inverse Rendering of Textured and Translucent Appearance
+<https://doi.org/10.1145/3730855>`__ by Weier et al. This feature targets
+workflows involving gradient-based optimization of textures with filtered
+texture lookups.
+
+In textures constructed with ``mip_basis=dr.MipBasis.Laplacian``, the
+authoritative representation is no longer the base image but a set of per-level
+coefficient tensors. The MIP pyramid uploaded to the GPU is then derived from
+these tensors by repeated upsampling and summation.
+
+.. code-block:: python
+
+   tex = Texture2f(tensor, mip_filter=dr.MipFilter.Linear,
+                   mip_basis=dr.MipBasis.Laplacian)
+
+This basis requires a MIP-mapped texture with floating-point storage on a JIT
+backend.
+
+The coefficients form a coarse-to-fine hierarchy. The coarsest level determines
+the overall appearance of the texture, and each finer level adds increasingly
+localized detail. An adaptive optimizer such as Adam maintains a separate step
+size per level, which turns the decomposition into a multiscale preconditioner.
+
+The coefficient tensors are exposed through level-indexed accessor and setter
+overloads. A typical optimization loop registers them with an optimizer, writes
+the updated values back, and rebuilds the sampled pyramid once per iteration
+via :py:func:`.update_inplace() <drjit.auto.Texture2f.update_inplace>`:
+
+.. code-block:: python
+
+   opt = Adam(lr=1e-2)
+   for l in range(tex.mip_levels()):
+       opt[f'level_{l}'] = tex.tensor(l)
+
+   for it in range(n_iterations):
+       for l in range(tex.mip_levels()):
+           tex.set_tensor(l, opt[f'level_{l}'], rebuild=False)
+       tex.update_inplace()
+       loss = objective(tex.eval_filtered(...))
+       dr.backward(loss)
+       opt.step()
+
+With ``rebuild=False``, the assignment cheaply rebinds the coefficient tensor,
+and the :py:func:`.update_inplace() <drjit.auto.Texture2f.update_inplace>` call
+at the end synthesizes the pyramid once for all levels. The default
+``rebuild=True`` instead synthesizes it after every assignment, which is
+convenient when changing a single level but wasteful in a loop like the one
+above.
+
+Assigning the high-resolution base texture via :py:func:`.set_tensor()
+<drjit.auto.Texture2f.set_tensor>` or :py:func:`.set_value()
+<drjit.auto.Texture2f.set_value>` is also supported and decomposes the image
+into the Laplacian representation.
+
 Hardware acceleration
 ---------------------
 
@@ -94,6 +208,8 @@ to perform sampling
     the `CUDA programming guide <https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#linear-filtering>`_
     for more details.
 
+.. _texture_migration:
+
 Migration
 ^^^^^^^^^
 When hardware acceleration is disabled, Dr.Jit textures are a thin wrapper
@@ -106,22 +222,32 @@ around the underlying tensor representation, which remains accessible:
    tensor_data = tex.tensor() # Return the tensor backing this texture
    array_data = tex.value()   # Same, but in array form
 
-Hardware-accelerated Dr.Jit textures work differently: they *migrate* texture
-data into a CUDA texture object that is no longer directly accessible to
-Dr.Jit. This makes methods such as :py:func:`.tensor()
-<drjit.cuda.Texture2f.tensor>` and :py:func:`.value()
-<drjit.cuda.Texture2f.value>` rather expensive, since they must copy the
-texture data from the CUDA object back into memory.
+Hardware-accelerated Dr.Jit textures work differently: they *migrate* the
+texture data into a CUDA texture object. This
+avoids redundant storage and happens on every update, i.e., in the constructor
+and in :py:func:`.set_value() <drjit.cuda.Texture2f.set_value>`,
+:py:func:`.set_tensor() <drjit.cuda.Texture2f.set_tensor>`, and
+:py:func:`.update_inplace() <drjit.cuda.Texture2f.update_inplace>`.
 
-If you desire access to a hardware-accelerated texture *and* at the
-same time retain the tensor representation, specify ``migrate=False``
-to the texture constructor, i.e.,
+Methods such as :py:func:`.tensor() <drjit.cuda.Texture2f.tensor>` and
+:py:func:`.value() <drjit.cuda.Texture2f.value>` then return a symbolic view
+that occupies no actual storage. Evaluating the view fetches the texel data
+back from the hardware texture, and it reflects the texture contents at the
+time of that evaluation. Evaluate it before overwriting the texture when the
+current contents are needed.
 
 .. code-block:: python
 
-   tex = dr.cuda.Texture2f(tensor_data, use_accel=True, migrate=False)
+   tex = dr.cuda.Texture2f(tensor_data) # use_accel=True by default
 
-This, however, doubles the storage cost associated with the texture.
+   snapshot = TensorXf(tex.tensor()) # Copy of the symbolic view
+   dr.eval(snapshot)                 # Fetch the texel data from the texture
+
+   tex.set_value(new_data)           # 'snapshot' retains the old contents
+
+Specify ``use_accel=False`` if the tensor representation must stay in ordinary
+memory. Lookups then use the emulated implementation instead of the hardware
+texture units.
 
 Automatic differentiation
 ^^^^^^^^^^^^^^^^^^^^^^^^^

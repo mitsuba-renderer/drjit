@@ -28,9 +28,12 @@ option(DRJIT_ENABLE_AUTODIFF      "Build Dr.Jit automatic differentation library
 option(DRJIT_ENABLE_PYTHON        "Build Python extension library?" ON)
 option(DRJIT_ENABLE_TESTS         "Build Dr.Jit test suite? (Warning, this takes *very* long to compile)" OFF)
 option(DRJIT_ENABLE_LEAK_WARNINGS "Emit DrJit and nanobind leak warnings? By default, leak warnings are disabled automatically when building PyPi wheels." ${DRJIT_ENABLE_LEAK_WARNINGS_DEFAULT})
+option(DRJIT_SPLIT_MODE           "Build the Python extension in nanobind split mode? This requires the 'nanobind-backend' package at runtime." ON)
 
-option(DRJIT_STABLE_ABI       "Build Python extension using the CPython stable ABI? (Only relevant when using scikit-build)" OFF)
-mark_as_advanced(DRJIT_STABLE_ABI)
+# Wheels are always built in split mode
+if (SKBUILD)
+  set(DRJIT_SPLIT_MODE ON)
+endif()
 
 # ----------------------------------------------------------
 #  Check if submodules have been checked out, or fail early
@@ -141,6 +144,8 @@ if (MSVC)
    add_compile_options(/utf-8)  # Ensure source and execution charset is UTF-8
    add_compile_options(/wd4251) # "warning C4251: X needs to have dll-interface to be used by clients of struct Y"
    add_compile_options(/wd4127) # "warning C4127 : conditional expression is constant, consider using 'if constexpr' statement instead"
+   add_compile_options(/wd4324) # "warning C4324: structure was padded due to alignment specifier" (robin_map bucket entries)
+   add_compile_options(/wd4714) # "warning C4714: function marked as __forceinline not inlined"
 
   # Workaround to avoid a particular crash due to MS VC++ runtime library binary
   # incompatibility. In general the runtime version needs to be at least as new
@@ -208,10 +213,23 @@ endif()
 
 if (DRJIT_MASTER_PROJECT)
   install(DIRECTORY include/drjit DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+  install(DIRECTORY ext/drjit-core/include/drjit-core DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
-  install(TARGETS drjit-core EXPORT drjitTargets DESTINATION drjit)
-  install(TARGETS drjit-extra EXPORT drjitTargets DESTINATION drjit)
-  install(TARGETS nanothread EXPORT drjitTargets DESTINATION drjit)
+  if (DRJIT_ENABLE_JIT)
+    if (DRJIT_ENABLE_PYTHON)
+      install(TARGETS drjit-core EXPORT drjitTargets DESTINATION drjit)
+      install(TARGETS drjit-extra EXPORT drjitTargets DESTINATION drjit)
+      install(TARGETS nanothread EXPORT drjitTargets DESTINATION drjit)
+    else()
+      install(
+        TARGETS drjit-core drjit-extra nanothread
+        EXPORT drjitTargets
+        RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
+        ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+        LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+      )
+    endif()
+  endif()
 
   if (DRJIT_ENABLE_PYTHON)
     # Stub generation is disabled for sanitizer builds in src/python/CMakeLists.txt.
@@ -316,7 +334,6 @@ if (DRJIT_MASTER_PROJECT)
   endif()
 
   if (DRJIT_ENABLE_JIT)
-    install(DIRECTORY ext/drjit-core/include/drjit-core DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
     install(DIRECTORY ext/drjit-core/ext/nanothread/include/nanothread DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
   endif()
 

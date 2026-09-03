@@ -95,6 +95,9 @@ DR_EXPORT_AD_2(mul)
 DR_EXPORT_AD_2(div)
 DR_EXPORT_AD_2(min)
 DR_EXPORT_AD_2(max)
+DR_EXPORT_AD_2(fmin)
+DR_EXPORT_AD_2(fmax)
+DR_EXPORT_AD_2(copysign)
 
 // Ternary operations
 DR_EXPORT_AD_3(fma)
@@ -226,8 +229,7 @@ extern DRJIT_EXTRA_EXPORT uint64_t ad_var_cast(uint64_t, VarType);
 /**
  * \brief Evaluate a texture's nearest-neighbor / (multi-)linear interpolant
  *
- * Type-erased backend of ``drjit::Texture<...>::eval()`` for the JIT backends.
- * All variable arguments are combined AD/JIT indices.
+ * This function implements the body of ``Texture::eval()`` on JIT backends.
  *
  * \param query_type        Scalar VarType to evaluate/return in (F16/F32/F64).
  * \param dimension         Texture dimensionality (1, 2, or 3).
@@ -249,6 +251,110 @@ ad_tex_eval(VarType query_type, uint32_t dimension, uint32_t channels_stored,
             void *handle, int use_accel, uint64_t value, const uint32_t *res,
             const uint32_t *idiv, const uint64_t *pos, uint32_t active,
             uint64_t *out);
+
+/**
+ * \brief Construct the MIP pyramid of a texture
+ *
+ * Each level halves the resolution using a 2x2 box filter with clamp boundary.
+ * 8-bit sRGB textures are filtered in linear space. The accumulation runs in
+ * single precision except for double-precision inputs. The result is
+ * differentiable with respect to ``value``.
+ *
+ * \param dimension        Texture dimensionality (1, 2, or 3).
+ * \param channels_stored  Storage channel count (power of two).
+ * \param srgb             Filter in linear space (UInt8 textures only).
+ * \param value            Combined index of the padded base texel buffer.
+ * \param res              Per-dimension base resolutions, fastest-varying
+ *                         (width) axis first.
+ * \param n_levels         Pyramid depth, including the base level.
+ * \return                 Owned combined index of the pyramid buffer storing
+ *                         levels ``1`` to ``n_levels - 1`` back to back.
+ */
+extern DRJIT_EXTRA_EXPORT uint64_t
+ad_tex_mipmap_from_base(uint32_t dimension, uint32_t channels_stored, int srgb,
+                    uint64_t value, const size_t *res, uint32_t n_levels);
+
+/**
+ * \brief Build a MIP pyramid from a Laplacian-parameterized texture
+ *
+ * \c coef holds the indices of ``n_levels`` coefficient arrays (finest first
+ * with ``channels`` interleaved channels). The Gaussian pyramid is synthesized
+ * coarse-to-fine by factor-2 bilinear upsampling and summation.
+ *
+ * The function returns the base texture through \c out_base and the packed
+ * levels >= 1 through \c out_mip following the layout of \ref
+ * ad_tex_mipmap_from_base(). Both are padded to ``channels_stored`` channels. The
+ * output is differentiable with respect to all coefficients.
+ */
+extern DRJIT_EXTRA_EXPORT void
+ad_tex_mipmap_from_laplacian(uint32_t dimension, uint32_t channels,
+                             uint32_t channels_stored, const uint64_t *coef,
+                             uint32_t n_levels, const size_t *res,
+                             uint64_t *out_base, uint64_t *out_mip);
+
+/**
+ * \brief Decompose a base image into Laplacian pyramid coefficients
+ *
+ * This is the inverse of \ref ad_tex_mipmap_from_laplacian(): it builds the
+ * Gaussian chain of \c value (``channels`` interleaved channels) with the 2x2
+ * box filter and stores per-level differences against the upsampled
+ * next-coarser level.
+ *
+ * The function writes ``n_levels`` coefficient indices to \c out. The
+ * implementation (intentionally) does not propagate derivatives from ``value``
+ * to ``out``.
+ */
+extern DRJIT_EXTRA_EXPORT void
+ad_tex_laplacian_from_base(uint32_t dimension, uint32_t channels,
+                           uint64_t value, uint32_t n_levels,
+                           const size_t *res, uint64_t *out);
+
+/**
+ * \brief Sample a MIP-mapped texture at an explicit level of detail
+ *
+ * See \ref ad_tex_eval for the shared parameters.
+ *
+ * \param mip_value   Combined index of the pyramid buffer built by \ref
+ *                    ad_tex_mipmap_from_base().
+ * \param mip_table   JIT index of the per-level constant table. The record
+ *                    layout is documented on \ref
+ *                    drjit::detail::tex_mip_table(), which builds the table.
+ * \param n_levels    Pyramid depth, including the base level.
+ * \param mip_filter  ``drjit::MipFilter`` cast to int.
+ * \param lod         JIT index of the query-precision level of detail. Passed
+ *                    without an AD component: it is filtering metadata and
+ *                    does not track derivatives.
+ */
+extern DRJIT_EXTRA_EXPORT void
+ad_tex_eval_lod(VarType query_type, uint32_t dimension, uint32_t channels_stored,
+                uint32_t channels_out, int filter_mode, int wrap_mode, int srgb,
+                void *handle, int use_accel, uint64_t value, uint64_t mip_value,
+                uint32_t mip_table, uint32_t n_levels, int mip_filter,
+                const uint32_t *res, const uint32_t *idiv, const uint64_t *pos,
+                uint32_t lod, uint32_t active, uint64_t *out);
+
+/**
+ * \brief Anisotropically filtered lookup of a MIP-mapped texture
+ *
+ * See \ref ad_tex_eval for the shared parameters and \ref ad_tex_eval_lod for
+ * the shared MIP pyramid parameters.
+ *
+ * \param max_aniso  Bound on the number of anisotropic taps.
+ * \param ddx        One JIT index per dimension: the screen-space derivatives
+ *                   of the query coordinate. Like ``lod`` above, they are
+ *                   filtering metadata passed without an AD component.
+ * \param ddy        Same as ``ddx``, for the second screen dimension.
+ */
+extern DRJIT_EXTRA_EXPORT void
+ad_tex_eval_filtered(VarType query_type, uint32_t dimension,
+                     uint32_t channels_stored, uint32_t channels_out,
+                     int filter_mode, int wrap_mode, int srgb, void *handle,
+                     int use_accel, uint64_t value, uint64_t mip_value,
+                     uint32_t mip_table, uint32_t n_levels, int mip_filter,
+                     uint32_t max_aniso, const uint32_t *res,
+                     const uint32_t *idiv, const uint64_t *pos,
+                     const uint32_t *ddx, const uint32_t *ddy, uint32_t active,
+                     uint64_t *out);
 
 /**
  * \brief Fetch the ``2^dim`` corner texels of a linear lookup (no interpolation)
@@ -309,6 +415,20 @@ ad_tex_write(uint32_t channels_stored, uint32_t channels_out,
              const uint64_t *value, uint32_t active);
 
 /**
+ * \brief Build an unevaluated expression that reads texel data back from a
+ * hardware texture
+ *
+ * Samples every texel at its center. The result is non-differentiable,
+ * reproduces the stored values exactly, and interleaves ``channels_out``
+ * channels per texel.See \ref ad_tex_eval for the shared parameters.
+ */
+extern DRJIT_EXTRA_EXPORT uint32_t
+ad_tex_readback(VarType storage_type, uint32_t dimension,
+                uint32_t channels_stored, uint32_t channels_out, int srgb,
+                void *handle, const uint32_t *res, const uint32_t *idiv,
+                size_t n_texels);
+
+/**
  * \brief Re-pack channel-interleaved texture data to a different channel width
  *
  * Gathers ``source`` (``n_pixels * src_channels`` elements) into a buffer of
@@ -348,6 +468,11 @@ extern DRJIT_EXTRA_EXPORT void ad_scope_leave(bool process_postponed);
 /// whether the operation did anything. If so, you should eventually call
 /// ``jit_eval()``.
 extern DRJIT_EXTRA_EXPORT uint64_t ad_var_schedule_force(uint64_t index, int *rv);
+
+/// Differentiable version of ``jit_var_copy_opaque()``: copy a variable into
+/// storage of its own, evaluating it if needed, so that the result is
+/// guaranteed to be distinct from every other variable.
+extern DRJIT_EXTRA_EXPORT uint64_t ad_var_copy_opaque(uint64_t index);
 
 /// Ensure that ``index`` is fully evaluated, and return a pointer to its
 /// device memory via ``ptr_out``. This process may require the creation of a

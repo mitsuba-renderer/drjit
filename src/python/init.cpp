@@ -10,15 +10,10 @@
 */
 
 #include <algorithm>
+#include <atomic>
 #include <condition_variable>
 #include <mutex>
 #include <thread>
-
-#if defined(_WIN32)
-#  include <windows.h>
-#else
-#  include <dlfcn.h>
-#endif
 
 #include <utility>
 #include <vector>
@@ -33,6 +28,7 @@
 #include "shape.h"
 #include "dlpack.h"
 #include "init.h"
+#include "eval.h"
 #include "coop_vec.h"
 
 /// Forward declarations
@@ -75,18 +71,14 @@ static int tp_init_array_impl(PyObject *self, PyObject *const *args,
     try {
         if (argc == 0) {
             // Default initialization, e.g., ``Array3f()``
-            nb::detail::nb_inst_zero(self);
+            nb::inst_zero(self);
             return 0;
         } else if (argc > 1) {
             // Initialize from argument list, e.g., ``Array3f(1, 2, 3)``
-            nb::object args_tuple = nb::steal(PyTuple_New(argc));
-            raise_if(!args_tuple.is_valid(),
-                     "Could not allocate argument tuple.");
-            for (Py_ssize_t i = 0; i < argc; ++i) {
-                PyObject *o = args[i];
-                Py_INCREF(o);
-                NB_TUPLE_SET_ITEM(args_tuple.ptr(), i, o);
-            }
+            nb::tuple_builder builder((size_t) argc);
+            for (Py_ssize_t i = 0; i < argc; ++i)
+                builder.put(nb::handle(args[i]));
+            nb::tuple args_tuple = builder.commit();
             raise_if(!array_init_from_seq(self, s, args_tuple.ptr()),
                      "Could not initialize array from argument list.");
             return 0;
@@ -113,7 +105,7 @@ static int tp_init_array_impl(PyObject *self, PyObject *const *args,
                 const ArraySupplement &s_arg = supp(arg_tp);
                 // Copy-constructor
                 if (arg_tp == self_tp) {
-                    nb::detail::nb_inst_copy(self, arg);
+                    nb::inst_copy(self, arg);
                     return 0;
                 } else if (s_arg.is_tensor) {
                     is_drjit_tensor = true;
@@ -187,13 +179,15 @@ static int tp_init_array_impl(PyObject *self, PyObject *const *args,
                         s_arg.ndim == 1 && s_arg.shape[0] == DRJIT_DYNAMIC) {
                         try_sequence_import = false;
                     } else {
-                        // Always broadcast when the element type is one of the sub-elements
-                        // or its AD/non-AD counterpart
+                        // Always broadcast when the argument has the shape of
+                        // one of the sub-elements. Its element type and AD
+                        // flavor are converted as part of the broadcast.
                         PyTypeObject *cur_tp = (PyTypeObject *) s.value;
                         while (cur_tp && is_drjit_type(cur_tp)) {
                             const ArraySupplement &s_cur = supp(cur_tp);
                             ArrayMeta m_curr = s_cur;
                             m_curr.is_diff = m_arg.is_diff;
+                            m_curr.type = m_arg.type;
                             if (m_curr == m_arg) {
                                 try_sequence_import = false;
                                 break;
@@ -252,7 +246,8 @@ static int tp_init_array_impl(PyObject *self, PyObject *const *args,
                         flattened = nb::steal(as.tensor_array(arg));
                         source_shape_vec = shape;
                     } else {
-                        flattened = import_ndarray(s, arg, &source_shape_vec);
+                        flattened = import_ndarray(s, arg, &source_shape_vec,
+                                                   false, do_flip_axes);
                     }
 
                     if (do_flip_axes)
@@ -302,10 +297,7 @@ static int tp_init_array_impl(PyObject *self, PyObject *const *args,
                     (s.is_class && arg == Py_None)) {
                 element = nb::borrow(arg);
             } else {
-                PyObject *args2[2] = { nullptr, arg };
-                element = nb::steal(
-                    PyObject_Vectorcall((PyObject *) value_tp, args2 + 1,
-                                  1 | PY_VECTORCALL_ARGUMENTS_OFFSET, nullptr));
+                element = call_one_arg((PyObject *) value_tp, arg);
                 if (NB_UNLIKELY(!element.is_valid())) {
                     nb::error_scope scope;
                     nb::raise("Broadcast from type '%s' to type '%s' failed.%s",
@@ -417,7 +409,7 @@ int tp_init_array(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
 PyObject *tp_vectorcall_array(PyObject *type_o, PyObject *const *args,
                               size_t nargsf, PyObject *kwnames) noexcept {
     PyTypeObject *tp = (PyTypeObject *) type_o;
-    Py_ssize_t nargs = (Py_ssize_t) PyVectorcall_NARGS(nargsf);
+    Py_ssize_t nargs = NB_VECTORCALL_NARGS(nargsf);
 
     bool do_flip_axes = false;
     if (NB_UNLIKELY(kwnames)) {
@@ -436,7 +428,7 @@ PyObject *tp_vectorcall_array(PyObject *type_o, PyObject *const *args,
 
     PyObject *self;
     try {
-        self = nb::detail::nb_inst_alloc(tp);
+        self = nb::inst_alloc((PyObject *) tp).release().ptr();
     } catch (nb::python_error &e) {
         e.restore();
         return nullptr;
@@ -454,7 +446,7 @@ PyObject *tp_vectorcall_array(PyObject *type_o, PyObject *const *args,
 PyObject *tp_vectorcall_tensor(PyObject *type_o, PyObject *const *args,
                                size_t nargsf, PyObject *kwnames) noexcept {
     PyTypeObject *tp = (PyTypeObject *) type_o;
-    Py_ssize_t nargs = (Py_ssize_t) PyVectorcall_NARGS(nargsf);
+    Py_ssize_t nargs = NB_VECTORCALL_NARGS(nargsf);
 
     PyObject *array = nullptr, *shape = nullptr, *flip_axes = nullptr;
 
@@ -505,7 +497,7 @@ PyObject *tp_vectorcall_tensor(PyObject *type_o, PyObject *const *args,
 
     PyObject *self;
     try {
-        self = nb::detail::nb_inst_alloc(tp);
+        self = nb::inst_alloc((PyObject *) tp).release().ptr();
     } catch (nb::python_error &e) {
         e.restore();
         return nullptr;
@@ -598,7 +590,7 @@ static bool array_init_from_seq(PyObject *self, const ArraySupplement &s, PyObje
                 nb::object o = nb::steal(sq_item(seq, i));                 \
                 if (NB_UNLIKELY(!o.is_valid() ||                           \
                     !caster.from_python(o,                                 \
-                                        (uint8_t) nb::detail::cast_flags:: \
+                                        (uint32_t) nb::detail::cast_flags::\
                                             convert, nullptr))) {          \
                     fail = true;                                           \
                     break;                                                 \
@@ -633,7 +625,7 @@ static bool array_init_from_seq(PyObject *self, const ArraySupplement &s, PyObje
                 nb::object o = nb::steal(sq_item(seq, i));
 
                 void *ptr = nullptr;
-                if (!nb::detail::nb_type_get(&cpp_type, o.ptr(), 0, nullptr, &ptr)) {
+                if (!NB_CALL(nb_type_get)(NB_CTX, &cpp_type, o.ptr(), 0, nullptr, &ptr)) {
                     fail = true;
                     break;
                 }
@@ -673,9 +665,13 @@ static void ndarray_keep_alive(JitBackend backend, uint32_t index,
                                nb::detail::ndarray_handle *p);
 
 nb::object import_ndarray(ArrayMeta m, PyObject *arg, vector<size_t> *shape_out,
-                          bool force_ad) {
+                          bool force_ad, bool flip_axes) {
+    // For complex arrays, 'flip_axes' refers to their interleaved storage
+    // format and does not transpose the input
+    flip_axes &= !m.is_complex;
+
     int64_t shape[4];
-    nb::detail::ndarray_config conf { };
+    nb::detail::ndarray_config conf { nb::detail::ndarray_config_t<>() };
     conf.order = 'C';
     conf.ro = true;
 
@@ -690,6 +686,9 @@ nb::object import_ndarray(ArrayMeta m, PyObject *arg, vector<size_t> *shape_out,
             if (shape[i] == DRJIT_DYNAMIC)
                 shape[i] = -1;
         }
+        // 'flip_axes' transposes the input, hence the expected shape reverses
+        if (flip_axes)
+            std::reverse(shape, shape + m.ndim);
     }
 
     if (m.is_complex) {
@@ -700,16 +699,20 @@ nb::object import_ndarray(ArrayMeta m, PyObject *arg, vector<size_t> *shape_out,
         conf.ndim -= 1;
     }
 
-    nb::detail::ndarray_handle *th = nb::detail::ndarray_import(
-        arg, &conf, (uint8_t) nb::detail::cast_flags::convert, nullptr);
+    nb::detail::ndarray_handle *th = NB_CALL(ndarray_import)(
+        NB_CTX, arg, &conf, true, nullptr);
 
     if (!th && m.ndim > 1 && m.shape[m.ndim - 1] == DRJIT_DYNAMIC) {
-        // Try conversion of scalar to vectorized representation
+        // Try conversion of scalar to vectorized representation. 'flip_axes'
+        // moved the dynamic dimension to the front.
         conf.ndim--;
-        th = nb::detail::ndarray_import(
-            arg, &conf, (uint8_t) nb::detail::cast_flags::convert, nullptr);
-        if (!th)
+        conf.shape += flip_axes;
+        th = NB_CALL(ndarray_import)(
+            NB_CTX, arg, &conf, true, nullptr);
+        if (!th) {
             conf.ndim++;
+            conf.shape -= flip_axes;
+        }
     }
 
     if (!th) {
@@ -784,12 +787,9 @@ nb::object import_ndarray(ArrayMeta m, PyObject *arg, vector<size_t> *shape_out,
     }
 
     if (m.is_complex) {
-        if (shape_out) {
-            shape_out->resize(shape_out->size() + 1);
-            for (size_t i = shape_out->size() - 1; i > 0; --i)
-                shape_out->operator[](i) = shape_out->operator[](i - 1);
-            shape_out->operator[](0) = 2;
-        }
+        // Complex arrays are imported with flipped axes, hence the trailing '2'
+        if (shape_out)
+            shape_out->push_back(2);
         ndim += 1;
         size *= 2;
     }
@@ -842,22 +842,20 @@ nb::object import_ndarray(ArrayMeta m, PyObject *arg, vector<size_t> *shape_out,
 }
 
 // The ndarray release sequence implemented by the following callbacks is
-// paranoid but needed in some case. When Dr.Jit wants to release an array, it
-// might still be accessed by concurrently running code (this is particularly
-// relevant for LLVM mode, where both host and "device" share the same address
-// space). Decreasing the reference count is therefore done by enqueueuing a
-// host function that is called after Dr.Jit is guaranteed to have finished
-// accessing the array. But this presents another problem: decreasing the
-// DLPack reference count might involve CPython API calls that require holding
-// the GIL, which is not a nice requirement for things running in the
-// CUDA-internal message queue thread or nanothread worker due to a danger of
-// deadlocks. We therefore manage the array cleanup calls in a separate thread.
-// This thread will *eventually* decrease the reference count of the array.
-// This is similar to Py_AddPendingCall, but avoids the issue where
-// Py_AddPendingCall is not always serviced, see also
+// paranoid but needed in some cases. In LLVM mode, an array that Dr.Jit wants
+// to release might still be accessed by concurrently running code, since host
+// and "device" share the same address space. Decreasing the reference count is
+// therefore done by enqueuing a host function that runs once Dr.Jit is
+// guaranteed to have finished accessing the array. But this presents another
+// problem: decreasing the DLPack reference count might involve CPython API
+// calls that require holding the GIL, which is not a nice requirement for a
+// nanothread worker due to a danger of deadlocks. We therefore manage the
+// array cleanup calls in a separate thread that is launched when this
+// situation arises for the first time. This thread will *eventually* decrease
+// the reference count of the array. This is similar to Py_AddPendingCall, but
+// avoids the issue where Py_AddPendingCall is not always serviced, see also
 // https://github.com/python/cpython/issues/95820.
 
-using CleanupCallback = void(*)(void*);
 static std::mutex python_cleanup_queue_mutex;
 static std::condition_variable python_cleanup_queue_cond;
 static bool python_cleanup_thread_stop = false;
@@ -873,24 +871,26 @@ void python_cleanup_thread_main() {
 
         std::vector<nb::detail::ndarray_handle*> todo;
         todo.swap(python_cleanup_queue);
+        bool stop = python_cleanup_thread_stop;
         lock.unlock();
 
         nb::gil_scoped_acquire guard;
-        for (auto p: todo)
-            nb::detail::ndarray_dec_ref(p);
-        if (python_cleanup_thread_stop)
+        if (guard.is_valid()) {
+            for (auto p: todo)
+                NB_CALL(ndarray_dec_ref)(p);
+        }
+        if (stop)
             break;
     }
-}
-
-void python_cleanup_thread_static_initialization() {
-    python_cleanup_thread = std::thread(&python_cleanup_thread_main);
 }
 
 void python_cleanup_thread_static_shutdown() {
     {
         std::scoped_lock lock(python_cleanup_queue_mutex);
         python_cleanup_thread_stop = true;
+
+        if (!python_cleanup_thread.joinable())
+            return;
     }
     nb::gil_scoped_release guard;
     python_cleanup_queue_cond.notify_one();
@@ -899,26 +899,30 @@ void python_cleanup_thread_static_shutdown() {
 
 void enqueue_python_cleanup(nb::detail::ndarray_handle *p) {
     std::scoped_lock lock(python_cleanup_queue_mutex);
+
+    // Nothing left to do if the interpreter is already shutting down
+    if (python_cleanup_thread_stop)
+        return;
+
+    if (!python_cleanup_thread.joinable())
+        python_cleanup_thread = std::thread(&python_cleanup_thread_main);
+
     python_cleanup_queue.emplace_back(p);
     python_cleanup_queue_cond.notify_one();
 }
 
-int drjit_py_is_alive = 1;
-
-// Resolved at init time via dlsym (see export_init). Returns nonzero when the
-// *calling* thread holds the GIL, allowing synchronous ndarray cleanup.
-extern "C" {
-    static int (*py_gilstate_check)() = nullptr;
-}
-extern int disable_gc_scope;
+// Cleared by a Py_AtExit() handler in log.cpp, which runs before nanobind's
+// own teardown. Until then, nb::is_alive() still reports success even though
+// entering Python is no longer safe.
+std::atomic<bool> drjit_py_is_alive { true };
 
 static void ndarray_free_cb_2(void *p) {
     if (!nb::is_alive() || !drjit_py_is_alive)
         return;
 
     // If we're currently holding the GIL, then, release the array right now
-    if (!disable_gc_scope && py_gilstate_check && py_gilstate_check())
-        nb::detail::ndarray_dec_ref((nb::detail::ndarray_handle *) p);
+    if (NB_CALL(gil_check)())
+        NB_CALL(ndarray_dec_ref)((nb::detail::ndarray_handle *) p);
     else
         enqueue_python_cleanup((nb::detail::ndarray_handle *) p);
 }
@@ -937,7 +941,7 @@ static void ndarray_free_cb(uint32_t, int free, void *p) {
 
     if (backend == JitBackend::LLVM) {
         // Variable is potentially used concurrently. Enqueue a host function
-        // to relesae it asynchronously
+        // to release it asynchronously
         jit_enqueue_host_func(backend, ndarray_free_cb_2, p2);
     } else {
         // Immediately try to release it
@@ -952,7 +956,7 @@ static void ndarray_keep_alive(JitBackend backend, uint32_t index, nb::detail::n
     if ((int) backend > 7)
         jit_raise("ndarray_keep_alive(): internal error, backend index too large.");
 
-    nb::detail::ndarray_inc_ref(p);
+    NB_CALL(ndarray_inc_ref)(p);
 
     // Pack pointer + backend ID and send to ndarray_free_cb (asynchronously)
     uintptr_t msg = (uintptr_t) p;
@@ -1003,7 +1007,7 @@ static int tp_init_tensor_impl(PyObject *self, PyObject *array, PyObject *shape,
                  "drjit.cuda.Array3f).");
 
         if (!shape && !array) {
-            nb::detail::nb_inst_zero(self);
+            nb::inst_zero(self);
             s.tensor_shape(inst_ptr(self)).push_back(0);
             return 0;
         }
@@ -1020,11 +1024,11 @@ static int tp_init_tensor_impl(PyObject *self, PyObject *array, PyObject *shape,
                 nb::raise("The flip_axes argument is only supported when "
                           "constructing tensors from N-D arrays or cooperative "
                           "vectors");
-            nb::detail::nb_inst_copy(self, array);
+            nb::inst_copy(self, array);
             return 0;
         }
 
-        nb::detail::nb_inst_zero(self);
+        nb::inst_zero(self);
         vector<size_t> &shape_vec = s.tensor_shape(inst_ptr(self));
 
         // Storage argument forwarded to the underlying 1D array initializer.
@@ -1245,7 +1249,7 @@ nb::object full(const char *name, nb::handle dtype, nb::handle value,
                 }
 
                 return result;
-            } else if (nb::object df = get_dataclass_fields(dtype); df.is_valid()) {
+            } else if (nb::object df = dataclass_fields(dtype); df.is_valid()) {
                 nb::object result = nb::dict();
 
                 for (auto field : df) {
@@ -1402,20 +1406,6 @@ nb::object extract_type(nb::object tp) {
 }
 
 void export_init(nb::module_ &m) {
-    // PyGILState_Check() is used by ndarray_free_cb to detect whether the
-    // *calling* thread holds the GIL, enabling synchronous cleanup. It is
-    // excluded from the limited API headers but still exported by libpython,
-    // so we resolve it at runtime via dlsym.
-    {
-        const char *name = "PyGILState_Check";
-#if defined(_WIN32)
-        void *h = (void *) GetProcAddress(GetModuleHandleA(nullptr), name);
-#else
-        void *h = dlsym(RTLD_DEFAULT, name);
-#endif
-        py_gilstate_check = (int (*)()) h;
-    }
-
     m.def("empty",
           [](nb::type_object dtype, size_t size) {
               return full("empty", dtype, nb::handle(), size);
@@ -1448,10 +1438,12 @@ void export_init(nb::module_ &m) {
           [](nb::type_object dtype, nb::handle value, dr::vector<size_t> shape) {
               return full("full", dtype, value, shape);
           }, "dtype"_a, "value"_a, "shape"_a)
+     .def("opaque", &opaque, "arg"_a.none(), doc_opaque,
+          nb::sig("def opaque(arg: T) -> T"))
      .def("opaque",
           [](nb::type_object dtype, nb::handle value, size_t size) {
               return full("opaque", dtype, value, size, true);
-          }, "dtype"_a, "value"_a, "shape"_a = 1, doc_opaque)
+          }, "dtype"_a, "value"_a, "shape"_a = 1)
      .def("opaque",
           [](nb::type_object dtype, nb::handle value, dr::vector<size_t> shape) {
               return full("opaque", dtype, value, shape, true);

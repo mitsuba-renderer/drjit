@@ -113,3 +113,33 @@ def test07_translate(t):
     mtx_tr = pkg.translate(tr)
 
     assert dr.all(mtx == mtx_tr, axis=None)
+
+
+@pytest.test_arrays('uint32,is_diff,shape=(*)')
+def test08_idiv(t):
+    pkg = get_pkg(t)
+    m = sys.modules[t.__module__]
+
+    divisors = [1, 2, 3, 4, 5, 6, 7, 8, 12, 13, 17, 64, 100, 127, 128, 129,
+                640, 641, 1000, 1023, 1024, 1025, 1920, 65535, 65536, 65537,
+                0x7FFFFFFF, 0x80000000, 0xFFFFFFFE, 0xFFFFFFFF]
+    values = [0, 1, 2, 3, 7, 8, 9, 100, 4095, 4096, 65535, 65536, 1 << 20,
+              0x7FFFFFFF, 0x80000000, 0xFFFFFFFE, 0xFFFFFFFF]
+
+    n = t(values)
+    for d in divisors:
+        ref = t([v // d for v in values])
+        assert dr.all(pkg.idiv_scalar(n, d) == ref)
+
+        # Constants as opaque JIT variables, as if gathered from memory
+        mul, shift = pkg.divisor_constants(d)
+        mul, shift = dr.opaque(t, mul), dr.opaque(t, shift)
+        assert dr.all(pkg.idiv_jit(n, mul, shift) == ref)
+
+    Int32 = m.Int32
+    values = [0, 1, -1, 7, -7, 100, -100, 0x7FFFFFFF, -0x80000000]
+    n = Int32(values)
+    for d in [1, 2, 3, 7, 16, 1000, -2, -3, -7, -16, -1000]:
+        # Truncating division, as in C
+        ref = Int32([abs(v) // abs(d) * (1 if (v < 0) == (d < 0) else -1) for v in values])
+        assert dr.all(pkg.idiv_signed(n, d) == ref)

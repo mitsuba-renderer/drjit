@@ -230,7 +230,7 @@ template <bool IsMask_, typename Derived_> struct alignas(32)
     DRJIT_INLINE auto eq_ (Ref a) const {
         using Int = int_array_t<Derived>;
         if constexpr (IsMask_)
-            return mask_t<Derived>(eq(Int(derived()), Int(a)));
+            return mask_t<Derived>(Int(derived()) == Int(a));
         else
             return DRJIT_COMP(eq, EQ_OQ);
     }
@@ -238,7 +238,7 @@ template <bool IsMask_, typename Derived_> struct alignas(32)
     DRJIT_INLINE auto neq_(Ref a) const {
         using Int = int_array_t<Derived>;
         if constexpr (IsMask_)
-            return mask_t<Derived>(neq(Int(derived()), Int(a)));
+            return mask_t<Derived>(Int(derived()) != Int(a));
         else
             return DRJIT_COMP(neq, NEQ_UQ);
     }
@@ -246,8 +246,11 @@ template <bool IsMask_, typename Derived_> struct alignas(32)
     #undef DRJIT_COMP
 
     DRJIT_INLINE Derived abs_()      const { return _mm256_andnot_ps(_mm256_set1_ps(-0.f), m); }
-    DRJIT_INLINE Derived minimum_(Ref b) const { return _mm256_min_ps(b.m, m); }
-    DRJIT_INLINE Derived maximum_(Ref b) const { return _mm256_max_ps(b.m, m); }
+    DRJIT_INLINE Derived minimum_(Ref b) const { return _mm256_blendv_ps(_mm256_min_ps(b.m, m), b.m, _mm256_cmp_ps(b.m, b.m, _CMP_UNORD_Q)); }
+    DRJIT_INLINE Derived maximum_(Ref b) const { return _mm256_blendv_ps(_mm256_max_ps(b.m, m), b.m, _mm256_cmp_ps(b.m, b.m, _CMP_UNORD_Q)); }
+
+    DRJIT_INLINE Derived fmin_(Ref b) const { return _mm256_blendv_ps(_mm256_min_ps(m, b.m), m, _mm256_cmp_ps(b.m, b.m, _CMP_UNORD_Q)); }
+    DRJIT_INLINE Derived fmax_(Ref b) const { return _mm256_blendv_ps(_mm256_max_ps(m, b.m), m, _mm256_cmp_ps(b.m, b.m, _CMP_UNORD_Q)); }
     DRJIT_INLINE Derived ceil_()     const { return _mm256_ceil_ps(m);     }
     DRJIT_INLINE Derived floor_()    const { return _mm256_floor_ps(m);    }
     DRJIT_INLINE Derived sqrt_()     const { return _mm256_sqrt_ps(m);     }
@@ -364,8 +367,8 @@ template <bool IsMask_, typename Derived_> struct alignas(32)
 
     DRJIT_INLINE Value sum_()  const { return sum(low_() + high_()); }
     DRJIT_INLINE Value prod_() const { return prod(low_() * high_()); }
-    DRJIT_INLINE Value min_()  const { return min(minimum(low_(), high_())); }
-    DRJIT_INLINE Value max_()  const { return max(maximum(low_(), high_())); }
+    DRJIT_INLINE Value min_()  const { return min(drjit::fmin(low_(), high_())); }
+    DRJIT_INLINE Value max_()  const { return max(drjit::fmax(low_(), high_())); }
 
     DRJIT_INLINE bool all_()  const { return _mm256_movemask_ps(m) == 0xFF;}
     DRJIT_INLINE bool any_()  const { return _mm256_movemask_ps(m) != 0x0; }
@@ -619,7 +622,7 @@ template <bool IsMask_, typename Derived_> struct alignas(32)
     DRJIT_INLINE auto eq_ (Ref a) const {
         using Int = int_array_t<Derived>;
         if constexpr (IsMask_)
-            return mask_t<Derived>(eq(Int(derived()), Int(a)));
+            return mask_t<Derived>(Int(derived()) == Int(a));
         else
             return DRJIT_COMP(eq, EQ_OQ);
     }
@@ -627,7 +630,7 @@ template <bool IsMask_, typename Derived_> struct alignas(32)
     DRJIT_INLINE auto neq_(Ref a) const {
         using Int = int_array_t<Derived>;
         if constexpr (IsMask_)
-            return mask_t<Derived>(neq(Int(derived()), Int(a)));
+            return mask_t<Derived>(Int(derived()) != Int(a));
         else
             return DRJIT_COMP(neq, NEQ_UQ);
     }
@@ -635,8 +638,11 @@ template <bool IsMask_, typename Derived_> struct alignas(32)
     #undef DRJIT_COMP
 
     DRJIT_INLINE Derived abs_()      const { return _mm256_andnot_pd(_mm256_set1_pd(-0.), m); }
-    DRJIT_INLINE Derived minimum_(Ref b) const { return _mm256_min_pd(b.m, m); }
-    DRJIT_INLINE Derived maximum_(Ref b) const { return _mm256_max_pd(b.m, m); }
+    DRJIT_INLINE Derived minimum_(Ref b) const { return _mm256_blendv_pd(_mm256_min_pd(b.m, m), b.m, _mm256_cmp_pd(b.m, b.m, _CMP_UNORD_Q)); }
+    DRJIT_INLINE Derived maximum_(Ref b) const { return _mm256_blendv_pd(_mm256_max_pd(b.m, m), b.m, _mm256_cmp_pd(b.m, b.m, _CMP_UNORD_Q)); }
+
+    DRJIT_INLINE Derived fmin_(Ref b) const { return _mm256_blendv_pd(_mm256_min_pd(m, b.m), m, _mm256_cmp_pd(b.m, b.m, _CMP_UNORD_Q)); }
+    DRJIT_INLINE Derived fmax_(Ref b) const { return _mm256_blendv_pd(_mm256_max_pd(m, b.m), m, _mm256_cmp_pd(b.m, b.m, _CMP_UNORD_Q)); }
     DRJIT_INLINE Derived ceil_()     const { return _mm256_ceil_pd(m);     }
     DRJIT_INLINE Derived floor_()    const { return _mm256_floor_pd(m);    }
     DRJIT_INLINE Derived sqrt_()     const { return _mm256_sqrt_pd(m);     }
@@ -737,8 +743,8 @@ template <bool IsMask_, typename Derived_> struct alignas(32)
 
     DRJIT_INLINE Value sum_()  const { return sum(low_() + high_()); }
     DRJIT_INLINE Value prod_() const { return prod(low_() * high_()); }
-    DRJIT_INLINE Value min_()  const { return min(minimum(low_(), high_())); }
-    DRJIT_INLINE Value max_()  const { return max(maximum(low_(), high_())); }
+    DRJIT_INLINE Value min_()  const { return min(drjit::fmin(low_(), high_())); }
+    DRJIT_INLINE Value max_()  const { return max(drjit::fmax(low_(), high_())); }
 
     DRJIT_INLINE bool all_()  const { return _mm256_movemask_pd(m) == 0xF;}
     DRJIT_INLINE bool any_()  const { return _mm256_movemask_pd(m) != 0x0; }

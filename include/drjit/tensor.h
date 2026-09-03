@@ -188,6 +188,15 @@ struct Tensor
     Tensor(Array &&data, Shape &&shape)
         : m_array(std::move(data)), m_shape(shape) { }
 
+    Tensor(const Array &data, std::initializer_list<size_t> shape)
+        : Tensor(data, shape.size(), shape.begin()) { }
+
+    Tensor(Array &&data, std::initializer_list<size_t> shape)
+        : Tensor(std::move(data), shape.size(), shape.begin()) { }
+
+    Tensor(const void *ptr, std::initializer_list<size_t> shape)
+        : Tensor(ptr, shape.size(), shape.begin()) { }
+
     template <typename T, enable_if_t<drjit::detail::is_scalar_v<T> && !std::is_pointer_v<T>> = 0>
     Tensor(T value) : m_array(value) { }
 
@@ -285,6 +294,24 @@ struct Tensor
         return Tensor(drjit::maximum(t0.m_array, t1.m_array), std::move(shape));
     }
 
+    Tensor fmin_(const Tensor &b) const {
+        Tensor t0 = *this, t1 = b;
+        Shape shape = detail::tensor_broadcast("fmin_", t0, t1);
+        return Tensor(drjit::fmin(t0.m_array, t1.m_array), std::move(shape));
+    }
+
+    Tensor fmax_(const Tensor &b) const {
+        Tensor t0 = *this, t1 = b;
+        Shape shape = detail::tensor_broadcast("fmax_", t0, t1);
+        return Tensor(drjit::fmax(t0.m_array, t1.m_array), std::move(shape));
+    }
+
+    Tensor copysign_(const Tensor &b) const {
+        Tensor t0 = *this, t1 = b;
+        Shape shape = detail::tensor_broadcast("copysign_", t0, t1);
+        return Tensor(drjit::copysign(t0.m_array, t1.m_array), std::move(shape));
+    }
+
     auto gt_(const Tensor &b) const {
         Tensor t0 = *this, t1 = b;
         Shape shape = detail::tensor_broadcast("gt_", t0, t1);
@@ -312,13 +339,13 @@ struct Tensor
     auto eq_(const Tensor &b) const {
         Tensor t0 = *this, t1 = b;
         Shape shape = detail::tensor_broadcast("eq_", t0, t1);
-        return mask_t<Tensor>(eq(t0.m_array, t1.m_array), std::move(shape));
+        return mask_t<Tensor>(t0.m_array == t1.m_array, std::move(shape));
     }
 
     auto neq_(const Tensor &b) const {
         Tensor t0 = *this, t1 = b;
         Shape shape = detail::tensor_broadcast("neq_", t0, t1);
-        return mask_t<Tensor>(neq(t0.m_array, t1.m_array), std::move(shape));
+        return mask_t<Tensor>(t0.m_array != t1.m_array, std::move(shape));
     }
 
     Tensor neg_() const { return Tensor(-m_array, m_shape); }

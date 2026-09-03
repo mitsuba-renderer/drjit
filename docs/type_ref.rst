@@ -393,17 +393,24 @@ Textures
    .. automethod:: tensor
    .. automethod:: filter_mode
    .. automethod:: wrap_mode
+   .. automethod:: wrap
+   .. automethod:: mip_filter
+   .. automethod:: mip_levels
+   .. automethod:: max_aniso
+   .. automethod:: mip_basis
    .. automethod:: use_accel
-   .. automethod:: migrated
    .. automethod:: writable
-   .. automethod:: external
+   .. automethod:: srgb
    .. automethod:: write
    .. automethod:: from_native_handle
    .. automethod:: map
    .. automethod:: unmap
    .. automethod:: native_handle
    .. autoproperty:: shape
+   .. automethod:: channel_count
    .. automethod:: eval
+   .. automethod:: eval_lod
+   .. automethod:: eval_filtered
    .. automethod:: eval_fetch
    .. automethod:: eval_cubic
    .. automethod:: eval_cubic_grad
@@ -420,17 +427,24 @@ Textures
    .. automethod:: tensor
    .. automethod:: filter_mode
    .. automethod:: wrap_mode
+   .. automethod:: wrap
+   .. automethod:: mip_filter
+   .. automethod:: mip_levels
+   .. automethod:: max_aniso
+   .. automethod:: mip_basis
    .. automethod:: use_accel
-   .. automethod:: migrated
    .. automethod:: writable
-   .. automethod:: external
+   .. automethod:: srgb
    .. automethod:: write
    .. automethod:: from_native_handle
    .. automethod:: map
    .. automethod:: unmap
    .. automethod:: native_handle
    .. autoproperty:: shape
+   .. automethod:: channel_count
    .. automethod:: eval
+   .. automethod:: eval_lod
+   .. automethod:: eval_filtered
    .. automethod:: eval_fetch
    .. automethod:: eval_cubic
    .. automethod:: eval_cubic_grad
@@ -447,17 +461,24 @@ Textures
    .. automethod:: tensor
    .. automethod:: filter_mode
    .. automethod:: wrap_mode
+   .. automethod:: wrap
+   .. automethod:: mip_filter
+   .. automethod:: mip_levels
+   .. automethod:: max_aniso
+   .. automethod:: mip_basis
    .. automethod:: use_accel
-   .. automethod:: migrated
    .. automethod:: writable
-   .. automethod:: external
+   .. automethod:: srgb
    .. automethod:: write
    .. automethod:: from_native_handle
    .. automethod:: map
    .. automethod:: unmap
    .. automethod:: native_handle
    .. autoproperty:: shape
+   .. automethod:: channel_count
    .. automethod:: eval
+   .. automethod:: eval_lod
+   .. automethod:: eval_filtered
    .. automethod:: eval_fetch
    .. automethod:: eval_cubic
    .. automethod:: eval_cubic_grad
@@ -474,17 +495,24 @@ Textures
    .. automethod:: tensor
    .. automethod:: filter_mode
    .. automethod:: wrap_mode
+   .. automethod:: wrap
+   .. automethod:: mip_filter
+   .. automethod:: mip_levels
+   .. automethod:: max_aniso
+   .. automethod:: mip_basis
    .. automethod:: use_accel
-   .. automethod:: migrated
    .. automethod:: writable
-   .. automethod:: external
+   .. automethod:: srgb
    .. automethod:: write
    .. automethod:: from_native_handle
    .. automethod:: map
    .. automethod:: unmap
    .. automethod:: native_handle
    .. autoproperty:: shape
+   .. automethod:: channel_count
    .. automethod:: eval
+   .. automethod:: eval_lod
+   .. automethod:: eval_filtered
    .. automethod:: eval_fetch
    .. automethod:: eval_cubic
    .. automethod:: eval_cubic_grad
@@ -501,17 +529,24 @@ Textures
    .. automethod:: tensor
    .. automethod:: filter_mode
    .. automethod:: wrap_mode
+   .. automethod:: wrap
+   .. automethod:: mip_filter
+   .. automethod:: mip_levels
+   .. automethod:: max_aniso
+   .. automethod:: mip_basis
    .. automethod:: use_accel
-   .. automethod:: migrated
    .. automethod:: writable
-   .. automethod:: external
+   .. automethod:: srgb
    .. automethod:: write
    .. automethod:: from_native_handle
    .. automethod:: map
    .. automethod:: unmap
    .. automethod:: native_handle
    .. autoproperty:: shape
+   .. automethod:: channel_count
    .. automethod:: eval
+   .. automethod:: eval_lod
+   .. automethod:: eval_filtered
    .. automethod:: eval_fetch
    .. automethod:: eval_cubic
    .. automethod:: eval_cubic_grad
@@ -528,17 +563,24 @@ Textures
    .. automethod:: tensor
    .. automethod:: filter_mode
    .. automethod:: wrap_mode
+   .. automethod:: wrap
+   .. automethod:: mip_filter
+   .. automethod:: mip_levels
+   .. automethod:: max_aniso
+   .. automethod:: mip_basis
    .. automethod:: use_accel
-   .. automethod:: migrated
    .. automethod:: writable
-   .. automethod:: external
+   .. automethod:: srgb
    .. automethod:: write
    .. automethod:: from_native_handle
    .. automethod:: map
    .. automethod:: unmap
    .. automethod:: native_handle
    .. autoproperty:: shape
+   .. automethod:: channel_count
    .. automethod:: eval
+   .. automethod:: eval_lod
+   .. automethod:: eval_filtered
    .. automethod:: eval_fetch
    .. automethod:: eval_cubic
    .. automethod:: eval_cubic_grad
@@ -555,17 +597,24 @@ Textures
    .. automethod:: tensor
    .. automethod:: filter_mode
    .. automethod:: wrap_mode
+   .. automethod:: wrap
+   .. automethod:: mip_filter
+   .. automethod:: mip_levels
+   .. automethod:: max_aniso
+   .. automethod:: mip_basis
    .. automethod:: use_accel
-   .. automethod:: migrated
    .. automethod:: writable
-   .. automethod:: external
+   .. automethod:: srgb
    .. automethod:: write
    .. automethod:: from_native_handle
    .. automethod:: map
    .. automethod:: unmap
    .. automethod:: native_handle
    .. autoproperty:: shape
+   .. automethod:: channel_count
    .. automethod:: eval
+   .. automethod:: eval_lod
+   .. automethod:: eval_filtered
    .. automethod:: eval_fetch
    .. automethod:: eval_cubic
    .. automethod:: eval_cubic_grad
@@ -582,17 +631,24 @@ Textures
    .. automethod:: tensor
    .. automethod:: filter_mode
    .. automethod:: wrap_mode
+   .. automethod:: wrap
+   .. automethod:: mip_filter
+   .. automethod:: mip_levels
+   .. automethod:: max_aniso
+   .. automethod:: mip_basis
    .. automethod:: use_accel
-   .. automethod:: migrated
    .. automethod:: writable
-   .. automethod:: external
+   .. automethod:: srgb
    .. automethod:: write
    .. automethod:: from_native_handle
    .. automethod:: map
    .. automethod:: unmap
    .. automethod:: native_handle
    .. autoproperty:: shape
+   .. automethod:: channel_count
    .. automethod:: eval
+   .. automethod:: eval_lod
+   .. automethod:: eval_filtered
    .. automethod:: eval_fetch
    .. automethod:: eval_cubic
    .. automethod:: eval_cubic_grad
@@ -609,17 +665,92 @@ Textures
    .. automethod:: tensor
    .. automethod:: filter_mode
    .. automethod:: wrap_mode
+   .. automethod:: wrap
+   .. automethod:: mip_filter
+   .. automethod:: mip_levels
+   .. automethod:: max_aniso
+   .. automethod:: mip_basis
    .. automethod:: use_accel
-   .. automethod:: migrated
    .. automethod:: writable
-   .. automethod:: external
+   .. automethod:: srgb
    .. automethod:: write
    .. automethod:: from_native_handle
    .. automethod:: map
    .. automethod:: unmap
    .. automethod:: native_handle
    .. autoproperty:: shape
+   .. automethod:: channel_count
    .. automethod:: eval
+   .. automethod:: eval_lod
+   .. automethod:: eval_filtered
+   .. automethod:: eval_fetch
+   .. automethod:: eval_cubic
+   .. automethod:: eval_cubic_grad
+   .. automethod:: eval_cubic_hessian
+   .. automethod:: eval_cubic_helper
+
+.. autoclass:: drjit.scalar.Texture1f8u
+
+   .. automethod:: __init__
+   .. automethod:: set_value
+   .. automethod:: set_tensor
+   .. automethod:: update_inplace
+   .. automethod:: value
+   .. automethod:: tensor
+   .. automethod:: filter_mode
+   .. automethod:: wrap_mode
+   .. automethod:: wrap
+   .. automethod:: mip_filter
+   .. automethod:: mip_levels
+   .. automethod:: max_aniso
+   .. automethod:: mip_basis
+   .. automethod:: use_accel
+   .. automethod:: writable
+   .. automethod:: srgb
+   .. automethod:: write
+   .. automethod:: from_native_handle
+   .. automethod:: map
+   .. automethod:: unmap
+   .. automethod:: native_handle
+   .. autoproperty:: shape
+   .. automethod:: channel_count
+   .. automethod:: eval
+   .. automethod:: eval_lod
+   .. automethod:: eval_filtered
+   .. automethod:: eval_fetch
+   .. automethod:: eval_cubic
+   .. automethod:: eval_cubic_grad
+   .. automethod:: eval_cubic_hessian
+   .. automethod:: eval_cubic_helper
+
+.. autoclass:: drjit.scalar.Texture2f8u
+
+   .. automethod:: __init__
+   .. automethod:: set_value
+   .. automethod:: set_tensor
+   .. automethod:: update_inplace
+   .. automethod:: value
+   .. automethod:: tensor
+   .. automethod:: filter_mode
+   .. automethod:: wrap_mode
+   .. automethod:: wrap
+   .. automethod:: mip_filter
+   .. automethod:: mip_levels
+   .. automethod:: max_aniso
+   .. automethod:: mip_basis
+   .. automethod:: use_accel
+   .. automethod:: writable
+   .. automethod:: srgb
+   .. automethod:: write
+   .. automethod:: from_native_handle
+   .. automethod:: map
+   .. automethod:: unmap
+   .. automethod:: native_handle
+   .. autoproperty:: shape
+   .. automethod:: channel_count
+   .. automethod:: eval
+   .. automethod:: eval_lod
+   .. automethod:: eval_filtered
    .. automethod:: eval_fetch
    .. automethod:: eval_cubic
    .. automethod:: eval_cubic_grad
@@ -636,16 +767,24 @@ Textures
    .. automethod:: tensor
    .. automethod:: filter_mode
    .. automethod:: wrap_mode
+   .. automethod:: wrap
+   .. automethod:: mip_filter
+   .. automethod:: mip_levels
+   .. automethod:: max_aniso
+   .. automethod:: mip_basis
    .. automethod:: use_accel
-   .. automethod:: migrated
    .. automethod:: writable
    .. automethod:: srgb
+   .. automethod:: write
    .. automethod:: from_native_handle
    .. automethod:: map
    .. automethod:: unmap
    .. automethod:: native_handle
    .. autoproperty:: shape
+   .. automethod:: channel_count
    .. automethod:: eval
+   .. automethod:: eval_lod
+   .. automethod:: eval_filtered
    .. automethod:: eval_fetch
    .. automethod:: eval_cubic
    .. automethod:: eval_cubic_grad

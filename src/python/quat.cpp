@@ -19,7 +19,7 @@ template <typename T> void export_t(nb::module_ &m) {
                                      nb::type_name(dtype_4).c_str(),
                                      nb::type_name(dtype).c_str());
         },
-        nb::sig("def quat_to_matrix(dtype: typing.Type[ArrayT], q: dr.ArrayBase) -> ArrayT"),
+        nb::sig("def quat_to_matrix(dtype: typing.Type[ArrayT], q: ArrayBase) -> ArrayT"),
         "dtype"_a, "q"_a, doc_quat_to_matrix);
 
     m.def(
@@ -47,7 +47,7 @@ template <typename T> void export_t(nb::module_ &m) {
         [](dr::Quaternion<T> &a, const dr::Quaternion<T> &b, nb::handle t) {
             return dr::slerp(a, b, nb::cast<T>(t));
         },
-        nb::sig("def slerp(a: ArrayT, b: ArrayT, t: dr.ArrayBase | float) -> ArrayT"),
+        nb::sig("def slerp(a: ArrayT, b: ArrayT, t: ArrayBase | float) -> ArrayT"),
         "a"_a, "b"_a, "t"_a, doc_slerp);
 
     m.def(
@@ -61,7 +61,7 @@ template <typename T> void export_t(nb::module_ &m) {
                                      nb::type_name(dtype_q).c_str(),
                                      nb::type_name(dtype).c_str());
         },
-        nb::sig("def rotate(dtype: typing.Type[ArrayT], axis: dr.ArrayBase, angle: dr.ArrayBase | float) -> ArrayT"),
+        nb::sig("def rotate(dtype: typing.Type[ArrayT], axis: ArrayBase, angle: ArrayBase | float) -> ArrayT"),
         "dtype"_a, "axis"_a, "angle"_a, doc_rotate);
 
     m.def(

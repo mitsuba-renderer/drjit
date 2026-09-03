@@ -103,8 +103,7 @@ def test05_evaluated_ad_kernel_launch_count(t, variant):
     dr.enable_grad(x)
     iterations = 50
 
-    with dr.scoped_set_flag(dr.JitFlag.KernelHistory):
-        dr.kernel_history_clear()
+    with dr.kernel_history() as kh:
         _, y, i = dr.while_loop(
             state=(x, t(1, 1, 1, 1), dr.zeros(UInt, 4)),
             cond=lambda x, y, i: i<iterations,
@@ -112,7 +111,7 @@ def test05_evaluated_ad_kernel_launch_count(t, variant):
             labels=('x', 'y', 'i'),
             mode='evaluated'
         )
-        h = dr.kernel_history((dr.KernelType.JIT,))
+    h = [k for k in kh if k.type == dr.KernelType.JIT]
 
     from math import sqrt
     assert len(h) >= iterations and len(h) < iterations + 3
@@ -120,22 +119,21 @@ def test05_evaluated_ad_kernel_launch_count(t, variant):
 
     if variant == 'fwd':
         x.grad = dr.opaque(t, 1)
-        with dr.scoped_set_flag(dr.JitFlag.KernelHistory):
+        with dr.kernel_history() as kh:
             g = dr.forward_to(y)
             dr.eval(g)
-            h = dr.kernel_history((dr.KernelType.JIT,))
     elif variant == 'bwd':
         y.grad = dr.opaque(t, 1)
-        with dr.scoped_set_flag(dr.JitFlag.KernelHistory):
+        with dr.kernel_history() as kh:
             g = dr.backward_to(x)
             dr.eval(g)
-            h = dr.kernel_history((dr.KernelType.JIT,))
     else:
         raise Exception('internal error')
+    h = [k for k in kh if k.type == dr.KernelType.JIT]
     assert dr.allclose(g, (1/(2*sqrt(2)), 1/(2*sqrt(3)), 1/(2*sqrt(4)), 1/(2*sqrt(5))))
     assert len(h) >= iterations and len(h) < iterations + 3
     for k in h:
-        assert k['operation_count'] < iterations
+        assert k.operation_count < iterations
 
 
 @pytest.mark.parametrize('variant', [0, 1])
@@ -755,3 +753,27 @@ def test45_general_bwd_invariant_diff_input(t):
     dr.backward(pw)
     dr.assert_allclose(pw, 16)
     dr.assert_allclose(dr.grad(x), 32)
+
+
+@pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
+@pytest.mark.parametrize('seed', ['x', 'y'])
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+def test46_fwd_partial_seed_multiple_implicit(t, mode, seed):
+    # Forward mode through a loop that implicitly captures several
+    # grad-enabled variables, of which only one is the starting point of
+    # the gradient propagation. The replay enqueues every capture and
+    # must not claim edges outside of the recording, such as the custom
+    # edge of the other capture.
+    UInt = dr.uint32_array_t(t)
+
+    x, y = t(2), t(3)
+    dr.enable_grad(x, y)
+
+    i, acc = dr.while_loop(
+        (UInt(0), t(0)),
+        lambda i, acc: i < 4,
+        lambda i, acc: (i + 1, acc + x*y),
+        mode=mode)
+
+    dr.forward_from(x if seed == 'x' else y)
+    dr.assert_allclose(dr.grad(acc), 12 if seed == 'x' else 8)

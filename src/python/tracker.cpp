@@ -21,6 +21,9 @@
 #include <string_view>
 #include <drjit/autodiff.h>
 #include <tsl/robin_map.h>
+#include <tsl/robin_set.h>
+#include <drjit-core/hash.h>
+#include "apply.h"
 
 // #define DEBUG_TRACKER
 
@@ -119,8 +122,11 @@ using VariableMap =
 // so that callers don't inherit the STL header file dependencies required
 // by the VariableMap declaration above
 struct VariableTracker::Impl {
-    Impl(bool strict, bool check_size)
-        : strict(strict), check_size(check_size) { }
+    Impl(dr::TraverseRole role, bool strict, bool check_size)
+        : role(role), strict(strict), check_size(check_size) { }
+
+    /// Purpose of the traversal, reported to C++ objects
+    dr::TraverseRole role;
 
     /// Pointer to a hash table storing the variable state
     VariableMap state;
@@ -231,8 +237,21 @@ struct ScopedAppendLabel {
     size_t length;
 };
 
-VariableTracker::VariableTracker(bool strict, bool check_size)
-    : m_impl(new Impl(strict, check_size)) {
+/// Report a non-array state variable whose value changed in strict mode
+static void raise_changed(const dr::string &label, nb::handle tp, nb::handle h,
+                          nb::handle prev) {
+    dr::string s0, s1;
+    try { s0 = nb::str(prev).c_str(); } catch (...) { }
+    try { s1 = nb::str(h).c_str(); } catch (...) { }
+    nb::raise("the non-array state variable '%s' of type '%s' changed from "
+              "'%s' to '%s'. You can annotate the loop/conditional with "
+              "``strict=False`` to disable this check.",
+              label.c_str(), nb::type_name(tp).c_str(), s0.c_str(), s1.c_str());
+}
+
+VariableTracker::VariableTracker(dr::TraverseRole role, bool strict,
+                                 bool check_size)
+    : m_impl(new Impl(role, strict, check_size)) {
 }
 
 VariableTracker::~VariableTracker() {
@@ -588,7 +607,7 @@ bool VariableTracker::Impl::traverse(Context &ctx, nb::handle h) {
                 changed |= traverse(ctx, state.find(ctx.label)->second.value);
             }
         } else {
-            nb::list l(h), r;
+            nb::list l(h);
             for (size_t i = 0; i < size; ++i) {
                 ScopedAppendLabel guard(ctx, "[", i, "]");
                 changed |= traverse(ctx, l[i]);
@@ -600,44 +619,50 @@ bool VariableTracker::Impl::traverse(Context &ctx, nb::handle h) {
                 v->index = vec->m_index;
             }
         }
+    } else if (is_builtin_scalar(tp)) {
+        if (strict && !new_variable && !py_equal(h, prev))
+            raise_changed(ctx.label, tp, h, prev);
     } else {
-        nb::object traverse_cb = nb::getattr(
-            h, ctx.write ? DR_STR(_traverse_1_cb_rw) : DR_STR(_traverse_1_cb_ro),
-            nb::handle());
+        if (dr::TraversableBase *tb = traversable_ptr(h); tb) {
+            // The arrays of the object graph are tracked under one label,
+            // and the Python side of each object under its own
+            struct State {
+                Impl &impl;
+                Context &ctx;
+                bool &changed;
+                dr::TraverseRole role;
+                tsl::robin_set<dr::TraversableBase *, PointerHasher> visited;
+                uint32_t n_objects = 0;
 
-        if (nb::dict ds = get_drjit_struct(tp); ds.is_valid()) {
+                uint64_t var(uint64_t idx, const char *v, const char *d) {
+                    if (ctx.write)
+                        return ctx._traverse_write(idx, v, d);
+                    ctx._traverse_read(idx, v, d);
+                    return idx;
+                }
+
+                void py(nb::dict d) {
+                    ScopedAppendLabel guard(ctx, ".__dict__", n_objects++);
+                    changed |= impl.traverse(ctx, d);
+                }
+            } st { *this, ctx, changed, role, {} };
+
+            ScopedAppendLabel guard(ctx, "._traverse_cb()");
+            traverse_object(st, tb);
+        } else if (nb::dict ds = get_drjit_struct(tp); ds.is_valid()) {
             for (auto [k, _] : ds) {
                 ScopedAppendLabel guard(ctx, ".", nb::str(k).c_str());
                 changed |= traverse(ctx, nb::getattr(h, k));
             }
-        } else if (traverse_cb.is_valid()) {
-            ScopedAppendLabel guard(ctx, "._traverse_cb()");
-            traverse_cb(
-                nb::cast(ctx, nb::rv_policy::reference)
-                    .attr(ctx.write ? DR_STR(_traverse_write) : DR_STR(_traverse_read)));
-        } else if (nb::object df = get_dataclass_fields(tp); df.is_valid()) {
-            for (nb::handle field : df) {
-                nb::object k = field.attr(DR_STR(name));
+        } else if (nb::dict df = dataclass_field_dict(tp); df.is_valid()) {
+            for (auto [k, field] : df) {
+                if (!is_dataclass_field(field))
+                    continue;
                 ScopedAppendLabel guard(ctx, ".", nb::str(k).c_str());
                 changed |= traverse(ctx, nb::getattr(h, k));
             }
-        } else if (strict && !new_variable && !h.is(prev)) {
-            bool is_same = false;
-            try {
-                is_same = h.equal(prev);
-            } catch (...) { }
-
-            if (!is_same) {
-                dr::string s0, s1;
-                try { s0 = nb::str(prev).c_str(); } catch (...) { }
-                try { s1 = nb::str(h).c_str(); } catch (...) { }
-                nb::raise(
-                    "the non-array state variable '%s' of type '%s' changed "
-                    "from '%s' to '%s'. You can annotate the loop/conditional "
-                    "with ``strict=False`` to disable this check.",
-                    ctx.label.c_str(), nb::type_name(tp).c_str(), s0.c_str(),
-                    s1.c_str());
-            }
+        } else if (strict && !new_variable && !py_equal(h, prev)) {
+            raise_changed(ctx.label, tp, h, prev);
         }
     }
 
@@ -730,12 +755,12 @@ nb::object VariableTracker::restore(const dr::vector<dr::string> &labels,
         label = default_label;
         return m_impl->restore(label);
     } else {
-        nb::object result = nb::steal(PyTuple_New(labels.size()));
+        nb::tuple_builder result(labels.size());
         for (size_t i = 0; i < labels.size(); ++i) {
             label = labels[i];
-            NB_TUPLE_SET_ITEM(result.ptr(), i, m_impl->restore(label).release().ptr());
+            result.put(m_impl->restore(label));
         }
-        return result;
+        return result.commit();
     }
 }
 
@@ -747,12 +772,12 @@ nb::object VariableTracker::rebuild(const dr::vector<dr::string> &labels,
         label = default_label;
         return m_impl->rebuild(label).first;
     } else {
-        nb::object result = nb::steal(PyTuple_New(labels.size()));
+        nb::tuple_builder result(labels.size());
         for (size_t i = 0; i < labels.size(); ++i) {
             label = labels[i];
-            NB_TUPLE_SET_ITEM(result.ptr(), i, m_impl->rebuild(label).first.release().ptr());
+            result.put(m_impl->rebuild(label).first);
         }
-        return result;
+        return result.commit();
     }
 }
 
@@ -811,15 +836,16 @@ nb::object VariableTracker::Impl::restore(dr::string &label) {
         ad_var_inc_ref(v->index_orig);
         ad_var_dec_ref(vec->m_index);
         vec->m_index = v->index_orig;
-    } else {
+    } else if (!is_builtin_scalar(tp)) {
         if (nb::dict ds = get_drjit_struct(tp); ds.is_valid()) {
             for (auto [k, _] : ds) {
                 ScopedAppendLabel guard(label, ".", nb::str(k).c_str());
                 nb::setattr(value, k, restore(label));
             }
-        } else if (nb::object df = get_dataclass_fields(tp); df.is_valid()) {
-            for (nb::handle field : df) {
-                nb::object k = field.attr(DR_STR(name));
+        } else if (nb::dict df = dataclass_field_dict(tp); df.is_valid()) {
+            for (auto [k, field] : df) {
+                if (!is_dataclass_field(field))
+                    continue;
                 ScopedAppendLabel guard(label, ".", nb::str(k).c_str());
                 nb::setattr(value, k, restore(label));
             }
@@ -863,13 +889,14 @@ std::pair<nb::object, bool> VariableTracker::Impl::rebuild(dr::string &label) {
             }
         } else if (s.ndim > 1) {
             size_t size = size_valid(v, label, value, nb::len(value));
-            nb::list tmp;
+            nb::list_builder builder(size);
             for (size_t i = 0; i < size; ++i) {
                 ScopedAppendLabel guard(label, "[", i, "]");
                 auto [o, n] = rebuild(label);
-                tmp.append(o);
+                builder.put(std::move(o));
                 new_object |= n;
             }
+            nb::list tmp = builder.commit();
 
             if (new_object) {
                 if (mutate) {
@@ -895,13 +922,14 @@ std::pair<nb::object, bool> VariableTracker::Impl::rebuild(dr::string &label) {
         }
     } else if (tp.is(&PyTuple_Type) || tp.is(&PyList_Type)) {
         size_t size = size_valid(v, label, value, nb::len(value));
-        nb::list tmp;
+        nb::list_builder builder(size);
         for (size_t i = 0; i < size; ++i) {
             ScopedAppendLabel guard(label, "[", i, "]");
             auto [o, n] = rebuild(label);
-            tmp.append(o);
+            builder.put(std::move(o));
             new_object |= n;
         }
+        nb::list tmp = builder.commit();
         if (new_object) {
             bool is_list = tp.is(&PyList_Type);
             if (mutate && is_list) {
@@ -930,16 +958,21 @@ std::pair<nb::object, bool> VariableTracker::Impl::rebuild(dr::string &label) {
         }
     } else if (tp.is(coop_vector_type)) {
         size_t size = size_valid(v, label, value, nb::len(value));
-        nb::list tmp;
+        nb::list_builder builder(size);
 
         for (size_t i = 0; i < size; ++i) {
             ScopedAppendLabel guard(label, "[", i, "]");
             auto [o, n] = rebuild(label);
-            tmp.append(o);
+            builder.put(std::move(o));
         }
 
-        value = nb::cast(CoopVec(tmp));
+        value = nb::cast(CoopVec(builder.commit()));
         new_object = true;
+    } else if (is_builtin_scalar(tp)) {
+        if (!value.is(v->value)) {
+            value = v->value;
+            new_object = true;
+        }
     } else if (nb::dict ds = get_drjit_struct(tp); ds.is_valid()) {
         nb::object tmp = tp();
         for (auto [k, _] : ds) {
@@ -957,10 +990,11 @@ std::pair<nb::object, bool> VariableTracker::Impl::rebuild(dr::string &label) {
                 value = tmp;
             }
         }
-    } else if (nb::object df = get_dataclass_fields(tp); df.is_valid()) {
+    } else if (nb::dict df = dataclass_field_dict(tp); df.is_valid()) {
         nb::dict tmp;
-        for (auto field : df) {
-            nb::object k = field.attr(DR_STR(name));
+        for (auto [k, field] : df) {
+            if (!is_dataclass_field(field))
+                continue;
             ScopedAppendLabel guard(label, ".", nb::str(k).c_str());
             auto [o, n] = rebuild(label);
             tmp[k] = o;
@@ -968,10 +1002,8 @@ std::pair<nb::object, bool> VariableTracker::Impl::rebuild(dr::string &label) {
         }
         if (new_object) {
             if (mutate) {
-                for (auto field : df) {
-                    nb::object k = field.attr(DR_STR(name));
-                    nb::setattr(value, k, tmp[k]);
-                }
+                for (auto [k, o] : tmp)
+                    nb::setattr(value, k, o);
                 new_object = false;
             } else {
                 value = tp(**tmp);
@@ -1011,12 +1043,13 @@ void export_tracker(nb::module_ &m) {
             ad_var_inc_ref(value);
             ad_var_dec_ref(v[i]);
             v[i] = value;
-        });
+        })
+        .freeze();
 
     auto trk = nb::class_<VariableTracker>(m, "VariableTracker",
                                            doc_detail_VariableTracker)
-        .def(nb::init<bool, bool>(),
-             "strict"_a = true, "check_size"_a = true,
+        .def(nb::init<dr::TraverseRole, bool, bool>(),
+             "role"_a, "strict"_a = true, "check_size"_a = true,
              doc_detail_VariableTracker_VariableTracker)
         .def("write",
              [](VariableTracker &vt, nb::handle state,
@@ -1050,7 +1083,5 @@ void export_tracker(nb::module_ &m) {
              "default_label"_a = "state",
              doc_detail_VariableTracker_rebuild);
 
-    nb::class_<VariableTracker::Context>(trk, "Context")
-        .def("_traverse_read", &VariableTracker::Context::_traverse_read)
-        .def("_traverse_write", &VariableTracker::Context::_traverse_write);
+    trk.freeze();
 }

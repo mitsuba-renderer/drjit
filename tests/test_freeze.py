@@ -427,26 +427,38 @@ def test12_resized(t, auto_opaque):
 @pytest.mark.parametrize("auto_opaque", [False, True])
 def test13_changed_input_dict(t, auto_opaque):
     """
-    Test that it is possible to pass a dictionary to a frozen function, that is
-    inserting the result at a new key in said dictionary. This ensures that the
-    input is evaluated correctly, and the dictionary is back-assigned to the input.
+    Tests that a frozen function may replace the value stored under a key of
+    an input dictionary, and that adding a key (a structural change of the
+    input) costs one extra recording.
     """
 
     @dr.freeze(auto_opaque=auto_opaque)
     def func(d: dict):
+        d["x"] = d["x"] + 1
+
+    for i in range(2):
+        d = {"x": t(i, i + 1, i + 2)}
+        func(d)
+        assert dr.all(t(i + 1, i + 2, i + 3) == d["x"])
+    assert func.n_recordings == 1
+
+    # The first call adds the key, which changes the structure of the input.
+    # The function is recorded again, starting from the dictionary that now
+    # holds the key, and the recording replaces its value from then on.
+    @dr.freeze(auto_opaque=auto_opaque)
+    def func2(d: dict):
         d["y"] = d["x"] + 1
 
-    x = t(0, 1, 2)
-    d = {"x": x}
-
-    func(d)
+    d = {"x": t(0, 1, 2)}
+    func2(d)
     assert dr.all(t(1, 2, 3) == d["y"])
+    assert func2.n_recordings == 2
 
-    x = t(1, 2, 3)
-    d = {"x": x}
-
-    func(d)
-    assert dr.all(t(2, 3, 4) == d["y"])
+    for i in range(2):
+        d["x"] = t(i, i + 1, i + 2)
+        func2(d)
+        assert dr.all(t(i + 1, i + 2, i + 3) == d["y"])
+    assert func2.n_recordings == 2
 
 
 @pytest.test_arrays("uint32, jit, shape=(*)")
@@ -3762,17 +3774,12 @@ def test98_changing_list(t, auto_opaque):
     """
     Tests that changing the number of elements in a list fails gracefully.
     """
-    mod = sys.modules[t.__module__]
-
     @dr.freeze
     def frozen(x: list):
         x.append(x[0] + 1)
 
     x = [t(1, 2, 3)]
-    frozen(x)
-
-    x = [t(1, 2, 3, 4)]
-    with pytest.raises(RuntimeError):
+    with pytest.raises(RuntimeError, match="changed its input"):
         frozen(x)
 
 
@@ -3831,32 +3838,26 @@ def test100_kernel_history(t, auto_opaque, recorded_func):
     x = dr.arange(t, 4)
     dr.make_opaque(x)
 
-    with dr.scoped_set_flag(dr.JitFlag.KernelHistory, True):
+    with dr.kernel_history() as history_record:
         frozen(x)
 
-        history_record = dr.kernel_history()
-
+    with dr.kernel_history() as history_replay:
         frozen(x)
 
-        history_replay = dr.kernel_history()
-
-        assert len(history_record) == len(history_replay)
-        for i in range(len(history_record)):
-            k1 = history_record[i]
-            k2 = history_replay[i]
-
-            assert k1["backend"] == k2["backend"]
-            assert k1["type"] == k2["type"]
-            if recorded_func == "kernel":
-                assert k1["hash"] == k2["hash"]
-                assert k1["uses_optix"] == k2["uses_optix"]
-            assert k1["size"] == k2["size"]
-            assert k1["input_count"] == k2["input_count"]
-            assert k1["output_count"] == k2["output_count"]
-            if (k1["type"] == dr.KernelType.JIT):
-                assert k1["operation_count"] == k2["operation_count"]
-            assert k1["recording_mode"] == dr.KernelRecordingMode.Recorded
-            assert k2["recording_mode"] == dr.KernelRecordingMode.Replayed
+    assert len(history_record) == len(history_replay)
+    for k1, k2 in zip(history_record, history_replay):
+        assert k1.backend == k2.backend
+        assert k1.type == k2.type
+        if recorded_func == "kernel":
+            assert k1.hash == k2.hash
+            assert k1.uses_optix == k2.uses_optix
+        assert k1.size == k2.size
+        assert k1.input_count == k2.input_count
+        assert k1.output_count == k2.output_count
+        if k1.type == dr.KernelType.JIT:
+            assert k1.operation_count == k2.operation_count
+        assert k1.recording_mode == dr.KernelRecordingMode.Recorded
+        assert k2.recording_mode == dr.KernelRecordingMode.Replayed
 
 
 @pytest.mark.parametrize("auto_opaque", [False, True])
@@ -3925,34 +3926,38 @@ def test102_assignment(t, auto_opaque):
 @pytest.test_arrays("float32, jit, diff, shape=(*)")
 def test103_rng(t, auto_opaque):
     """
-    This tests, that calling a frozen function with a re-seeded random number
-    generator does not result in a crash. When the rng is initialized with a
-    python integer, it will convert it to a Dr.Jit UInt64 in the first call to
-    ``rng.random``. The frozen function will therefore be recorded twice once
-    with the python ``int`` as an input, and then again with a ``UInt64``
-    variable as input. The first recording cannot be replayed, and Dr.Jit
-    should therefore discard this recording. The RNG should therefore call
-    ``jit_freeze_discard``.
+    Tests a random number generator that is passed to a frozen function and
+    advances across calls. A generator seeded with a Python integer converts
+    its state to arrays on first use. That changes the structure of the input,
+    so the function is recorded a second time and this first call draws twice.
+    Seeded with an array, the generator is replayed.
     """
+    UInt64 = dr.uint64_array_t(t)
+
     def func(rng: dr.random.Generator, _):
         return rng.random(t, 10)
 
     frozen = dr.freeze(func, auto_opaque=auto_opaque)
-
-    rng_ref = dr.rng(42)
-    rng_frozen = dr.rng(42)
-
     x = t(1)
+
+    rng_int = dr.rng()
+    assert dr.width(frozen(rng_int, x)) == 10
+    assert frozen.n_recordings == 2
+
+    rng_ref = dr.rng(UInt64(0))
+    rng_frozen = dr.rng(UInt64(0))
 
     for i in range(3):
         res = frozen(rng_frozen, x)
         ref = func(rng_ref, x)
-
         assert dr.allclose(ref, res)
 
-    res = frozen(dr.rng(42), x)
-    ref = func(dr.rng(42), x)
+    # Re-seeding replays an existing recording
+    n = frozen.n_recordings
+    res = frozen(dr.rng(UInt64(0)), x)
+    ref = func(dr.rng(UInt64(0)), x)
     assert dr.allclose(ref, res)
+    assert frozen.n_recordings == n
 
 
 @pytest.mark.parametrize("auto_opaque", [False, True])
@@ -4088,3 +4093,510 @@ def test108_tensor_slicing_advanced_trailing(t, auto_opaque):
 
         assert dr.allclose(res, ref)
 
+
+
+@pytest.test_arrays("uint32, jit, shape=(*)")
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test109_replay_frees_temporaries(t, auto_opaque):
+    """
+    Tests that replaying a frozen function frees intermediate buffers as
+    soon as they are no longer needed instead of keeping the whole chain
+    alive until the end of the replay.
+    """
+    n = 1024 * 1024
+    nbytes = n * 4
+    steps = 16
+
+    @dr.freeze(auto_opaque=auto_opaque)
+    def func(x):
+        for _ in range(steps):
+            x = x + 1
+            dr.eval(x)
+        return x
+
+    x = dr.arange(t, n)
+    dr.eval(x)
+    func(x)
+    assert func.n_recordings == 1
+
+    # The watermark only grows on fresh allocations, so empty the cache first
+    backend = dr.backend_v(t)
+    dr.flush_malloc_cache()
+    dr.detail.malloc_clear_statistics()
+    base = dr.detail.malloc_watermark(backend)
+
+    y = func(x)
+    dr.eval(y)
+    assert func.n_recordings == 1
+    assert dr.all(y == x + steps)
+
+    assert dr.detail.malloc_watermark(backend) - base < 6 * nbytes
+
+
+@pytest.test_arrays("uint32, jit, shape=(*)")
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test110_namedtuple(t, auto_opaque):
+    """
+    Tests that namedtuples can be passed to and returned from frozen
+    functions.
+    """
+    from collections import namedtuple
+
+    Pair = namedtuple("Pair", ["a", "b"])
+
+    @dr.freeze(auto_opaque=auto_opaque)
+    def func(p):
+        return Pair(p.a + p.b, p.a * p.b)
+
+    for i in range(2):
+        p = Pair(t(1 + i, 2, 3), t(4, 5 + i, 6))
+        res = func(p)
+        assert type(res) is Pair
+        assert dr.all(res.a == p.a + p.b)
+        assert dr.all(res.b == p.a * p.b)
+
+    assert func.n_recordings == 1
+
+
+def get_custom_type_pkg(t):
+    with dr.detail.scoped_rtld_deepbind():
+        m = pytest.importorskip("custom_type_ext")
+    backend = dr.backend_v(t)
+    if backend == dr.JitBackend.LLVM:
+        return m.llvm
+    elif backend == dr.JitBackend.CUDA:
+        return m.cuda
+    elif backend == dr.JitBackend.Metal:
+        return getattr(m, "metal", None)
+
+
+@pytest.test_arrays("float32, jit, -is_diff, shape=(*)")
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test111_cpp_objects(t, auto_opaque):
+    """
+    Tests frozen functions whose inputs are C++ objects: an object that is
+    reachable through several references, and a Python subclass of a C++
+    class with Dr.Jit arrays in its attributes.
+    """
+    pkg = get_custom_type_pkg(t)
+
+    class Holder(pkg.CustomBase):
+        def __init__(self, value, base_value):
+            super().__init__(base_value)
+            self.v = value
+
+        def value(self):
+            return self.v
+
+    @dr.freeze(auto_opaque=auto_opaque)
+    def func(nested, a, h):
+        return a.value() + a.base_value(), h.value() * h.base_value()
+
+    for i in range(3):
+        value = dr.arange(t, 4) + i
+        base_value = dr.arange(t, 4) * 2 + i
+        a = pkg.CustomA(value, base_value)
+        nested = pkg.Nested(a, a)
+        h = Holder(value + 1, base_value + 1)
+
+        r0, r1 = func(nested, a, h)
+        assert dr.all(r0 == value + base_value)
+        assert dr.all(r1 == (value + 1) * (base_value + 1))
+
+    assert func.n_recordings == 1
+
+
+@pytest.test_arrays("float32, jit, -is_diff, shape=(*)")
+def test112_late_python_binding(t):
+    """
+    Tests that a C++ object which acquires a Python counterpart while the
+    frozen function runs (or in between calls) does not invalidate the
+    recording.
+    """
+    pkg = get_custom_type_pkg(t)
+
+    @dr.freeze
+    def func(nested):
+        # Accessing the child creates its Python object during the recording
+        c = nested.child(0)
+        return c.value() + c.base_value()
+
+    for i in range(3):
+        value = dr.arange(t, 4) + i
+        base_value = dr.arange(t, 4) * 2 + i
+        nested = pkg.make_nested(value, base_value)
+        res = func(nested)
+        assert dr.all(res == value + base_value)
+        # Bind the second child in between calls
+        nested.child(1)
+        res = func(nested)
+        assert dr.all(res == value + base_value)
+
+    assert func.n_recordings == 1
+
+
+@pytest.test_arrays("float32, jit, -is_diff, shape=(*)")
+def test113_python_subclass_of_cpp_class(t):
+    """
+    Tests that a Python subclass of a C++ class is traversed on both sides:
+    the Python attributes and the members of the C++ base, whether the object
+    is passed directly or reached through another C++ object.
+    """
+    pkg = get_custom_type_pkg(t)
+
+    class Holder(pkg.CustomBase):
+        def __init__(self, value, base_value):
+            super().__init__(base_value)
+            self.v = value
+
+        def value(self):
+            return self.v
+
+    @dr.freeze
+    def func(h, nested):
+        c = nested.child(0)
+        return h.value() + h.base_value(), c.value() * c.base_value()
+
+    for i in range(3):
+        value = dr.arange(t, 4) + i
+        base_value = dr.arange(t, 4) * 2 + i
+        h = Holder(value, base_value)
+        nested = pkg.Nested(Holder(value + 1, base_value + 1),
+                            Holder(value + 2, base_value + 2))
+
+        r0, r1 = func(h, nested)
+        assert dr.all(r0 == value + base_value)
+        assert dr.all(r1 == (value + 1) * (base_value + 1))
+
+    assert func.n_recordings == 1
+
+
+@pytest.test_arrays("float32, jit, -is_diff, shape=(*)")
+def test114_tensor_rank(t):
+    """
+    Tests that tensors keep their rank through a frozen function, including
+    0-dimensional tensors.
+    """
+    Tensor = dr.tensor_t(t)
+
+    @dr.freeze
+    def func(x):
+        return x * 2
+
+    x0 = Tensor(3.0)
+    x1 = Tensor(t(3.0))
+    assert x0.shape == () and x1.shape == (1,)
+
+    assert func(x0).shape == ()
+    assert func(x1).shape == (1,)
+    assert func(x0).shape == ()
+    assert func.n_recordings == 2
+
+
+@pytest.test_arrays("float32, jit, -is_diff, shape=(*)")
+def test115_registry_type_change(t):
+    """
+    Tests that replacing a registered object by an instance of another class
+    with the same variable layout forces a new recording, since the recorded
+    kernels contain the code of the class seen while recording.
+    """
+    pkg = get_pkg(t)
+    A, B, BasePtr = pkg.A, pkg.B, pkg.BasePtr
+
+    @dr.freeze
+    def func(c, xi, yi):
+        return c.f(xi, yi)
+
+    xi = t(1, 2, 3)
+    yi = t(5, 6, 7)
+
+    a = A()
+    c = BasePtr(a, a, a)
+    xo, yo = func(c, xi, yi)
+    assert dr.all(xo == 2 * yi) and dr.all(yo == -xi)
+    del c, a
+
+    b = B()
+    c = BasePtr(b, b, b)
+    xo, yo = func(c, xi, yi)
+    assert dr.all(xo == 3 * yi) and dr.all(yo == xi)
+    assert func.n_recordings == 2
+
+
+@pytest.test_arrays("float32, jit, -is_diff, shape=(*)")
+def test116_property_field(t):
+    """
+    Tests a ``DRJIT_STRUCT`` field implemented as a property whose getter
+    builds a new array on every access.
+    """
+    class Holder:
+        DRJIT_STRUCT = { 'x': t }
+
+        def __init__(self, x):
+            self._x = x
+
+        @property
+        def x(self):
+            return self._x + 0
+
+        @x.setter
+        def x(self, value):
+            self._x = value
+
+    @dr.freeze
+    def func(h):
+        return h.x * 2
+
+    for i in range(4):
+        h = Holder(dr.arange(t, 8) + i)
+        assert dr.all(func(h) == (dr.arange(t, 8) + i) * 2)
+    assert func.n_recordings == 1
+
+
+@pytest.test_arrays("float32, jit, -is_diff, shape=(*)")
+def test117_self_reference_collected(t):
+    """
+    Tests that a frozen function whose layouts refer back to the function
+    itself (a reference cycle) is collected by the garbage collector.
+    """
+    import gc, weakref
+
+    @dr.freeze
+    def func(x, f):
+        return x + 1
+
+    x = t(1, 2, 3)
+    assert dr.all(func(x, func) == x + 1)
+    ref = weakref.ref(func)
+    del func
+    gc.collect()
+    assert ref() is None
+
+
+@pytest.test_arrays("uint32, jit, shape=(*)")
+def test118_input_changes_rejected(t):
+    """
+    Tests how a frozen function that changes anything but the arrays held by
+    its input is treated. A change that the function repeats on every call
+    raises, since a replay could not reproduce it. A change that the function
+    performs only once, such as the reordering of dictionary keys or the
+    reshaping of a tensor, costs one extra recording.
+    """
+    Tensor = dr.tensor_t(t)
+
+    # The diagnostic refers to the modified input by the name of the
+    # parameter that holds it, rather than by its position
+    def check_raises(func, arg):
+        with pytest.raises(RuntimeError, match="changed its input at d"):
+            func(arg)
+
+    def check_retraced(func, arg):
+        func(arg)
+        assert func.n_recordings == 2
+        func(arg)
+        assert func.n_recordings == 2
+
+    @dr.freeze
+    def f1(d):
+        d["n"] += 1
+    check_raises(f1, {"n": 5, "x": t(1, 2, 3)})
+
+    @dr.freeze
+    def f2(d):
+        x = d.pop("a")
+        d["a"] = x + 10
+    check_retraced(f2, {"a": t(0, 1, 2), "b": t(3, 4, 5)})
+
+    @dr.freeze
+    def f3(d):
+        d["x"] = Tensor(d["x"].array, (2, 3))
+    check_retraced(f3, {"x": Tensor(dr.arange(t, 6), (3, 2))})
+
+    @dr.freeze
+    def f4(d):
+        d["x"] = d["y"] + 1
+    check_retraced(f4, {"x": None, "y": t(1, 2, 3)})
+
+    # Assigning a new array is fine
+    @dr.freeze
+    def f5(d):
+        d["x"] = d["x"] + 1
+    d = {"x": t(1, 2, 3)}
+    f5(d)
+    assert dr.all(d["x"] == t(2, 3, 4))
+
+
+@pytest.test_arrays("uint32, jit, shape=(*)")
+def test119_captured_globals(t):
+    """
+    Tests the set of global variables that a frozen function captures. It is
+    determined by scanning the bytecode of the function, whose format depends
+    on the Python version, so the two properties that matter are checked
+    directly: a global that the function reads must be captured, and an
+    attribute name must not be mistaken for one.
+    """
+    x = t(1, 2, 3)
+
+    # The functions are compiled in a namespace of their own, which stands in
+    # for the globals of a module
+    def make_frozen(source, **names):
+        ns = dict(dr=dr, t=t, **names)
+        exec(source, ns)
+        return ns, dr.freeze(ns["func"])
+
+    # A global that the function reads is captured, even when its name sits
+    # at a high index of the name table (which needs an EXTENDED_ARG prefix)
+    attrs = "".join(f" + holder.a{i}" for i in range(300))
+    holder = type("Holder", (), { f"a{i}": 0 for i in range(300) })()
+    ns, func = make_frozen(f"def func(x):\n    return x{attrs} + scale\n",
+                           holder=holder, scale=1)
+
+    assert dr.all(func(x) == x + 1)
+    ns["scale"] = 2
+    assert dr.all(func(x) == x + 2)
+    assert func.n_recordings == 2
+
+    # An attribute name that happens to also be a global is not captured,
+    # so that changing that global does not trigger a new recording
+    ns, func = make_frozen("def func(x):\n    return x + dr.zeros(t, 3)\n",
+                           zeros=1)
+
+    assert dr.all(func(x) == x)
+    ns["zeros"] = 2
+    assert dr.all(func(x) == x)
+    assert func.n_recordings == 1
+
+
+    # A global that is only read from a lambda, a comprehension or a nested
+    # function lives in a code object of its own, which is scanned as well
+    ns, func = make_frozen(
+        "def func(x):\n"
+        "    scale = lambda y: y * factor\n"
+        "    return scale(x) + sum(y * weight for y in [x])\n",
+        factor=1, weight=0)
+
+    assert dr.all(func(x) == x)
+    ns["factor"] = 2
+    assert dr.all(func(x) == x * 2)
+    ns["weight"] = 1
+    assert dr.all(func(x) == x * 3)
+    assert func.n_recordings == 3
+
+
+def test120_function_environment():
+    """
+    ``FunctionEnvironment`` extracts what a frozen function reads from the
+    callable that it wraps: the names of its positional parameters, of the
+    global variables that it loads and of its closure variables. The
+    extraction reaches into CPython internals, hence this test.
+    """
+    env = dr.detail.FunctionEnvironment
+
+    # Only the positional parameters are named, in declaration order.
+    # Keyword-only parameters, ``*args`` and ``**kwargs`` are left out: a
+    # call passes them by name, or beyond the end of the parameter list.
+    def f0(a, b, /, c, d=1, *rest, e, g=2, **kw):
+        pass
+
+    assert env(f0).arg_names == ("a", "b", "c", "d")
+    assert env(lambda: None).arg_names == ()
+    assert env(lambda *args, **kwargs: None).arg_names == ()
+
+    # The object of a method is an ordinary parameter
+    class MyClass:
+        def method(self, x):
+            pass
+
+    assert env(MyClass.method).arg_names == ("self", "x")
+
+    # A global that the function reads is captured, an attribute name that
+    # happens to look like one is not
+    ns = dict(scale=1, zeros=2)
+    exec("def func(x):\n    return x * scale + dr.zeros(x, 3)\n", ns)
+    e = env(ns["func"])
+    assert "scale" in e.global_names
+    assert "dr" in e.global_names
+    assert "zeros" not in e.global_names
+
+    # Builtins cannot change and are skipped
+    exec("def func2(x):\n    return len(x) + scale\n", ns)
+    assert env(ns["func2"]).global_names == ("scale",)
+
+    # The captured values are read when the call happens
+    assert e.capture()["scale"] == 1
+    ns["scale"] = 5
+    assert e.capture()["scale"] == 5
+
+    # A global that only a nested code object reads (a lambda, a
+    # comprehension or a nested function) is captured too
+    exec("def func3(x):\n"
+         "    fn = lambda y: y * inner\n"
+         "    return [fn(y) + comp for y in x]\n", ns)
+    names = env(ns["func3"]).global_names
+    assert "inner" in names and "comp" in names
+
+    # Closure variables are captured by name as well
+    def outer():
+        captured = 7
+
+        def inner(y):
+            return y + captured
+
+        return inner
+
+    e = env(outer())
+    assert e.free_names == ("captured",)
+    assert e.capture()["captured"] == 7
+
+
+@pytest.test_arrays("float32, jit, shape=(*)")
+def test121_scalar_arrays(t):
+    """
+    Tests that Dr.Jit arrays without a JIT backend (the ``drjit.scalar.*``
+    types) can appear anywhere in the input and output. Their entries are
+    captured by value, just like a Python ``float``, hence a change of the
+    value triggers a new recording.
+    """
+    @dr.freeze
+    def func(v, m, x):
+        return {"y": v.x * x + m[1, 1], "v": v}
+
+    v, m = dr.scalar.Array3f(1, 2, 3), dr.scalar.Matrix4f(2)
+    x = t(1, 2, 3)
+
+    r = func(v, m, x)
+    assert dr.all(r["y"] == t(3, 4, 5))
+    assert dr.all(r["v"] == v)
+
+    r = func(v, m, t(4, 5, 6))
+    assert dr.all(r["y"] == t(6, 7, 8))
+    assert func.n_recordings == 1
+
+    r = func(dr.scalar.Array3f(10, 2, 3), m, t(1, 2, 3))
+    assert dr.all(r["y"] == t(12, 22, 32))
+    assert func.n_recordings == 2
+
+
+@pytest.test_arrays("float32, jit, is_diff, shape=(*)")
+def test122_input_init_gradients(t):
+    """
+    Tests that the extra recording of a callable that initializes its input
+    does not accumulate the gradients of its aborted first attempt.
+    """
+
+    @dr.freeze
+    def func(d):
+        d.setdefault("y", d["x"] * 2)
+        dr.backward(dr.sum(d["x"] * d["p"]))
+
+    p = t(1, 2, 3)
+    dr.enable_grad(p)
+    d = {"x": t(1, 1, 1), "p": p}
+    func(d)
+    assert func.n_recordings == 2
+    assert dr.all(dr.grad(p) == t(1, 1, 1))
+
+    dr.set_grad(p, 0)
+    func(d)
+    assert func.n_recordings == 2
+    assert dr.all(dr.grad(p) == t(1, 1, 1))

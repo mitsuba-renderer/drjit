@@ -11,7 +11,7 @@ else:
     from typing import Tuple, Type, overload, Iterable, List
 
 
-def cosine_ramp(x: dr.ArrayBase) -> dr.ArrayBase:
+def cosine_ramp(x: drjit.ArrayBase) -> drjit.ArrayBase:
     """ "Smoothed" ramp to help features blend-in without instabilities"""
     return 0.5 * (1.0 - dr.cos(dr.pi * x))
 
@@ -35,7 +35,7 @@ class HashEncoding:
     """
 
     # The parameters stored by this encoding.
-    data: None | dr.ArrayBase
+    data: None | drjit.ArrayBase
     # The Dr.Jit type of the parameters used by this encoding.
     _dtype: None | Type
     # The offsets into ``data``, for each level.
@@ -67,12 +67,12 @@ class HashEncoding:
     _init_scale: float
 
     DRJIT_STRUCT = {
-        "data": dr.ArrayBase,
+        "data": drjit.ArrayBase,
     }
 
     def __init__(
         self,
-        dtype: Type[dr.ArrayBase],
+        dtype: Type[drjit.ArrayBase],
         dimension: int,
         *,
         n_levels: int = 16,
@@ -85,7 +85,7 @@ class HashEncoding:
         smooth_weight_gradients: bool = False,
         smooth_weight_lambda: float = 1.0,
         init_scale: float = 1e-4,
-        rng: dr.random.Generator | None = None,
+        rng: drjit.random.Generator | None = None,
     ) -> None:
         """
         Initialize a hash encoding. This computes fields used by both HashGrid
@@ -196,7 +196,7 @@ class HashEncoding:
         """
         return self._n_params
 
-    def set_params(self, values: dr.ArrayBase) -> None:
+    def set_params(self, values: drjit.ArrayBase) -> None:
         """
         This function can be used to set the parameters of the hashgrid. It can
         be used to update parameters from the optimizer.
@@ -211,14 +211,14 @@ class HashEncoding:
         self.data[:] = values
 
     @property
-    def params(self) -> dr.ArrayBase:
+    def params(self) -> drjit.ArrayBase:
         """
         The parameters stored by this encoding.
         """
         return self.data
 
     @params.setter
-    def params(self, values):
+    def params(self, values: drjit.ArrayBase) -> None:
         """
         Setter for the parameters of this hashgrid.
         """
@@ -331,8 +331,8 @@ class HashEncoding:
         return self._n_features_per_level * self.n_levels
 
     def _position_types(
-        self, p: dr.ArrayBase
-    ) -> Tuple[Type[dr.ArrayBase], Type[dr.ArrayBase]]:
+        self, p: drjit.ArrayBase
+    ) -> Tuple[Type[drjit.ArrayBase], Type[drjit.ArrayBase]]:
         """
         Returns a tuple of the PositionFloat and PositionFloatXf types, given the
         position value passed to the encoding.
@@ -347,10 +347,10 @@ class HashEncoding:
     def _acc_features(
         self,
         level_i: int,
-        weight: dr.ArrayBase,
-        index: dr.ArrayBase,
-        values: List[dr.ArrayBase],
-        active: bool | dr.ArrayBase,
+        weight: drjit.ArrayBase,
+        index: drjit.ArrayBase,
+        values: List[drjit.ArrayBase],
+        active: bool | drjit.ArrayBase,
     ):
         """
         Accumulates the ``self.num_features`` features into ``values`` at the given
@@ -380,7 +380,7 @@ class HashEncoding:
                 values[level_i * self.n_features_per_level + k],
             )
 
-    def indexing_function(self, key: dr.ArrayBase, level_i: int) -> dr.ArrayBase:
+    def indexing_function(self, key: drjit.ArrayBase, level_i: int) -> drjit.ArrayBase:
         """
         Given a key i.e. a D-dimensional integer vector identifying a vertex
         of a simplex, this function calculates the index of the feature tuple,
@@ -408,7 +408,7 @@ class HashEncoding:
         sub_grid_index = level_offset + (index % self.UInt32(this_level_size))
         return sub_grid_index
 
-    def hash(self, key) -> dr.ArrayBase:
+    def hash(self, key: drjit.ArrayBase) -> drjit.ArrayBase:
         """
         Hashes the D-dimensional key to compute a 1-dimensional index. This function
         is called when dense indexing is not possible.
@@ -534,7 +534,7 @@ class HashGridEncoding(HashEncoding):
 
         return self.StorageFloatXf(*out_values) & active
 
-    def hash(self, key):
+    def hash(self, key: drjit.ArrayBase) -> drjit.ArrayBase:
         # Prime numbers used to hash the simplex vertices and calculate the lookup
         # index. These are equivalent to ones used for coherent hashing in tiny-cuda-nn.
         indexing_primes = [
@@ -640,7 +640,7 @@ class PermutoEncoding(HashEncoding):
         smooth_weight_gradients: bool = False,
         smooth_weight_lambda: float = 1.0,
         init_scale: float = 1e-4,
-        rng: dr.random.Generator | None = None,
+        rng: drjit.random.Generator | None = None,
     ) -> None: ...
 
     def __init__(self, *args, **kwargs) -> None:
@@ -735,7 +735,7 @@ class PermutoEncoding(HashEncoding):
 
         return self.StorageFloatXf(*out_values) & active
 
-    def hash(self, key) -> dr.ArrayBase:
+    def hash(self, key: drjit.ArrayBase) -> drjit.ArrayBase:
         """Polynomial rolling hash for mapping lattice coordinates to hash table indices.
 
         Uses a simple multiplicative hash with prime number 2531011 to distribute

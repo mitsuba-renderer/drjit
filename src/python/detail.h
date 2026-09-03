@@ -22,14 +22,18 @@ struct StashRef {
 };
 
 // See misc.cpp for documentation of these functions
-extern nb::object copy(nb::handle h);
 extern void collect_indices(nb::handle, dr::vector<uint64_t> &,
+                            dr::TraverseRole role = dr::TraverseRole::Generic,
                             bool inc_ref = false);
-extern nb::object update_indices(nb::handle, const dr::vector<uint64_t> &);
+extern nb::object update_indices(nb::handle, const dr::vector<uint64_t> &,
+                                 dr::TraverseRole role = dr::TraverseRole::Generic);
 extern void check_compatibility(nb::handle, nb::handle, bool, const char *);
 extern void stash_ref(nb::handle h, dr::vector<StashRef> &);
 
 extern nb::object reset(nb::handle h);
+
+/// Shallow-copy a PyTree, creating new Dr.Jit array objects with the same indices
+extern nb::object copy(nb::handle h);
 extern void enable_py_tracing();
 extern void disable_py_tracing();
 

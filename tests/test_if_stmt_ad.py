@@ -419,3 +419,55 @@ def test14_symbolic_if_direct_non_scalar_implicit_read(t):
 
     assert dr.allclose(z, [10.0, 20.0, 1.0, 2.0])
     assert dr.allclose(y.grad, [1.0, 1.0, 0.0, 0.0])
+
+
+@pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+def test15_fwd_partial_seed_multiple_implicit(t, mode):
+    # Forward mode through a conditional whose branches implicitly capture
+    # several grad-enabled variables, of which only one is seeded (see the
+    # analogous loop test in test_while_loop_ad.py)
+    UInt32 = dr.uint32_array_t(t)
+
+    x, y = t(2), t(3)
+    dr.enable_grad(x, y)
+
+    res = dr.if_stmt((t(1, 1),),
+                     UInt32(0, 1) == 0,
+                     lambda a: a * x * y,
+                     lambda a: a + x * y,
+                     mode=mode)
+
+    dr.forward_from(x)
+    dr.assert_allclose(dr.grad(res), [3, 3])
+
+
+@pytest.mark.parametrize('mode', ['symbolic', 'evaluated'])
+@pytest.mark.parametrize('ad', ['fwd', 'bwd'])
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+def test17_return_captured_variable(t, mode, ad):
+    # A branch returns a variable of the caller unchanged, either as a closure
+    # variable or as a pass-through of an argument. The conditional must not
+    # modify that object, and derivatives must keep flowing through it.
+    Bool = dr.mask_t(t)
+    c = Bool(True, False, True)
+
+    for closure in [True, False]:
+        y = t(1, 2, 3)
+        dr.enable_grad(y)
+
+        if closure:
+            r = dr.if_stmt((), c, lambda: y * 2, lambda: y, mode=mode)
+        else:
+            r = dr.if_stmt((y,), c, lambda y: y * 2, lambda y: y, mode=mode)
+
+        assert r is not y
+        dr.assert_allclose(y, [1, 2, 3])
+        dr.assert_allclose(r, [2, 2, 6])
+
+        if ad == 'fwd':
+            dr.forward_from(y)
+            dr.assert_allclose(dr.grad(r), [2, 1, 2])
+        else:
+            dr.backward(r)
+            dr.assert_allclose(dr.grad(y), [2, 1, 2])

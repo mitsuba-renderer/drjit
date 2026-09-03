@@ -24,6 +24,7 @@
 #include "reduce.h"
 #include "eval.h"
 #include "freeze.h"
+#include "funcenv.h"
 #include "iter.h"
 #include "init.h"
 #include "memop.h"
@@ -59,11 +60,10 @@ static void set_flag_py(JitFlag flag, bool value) {
 }
 
 NB_MODULE(_drjit_ext, m_) {
-    (void) m_;
     nb::module_ m = nb::module_::import_("drjit");
     m.doc() = "A Just-In-Time-Compiler for Differentiable Rendering";
 
-    export_log(m, nanobind__drjit_ext_module);
+    export_log(m, m_);
 
     uint32_t backends = 0;
 
@@ -109,7 +109,6 @@ NB_MODULE(_drjit_ext, m_) {
         .value("CompressLoops", JitFlag::CompressLoops, doc_JitFlag_CompressLoops)
         .value("SymbolicCalls", JitFlag::SymbolicCalls, doc_JitFlag_SymbolicCalls)
         .value("OptimizeCalls", JitFlag::OptimizeCalls, doc_JitFlag_OptimizeCalls)
-        .value("MergeFunctions", JitFlag::MergeFunctions, doc_JitFlag_MergeFunctions)
         .value("PacketOps", JitFlag::PacketOps, doc_JitFlag_PacketOps)
         .value("ForceOptiX", JitFlag::ForceOptiX, doc_JitFlag_ForceOptiX)
         .value("PrintIR", JitFlag::PrintIR, doc_JitFlag_PrintIR)
@@ -122,17 +121,7 @@ NB_MODULE(_drjit_ext, m_) {
         .value("ShaderExecutionReordering", JitFlag::ShaderExecutionReordering, doc_JitFlag_ShaderExecutionReordering)
         .value("KernelFreezing", JitFlag::KernelFreezing, doc_JitFlag_KernelFreezing)
         .value("FreezingScope", JitFlag::FreezingScope, doc_JitFlag_FreezingScope)
-        .value("EnableObjectTraversal", JitFlag::EnableObjectTraversal, doc_JitFlag_EnableObjectTraversal)
-        .value("SpillToSharedMemory", JitFlag::SpillToSharedMemory, doc_JitFlag_SpillToSharedMemory)
-        .value("Default", JitFlag::Default, doc_JitFlag_Default)
-
-        // Deprecated aliases
-        .value("VCallRecord", JitFlag::VCallRecord, doc_JitFlag_VCallRecord)
-        .value("VCallOptimize", JitFlag::VCallOptimize, doc_JitFlag_VCallOptimize)
-        .value("VCallDeduplicate", JitFlag::VCallDeduplicate, doc_JitFlag_VCallDeduplicate)
-        .value("LoopRecord", JitFlag::LoopRecord, doc_JitFlag_LoopRecord)
-        .value("LoopOptimize", JitFlag::LoopOptimize, doc_JitFlag_LoopOptimize)
-        .value("Recording", JitFlag::Recording, doc_JitFlag_Recording);
+        .value("Default", JitFlag::Default, doc_JitFlag_Default);
 
     nb::enum_<VarType>(m, "VarType", doc_VarType)
         .value("Void", VarType::Void, doc_VarType_Void)
@@ -186,6 +175,15 @@ NB_MODULE(_drjit_ext, m_) {
         .value("Clamp", dr::WrapMode::Clamp)
         .value("Mirror", dr::WrapMode::Mirror);
 
+    nb::enum_<dr::MipFilter>(m, "MipFilter")
+        .value("Disabled", dr::MipFilter::Disabled)
+        .value("Nearest", dr::MipFilter::Nearest)
+        .value("Linear", dr::MipFilter::Linear);
+
+    nb::enum_<dr::MipBasis>(m, "MipBasis")
+        .value("Standard", dr::MipBasis::Standard)
+        .value("Laplacian", dr::MipBasis::Laplacian);
+
     m.def("has_backend", &jit_has_backend, doc_has_backend);
 
     m.def("sync_thread", &jit_sync_thread, doc_sync_thread, nb::call_guard<nb::gil_scoped_release>())
@@ -221,19 +219,22 @@ NB_MODULE(_drjit_ext, m_) {
         .def(nb::init<JitFlag, bool>(), "flag"_a, "value"_a = true)
         .def("__enter__", &scoped_set_flag_py::__enter__)
         .def("__exit__", &scoped_set_flag_py::__exit__, nb::arg().none(),
-             nb::arg().none(), nb::arg().none());
+             nb::arg().none(), nb::arg().none())
+        .freeze();
 
     // Intrusive reference counting
     nb::intrusive_init(
         [](PyObject *o) noexcept {
             nb::gil_scoped_acquire guard;
-            Py_INCREF(o);
+            if (guard.is_valid())
+                Py_INCREF(o);
         },
         [](PyObject *o) noexcept {
             if (!nb::is_alive())
                 return;
             nb::gil_scoped_acquire guard;
-            Py_DECREF(o);
+            if (guard.is_valid())
+                Py_DECREF(o);
         });
 
     nb::class_<nb::intrusive_base> ib(
@@ -242,10 +243,10 @@ NB_MODULE(_drjit_ext, m_) {
             [](nb::intrusive_base *o, PyObject *po) noexcept {
                 o->set_self_py(po);
             }), doc_intrusive_base);
+    ib.freeze();
 
     jit_init_async(backends);
 
-    python_cleanup_thread_static_initialization();
     nb::module_::import_("atexit").attr("register")(nb::cpp_function([]() {
         dr::sync_thread(); // Finish any ongoing Dr.Jit computations.
         python_cleanup_thread_static_shutdown();
@@ -261,10 +262,16 @@ NB_MODULE(_drjit_ext, m_) {
     export_iter(detail);
     export_reduce(m);
     export_eval(m);
+    export_funcenv(detail);
     export_freeze(m);
     export_memop(m);
     export_slice(m);
     export_dlpack(m);
+
+    // 'export_dlpack()' is the last step that touches 'dr.ArrayBase'. Freezing
+    // it here is a prerequisite for freezing the array types created below.
+    nb::type_freeze(array_base);
+
     export_autodiff(m);
     export_inspect(m);
     export_detail(m);

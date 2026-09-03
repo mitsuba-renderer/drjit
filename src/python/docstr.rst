@@ -262,7 +262,7 @@
 
     .. code-block:: python
 
-        assert dr.leaf_t(dr.leaf.Array3f) is dr.leaf.Array3f
+        assert dr.leaf_t(dr.scalar.Array3f) is dr.scalar.Array3f
         assert dr.leaf_t(dr.cuda.Array3i) is dr.cuda.Int
         assert dr.leaf_t(dr.cuda.Matrix4f) is dr.cuda.Float
         assert dr.leaf_t(dr.cuda.TensorXf) is dr.cuda.Float
@@ -585,6 +585,9 @@
 
     Compute the element-wise maximum value of the provided inputs.
 
+    A NaN in either input propagates to the output. Use
+    :py:func:`drjit.fmax` to ignore NaNs instead.
+
     (Not to be confused with :py:func:`drjit.max`, which reduces the input
     along the specified axes to determine the maximum)
 
@@ -599,6 +602,9 @@
 
     Compute the element-wise minimum value of the provided inputs.
 
+    A NaN in either input propagates to the output. Use
+    :py:func:`drjit.fmin` to ignore NaNs instead.
+
     (Not to be confused with :py:func:`drjit.min`, which reduces the input
     along the specified axes to determine the minimum)
 
@@ -608,6 +614,50 @@
 
     Returns:
         int | float | drjit.ArrayBase: Minimum of the input(s)
+
+.. topic:: fmax
+
+    Compute the element-wise maximum value of the provided inputs, ignoring NaNs.
+
+    If exactly one input is a NaN, the other one is returned. Integers have no
+    NaNs, hence this is equivalent to :py:func:`drjit.maximum` there.
+
+    Args:
+        arg0 (int | float | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+        arg1 (int | float | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+
+    Returns:
+        int | float | drjit.ArrayBase: Maximum of the input(s)
+
+.. topic:: fmin
+
+    Compute the element-wise minimum value of the provided inputs, ignoring NaNs.
+
+    If exactly one input is a NaN, the other one is returned. Integers have no
+    NaNs, hence this is equivalent to :py:func:`drjit.minimum` there.
+
+    Args:
+        arg0 (int | float | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+        arg1 (int | float | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+
+    Returns:
+        int | float | drjit.ArrayBase: Minimum of the input(s)
+
+.. topic:: copysign
+
+    Copy the sign of ``arg1`` to ``arg0`` element-wise.
+
+    For floating point inputs, this function realizes the IEEE-754
+    ``copysign`` operation and compiles into a dedicated instruction on all
+    backends. It propagates the sign of negative zeros, i.e.,
+    ``dr.copysign(1.0, -0.0) == -1.0``.
+
+    Args:
+        arg0 (int | float | drjit.ArrayBase): A Python or Dr.Jit array to change the sign of
+        arg1 (int | float | drjit.ArrayBase): A Python or Dr.Jit array to copy the sign from
+
+    Returns:
+        int | float | drjit.ArrayBase: The values of ``arg0`` with the sign of ``arg1``
 
 .. topic:: square
 
@@ -2189,17 +2239,21 @@
 
 .. topic:: opaque
 
-    Return an *opaque* constant-valued instance of the desired type and shape.
+    Return an *opaque* copy of an array, tensor, or :ref:`PyTree <pytrees>`.
 
-    This function is very similar to :py:func:`drjit.full` in that it creates
-    constant-valued instances of various types including (potentially nested)
-    Dr.Jit arrays, tensors, and :ref:`PyTrees <pytrees>`. Please refer to the
-    documentation of :py:func:`drjit.full` for details on the function signature.
-    However, :py:func:`drjit.full` creates *literal constant* arrays, which
-    means that Dr.Jit is fully aware of the array contents.
+    A *literal constant* array is one whose contents Dr.Jit is fully aware of,
+    which means that it can bake them into the programs it generates. In
+    contrast, an *opaque* array is backed by a representation in device memory,
+    and the generated program reads it from there.
 
-    In contrast, :py:func:`drjit.opaque` produces an *opaque* array backed by a
-    representation in device memory.
+    :py:func:`drjit.opaque` returns an opaque copy of its argument, giving each
+    array storage of its own:
+
+    .. code-block:: python
+
+       from drjit.llvm import Float
+
+       y = dr.opaque(Float(2))
 
     .. rubric:: Why is this useful?
 
@@ -2238,24 +2292,39 @@
     .. code-block:: python
 
        # The following lines reuse the compiled kernel regardless of the constant
-       value = dr.opqaque(Float, 2)
+       value = dr.opaque(Float(2))
        result = complex_function(value, ...)
        print(result)
 
-    This function is related to :py:func:`drjit.make_opaque`, which can turn an
-    already existing Dr.Jit array, tensor, or :ref:`PyTree <pytrees>` into an
-    opaque representation.
+    This function is related to :py:func:`drjit.make_opaque`, which turns an
+    existing array, tensor, or :ref:`PyTree <pytrees>` into an opaque
+    representation *in place*. :py:func:`drjit.make_opaque` leaves an already
+    evaluated array alone, whereas :py:func:`drjit.opaque` always gives each
+    array storage of its own, so that the result is guaranteed to be distinct
+    from every other variable in the system.
+
+    .. rubric:: Constant-valued form
+
+    A second overload creates an opaque constant-valued instance of a given type
+    and shape, analogously to :py:func:`drjit.full`:
+
+    .. code-block:: python
+
+       value = dr.opaque(Float, 2)   # equivalent to dr.opaque(Float(2))
 
     Args:
+        arg (object): An array, tensor, or :ref:`PyTree <pytrees>` to copy.
         dtype (type): Desired Dr.Jit array type, Python scalar type, or
-          :ref:`PyTree <pytrees>`.
+          :ref:`PyTree <pytrees>` (constant-valued form).
         value (object): An instance of the underlying scalar type
           (``float``/``int``/``bool``, etc.) that will be used to initialize the
-          array contents.
+          array contents (constant-valued form).
         shape (Sequence[int] | int): Shape of the desired array
+          (constant-valued form).
 
     Returns:
-        object: A instance of type ``dtype`` filled with ``value``
+        object: An opaque copy of ``arg``, or an instance of type ``dtype``
+        filled with ``value``
 
 .. topic:: empty
 
@@ -3223,14 +3292,14 @@
          - ❌
          - ✅
          - ⚠️  CC≥90
-         - ❌
-         - ❌
+         - ✅
+         - ✅
        * - :py:attr:`ReduceOp.Max`
          - ❌
          - ✅
          - ⚠️  CC≥90
-         - ❌
-         - ❌
+         - ✅
+         - ✅
        * - :py:attr:`ReduceOp.And`
          - ❌
          - ✅
@@ -3493,9 +3562,9 @@
         dtype (type): An arbitrary Dr.Jit array type
 
         array (drjit.ArrayBase): A dynamically sized 1D Dr.Jit array instance
-           that is compatible with ``dtype``. In other words, both must have the
-           same underlying scalar type and be located imported in the same package
-           (e.g., ``drjit.llvm.ad``).
+           that uses the same backend as ``dtype`` (e.g. ``drjit.llvm``). Its
+           element type and AD flavor are converted when they differ from the
+           ones implied by ``dtype``.
 
         order (str): A single character indicating the index order. ``'F'`` (the
            default) indicates column-major/Fortran-style ordering, in which case
@@ -3631,10 +3700,10 @@
     additionally converts literal constant arrays into evaluated (device
     memory-based) representations.
 
-    It is related to the function :py:func:`drjit.opaque` that can be used to
-    directly construct such opaque arrays. Please see the documentation of this
-    function regarding the rationale of making array contents opaque to Dr.Jit's
-    symbolic tracing mechanism.
+    It is related to the function :py:func:`drjit.opaque`, which returns an
+    opaque *copy* rather than modifying its argument in place. Please see the
+    documentation of that function regarding the rationale of making array
+    contents opaque to Dr.Jit's symbolic tracing mechanism.
 
     Args:
         *args (tuple): A variable-length list of Dr.Jit array instances or
@@ -5715,18 +5784,20 @@
         object: A Dr.Jit array or :ref:`PyTree <pytrees>` containing the
         result of each performed function call.
 
-.. topic:: detail_copy
+.. topic:: copy
 
-    Create a deep copy of a PyTree
+    Create a deep copy of an array, tensor, or :ref:`PyTree <pytrees>`.
 
     This function recursively traverses PyTrees and replaces Dr.Jit arrays with
     copies created via the ordinary copy constructor. It also rebuilds tuples,
-    lists, dictionaries, and custom data structures. The purpose of this function
-    is isolate the inputs of :py:func:`drjit.while_loop()` and
-    :py:func:`drjit.if_stmt()` from changes.
+    lists, dictionaries, and other :ref:`custom data structures
+    <custom_types_py>`.
 
-    This function exists for Dr.Jit-internal use. You probably should not call
-    it in your own application code.
+    Args:
+        arg (object): An array, tensor, or :ref:`PyTree <pytrees>` to copy.
+
+    Returns:
+        object: A deep copy of ``arg``
 
 .. topic:: detail_check_compatibility
 
@@ -5740,6 +5811,16 @@
     raised if there is a mismatch of the vectorization widths of any Dr.Jit type
     in the pytrees.
 
+.. topic:: detail_TraverseRole
+
+    Purpose of a traversal of a :ref:`PyTree <pytrees>`.
+
+    Dr.Jit traverses PyTrees and C++ objects for many reasons: to evaluate
+    their arrays, to gather the state of a symbolic loop, to describe the
+    input of a frozen function, and so on. The role is reported to C++ objects
+    deriving from ``drjit::TraversableBase`` so that they can decide which of
+    their members take part in a particular traversal.
+
 .. topic:: detail_collect_indices
 
     Return Dr.Jit variable indices associated with the provided data structure.
@@ -5749,7 +5830,8 @@
     variables (in the order of traversal, may contain duplicates). The index
     information is returned as a list of encoded 64 bit integers, where each
     contains the AD variable index in the upper 32 bits and the JIT variable
-    index in the lower 32 bit.
+    index in the lower 32 bit. The ``role`` parameter is reported to C++
+    objects (see :py:class:`drjit.detail.TraverseRole`).
 
     This function exists for Dr.Jit-internal use. You probably should not
     call it in your own application code.
@@ -6053,31 +6135,6 @@
     also controls the behavior of the functions :py:func:`drjit.switch` and
     :py:func:`drjit.dispatch`.
 
-.. topic:: JitFlag_MergeFunctions
-
-    Deduplicate code generated
-    by function calls on instance arrays.
-
-    When ``arr`` is an instance array (potentially with thousands of instances),
-    a function call like
-
-    .. code-block:: python
-
-       arr.f(inputs...)
-
-    can potentially generate vast numbers of different functions in the generated
-    code. At the same time, many of these functions may contain identical code
-    (or code that is identical except for data references).
-
-    Dr.Jit can exploit such redundancy and merge such functions during code
-    generation. Besides generating shorter programs, this also helps to reduce
-    thread divergence.
-
-    This flag is *enabled* by default. Note that it is only meaningful in
-    combination with :py:attr:`SymbolicCalls`. Besides calls to instance arrays,
-    this flag also controls the behavior of the functions :py:func:`drjit.switch`
-    and :py:func:`drjit.dispatch`.
-
 .. topic:: JitFlag_SymbolicLoops
 
     Dr.Jit provides two main ways of compiling loops involving Dr.Jit arrays.
@@ -6265,9 +6322,10 @@
     Dr.Jit provides a *kernel history* feature, where it creates an entry in a list
     whenever it launches a kernel or related operation (memory copies, etc.). This
     not only gives accurate and isolated timings (measured with counters on the
-    CPU/GPU) but also reveals if a kernel was launched at all. To capture the
-    kernel history, set this flag just before the region to be benchmarked and call
-    :py:func:`drjit.kernel_history()` at the end.
+    CPU/GPU) but also reveals if a kernel was launched at all. The
+    :py:class:`drjit.kernel_history` context manager sets this flag for the
+    duration of the region to be benchmarked, so there is normally no need to
+    manage it manually.
 
     Capturing the history has a (very) small cost and is therefore  *disabled* by
     default.
@@ -6365,26 +6423,6 @@
     User code may query this flag to conditionally optimize kernels for frozen
     function recording, such as re-seeding the sampler, used for rendering.
 
-.. topic:: JitFlag_EnableObjectTraversal
-
-    This flag is set to ``True`` when Dr.Jit is currently traversing
-    inputs and outputs of a frozen function. The flag is automatically managed
-    and should not be updated by application code.
-
-    When enabled, traversal of complex objects, that usually are opaque to
-    loops and conditionals, is enabled.
-
-.. topic:: JitFlag_SpillToSharedMemory
-
-    Enable spilling of excess registers into shared memory.
-
-    This flag activates an optimization that stores registers in shared memory
-    when register pressure is high, reducing the need to spill to slower
-    local memory. This can improve performance by lowering memory latency on
-    register-intensive kernels. This flag only applies to the CUDA backend.
-
-    This flag is *enabled* by default.
-
 .. topic:: JitFlag_Default
 
     The default set of optimization flags consisting of
@@ -6395,37 +6433,12 @@
     - :py:attr:`drjit.JitFlag.SymbolicLoops`,
     - :py:attr:`drjit.JitFlag.OptimizeLoops`,
     - :py:attr:`drjit.JitFlag.SymbolicCalls`,
-    - :py:attr:`drjit.JitFlag.MergeFunctions`,
     - :py:attr:`drjit.JitFlag.OptimizeCalls`,
     - :py:attr:`drjit.JitFlag.SymbolicConditionals`,
     - :py:attr:`drjit.JitFlag.ReuseIndices`, and
     - :py:attr:`drjit.JitFlag.ScatterReduceLocal`.
     - :py:attr:`drjit.JitFlag.PacketOps`.
     - :py:attr:`drjit.JitFlag.ShaderExecutionReordering`.
-
-.. topic:: JitFlag_LoopRecord
-
-    Deprecated. Replaced by :py:attr:`SymbolicLoops`.
-
-.. topic:: JitFlag_LoopOptimize
-
-    Deprecated. Replaced by :py:attr:`OptimizeLoops`.
-
-.. topic:: JitFlag_VCallRecord
-
-    Deprecated. Replaced by :py:attr:`SymbolicCalls`.
-
-.. topic:: JitFlag_VCallOptimize
-
-    Deprecated. Replaced by :py:attr:`OptimizeCalls`.
-
-.. topic:: JitFlag_VCallDeduplicate
-
-    Deprecated. Replaced by :py:attr:`MergeFunctions`.
-
-.. topic:: JitFlag_Recording
-
-    Deprecated. Replaced by :py:attr:`Symbolic`.
 
 .. topic:: VarState
 
@@ -7035,6 +7048,9 @@
     texture API instead of using the hardware texture units. In other modes,
     this argument has no effect.
 
+    A ``writable`` texture can be modified using :py:func:`write()`. Such
+    a texture cannot be MIP-mapped.
+
     The ``filter_mode`` parameter defines the interpolation method to be used
     in all evaluation routines. By default, the texture is linearly
     interpolated. Besides nearest/linear filtering, the implementation also
@@ -7044,8 +7060,9 @@
     (hence, linear filtering must be enabled to use this feature).
 
     When evaluating the texture outside of its boundaries, the ``wrap_mode``
-    defines the wrapping method. The default behavior is ``drjit.WrapMode.Clamp``,
-    which indefinitely extends the colors on the boundary along each dimension.
+    defines the wrapping method. The default behavior is
+    :py:attr:`drjit.WrapMode.Clamp`, which indefinitely extends the colors on
+    the boundary along each dimension.
 
     On the CUDA and Metal backends, hardware texture units resolve the sub-texel
     position using reduced-precision fixed-point weights (8 fractional bits on
@@ -7060,31 +7077,65 @@
     of four the first three are decoded and the fourth (alpha) is left linear
     (e.g. channel 3 is linear for a 6-channel texture).
 
+    A ``mip_filter`` other than :py:attr:`drjit.MipFilter.Disabled` equips the
+    texture with a MIP pyramid for the filtered lookup methods
+    :py:func:`eval_lod()` and :py:func:`eval_filtered()`. The functions
+    :py:func:`set_value()` / :py:func:`set_tensor()` regenerate it from the
+    base level using a box filter that averages two texels per axis (applied in
+    linear space for sRGB textures). MIP-mapped textures cannot be
+    ``writable``. See the section on :ref:`MIP-mapped filtering
+    <texture_mipmap>` for details.
+
+    The ``max_aniso`` parameter only applies to MIP-mapped textures and
+    controls the number of taps that anisotropic filtering in
+    :py:func:`eval_filtered()` may use. The value 1 selects isotropic
+    filtering, and values above the hardware limit of 16 raise an error.
+
+    The ``mip_basis`` parameter determines the internal representation of
+    MIP-mapped textures. The default :py:attr:`drjit.MipBasis.Standard`
+    derives a standard MIP pyramid from the base image.
+
+    When ``mip_basis`` is set to :py:attr:`drjit.MipBasis.Laplacian`, the
+    authoritative representation is no longer the base image but a set of
+    per-level coefficient tensors (see :py:func:`tensor()`). The MIP pyramid
+    uploaded to the GPU is then derived from these tensors by repeated
+    upsampling and summation. This choice is mainly useful for workloads that
+    perform gradient-based optimization of textures with filtered texture
+    lookups. See the section on the :ref:`Laplacian basis
+    <texture_laplacian>` for additional detail. Laplacian mode requires a
+    MIP-mapped texture with floating-point storage on a JIT backend.
+
 .. topic:: Texture_init_tensor
 
     Construct a new texture from a given tensor
 
     This constructor allocates texture memory just like the previous
     constructor, extracting shape information from ``tensor``. It then also
-    invokes ``set_tensor(tensor)`` to fill the texture memory with the provided
-    tensor.
+    invokes :py:func:`set_tensor()` to fill the texture memory with the
+    provided tensor.
 
-    When ``migrate`` is set to ``True`` on a GPU backend, the texture is *fully*
-    migrated to GPU texture memory to avoid redundant storage. Note that the
-    texture is still differentiable even when migrated. The :py:func:`value()`
-    and :py:func:`tensor()` operations will perform a reverse migration in this
-    case.
+    On the CUDA and Metal backends, Dr.Jit migrates the data to GPU texture
+    memory, which then holds the only copy. Values like :py:func:`tensor()`
+    and :py:func:`value()` produce a differentiable symbolic view of this
+    memory that occupies no storage of its own. See the section on
+    :ref:`migration <texture_migration>` for details.
 
-    Both the ``filter_mode`` and ``wrap_mode`` have the same defaults and
-    behaviors as for the previous constructor.
+    The ``use_accel``, ``filter_mode``, ``wrap_mode``, ``srgb``,
+    ``mip_filter``, ``max_aniso``, and ``mip_basis`` parameters have the same
+    defaults and behaviors as in the shape-based constructor. This overload
+    infers the shape and channel count from the tensor and does not accept
+    ``writable``.
 
 .. topic:: Texture_set_value
 
     Overwrite the texture contents with the provided linearized 1D array
 
-    When ``migrate`` is set to ``True`` on the CUDA and Metal backends, the
-    texture information is *fully* migrated to GPU texture memory to avoid
-    redundant storage.
+    On the CUDA and Metal backends, the update migrates the texture data into
+    the GPU's native texture format, which then holds the only copy.
+
+    With :py:attr:`drjit.MipBasis.Laplacian`, the array is first decomposed
+    into per-level coefficients. A subsequent :py:func:`value()` then
+    reproduces it up to floating point rounding.
 
 .. topic:: Texture_set_value_2
 
@@ -7112,9 +7163,27 @@
     overhead (new hardware texture objects must be created; on CUDA this also
     synchronizes the GPU pipeline).
 
-    When ``migrate`` is set to ``True`` on the CUDA and Metal backends, the
-    texture information is *fully* migrated to GPU texture memory to avoid
-    redundant storage.
+    On the CUDA and Metal backends, the update migrates the texture data into
+    the GPU's native texture format, which then holds the only copy.
+
+    With :py:attr:`drjit.MipBasis.Laplacian`, the tensor is first decomposed
+    into the per-level coefficient tensors, and the
+    sampled pyramid is then rebuilt from them. A subsequent :py:func:`tensor()`
+    reproduces the input up to floating point rounding.
+
+.. topic:: Texture_set_tensor_level
+
+    Overwrite the coefficient tensor of one pyramid level and rebuild the
+    sampled pyramid (Laplacian basis only)
+
+    The tensor shape must match the level. Resolution changes go through the
+    whole-image :py:func:`set_tensor()`.
+
+    Passing ``rebuild=False`` only rebinds the coefficient tensor, which costs
+    no computation. The sampled pyramid is then refreshed by a later call to
+    :py:func:`update_inplace()`. An optimization loop should assign all levels
+    this way and rebuild once per iteration, see the section on the
+    :ref:`Laplacian basis <texture_laplacian>` for a worked example.
 
 .. topic:: Texture_update_inplace
 
@@ -7127,17 +7196,53 @@
     short, this method will use the tensor representation to update the
     texture's internal state.
 
-    When ``migrate`` is set to ``True`` on the CUDA and Metal backends, the
-    texture information is *fully* migrated to GPU texture memory to avoid
-    redundant storage.
+    Previously obtained tensor representations remain valid and reflect the
+    updated contents afterwards (see the note in :py:func:`tensor()`).
+
+    On the CUDA and Metal backends, the update migrates the texture data into
+    the GPU's native texture format, which then holds the only copy.
+
+    With :py:attr:`drjit.MipBasis.Laplacian`, the per-level coefficient
+    tensors (see :py:func:`tensor()`) are the authoritative state instead, and
+    this method rebuilds the sampled pyramid from their current contents. An
+    optimization loop should write the coefficient tensors in place and call
+    this method once per step.
 
 .. topic:: Texture_value
 
-    Return the texture data as an array object
+    Return the texture data as an array object. See the remark in
+    :py:func:`tensor()`.
 
 .. topic:: Texture_tensor
 
     Return the texture data as a tensor object
+
+    .. note::
+
+       When the texture data resides in GPU texture memory, this function
+       returns a symbolic view that occupies no actual storage. Its evaluation
+       will query the hardware texture. Changing the texture contents via
+       :py:func:`set_tensor()`, :py:func:`write()`, etc., will also change
+       this view, so be sure to evaluate beforehand.
+
+    .. note::
+
+       The returned object aliases the texture's internal tensor
+       representation, and changes to it are only fully propagated by a
+       subsequent call to :py:func:`update_inplace()`. The object stays
+       valid across updates and continues to reflect the texture contents:
+       each content update replaces it with a symbolic view of the new
+       storage. Both whole-tensor assignments and full or partial scatters
+       may therefore be applied through a previously obtained object.
+
+.. topic:: Texture_tensor_level
+
+    Return the coefficient tensor of one pyramid level (Laplacian basis
+    only)
+
+    The tensor has the resolution of pyramid level ``level`` and the number
+    of channels of the texture. Changes to it are only propagated to the
+    texture by a subsequent call to :py:func:`update_inplace()`.
 
 .. topic:: Texture_filter_mode
 
@@ -7155,33 +7260,84 @@
 
     Are hardware texture units used for evaluation?
 
-.. topic:: Texture_migrated
-
-    Is the texture data held exclusively in GPU texture memory?
-
 .. topic:: Texture_shape
 
     Return the texture shape
 
+    The returned tuple has one entry per texture dimension followed by the
+    channel count.
+
 .. topic:: Texture_channel_count
 
-    Return the number of channels (equals ``shape()[ndim()-1]``)
+    Return the number of channels (equals ``shape[-1]``)
 
 .. topic:: Texture_eval
 
     Evaluate the linear interpolant represented by this texture.
 
-    When hardware-acceleration is not available, the numerical precision of the
-    interpolation is dictated by the floating point precision of the query
-    point type.
+    When using the non-hardware-accelerated evaluation, the numerical
+    precision of the interpolation is dictated by the floating point precision
+    of the query point type.
+
+.. topic:: Texture_eval_lod
+
+    Evaluate the texture at an explicit MIP level of detail.
+
+    A fractional ``lod`` blends the two enclosing pyramid levels under
+    :py:attr:`drjit.MipFilter.Linear` and rounds to the nearest level under
+    :py:attr:`drjit.MipFilter.Nearest`. Out-of-range values are clamped.
+
+    The method is differentiable with respect to the query position and
+    texture data (including derivative propagation through the MIP pyramid
+    construction) but not with respect to the ``lod`` argument.
+
+    On a texture without a MIP pyramid, the lookup degrades to a regular
+    non-filtered :py:func:`eval()`.
+
+.. topic:: Texture_eval_filtered
+
+    Perform an anisotropically filtered texture lookup
+
+    Besides the query position, this function additionally takes
+    texture-space differentials ``ddx`` and ``ddy`` that span the pixel's
+    elliptical footprint. The method averages up to ``max_aniso`` trilinear
+    taps that are distributed along the major ellipse axis. For ``max_aniso``
+    equal to 1, it performs an ordinary trilinear lookup.
+
+    Hardware anisotropic filtering (if enabled via the ``use_accel``
+    constructor argument) is approximate and vendor specific. Results may
+    deviate from the software path by several percent for off-axis
+    footprints. Pass ``use_accel=false`` if it is important that the output
+    remains consistent across backends.
+
+    The method is differentiable with respect to the query position and
+    texture data (including derivative propagation through the MIP pyramid
+    construction) but not with respect to the ``ddx`` and ``ddy`` argument.
+
+    On a texture without a MIP pyramid, the lookup degrades to a regular
+    non-filtered :py:func:`eval()`.
+
+.. topic:: Texture_mip_filter
+
+    Return the MIP level selection mode of filtered lookups
+
+.. topic:: Texture_mip_levels
+
+    Return the number of MIP pyramid levels, including the base level (1 when
+    the texture is not MIP-mapped)
+
+.. topic:: Texture_max_aniso
+
+    Return the anisotropic tap bound of :py:func:`eval_filtered()`
+
+.. topic:: Texture_mip_basis
+
+    Return the MIP basis of the texture
 
 .. topic:: Texture_eval_fetch
 
     Fetch the texels that would be referenced in a texture lookup with
     linear interpolation without actually performing this interpolation.
-
-    The numerical precision of the interpolation is dictated by the
-    floating point precision of the query point type.
 
 .. topic:: Texture_eval_cubic
 
@@ -7204,8 +7360,8 @@
     calls :py:func:`eval_cubic_helper()` function to replace the AD graph with a
     direct evaluation of the B-Spline basis functions in that case.
 
-    The numerical precision of the interpolation is dictated by the
-    floating point precision of the query point type.
+    Setting ``force_nonaccel`` to ``True`` bypasses the hardware texture units
+    even when they are available, which is mainly useful for testing.
 
 .. topic:: Texture_eval_cubic_grad
 
@@ -7214,9 +7370,8 @@
     This implementation computes the result directly from explicit
     differentiated basis functions. It has no autodiff support.
 
-    The resulting gradient and hessian have been multiplied by the spatial extents
-    to count for the transformation from the unit size volume to the size of its
-    shape.
+    The resulting gradient has been multiplied by the spatial extents to count
+    for the transformation from the unit size volume to the size of its shape.
 
 .. topic:: Texture_eval_cubic_hessian
 
@@ -7249,15 +7404,23 @@
 
 .. topic:: Texture_write
 
-    Store values into a writable hardware texture
+    Store values into a writable texture
 
     The per-channel values in ``value`` are written to the texel addressed by
     the integer coordinates ``pos``. The texture must have been created with
-    ``writable=True``.
+    ``writable=True``, must live on a JIT backend, and ``value`` must supply
+    one entry per channel.
 
-    This is a hardware texture store (a side effect): it is not differentiable,
-    and the written texture is meant for display / external sampling rather than
-    :py:func:`eval()`.
+    The store is a side effect and not differentiable. Backends providing a
+    hardware texture write into it, and such a texture is meant for display /
+    external sampling rather than :py:func:`eval()`. Without one (LLVM,
+    ``use_accel=False``, or double precision), the values are scattered into
+    the backing storage.
+
+    Reading the texture after writing to it (via :py:func:`value()`,
+    :py:func:`tensor()`, or the ``eval_*()`` methods) requires an intermediate
+    :py:func:`drjit.eval()` call. The write and the read may otherwise end up
+    in the same kernel, where their relative order is undefined.
 
 .. topic:: Texture_from_native_handle
 
@@ -7273,6 +7436,10 @@
     (:py:func:`eval()`). If ``True`` it is wrapped for *rendering into* via
     :py:func:`write()`, and the native texture must allow shader writes / surface
     stores. On CUDA such a wrap is bound as a surface and cannot also be sampled.
+
+    The ``filter_mode`` and ``wrap_mode`` parameters behave as in the regular
+    constructors. Setting ``srgb`` requests that samples be decoded from sRGB
+    to linear and is only allowed for 8-bit textures.
 
     A texture wrapping a cross-API handle (OpenGL on CUDA) requires a
     :py:func:`map()` / :py:func:`unmap()` pair around each use; on Metal those
@@ -8076,8 +8243,8 @@
     thread.
 
     One potential use of this function is to measure the runtime of a kernel
-    launched by Dr.Jit. We instead recommend the use of the
-    :py:func:`drjit.kernel_history()`, which exposes more accurate device timers.
+    launched by Dr.Jit. We instead recommend the use of
+    :py:class:`drjit.kernel_history`, which exposes more accurate device timers.
 
     In general, calling this function in user code is considered **bad practice**.
     Dr.Jit programs "run ahead" of the device to keep it fed with work. This is
@@ -8141,77 +8308,147 @@
 
 .. topic:: kernel_history
 
-    Return the history of captured kernel launches.
-
-    Dr.Jit can optionally capture performance-related metadata. To do so, set the
-    :py:attr:`drjit.JitFlag.KernelHistory` flag as follows:
+    Capture Dr.Jit's *kernel history*, which records performance-related
+    metadata about every launched kernel and backend operation (reductions,
+    memory copies, etc.). Use it as follows:
 
     .. code-block:: python
 
-       with dr.scoped_set_flag(dr.JitFlag.KernelHistory):
-          # .. computation to be analyzed ..
+       with dr.kernel_history() as kh:
+           y = f(x)
+           dr.eval(y) # Evaluate results to ensure they are included in `kh`
 
-       hist = dr.kernel_history()
+       # Render a table of the captured launches
+       print(kh)
 
-    The :py:func:`drjit.kernel_history()` function returns a list of dictionaries
-    characterizing each major operation performed by the analyzed region. This
-    dictionary has the following entries
+       # .. or iterate through them manually
+       for k in kh:
+           print(k.execution_time)
 
-    - ``backend``: The used JIT backend.
+    Accessing the kernel history (string summary, ``execution_time``) waits for
+    the associated operation to finish and synchronizes the device with the
+    host.
 
-    - ``execution_time``: The time (in milliseconds) used by this operation.
+    Capture regions may be nested, in which case launches inside the inner
+    region appear in both. Accessing the object inside a still-active ``with``
+    block yields the launches recorded so far.
 
-      On the CUDA backend, this value is captured via CUDA events. On the LLVM
-      backend, this involves querying ``CLOCK_MONOTONIC`` (Linux/macOS) or
-      ``QueryPerformanceCounter`` (Windows).
+.. topic:: KernelHistoryEntry
 
-    - ``type``: The type of computation expressed by an enumeration value of type
-      :py:class:`drjit.KernelType`. The most interesting workload generated by Dr.Jit
-      are just-in-time compiled kernels, which are identified by :py:attr:`drjit.KernelType.JIT`.
+    One operation captured by :py:class:`drjit.kernel_history`.
 
-      These have several additional entries:
+    Attributes that only apply to just-in-time compiled kernels
+    (:py:attr:`drjit.KernelType.JIT`) take a neutral default (``None``, ``0``,
+    or ``False``) for other operation types.
 
-      - ``hash``: The hash code identifying the kernel. (This is the same hash code is
-        also shown when increasing the log level via :py:func:`drjit.set_log_level`).
+.. topic:: KernelHistoryEntry_backend
 
-      - ``ir``: A capture of the intermediate representation used in this kernel.
+    Backend that executed the operation (a :py:class:`drjit.JitBackend`
+    value).
 
-      - ``operation_count``: The number of low-level IR operations. (A rough
-        proxy for the complexity of the operation.)
+.. topic:: KernelHistoryEntry_type
 
-      - ``cache_hit``: Was this kernel present in Dr.Jit's in-memory cache?
-        Otherwise, it as either loaded from memory or had to be recompiled from scratch.
+    Type of the operation (a :py:class:`drjit.KernelType` value).
 
-      - ``cache_disk``: Was this kernel present in Dr.Jit's on-disk cache?
-        Otherwise, it had to be recompiled from scratch.
+.. topic:: KernelHistoryEntry_recording_mode
 
-      - ``codegen_time``: The time (in milliseconds) which Dr.Jit needed to
-        generate the textual low-level IR representation of the kernel. This
-        step is always needed even if the resulting kernel is already cached.
+    Indicates whether the launch was recorded or replayed by a frozen
+    function (a :py:class:`drjit.KernelRecordingMode` value, see
+    :py:func:`@dr.freeze <freeze>`).
 
-      - ``backend_time``: The time (in milliseconds) which the backend (either the
-        LLVM compiler framework or the CUDA PTX just-in-time compiler) required to
-        compile and link the low-level IR into machine code. This step is only
-        needed when the kernel did not already exist in the in-memory or on-disk cache.
+.. topic:: KernelHistoryEntry_size
 
-      - ``uses_optix``: Was this kernel compiled by the
-        `NVIDIA OptiX <https://developer.nvidia.com/rtx/ray-tracing/optix>`__
-        ray tracing engine?
+    Launch width, i.e., the number of processed array entries.
 
-    - ``recording_mode``: Indicates if this kernel was executed in the context of
-      a frozen function (see :py:func:`@dr.freeze <freeze>`) and if so, if it
-      was recorded or replayed by one.
+.. topic:: KernelHistoryEntry_input_count
 
-    Note that :py:func:`drjit.kernel_history()` clears the history while extracting
-    this information. A related operation :py:func:`drjit.kernel_history_clear()`
-    *only* clears the history without returning any information.
+    Number of input arrays.
+
+.. topic:: KernelHistoryEntry_output_count
+
+    Number of output arrays and side effects.
+
+.. topic:: KernelHistoryEntry_hash
+
+    Hexadecimal hash code identifying a JIT kernel, or ``None`` for other
+    operations. The same hash appears in the log output at higher log levels
+    (see :py:func:`drjit.set_log_level`).
+
+.. topic:: KernelHistoryEntry_operation_count
+
+    Number of low-level IR operations of a JIT kernel, which is a rough proxy
+    for its complexity. ``0`` for other operations.
+
+.. topic:: KernelHistoryEntry_codegen_time
+
+    Time (in milliseconds) that Dr.Jit needed to generate the textual IR
+    representation of a JIT kernel. This step takes place even when the
+    compiled kernel is already cached.
+
+.. topic:: KernelHistoryEntry_backend_time
+
+    Time (in milliseconds) that the backend (e.g. the LLVM compiler framework
+    or the CUDA PTX just-in-time compiler) needed to compile and link the IR
+    into machine code. ``0.0`` when the kernel was cached.
+
+.. topic:: KernelHistoryEntry_uses_optix
+
+    Was the kernel compiled by the `NVIDIA OptiX
+    <https://developer.nvidia.com/rtx/ray-tracing/optix>`__ ray tracing
+    engine?
+
+.. topic:: KernelHistoryEntry_cache_hit
+
+    Was the kernel found in Dr.Jit's in-memory or on-disk cache, avoiding a
+    fresh compilation?
+
+.. topic:: KernelHistoryEntry_cache_disk
+
+    Was the kernel loaded from the on-disk cache?
+
+.. topic:: KernelHistoryEntry_execution_time
+
+    Device-side execution time of the operation in milliseconds, captured via
+    CUDA events, Metal command buffer timestamps, or task timers on the LLVM
+    backend. Reading this attribute waits for the operation to finish if it
+    is still running.
+
+.. topic:: KernelHistoryEntry_source
+
+    Source code of a JIT kernel (PTX, LLVM IR, or Metal Shading Language),
+    fetched from Dr.Jit's in-memory kernel cache. ``None`` for other
+    operation types, and for kernels that were evicted from the cache in the
+    meantime (e.g. by :py:func:`drjit.flush_kernel_cache`).
 
 .. topic:: kernel_history_clear
 
-    Clear the kernel history.
+    Clear the global kernel history log.
 
-    This operation clears the kernel history without returning any information
-    about it. See :py:func:`drjit.kernel_history` for details.
+    This function discards launch metadata that accumulated while the
+    :py:attr:`drjit.JitFlag.KernelHistory` flag was set manually. It exists to
+    support the legacy kernel history interface and is unnecessary when using
+    the :py:class:`drjit.kernel_history` context manager, which starts each
+    capture from a clean slate.
+
+.. topic:: KernelType
+
+    Enumeration characterizing the operations captured by the kernel history
+    (see :py:class:`drjit.kernel_history`).
+
+    Besides just-in-time compiled kernels (:py:attr:`drjit.KernelType.JIT`),
+    Dr.Jit dispatches various specialized operations such as reductions,
+    prefix sums, stream compaction, and memory operations, which the remaining
+    enumeration values identify.
+
+.. topic:: KernelRecordingMode
+
+    Enumeration indicating whether a kernel launch took place in the context
+    of a frozen function (see :py:func:`@dr.freeze <freeze>`).
+
+    A frozen function records kernel launches and can replay them later. The
+    values :py:attr:`Recorded` and :py:attr:`Replayed` identify launches
+    performed by these two phases, while :py:attr:`Inactive` refers to
+    launches outside of any frozen function.
 
 .. topic:: detail_any_symbolic
 
@@ -8539,7 +8776,7 @@
                   # Create an opaque variable representing the number 'loop_state'.
                   # This keeps this changing value from being baked into the program,
                   # which is needed for proper kernel caching
-                  queue_size_o = dr.opaque(UInt32, queue_size)
+                  queue_size_o = dr.opaque(UInt32(queue_size))
 
                   while not stopping_criterion(state):
                       # This line represents the loop body that processes work
@@ -8778,7 +9015,11 @@
 
    Create a new variable tracker.
 
-   The constructor accepts two parameters:
+   The constructor accepts three parameters:
+
+   - ``role``: The purpose of the traversal that is reported to C++ objects
+     (see :py:class:`drjit.detail.TraverseRole`), for example ``Loop`` when
+     tracking the state of a symbolic loop.
 
    - ``strict``: Certain types of Python objects (e.g. custom Python classes
      without ``DRJIT_STRUCT`` field, scalar Python numeric types) are not
@@ -9015,6 +9256,20 @@
 .. topic:: leak_warnings
 
    Query whether leak warnings are enabled. See :py:func:`drjit.detail.set_leak_warnings()`.
+
+.. topic:: FrozenFunction
+
+   Callable returned by :py:func:`drjit.freeze`.
+
+   Besides being callable like the decorated function, it exposes the
+   following members:
+
+   - ``enabled``: when set to ``False``, calls are forwarded to the decorated
+     function without freezing.
+   - ``n_recordings``: the number of times the function was recorded,
+     including re-recordings after a failed dry run.
+   - ``n_cached_recordings``: the number of recordings currently cached.
+   - ``clear()``: drops all recordings and resets the counters.
 
 .. topic:: step
 
