@@ -31,6 +31,9 @@ extern void check_compatibility(nb::handle, nb::handle, bool, const char *);
 extern void stash_ref(nb::handle h, dr::vector<StashRef> &);
 
 extern nb::object reset(nb::handle h);
+
+/// Shallow-copy a PyTree, creating new Dr.Jit array objects with the same indices
+extern nb::object copy(nb::handle h);
 extern void enable_py_tracing();
 extern void disable_py_tracing();
 

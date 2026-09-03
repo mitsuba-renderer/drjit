@@ -148,6 +148,10 @@ nb::object if_stmt(nb::tuple args, nb::handle cond, nb::callable true_fn,
             ad_cond(backend, symbolic, name_cstr, is.get(), cond_index, args_i,
                     rv_i, if_stmt_body_cb, if_stmt_delete_cb, true);
 
+        // Record the conditional's outputs in the tracker. The shallow copy is
+        // needed to handle the case where the last branch returns an object
+        // that the caller still holds.
+        is->rv = copy(is->rv);
         is->tracker.write(is->rv, rv_i, false, is->rv_labels, "rv");
         is->rv.reset();
         is->sr.clear();

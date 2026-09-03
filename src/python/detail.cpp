@@ -26,7 +26,7 @@
  * (Note: this explanation is also part of src/python/docstr.rst -- please keep
  * them in sync in case you make a change here)
  */
-static nb::object copy(nb::handle h) {
+nb::object copy(nb::handle h) {
     struct CopyOp : TransformCallback {
         void operator()(nb::handle h1, nb::handle h2) override {
             nb::inst_replace_copy(h2, h1);
