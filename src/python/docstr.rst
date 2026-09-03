@@ -6135,31 +6135,6 @@
     also controls the behavior of the functions :py:func:`drjit.switch` and
     :py:func:`drjit.dispatch`.
 
-.. topic:: JitFlag_MergeFunctions
-
-    Deduplicate code generated
-    by function calls on instance arrays.
-
-    When ``arr`` is an instance array (potentially with thousands of instances),
-    a function call like
-
-    .. code-block:: python
-
-       arr.f(inputs...)
-
-    can potentially generate vast numbers of different functions in the generated
-    code. At the same time, many of these functions may contain identical code
-    (or code that is identical except for data references).
-
-    Dr.Jit can exploit such redundancy and merge such functions during code
-    generation. Besides generating shorter programs, this also helps to reduce
-    thread divergence.
-
-    This flag is *enabled* by default. Note that it is only meaningful in
-    combination with :py:attr:`SymbolicCalls`. Besides calls to instance arrays,
-    this flag also controls the behavior of the functions :py:func:`drjit.switch`
-    and :py:func:`drjit.dispatch`.
-
 .. topic:: JitFlag_SymbolicLoops
 
     Dr.Jit provides two main ways of compiling loops involving Dr.Jit arrays.
@@ -6458,7 +6433,6 @@
     - :py:attr:`drjit.JitFlag.SymbolicLoops`,
     - :py:attr:`drjit.JitFlag.OptimizeLoops`,
     - :py:attr:`drjit.JitFlag.SymbolicCalls`,
-    - :py:attr:`drjit.JitFlag.MergeFunctions`,
     - :py:attr:`drjit.JitFlag.OptimizeCalls`,
     - :py:attr:`drjit.JitFlag.SymbolicConditionals`,
     - :py:attr:`drjit.JitFlag.ReuseIndices`, and

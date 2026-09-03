@@ -235,7 +235,6 @@ Other
 Some other optimizations are specific to symbolic operations, such as
 
 - :py:attr:`drjit.JitFlag.OptimizeCalls`,
-- :py:attr:`drjit.JitFlag.MergeFunctions`,
 - :py:attr:`drjit.JitFlag.OptimizeLoops`,
 - :py:attr:`drjit.JitFlag.CompressLoops`.
 
