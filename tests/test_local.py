@@ -277,3 +277,35 @@ def test15_zero_init_dynamic_readback(t):
     s[idx % 4] = idx + 1
     assert dr.all(s[idx % 4] == idx + 1)     # written slots (dynamic gather)
     assert dr.all(s[(idx % 4) + 4] == 0)     # never-written slots -> zero-init
+
+
+@pytest.test_arrays('jit,-diff,float32,shape=(*)')
+def test16_local_in_call(t):
+    # Local memory allocated inside of a symbolic call must be materialized
+    # within the generated function. The second callable also exercises the
+    # copy elision state machine: it reads the original buffer after a
+    # modified copy was written, which requires a real copy.
+    UInt32 = dr.uint32_array_t(t)
+
+    @dr.syntax
+    def f0(x):
+        tp = type(x)
+        local = dr.alloc_local(tp, 4, value=tp(0))
+        i = dr.uint32_array_t(tp)(0)
+        while i < 3:
+            local[i] = x * tp(i)
+            i += 1
+        return local[0] + local[1] + local[2]
+
+    def f1(x):
+        s0 = dr.alloc_local(t, 2)
+        s0[0] = x
+        s0[1] = x + 1
+        s1 = dr.Local(s0)
+        s1[0] += 100
+        s0[0] += 1000
+        return s0[0] + s0[1] + s1[0] + s1[1]
+
+    x = t(1, 2, 3, 4)
+    r = dr.switch(UInt32(0, 1, 0, 1), [f0, f1], x, mode='symbolic')
+    assert dr.all(r == [3, 1110, 9, 1118])
