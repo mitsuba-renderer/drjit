@@ -109,7 +109,6 @@ NB_MODULE(_drjit_ext, m_) {
         .value("CompressLoops", JitFlag::CompressLoops, doc_JitFlag_CompressLoops)
         .value("SymbolicCalls", JitFlag::SymbolicCalls, doc_JitFlag_SymbolicCalls)
         .value("OptimizeCalls", JitFlag::OptimizeCalls, doc_JitFlag_OptimizeCalls)
-        .value("MergeFunctions", JitFlag::MergeFunctions, doc_JitFlag_MergeFunctions)
         .value("PacketOps", JitFlag::PacketOps, doc_JitFlag_PacketOps)
         .value("ForceOptiX", JitFlag::ForceOptiX, doc_JitFlag_ForceOptiX)
         .value("PrintIR", JitFlag::PrintIR, doc_JitFlag_PrintIR)

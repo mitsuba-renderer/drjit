@@ -1,5 +1,6 @@
 import drjit as dr
 import pytest
+import re
 
 
 @pytest.test_arrays('float32,shape=(*),jit')
@@ -22,7 +23,6 @@ def test01_basic(t):
     ir_plain = hist_plain[0].source
     if dr.backend_v(t) is dr.JitBackend.LLVM:
         assert '@func_' not in ir_plain
-        assert 'define fastcc' not in ir_plain
     elif dr.backend_v(t) is dr.JitBackend.CUDA:
         assert 'call.uni' not in ir_plain
 
@@ -36,7 +36,7 @@ def test01_basic(t):
     ir_wrapped = hist_wrapped[0].source
     if dr.backend_v(t) is dr.JitBackend.LLVM:
         assert '@func_' in ir_wrapped
-        assert ir_wrapped.count('define fastcc') == 1
+        assert len(re.findall(r'define .*@func_', ir_wrapped)) == 1
     elif dr.backend_v(t) is dr.JitBackend.CUDA:
         assert 'call.uni' in ir_wrapped
 

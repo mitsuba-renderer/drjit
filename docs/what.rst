@@ -266,7 +266,7 @@ Dr.Jit provides three backends with feature parity:
    You can explicitly request this backend by importing types from
    ``drjit.llvm`` or ``drjit.llvm.ad`` (add ``.ad`` if derivative computation is needed).
 
-   Note that LLVM >= 11.0 must be installed on your machine for this backend to
+   Note that LLVM >= 18.0 must be installed on your machine for this backend to
    be available.  ```x86_64``` support is limited to CPUs with the ```FMA```
    instruction set, like Intel Haswell (2013) and AMD Piledriver (2012) and newer.
 
