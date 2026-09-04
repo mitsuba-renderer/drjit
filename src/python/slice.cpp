@@ -138,6 +138,14 @@ slice_index(const nb::type_object_t<ArrayBase> &dtype,
                 VarType vt = (VarType) s2->type;
                 nb::object o = nb::borrow(h);
 
+                if (!is_signed_int(vt) && !is_unsigned_int(vt))
+                    nb::raise("drjit.slice_index(): index arrays must have "
+                              "an integer type, but the slice expression "
+                              "contains an array of type '%s'. Boolean masks "
+                              "are not supported here, use drjit.select() "
+                              "or drjit.compress() instead.",
+                              nb::inst_name(h).c_str());
+
                 size_t slice_size = nb::len(h);
                 if (is_signed_int(vt)) {
                     o = select(o.attr("__lt__")(nb::int_(0)),
