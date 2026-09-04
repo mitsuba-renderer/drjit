@@ -198,13 +198,14 @@ public:
      * and component type must match this texture type.
      *
      * If \c writable is \c false the texture is wrapped for sampling (\ref
-     * eval()). If \c true it is wrapped for *rendering into* via \ref write(),
-     * and the native texture must allow shader writes / surface stores. On CUDA
-     * such a wrap is bound as a surface and cannot also be sampled.
+     * eval()). If \c true it may additionally be *rendered into* via \ref
+     * write(), and the native texture must allow shader writes / surface
+     * stores.
      *
      * A texture wrapping a cross-API handle (OpenGL on CUDA) requires a \ref
-     * map() / \ref unmap() pair around each use; on Metal those are no-ops. The
-     * native handle can be recovered with \ref native_handle().
+     * map() / \ref unmap() pair around each use, including accesses to its
+     * contents via \ref tensor() and \ref value(); on Metal those are no-ops.
+     * The native handle can be recovered with \ref native_handle().
      */
     static Texture from_native_handle(uintptr_t handle, bool writable = false,
                                       FilterMode filter_mode = FilterMode::Linear,
@@ -472,7 +473,7 @@ public:
             return;
         }
 
-        const TensorXf &pub = tensor();
+        const TensorXf &pub = is_jit_v<Storage_> ? m_tensor : m_padded_tensor;
 
         if (pub.ndim() != Dimension + 1)
             jit_raise("Texture::update_inplace(): tensor dimension must equal "
@@ -527,7 +528,9 @@ public:
      *    returns a symbolic view that occupies no actual storage. Its
      *    evaluation will query the hardware texture. Changing the texture
      *    contents via \ref set_tensor(), \ref write(), etc., will also change
-     *    this view, so be sure to evaluate beforehand.
+     *    this view, so be sure to evaluate beforehand. A texture wrapping an
+     *    OpenGL handle on the CUDA backend must be mapped (see \ref map())
+     *    when this function is called.
      */
     const TensorXf &tensor() const {
         if constexpr (!is_jit_v<Storage_>) {
@@ -1319,10 +1322,7 @@ protected:
                         m_level_count, m_mip_filter == MipFilter::Nearest ? 0 : 1,
                         m_max_aniso);
                 }
-                m_hw_mutable = (m_writable || external_wrap) &&
-                               !(IsCUDA && external_wrap && m_writable);
-                if (m_hw_mutable)
-                    install_readback_views();
+                m_hw_mutable = m_writable || external_wrap;
             }
         }
     }
@@ -1411,23 +1411,14 @@ private:
         }
     }
 
-    /// Refresh the readback views of a hardware-mutable texture before
+    /// Rebuild the readback views of a hardware-mutable texture before
     /// handing them out (other configurations keep them current at all times)
     void sync_views() const {
         if constexpr (HasGPUTexture) {
-            if (m_hw_mutable) {
-                // The hardware texture contents can change behind our back.
-                // An evaluated readback view would pin stale contents, so
-                // swap in a fresh one.
-                auto is_materialized = [](uint32_t index) {
-                    VarState s = jit_var_state(index);
-                    return s == VarState::Evaluated || s == VarState::Dirty;
-                };
-
-                if (is_materialized((uint32_t) m_padded_tensor.array().index()) ||
-                    is_materialized((uint32_t) m_tensor.array().index()))
-                    install_readback_views();
-            }
+            // The contents can change behind our back, and a wrapped OpenGL
+            // texture is only accessible while mapped. Fresh views are cheap.
+            if (m_hw_mutable)
+                install_readback_views();
         }
     }
 
@@ -1903,8 +1894,8 @@ private:
     bool m_srgb = false;
 
     /// The hardware texture contents can change behind our back (the texture
-    /// is writable or externally managed); the tensor members permanently
-    /// hold readback views that \ref sync_views() keeps current
+    /// is writable or externally managed); \ref sync_views() rebuilds the
+    /// readback views in the tensor members whenever they are handed out
     bool m_hw_mutable = false;
 
     /// MIP level selection mode of filtered lookups
