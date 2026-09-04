@@ -416,9 +416,9 @@ class Linear(Module):
     specifying ``bias=False``.
 
     The method :py:func:`Module.alloc` initializes the underlying coefficient
-    storage with random weights following a uniform Xavier initialization,
-    i.e., uniform variates on the interval :math:`[-k,k]` where
-    :math:`k=1/\sqrt{\texttt{out\_features}}`.
+    storage with random weights following the PyTorch convention for linear
+    layers, i.e., uniform variates on the interval :math:`[-k,k]` where
+    :math:`k=1/\sqrt{\texttt{in\_features}}`.
     """
     config: Tuple[int, int, bool]
     weights: TensorOrViewOrNone
@@ -487,8 +487,8 @@ class Linear(Module):
                                "size. You must specify the input size to drjit.nn.Module.alloc().")
 
         result = Linear(in_features, out_features, bias)
-        # Xavier (uniform) initialization, matches PyTorch
-        scale = drjit.sqrt(1 / out_features)
+        # Uniform initialization with fan-in scaling, matches PyTorch
+        scale = drjit.sqrt(1 / in_features)
         Float32 = drjit.float32_array_t(dtype)
         samples = rng.random(Float32, (out_features, in_features))
         result.weights = dtype(drjit.fma(samples, 2, -1) * scale)
