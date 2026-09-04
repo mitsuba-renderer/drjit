@@ -117,10 +117,16 @@ def test07_bad_swizzle(t):
         a.xw = 1
     with pytest.raises(IndexError):
         a = t(1,2,3)
-        a.xyw = a.yyxx
+        a.xyz = a.yyxx
     with pytest.raises(IndexError):
         a = t(1,2,3)
-        a.xywx = a.yyx
+        a.xyzx = a.yyx
+    with pytest.raises(AttributeError):
+        a.xyw = a.yyx
+    with pytest.raises(AttributeError):
+        b = a.ax
+    with pytest.raises(AttributeError):
+        a.xa = 1
 
 
 @pytest.test_arrays('shape=(*), float32')

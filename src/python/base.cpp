@@ -336,10 +336,10 @@ static NB_NOINLINE nb::handle tp_getattro_fallback(nb::handle h0, nb::handle h1)
 
             for (size_t i = 0; i < swizzle_size; ++i) {
                 switch (name[i]) {
-                    case 'x': valid |= in_size >= 1; break;
-                    case 'y': valid |= in_size >= 2; break;
-                    case 'z': valid |= in_size >= 3; break;
-                    case 'w': valid |= in_size >= 4; break;
+                    case 'x': valid &= in_size >= 1; break;
+                    case 'y': valid &= in_size >= 2; break;
+                    case 'z': valid &= in_size >= 3; break;
+                    case 'w': valid &= in_size >= 4; break;
                     default: valid = false; break;
                 }
             }
@@ -418,10 +418,10 @@ static NB_NOINLINE int tp_setattro_fallback(nb::handle h0, nb::handle h1, nb::ha
 
             for (size_t i = 0; i < swizzle_size; ++i) {
                 switch (name[i]) {
-                    case 'x': valid |= dst_size >= 1; break;
-                    case 'y': valid |= dst_size >= 2; break;
-                    case 'z': valid |= dst_size >= 3; break;
-                    case 'w': valid |= dst_size >= 4; break;
+                    case 'x': valid &= dst_size >= 1; break;
+                    case 'y': valid &= dst_size >= 2; break;
+                    case 'z': valid &= dst_size >= 3; break;
+                    case 'w': valid &= dst_size >= 4; break;
                     default: valid = false; break;
                 }
             }
