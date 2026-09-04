@@ -3012,7 +3012,12 @@ Index ad_var_reduce(JitBackend backend, VarType vt, ReduceOp op, Index i0) {
             case ReduceOp::Mul: {
                     JitVar v0 = JitVar::borrow(jit_index(i0)),
                            z  = scalar(i0, 0.0),
-                           w0 = dr::select(v0 == z, z, result / v0);
+                           o  = scalar(i0, 1.0);
+                    JitMask is_zero = v0 == z;
+                    JitVar nz = dr::select(is_zero, o, v0),
+                           cnt = dr::select(is_zero, o, z),
+                           n_zero = dr::sum(cnt),
+                           w0 = dr::select(n_zero == cnt, dr::prod(nz) / nz, z);
                     return ad_var_new("prod", std::move(result),
                                       Arg(i0, std::move(w0)));
                 }
