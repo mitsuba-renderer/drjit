@@ -14,6 +14,8 @@ def test01_comprehensions(t):
     {j: 'value' for j in range(n)} # Dict comprehension
     {j for j in range(n)} # Set comprehension
     (j for j in range(n) if j > 2) # Generator expression
+    [a + b for a, b in zip(range(n), range(n))] # Tuple target
+    [k for k, (a, b) in enumerate(zip(range(n), range(n)))] # Nested tuple target
 
     i = dr.zeros(t, 1)
     result = dr.zeros(t)
