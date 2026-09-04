@@ -749,7 +749,7 @@ class HashEncodingLayer(Module):
 
     @property
     def data(self):
-        self.encoding.data
+        return self.encoding.data
 
     def __repr__(self) -> str:
         return self.encoding.__repr__()
