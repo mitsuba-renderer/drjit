@@ -574,7 +574,7 @@ void Resampler::resample(const Value *source, Value *target,
                     }
                 }
                 if constexpr (std::is_same_v<Value, uint8_t>)
-                    accum = clip(accum, (uint8_t) 0, (uint8_t) 255);
+                    accum = clip(accum + Accum(0.5), Accum(0), Accum(255));
                 *out++ = (Value) accum;
             }
         }
