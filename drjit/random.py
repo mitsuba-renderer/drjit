@@ -136,8 +136,8 @@ class Generator:
         ``0``): each slice along that axis is kept intact, but their order
         is randomized.
 
-        The implementation generates uniform random float keys and calls
-        :py:func:`drjit.argsort` to obtain a permutation using an
+        The implementation generates uniform random 32-bit integer keys and
+        calls :py:func:`drjit.argsort` to obtain a permutation using an
         efficient parallel radix sort on both CPU and GPU backends.
 
         Overloaded signatures:
@@ -175,9 +175,7 @@ class Generator:
             if n <= 1:
                 return dr.arange(UInt32, n)
 
-            Float = dr.float32_array_t(x)
-            keys = self.random(Float, n)
-            return dr.argsort(keys)
+            return dr.argsort(self._sort_keys(x, n))
 
         elif dr.is_tensor_v(x):
             axis = args[0] if args else kwargs.get('axis', 0)
@@ -194,9 +192,7 @@ class Generator:
             if n <= 1:
                 return type(x)(x)
 
-            Float = dr.float32_array_t(type(x.array))
-            keys = self.random(Float, n)
-            perm = dr.argsort(keys)
+            perm = dr.argsort(self._sort_keys(type(x.array), n))
 
             idx = tuple(
                 perm if i == axis else slice(None)
@@ -215,9 +211,7 @@ class Generator:
             if n <= 1:
                 return type(x)(x)
 
-            Float = dr.float32_array_t(type(x))
-            keys = self.random(Float, n)
-            perm = dr.argsort(keys)
+            perm = dr.argsort(self._sort_keys(type(x), n))
             return dr.gather(type(x), x, perm)
 
         else:
@@ -247,6 +241,9 @@ class Philox4x32Generator(Generator):
 
     def clone(self) -> 'Generator':
         return Philox4x32Generator(self._seed, self._counter)
+
+    def _sort_keys(self, dtype: typing.Type[ArrayT], n: int) -> ArrayT:
+        return self._sample(dr.uint32_array_t(dtype), n, 'next_uint32x4')
 
     def _sample(self, dtype: typing.Type[ArrayT], shape: Shape, fn_name: str,
                 counter: typing.Optional[ArrayOrInt] = None) -> ArrayT:
