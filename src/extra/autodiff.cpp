@@ -838,7 +838,7 @@ void ad_var_dec_ref_impl(Index index) JIT_NOEXCEPT {
 /// Concatenate two strings
 char *concat(const char *s1, const char *s2) {
     size_t l1 = strlen(s1),
-           l2 = strlen(s1);
+           l2 = strlen(s2);
 
     char *buf = (char *) malloc(l1 + l2 + 1);
     if (!buf) {
@@ -1280,7 +1280,7 @@ Index ad_var_set_label(Index index, size_t argc, ...) {
 
         for (size_t i = 0; i < argc; ++i) {
             const char *s = va_arg(ap, const char *);
-            bool isnum = s[0] >= '0' || s[1] <= '9';
+            bool isnum = s[0] >= '0' && s[0] <= '9';
 
             if (isnum) {
                 buffer.put('[');
