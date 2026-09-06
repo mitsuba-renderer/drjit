@@ -160,7 +160,7 @@ Random number generation
    .. automethod:: permutation
    .. automethod:: clone
 
-.. py:module:: drjit
+.. py:currentmodule:: drjit
 
 Mask operations
 ---------------
@@ -340,6 +340,7 @@ Operations for vectors and matrices
 .. autofunction:: diag
 .. autofunction:: trace
 .. autofunction:: matmul
+   :no-index:
 .. autofunction:: hypot
 .. autofunction:: normalize
 .. autofunction:: lerp
@@ -722,9 +723,19 @@ Low-level bits
 Typing
 ------
 
-.. autoattribute:: T
-.. autoattribute:: Ts
-.. autoattribute:: AnyArray
+.. py:data:: T
+
+   Generic type variable used in the signatures of many Dr.Jit functions.
+
+.. py:data:: Ts
+
+   Type variable tuple (:pep:`646`) used by functions that accept an
+   arbitrary number of typed arguments, such as :py:func:`while_loop`.
+
+.. py:data:: AnyArray
+
+   Alias of :py:class:`ArrayBase` with all of its type parameters set to
+   ``typing.Any``. It matches any Dr.Jit array type.
 
 Local memory
 ------------

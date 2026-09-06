@@ -3505,7 +3505,7 @@
 
          1. use of the LLVM backend.
          2. integer or floating point scatter-additions.
-         2. use of the :py:attr:`drjit.ReduceMode.Expand` reduction strategy.
+         3. use of the :py:attr:`drjit.ReduceMode.Expand` reduction strategy.
 
     .. danger::
 

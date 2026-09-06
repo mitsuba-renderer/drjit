@@ -2191,13 +2191,13 @@ def sh_eval(d: ArrayBase, order: int) -> list:
 
     .. code-block:: wolfram
 
-        SphericalHarmonicQ[l_, m_, d_] := Block[{θ, ϕ},
-          θ = ArcCos[d[[3]]];
-          ϕ = ArcTan[d[[1]], d[[2]]];
+        SphericalHarmonicQ[l_, m_, d_] := Block[{theta, phi},
+          theta = ArcCos[d[[3]]];
+          phi = ArcTan[d[[1]], d[[2]]];
           Piecewise[{
-            {SphericalHarmonicY[l, m, θ, ϕ], m == 0},
-            {Sqrt[2] * Re[SphericalHarmonicY[l,  m, θ, ϕ]], m > 0},
-            {Sqrt[2] * Im[SphericalHarmonicY[l, -m, θ, ϕ]], m < 0}
+            {SphericalHarmonicY[l, m, theta, phi], m == 0},
+            {Sqrt[2] * Re[SphericalHarmonicY[l,  m, theta, phi]], m > 0},
+            {Sqrt[2] * Im[SphericalHarmonicY[l, -m, theta, phi]], m < 0}
           }]
         ]
     """
