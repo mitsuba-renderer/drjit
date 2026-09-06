@@ -107,7 +107,6 @@ DEFINE_MATH_OP(erf)
 DEFINE_MATH_OP_2(atan2)
 DEFINE_MATH_OP_2(ldexp)
 DEFINE_MATH_OP_PAIR(frexp)
-DEFINE_MATH_OP_PAIR(sincos)
 DEFINE_MATH_OP_PAIR(sincosh)
 
 // The operations below need special casing to use intrinsics on CUDA hardware
@@ -238,6 +237,33 @@ DRJIT_EXTRA_EXPORT uint32_t jit_var_cos(uint32_t i0) {
         default:
             jit_fail("jit_var_cos(): invalid operand!");
             return 0;
+    }
+}
+
+DRJIT_EXTRA_EXPORT UInt32Pair jit_var_sincos(uint32_t i0) {
+    VarInfo info = jit_set_backend(i0);
+
+    switch (info.type) {
+        case VarType::Float16: {
+            auto [a, b] = dr::sincos<Float16, false>(Float16::borrow(i0));
+            return { a.release(), b.release() };
+        }
+
+        case VarType::Float32: {
+            if (is_gpu(info.backend))
+                return { jit_var_sin_intrinsic(i0), jit_var_cos_intrinsic(i0) };
+            auto [a, b] = dr::sincos<Float32, false>(Float32::borrow(i0));
+            return { a.release(), b.release() };
+        }
+
+        case VarType::Float64: {
+            auto [a, b] = dr::sincos<Float64, false>(Float64::borrow(i0));
+            return { a.release(), b.release() };
+        }
+
+        default:
+            jit_fail("jit_var_sincos(): invalid operand!");
+            return { 0, 0 };
     }
 }
 
