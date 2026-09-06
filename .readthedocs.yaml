@@ -5,9 +5,10 @@ submodules:
   recursive: true
 
 build:
-  os: ubuntu-22.04
+  os: ubuntu-24.04
   apt_packages:
     - librsvg2-bin
+    - libllvm18
   tools:
     python: "3.11"
 
