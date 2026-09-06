@@ -1390,7 +1390,8 @@ def sphdir(theta, phi):
 
     return Array3f(cp * st, sp * st, ct)
 
-def var(value, axis = ..., mode = None, keepdims: bool = False, ddof: int = 0):
+def var(value, axis = ..., mode = None, keepdims: bool = False, ddof: int = 0,
+        where = True):
     '''
     Compute the variance of the input along the specified axis/axes.
 
@@ -1433,20 +1434,30 @@ def var(value, axis = ..., mode = None, keepdims: bool = False, ddof: int = 0):
         ddof (int): "delta degrees of freedom"; the divisor used is
           ``N - ddof``. Defaults to ``0`` (population variance).
 
+        where (ArrayBase | Sequence[bool] | bool): optional mask that
+          excludes entries from the computation. ``N`` then counts the
+          entries where the mask is ``True``. Defaults to ``True``.
+
     Returns:
         The variance along the specified axis/axes.
     '''
     if not is_array_v(value):
         items = list(value) if hasattr(value, '__iter__') else [value]
-        m = mean(items)
-        return sum([(x - m) ** 2 for x in items]) / (len(items) - ddof)
-    m = mean(value, axis=axis, mode=mode, keepdims=True)
-    s = sum((value - m) ** 2, axis=axis, mode=mode, keepdims=keepdims)
-    n = prod(shape(value)) // prod(shape(m))
+        m = mean(items, where=where)
+        s = sum([(x - m) ** 2 for x in items], where=where)
+        n = len(items) if where is True else sum([1] * len(items), where=where)
+        return s / (n - ddof)
+    m = mean(value, axis=axis, mode=mode, keepdims=True, where=where)
+    s = sum((value - m) ** 2, axis=axis, mode=mode, keepdims=keepdims, where=where)
+    if where is True:
+        n = prod(shape(value)) // prod(shape(m))
+    else:
+        n = sum(ones_like(value), axis=axis, mode=mode, keepdims=keepdims, where=where)
     return s / (n - ddof)
 
 
-def std(value, axis = ..., mode = None, keepdims: bool = False, ddof: int = 0):
+def std(value, axis = ..., mode = None, keepdims: bool = False, ddof: int = 0,
+        where = True):
     '''
     Compute the standard deviation of the input along the specified
     axis/axes.
@@ -1470,10 +1481,14 @@ def std(value, axis = ..., mode = None, keepdims: bool = False, ddof: int = 0):
 
         ddof (int): delta degrees of freedom (default ``0``).
 
+        where (ArrayBase | Sequence[bool] | bool): optional mask that
+          excludes entries from the computation (default ``True``).
+
     Returns:
         The standard deviation along the specified axis/axes.
     '''
-    return sqrt(var(value, axis=axis, mode=mode, keepdims=keepdims, ddof=ddof))
+    return sqrt(var(value, axis=axis, mode=mode, keepdims=keepdims, ddof=ddof,
+                    where=where))
 
 
 def _to_ordinal_32(value):
@@ -1691,12 +1706,109 @@ def argmax(value: ArrayBase, /, axis: Optional[int] = None, keepdims: bool = Fal
     return _argminmax(value, axis, keepdims, find_max=True)
 
 
-def _radix_sort(arr, block_size, descending, return_indices):
+def _rank_sort_blocks(ordinal, block_size, inactive):
     """
-    Multi-pass radix sort using block_mkperm.
+    Return a permutation that stably sorts each block of ``block_size``
+    elements of the unsigned array ``ordinal``, placing elements flagged in
+    the optional ``inactive`` array after the others.
 
-    Operates on the flat inner array. When block_size < len(arr),
+    Every element counts the block members that precede it, which costs
+    ``block_size`` gathers per element in a single kernel. This beats
+    ``block_mkperm`` for small blocks, whose per-block overhead (a serial
+    bucket scan and a heap allocation per block and pass) dominates the
+    radix sort there.
+    """
+    Ordinal = type(ordinal)
+    UInt32 = uint32_array_t(Ordinal)
+    n = len(ordinal)
+    idx = arange(UInt32, n)
+
+    # An opaque block size lets every block size share the same kernel
+    bs = opaque(UInt32, block_size)
+    local = idx % bs
+    base = idx - local
+
+    def body(j, rank):
+        o = gather(Ordinal, ordinal, base + j)
+        before = (o < ordinal) | ((o == ordinal) & (j < local))
+        if inactive is not None:
+            i = gather(UInt32, inactive, base + j)
+            before = (i < inactive) | ((i == inactive) & before)
+        return j + 1, rank + UInt32(before)
+
+    _, rank = while_loop((zeros(UInt32, n), zeros(UInt32, n)),
+                         lambda j, rank: j < bs, body)
+
+    perm = empty(UInt32, n)
+    scatter(perm, idx, base + rank)
+    return perm
+
+
+# Blocks up to this size use _rank_sort_blocks instead of radix passes.
+# On a 12-core CPU the two approaches cross over between 256 and 512.
+_RANK_SORT_MAX_BLOCK = 256
+
+
+def _radix_sort_blocks(ordinal, block_size, inactive, return_indices):
+    """
+    Multi-pass radix sort of each block of ``block_size`` elements of the
+    unsigned array ``ordinal`` using ``block_mkperm``. Elements flagged in
+    the optional ``inactive`` array move to the end of their block.
+
+    Returns the permutation if ``return_indices`` is set and the sorted
+    ordinals otherwise.
+    """
+    Ordinal = type(ordinal)
+    UInt32 = uint32_array_t(Ordinal)
+    ordinal_bits = itemsize_v(Ordinal) * 8
+
+    # 11-bit radix (3 passes for 32-bit) is faster on CPU; 8-bit radix
+    # (4 passes) is better on GPU where shared memory is limited.
+    radix_bits = 11 if backend_v(Ordinal) == JitBackend.LLVM else 8
+
+    if return_indices:
+        index = arange(UInt32, len(ordinal))
+
+    shift = 0
+    bits_remaining = ordinal_bits
+    while bits_remaining > 0:
+        bits_this_pass = _builtins.min(radix_bits, bits_remaining)
+        bucket_count = 1 << bits_this_pass
+        mask = bucket_count - 1
+
+        digit = UInt32((ordinal >> shift) & Ordinal(mask))
+
+        # Inactive elements gain a set bit above the most significant
+        # digit, which sends them to the end of the block in the final pass
+        last_pass = bits_this_pass == bits_remaining
+        if last_pass and inactive is not None:
+            digit |= inactive << bits_this_pass
+            bucket_count <<= 1
+
+        eval(digit, ordinal)
+        perm = detail.block_mkperm(digit, block_size, bucket_count)
+
+        ordinal = gather(Ordinal, ordinal, perm)
+        if return_indices:
+            index = gather(UInt32, index, perm)
+        if inactive is not None and not last_pass:
+            inactive = gather(UInt32, inactive, perm)
+
+        shift += bits_this_pass
+        bits_remaining -= bits_this_pass
+
+    return index if return_indices else ordinal
+
+
+def _radix_sort(arr, block_size, descending, return_indices, where=True):
+    """
+    Stable sort of the flat array ``arr``. When block_size < len(arr),
     independently sorts contiguous groups of block_size elements.
+
+    An optional ``where`` mask moves inactive elements to the end of their
+    block (in stable order) regardless of their value.
+
+    Small blocks use a rank-counting sort, larger ones a radix sort.
     """
     arr_tp = type(arr)
 
@@ -1704,7 +1816,7 @@ def _radix_sort(arr, block_size, descending, return_indices):
     if (backend_v(arr_tp) == JitBackend.Metal and
             type_v(arr_tp) == VarType.Float64):
         result = _radix_sort(float32_array_t(arr_tp)(arr), block_size,
-                             descending, return_indices)
+                             descending, return_indices, where)
         return result if return_indices else arr_tp(result)
 
     bits = itemsize_v(arr_tp) * 8
@@ -1725,45 +1837,28 @@ def _radix_sort(arr, block_size, descending, return_indices):
     if descending:
         ordinal = ~ordinal
 
-    Ordinal = type(ordinal)
-    ordinal_bits = itemsize_v(Ordinal) * 8
-    UInt32 = uint32_array_t(arr_tp)
+    inactive = None
+    if where is not True:
+        UInt32 = uint32_array_t(arr_tp)
+        inactive = select(mask_t(arr_tp)(where), UInt32(0), UInt32(1))
 
-    # 11-bit radix (3 passes for 32-bit) is faster on CPU; 8-bit radix
-    # (4 passes) is better on GPU where shared memory is limited.
-    radix_bits = 11 if backend_v(arr_tp) == JitBackend.LLVM else 8
-
-    if return_indices:
-        index = arange(UInt32, n)
-
-    shift = 0
-    bits_remaining = ordinal_bits
-    while bits_remaining > 0:
-        bits_this_pass = min(radix_bits, bits_remaining)
-        bucket_count = 1 << bits_this_pass
-        mask = bucket_count - 1
-
-        digit = UInt32((ordinal >> shift) & Ordinal(mask))
-
-        eval(digit, ordinal)
-        perm = detail.block_mkperm(digit, block_size, bucket_count)
-
-        ordinal = gather(Ordinal, ordinal, perm)
+    if block_size <= _RANK_SORT_MAX_BLOCK:
+        index = _rank_sort_blocks(ordinal, block_size, inactive)
         if return_indices:
-            index = gather(UInt32, index, perm)
-
-        shift += bits_this_pass
-        bits_remaining -= bits_this_pass
-
-    if return_indices:
-        return index
+            return index
+        ordinal = gather(type(ordinal), ordinal, index)
     else:
-        if descending:
-            ordinal = ~ordinal
-        if bits <= 32:
-            return _from_ordinal_32(ordinal, arr_tp)
-        else:
-            return _from_ordinal_64(ordinal, arr_tp)
+        result = _radix_sort_blocks(ordinal, block_size, inactive, return_indices)
+        if return_indices:
+            return result
+        ordinal = result
+
+    if descending:
+        ordinal = ~ordinal
+    if bits <= 32:
+        return _from_ordinal_32(ordinal, arr_tp)
+    else:
+        return _from_ordinal_64(ordinal, arr_tp)
 
 
 def _sort_tensor_prep(value, axis):
@@ -1845,10 +1940,11 @@ def argsort(value: ArrayBase, /, axis: int = -1, descending: bool = False) -> Ar
         return _radix_sort(value, len(value), descending, return_indices=True)
 
 
-def _median_blocks(inner, block_size, return_index):
+def _median_blocks(inner, block_size, return_index, where):
     """
-    Select the lower median (the element at rank ``(block_size - 1) // 2``) of
-    each contig. block of ``block_size`` elements of the flat array ``inner``
+    Select the lower median (the selected element at rank ``(N - 1) // 2``,
+    where ``N`` counts the elements that ``where`` lets through) of each block of
+    ``block_size`` elements of the flat array ``inner``
     """
     arr_tp = type(inner)
     if block_size == 0:
@@ -1857,26 +1953,41 @@ def _median_blocks(inner, block_size, return_index):
     UInt32 = uint32_array_t(arr_tp)
     # A radix-select would avoid fully sorting each block, but no concrete use
     # case currently justifies the added complexity over reusing the sort.
-    perm = _radix_sort(inner, block_size, descending=False, return_indices=True)
+    perm = _radix_sort(inner, block_size, descending=False,
+                       return_indices=True, where=where)
     base = arange(UInt32, len(inner) // block_size) * block_size
 
-    idx = gather(UInt32, perm, base + (block_size - 1) // 2)
-    values = gather(arr_tp, inner, idx)
+    if where is True:
+        rank, nonempty = (block_size - 1) // 2, True
+    else:
+        # Inactive elements sort to the end of each block, so the median
+        # sits at rank (N - 1) // 2 among the N where ones
+        count = block_sum(UInt32(mask_t(arr_tp)(where)), block_size)
+        nonempty = count > 0
+        rank = (count - 1) // 2
+
+    idx = gather(UInt32, perm, base + rank, nonempty)
+    values = gather(arr_tp, inner, idx, nonempty)
+    if where is not True and is_float_v(arr_tp):
+        values = select(nonempty, values, nan)
     return (values, idx - base) if return_index else values
 
 
 @overload
 def median(value: ArrayT, /, axis: Union[int, Tuple[int, ...], None] = -1,
-           keepdims: bool = False, return_index: Literal[False] = False) -> ArrayT: ...
+           keepdims: bool = False, return_index: Literal[False] = False,
+           where: Union[bool, ArrayBase] = True) -> ArrayT: ...
 
 
 @overload
 def median(value: ArrayT, /, axis: Union[int, Tuple[int, ...], None] = -1,
-           keepdims: bool = False, *, return_index: Literal[True]) -> Tuple[ArrayT, ArrayBase]: ...
+           keepdims: bool = False, *, return_index: Literal[True],
+           where: Union[bool, ArrayBase] = True) -> Tuple[ArrayT, ArrayBase]: ...
 
 
 def median(value: ArrayT, /, axis: Union[int, Tuple[int, ...], None] = -1,
-           keepdims: bool = False, return_index: bool = False) -> ArrayT:
+           keepdims: bool = False, return_index: bool = False,
+           where: Union[bool, ArrayBase] = True) -> ArrayT:
     '''
     Compute the median of the input along the specified axis/axes.
 
@@ -1900,6 +2011,12 @@ def median(value: ArrayT, /, axis: Union[int, Tuple[int, ...], None] = -1,
           the selected element within the reduced axis/axes (the index into
           the flattened reduced extent when reducing several axes at once).
 
+        where (bool | drjit.ArrayBase): an optional Dr.Jit mask array with
+          the shape of ``value`` that excludes entries from the median.
+          ``N`` then counts the entries where the mask is ``True``. If no
+          entry remains, the result is NaN for floating point inputs and
+          ``0`` otherwise, and the index is ``0``. The default is ``True``.
+
     Returns:
         The median along the specified axis/axes, or a ``(values, indices)``
         tuple if ``return_index`` is set.
@@ -1909,11 +2026,23 @@ def median(value: ArrayT, /, axis: Union[int, Tuple[int, ...], None] = -1,
         n = len(items)
         if n == 0:
             raise RuntimeError("median(): cannot compute the median of an empty input.")
-        sel = sorted(range(n), key=items.__getitem__)[(n - 1) // 2]
+        if where is True:
+            keep = range(n)
+        else:
+            flags = list(where) if hasattr(where, '__iter__') else [where] * n
+            keep = [i for i in range(n) if flags[i]]
+            if not keep:
+                return (nan, 0) if return_index else nan
+        sel = sorted(keep, key=items.__getitem__)[(len(keep) - 1) // 2]
         return (items[sel], sel) if return_index else items[sel]
 
+    if where is not True:
+        where = mask_t(type(value))(where)
+        if is_tensor_v(value) and where.shape != value.shape:
+            raise RuntimeError("median(): 'where' must have the shape of 'value'.")
+
     if not is_tensor_v(value):
-        return _median_blocks(value, len(value), return_index)
+        return _median_blocks(value, len(value), return_index, where)
 
     shape = value.shape
     ndim = len(shape)
@@ -1927,13 +2056,18 @@ def median(value: ArrayT, /, axis: Union[int, Tuple[int, ...], None] = -1,
     tail = tuple(range(ndim - len(axes), ndim))
     if axes != tail:
         value = moveaxis(value, axes, tail)
+        if where is not True:
+            where = moveaxis(where, axes, tail)
 
     if keepdims:
         out_shape = tuple(1 if d in axes else shape[d] for d in range(ndim))
     else:
         out_shape = tuple(shape[d] for d in range(ndim) if d not in axes)
 
-    res = _median_blocks(value.array, prod([shape[a] for a in axes]), return_index)
+    if where is not True:
+        where = where.array
+    res = _median_blocks(value.array, prod([shape[a] for a in axes]),
+                         return_index, where)
     if return_index:
         med, idx = res
         return tensor_t(type(med))(med, out_shape), tensor_t(type(idx))(idx, out_shape)

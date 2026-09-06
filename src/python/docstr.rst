@@ -909,6 +909,11 @@
         keepdims (bool): if ``True``, the reduced axes are retained in the
           output as size-1 dimensions. Defaults to ``False``.
 
+        where (ArrayBase | Sequence[bool] | bool): optional mask that
+          excludes entries from the reduction. Masked-out entries are
+          replaced by the identity element of the operation (e.g. ``0`` for
+          sums) and therefore do not contribute. Defaults to ``True``.
+
     Returns:
         The reduced array or tensor as specified above.
 
@@ -936,6 +941,11 @@
         keepdims (bool): if ``True``, the reduced axes are retained in the
           output as size-1 dimensions. Defaults to ``False``.
 
+        where (ArrayBase | Sequence[bool] | bool): optional mask that
+          excludes entries from the reduction. Masked-out entries are
+          replaced by the identity element of the operation (e.g. ``0`` for
+          sums) and therefore do not contribute. Defaults to ``True``.
+
     Returns:
         object: The reduced array or tensor as specified above.
 
@@ -962,6 +972,11 @@
 
         keepdims (bool): if ``True``, the reduced axes are retained in the
           output as size-1 dimensions. Defaults to ``False``.
+
+        where (ArrayBase | Sequence[bool] | bool): optional mask that
+          excludes entries from the reduction. Masked-out entries are
+          replaced by the identity element of the operation (e.g. ``0`` for
+          sums) and therefore do not contribute. Defaults to ``True``.
 
     Returns:
         object: The reduced array or tensor as specified above.
@@ -994,6 +1009,11 @@
         keepdims (bool): if ``True``, the reduced axes are retained in the
           output as size-1 dimensions. Defaults to ``False``.
 
+        where (ArrayBase | Sequence[bool] | bool): optional mask that
+          excludes entries from the reduction. Masked-out entries are
+          replaced by the identity element of the operation (e.g. ``0`` for
+          sums) and therefore do not contribute. Defaults to ``True``.
+
     Returns:
         object: The reduced array or tensor as specified above.
 
@@ -1025,6 +1045,11 @@
         keepdims (bool): if ``True``, the reduced axes are retained in the
           output as size-1 dimensions. Defaults to ``False``.
 
+        where (ArrayBase | Sequence[bool] | bool): optional mask that
+          excludes entries from the reduction. Masked-out entries are
+          replaced by the identity element of the operation (e.g. ``0`` for
+          sums) and therefore do not contribute. Defaults to ``True``.
+
     Returns:
         The reduced array or tensor as specified above.
 
@@ -1053,6 +1078,10 @@
 
         keepdims (bool): if ``True``, the reduced axes are retained in the
           output as size-1 dimensions. Defaults to ``False``.
+
+        where (ArrayBase | Sequence[bool] | bool): optional mask that
+          excludes entries from the mean. Masked-out entries contribute
+          neither to the sum nor to the divisor. Defaults to ``True``.
 
     Returns:
         The reduced array or tensor as specified above.
@@ -1127,6 +1156,11 @@
         keepdims (bool): if ``True``, the reduced axes are retained in the
           output as size-1 dimensions. Defaults to ``False``.
 
+        where (ArrayBase | Sequence[bool] | bool): optional mask that
+          excludes entries from the reduction. Masked-out entries are
+          replaced by the identity element of the operation (e.g. ``0`` for
+          sums) and therefore do not contribute. Defaults to ``True``.
+
     Returns:
         object: The reduced array or tensor as specified above.
 
@@ -1200,6 +1234,11 @@
         keepdims (bool): if ``True``, the reduced axes are retained in the
           output as size-1 dimensions. Defaults to ``False``.
 
+        where (ArrayBase | Sequence[bool] | bool): optional mask that
+          excludes entries from the reduction. Masked-out entries are
+          replaced by the identity element of the operation (e.g. ``0`` for
+          sums) and therefore do not contribute. Defaults to ``True``.
+
     Returns:
         bool | drjit.ArrayBase: Result of the reduction operation
 
@@ -1269,6 +1308,11 @@
         keepdims (bool): if ``True``, the reduced axes are retained in the
           output as size-1 dimensions. Defaults to ``False``.
 
+        where (ArrayBase | Sequence[bool] | bool): optional mask that
+          excludes entries from the reduction. Masked-out entries are
+          replaced by the identity element of the operation (e.g. ``0`` for
+          sums) and therefore do not contribute. Defaults to ``True``.
+
     Returns:
         bool | drjit.ArrayBase: Result of the reduction operation
 
@@ -1290,6 +1334,9 @@
 
         arg1 (list | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
 
+        where (ArrayBase | Sequence[bool] | bool): optional mask that
+          excludes entries from the dot product. Defaults to ``True``.
+
     Returns:
         float | int | drjit.ArrayBase: Dot product of inputs
 
@@ -1306,6 +1353,9 @@
         arg0 (list | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
 
         arg1 (list | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+
+        where (ArrayBase | Sequence[bool] | bool): optional mask that
+          excludes entries from the dot product. Defaults to ``True``.
 
     Returns:
         float | int | drjit.ArrayBase: Absolute value of the dot product of inputs
@@ -1343,6 +1393,11 @@
         keepdims (bool): if ``True``, the reduced axes are retained in the
           output as size-1 dimensions. Defaults to ``False``.
 
+        where (ArrayBase | Sequence[bool] | bool): optional mask that
+          excludes entries from the reduction. Masked-out entries are
+          replaced by the identity element of the operation (e.g. ``0`` for
+          sums) and therefore do not contribute. Defaults to ``True``.
+
     Returns:
         float | int | drjit.ArrayBase: 2-norm of the input
 
@@ -1378,6 +1433,11 @@
 
         keepdims (bool): if ``True``, the reduced axes are retained in the
           output as size-1 dimensions. Defaults to ``False``.
+
+        where (ArrayBase | Sequence[bool] | bool): optional mask that
+          excludes entries from the reduction. Masked-out entries are
+          replaced by the identity element of the operation (e.g. ``0`` for
+          sums) and therefore do not contribute. Defaults to ``True``.
 
     Returns:
         float | int | drjit.ArrayBase: squared 2-norm of the input
@@ -1430,6 +1490,11 @@
 
         reverse (bool): if set to ``True``, the reduction is done from
           the end of each block.
+
+        where (ArrayBase | Sequence[bool] | bool): optional mask that
+          excludes entries from the scan. Masked-out entries are replaced
+          by the identity element of the operation, so the running value
+          passes through them unchanged. Defaults to ``True``.
 
     Returns:
         The block-reduced array or PyTree as specified above.
@@ -8231,6 +8296,10 @@
         keepdims (bool): if ``True``, the reduced axes are retained in the
           output as size-1 dimensions. Defaults to ``False``.
 
+        where (ArrayBase | Sequence[bool] | bool): optional mask. Only
+          entries where the mask is ``True`` are counted. Defaults to
+          ``True``.
+
     Returns:
         int | drjit.ArrayBase: Result of the reduction operation
 
@@ -8931,6 +9000,11 @@
 
         mode (str | None): optional parameter to force an evaluation strategy.
 
+        where (ArrayBase | Sequence[bool] | bool): optional mask that
+          excludes entries from the reduction. Masked-out entries are
+          replaced by the identity element of the operation (e.g. ``0`` for
+          sums) and therefore do not contribute. Defaults to ``True``.
+
     Returns:
         The block-reduced array or PyTree as specified above.
 
@@ -9220,6 +9294,11 @@
 
         reverse (bool): if set to ``True``, the prefix reduction is done from
           the *end* of the selected axis.
+
+        where (ArrayBase | Sequence[bool] | bool): optional mask that
+          excludes entries from the scan. Masked-out entries are replaced
+          by the identity element of the operation, so the running value
+          passes through them unchanged. Defaults to ``True``.
 
     Returns:
         The prefix-reduced array or tensor as specified above. It has
