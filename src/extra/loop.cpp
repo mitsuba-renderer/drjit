@@ -1115,8 +1115,15 @@ public:
             if (!in.is_diff)
                 continue;
             uint32_t new_grad = ad_grad(m_state2[i]);
-            jit_var_dec_ref((uint32_t) m_state[diff_off]);
-            m_state[diff_off] = new_grad;
+            uint32_t old_grad = (uint32_t) m_state[diff_off];
+            // Keep constant accumulators invariant across loop re-recording.
+            if (in.is_invariant && jit_var_is_zero_literal(old_grad) &&
+                jit_var_is_zero_literal(new_grad)) {
+                jit_var_dec_ref(new_grad);
+            } else {
+                jit_var_dec_ref(old_grad);
+                m_state[diff_off] = new_grad;
+            }
             diff_off++;
         }
 
@@ -1178,7 +1185,7 @@ public:
             } else {
                 uint64_t zero = 0;
                 grad = jit_var_literal(m_backend, jit_var_type(in.index),
-                                       &zero, loop_size);
+                                       &zero, in.is_invariant ? jit_var_size(in.index) : loop_size);
             }
             m_state.push_back_steal(grad);
         }

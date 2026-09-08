@@ -777,3 +777,49 @@ def test46_fwd_partial_seed_multiple_implicit(t, mode, seed):
 
     dr.forward_from(x if seed == 'x' else y)
     dr.assert_allclose(dr.grad(acc), 12 if seed == 'x' else 8)
+
+
+@pytest.mark.parametrize('width', [1, 2, 5])
+@pytest.mark.parametrize('enable_unused_grad', [False, True])
+@pytest.test_arrays('float16,is_diff,shape=(*)', 'float32,is_diff,shape=(*)',
+                    'float64,is_diff,shape=(*)')
+def test47_general_bwd_unused_invariant_width(t, width, enable_unused_grad):
+    UInt = dr.uint32_array_t(t)
+    x, scale, captured = t([1, 2, 3, 4]), t(2), t(3)
+    unused = dr.full(t, 7, width)
+    dr.enable_grad(x, scale, captured)
+    if enable_unused_grad:
+        dr.enable_grad(unused)
+
+    _, value, _, _, passenger = dr.while_loop(
+        (UInt(0), t(1), x, scale, unused),
+        lambda i, *_: i < 2,
+        lambda i, v, x, scale, unused:
+            (i + 1, v * x * scale * captured, x, scale, unused),
+        mode='symbolic', max_iterations=2)
+
+    dr.backward(dr.sum(value))
+    dr.assert_allclose(value, [36, 144, 324, 576])
+    dr.assert_allclose(dr.grad(x), [72, 144, 216, 288])
+    dr.assert_allclose(dr.grad(scale), 1080)
+    dr.assert_allclose(dr.grad(captured), 720)
+    dr.assert_allclose(passenger, unused)
+    dr.assert_allclose(dr.grad(unused), 0)
+
+
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+def test48_general_bwd_invariant_gradient_cancellation(t):
+    UInt = dr.uint32_array_t(t)
+    x, scale = t([1, 2, 3, 4]), t(2)
+    dr.enable_grad(x, scale)
+    _, value, _ = dr.while_loop(
+        (UInt(0), x, scale),
+        lambda i, *_: i < 2,
+        lambda i, v, scale:
+            (i + 1, v + x * scale * (1 - 2 * t(i)), scale),
+        mode='symbolic', max_iterations=2)
+
+    dr.backward(dr.sum(value))
+    dr.assert_allclose(value, x)
+    dr.assert_allclose(dr.grad(x), 1)
+    dr.assert_allclose(dr.grad(scale), 0)
