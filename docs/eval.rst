@@ -247,20 +247,24 @@ In a gradient-based optimization, typically only the first gradient step will
 compile kernels (causing either soft or hard misses), which are subsequently
 reused many times.
 
-The location of the on-disk cache depends on the backend, operating system, and
-type of kernel. It can be found in the following location (where ``~`` refers
-to the user's home directory):
+Dr.Jit stores its on-disk cache in a single directory (where ``~`` refers to
+the user's home directory):
+
+- **Linux** and **macOS**: ``~/.drjit``
+- **Windows**: ``~\AppData\Local\Temp\drjit``
+
+The contents of this directory depend on the backend and type of kernel:
 
 1. **LLVM Backend**:
 
-   - **Linux** and **macOS**: ``~/.drjit/*.llvm.bin``
-   - **Windows**: ``~\AppData\Local\Temp\drjit\*.llvm.bin``
+   Compiled kernels are stored in files named after a hash of their contents,
+   with the extension ``.o.lz4`` on Linux and macOS and ``.obj.lz4`` on
+   Windows.
 
-1. **CUDA Backend**:
+2. **CUDA Backend**:
 
    The CUDA environment already provides an on-disk kernel caching mechanism,
    which is reused by Dr.Jit. The cache files can be found here:
-
 
    - **Linux**: ``~/.nv/ComputeCache\*``
    - **Windows**: ``~\AppData\Roaming\NVIDIA\ComputeCache\*``
@@ -268,14 +272,17 @@ to the user's home directory):
    Kernels that perform hardware-accelerated ray tracing go through a different
    compilation pipeline named `OptiX
    <https://developer.nvidia.com/rtx/ray-tracing/optix>`__. In this case, they
-   are cached in a single file at the following location:
+   are cached in a single file named ``optix7cache.db`` within the Dr.Jit cache
+   directory.
 
-   - **Linux**: ``~/.drjit/optix7cache.db``
-   - **Windows**: ``~\AppData\Local\Temp\drjit\optix7cache.db``
+3. **Metal Backend**:
 
-The Metal backend does not currently persist compiled kernels to disk. Its
-kernels are retained in an in-memory cache that benefits repeated computation
-within a session, but a new session always recompiles them from scratch.
+   Dr.Jit maintains its own cache instead of relying on the system-wide Metal
+   shader cache. Its entries use the extensions ``.air.metallib.lz4``,
+   ``.func.metallib.lz4``, and ``.pso.metallib.lz4``.
+
+The section on :ref:`inspecting compiled kernels <inspect_kernels>` explains
+the format of these files and how to decompress and examine them.
 
 .. _cache_config:
 
