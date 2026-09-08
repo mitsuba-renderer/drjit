@@ -968,8 +968,9 @@ public:
         size_t N = m_inputs.size();
 
         m_state2.release();
+        // Keep invariant identities stable during trajectory re-recording.
         for (size_t i = 0; i < N; ++i)
-            m_state2.push_back_borrow(m_state[i]);
+            m_state2.push_back_borrow(m_inputs[i].is_invariant ? m_inputs[i].index : m_state[i]);
         m_write_cb(m_payload, m_state2, m_reset);
         m_reset = false;
         m_state2.release();
@@ -1020,6 +1021,8 @@ public:
         m_state2.release();
         m_read_cb(m_payload, m_state2);
         for (size_t i = 0; i < N; ++i) {
+            if (m_inputs[i].is_invariant)
+                continue;
             uint32_t new_jit = (uint32_t) m_state2[i];
             jit_var_inc_ref(new_jit);
             jit_var_dec_ref((uint32_t) m_state[i]);
