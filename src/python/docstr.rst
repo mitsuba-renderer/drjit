@@ -6488,6 +6488,25 @@
     User code may query this flag to conditionally optimize kernels for frozen
     function recording, such as re-seeding the sampler, used for rendering.
 
+.. topic:: JitFlag_SymbolicAll
+
+    A combined flag that refers to the three types of symbolic control flow:
+
+    - :py:attr:`drjit.JitFlag.SymbolicLoops`,
+    - :py:attr:`drjit.JitFlag.SymbolicCalls`, and
+    - :py:attr:`drjit.JitFlag.SymbolicConditionals`.
+
+    Disabling it switches loops, calls, and conditionals to *evaluated mode*,
+    which is less efficient but permits stepping through a program in a
+    debugger and printing intermediate results.
+
+    .. code-block:: python
+
+       dr.set_flag(dr.JitFlag.SymbolicAll, False)
+
+    Querying this flag via :py:func:`drjit.flag()` returns ``True`` only when
+    all three of the above flags are set.
+
 .. topic:: JitFlag_Default
 
     The default set of optimization flags consisting of

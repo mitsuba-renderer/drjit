@@ -10,32 +10,29 @@ Undefined behavior
 ------------------
 
 Dr.Jit operations that acess memory (e.g., :py:func:`dr.gather() <gather>`,
-:py:func:`dr.scatter(), dynamic slicing) emphasize performance and assume that
-provided indices are in bounds. Violating this rule can easily crash the
-process or produce other kinds of undefined behavior. To track down such
-issues, enable *debug mode* (:py:attr:`drjit.JitFlag.Debug`) at the beginning
-of your program.
+:py:func:`dr.scatter()`, dynamic slicing) emphasize performance and assume that
+provided indices are in bounds. Programs that violate this rule can easily
+crash the process or produce other kinds of undefined behavior. To track down
+such issues, enable *debug mode* (:py:attr:`drjit.JitFlag.Debug`) at the
+beginning of your program.
 
 .. code-block:: python
 
    dr.set_flag(drjit.JitFlag.Debug, True)
 
-Debug mode adds bounds checks that report all undefined behavior along with the
+Debug mode adds bounds checks that report all undefined behavior with the
 responsible Python source code location. It is expensive and should not be
-enabled by default. used to periodically detect issues. Debug mode comes at a
-significant additional cost and is not a good default setting. We recommend
-enabling it occasionally to flush out errors.
-
-Further, consider using the functions
+enabled by default. We recommend enabling it occasionally to flush out bugs.
+Also consider using the functions
 
 - :py:func:`drjit.assert_true`,
 - :py:func:`drjit.assert_false`,
 - :py:func:`drjit.assert_equal`.
 
-to assert program invariants. They are only active in debug mode and can
-also check symbolic variables.
+to assert program invariants. They are active in debug mode and can
+check symbolic variables.
 
-In general, it should not be possible to crash Dr.Jit or run into undefined
+In general, you should not be able to crash Dr.Jit or generate undefined
 behavior when debug mode is enabled. If you do, then you have likely found a
 bug and we would appreciate a bug report with a minimal reproducer.
 
@@ -47,16 +44,22 @@ You can use the built-in `Python debugger
 <https://code.visualstudio.com/docs/python/debugging>`__ to set breakpoints and
 step through Dr.Jit programs. In this case, it may be helpful to disable
 Dr.Jit's symbolic loops, conditionals, and calls so that variable contents are
-inspectable.
+inspectable. The flag :py:attr:`drjit.JitFlag.SymbolicAll` turns off all three
+at once.
 
 .. code-block:: python
 
-   dr.set_flag(drjit.JitFlag.SymbolicLoops, True)
-   dr.set_flag(drjit.JitFlag.SymbolicCalls, True)
-   dr.set_flag(drjit.JitFlag.SymbolicConditionals, True)
+   dr.set_flag(dr.JitFlag.SymbolicAll, False)
 
 This will switch control flow to the less efficient but functionally equivalent
-*evaluated mode* that is compatible with interactive debugging.
+*evaluated mode* that is compatible with interactive debugging. Use
+:py:func:`dr.scoped_set_flag() <scoped_set_flag>` to restrict the change to a
+region of the program.
+
+.. code-block:: python
+
+   with dr.scoped_set_flag(dr.JitFlag.SymbolicAll, False):
+       # ...
 
 .. _debug_kernels:
 
