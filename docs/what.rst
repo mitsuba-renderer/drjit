@@ -256,7 +256,7 @@ Dr.Jit provides three backends with feature parity:
    Silicon GPUs (M1 or newer). You can explicitly request this backend by
    importing types from ``drjit.metal`` or ``drjit.metal.ad`` (add ``.ad`` if
    derivative computation is needed). Apple GPUs do not support double
-   precision arithmetic. Double-precision types like :cpp:class:`drjit.metal.Float64`
+   precision arithmetic. Double-precision types like :py:class:`drjit.metal.Float64`
    are therefore demoted to single precision; the first use generates
    a warning to inform about this.
 

@@ -8,6 +8,21 @@ Changelog
 DrJit 1.6.0 (unreleased)
 ------------------------
 
+- Reductions accept a ``where`` mask that excludes entries from the result.
+  This covers :py:func:`dr.sum() <sum>`, :py:func:`dr.prod() <prod>`,
+  :py:func:`dr.min() <min>`, :py:func:`dr.max() <max>`, :py:func:`dr.mean()
+  <mean>`, :py:func:`dr.var() <var>`, :py:func:`dr.std() <std>`,
+  :py:func:`dr.all() <all>`, :py:func:`dr.any() <any>`, :py:func:`dr.none()
+  <none>`, :py:func:`dr.count() <count>`, :py:func:`dr.dot() <dot>`,
+  :py:func:`dr.norm() <norm>`, :py:func:`dr.reduce() <reduce>`, the prefix
+  scans, the block reductions, and :py:func:`dr.median() <median>`.
+
+- :py:func:`dr.sort() <sort>`, :py:func:`dr.argsort() <argsort>`, and
+  :py:func:`dr.median() <median>` no longer run the radix sort for tensor axes
+  of length 256 or less. A rank-counting sort in a single kernel now handles
+  such blocks, which are hundreds of times faster than before when the tensor
+  has many rows.
+
 - New kernel history benchmarking API. Measuring kernel runtimes previously
   required changing JIT flags and then extracting fields from dictionaries,
   which was awkward (untyped, no code completion, etc.):

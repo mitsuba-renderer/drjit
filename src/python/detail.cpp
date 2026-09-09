@@ -53,24 +53,29 @@ void stash_ref(nb::handle h, dr::vector<StashRef> &v) {
     traverse("drjit.detail.stash_ref", vo, h);
 }
 
-nb::object reduce_identity(nb::type_object_t<dr::ArrayBase> tp, ReduceOp op, uint32_t size) {
-    const ArraySupplement &s = supp(tp);
-
+nb::object reduce_identity_scalar(VarType vt, ReduceOp op) {
     ArrayMeta m { };
     m.backend = (uint64_t)JitBackend::None;
     m.ndim = 1;
-    m.type = s.type;
+    m.type = (uint16_t) vt;
     m.shape[0] = DRJIT_DYNAMIC;
-    nb::handle tp2 = meta_get_type(m);
-    const ArraySupplement &s2 = supp(tp2);
+    nb::handle tp = meta_get_type(m);
+    const ArraySupplement &s = supp(tp);
 
-    nb::object id_elem = nb::inst_alloc(tp2);
-    uint64_t value = jit_reduce_identity((VarType) s2.type, op);
-    s2.init_data(1, &value, inst_ptr(id_elem));
+    nb::object id_elem = nb::inst_alloc(tp);
+    uint64_t value = jit_reduce_identity(vt, op);
+    s.init_data(1, &value, inst_ptr(id_elem));
     nb::inst_mark_ready(id_elem);
 
+    return id_elem[0];
+}
+
+nb::object reduce_identity(nb::type_object_t<dr::ArrayBase> tp, ReduceOp op, uint32_t size) {
+    const ArraySupplement &s = supp(tp);
+    nb::object id_elem = reduce_identity_scalar((VarType) s.type, op);
+
     nb::object result = nb::inst_alloc(tp);
-    s.init_const(size, false, id_elem[0].ptr(), inst_ptr(result));
+    s.init_const(size, false, id_elem.ptr(), inst_ptr(result));
     nb::inst_mark_ready(result);
 
     return result;

@@ -620,6 +620,21 @@ def test027_prod(t):
     assert len(y) == 1 and dr.allclose(y[0], 80)
     assert dr.allclose(dr.grad(x), [80, 40, 16, 10])
 
+    # A single zero entry: only that entry has a nonzero derivative
+    x = t(1, 0, 5, 8)
+    dr.enable_grad(x)
+    y = dr.prod(x)
+    dr.backward(y)
+    assert len(y) == 1 and y[0] == 0
+    assert dr.allclose(dr.grad(x), [0, 40, 0, 0])
+
+    # Two or more zeros: every derivative vanishes
+    x = t(0, 2, 0, 8)
+    dr.enable_grad(x)
+    y = dr.prod(x)
+    dr.backward(y)
+    assert dr.allclose(dr.grad(x), [0, 0, 0, 0])
+
 
 @pytest.test_arrays('is_diff,float,shape=(*)')
 def test028_max_bwd(t):

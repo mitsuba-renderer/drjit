@@ -126,12 +126,54 @@ static_assert(
 static_assert(sizeof(reductions) == sizeof(Reduction) * (size_t) ReduceOpExt::OpCount);
 
 // Forward declaration
-nb::object reduce(uint32_t op, nb::handle h, nb::handle axis, nb::handle mode, bool keepdims);
+nb::object reduce(uint32_t op, nb::handle h, nb::handle axis, nb::handle mode,
+                  bool keepdims, nb::handle where);
 
 /// Turn a mask into an unsigned integer array of zeros and ones
 static nb::object count_promote(nb::handle h) {
     nb::object tp = reinterpret_array_t(h, VarType::UInt32);
     return array_module.attr("select")(h, tp(1), tp(0));
+}
+
+/// Python scalar identity element of 'op' for the leaf type of 'h'
+static nb::object identity_scalar(uint32_t op, nb::handle h) {
+    if (op == (uint32_t) ReduceOpExt::All)
+        return nb::borrow(Py_True);
+    if (op == (uint32_t) ReduceOpExt::Any || op == (uint32_t) ReduceOpExt::Count)
+        return nb::borrow(Py_False);
+
+    nb::handle tp = h.type();
+    if (!is_drjit_type(tp))
+        return reductions[op].init();
+
+    return reduce_identity_scalar((VarType) supp(tp).type, (ReduceOp) op);
+}
+
+/// Replace the entries of 'h' that 'where' masks out by the identity element
+/// of 'op', which excludes them from the reduction
+static nb::object apply_where(uint32_t op, nb::handle h, nb::handle where) {
+    if (where.is(Py_True))
+        return nb::borrow(h);
+
+    nb::object select = array_module.attr("select"),
+               identity = identity_scalar(op, h);
+
+    if (is_drjit_type(h.type()) || !nb::isinstance<nb::sequence>(h))
+        return select(where, h, identity);
+
+    // Python sequence: mask each entry, broadcasting a non-sequence 'where'
+    nb::object hs = nb::borrow(h);
+    size_t n = nb::len(hs);
+    bool per_entry = nb::isinstance<nb::sequence>(where) &&
+                     !is_drjit_type(where.type());
+    if (per_entry && nb::len(where) != n)
+        nb::raise("the 'where' sequence must have the same length as 'value'.");
+
+    nb::object ws = nb::borrow(where);
+    nb::list result;
+    for (size_t i = 0; i < n; ++i)
+        result.append(select(per_entry ? ws[i] : ws, hs[i], identity));
+    return std::move(result);
 }
 
 /// Handle a reduction that does not actually reduce anything
@@ -164,7 +206,7 @@ nb::object reduce_seq(uint32_t op, nb::handle h, nb::handle axis, nb::handle mod
     for (nb::handle h2 : it) {
         nb::object o = nb::borrow(h2);
         if (axis.is_none())
-            o = reduce(op, o, axis, mode, false); // yields a count already
+            o = reduce(op, o, axis, mode, false, Py_True); // yields a count already
         else if (op == (uint32_t) ReduceOpExt::Count)
             o = count_promote(o);
 
@@ -211,7 +253,14 @@ nb::object prefix_reduce_seq(ReduceOp op, nb::handle h, int axis, bool exclusive
     return std::move(result);
 }
 
-nb::object reduce(uint32_t op, nb::handle h, nb::handle axis_, nb::handle mode, bool keepdims) {
+nb::object reduce(uint32_t op, nb::handle h, nb::handle axis_, nb::handle mode,
+                  bool keepdims, nb::handle where) {
+    if (op >= (size_t) ReduceOpExt::OpCount || !reductions[op].skip)
+        nb::raise("drjit.reduce(): unsupported reduction type.");
+
+    nb::object h_masked = apply_where(op, h, where);
+    h = h_masked;
+
     nb::handle tp = h.type();
     if (axis_.type().is(&PyEllipsis_Type)) {
         if (!is_drjit_type(tp) || !supp(tp).is_tensor)
@@ -219,9 +268,6 @@ nb::object reduce(uint32_t op, nb::handle h, nb::handle axis_, nb::handle mode, 
         else
             axis_ = nb::none();
     }
-
-    if (op >= (size_t) ReduceOpExt::OpCount || !reductions[op].skip)
-        nb::raise("drjit.reduce(): unsupported reduction type.");
 
     const Reduction &red = reductions[op];
 
@@ -312,7 +358,7 @@ nb::object reduce(uint32_t op, nb::handle h, nb::handle axis_, nb::handle mode, 
             if (axis_len == -1) {
                 // Directly process the underlying 1D array
                 nb::object value = nb::steal(s.tensor_array(h.ptr()));
-                value = reduce(op, value, axis, mode, false);
+                value = reduce(op, value, axis, mode, false, Py_True);
                 if (op == (uint32_t) ReduceOpExt::Count) {
                     ArrayMeta m = s;
                     m.type = (uint16_t) VarType::UInt32;
@@ -326,7 +372,7 @@ nb::object reduce(uint32_t op, nb::handle h, nb::handle axis_, nb::handle mode, 
             } else {
                 if (op == (uint32_t) ReduceOpExt::Count)
                     return reduce((uint32_t) ReduceOp::Add, count_promote(h),
-                                  axis, mode, keepdims);
+                                  axis, mode, keepdims, Py_True);
 
                 if (op >= (uint32_t) ReduceOp::Count) {
                     if (axis_len == 1 && red_axis == 0)
@@ -470,7 +516,7 @@ nb::object reduce(uint32_t op, nb::handle h, nb::handle axis_, nb::handle mode, 
 
             size_t i = 0;
             for (nb::handle h2 : h)
-                result[i++] = reduce(op, h2, nb::int_(red_axis - 1), mode, false);
+                result[i++] = reduce(op, h2, nb::int_(red_axis - 1), mode, false, Py_True);
         }
 
         if (ndim == 1 || axis_len == 1)
@@ -492,7 +538,7 @@ nb::object reduce(uint32_t op, nb::handle h, nb::handle axis_, nb::handle mode, 
         if (op == (uint32_t) ReduceOpExt::Count)
             op = (uint32_t) ReduceOp::Add;
 
-        return reduce(op, result, axis, mode, false);
+        return reduce(op, result, axis, mode, false, Py_True);
     } catch (nb::python_error &e) {
         nb::str tp_name = nb::type_name(tp);
         e.restore();
@@ -508,41 +554,41 @@ nb::object reduce(uint32_t op, nb::handle h, nb::handle axis_, nb::handle mode, 
     return nb::object();
 }
 
-nb::object sum(nb::handle value, nb::handle axis, nb::handle mode, bool keepdims) {
-    return reduce((uint32_t) ReduceOp::Add, value, axis, mode, keepdims);
+nb::object sum(nb::handle value, nb::handle axis, nb::handle mode, bool keepdims, nb::handle where) {
+    return reduce((uint32_t) ReduceOp::Add, value, axis, mode, keepdims, where);
 }
 
-nb::object prod(nb::handle value, nb::handle axis, nb::handle mode, bool keepdims) {
-    return reduce((uint32_t) ReduceOp::Mul, value, axis, mode, keepdims);
+nb::object prod(nb::handle value, nb::handle axis, nb::handle mode, bool keepdims, nb::handle where) {
+    return reduce((uint32_t) ReduceOp::Mul, value, axis, mode, keepdims, where);
 }
 
-nb::object min(nb::handle value, nb::handle axis, nb::handle mode, bool keepdims) {
-    return reduce((uint32_t) ReduceOp::Min, value, axis, mode, keepdims);
+nb::object min(nb::handle value, nb::handle axis, nb::handle mode, bool keepdims, nb::handle where) {
+    return reduce((uint32_t) ReduceOp::Min, value, axis, mode, keepdims, where);
 }
 
-nb::object max(nb::handle value, nb::handle axis, nb::handle mode, bool keepdims) {
-    return reduce((uint32_t) ReduceOp::Max, value, axis, mode, keepdims);
+nb::object max(nb::handle value, nb::handle axis, nb::handle mode, bool keepdims, nb::handle where) {
+    return reduce((uint32_t) ReduceOp::Max, value, axis, mode, keepdims, where);
 }
 
-nb::object all(nb::handle value, nb::handle axis, bool keepdims) {
-    return reduce((uint32_t) ReduceOpExt::All, value, axis, nb::none(), keepdims);
+nb::object all(nb::handle value, nb::handle axis, bool keepdims, nb::handle where) {
+    return reduce((uint32_t) ReduceOpExt::All, value, axis, nb::none(), keepdims, where);
 }
 
-nb::object any(nb::handle value, nb::handle axis, bool keepdims) {
-    return reduce((uint32_t) ReduceOpExt::Any, value, axis, nb::none(), keepdims);
+nb::object any(nb::handle value, nb::handle axis, bool keepdims, nb::handle where) {
+    return reduce((uint32_t) ReduceOpExt::Any, value, axis, nb::none(), keepdims, where);
 }
 
-nb::object count(nb::handle value, nb::handle axis, bool keepdims) {
-    return reduce((uint32_t) ReduceOpExt::Count, value, axis, nb::none(), keepdims);
+nb::object count(nb::handle value, nb::handle axis, bool keepdims, nb::handle where) {
+    return reduce((uint32_t) ReduceOpExt::Count, value, axis, nb::none(), keepdims, where);
 }
 
 nb::object reduce_py(ReduceOp op, nb::handle value, nb::handle axis,
-                     nb::handle mode, bool keepdims) {
-    return reduce((uint32_t) op, value, axis, mode, keepdims);
+                     nb::handle mode, bool keepdims, nb::handle where) {
+    return reduce((uint32_t) op, value, axis, mode, keepdims, where);
 }
 
-nb::object none(nb::handle h, nb::handle axis, bool keepdims) {
-    nb::object result = any(h, axis, keepdims);
+nb::object none(nb::handle h, nb::handle axis, bool keepdims, nb::handle where) {
+    nb::object result = any(h, axis, keepdims, where);
 
     if (!result.ptr()) {
         nb::chain_error(PyExc_RuntimeError,
@@ -556,13 +602,26 @@ nb::object none(nb::handle h, nb::handle axis, bool keepdims) {
         return ~result;
 }
 
-nb::object mean(nb::handle value, nb::handle axis, nb::handle mode, bool keepdims) {
-    nb::object out = sum(value, axis, mode, keepdims);
+nb::object mean(nb::handle value, nb::handle axis, nb::handle mode, bool keepdims, nb::handle where) {
+    nb::object out = sum(value, axis, mode, keepdims, where);
 
     if (!out.ptr()) {
         nb::chain_error(PyExc_RuntimeError,
             "dr.mean(): encountered an exception (see above).");
         return out;
+    }
+
+    if (!where.is(Py_True)) {
+        // Divide by the number of entries that 'where' lets through
+        nb::object ones;
+        if (is_drjit_type(value.type())) {
+            ones = array_module.attr("ones_like")(value);
+        } else {
+            nb::list one;
+            one.append(nb::int_(1));
+            ones = nb::steal(PySequence_Repeat(one.ptr(), (Py_ssize_t) nb::len(value)));
+        }
+        return out / sum(ones, axis, mode, keepdims, where);
     }
 
     if (jit_flag(JitFlag::FreezingScope) && width(out) == 1 &&
@@ -582,8 +641,11 @@ nb::object mean(nb::handle value, nb::handle axis, nb::handle mode, bool keepdim
          / prod(shape(value), nb::none(), nb::none(), false);
 }
 
-nb::object dot(nb::handle h0, nb::handle h1) {
+nb::object dot(nb::handle h0, nb::handle h1, nb::handle where) {
     try {
+        nb::object h0_masked = apply_where((uint32_t) ReduceOp::Add, h0, where);
+        h0 = h0_masked;
+
         size_t l0 = nb::len(h0),
                l1 = nb::len(h1),
                lr = std::max(l0, l1);
@@ -613,7 +675,7 @@ nb::object dot(nb::handle h0, nb::handle h1) {
         if (use_fma) {
             if (tp0.is(coop_vector_type) || tp1.is(coop_vector_type)) {
                 nb::list o0 = nb::list(h0), o1 = nb::list(h1);
-                return dot(o0, o1);
+                return dot(o0, o1, Py_True);
             }
             nb::object result = h0[0] * h1[0],
                        fma = array_module.attr("fma");
@@ -673,13 +735,16 @@ nb::object compress(nb::handle_t<dr::ArrayBase> h) {
 }
 
 
-static nb::object prefix_reduce(ReduceOp op, nb::handle h, nb::handle axis, bool exclusive, bool reverse) {
+static nb::object prefix_reduce(ReduceOp op, nb::handle h, nb::handle axis,
+                                bool exclusive, bool reverse, nb::handle where) {
+    nb::object h_masked = apply_where((uint32_t) op, h, where);
+    h = h_masked;
 
     if (nb::isinstance<nb::tuple>(axis)) {
         nb::object o = nb::borrow(h);
         nb::tuple t = nb::cast<nb::tuple>(axis);
         for (size_t i = 0, s = t.size(); i < s; ++i)
-            o = prefix_reduce(op, o, t[s - 1 - i], exclusive, reverse);
+            o = prefix_reduce(op, o, t[s - 1 - i], exclusive, reverse, Py_True);
         return o;
     }
     int axis_i;
@@ -703,7 +768,11 @@ static nb::object prefix_reduce(ReduceOp op, nb::handle h, nb::handle axis, bool
 
 static nb::object block_reduce(ReduceOp op,
                                nb::handle h, uint32_t block_size,
-                               std::optional<dr::string> mode) {
+                               std::optional<dr::string> mode,
+                               nb::handle where) {
+    nb::object h_masked = apply_where((uint32_t) op, h, where);
+    h = h_masked;
+
     struct BlockReduceOp : TransformCallback {
         ReduceOp op;
         uint32_t block_size;
@@ -741,7 +810,10 @@ static nb::object block_reduce(ReduceOp op,
 
 static nb::object block_prefix_reduce(ReduceOp op, nb::handle h,
                                       uint32_t block_size, bool exclusive,
-                                      bool reverse) {
+                                      bool reverse, nb::handle where) {
+    nb::object h_masked = apply_where((uint32_t) op, h, where);
+    h = h_masked;
+
     struct BlockPrefixReduceOp : TransformCallback {
         ReduceOp op;
         uint32_t block_size;
@@ -769,8 +841,8 @@ static nb::object block_prefix_reduce(ReduceOp op, nb::handle h,
 }
 
 static nb::object block_sum(nb::handle h, uint32_t block_size,
-                            std::optional<dr::string> mode) {
-    return block_reduce(ReduceOp::Add, h, block_size, mode);
+                            std::optional<dr::string> mode, nb::handle where) {
+    return block_reduce(ReduceOp::Add, h, block_size, mode, where);
 }
 
 /// Returns the shape that ``sum(x, axis, keepdims)`` would produce for an
@@ -828,7 +900,10 @@ static std::optional<dr::vector<size_t>> reduction_output_shape(
 /// when the default axis is requested *or* when ``shape[1:]`` is
 /// trivial.
 static nb::object norm_impl(nb::handle h, nb::handle axis, nb::handle mode,
-                            bool keepdims, bool sqrt_wrap) {
+                            bool keepdims, bool sqrt_wrap, nb::handle where) {
+    nb::object h_masked = apply_where((uint32_t) ReduceOp::Add, h, where);
+    h = h_masked;
+
     auto wrap = [sqrt_wrap](nb::object v) -> nb::object {
         return sqrt_wrap ? array_module.attr("sqrt")(v) : v;
     };
@@ -870,68 +945,67 @@ static nb::object norm_impl(nb::handle h, nb::handle axis, nb::handle mode,
     }
 
     nb::object sq = array_module.attr("square")(h);
-    return wrap(sum(sq, axis, mode, keepdims));
+    return wrap(sum(sq, axis, mode, keepdims, Py_True));
 }
 
 
 void export_reduce(nb::module_ & m) {
-    m.def("reduce", &reduce_py, "op"_a, "value"_a, "axis"_a.none() = nb::ellipsis(), "mode"_a = nb::none(), "keepdims"_a = false, doc_reduce,
-          nb::sig("def reduce(op: ReduceOp, value: object, axis: int | tuple[int, ...] | ... | None = ..., mode: str | None = None, keepdims: bool = False) -> object"))
-     .def("all", &all, "value"_a, "axis"_a.none() = nb::ellipsis(), "keepdims"_a = false, doc_all,
-          nb::sig("def all(value: object, axis: int | tuple[int, ...] | ... | None = ..., keepdims: bool = False) -> object"))
-     .def("any", &any, "value"_a, "axis"_a.none() = nb::ellipsis(), "keepdims"_a = false, doc_any,
-          nb::sig("def any(value: object, axis: int | tuple[int, ...] | ... | None = ..., keepdims: bool = False) -> object"))
-     .def("none", &none, "value"_a, "axis"_a.none() = nb::ellipsis(), "keepdims"_a = false, doc_none,
-          nb::sig("def none(value: object, axis: int | tuple[int, ...] | ... | None = ..., keepdims: bool = False) -> object"))
-     .def("count", &count, "value"_a, "axis"_a.none() = nb::ellipsis(), "keepdims"_a = false, doc_count,
-          nb::sig("def count(value: object, axis: int | tuple[int, ...] | ... | None = ..., keepdims: bool = False) -> object"))
-     .def("sum", &sum, "value"_a, "axis"_a.none() = nb::ellipsis(), "mode"_a = nb::none(), "keepdims"_a = false, doc_sum,
-          nb::sig("def sum(value: object, axis: int | tuple[int, ...] | ... | None = ..., mode: str | None = None, keepdims: bool = False) -> object"))
-     .def("prod", &prod, "value"_a, "axis"_a.none() = nb::ellipsis(), "mode"_a = nb::none(), "keepdims"_a = false, doc_prod,
-          nb::sig("def prod(value: object, axis: int | tuple[int, ...] | ... | None = ..., mode: str | None = None, keepdims: bool = False) -> object"))
-     .def("min", &min, "value"_a, "axis"_a.none() = nb::ellipsis(), "mode"_a = nb::none(), "keepdims"_a = false, doc_min,
-          nb::sig("def min(value: object, axis: int | tuple[int, ...] | ... | None = ..., mode: str | None = None, keepdims: bool = False) -> object"))
-     .def("max", &max, "value"_a, "axis"_a.none() = nb::ellipsis(), "mode"_a = nb::none(), "keepdims"_a = false, doc_max,
-          nb::sig("def max(value: object, axis: int | tuple[int, ...] | ... | None = ..., mode: str | None = None, keepdims: bool = False) -> object"))
-     .def("mean", &mean, "value"_a, "axis"_a.none() = nb::ellipsis(), "mode"_a = nb::none(), "keepdims"_a = false, doc_mean,
-          nb::sig("def mean(value: object, axis: int | tuple[int, ...] | ... | None = ..., mode: str | None = None, keepdims: bool = False) -> object"))
-     .def("prefix_reduce", &prefix_reduce, "op"_a, "value"_a, "axis"_a = 0, "exclusive"_a = true, "reverse"_a = false, doc_prefix_reduce,
-          nb::sig("def prefix_reduce(op: ReduceOp, value: T, axis: int | tuple[int, ...] = 0, exclusive: bool = True, reverse: bool = False) -> T"))
-     .def("dot", &dot, doc_dot)
+    m.def("reduce", &reduce_py, "op"_a, "value"_a, "axis"_a.none() = nb::ellipsis(), "mode"_a = nb::none(), "keepdims"_a = false, "where"_a = true, doc_reduce,
+          nb::sig("def reduce(op: ReduceOp, value: object, axis: int | tuple[int, ...] | ... | None = ..., mode: str | None = None, keepdims: bool = False, where: ArrayBase | Sequence[bool] | bool = True) -> object"))
+     .def("all", &all, "value"_a, "axis"_a.none() = nb::ellipsis(), "keepdims"_a = false, "where"_a = true, doc_all,
+          nb::sig("def all(value: object, axis: int | tuple[int, ...] | ... | None = ..., keepdims: bool = False, where: ArrayBase | Sequence[bool] | bool = True) -> object"))
+     .def("any", &any, "value"_a, "axis"_a.none() = nb::ellipsis(), "keepdims"_a = false, "where"_a = true, doc_any,
+          nb::sig("def any(value: object, axis: int | tuple[int, ...] | ... | None = ..., keepdims: bool = False, where: ArrayBase | Sequence[bool] | bool = True) -> object"))
+     .def("none", &none, "value"_a, "axis"_a.none() = nb::ellipsis(), "keepdims"_a = false, "where"_a = true, doc_none,
+          nb::sig("def none(value: object, axis: int | tuple[int, ...] | ... | None = ..., keepdims: bool = False, where: ArrayBase | Sequence[bool] | bool = True) -> object"))
+     .def("count", &count, "value"_a, "axis"_a.none() = nb::ellipsis(), "keepdims"_a = false, "where"_a = true, doc_count,
+          nb::sig("def count(value: object, axis: int | tuple[int, ...] | ... | None = ..., keepdims: bool = False, where: ArrayBase | Sequence[bool] | bool = True) -> object"))
+     .def("sum", &sum, "value"_a, "axis"_a.none() = nb::ellipsis(), "mode"_a = nb::none(), "keepdims"_a = false, "where"_a = true, doc_sum,
+          nb::sig("def sum(value: object, axis: int | tuple[int, ...] | ... | None = ..., mode: str | None = None, keepdims: bool = False, where: ArrayBase | Sequence[bool] | bool = True) -> object"))
+     .def("prod", &prod, "value"_a, "axis"_a.none() = nb::ellipsis(), "mode"_a = nb::none(), "keepdims"_a = false, "where"_a = true, doc_prod,
+          nb::sig("def prod(value: object, axis: int | tuple[int, ...] | ... | None = ..., mode: str | None = None, keepdims: bool = False, where: ArrayBase | Sequence[bool] | bool = True) -> object"))
+     .def("min", &min, "value"_a, "axis"_a.none() = nb::ellipsis(), "mode"_a = nb::none(), "keepdims"_a = false, "where"_a = true, doc_min,
+          nb::sig("def min(value: object, axis: int | tuple[int, ...] | ... | None = ..., mode: str | None = None, keepdims: bool = False, where: ArrayBase | Sequence[bool] | bool = True) -> object"))
+     .def("max", &max, "value"_a, "axis"_a.none() = nb::ellipsis(), "mode"_a = nb::none(), "keepdims"_a = false, "where"_a = true, doc_max,
+          nb::sig("def max(value: object, axis: int | tuple[int, ...] | ... | None = ..., mode: str | None = None, keepdims: bool = False, where: ArrayBase | Sequence[bool] | bool = True) -> object"))
+     .def("mean", &mean, "value"_a, "axis"_a.none() = nb::ellipsis(), "mode"_a = nb::none(), "keepdims"_a = false, "where"_a = true, doc_mean,
+          nb::sig("def mean(value: object, axis: int | tuple[int, ...] | ... | None = ..., mode: str | None = None, keepdims: bool = False, where: ArrayBase | Sequence[bool] | bool = True) -> object"))
+     .def("prefix_reduce", &prefix_reduce, "op"_a, "value"_a, "axis"_a = 0, "exclusive"_a = true, "reverse"_a = false, "where"_a = true, doc_prefix_reduce,
+          nb::sig("def prefix_reduce(op: ReduceOp, value: T, axis: int | tuple[int, ...] = 0, exclusive: bool = True, reverse: bool = False, where: ArrayBase | Sequence[bool] | bool = True) -> T"))
+     .def("dot", &dot, "arg0"_a, "arg1"_a, "where"_a = true, doc_dot)
      .def("abs_dot",
-          [](nb::handle h0, nb::handle h1) -> nb::object {
-              return array_module.attr("abs")(
-                  array_module.attr("dot")(h0, h1));
-          }, doc_abs_dot)
+          [](nb::handle h0, nb::handle h1, nb::handle where) -> nb::object {
+              return array_module.attr("abs")(dot(h0, h1, where));
+          }, "arg0"_a, "arg1"_a, "where"_a = true, doc_abs_dot)
      .def("norm",
-          [](nb::handle h, nb::handle axis, nb::handle mode, bool keepdims) -> nb::object {
-              return norm_impl(h, axis, mode, keepdims, /* sqrt_wrap = */ true);
-          }, "value"_a, "axis"_a.none() = nb::ellipsis(), "mode"_a = nb::none(), "keepdims"_a = false, doc_norm,
-          nb::sig("def norm(value: object, axis: int | tuple[int, ...] | ... | None = ..., mode: str | None = None, keepdims: bool = False) -> object"))
+          [](nb::handle h, nb::handle axis, nb::handle mode, bool keepdims, nb::handle where) -> nb::object {
+              return norm_impl(h, axis, mode, keepdims, /* sqrt_wrap = */ true, where);
+          }, "value"_a, "axis"_a.none() = nb::ellipsis(), "mode"_a = nb::none(), "keepdims"_a = false, "where"_a = true, doc_norm,
+          nb::sig("def norm(value: object, axis: int | tuple[int, ...] | ... | None = ..., mode: str | None = None, keepdims: bool = False, where: ArrayBase | Sequence[bool] | bool = True) -> object"))
      .def("squared_norm",
-          [](nb::handle h, nb::handle axis, nb::handle mode, bool keepdims) -> nb::object {
-              return norm_impl(h, axis, mode, keepdims, /* sqrt_wrap = */ false);
-          }, "value"_a, "axis"_a.none() = nb::ellipsis(), "mode"_a = nb::none(), "keepdims"_a = false, doc_squared_norm,
-          nb::sig("def squared_norm(value: object, axis: int | tuple[int, ...] | ... | None = ..., mode: str | None = None, keepdims: bool = False) -> object"))
-     .def("block_prefix_reduce", &block_prefix_reduce, "op"_a, "value"_a, "block_size"_a, "exclusive"_a = true, "reverse"_a = false,
+          [](nb::handle h, nb::handle axis, nb::handle mode, bool keepdims, nb::handle where) -> nb::object {
+              return norm_impl(h, axis, mode, keepdims, /* sqrt_wrap = */ false, where);
+          }, "value"_a, "axis"_a.none() = nb::ellipsis(), "mode"_a = nb::none(), "keepdims"_a = false, "where"_a = true, doc_squared_norm,
+          nb::sig("def squared_norm(value: object, axis: int | tuple[int, ...] | ... | None = ..., mode: str | None = None, keepdims: bool = False, where: ArrayBase | Sequence[bool] | bool = True) -> object"))
+     .def("block_prefix_reduce", &block_prefix_reduce, "op"_a, "value"_a, "block_size"_a, "exclusive"_a = true, "reverse"_a = false, "where"_a = true,
           doc_block_prefix_reduce,
-          nb::sig("def block_prefix_reduce(op: ReduceOp, value: ArrayT, block_size: int, exclusive: bool = True, reverse: bool = False) -> ArrayT"))
-     .def("block_reduce", &block_reduce, "op"_a, "value"_a, "block_size"_a, "mode"_a = nb::none(), doc_block_reduce,
-          nb::sig("def block_reduce(op: ReduceOp, value: T, block_size: int, mode: Literal['evaluated', 'symbolic', None] = None) -> T"))
-     .def("block_sum", &block_sum, "value"_a, "block_size"_a, "mode"_a = nb::none(), doc_block_sum,
-          nb::sig("def block_sum(value: T, block_size: int, mode: Literal['evaluated', 'symbolic', None] = None) -> T"))
+          nb::sig("def block_prefix_reduce(op: ReduceOp, value: ArrayT, block_size: int, exclusive: bool = True, reverse: bool = False, where: ArrayBase | Sequence[bool] | bool = True) -> ArrayT"))
+     .def("block_reduce", &block_reduce, "op"_a, "value"_a, "block_size"_a, "mode"_a = nb::none(), "where"_a = true, doc_block_reduce,
+          nb::sig("def block_reduce(op: ReduceOp, value: T, block_size: int, mode: Literal['evaluated', 'symbolic', None] = None, where: ArrayBase | Sequence[bool] | bool = True) -> T"))
+     .def("block_sum", &block_sum, "value"_a, "block_size"_a, "mode"_a = nb::none(), "where"_a = true, doc_block_sum,
+          nb::sig("def block_sum(value: T, block_size: int, mode: Literal['evaluated', 'symbolic', None] = None, where: ArrayBase | Sequence[bool] | bool = True) -> T"))
      .def("compress", &compress, doc_compress)
-     .def("cumsum", [](nb::handle value, nb::handle axis, bool reverse) {
-             return prefix_reduce(ReduceOp::Add, value, axis, false, reverse);
-          }, "value"_a, "axis"_a = 0, "reverse"_a = false, doc_cumsum,
-          nb::sig("def cumsum(value: T, axis: Union[int, tuple[int, ...]] = 0, reverse: bool = False) -> T"))
-     .def("prefix_sum", [](nb::handle value, nb::handle axis, bool reverse) {
-             return prefix_reduce(ReduceOp::Add, value, axis, true, reverse);
-          }, "value"_a, "axis"_a = 0, "reverse"_a = false, doc_prefix_sum,
-          nb::sig("def prefix_sum(value: T, axis: Union[int, tuple[int, ...]] = 0, reverse: bool = False) -> T"))
+     .def("cumsum", [](nb::handle value, nb::handle axis, bool reverse, nb::handle where) {
+             return prefix_reduce(ReduceOp::Add, value, axis, false, reverse, where);
+          }, "value"_a, "axis"_a = 0, "reverse"_a = false, "where"_a = true, doc_cumsum,
+          nb::sig("def cumsum(value: T, axis: Union[int, tuple[int, ...]] = 0, reverse: bool = False, where: ArrayBase | Sequence[bool] | bool = True) -> T"))
+     .def("prefix_sum", [](nb::handle value, nb::handle axis, bool reverse, nb::handle where) {
+             return prefix_reduce(ReduceOp::Add, value, axis, true, reverse, where);
+          }, "value"_a, "axis"_a = 0, "reverse"_a = false, "where"_a = true, doc_prefix_sum,
+          nb::sig("def prefix_sum(value: T, axis: Union[int, tuple[int, ...]] = 0, reverse: bool = False, where: ArrayBase | Sequence[bool] | bool = True) -> T"))
      .def("block_prefix_sum",
-          [](nb::handle value, uint32_t block_size, bool exclusive, bool reverse) {
-              return block_prefix_reduce(ReduceOp::Add, value, block_size, exclusive, reverse);
-          }, "value"_a, "block_size"_a, "exclusive"_a = true, "reverse"_a = false, doc_block_prefix_sum,
-          nb::sig("def block_prefix_sum(value: T, block_size: int, exclusive: bool = True, reverse: bool = False) -> T"));
+          [](nb::handle value, uint32_t block_size, bool exclusive, bool reverse, nb::handle where) {
+              return block_prefix_reduce(ReduceOp::Add, value, block_size, exclusive, reverse, where);
+          }, "value"_a, "block_size"_a, "exclusive"_a = true, "reverse"_a = false, "where"_a = true, doc_block_prefix_sum,
+          nb::sig("def block_prefix_sum(value: T, block_size: int, exclusive: bool = True, reverse: bool = False, where: ArrayBase | Sequence[bool] | bool = True) -> T"));
 }

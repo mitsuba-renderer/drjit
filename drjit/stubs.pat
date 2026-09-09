@@ -71,33 +71,43 @@ drjit.(imag|real)$:
 drjit.(sum|prod|min|max|mean|norm|squared_norm)$:
     @overload
     def \1(value: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], axis: Axis = 0,
-           mode: Literal['symbolic', 'evaluated', None] = None, keepdims: bool = False) -> RedT:
+           mode: Literal['symbolic', 'evaluated', None] = None, keepdims: bool = False,
+           where: bool | AnyArray = True) -> RedT:
         \doc
     @overload
-    def \1(value: Iterable[T], axis: Axis = 0, mode: Literal['symbolic', 'evaluated', None] = None, keepdims: bool = False) -> T: ...
+    def \1(value: Iterable[T], axis: Axis = 0, mode: Literal['symbolic', 'evaluated', None] = None, keepdims: bool = False, where: bool | AnyArray | Sequence[bool] = True) -> T: ...
     @overload
-    def \1(value: int, axis: Axis = 0, mode: Literal['symbolic', 'evaluated', None] = None, keepdims: bool = False) -> int: ...
+    def \1(value: int, axis: Axis = 0, mode: Literal['symbolic', 'evaluated', None] = None, keepdims: bool = False, where: bool = True) -> int: ...
     @overload
-    def \1(value: float, axis: Axis = 0, mode: Literal['symbolic', 'evaluated', None] = None, keepdims: bool = False) -> float: ...
+    def \1(value: float, axis: Axis = 0, mode: Literal['symbolic', 'evaluated', None] = None, keepdims: bool = False, where: bool = True) -> float: ...
 
 drjit.(all|any|none)$:
     @overload
     def \1(value: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], axis: Axis = 0,
-           keepdims: bool = False) -> RedT:
+           keepdims: bool = False, where: bool | AnyArray = True) -> RedT:
         \doc
     @overload
-    def \1(value: Iterable[T], axis: Axis = 0, keepdims: bool = False) -> T: ...
+    def \1(value: Iterable[T], axis: Axis = 0, keepdims: bool = False, where: bool | AnyArray | Sequence[bool] = True) -> T: ...
     @overload
-    def \1(value: bool, axis: Axis = 0, keepdims: bool = False) -> bool: ...
+    def \1(value: bool, axis: Axis = 0, keepdims: bool = False, where: bool = True) -> bool: ...
 
-drjit.(dot|abs_dot|unit_angle)$:
+drjit.(dot|abs_dot)$:
     @overload
-    def \1(arg0: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], arg1: SelfCpT, /) -> RedT:
+    def \1(arg0: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], arg1: SelfCpT, /, where: bool | AnyArray = True) -> RedT:
         \doc
     @overload
-    def \1(arg0: SelfCpT, arg1: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], /) -> RedT: ...
+    def \1(arg0: SelfCpT, arg1: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], /, where: bool | AnyArray = True) -> RedT: ...
     @overload
-    def \1(arg0: Sequence[T], arg1: Sequence[T], /) -> T: ...
+    def \1(arg0: Sequence[T], arg1: Sequence[T], /, where: bool | AnyArray | Sequence[bool] = True) -> T: ...
+
+drjit.unit_angle$:
+    @overload
+    def unit_angle(arg0: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], arg1: SelfCpT, /) -> RedT:
+        \doc
+    @overload
+    def unit_angle(arg0: SelfCpT, arg1: ArrayBase[SelfT, SelfCpT, ValT, ValCpT, RedT, PlainT, MaskT], /) -> RedT: ...
+    @overload
+    def unit_angle(arg0: Sequence[T], arg1: Sequence[T], /) -> T: ...
 
 drjit.select$:
     @overload

@@ -1,3 +1,5 @@
+:orphan:
+
 How to make a new release?
 --------------------------
 

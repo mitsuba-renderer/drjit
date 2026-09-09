@@ -227,6 +227,19 @@ class DrjitNamespace(Directive):
         return []
 
 
+# Sphinx 8.1 cannot parse PEP 646 unpacking (``*Ts``) in signatures. Rewrite it
+# as ``Unpack[Ts]``. Wrapping autodoc is needed because the
+# ``autodoc-process-signature`` event skips the signatures of overloads.
+from sphinx.ext.autodoc import DocstringSignatureMixin
+
+_format_signature = DocstringSignatureMixin.format_signature
+
+def _format_signature_unpack(self, **kwargs):
+    return _format_signature(self, **kwargs).replace('*Ts', 'typing.Unpack[Ts]')
+
+DocstringSignatureMixin.format_signature = _format_signature_unpack
+
+
 def setup(app):
     app.add_directive("drjit-namespace", DrjitNamespace)
     return {"parallel_read_safe": True, "parallel_write_safe": True}

@@ -243,3 +243,15 @@ def test04_initialization(t):
     )
 
     hg.n_params == 1908736
+
+
+@pytest.test_arrays("jit,shape=(*),float32,diff")
+def test05_encoding_layer_data(t):
+    """
+    The wrapper layer exposes the parameters of the underlying encoding.
+    """
+    hg = dr.nn.HashGridEncoding(
+        t, 2, hashmap_size=256, n_levels=4, n_features_per_level=2
+    )
+    layer = dr.nn.HashEncodingLayer(hg)
+    assert layer.data is hg.data

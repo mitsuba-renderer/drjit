@@ -155,7 +155,9 @@ class _SyntaxVisitor(ast.NodeTransformer):
 
         comp_targets = set()
         for comp in node.generators:
-            comp_targets.add(comp.target.id)
+            for target in ast.walk(comp.target):
+                if isinstance(target, ast.Name):
+                    comp_targets.add(target.id)
 
         # Targets should not be considered, and no assigments can be made
         self.var_r = (self.var_r - comp_targets) | var_r

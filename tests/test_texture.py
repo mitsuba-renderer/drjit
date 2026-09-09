@@ -1118,6 +1118,26 @@ def test32_from_native_handle(t, texture_type):
         TexType.from_native_handle(src.native_handle(), writable=True)
 
 
+@pytest.test_arrays("is_jit, float32, shape=(*)")
+def test32b_writable_update_inplace(t):
+    # The in-place update workflow (modify tensor(), then update_inplace())
+    # applies to writable textures, whose tensor is a readback view that
+    # is rebuilt on every access.
+    mod = sys.modules[t.__module__]
+    H, W, C = 4, 8, 4
+    tex = mod.Texture2f([H, W], C, writable=True)
+    data = dr.arange(t, H * W * C) * 0.01
+    tex.set_value(data)
+
+    ten = tex.tensor()
+    ten[1, 2, 3] = 42
+    tex.update_inplace()
+
+    ref = t(data)
+    dr.scatter(ref, 42, (1 * W + 2) * C + 3)
+    assert dr.allclose(tex.value(), ref, 5e-3, 5e-3)
+
+
 def _quantize_srgb8(t, x):
     """Round linear values to the nearest 8-bit sRGB code and decode again"""
     return dr.srgb_to_linear(dr.floor(dr.linear_to_srgb(t(x)) * 255 + 0.5) / 255)

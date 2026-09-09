@@ -553,7 +553,7 @@ struct DRJIT_TRIVIAL_ABI DiffArray
                     result[i] = steal(tmp[i]);
             } else {
                 uint32_t tmp[N];
-                jit_var_gather_packet(N, src.index_combined(), index.index(), mask.index(), tmp);
+                jit_var_gather_packet(N, src.index(), index.index(), mask.index(), tmp);
                 for (size_t i = 0; i < N; ++i)
                     result[i] = steal(tmp[i]);
             }

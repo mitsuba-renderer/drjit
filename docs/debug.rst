@@ -83,6 +83,51 @@ program features by setting :py:attr:`drjit.JitFlag.SymbolicLoops`,
 control flow to the less efficient but functionally equivalent *evaluated mode*
 that is compatible with interactive debugging.
 
+.. _inspect_kernels:
+
+Inspecting compiled kernels
+---------------------------
+
+It is sometimes useful to look at the machine code that Dr.Jit generated for a
+kernel, for example to disassemble it or to load its symbols into a debugger
+such as GDB or LLDB. The :ref:`kernel cache <caching>` provides a convenient
+way to access this code.
+
+With the exception of the OptiX database, every cache entry is a standard `LZ4
+<https://lz4.org>`__ frame. Dr.Jit compresses entries using a dictionary that
+depends on the file type, which improves the compression ratio of small
+kernels. The ``lz4`` command line tool can decompress an entry given the
+matching dictionary from the ``ext/drjit-core/resources`` directory of the
+source tree. For example, the following command extracts an object file from
+the cache on Linux:
+
+.. code-block:: bash
+
+   lz4 -d -D lz4_dict_elf ~/.drjit/<hash>.o.lz4 kernel.o
+
+The decompressed contents depend on the backend:
+
+- **LLVM Backend**: each entry decompresses to a native object file in the
+  platform's standard format, i.e., ELF on Linux, Mach-O on macOS, and COFF on
+  Windows. The matching dictionaries are ``lz4_dict_elf``, ``lz4_dict_macho``,
+  and ``lz4_dict_coff``.
+  Tools such as ``objdump``, ``otool``, or ``dumpbin`` can disassemble these
+  files.
+
+- **Metal Backend**: the cache holds three kinds of Metal library files.
+  Entries with the extension ``.air.metallib.lz4`` hold an intermediate
+  library image produced
+  by the shader compiler front end. Entries with the extension
+  ``.func.metallib.lz4`` are binary archives with the device-specific machine
+  code of individual callables. Entries with the extension
+  ``.pso.metallib.lz4`` are binary archives with the pipeline state of complete
+  kernels. The first two use the ``lz4_dict_metallib`` dictionary, the last
+  one uses ``lz4_dict_mpso``.
+
+- **CUDA Backend**: Dr.Jit relies on the driver's own cache, whose format is
+  not documented. Use the :py:class:`drjit.kernel_history` API to retrieve the
+  PTX source of a kernel instead.
+
 Localizing bugs within Dr.Jit
 -----------------------------
 

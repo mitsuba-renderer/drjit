@@ -974,3 +974,160 @@ def test31_median_ad(t):
     m = dr.median(y)
     dr.backward(m)
     assert dr.allclose(y.grad, [1, 0, 0, 0, 0, 0, 0, 0])
+
+
+@pytest.test_arrays('jit, float32, shape=(*)')
+def test32_median_where(t):
+    np = pytest.importorskip("numpy")
+    Bool = dr.mask_t(t)
+    Int32 = dr.int32_array_t(t)
+
+    x = t([3, 1, 4, 1, 5, 9, 2, 6])
+    a = Bool([True, False, True, True, False, True, False, True])
+    v, idx = dr.median(x, where=a, return_index=True)
+    assert v[0] == _lower_median(x.numpy()[a.numpy()])
+    assert dr.gather(t, x, idx)[0] == v[0]
+
+    # Inactive elements never leak in, even if they would sort first or last
+    y = Int32([-2**31, 7, 2**31 - 1, 3, 0])
+    assert dr.median(y, where=Bool([False, True, False, True, True]))[0] == 3
+    z = t([dr.inf, dr.nan, 2.0, dr.inf, 1.0])
+    assert dr.median(z, where=Bool([True, False, True, True, True]))[0] == 2.0
+
+    # Nothing active: NaN for floats, 0 for integers
+    assert dr.isnan(dr.median(x, where=Bool(False)))[0]
+    assert dr.median(y, where=Bool(False))[0] == 0
+
+    # Tensors take a mask of the same shape and reduce along the given axes
+    T = dr.tensor_t(t)
+    x_np = np.arange(12, dtype=np.float32).reshape(3, 4)
+    a_np = np.array([[1, 0, 1, 1], [0, 0, 0, 0], [1, 1, 1, 0]], dtype=bool)
+    x_dr, a_dr = T(x_np), dr.mask_t(T)(a_np)
+    r = dr.median(x_dr, axis=1, where=a_dr).numpy()
+    assert np.array_equal(r[[0, 2]], [2, 9]) and np.isnan(r[1])
+    assert np.array_equal(dr.median(x_dr, axis=0, where=a_dr).numpy(), [0, 9, 2, 3])
+    assert dr.median(x_dr, axis=None, where=a_dr) == _lower_median(x_np[a_np])
+    with pytest.raises(RuntimeError, match='shape'):
+        dr.median(x_dr, where=dr.mask_t(T)(a_np.T))
+
+    # Python iterables
+    assert dr.median([3, 1, 2, 4], where=[True, False, True, True]) == 3
+
+
+@pytest.test_arrays('jit, float32, shape=(*)')
+def test33_sort_small_blocks(t):
+    # Blocks up to _RANK_SORT_MAX_BLOCK use the rank-counting sort, larger
+    # ones the radix sort. Both must agree with a stable NumPy sort.
+    np = pytest.importorskip("numpy")
+    rng = np.random.default_rng(7)
+    Bool = dr.mask_t(t)
+    u64 = dr.uint64_array_t(t)
+    T = dr.tensor_t(t)
+    limit = dr._RANK_SORT_MAX_BLOCK
+
+    for cols in (2, 3, 8, 37, limit, limit + 1):
+        rows = 500
+        x_np = rng.integers(0, 10, size=(rows, cols)).astype(np.float32)
+        x_dr = T(x_np)
+        s_np = np.sort(x_np, axis=1, kind='stable')
+        assert np.array_equal(dr.sort(x_dr, axis=1).numpy(), s_np)
+        assert np.array_equal(dr.sort(x_dr, axis=1, descending=True).numpy(),
+                              np.flip(s_np, axis=1))
+        idx = dr.argsort(x_dr, axis=1).numpy()
+        assert np.array_equal(idx, np.argsort(x_np, axis=1, kind='stable'))
+
+        a_np = rng.random((rows, cols)) < 0.5
+        m = dr.median(x_dr, axis=1, where=dr.mask_t(T)(a_np)).numpy()
+        for i in range(rows):
+            sel = x_np[i][a_np[i]]
+            if len(sel):
+                assert m[i] == np.sort(sel)[(len(sel) - 1) // 2]
+            else:
+                assert np.isnan(m[i])
+
+    # 64-bit keys through the rank path, flat array as a single block
+    x64 = rng.integers(0, 2**63, size=200, dtype=np.uint64)
+    assert np.array_equal(dr.sort(u64(x64)).numpy(), np.sort(x64))
+    a = Bool(rng.random(200) < 0.5)
+    v = dr.median(u64(x64), where=a)[0]
+    sel = np.sort(x64[a.numpy()])
+    assert v == sel[(len(sel) - 1) // 2]
+
+
+@pytest.test_arrays('jit, float32, shape=(*)')
+def test34_reductions_where(t):
+    np = pytest.importorskip("numpy")
+    rng = np.random.default_rng(11)
+    Bool = dr.mask_t(t)
+    Int32 = dr.int32_array_t(t)
+    T = dr.tensor_t(t)
+
+    x_np = rng.normal(size=16).astype(np.float32)
+    w_np = rng.random(16) < 0.5
+    x, w = t(x_np), Bool(w_np)
+    sel = x_np[w_np]
+
+    assert dr.allclose(dr.sum(x, where=w), sel.sum())
+    assert dr.allclose(dr.prod(x, where=w), np.prod(sel))
+    assert dr.min(x, where=w)[0] == sel.min()
+    assert dr.max(x, where=w)[0] == sel.max()
+    assert dr.allclose(dr.mean(x, where=w), sel.mean())
+    assert dr.allclose(dr.var(x, where=w), sel.var())
+    assert dr.allclose(dr.var(x, where=w, ddof=1), sel.var(ddof=1))
+    assert dr.allclose(dr.std(x, where=w), sel.std())
+    assert dr.allclose(dr.norm(x, where=w), np.linalg.norm(sel))
+    assert dr.allclose(dr.squared_norm(x, where=w), (sel ** 2).sum())
+    assert dr.allclose(dr.dot(x, x, where=w), (sel ** 2).sum())
+    assert dr.allclose(dr.abs_dot(x, -x, where=w), (sel ** 2).sum())
+    assert dr.allclose(dr.reduce(dr.ReduceOp.Add, x, where=w), sel.sum())
+
+    # Integer identities: the extremes of the type
+    i = Int32([-5, 3, 9, -1])
+    wi = Bool([False, True, False, True])
+    assert dr.min(i, where=wi)[0] == -1 and dr.max(i, where=wi)[0] == 3
+    assert dr.sum(i, where=wi)[0] == 2 and dr.prod(i, where=wi)[0] == -3
+
+    # Mask reductions
+    b = Bool([True, False, True, True])
+    wb = Bool([True, False, False, True])
+    assert dr.all(b, where=wb)[0] and dr.any(b, where=wb)[0]
+    assert not dr.none(b, where=wb)[0]
+    assert dr.count(b, where=wb)[0] == 2
+    assert dr.all(b, where=Bool([False, True, False, False]))[0] is False
+
+    # Scans and block reductions
+    v = t([1, 2, 3, 4, 5, 6])
+    wv = Bool([True, False, True, True, False, True])
+    assert dr.all(dr.cumsum(v, where=wv) == t([1, 1, 4, 8, 8, 14]))
+    assert dr.all(dr.prefix_sum(v, where=wv) == t([0, 1, 1, 4, 8, 8]))
+    assert dr.all(dr.block_sum(v, 3, where=wv) == t([4, 10]))
+    assert dr.all(dr.block_reduce(dr.ReduceOp.Max, v, 3, where=wv) == t([3, 6]))
+    assert dr.all(dr.block_prefix_sum(v, 3, where=wv) == t([0, 1, 1, 0, 4, 4]))
+
+    # Nothing selected: identity element, NaN for the mean
+    assert dr.sum(x, where=Bool(False))[0] == 0
+    assert dr.max(x, where=Bool(False))[0] == -dr.inf
+    assert dr.isnan(dr.mean(x, where=Bool(False)))[0]
+
+    # Tensors reduce along axes with a mask of the same shape
+    t_np = rng.normal(size=(4, 5)).astype(np.float32)
+    m_np = rng.random((4, 5)) < 0.5
+    m_np[2, :] = True
+    t_dr, m_dr = T(t_np), dr.mask_t(T)(m_np)
+    assert np.allclose(dr.sum(t_dr, axis=1, where=m_dr).numpy(),
+                       np.where(m_np, t_np, 0).sum(axis=1))
+    assert np.allclose(dr.mean(t_dr, axis=0, where=m_dr).numpy(),
+                       np.where(m_np, t_np, 0).sum(axis=0) / m_np.sum(axis=0))
+    assert np.allclose(dr.var(t_dr, axis=1, where=m_dr).numpy()[2], t_np[2].var())
+    assert np.allclose(dr.max(t_dr, axis=None, where=m_dr), t_np[m_np].max())
+
+
+    # Python sequences accept a matching sequence of bools
+    assert dr.sum([1, 2, 3, 4], where=[True, False, True, False]) == 4
+    assert dr.max([1, 7, 3], where=[True, False, True]) == 3
+    assert dr.mean([1.0, 2.0, 6.0], where=[True, False, True]) == 3.5
+    assert dr.var([1.0, 2.0, 5.0], where=[True, False, True]) == 4.0
+    assert dr.all([True, False], where=[True, False])
+    assert dr.count([True, True, False], where=[True, False, True]) == 1
+    with pytest.raises(RuntimeError, match='length'):
+        dr.sum([1, 2, 3], where=[True, False])

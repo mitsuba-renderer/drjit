@@ -14,7 +14,8 @@
 #include <nanobind/ndarray.h>
 #include <tsl/robin_map.h>
 #include <drjit-core/hash.h>
-#include <xxh3.h>
+#define XXH_INLINE_ALL
+#include <xxhash.h>
 #include <cstring>
 
 /// Check if the given metadata record is valid
@@ -319,12 +320,12 @@ struct PromoteKeyHasher {
             return r.low64 ^ r.high64;
         };
 
-        uint64_t a = mix((uint64_t) (uintptr_t) k.tp[0] ^ PRIME64_1,
-                         (uint64_t) (uintptr_t) k.tp[1] ^ PRIME64_2);
-        uint64_t b = mix((uint64_t) (uintptr_t) k.tp[2] ^ PRIME64_3,
-                         (uint64_t) k.flags             ^ PRIME64_4);
+        uint64_t a = mix((uint64_t) (uintptr_t) k.tp[0] ^ XXH_PRIME64_1,
+                         (uint64_t) (uintptr_t) k.tp[1] ^ XXH_PRIME64_2);
+        uint64_t b = mix((uint64_t) (uintptr_t) k.tp[2] ^ XXH_PRIME64_3,
+                         (uint64_t) k.flags             ^ XXH_PRIME64_4);
 
-        return (size_t) mix(a ^ b, PRIME64_5);
+        return (size_t) mix(a ^ b, XXH_PRIME64_5);
     }
 };
 struct PromoteVal { nb::handle h[3]; };

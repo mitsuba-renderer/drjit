@@ -299,3 +299,23 @@ def test08_rng_symbolic(t, seed_mode):
     if seed_mode == 0:
         x = rng.uniform(t, 1)
         assert dr.allclose(x, 0.467728)
+
+
+@pytest.test_arrays('shape=(*), uint32, jit')
+def test09_rng_permutation(t):
+    n = 100000
+    rng = dr.rng(seed=1)
+    p = rng.permutation(t, n)
+    assert len(p) == n
+    assert dr.all(dr.gather(t, p, dr.argsort(p)) == dr.arange(t, n))
+
+    # Shuffling an array or a tensor axis only reorders the entries
+    x = dr.arange(t, 10)
+    y = rng.permutation(x)
+    assert dr.all(dr.gather(t, y, dr.argsort(y)) == x)
+
+    Tensor = dr.tensor_t(t)
+    tens = Tensor(dr.arange(t, 12), (3, 4))
+    s = rng.permutation(tens, axis=1)
+    assert dr.all(dr.sum(s, axis=1) == dr.sum(tens, axis=1))
+    assert dr.any(s.array != tens.array)

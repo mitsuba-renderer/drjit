@@ -567,6 +567,12 @@ def test21_tensor_index_with_tensor(t):
     idx = t([2, 0])
     assert dr.all(x[:, idx] == t([3, 1]))
 
+    # Boolean masks inside slice tuples are rejected instead of being
+    # reinterpreted as integer indices
+    mask = dr.mask_t(t)([True, False, True])
+    with pytest.raises(TypeError, match="integer type"):
+        x[:, mask]
+
 
 @pytest.test_arrays('is_tensor, -bool')
 def test22_item(t):
