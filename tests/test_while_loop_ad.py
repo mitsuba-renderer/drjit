@@ -777,3 +777,41 @@ def test46_fwd_partial_seed_multiple_implicit(t, mode, seed):
 
     dr.forward_from(x if seed == 'x' else y)
     dr.assert_allclose(dr.grad(acc), 12 if seed == 'x' else 8)
+
+
+@pytest.mark.parametrize('variant', ['fwd', 'bwd', 'bwd_general'])
+@pytest.mark.parametrize('scale', [False, True])
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+def test47_scalar_state_call_implicit(t, variant, scale):
+    # Scalar loop state, wide condition, and a symbolic call that gathers from
+    # a grad-enabled array. The call mask keeps the body output scalar, so the
+    # reverse pass must widen the loop inputs before accumulating gradients.
+    UInt = dr.uint32_array_t(t)
+
+    buf = t(0.25, 0.5, 0.75)
+    c = t(2)
+    dr.enable_grad(buf, c)
+
+    def f0(i): return dr.gather(t, buf, i)
+    def f1(i): return dr.gather(t, buf, i) * 2
+
+    def body(i, acc):
+        v = dr.switch(i % 2, [f0, f1], i)
+        if scale:
+            v *= c
+        return i + 1, acc + v
+
+    n = UInt(2, 3, 1, 0)
+    i, acc = dr.while_loop(
+        (UInt(0), t(0)), lambda i, acc: i < n, body, mode='symbolic',
+        max_iterations=4 if variant == 'bwd_general' else -1)
+
+    s = 2 if scale else 1
+    if variant == 'fwd':
+        dr.forward_from(buf)
+        dr.assert_allclose(dr.grad(acc), [3*s, 4*s, 1*s, 0])
+    else:
+        dr.backward_from(dr.sum(acc))
+        dr.assert_allclose(dr.grad(buf), [3*s, 4*s, 1*s])
+        if scale:
+            dr.assert_allclose(dr.grad(c), 3.5)
