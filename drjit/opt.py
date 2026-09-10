@@ -550,7 +550,9 @@ class _LRCache(Dict[Tuple[Type[dr.ArrayBase], float], dr.ArrayBase]):
             elif scale_o is None:
                 scale_o = arg
             else:
-                scale_o *= arg
+                # don't `*=`: `scale_o` may alias a parameter's stored
+                # learning rate, which `*=` would decay on every step
+                scale_o = scale_o * arg
 
         key = (tp, scale_f)
         result = self.get(key, None)
