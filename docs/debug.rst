@@ -6,132 +6,141 @@ Debugging
 This section presents strategies for debugging Dr.Jit-based programs that
 do not behave as expected.
 
-Suppressing undefined behavior
-------------------------------
+Undefined behavior
+------------------
 
-Several operations elide bounds checks for performance reasons, which can lead
-to undefined behavior.
-
-For example, calling :py:func:`drjit.gather` with an incorrect index could
-cause the operation to read beyond the end of an array, producing bogus results
-or even crashing the Python session due to a CPU or GPU page fault. Similarly,
-incorrect indices passed to :py:func:`drjit.scatter`,
-:py:func:`drjit.scatter_reduce`, :py:func:`drjit.scatter_add`, etc., might
-cause these operations to write beyond the end of an array and crash Python or,
-worse, introduce data corruption elsewhere that shows up much later.
-
-To track down such issues, enable *debug mode*
-(:py:attr:`drjit.JitFlag.Debug`). Debug mode instruments compiled kernels with
-additional checks that suppress and report all undefined behavior along with
-the responsible Python source code location.
-
-To enable it, set the associated flag at the beginning of your program.
+Dr.Jit operations that acess memory (e.g., :py:func:`dr.gather() <gather>`,
+:py:func:`dr.scatter()`, dynamic slicing) emphasize performance and assume that
+provided indices are in bounds. Programs that violate this rule can easily
+crash the process or produce other kinds of undefined behavior. To track down
+such issues, enable *debug mode* (:py:attr:`drjit.JitFlag.Debug`) at the
+beginning of your program.
 
 .. code-block:: python
 
    dr.set_flag(drjit.JitFlag.Debug, True)
 
-Alternatively, you can enable debug mode locally for a block of code.
-
-.. code-block:: python
-
-   with dr.scoped_set_flag(drjit.JitFlag.Debug):
-
-       # .. code goes here
-
-(Due to how this instrumentation works internally, Python source code locations
-will be tracked following the next function call)
-
-Debug mode comes at a significant additional cost and is not a good default
-setting. We recommend enabling it occasionally to flush out errors.
-
-In general, it should not be possible to crash Dr.Jit or encounter undefined
-behavior when debug mode is enabled. If you can break things with this flag
-set, then you have likely found a bug within Dr.Jit (see the next section).
-
-Debug assertions
-----------------
-
-Dr.Jit offers the following assertion helper functions that perform additional
-check when the program runs in the *debug mode* explained above. Otherwise,
-they are optimized away.
+Debug mode adds bounds checks that report all undefined behavior with the
+responsible Python source code location. It is expensive and should not be
+enabled by default. We recommend enabling it occasionally to flush out bugs.
+Also consider using the functions
 
 - :py:func:`drjit.assert_true`,
 - :py:func:`drjit.assert_false`,
 - :py:func:`drjit.assert_equal`.
 
-A useful feature of these functions is that they also work in a symbolic
-context, in which case they report errors asynchronously when code eventually
-runs on the device.
+to assert program invariants. They are active in debug mode and can
+check symbolic variables.
 
-Stepping through programs
--------------------------
+In general, you should not be able to crash Dr.Jit or generate undefined
+behavior when debug mode is enabled. If you do, then you have likely found a
+bug and we would appreciate a bug report with a minimal reproducer.
 
-If debug mode did not change the behavior of the program, then it may be
-helpful to isolate the issue using traditional debugging techniques
-(visualizing variable contents, setting breakpoints, and single-stepping
-through the program using the built-in `Python debugger
+Debugging within Python
+-----------------------
+
+You can use the built-in `Python debugger
 <https://docs.python.org/3/library/pdb.html>`__ or an IDE such as `VS Code
-<https://code.visualstudio.com/docs/python/debugging>`__.
+<https://code.visualstudio.com/docs/python/debugging>`__ to set breakpoints and
+step through Dr.Jit programs. In this case, it may be helpful to disable
+Dr.Jit's symbolic loops, conditionals, and calls so that variable contents are
+inspectable. The flag :py:attr:`drjit.JitFlag.SymbolicAll` turns off all three
+at once.
 
-Dr.Jit's symbolic loops, conditionals, and calls can sometimes interfere with
-this kind of debugging methodology because they prevent access to symbolic
-variable contents. In this case, you can temporarily disable all symbolic
-program features by setting :py:attr:`drjit.JitFlag.SymbolicLoops`,
-:py:attr:`drjit.JitFlag.SymbolicCalls`, and
-:py:attr:`drjit.JitFlag.SymbolicConditionals` to ``False``. This will switch
-control flow to the less efficient but functionally equivalent *evaluated mode*
-that is compatible with interactive debugging.
+.. code-block:: python
 
-.. _inspect_kernels:
+   dr.set_flag(dr.JitFlag.SymbolicAll, False)
 
-Inspecting compiled kernels
+This will switch control flow to the less efficient but functionally equivalent
+*evaluated mode* that is compatible with interactive debugging. Use
+:py:func:`dr.scoped_set_flag() <scoped_set_flag>` to restrict the change to a
+region of the program.
+
+.. code-block:: python
+
+   with dr.scoped_set_flag(dr.JitFlag.SymbolicAll, False):
+       # ...
+
+.. _debug_kernels:
+
+Debugging using LLDB or GDB
 ---------------------------
 
-It is sometimes useful to look at the machine code that Dr.Jit generated for a
-kernel, for example to disassemble it or to load its symbols into a debugger
-such as GDB or LLDB. The :ref:`kernel cache <caching>` provides a convenient
-way to access this code.
+The LLVM backend also supports attaching *external debuggers* like `LLDB
+<https://lldb.llvm.org>`__ and `GDB <https://www.gnu.org/software/gdb/>`__ on
+macOS and Linux. It tags compiled code with source location information to map
+from machine instructions to Python code. You must enable *debug mode*
+(:py:attr:`drjit.JitFlag.Debug`) for this feature.
 
-With the exception of the OptiX database, every cache entry is a standard `LZ4
-<https://lz4.org>`__ frame. Dr.Jit compresses entries using a dictionary that
-depends on the file type, which improves the compression ratio of small
-kernels. The ``lz4`` command line tool can decompress an entry given the
-matching dictionary from the ``ext/drjit-core/resources`` directory of the
-source tree. For example, the following command extracts an object file from
-the cache on Linux:
+Native debuggers can then treat kernels much like ordinary compiled code:
 
-.. code-block:: bash
+- Interrupting a running program shows the Python line teach thread is
+  currently executing, even when the thread is deep inside a kernel.
 
-   lz4 -d -D lz4_dict_elf ~/.drjit/<hash>.o.lz4 kernel.o
+- Breakpoints on Python source lines resolve to the corresponding machine code
+  within kernels.
 
-The decompressed contents depend on the backend:
+This reveals where a long-running kernel spends its time and enables low-level
+inspection (e.g., disassembly and single-stepping) of the code generated for a
+specific Python line.
 
-- **LLVM Backend**: each entry decompresses to a native object file in the
-  platform's standard format, i.e., ELF on Linux, Mach-O on macOS, and COFF on
-  Windows. The matching dictionaries are ``lz4_dict_elf``, ``lz4_dict_macho``,
-  and ``lz4_dict_coff``.
-  Tools such as ``objdump``, ``otool``, or ``dumpbin`` can disassemble these
-  files.
+LLDB does not consult the debugger interface for JIT-compiled code by default.
+Enable it once and for all by adding the following line to ``~/.lldbinit``:
 
-- **Metal Backend**: the cache holds three kinds of Metal library files.
-  Entries with the extension ``.air.metallib.lz4`` hold an intermediate
-  library image produced
-  by the shader compiler front end. Entries with the extension
-  ``.func.metallib.lz4`` are binary archives with the device-specific machine
-  code of individual callables. Entries with the extension
-  ``.pso.metallib.lz4`` are binary archives with the pipeline state of complete
-  kernels. The first two use the ``lz4_dict_metallib`` dictionary, the last
-  one uses ``lz4_dict_mpso``.
+.. code-block:: text
 
-- **CUDA Backend**: Dr.Jit relies on the driver's own cache, whose format is
-  not documented. Use the :py:class:`drjit.kernel_history` API to retrieve the
-  PTX source of a kernel instead.
+   settings set plugin.jit-loader.gdb.enable on
 
-Localizing bugs within Dr.Jit
------------------------------
+GDB supports this interface out of the box and needs no configuration.
 
-To debug Dr.Jit, begin making a debug build (i.e., manually compile it with
+
+The following shows an example LLDB session:
+
+.. code-block:: console
+
+   $ lldb -- python3 test.py
+   (lldb) run
+   running (interrupt with Ctrl-C in the debugger)
+   ^C
+   Process 85611 stopped
+   * thread #1, queue = 'com.apple.main-thread', stop reason = signal SIGSTOP
+       frame #0: 0x00000001011b81c8 JIT(0x1011b4000)`drjit.switch() + 456 at test.py:21
+      18   def f_sin(x):
+      19       y = x
+      20       for _ in range(8):
+   -> 21           y = dr.sin(y) * 1.5 + 0.25
+      22       return y
+   (lldb) bt
+   * frame #0: 0x00000001011b81c8 JIT(0x1011b4000)`drjit.switch() + 456 at test.py:21
+     frame #1: 0x00000001011a8144 JIT(0x1011a4000)`drjit_kernel + 324 at test.py:34
+     frame #2: 0x000000010005fb58 libnanothread.dylib`pool_execute_task(...) + 72
+     ...
+   (lldb) thread backtrace all
+   ...
+   (lldb) breakpoint set -f test.py -l 26
+   Breakpoint 1: where = JIT(0x1011b4000)`drjit.switch() + 156 at test.py:26
+   (lldb) continue
+
+A few things are worth knowing when reading such output:
+
+- Kernel entry points appear as ``drjit_kernel``, and callables invoked via
+  :py:func:`drjit.switch` or :py:func:`drjit.dispatch` appear under the name
+  of the call. The underlying symbols are named ``drjit_<hash>`` and
+  ``func_<hash>``, where ``<hash>`` identifies the :ref:`kernel cache
+  <caching>` entry.
+
+- A line refers to the Python code that *created* an operation. Since Dr.Jit
+  fuses and reorders operations, neighboring instructions may belong to
+  different lines, and a single line may occur in several places.
+
+- Variables of the Python program are not accessible from within a kernel.
+
+.. _debugging_drjit:
+
+Advanced: finding bugs within Dr.Jit itself
+-------------------------------------------
+
+To debug Dr.Jit itself, begin making a debug build (i.e., manually compile it with
 ``-DCMAKE_BUILD_TYPE=Debug``). Furthermore, you may want to enable some of the
 following sanitization flags:
 
@@ -143,7 +152,7 @@ following sanitization flags:
 
 
 Sanitizing Python sessions
---------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Getting the sanitizers to play well with Python requires a few extra steps.
 First, unless you have manually compiled Python with sanitization, you will
@@ -197,3 +206,49 @@ workaround seems to be to set the environment variable
 .. code-block:: bash
 
    ASAN_OPTIONS=protect_shadow_gap=0:replace_intrin=0:detect_leaks=0
+
+.. _inspect_kernels:
+
+Advanced: Inspecting compiled kernels
+-------------------------------------
+
+It is sometimes useful to look at the machine code that Dr.Jit generated for a
+kernel, for example to disassemble it or to load its symbols into a debugger
+such as GDB or LLDB. The :ref:`kernel cache <caching>` provides a convenient
+way to access this code.
+
+With the exception of the OptiX database, every cache entry is a standard `LZ4
+<https://lz4.org>`__ frame. Dr.Jit compresses entries using a dictionary that
+depends on the file type, which improves the compression ratio of small
+kernels. The ``lz4`` command line tool can decompress an entry given the
+matching dictionary from the ``ext/drjit-core/resources`` directory of the
+source tree. For example, the following command extracts an object file from
+the cache on Linux:
+
+.. code-block:: bash
+
+   lz4 -d -D lz4_dict_elf ~/.drjit/<hash>.o.lz4 kernel.o
+
+The decompressed contents depend on the backend:
+
+- **LLVM Backend**: each entry decompresses to a native object file in the
+  platform's standard format, i.e., ELF on Linux, Mach-O on macOS, and COFF on
+  Windows. The matching dictionaries are ``lz4_dict_elf``, ``lz4_dict_macho``,
+  and ``lz4_dict_coff``.
+  Tools such as ``objdump``, ``otool``, or ``dumpbin`` can disassemble these
+  files.
+
+- **Metal Backend**: the cache holds three kinds of Metal library files.
+  Entries with the extension ``.air.metallib.lz4`` hold an intermediate
+  library image produced
+  by the shader compiler front end. Entries with the extension
+  ``.func.metallib.lz4`` are binary archives with the device-specific machine
+  code of individual callables. Entries with the extension
+  ``.pso.metallib.lz4`` are binary archives with the pipeline state of complete
+  kernels. The first two use the ``lz4_dict_metallib`` dictionary, the last
+  one uses ``lz4_dict_mpso``.
+
+- **CUDA Backend**: Dr.Jit relies on the driver's own cache, whose format is
+  not documented. Use the :py:class:`drjit.kernel_history` API to retrieve the
+  PTX source of a kernel instead.
+
