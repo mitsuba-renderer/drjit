@@ -116,18 +116,20 @@ static bool ad_loop_symbolic(JitBackend backend, const char *name,
             int rv = jit_var_loop_end(loop.index(), loop_cond.index(),
                                       indices2.data(), record_guard.checkpoint);
 
-            indices1.release();
             if (rv) {
-                /* Final iteration: hand off plain JIT indices. The downstream
-                   LoopOp construction in ad_loop() detects loop-invariant
-                   variables and re-attaches AD itself, so we keep the existing
-                   AD=0 convention here to avoid double-tracking. */
-                for (uint32_t i : indices2)
-                    indices1.push_back_steal(i);
+                /* Final iteration: hand off the loop outputs together with
+                   the AD indices produced by the body. ad_loop() compares
+                   them against the inputs to detect loop-invariant variables
+                   and re-attaches AD to the remaining ones. */
+                for (size_t i = 0; i < indices2.size(); ++i) {
+                    jit_var_dec_ref((uint32_t) indices1[i]);
+                    indices1[i] = ((indices1[i] >> 32) << 32) | indices2[i];
+                }
             } else {
                 /* Re-record requested. Recombine the saved AD indices with the
                    re-initialized JIT inputs so the next body invocation sees
                    AD-tracked state, just like the initial setup did. */
+                indices1.release();
                 for (size_t i = 0; i < indices2.size(); ++i) {
                     if (ad_state[i])
                         ad_var_inc_ref(uint64_t(ad_state[i]) << 32);
@@ -1380,19 +1382,15 @@ bool ad_loop(JitBackend backend, int symbolic, int compress,
                     vt != VarType::Float64)
                     continue;
 
-                if (invariant_mask[i]) {
-                    // Keep unchanged variables out of the AD system
-                    if (indices_in[i] != indices_out[i]) {
-                        ad_var_inc_ref(indices_in[i]);
-                        jit_var_dec_ref((uint32_t) indices_out[i]);
-                        indices_out[i] = indices_in[i];
-                    }
-                } else {
-                    uint64_t index = ad_var_new((uint32_t) indices_out[i]);
-                    jit_var_dec_ref((uint32_t) indices_out[i]);
-                    indices_out[i] = index;
-                    op->add_output(index, i);
-                }
+                // Keep variables whose value and derivative are both
+                // unchanged out of the AD system.
+                if (indices_in[i] == indices_out[i])
+                    continue;
+
+                uint64_t index = ad_var_new((uint32_t) indices_out[i]);
+                ad_var_dec_ref(indices_out[i]);
+                indices_out[i] = index;
+                op->add_output(index, i);
             }
 
             if (ad_custom_op(op.get())) {

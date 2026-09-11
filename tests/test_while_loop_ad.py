@@ -844,3 +844,32 @@ def test48_general_bwd_unused_invariant_width(t, width, enable_unused_grad):
     dr.assert_allclose(dr.grad(captured), 604)
     dr.assert_allclose(passenger, unused)
     dr.assert_allclose(dr.grad(unused), 0)
+
+
+@pytest.mark.parametrize('variant', ['fwd', 'bwd', 'bwd_general'])
+@pytest.mark.parametrize('width', [1, 2])
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+def test49_invariant_value_changing_grad(t, variant, width):
+    # Loop state whose value never changes but whose derivative does must
+    # still be differentiable. Here, 'acc' accumulates a term with value zero
+    # and gradient 'x * i'. Since 'acc + 0' folds back to the loop input, its
+    # JIT index is the same before and after the loop, and the AD layer used
+    # to treat it as an invariant, dropping the dependence on 'x'.
+    UInt = dr.uint32_array_t(t)
+
+    x = t([1] * width)
+    dr.enable_grad(x)
+
+    def body(i, acc):
+        return i + 1, acc + dr.replace_grad(t(0), x * t(i))
+
+    i, acc = dr.while_loop(
+        (UInt(0), t(0)), lambda i, acc: i < 3, body, mode='symbolic',
+        max_iterations=4 if variant == 'bwd_general' else -1)
+
+    if variant == 'fwd':
+        dr.forward_from(x)
+        dr.assert_allclose(dr.grad(acc), [3] * width)
+    else:
+        dr.backward_from(dr.sum(acc))
+        dr.assert_allclose(dr.grad(x), [3] * width)
