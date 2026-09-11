@@ -1063,7 +1063,7 @@ template <typename Value, bool Native> Value sinh(const Value &x) {
 
 
         Value xa = abs(x),
-              r_small, r_big;
+              r_small = Value(0), r_big = Value(0);
 
         Mask mask_big = xa > Scalar(1);
 
@@ -1142,7 +1142,7 @@ template <typename Value, bool Native> std::pair<Value, Value> sincosh(const Val
         Value xa = abs(x),
               exp0 = exp(x),
               exp1 = rcp(exp0),
-              r_small, r_big;
+              r_small = Value(0), r_big = Value(0);
 
         Mask mask_big = xa > Scalar(1);
 
@@ -1201,7 +1201,7 @@ template <typename Value, bool Native> Value tanh(const Value &x) {
         using Mask = mask_t<Value>;
         constexpr bool Single = std::is_same_v<Scalar, float>;
 
-        Value r_big, r_small;
+        Value r_big = Value(0), r_small = Value(0);
 
         Mask mask_big = abs(x) >= Scalar(0.625);
 
@@ -1263,7 +1263,7 @@ template <typename Value, bool Native> Value asinh(const Value &x) {
         using Mask = mask_t<Value>;
         constexpr bool Single = std::is_same_v<Scalar, float>;
 
-        Value x2 = square(x), xa = abs(x), r_big, r_small;
+        Value x2 = square(x), xa = abs(x), r_big = Value(0), r_small = Value(0);
 
         Mask mask_big  = xa >= Scalar(Single ? 0.51 : 0.533),
              mask_huge = xa >= Scalar(Single ? 1e10 : 1e20);
@@ -1325,7 +1325,7 @@ template <typename Value, bool Native> Value acosh(const Value &x) {
         using Mask = mask_t<Value>;
         constexpr bool Single = std::is_same_v<Scalar, float>;
 
-        Value x1 = x - Scalar(1), r_big, r_small;
+        Value x1 = x - Scalar(1), r_big = Value(0), r_small = Value(0);
 
         Mask mask_big  = x1 >= Scalar(0.49),
              mask_huge = x1 >= Scalar(1e10);
@@ -1390,7 +1390,7 @@ template <typename Value, bool Native> Value atanh(const Value &x) {
         using Mask = mask_t<Value>;
         constexpr bool Single = std::is_same_v<Scalar, float>;
 
-        Value xa = abs(x), r_big, r_small;
+        Value xa = abs(x), r_big = Value(0), r_small = Value(0);
 
         Mask mask_big = xa >= Scalar(0.5);
 
