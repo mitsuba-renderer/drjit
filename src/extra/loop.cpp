@@ -555,11 +555,11 @@ public:
            const index64_vector &state,
            const dr::vector<uint32_t> &implicit_in,
            const dr::vector<bool> &invariant_mask,
-           long long max_iterations)
+           size_t size, long long max_iterations)
         : m_backend(backend), m_name(name), m_payload(payload),
           m_read_cb(read_cb), m_write_cb(write_cb), m_cond_cb(cond_cb),
           m_body_cb(body_cb), m_delete_cb(delete_cb), m_diff_count(0),
-          m_max_iterations(max_iterations), m_reset(false) {
+          m_size(size), m_max_iterations(max_iterations), m_reset(false) {
         m_name_op = "Loop: " + m_name;
 
         m_inputs.reserve(state.size());
@@ -638,6 +638,15 @@ public:
 
     uint64_t combine(uint32_t ad_index, uint32_t jit_index = 0) {
         return (((uint64_t) ad_index) << 32) + jit_index;
+    }
+
+    /// Broadcast a scalar loop input to the width of the primal loop
+    uint32_t widen(uint32_t index) const {
+        if (jit_var_size(index) != 1 || m_size == 1) {
+            jit_var_inc_ref(index);
+            return index;
+        }
+        return jit_var_resize(index, m_size);
     }
 
     const char *name() const override { return m_name_op.c_str(); }
@@ -880,7 +889,7 @@ public:
 
         m_state.release();
         for (const Input &i : m_inputs)
-            m_state.push_back_borrow(i.index);
+            m_state.push_back_steal(widen(i.index));
 
         uint32_t index = 0;
         for (const Input &in : m_inputs) {
@@ -1262,6 +1271,8 @@ private:
     size_t m_diff_count;
     // Offset of implicit indices in m_input_indices
     size_t m_implicit_in_offset;
+    /// Width of the primal loop (size of its outputs)
+    size_t m_size;
     long long m_max_iterations;
     bool m_reset;
 };
@@ -1344,16 +1355,21 @@ bool ad_loop(JitBackend backend, int symbolic, int compress,
             index64_vector indices_out;
             read_cb(payload, indices_out);
 
-            // Detect loop-invariant state variables (same JIT index pre/post)
+            // Detect loop-invariant state variables (same JIT index pre/post).
+            // The remaining outputs were widened to the size of the loop.
             dr::vector<bool> invariant_mask(indices_out.size(), false);
-            for (size_t i = 0; i < indices_out.size(); ++i)
+            size_t size = 1;
+            for (size_t i = 0; i < indices_out.size(); ++i) {
                 invariant_mask[i] =
                     (uint32_t) indices_in[i] == (uint32_t) indices_out[i];
+                if (!invariant_mask[i])
+                    size = std::max(size, jit_var_size((uint32_t) indices_out[i]));
+            }
 
             nanobind::ref<LoopOp> op =
                 new LoopOp(backend, name, payload, read_cb, write_cb,
                            cond_cb, body_cb, delete_cb, indices_in,
-                           implicit_in, invariant_mask, max_iterations);
+                           implicit_in, invariant_mask, size, max_iterations);
 
             for (size_t i = 0; i < indices_out.size(); ++i) {
                 VarType vt = jit_var_type((uint32_t) indices_out[i]);

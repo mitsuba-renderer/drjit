@@ -105,6 +105,15 @@ auto if_stmt_impl(std::index_sequence<Is...>, Args &&args, const Mask &cond,
 
 NAMESPACE_END(detail)
 
+/*
+ * Record a conditional expression
+ *
+ * See `cflow.rst` and `cpp.rst` for details.
+ *
+ * All supplied lambda functions may be called again during derivative
+ * propagation, after the calling function has returned. It must therefore not
+ * capture surrounding stack variables by reference.
+ */
 template <typename Args, typename Mask, typename TrueFn, typename FalseFn>
 auto if_stmt(Args &&state, const Mask &cond, TrueFn &&true_fn,
              FalseFn &&false_fn, const char *name = nullptr) {
