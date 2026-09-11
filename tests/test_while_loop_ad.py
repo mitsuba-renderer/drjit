@@ -873,3 +873,25 @@ def test49_invariant_value_changing_grad(t, variant, width):
     else:
         dr.backward_from(dr.sum(acc))
         dr.assert_allclose(dr.grad(x), [3] * width)
+
+
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+def test50_suspended_loop_detaches_body_grad(t):
+    # A body that re-enables gradients inside a suspended loop must not
+    # leak AD nodes of the recorded body into the loop outputs
+    UInt = dr.uint32_array_t(t)
+    x = t([1, 1])
+    dr.enable_grad(x)
+
+    with dr.suspend_grad():
+        def body(i, acc, acc2):
+            with dr.resume_grad():
+                return i + 1, acc + x, acc2 + dr.replace_grad(t(0), x)
+
+        i, acc, acc2 = dr.while_loop(
+            (UInt(0), t(0), t(0)), lambda i, a, b: i < 3, body,
+            mode='symbolic', max_iterations=-1)
+
+    assert not dr.grad_enabled(acc)
+    assert not dr.grad_enabled(acc2)
+    dr.assert_allclose(acc, [3, 3])

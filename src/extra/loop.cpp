@@ -1331,28 +1331,33 @@ bool ad_loop(JitBackend backend, int symbolic, int compress,
         read_cb(payload, indices_in);
         dr::detail::ad_index32_vector implicit_in, implicit_out;
 
-        bool needs_ad;
-        {
-            needs_ad = ad_loop_symbolic(backend, name, payload, read_cb,
-                                        write_cb, cond_cb, body_cb, indices_in,
-                                        implicit_in, implicit_out);
-        }
-        needs_ad &= ad;
+        bool needs_ad = ad_loop_symbolic(backend, name, payload, read_cb,
+                                         write_cb, cond_cb, body_cb, indices_in,
+                                         implicit_in, implicit_out);
 
-        if (needs_ad && ad_grad_suspended()) {
-            // Maintain differentiability of unchanged variables
+        if (needs_ad && (!ad || ad_grad_suspended())) {
+            /* No LoopOp will be created. Detach the outputs from the AD
+               nodes recorded inside the loop body. Outputs whose value is
+               unchanged keep the AD index of the corresponding input. */
             bool rewrite = false;
             index64_vector indices_out;
 
             read_cb(payload, indices_out);
             for (size_t i = 0; i < indices_out.size(); ++i) {
-                if ((uint32_t) indices_in[i] == (uint32_t) indices_out[i] &&
-                    indices_in[i] != indices_out[i]) {
-                    ad_var_inc_ref(indices_in[i]);
-                    jit_var_dec_ref((uint32_t) indices_out[i]);
-                    indices_out[i] = indices_in[i];
-                    rewrite = true;
+                uint64_t in = indices_in[i], out = indices_out[i];
+                if (in == out)
+                    continue;
+
+                uint64_t index;
+                if ((uint32_t) in == (uint32_t) out) {
+                    index = ad_var_inc_ref(in);
+                } else {
+                    index = (uint32_t) out;
+                    jit_var_inc_ref((uint32_t) index);
                 }
+                ad_var_dec_ref(out);
+                indices_out[i] = index;
+                rewrite = true;
             }
             if (rewrite)
                 write_cb(payload, indices_out, false);
