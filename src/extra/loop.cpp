@@ -977,8 +977,14 @@ public:
         size_t N = m_inputs.size();
 
         m_state2.release();
-        for (size_t i = 0; i < N; ++i)
-            m_state2.push_back_borrow(m_state[i]);
+
+        // Always hand invariants to the callbacks by their original index.
+        // The Python variable tracker pins the first index it sees and
+        // rejects a later width change (placeholder -> in.index).
+        for (size_t i = 0; i < N; ++i) {
+            const Input &in = m_inputs[i];
+            m_state2.push_back_borrow(in.is_invariant ? in.index : m_state[i]);
+        }
         m_write_cb(m_payload, m_state2, m_reset);
         m_reset = false;
         m_state2.release();
@@ -1029,6 +1035,9 @@ public:
         m_state2.release();
         m_read_cb(m_payload, m_state2);
         for (size_t i = 0; i < N; ++i) {
+            // Leave invariants untouched so that the loop eliminates them
+            if (m_inputs[i].is_invariant)
+                continue;
             uint32_t new_jit = (uint32_t) m_state2[i];
             jit_var_inc_ref(new_jit);
             jit_var_dec_ref((uint32_t) m_state[i]);
@@ -1185,9 +1194,13 @@ public:
             if (in.has_grad_out) {
                 grad = ad_grad(combine(m_output_indices[in.grad_out_offset]));
             } else {
+                // Match the width of the AD wrapper that receives this seed
+                // during replay. Invariants keep their original width there.
                 uint64_t zero = 0;
+                size_t size = in.is_invariant ? jit_var_size(in.index)
+                                              : loop_size;
                 grad = jit_var_literal(m_backend, jit_var_type(in.index),
-                                       &zero, loop_size);
+                                       &zero, size);
             }
             m_state.push_back_steal(grad);
         }
