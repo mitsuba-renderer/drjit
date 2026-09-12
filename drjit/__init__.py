@@ -750,19 +750,20 @@ def trace(arg, /):
 def frob(a, /):
     r'''
     frob(arg, /)
-    Returns the squared Frobenius norm of the provided Dr.Jit matrix.
+    Returns the Frobenius norm of the provided Dr.Jit matrix.
 
-    The squared Frobenius norm is defined as the sum of the squares of its elements:
+    The Frobenius norm is defined as the square root of the sum of the squares
+    of the matrix elements:
 
     .. math::
 
-        \sum_{i=1}^m \sum_{j=1}^n a_{i j}^2
+        \sqrt{\sum_{i=1}^m \sum_{j=1}^n a_{i j}^2}
 
     Args:
         arg (drjit.ArrayBase): A Dr.Jit matrix type
 
     Returns:
-        drjit.ArrayBase: The squared Frobenius norm of the input matrix
+        drjit.ArrayBase: The Frobenius norm of the input matrix
     '''
     if not is_matrix_v(a):
         raise Exception('frob() : unsupported type!')
@@ -771,7 +772,7 @@ def frob(a, /):
     for i in range(1, size_v(a)):
         value = a[i]
         result = fma(value, value, result)
-    return sum(result)
+    return sqrt(sum(result))
 
 
 def polar_decomp(arg: T, it: int = 10) -> Tuple[T, T]:

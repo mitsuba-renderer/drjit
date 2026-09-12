@@ -100,6 +100,11 @@ DrJit 1.6.0 (unreleased)
 
 - Removed a number of long-deprecated aliases.
 
+- :py:func:`dr.frob() <frob>` returns the Frobenius norm instead of its square,
+  which matches the convention used by NumPy, PyTorch, MATLAB, and Eigen. This
+  also fixes :py:func:`dr.polar_decomp() <polar_decomp>`, which computed a
+  wrong scale factor because of the previous behavior.
+
 DrJit 1.5.0 (August 7, 2026)
 ----------------------------
 
