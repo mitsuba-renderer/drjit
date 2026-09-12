@@ -459,3 +459,19 @@ def test12_promote_fp16(optimizer_class, promote_fp16, t):
     if not success:
         print(f"  Target: {target}, Final: {final_value[0]:.8f}")
     assert success
+
+
+@pytest.test_arrays("is_diff,float32,shape=(*)")
+def test13_array_valued_lr(t):
+    # An array-valued learning rate is stored by reference. Ensure that the
+    # optimizer does not scale it in place while assembling the step size.
+    lr = dr.opaque(t, 1e-2)
+    opt = Adam(lr=lr, params={"x": t(1)})
+
+    prev = t(1)
+    for _ in range(4):
+        dr.backward(dr.sum(dr.square(opt["x"])))
+        opt.step()
+        assert dr.allclose(lr, 1e-2)
+        assert dr.all(opt["x"] < prev)
+        prev = dr.detach(opt["x"])
