@@ -317,4 +317,21 @@ if (NOT (DRJIT_SANITIZE_ASAN OR DRJIT_SANITIZE_UBSAN))
     ${DRJIT_PYTHON_DST_DIR}/auto/ad.py
     ${DRJIT_PYTHON_DST_DIR}/auto/py.typed
   )
+else()
+  add_custom_command(
+    OUTPUT
+      ${DRJIT_PYTHON_DST_DIR}/auto/__init__.py
+      ${DRJIT_PYTHON_DST_DIR}/auto/ad.py
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${DRJIT_PYTHON_DST_DIR}/auto
+    COMMAND ${CMAKE_COMMAND} -E touch
+      ${DRJIT_PYTHON_DST_DIR}/auto/__init__.py
+      ${DRJIT_PYTHON_DST_DIR}/auto/ad.py
+    DEPENDS drjit-copy-python-src
+  )
+
+  add_custom_target(
+    drjit-auto-stub ALL DEPENDS
+    ${DRJIT_PYTHON_DST_DIR}/auto/__init__.py
+    ${DRJIT_PYTHON_DST_DIR}/auto/ad.py
+  )
 endif()
