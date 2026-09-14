@@ -401,6 +401,7 @@ Textures
    .. automethod:: use_accel
    .. automethod:: writable
    .. automethod:: srgb
+   .. automethod:: block_format
    .. automethod:: write
    .. automethod:: from_native_handle
    .. automethod:: map
@@ -435,6 +436,7 @@ Textures
    .. automethod:: use_accel
    .. automethod:: writable
    .. automethod:: srgb
+   .. automethod:: block_format
    .. automethod:: write
    .. automethod:: from_native_handle
    .. automethod:: map
@@ -469,6 +471,7 @@ Textures
    .. automethod:: use_accel
    .. automethod:: writable
    .. automethod:: srgb
+   .. automethod:: block_format
    .. automethod:: write
    .. automethod:: from_native_handle
    .. automethod:: map
@@ -503,6 +506,7 @@ Textures
    .. automethod:: use_accel
    .. automethod:: writable
    .. automethod:: srgb
+   .. automethod:: block_format
    .. automethod:: write
    .. automethod:: from_native_handle
    .. automethod:: map
@@ -537,6 +541,7 @@ Textures
    .. automethod:: use_accel
    .. automethod:: writable
    .. automethod:: srgb
+   .. automethod:: block_format
    .. automethod:: write
    .. automethod:: from_native_handle
    .. automethod:: map
@@ -571,6 +576,7 @@ Textures
    .. automethod:: use_accel
    .. automethod:: writable
    .. automethod:: srgb
+   .. automethod:: block_format
    .. automethod:: write
    .. automethod:: from_native_handle
    .. automethod:: map
@@ -605,6 +611,7 @@ Textures
    .. automethod:: use_accel
    .. automethod:: writable
    .. automethod:: srgb
+   .. automethod:: block_format
    .. automethod:: write
    .. automethod:: from_native_handle
    .. automethod:: map
@@ -639,6 +646,7 @@ Textures
    .. automethod:: use_accel
    .. automethod:: writable
    .. automethod:: srgb
+   .. automethod:: block_format
    .. automethod:: write
    .. automethod:: from_native_handle
    .. automethod:: map
@@ -673,6 +681,7 @@ Textures
    .. automethod:: use_accel
    .. automethod:: writable
    .. automethod:: srgb
+   .. automethod:: block_format
    .. automethod:: write
    .. automethod:: from_native_handle
    .. automethod:: map
@@ -707,6 +716,7 @@ Textures
    .. automethod:: use_accel
    .. automethod:: writable
    .. automethod:: srgb
+   .. automethod:: block_format
    .. automethod:: write
    .. automethod:: from_native_handle
    .. automethod:: map
@@ -741,6 +751,7 @@ Textures
    .. automethod:: use_accel
    .. automethod:: writable
    .. automethod:: srgb
+   .. automethod:: block_format
    .. automethod:: write
    .. automethod:: from_native_handle
    .. automethod:: map
@@ -775,6 +786,7 @@ Textures
    .. automethod:: use_accel
    .. automethod:: writable
    .. automethod:: srgb
+   .. automethod:: block_format
    .. automethod:: write
    .. automethod:: from_native_handle
    .. automethod:: map

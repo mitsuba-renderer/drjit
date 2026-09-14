@@ -199,6 +199,12 @@ NB_MODULE(_drjit_ext, m_) {
         .value("Standard", dr::MipBasis::Standard)
         .value("Laplacian", dr::MipBasis::Laplacian);
 
+    nb::enum_<dr::BlockFormat>(m, "BlockFormat")
+        .value("Disabled", dr::BlockFormat::Disabled)
+        .value("BC4", dr::BlockFormat::BC4)
+        .value("BC5", dr::BlockFormat::BC5)
+        .value("BC7", dr::BlockFormat::BC7);
+
     m.def("has_backend", &jit_has_backend, doc_has_backend);
 
     m.def("sync_thread", &jit_sync_thread, doc_sync_thread, nb::call_guard<nb::gil_scoped_release>())

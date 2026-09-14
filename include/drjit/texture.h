@@ -189,6 +189,73 @@ public:
     }
 
     /**
+     * \brief Create a 2D texture from block-compressed (BC4, BC5, or BC7)
+     * 8-bit data
+     *
+     * The texture keeps the compressed representation: on the CUDA and Metal
+     * backends (with \c use_accel set), the hardware texture units decode the
+     * blocks on every lookup, which reduces the memory footprint by a factor
+     * of 4-8 compared to plain 8-bit storage. Other configurations decode the
+     * blocks once on the host and then behave like an ordinary 8-bit texture.
+     *
+     * \c blocks holds the row-major 4x4 blocks of the base level, followed by
+     * those of the \c n_levels - 1 coarser MIP levels (each level covers
+     * <tt>ceil(w/4) * ceil(h/4)</tt> blocks of 8 bytes for BC4 and 16 bytes
+     * otherwise). The pyramid cannot be derived from compressed data, so a
+     * texture with a \c mip_filter must provide the complete chain, and a
+     * texture without one exactly one level.
+     *
+     * The \c channels parameter gives the logical channel count: 1 for BC4,
+     * 2 for BC5, and 3 or 4 for BC7 (whose alpha channel is then ignored). The
+     * \c srgb flag is only available for BC7 textures.
+     *
+     * Such a texture is read-only: \ref set_value(), \ref set_tensor(),
+     * \ref update_inplace(), and \ref write() raise an exception. The
+     * remaining parameters match the shape-based constructor.
+     */
+    Texture(const size_t shape[Dimension], size_t channels,
+            BlockFormat block_format, const Storage &blocks,
+            size_t n_levels = 1, bool use_accel = true,
+            FilterMode filter_mode = FilterMode::Linear,
+            WrapMode wrap_mode = WrapMode::Clamp, bool srgb = false,
+            MipFilter mip_filter = MipFilter::Disabled, size_t max_aniso = 8)
+        : m_srgb(srgb), m_block_format(block_format) {
+        if constexpr (!IsUInt8 || Dimension != 2) {
+            jit_raise("Texture(): block-compressed data requires a 2D texture "
+                      "with UInt8 storage.");
+        } else {
+            // The C++ layer pads 3 channels to 4, which is what BC7 stores.
+            // jit_tex_create() checks the remaining format constraints.
+            size_t bc_channels = block_channels();
+            if (bc_channels == 0)
+                jit_raise("Texture(): invalid block format!");
+            if (channels != bc_channels && !(bc_channels == 4 && channels == 3))
+                jit_raise("Texture(): a BC%u texture must have %zu channel(s)%s, "
+                          "got %zu.", (uint32_t) block_format, bc_channels,
+                          bc_channels == 4 ? " (or 3)" : "", channels);
+            if (srgb && block_format != BlockFormat::BC7)
+                jit_raise("Texture(): the 'srgb' flag requires a BC7 texture.");
+
+            // Validate before init() allocates the hardware texture, which a
+            // throwing constructor would leak
+            uint32_t level_count = mip_filter == MipFilter::Disabled
+                ? 1 : detail::tex_mip_levels(shape, Dimension);
+            if (n_levels != level_count)
+                jit_raise("Texture(): expected block data for %u MIP level(s), "
+                          "got %zu.", level_count, n_levels);
+            size_t expected = chain_block_bytes(shape, n_levels);
+            if (blocks.size() != expected)
+                jit_raise("Texture(): unexpected block data size (%zu vs %zu "
+                          "bytes).", blocks.size(), expected);
+
+            init(shape, channels, use_accel, filter_mode, wrap_mode,
+                 /* writable = */ false, /* external = */ nullptr, mip_filter,
+                 max_aniso, MipBasis::Standard);
+            set_blocks(blocks, n_levels);
+        }
+    }
+
+    /**
      * \brief Wrap an existing native texture as a Dr.Jit texture
      *
      * Builds a texture that *wraps* an externally-owned native texture rather
@@ -304,6 +371,9 @@ public:
     /// Are 8-bit samples decoded from sRGB to linear?
     bool srgb() const { return m_srgb; }
 
+    /// Block compression of the texel storage (\ref BlockFormat::Disabled if uncompressed)
+    BlockFormat block_format() const { return m_block_format; }
+
     /// Map an imported texture (\ref from_native_handle()) for use by Dr.Jit
     /// (no-op on Metal, required for CUDA/OpenGL).
     void map() {
@@ -344,6 +414,7 @@ public:
      */
     template <typename StorageT>
     void set_value(StorageT &&value) {
+        check_writable("set_value");
         if constexpr (!is_jit_v<Storage_>) {
             if (value.size() != m_size)
                 jit_raise("Texture::set_value(): unexpected array size!");
@@ -419,6 +490,7 @@ public:
      */
     template <typename TensorT>
     void set_tensor(TensorT &&tensor) {
+        check_writable("set_tensor");
         if (tensor.ndim() != Dimension + 1)
             jit_raise("Texture::set_tensor(): tensor dimension must equal "
                       "texture dimension plus one (channels).");
@@ -465,6 +537,7 @@ public:
      * this method once per step.
      */
     void update_inplace() {
+        check_writable("update_inplace");
         if (m_mip_basis == MipBasis::Laplacian) {
             // The coefficient tensors are the authoritative state; rebuild
             // the sampled pyramid from their current (possibly externally
@@ -843,6 +916,7 @@ public:
                const Value *value, mask_t<Value> active = true) {
         static_assert(is_jit_v<Storage_>,
                       "Texture::write() requires a JIT backend");
+        check_writable("write");
         if (!m_writable)
             jit_raise("Texture::write(): texture was not created with "
                       "writable=true.");
@@ -1320,7 +1394,7 @@ protected:
                         (int) type_v<scalar_t<Storage_>>, (int) filter_mode,
                         (int) wrap_mode, (int) m_writable, (int) m_srgb,
                         m_level_count, m_mip_filter == MipFilter::Nearest ? 0 : 1,
-                        m_max_aniso);
+                        m_max_aniso, (int) m_block_format);
                 }
                 m_hw_mutable = m_writable || external_wrap;
             }
@@ -1357,6 +1431,128 @@ private:
         m_mip_table = std::move(other.m_mip_table);
         m_mip_basis = other.m_mip_basis;
         m_levels = std::move(other.m_levels);
+        m_block_format = other.m_block_format;
+    }
+
+    /// Raise when ``name()`` is invoked on a read-only (block-compressed) texture
+    void check_writable(const char *name) const {
+        if (m_block_format != BlockFormat::Disabled)
+            jit_raise("Texture::%s(): block-compressed textures are read-only.",
+                      name);
+    }
+
+    /// Stored channels per texel of the block format (0 if uncompressed)
+    size_t block_channels() const {
+        switch (m_block_format) {
+            case BlockFormat::BC4: return 1;
+            case BlockFormat::BC5: return 2;
+            case BlockFormat::BC7: return 4;
+            default: return 0;
+        }
+    }
+
+    /// Bytes per 4x4 block of the block format
+    size_t block_bytes() const {
+        return m_block_format == BlockFormat::BC4 ? 8 : 16;
+    }
+
+    /// Byte size of the compressed representation of MIP level ``level`` of a
+    /// texture with the given tensor shape (height, width, channels)
+    size_t level_block_bytes(const size_t *shape, uint32_t level) const {
+        size_t w = shape[1] >> level, h = shape[0] >> level;
+        w = w > 0 ? w : 1;
+        h = h > 0 ? h : 1;
+        return ((w + 3) / 4) * ((h + 3) / 4) * block_bytes();
+    }
+
+    /// Byte size of the compressed representation of the first ``n_levels``
+    /// MIP levels of a texture with the given tensor shape
+    size_t chain_block_bytes(const size_t *shape, size_t n_levels) const {
+        size_t result = 0;
+        for (uint32_t l = 0; l < n_levels; ++l)
+            result += level_block_bytes(shape, l);
+        return result;
+    }
+
+    /**
+     * \brief Install the block-compressed contents (see the corresponding
+     * constructor, which validates ``blocks`` and ``n_levels``)
+     *
+     * Uploads the blocks of every level to the hardware texture when one is
+     * used and otherwise decodes them on the host into the padded storage
+     * (base level) and the pyramid buffer (coarser levels).
+     */
+    void set_blocks(const Storage &blocks, size_t n_levels) {
+        if constexpr (HasGPUTexture) {
+            if (m_use_accel) {
+                drjit::eval(blocks);
+                const uint8_t *ptr = (const uint8_t *) blocks.data();
+                for (uint32_t l = 0; l < n_levels; ++l) {
+                    jit_tex_memcpy_d2t(ptr, m_handle, l);
+                    ptr += level_block_bytes(m_shape, l);
+                }
+                install_readback_views();
+                return;
+            }
+        }
+
+        // Software path: decode the blocks on the host (fetching them from
+        // the device first when they might not be host-accessible)
+        const uint8_t *src = (const uint8_t *) blocks.data();
+        std::unique_ptr<uint8_t[]> host;
+        if constexpr (IsCUDA || IsMetal) {
+            size_t size = chain_block_bytes(m_shape, n_levels);
+            drjit::eval(blocks);
+            host = std::make_unique<uint8_t[]>(size);
+            jit_memcpy(Backend, host.get(), blocks.data(), size);
+            src = host.get();
+        } else if constexpr (is_jit_v<Storage_>) {
+            drjit::eval(blocks);
+            jit_sync_thread();
+        }
+
+        size_t base_size = m_size,
+               mip_size = (size_t) m_mip_texels * m_channels_storage;
+        std::unique_ptr<uint8_t[]> base = std::make_unique<uint8_t[]>(base_size),
+                                   mip = mip_size ? std::make_unique<uint8_t[]>(mip_size)
+                                                  : nullptr;
+        uint8_t *dst = base.get();
+        for (uint32_t l = 0; l < n_levels; ++l) {
+            if (l == 1)
+                dst = mip.get();
+            dst += decode_level(l, src, dst);
+            src += level_block_bytes(m_shape, l);
+        }
+
+        m_padded_tensor.array() = load<Storage>(base.get(), base_size);
+        if (mip_size)
+            m_mip = load<Storage>(mip.get(), mip_size);
+
+        if constexpr (is_jit_v<Storage_>)
+            install_unpadded_view();
+    }
+
+    /// Decode one level of blocks into ``m_channels_storage``-channel texels
+    /// at ``dst``, returning the number of bytes written
+    size_t decode_level(uint32_t level, const uint8_t *blocks, uint8_t *dst) const {
+        size_t w = m_shape[1] >> level, h = m_shape[0] >> level;
+        w = w > 0 ? w : 1;
+        h = h > 0 ? h : 1;
+        size_t bc = block_channels(), n = w * h;
+
+        if (bc == m_channels_storage) {
+            ad_tex_bc_decode((int) m_block_format, (uint32_t) w, (uint32_t) h,
+                             blocks, dst);
+        } else {
+            // Unpadded scalar storage of a 3-channel BC7 texture: drop alpha
+            std::unique_ptr<uint8_t[]> tmp = std::make_unique<uint8_t[]>(n * bc);
+            ad_tex_bc_decode((int) m_block_format, (uint32_t) w, (uint32_t) h,
+                             blocks, tmp.get());
+            for (size_t i = 0; i < n; ++i)
+                for (size_t c = 0; c < m_channels_storage; ++c)
+                    dst[i * m_channels_storage + c] = tmp[i * bc + c];
+        }
+        return n * m_channels_storage;
     }
 
     /// Rebind the tensor members to fresh unevaluated readback expressions,
@@ -1922,6 +2118,9 @@ private:
     /// Laplacian mode: per-level coefficient tensors (finest first, unpadded
     /// channel count). Empty in the standard basis.
     vector<TensorXf> m_levels;
+
+    /// Block compression of the texel storage (read-only textures)
+    BlockFormat m_block_format = BlockFormat::Disabled;
 
 public:
     void traverse_cb(void *payload, const drjit::TraverseVisitor &cb) override {

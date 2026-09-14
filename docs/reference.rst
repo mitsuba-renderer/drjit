@@ -699,6 +699,7 @@ enumerations provided here
 .. autoenum:: FilterMode
 .. autoenum:: MipFilter
 .. autoenum:: MipBasis
+.. autoenum:: BlockFormat
 
 Low-level bits
 --------------

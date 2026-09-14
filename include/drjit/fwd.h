@@ -300,4 +300,12 @@ enum class MipBasis : uint32_t {
     Laplacian = 1
 };
 
+/// Block compression of 8-bit texture storage (the values match the format numbers)
+enum class BlockFormat : uint32_t {
+    Disabled = 0, /// Uncompressed texels
+    BC4 = 4,  /// One channel, 8 bytes per 4x4 block
+    BC5 = 5,  /// Two channels, 16 bytes per 4x4 block
+    BC7 = 7   /// Four channels (RGBA), 16 bytes per 4x4 block
+};
+
 NAMESPACE_END(drjit)

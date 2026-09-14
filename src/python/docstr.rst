@@ -7210,6 +7210,37 @@
     infers the shape and channel count from the tensor and does not accept
     ``writable``.
 
+.. topic:: Texture_init_blocks
+
+    Create a 2D texture from block-compressed (BC4, BC5, or BC7) 8-bit data
+
+    The texture keeps the compressed representation: on the CUDA and Metal
+    backends (with ``use_accel`` set), the hardware texture units decode the
+    blocks on every lookup, which reduces the memory footprint by a factor of
+    4-8 compared to plain 8-bit storage. Other configurations decode the
+    blocks once on the host and then behave like an ordinary 8-bit texture.
+
+    ``blocks`` holds the row-major 4x4 blocks of the base level, followed by
+    those of the ``n_levels - 1`` coarser MIP levels (each level covers
+    ``ceil(w/4) * ceil(h/4)`` blocks of 8 bytes for BC4 and 16 bytes
+    otherwise). The pyramid cannot be derived from compressed data, so a
+    texture with a ``mip_filter`` must provide the complete chain, and a
+    texture without one exactly one level.
+
+    The ``channels`` parameter gives the logical channel count: 1 for BC4, 2
+    for BC5, and 3 or 4 for BC7 (whose alpha channel is then ignored). The
+    ``srgb`` flag is only available for BC7 textures.
+
+    Such a texture is read-only: :py:func:`set_value()`,
+    :py:func:`set_tensor()`, :py:func:`update_inplace()`, and
+    :py:func:`write()` raise an exception. The remaining parameters match the
+    shape-based constructor.
+
+.. topic:: Texture_block_format
+
+    Return the block compression of the texel storage
+    (:py:attr:`drjit.BlockFormat.Disabled` if uncompressed)
+
 .. topic:: Texture_set_value
 
     Overwrite the texture contents with the provided linearized 1D array

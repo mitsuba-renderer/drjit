@@ -235,6 +235,22 @@ void bind_texture(nb::module_ &m, const char *name) {
              "mip_filter"_a = dr::MipFilter::Disabled, "max_aniso"_a = 8,
              "mip_basis"_a = dr::MipBasis::Standard,
              doc_Texture_init_tensor)
+        .def("__init__", [](Tex *t, const dr::vector<size_t> &shape,
+                            size_t channels, dr::BlockFormat block_format,
+                            const typename Tex::Storage &blocks,
+                            size_t n_levels, bool use_accel,
+                            dr::FilterMode filter_mode, dr::WrapMode wrap_mode,
+                            bool srgb, dr::MipFilter mip_filter,
+                            size_t max_aniso) {
+                 new (t) Tex(shape.data(), channels, block_format, blocks,
+                             n_levels, use_accel, filter_mode, wrap_mode, srgb,
+                             mip_filter, max_aniso); },
+             "shape"_a, "channels"_a, "block_format"_a, "blocks"_a,
+             "n_levels"_a = 1, "use_accel"_a = true,
+             "filter_mode"_a = dr::FilterMode::Linear,
+             "wrap_mode"_a = dr::WrapMode::Clamp, "srgb"_a = false,
+             "mip_filter"_a = dr::MipFilter::Disabled, "max_aniso"_a = 8,
+             doc_Texture_init_blocks)
         .def("set_value",
              [](Tex &t, const typename Tex::Storage &value) {
                  t.set_value(value);
@@ -274,6 +290,7 @@ void bind_texture(nb::module_ &m, const char *name) {
         .def("use_accel", &Tex::use_accel, doc_Texture_use_accel)
         .def("writable", &Tex::writable, doc_Texture_writable)
         .def("srgb", &Tex::srgb, doc_Texture_srgb)
+        .def("block_format", &Tex::block_format, doc_Texture_block_format)
         .def_static("from_native_handle",
              [](uintptr_t handle, bool writable, dr::FilterMode filter_mode,
                 dr::WrapMode wrap_mode, bool srgb) {

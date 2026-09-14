@@ -2163,3 +2163,228 @@ def test60_mip_filtered_grad_in_call(t, ad):
         dr.backward(out)
         assert dr.allclose(dr.grad(p), ref)
         assert dr.allclose(dr.grad(tens).array, ref_tens)
+
+
+# Block-compressed test textures in tests/data: each DDS file (DX10 header)
+# holds the complete MIP chain of a synthetic 22x14 image encoded with
+# bc7enc, and the .bin file next to it contains the texels of every level as
+# decoded by an independent decoder (Pillow).
+_bc_levels = [(22, 14), (11, 7), (5, 3), (2, 1), (1, 1)]
+_bc_channels = {4: 1, 5: 2, 7: 4}
+
+def _bc_level_bytes(fmt, level):
+    w, h = _bc_levels[level]
+    return ((w + 3) // 4) * ((h + 3) // 4) * (8 if fmt == 4 else 16)
+
+def _load_bc(fmt):
+    """Return the block data and the reference texels of ``tests/data/bc{fmt}``"""
+    import os
+    base = os.path.join(os.path.dirname(__file__), 'data', f'bc{fmt}')
+    with open(base + '.dds', 'rb') as f:
+        blocks = f.read()[148:]
+    with open(base + '.bin', 'rb') as f:
+        ref = f.read()
+    return list(blocks), list(ref)
+
+def _bc_tolerance(fmt, hw):
+    # BC7 decoding is exactly specified. The BC4/BC5 specification admits
+    # small deviations, which hardware decoders make use of.
+    if fmt == 7:
+        return 0
+    return 3 if hw else 1
+
+def _is_hw(t):
+    return dr.backend_v(t) in (dr.JitBackend.CUDA, dr.JitBackend.Metal)
+
+
+@pytest.mark.parametrize("fmt", [4, 5, 7])
+@pytest.test_arrays("is_jit, float32, shape=(*)")
+def test61_bc_decode(t, fmt):
+    # The hardware and software (bcdec) decoders both reproduce the reference
+    # texels, and agree with each other on filtered lookups
+    mod = sys.modules[t.__module__]
+    TexType = mod.Texture2f8u
+    UInt8, UInt32, Int32 = mod.UInt8, mod.UInt32, mod.Int32
+    Array2f = mod.Array2f
+
+    (W, H), C = _bc_levels[0], _bc_channels[fmt]
+    blocks, ref = _load_bc(fmt)
+    blocks = UInt8(blocks[:_bc_level_bytes(fmt, 0)])
+    ref = Int32(UInt8(ref[:W * H * C]))
+    idx = dr.arange(UInt32, W * H)
+    centers = Array2f((idx % W + 0.5) / W, (idx // W + 0.5) / H)
+
+    for use_accel in (True, False):
+        hw = use_accel and _is_hw(t)
+        tol = _bc_tolerance(fmt, hw)
+        tex = TexType([H, W], C, dr.BlockFormat(fmt), blocks,
+                      use_accel=use_accel)
+        assert tex.block_format() == dr.BlockFormat(fmt)
+        assert tex.shape == (H, W, C)
+        assert not tex.writable()
+        assert tex.mip_levels() == 1
+
+        got = Int32(tex.tensor().array)
+        assert dr.all(dr.abs(got - ref) <= tol)
+
+        # A nearest lookup at the texel centers reads the same values
+        tex_n = TexType([H, W], C, dr.BlockFormat(fmt), blocks,
+                        use_accel=use_accel, filter_mode=dr.FilterMode.Nearest)
+        out = tex_n.eval(centers)
+        for ch in range(C):
+            ref_ch = dr.gather(t, t(ref), idx * C + ch) / 255
+            assert dr.allclose(out[ch], ref_ch, atol=(tol + 0.5) / 255)
+
+    # Filtered lookups agree between the hardware and software paths
+    if _is_hw(t):
+        tex_hw = TexType([H, W], C, dr.BlockFormat(fmt), blocks, use_accel=True)
+        tex_sw = TexType([H, W], C, dr.BlockFormat(fmt), blocks, use_accel=False)
+        pos = Array2f([0.2, 0.55, 0.9, 0.31], [0.3, 0.6, 0.8, 0.77])
+        out_hw, out_sw = tex_hw.eval(pos), tex_sw.eval(pos)
+        for ch in range(C):
+            assert dr.allclose(out_hw[ch], out_sw[ch],
+                               atol=_bc_tolerance(fmt, True) / 255 + 5e-3)
+
+    # A BC7 texture may expose 3 channels, which drops the stored alpha
+    if fmt == 7:
+        for use_accel in (True, False):
+            tex = TexType([H, W], 3, dr.BlockFormat.BC7, blocks,
+                          use_accel=use_accel)
+            assert tex.shape == (H, W, 3)
+            got = Int32(tex.tensor().array)
+            for ch in range(3):
+                assert dr.all(dr.gather(Int32, got, idx * 3 + ch) ==
+                              dr.gather(Int32, ref, idx * 4 + ch))
+
+
+@pytest.mark.parametrize("fmt", [4, 5, 7])
+def test62_bc_scalar(fmt):
+    # The scalar backend decodes on the host into unpadded storage
+    from drjit.scalar import Texture2f8u, ArrayXu8, Array2f
+
+    (W, H), C = _bc_levels[0], _bc_channels[fmt]
+    blocks, ref = _load_bc(fmt)
+    blocks = ArrayXu8(blocks[:_bc_level_bytes(fmt, 0)])
+    ref = ref[:W * H * C]
+    tol = _bc_tolerance(fmt, False)
+
+    tex = Texture2f8u([H, W], C, dr.BlockFormat(fmt), blocks,
+                      filter_mode=dr.FilterMode.Nearest)
+    assert tex.shape == (H, W, C)
+    got = list(tex.tensor().array)
+    assert len(got) == len(ref)
+    assert max(abs(a - b) for a, b in zip(got, ref)) <= tol
+
+    out = tex.eval(Array2f(3.5 / W, 2.5 / H))
+    for ch in range(C):
+        assert abs(out[ch] * 255 - ref[(2 * W + 3) * C + ch]) <= tol + 0.5
+
+    if fmt == 7:
+        tex = Texture2f8u([H, W], 3, dr.BlockFormat.BC7, blocks)
+        got = list(tex.tensor().array)
+        assert got == [v for i, v in enumerate(ref) if i % 4 != 3]
+
+
+@pytest.test_arrays("is_jit, float32, shape=(*)")
+def test63_bc_srgb(t):
+    # BC7 textures support sRGB decoding of the color channels (alpha stays
+    # linear) on both the hardware and software paths
+    mod = sys.modules[t.__module__]
+    TexType, UInt8, UInt32 = mod.Texture2f8u, mod.UInt8, mod.UInt32
+    Array2f = mod.Array2f
+
+    (W, H), C = _bc_levels[0], 4
+    blocks, ref = _load_bc(7)
+    blocks = UInt8(blocks[:_bc_level_bytes(7, 0)])
+    ref = t(ref[:W * H * C]) / 255
+    idx = dr.arange(UInt32, W * H)
+    centers = Array2f((idx % W + 0.5) / W, (idx // W + 0.5) / H)
+
+    for use_accel in (True, False):
+        tex = TexType([H, W], C, dr.BlockFormat.BC7, blocks, srgb=True,
+                      use_accel=use_accel, filter_mode=dr.FilterMode.Nearest)
+        assert tex.srgb()
+        out = tex.eval(centers)
+        atol = 5e-3 if use_accel and _is_hw(t) else 1e-5
+        for ch in range(C):
+            ref_ch = dr.gather(t, ref, idx * C + ch)
+            if ch != 3:
+                ref_ch = dr.srgb_to_linear(ref_ch)
+            assert dr.allclose(out[ch], ref_ch, atol=atol)
+
+
+@pytest.mark.parametrize("fmt", [4, 5, 7])
+@pytest.test_arrays("is_jit, float32, shape=(*)")
+def test64_bc_mip(t, fmt):
+    # eval_lod() reproduces every level of a precompressed MIP chain at the
+    # texel centers
+    mod = sys.modules[t.__module__]
+    TexType, UInt8, UInt32 = mod.Texture2f8u, mod.UInt8, mod.UInt32
+    Array2f = mod.Array2f
+
+    (W, H), C = _bc_levels[0], _bc_channels[fmt]
+    blocks, ref = _load_bc(fmt)
+    blocks, ref = UInt8(blocks), t(ref)
+    n_levels = len(_bc_levels)
+
+    for use_accel in (True, False):
+        tol = _bc_tolerance(fmt, use_accel and _is_hw(t))
+        tex = TexType([H, W], C, dr.BlockFormat(fmt), blocks,
+                      n_levels=n_levels, use_accel=use_accel,
+                      filter_mode=dr.FilterMode.Nearest,
+                      mip_filter=dr.MipFilter.Nearest)
+        assert tex.mip_levels() == n_levels
+
+        offset = 0
+        for level, (w, h) in enumerate(_bc_levels):
+            idx = dr.arange(UInt32, w * h)
+            pos = Array2f((idx % w + 0.5) / w, (idx // w + 0.5) / h)
+            out = tex.eval_lod(pos, float(level))
+            for ch in range(C):
+                ref_ch = dr.gather(t, ref, offset + idx * C + ch) / 255
+                assert dr.allclose(out[ch], ref_ch, atol=(tol + 0.5) / 255)
+            offset += w * h * C
+
+
+@pytest.test_arrays("is_jit, float32, shape=(*)")
+def test65_bc_errors(t):
+    # Invalid configurations are rejected, and compressed textures are read-only
+    mod = sys.modules[t.__module__]
+    TexType, UInt8 = mod.Texture2f8u, mod.UInt8
+    (W, H) = _bc_levels[0]
+    blocks7 = UInt8(_load_bc(7)[0][:_bc_level_bytes(7, 0)])
+    blocks4 = UInt8(_load_bc(4)[0][:_bc_level_bytes(4, 0)])
+    chain7 = UInt8(_load_bc(7)[0])
+
+    with pytest.raises(RuntimeError, match='unexpected block data size'):
+        TexType([H, W], 4, dr.BlockFormat.BC7, UInt8(blocks7[:-1]))
+    with pytest.raises(RuntimeError, match='must have 4 channel'):
+        TexType([H, W], 1, dr.BlockFormat.BC7, blocks7)
+    with pytest.raises(RuntimeError, match='must have 1 channel'):
+        TexType([H, W], 4, dr.BlockFormat.BC4, blocks4)
+    with pytest.raises(RuntimeError, match='invalid block format'):
+        TexType([H, W], 4, dr.BlockFormat.Disabled, blocks7)
+    with pytest.raises(RuntimeError, match='requires a BC7'):
+        TexType([H, W], 1, dr.BlockFormat.BC4, blocks4, srgb=True)
+    with pytest.raises(RuntimeError, match='expected block data for 5 MIP'):
+        TexType([H, W], 4, dr.BlockFormat.BC7, blocks7,
+                mip_filter=dr.MipFilter.Linear)
+    with pytest.raises(RuntimeError, match='expected block data for 1 MIP'):
+        TexType([H, W], 4, dr.BlockFormat.BC7, chain7, n_levels=5)
+    with pytest.raises(RuntimeError, match='requires a 2D texture'):
+        mod.Texture3f8u([2, H, W], 4, dr.BlockFormat.BC7, blocks7)
+    with pytest.raises(RuntimeError, match='requires a 2D texture'):
+        mod.Texture2f([H, W], 4, dr.BlockFormat.BC7, mod.Float(blocks7))
+
+    zeros = mod.TensorXu8(dr.zeros(UInt8, H * W * 4), shape=(H, W, 4))
+    for use_accel in (True, False):
+        tex = TexType([H, W], 4, dr.BlockFormat.BC7, blocks7,
+                      use_accel=use_accel)
+        with pytest.raises(RuntimeError, match='read-only'):
+            tex.set_value(zeros.array)
+        with pytest.raises(RuntimeError, match='read-only'):
+            tex.set_tensor(zeros)
+        with pytest.raises(RuntimeError, match='read-only'):
+            tex.update_inplace()
+        with pytest.raises(RuntimeError, match='read-only'):
+            tex.write(mod.Array2u(0, 0), [mod.Float(0)] * 4)
