@@ -89,7 +89,10 @@ enum class TraverseRole : uint32_t {
     Call,
 
     /// Inputs and outputs of a frozen function (``dr.freeze()``)
-    Freeze
+    Freeze,
+
+    /// Recursive traversal (e.g., for garbage collection)
+    Children
 };
 
 /**
@@ -102,7 +105,8 @@ enum class TraverseRole : uint32_t {
  * return a borrowed index. This means a callback that callbacks creates a new
  * variable must keep it alive until the traversal has returns.
  * When the array is a class pointer array, ``variant`` and ``domain`` identify
- * its ``CallSupport``, otherwise both are "".
+ * its ``CallSupport``, otherwise both are "". A null ``var`` callback skips
+ * the arrays, which leaves a traversal of the child objects alone.
  *
  * ``child`` receives each directly held child object (a member deriving from
  * \ref TraversableBase, whether held by value, pointer, or smart pointer). A
@@ -306,6 +310,9 @@ void traverse_fn(Value_ &&value, void *payload, const TraverseVisitor &cb,
     DRJIT_MARK_USED(name);
 
     if constexpr (is_jit_v<ValueNC> && depth_v<ValueNC> == 1) {
+        if (!cb.var)
+            return;
+
         uint64_t index = value.index_combined(), index_new;
         if constexpr (ValueNC::IsClass)
             index_new = cb.var(payload, index, name,
@@ -325,6 +332,10 @@ void traverse_fn(Value_ &&value, void *payload, const TraverseVisitor &cb,
             traverse_fn(x, payload, cb, name);
         });
     } else if constexpr (is_dynamic_traversable_v<ValueNC>) {
+        // The entries are arrays
+        if (!cb.var)
+            return;
+
         for (size_t i = 0; i < value.size(); ++i) {
             traverse_1(drjit::tie(value.entry(i)), [payload, &cb, name](auto &x) {
                 traverse_fn(x, payload, cb, name);

@@ -10,6 +10,8 @@
 
 #include "detail.h"
 #include "apply.h"
+#include <drjit-core/hash.h>
+#include <tsl/robin_map.h>
 #include "shape.h"
 #include "base.h"
 #include "meta.h"
@@ -304,11 +306,74 @@ void raise_if_unbound_traversable(nb::handle tp) {
                   nb::type_name(tp).c_str());
 }
 
+/// Traverse an object graph to make reference cycles visible to Python
+struct GCTraversal {
+    visitproc visit;
+    void *arg;
+    int rv = 0;
+
+    /// References found so far to each child without a Python identity
+    tsl::robin_map<dr::TraversableBase *, size_t, PointerHasher> tally;
+
+    /// Children that still need to be traversed
+    dr::vector<dr::TraversableBase *> work;
+
+    static void child_cb(void *payload, dr::TraversableBase *child,
+                         const char *) {
+        GCTraversal &t = *(GCTraversal *) payload;
+        if (!child || t.rv)
+            return;
+
+        if (PyObject *py = child->self_py()) {
+            // Report every detected Python object
+            t.rv = t.visit(py, t.arg);
+        } else if (++t.tally[child] == child->ref_count()) {
+            // Once the number of traversed references matches the actual
+            // reference count, we can be sure that ``child`` is exclusively
+            // owned by the root of the traversal. Add it to the TODO list.
+            t.work.push_back(child);
+        }
+    }
+
+    int traverse(dr::TraversableBase *obj) {
+        dr::TraverseVisitor cb { dr::TraverseRole::Children, nullptr, child_cb };
+
+        work.push_back(obj);
+        while (!work.empty() && !rv) {
+            dr::TraversableBase *o = work.back();
+            work.pop_back();
+            o->traverse_cb(this, cb);
+        }
+        return rv;
+    }
+};
+
+static int traversable_tp_traverse(PyObject *self, visitproc visit, void *arg) {
+    Py_VISIT(Py_TYPE(self));
+
+    // The collector may run before the C++ constructor has completed
+    if (!nb::inst_ready(self))
+        return 0;
+
+    GCTraversal t { visit, arg };
+    try {
+        return t.traverse(nb::inst_ptr<dr::TraversableBase>(self));
+    } catch (...) {
+        return 0;
+    }
+}
+
+static PyType_Slot traversable_slots[] = {
+    { Py_tp_traverse, (void *) traversable_tp_traverse },
+    { 0, nullptr }
+};
+
 void export_detail(nb::module_ &m) {
     nb::module_ d = nb::module_::import_("drjit.detail");
 
     traversable_base_type =
-        nb::class_<drjit::TraversableBase, nb::intrusive_base>(d, "TraversableBase")
+        nb::class_<drjit::TraversableBase, nb::intrusive_base>(
+            d, "TraversableBase", nb::type_slots(traversable_slots))
             .freeze();
 
     m.def("copy", &copy, "arg"_a, doc_copy,
@@ -321,7 +386,8 @@ void export_detail(nb::module_ &m) {
         .value("Loop", dr::TraverseRole::Loop)
         .value("Conditional", dr::TraverseRole::Conditional)
         .value("Call", dr::TraverseRole::Call)
-        .value("Freeze", dr::TraverseRole::Freeze);
+        .value("Freeze", dr::TraverseRole::Freeze)
+        .value("Children", dr::TraverseRole::Children);
 
     d.def("collect_indices",
           [](nb::handle h, dr::TraverseRole role) {
