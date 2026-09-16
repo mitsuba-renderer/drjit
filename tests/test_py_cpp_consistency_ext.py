@@ -143,3 +143,40 @@ def test08_idiv(t):
         # Truncating division, as in C
         ref = Int32([abs(v) // abs(d) * (1 if (v < 0) == (d < 0) else -1) for v in values])
         assert dr.all(pkg.idiv_signed(n, d) == ref)
+
+
+@pytest.mark.parametrize("scale", [[-1, 2, 3], [1, -2, 3], [1, 2, -3], [-1, -2, -3]])
+def test_transform_decompose_reflection_scalar(scale):
+    pkg = pytest.importorskip("py_cpp_consistency_ext")
+    rotation = dr.rotate(dr.scalar.Quaternion4f,
+                         dr.normalize(dr.scalar.Array3f(1, 2, 3)), 0.7)
+    mtx = dr.transform_compose(dr.scalar.Matrix3f([[scale[0], 0, 0],
+                                                 [0, scale[1], 0],
+                                                 [0, 0, scale[2]]]),
+                               rotation, dr.scalar.Array3f(1, 2, 3))
+    s, q, t = pkg.transform_decompose(mtx)
+    assert dr.allclose(dr.transform_compose(s, q, t), mtx, atol=1e-5)
+
+
+@pytest.test_arrays('matrix,shape=(4, 4),float32',
+                    'matrix,is_diff,shape=(4, 4, *),float32')
+def test_transform_decompose_qr(t):
+    pkg = (pytest.importorskip("py_cpp_consistency_ext")
+           if dr.depth_v(t) == 2 else get_pkg(t))
+    m = sys.modules[t.__module__]
+    angle = dr.pi if dr.depth_v(t) == 2 else m.Float([0, 0.7, dr.pi])
+    rotation = dr.rotate(m.Quaternion4f, dr.normalize(m.Array3f(1, 2, 3)), angle)
+    translation = m.Array3f(1, -2, 3)
+    for stretch in [m.Matrix3f(1),
+                    m.Matrix3f([[2, 0.4, -0.2], [0, 3, 0.3], [0, 0, -4]])]:
+        matrix = dr.transform_compose(stretch, rotation, translation)
+        result = dr.transform_decompose_qr(matrix)
+        reference = pkg.transform_decompose_qr(matrix)
+        for a, b in zip(result, reference):
+            assert type(a) is type(b)
+            assert dr.allclose(a, b, atol=1e-5)
+        s, h, q, tr = result
+        upper = m.Matrix3f([[s.x, h.x, h.y], [0, s.y, h.z], [0, 0, s.z]])
+        assert dr.allclose(upper, stretch, atol=1e-5)
+        assert dr.allclose(dr.norm(q), 1, atol=1e-5)
+        assert dr.allclose(dr.transform_compose(upper, q, tr), matrix, atol=1e-5)

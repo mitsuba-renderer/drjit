@@ -820,26 +820,29 @@ def polar_decomp(arg: T, it: int = 10) -> Tuple[T, T]:
     return q0, q0.T @ arg
 
 
-def transform_decompose(a, it=10):
-    '''
-    transform_decompose(arg, it=10)
-    Performs a polar decomposition of a non-perspective 4x4 homogeneous
-    coordinate matrix and returns a tuple of
+def transform_decompose(a: ArrayBase, it: int = 10) -> Tuple[ArrayBase, ArrayBase, ArrayBase]:
+    """
+    Decompose a nonsingular affine 4x4 matrix ``a`` into scale, shear, rotation, and
+    translation using a polar decomposition of its linear 3x3 part.
 
-    1. A positive definite 3x3 matrix containing an inhomogeneous scaling operation
-    2. A rotation quaternion
-    3. A 3D translation vector
+    The function returns a tuple ``(s, q, t)`` with the following components.
 
-    This representation is helpful when animating keyframe animations.
+    1. A symmetric 3x3 matrix ``s`` that combines nonuniform scaling and shear.
+       It is positive definite for transforms without reflections and negative
+       definite otherwise.
+    2. A unit quaternion ``q`` that represents a proper rotation following the
+       scaling and shear.
+    3. A 3D vector ``t`` that translates the rotated result. It matches the
+       first three entries of the input matrix's last column.
 
-    Args:
-        arg (drjit.ArrayBase): A Dr.Jit matrix type
+    In contrast, ``transform_decompose_qr`` uses a QR decomposition and
+    returns separate scale and shear vectors describing an upper-triangular
+    matrix. The two decompositions can produce different rotations.
 
-        it (int): Number of iterations to be taken by the polar decomposition algorithm.
+    ``transform_compose(s, q, t)`` reconstructs the input.
 
-    Returns:
-        tuple: The tuple containing the scaling matrix, rotation quaternion and 3D translation vector.
-    '''
+    Use ``it`` refinement iterations, with a default of 10.
+    """
     if not is_matrix_v(a):
         raise Exception('drjit.transform_decompose(): unsupported input type!')
 
@@ -863,6 +866,61 @@ def transform_decompose(a, it=10):
     P = mulsign(P, sign_q)
 
     return P, matrix_to_quat(Q), Array3f(a[0][3], a[1][3], a[2][3])
+
+
+def transform_decompose_qr(a: ArrayBase) -> Tuple[ArrayBase, ArrayBase, ArrayBase, ArrayBase]:
+    """
+    Decompose a nonsingular affine 4x4 matrix ``a`` into scale, shear, rotation, and
+    translation using a QR decomposition of its linear 3x3 part.
+
+    The function returns a tuple ``(s, h, q, t)`` with the following components.
+
+    1. A 3D vector ``s`` that contains the diagonal scale factors. Its first two
+       entries are positive. Its third entry carries any reflection.
+    2. A 3D vector ``h`` that contains the upper-triangular shear entries
+       ``(xy, xz, yz)`` without scale normalization.
+    3. A unit quaternion ``q`` that represents a proper rotation following the
+       scaling and shear.
+    4. A 3D vector ``t`` that translates the rotated result. It matches the
+       first three entries of the input matrix's last column.
+
+    The scale and shear vectors describe an upper-triangular matrix. In contrast,
+    ``transform_decompose`` uses a polar decomposition and returns scale
+    and shear together as a symmetric 3x3 matrix. The two decompositions can
+    produce different rotations.
+
+    ``transform_compose(U, q, t)`` reconstructs the input, where
+    ``U = [[s.x, h.x, h.y], [0, s.y, h.z], [0, 0, s.z]]``.
+    """
+    if not is_matrix_v(a):
+        raise Exception('drjit.transform_decompose_qr(): unsupported input type!')
+
+    if a.shape[:2] != (4, 4):
+        raise Exception('drjit.transform_decompose_qr(): invalid input shape!')
+
+    m = _sys.modules[a.__module__]
+    Matrix3f = replace_type_t(m.Matrix3f, type_v(a))
+    Array3f = replace_type_t(m.Array3f, type_v(a))
+
+    c0 = Array3f(a[0, 0], a[1, 0], a[2, 0])
+    c1 = Array3f(a[0, 1], a[1, 1], a[2, 1])
+    c2 = Array3f(a[0, 2], a[1, 2], a[2, 2])
+    sx = norm(c0)
+    r0 = c0 / sx
+    h_xy = dot(r0, c1)
+    v1 = c1 - h_xy * r0
+    sy = norm(v1)
+    r1 = v1 / sy
+    r2 = cross(r0, r1)
+
+    s = Array3f(sx, sy, dot(r2, c2))
+    h = Array3f(h_xy, dot(r0, c2), dot(r1, c2))
+    q = matrix_to_quat(Matrix3f(
+        r0.x, r1.x, r2.x,
+        r0.y, r1.y, r2.y,
+        r0.z, r1.z, r2.z))
+    t = Array3f(a[0, 3], a[1, 3], a[2, 3])
+    return s, h, q, t
 
 
 def transform_compose(s, q, t, /):

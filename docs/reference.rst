@@ -354,6 +354,7 @@ Operations for vectors and matrices
 .. autofunction:: quat_to_euler
 .. autofunction:: euler_to_quat
 .. autofunction:: transform_decompose
+.. autofunction:: transform_decompose_qr
 .. autofunction:: transform_compose
 .. autofunction:: unit_angle
 .. autofunction:: quat_apply

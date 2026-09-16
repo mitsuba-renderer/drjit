@@ -185,11 +185,40 @@ transform_decompose(const Matrix<Value, 4> &a, size_t it = 10) {
     auto [Q, P] = polar_decomp(Matrix<Value, 3>(a), it);
     Q[isnan(Q(0, 0))] = identity<Matrix<Value, 3>>();
 
+    using Plain = plain_t<Matrix<Value, 3>>;
     Value sign_q = det(Q);
-    Q = mulsign(Q, sign_q);
-    P = mulsign(P, sign_q);
+    Q = mulsign(Plain(Q), sign_q);
+    P = mulsign(Plain(P), sign_q);
 
     return drjit::make_tuple(P, matrix_to_quat(Q), head<3>(transpose(a).entry(3)));
+}
+
+template <typename Value>
+drjit::tuple<Array<Value, 3>, Array<Value, 3>, Quaternion<Value>, Array<Value, 3>>
+transform_decompose_qr(const Matrix<Value, 4> &a) {
+    using Vector3 = Array<Value, 3>;
+
+    // QR decomposition with a right-handed orthonormal basis.
+    Vector3 c0(a(0, 0), a(1, 0), a(2, 0)),
+            c1(a(0, 1), a(1, 1), a(2, 1)),
+            c2(a(0, 2), a(1, 2), a(2, 2));
+    Value sx = norm(c0);
+    Vector3 r0 = c0 / sx;
+    Value h_xy = dot(r0, c1);
+    Vector3 v1 = c1 - h_xy * r0;
+    Value sy = norm(v1);
+    Vector3 r1 = v1 / sy,
+            r2 = cross(r0, r1);
+
+    Vector3 S(sx, sy, dot(r2, c2)),
+            H(h_xy, dot(r0, c2), dot(r1, c2)),
+            T(a(0, 3), a(1, 3), a(2, 3));
+    auto Q = matrix_to_quat(Matrix<Value, 3>(
+        r0.x(), r1.x(), r2.x(),
+        r0.y(), r1.y(), r2.y(),
+        r0.z(), r1.z(), r2.z()));
+
+    return drjit::make_tuple(S, H, Q, T);
 }
 
 template <typename Matrix4>
