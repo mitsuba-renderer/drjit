@@ -355,7 +355,7 @@ static int traversable_tp_traverse(PyObject *self, visitproc visit, void *arg) {
     if (!nb::inst_ready(self))
         return 0;
 
-    GCTraversal t { visit, arg };
+    GCTraversal t { visit, arg, 0, {}, {} };
     try {
         return t.traverse(nb::inst_ptr<dr::TraversableBase>(self));
     } catch (...) {

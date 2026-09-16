@@ -67,7 +67,7 @@ struct Matrix : StaticArrayImpl<Array<Value_, Size_>, Size_, false,
     template <typename T, enable_if_t<!is_matrix_v<T> && depth_v<T> != Base::Depth> = 0>
     DRJIT_INLINE Matrix(T&& v) : Base(zeros<Value_>()) {
         for (size_t i = 0; i < Size; ++i)
-            entry(i, i) = v;
+            entry(i, i) = Value_(v);
     }
 
     /// Initialize the matrix from a list of rows
