@@ -1,5 +1,6 @@
 import os
 import warnings
+import sys
 
 import drjit as dr
 import pytest
@@ -858,3 +859,390 @@ def test31_wrap_backend_preservation(t):
     dr.enable_grad(x)
     y = f(x)
     assert dr.backend_v(y) == dr.backend_v(x)
+
+
+# ---------------------------------------------------------------------------
+#  SymPy wrapper tests (source='drjit', target='sympy')
+# ---------------------------------------------------------------------------
+
+
+@pytest.test_arrays("float,shape=(*),jit")
+def test32_sympy_quadratic(t):
+    """Test that simple equations can be expressed in sympy, and compiled to drjit."""
+    pytest.importorskip("sympy")
+    rng = dr.rng()
+
+
+    @dr.wrap(source="drjit", target="sympy")
+    def f(x):
+        return x**2 + 2 * x + 1
+
+    def f_drjit(x):
+        return x**2 + 2 * x + 1
+
+    dr.set_flag(dr.JitFlag.KernelHistory, True)
+    x = rng.uniform(t, 10)
+    assert dr.allclose(f(x), f_drjit(x))
+
+
+@pytest.test_arrays("float,shape=(*),jit")
+def test33_sympy_trig(t):
+    """Test that dr.wrap can handle builtin sympy functions."""
+    sp = pytest.importorskip("sympy")
+    rng = dr.rng()
+
+    @dr.wrap(source="drjit", target="sympy")
+    def f(x):
+        return sp.sin(x) ** 2 + sp.cos(x) ** 2
+
+    def f_drjit(x):
+        return dr.sin(x) ** 2 + dr.cos(x) ** 2
+
+    x = rng.uniform(t, 10)
+    assert dr.allclose(f(x), f_drjit(x))
+
+
+@pytest.test_arrays("float,shape=(*),jit")
+def test34_sympy_output(t):
+    """dr.wrap should preserve nested list and tuple outputs from SymPy."""
+    sp = pytest.importorskip("sympy")
+    rng = dr.rng()
+
+    @dr.wrap(source="drjit", target="sympy")
+    def f(x):
+        return [sp.sin(x), (sp.cos(x), x**2)]
+
+    def f_drjit(x):
+        return [dr.sin(x), (dr.cos(x), x**2)]
+
+    x = rng.uniform(t, 10)
+    assert dr.allclose(f(x), f_drjit(x))
+
+
+@pytest.test_arrays("float,shape=(*),jit")
+def test35_sympy_caching(t):
+    """dr.wrap should cache the symbolic trace for compatible inputs."""
+    pytest.importorskip("sympy")
+    call_count = 0
+
+    @dr.wrap(source="drjit", target="sympy")
+    def f(x, y):
+        nonlocal call_count
+        call_count += 1
+        return x + y
+
+    f(t(1.0), t(2.0))
+    f(t(3.0), t(4.0))
+    assert call_count == 1
+
+
+@pytest.test_arrays("float,shape=(*),jit")
+def test36_sympy_matrix_output(t):
+    """dr.wrap should convert a SymPy matrix into a nested list."""
+    sp = pytest.importorskip("sympy")
+
+    @dr.wrap(source="drjit", target="sympy")
+    def f(x, y):
+        return sp.Matrix([[x + y, x - y], [x * y, x / y]])
+
+    result = f(t(6.0), t(3.0))
+    assert isinstance(result, list) and len(result) == 2 and len(result[0]) == 2
+
+
+@pytest.test_arrays("float,shape=(*),jit")
+def test37_sympy_nested(t):
+    """SymPy wrappers should support calls to other SymPy wrappers."""
+    pytest.importorskip("sympy")
+    @dr.wrap(source="drjit", target="sympy")
+    def inner(x):
+        return x**2
+
+    @dr.wrap(source="drjit", target="sympy")
+    def outer(x):
+        return inner(x) + 1
+
+    assert dr.allclose(outer(t(3.0)), t(10.0))
+
+
+@pytest.test_arrays("float,shape=(*),jit,diff")
+def test38_sympy_ad_backward(t):
+    """SymPy wrapper outputs should remain differentiable by Dr.Jit."""
+    pytest.importorskip("sympy")
+    @dr.wrap(source="drjit", target="sympy")
+    def f(x):
+        return x**2 + 2 * x + 1
+
+    def f_drjit(x):
+        return x**2 + 2 * x + 1
+
+    x = t(3.0)
+    dr.enable_grad(x)
+    dr.backward(f(x))
+    grad_res = dr.grad(x)
+
+    x = t(3.0)
+    dr.enable_grad(x)
+    dr.backward(f_drjit(x))
+    grad_ref = dr.grad(x)
+
+    assert dr.allclose(grad_res, grad_ref)
+
+
+@pytest.test_arrays("float,shape=(*),jit,diff")
+def test39_sympy_grad(t):
+    """Using SymPy's AD system should work inside of dr.wrap."""
+    sp = pytest.importorskip("sympy")
+    @dr.wrap(source="drjit", target="sympy")
+    def f(x):
+        return x**2 + 2 * x + 1
+
+    @dr.wrap(source="drjit", target="sympy")
+    def f_grad(x):
+        y = f(x)
+        return sp.diff(y, x)
+
+    def f_drjit(x):
+        return x**2 + 2 * x + 1
+
+    x = t(3.0)
+    grad_res = f_grad(x)
+
+    x = t(3.0)
+    dr.enable_grad(x)
+    dr.backward(f_drjit(x))
+    grad_ref = dr.grad(x)
+
+    assert dr.allclose(grad_res, grad_ref)
+
+
+@pytest.test_arrays("float,shape=(*),jit")
+def test40_sympy_promote_vector(t):
+    """dr.wrap should promote fixed-size vectors to SymPy matrices."""
+    pytest.importorskip("sympy")
+    mod = sys.modules[t.__module__]
+
+    @dr.wrap(source="drjit", target="sympy")
+    def f(v):
+        return v.norm()
+
+    def f_drjit(v):
+        return dr.norm(v)
+
+    v = mod.Array3f(1, 2, 3)
+    assert dr.allclose(f(v), f_drjit(v))
+
+
+
+@pytest.test_arrays("float,shape=(*),jit")
+def test41_sympy_promote_arrayXf(t):
+    """dr.wrap should promote dynamically sized vectors to SymPy matrices."""
+    pytest.importorskip("sympy")
+    mod = sys.modules[t.__module__]
+    rng = dr.rng()
+
+    @dr.wrap(source="drjit", target="sympy")
+    def f(a, b):
+        return a.dot(b)
+
+    def f_drjit(a, b):
+        return dr.dot(a, b)
+
+    a = rng.random(mod.ArrayXf, (6, 8))
+    b = rng.random(mod.ArrayXf, (6, 8))
+    assert dr.allclose(f(a, b), f_drjit(a, b))
+
+
+@pytest.test_arrays("float,shape=(*),jit")
+def test42_sympy_promote_matrix(t):
+    """SymPy matrix multiplication should match Dr.Jit matrix multiplication."""
+    pytest.importorskip("sympy")
+    mod = sys.modules[t.__module__]
+    rng = dr.rng()
+
+    @dr.wrap(source="drjit", target="sympy")
+    def f(a, b):
+        return a * b
+
+    def f_drjit(a, b):
+        return a @ b
+
+    a = rng.random(mod.Matrix4f, (4, 4, 8))
+    b = rng.random(mod.Matrix4f, (4, 4, 8))
+
+    res = mod.Matrix4f(f(a, b))
+    ref = f_drjit(a, b)
+    assert dr.allclose(res, ref)
+
+
+@pytest.test_arrays("float,shape=(*),jit")
+def test43_sympy_matrix_vector(t):
+    """SymPy matrix-vector multiplication should match Dr.Jit."""
+    pytest.importorskip("sympy")
+    mod = sys.modules[t.__module__]
+    rng = dr.rng()
+
+    @dr.wrap(source="drjit", target="sympy")
+    def f(a, v):
+        return a * v
+
+    def f_drjit(a, v):
+        return a @ v
+
+    a = rng.random(mod.Matrix4f, (4, 4, 8))
+    v = rng.random(mod.Array4f, (4, 8))
+    assert dr.allclose(f(a, v), f_drjit(a, v))
+
+
+@pytest.test_arrays("float,shape=(*),jit")
+def test44_sympy_kwargs(t):
+    """SymPy wrappers should accept positional and keyword arguments."""
+    pytest.importorskip("sympy")
+    @dr.wrap(source="drjit", target="sympy")
+    def f(x, y):
+        return x + y
+
+    assert dr.allclose(f(x=t(3.0), y=t(4.0)), t(7.0))
+    assert dr.allclose(f(t(3.0), y=t(4.0)), t(7.0))
+
+
+@pytest.test_arrays("float,shape=(*),jit")
+def test45_sympy_pytree_dict(t):
+    """SymPy wrappers should preserve dictionaries nested in input PyTrees."""
+    pytest.importorskip("sympy")
+    @dr.wrap(source="drjit", target="sympy")
+    def f(x):
+        return {
+            "sum": x[0]["a"] + x[1]["b"],
+            "prod": x[0]["a"] * x[1]["b"],
+        }
+
+    def f_drjit(x):
+        return {
+            "sum": x[0]["a"] + x[1]["b"],
+            "prod": x[0]["a"] * x[1]["b"],
+        }
+
+    xt = [{"a": t(3.0)}, {"b": t(4.0)}]
+    res = f(xt)
+    ref = f_drjit(xt)
+    assert dr.allclose(res["sum"], ref["sum"])
+    assert dr.allclose(res["prod"], ref["prod"])
+
+
+@pytest.test_arrays("float,shape=(*),jit")
+def test46_sympy_pytree_nested(t):
+    """SymPy wrappers should handle deeply nested input and output PyTrees."""
+    pytest.importorskip("sympy")
+    rng = dr.rng()
+
+    @dr.wrap(source="drjit", target="sympy")
+    def f(x):
+        return {"r": (x[0]["a"] + 2 * x[1]["b"][0],)}
+
+    def f_drjit(x):
+        return {"r": (x[0]["a"] + 2 * x[1]["b"][0],)}
+
+    a = rng.uniform(t, 8)
+    b = rng.uniform(t, 8)
+    xt = [{"a": a}, {"b": (b,)}]
+    assert dr.allclose(f(xt)["r"][0], f_drjit(xt)["r"][0])
+
+
+@pytest.test_arrays("float,shape=(*),jit")
+def test47_sympy_pytree_tuple_output(t):
+    """SymPy wrappers should preserve mixed tuple and dictionary outputs."""
+    pytest.importorskip("sympy")
+    rng = dr.rng()
+
+    @dr.wrap(source="drjit", target="sympy")
+    def f(x, y):
+        return (x + y, {"diff": x - y})
+
+    def f_drjit(x, y):
+        return (x + y, {"diff": x - y})
+
+    x = rng.uniform(t, 8)
+    y = rng.uniform(t, 8)
+    res = f(x, y)
+    ref = f_drjit(x, y)
+    assert dr.allclose(res[0], ref[0])
+    assert dr.allclose(res[1]["diff"], ref[1]["diff"])
+
+
+@pytest.test_arrays("float,shape=(*),jit")
+def test48_sympy_second_derivative(t):
+    """SymPy should compute higher-order derivatives of wrapped functions."""
+    sp = pytest.importorskip("sympy")
+    rng = dr.rng()
+
+    @dr.wrap(source="drjit", target="sympy")
+    def f(x):
+        return sp.sin(x) * sp.exp(x)
+
+    @dr.wrap(source="drjit", target="sympy")
+    def f_dd(x):
+        y = f(x)
+        return sp.diff(y, x, 2)
+
+    x = rng.uniform(t, 10)
+
+    # d/dx[sin(x)*exp(x)] = exp(x)*(sin(x) + cos(x))
+    # d2/dx2[sin(x)*exp(x)] = 2*exp(x)*cos(x)
+    ref = 2 * dr.exp(x) * dr.cos(x)
+    assert dr.allclose(f_dd(x), ref)
+
+
+@pytest.test_arrays("float,shape=(*),jit")
+def test49_sympy_newton_optimization(t):
+    """The 2D Newton optimization example in the documentation should converge."""
+    sp = pytest.importorskip("sympy")
+
+    @dr.wrap(source="drjit", target="sympy")
+    def newton_step(x, y):
+        variables = sp.Matrix([x, y])
+        objective = (x - 1)**2 + 2*(y + 2)**2 + (x + y + 1)**2
+        gradient = sp.Matrix([sp.diff(objective, v) for v in variables])
+        hessian = sp.hessian(objective, variables)
+        step = hessian.inv() * gradient
+        return x - step[0], y - step[1]
+
+    x = t([-2, 0, 4])
+    y = t([3, -1, 2])
+    x, y = newton_step(x, y)
+
+    assert dr.allclose(x, 1)
+    assert dr.allclose(y, -2)
+
+
+@pytest.test_arrays("float32,shape=(*),jit")
+def test50_sympy_math_functions(t):
+    """SymPy math functions should compile to array-valued Dr.Jit operations."""
+    sp = pytest.importorskip("sympy")
+    expm1 = sp.Function("expm1")
+    hypot = sp.Function("hypot")
+    isnan = sp.Function("isnan")
+    log1p = sp.Function("log1p")
+    log2 = sp.Function("log2")
+
+    @dr.wrap(source="drjit", target="sympy")
+    def f(x):
+        return (
+            sp.sinh(x), sp.cosh(x), sp.tanh(x),
+            sp.asinh(x), sp.acosh(x + 1), sp.atanh(x / 2),
+            sp.floor(x), sp.ceiling(x), sp.erf(x), sp.erfc(x),
+            sp.loggamma(x + 1), sp.gamma(x + 1), sp.factorial(x),
+            expm1(x), log1p(x), log2(x),
+            hypot(x, x + 1, x + 2), isnan(x),
+        )
+
+    x = t([0.25, 0.5, 1.25])
+    result = f(x)
+    reference = (
+        dr.sinh(x), dr.cosh(x), dr.tanh(x),
+        dr.asinh(x), dr.acosh(x + 1), dr.atanh(x / 2),
+        dr.floor(x), dr.ceil(x), dr.erf(x), 1 - dr.erf(x),
+        dr.lgamma(x + 1), dr.exp(dr.lgamma(x + 1)),
+        dr.exp(dr.lgamma(x + 1)), dr.exp(x) - 1, dr.log(1 + x),
+        dr.log2(x), dr.hypot(dr.hypot(x, x + 1), x + 2), dr.isnan(x),
+    )
+    assert dr.allclose(result, reference)
