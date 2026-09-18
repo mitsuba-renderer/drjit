@@ -174,7 +174,7 @@ inline drjit::TraversableBase *traversable_ptr(nb::handle h) {
  */
 inline nb::dict traversable_dict(const drjit::TraversableBase *obj) {
     nb::handle self = obj->self_py();
-    if (!self.is_valid() || !NB_CALL(nb_inst_python_derived)(self.ptr()))
+    if (!self.is_valid() || !nb::inst_python_derived(self))
         return nb::steal<nb::dict>(nb::handle());
     return nb::inst_dict(self);
 }

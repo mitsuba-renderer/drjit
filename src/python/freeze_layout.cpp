@@ -333,7 +333,7 @@ struct LayoutBuilder {
     /// Return the index of a C++ type that may be subclassed in Python
     uint16_t intern_object_type(const drjit::TraversableBase *obj) {
         nb::handle self = obj->self_py();
-        if (self.is_valid() && NB_CALL(nb_inst_python_derived)(self.ptr()))
+        if (self.is_valid() && nb::inst_python_derived(self))
             return intern_type(self);
         return ObjectType;
     }
