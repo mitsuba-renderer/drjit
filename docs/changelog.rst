@@ -12,7 +12,9 @@ DrJit 1.6.0 (unreleased)
   :py:func:`dr.hsv_to_rgb() <hsv_to_rgb>`, :py:func:`dr.rgb_to_hsl()
   <rgb_to_hsl>`, and :py:func:`dr.hsl_to_rgb() <hsl_to_rgb>`. They follow the
   conventions of the existing Oklab routines and accept arrays or tensors
-  with an optional alpha channel.
+  with an optional alpha channel. The header ``drjit/color.h`` provides C++
+  versions of these routines and of the Oklab conversions. They work with
+  nested arrays, packets, and custom color types with 3 or 4 channels.
 
 - Reductions accept a ``where`` mask that excludes entries from the result.
   This covers :py:func:`dr.sum() <sum>`, :py:func:`dr.prod() <prod>`,
