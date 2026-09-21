@@ -4500,6 +4500,46 @@ _LMS_TO_SRGB = [
     -0.0041960863, -0.7034186147,  1.7076147010
 ]
 
+def _color_conversion(fn):
+    """
+    Decorator that extends a conversion of 3-channel color arrays to Dr.Jit
+    tensors and to inputs with an alpha channel.
+
+    Tensors must have a trailing dimension of size 3 or 4, and arrays a
+    leading dimension of size 3 or 4. A fourth (alpha) channel passes through
+    unchanged.
+    """
+
+    name = fn.__name__
+
+    @wraps(fn)
+    def wrapper(value):
+        if not is_array_v(value):
+            raise Exception(f'{name}(): expected a Jit tensor/array type as input!')
+
+        Type = type(value)
+        shape = value.shape
+
+        if is_tensor_v(value):
+            if shape[-1] != 3 and shape[-1] != 4:
+                raise Exception(f'{name}(): tensors must have trailing dimension 3 or 4 (with alpha)')
+            value = reshape(value, (-1, shape[-1]))
+            Array = replace_shape_t(Type, (shape[-1], -1), 'array')
+            value_2 = wrapper(Array(value, flip_axes=True))
+            return reshape(Type(value_2, flip_axes=True), shape)
+        elif shape[0] == 4:
+            value_2 = Type()
+            value_2.xyz = fn(value.xyz)
+            value_2.w = value.w
+            return value_2
+        elif shape[0] != 3:
+            raise Exception(f'{name}(): arrays must have leading dimension 3 or 4 (with alpha)')
+
+        return fn(value)
+
+    return wrapper
+
+@_color_conversion
 def linear_srgb_to_oklab(value: ArrayT) -> ArrayT:
     """
     Convert colors from linear sRGB to Oklab color space.
@@ -4534,37 +4574,17 @@ def linear_srgb_to_oklab(value: ArrayT) -> ArrayT:
                       b represents blue-yellow axis.
     """
 
-    if not is_array_v(value):
-        raise Exception('linear_srgb_to_oklab(): expected a Jit tensor/array type as input!')
-
-    Type = type(value)
-    shape = value.shape
-
-    if is_tensor_v(value):
-        if shape[-1] != 3 and shape[-1] != 4:
-            raise Exception('linear_srgb_to_oklab(): tensors must have trailing dimension 3 (RGB) or 4 (RGBA)')
-        value = reshape(value, (-1, shape[-1]))
-        Array = replace_shape_t(Type, (shape[-1], -1), 'array')
-        value_2 = Array(value, flip_axes=True)
-        value_2 = linear_srgb_to_oklab(value_2)
-        return reshape(Type(value_2, flip_axes = True), shape)
-    elif shape[0] == 4:
-        value_2 = Type()
-        value_2.xyz = linear_srgb_to_oklab(value.xyz)
-        value_2.w = value.w
-        return value_2
-    elif shape[0] != 3:
-        raise Exception('linear_srgb_to_oklab(): arrays must have leading dimension 3 (RGB) or 4 (RGBA)')
-
-    Matrix = replace_shape_t(Type, (3, 3), 'matrix')
+    Matrix = replace_shape_t(type(value), (3, 3), 'matrix')
     lms = Matrix(_SRGB_TO_LMS) @ value
     return Matrix(_CBRT_LMS_TO_OKLAB) @ cbrt(lms)
 
+@_color_conversion
 def oklab_to_linear_srgb(value: ArrayT) -> ArrayT:
     """
     Convert colors from Oklab color space back to linear sRGB.
 
-    This function performs the inverse transformation of linear_srgb_to_oklab,
+    This function performs the inverse transformation of
+    :py:func:`dr.linear_srgb_to_oklab() <drjit.linear_srgb_to_oklab>`,
     converting Oklab L, a, b coordinates back to linear sRGB values.
 
     This function supports Dr.Jit tensors and arrays with Lab or LabA data.
@@ -4587,32 +4607,157 @@ def oklab_to_linear_srgb(value: ArrayT) -> ArrayT:
                       Values are in linear sRGB (not gamma-corrected).
     """
 
-    if not is_array_v(value):
-        raise Exception('oklab_to_linear_srgb(): expected a Jit tensor/array type as input!')
-
-    Type = type(value)
-    shape = value.shape
-
-    if is_tensor_v(value):
-        if shape[-1] != 3 and shape[-1] != 4:
-            raise Exception('oklab_to_linear_srgb(): tensors must have trailing dimension 3 (Lab) or 4 (LabA)')
-        value = reshape(value, (-1, shape[-1]))
-        Array = replace_shape_t(Type, (shape[-1], -1), 'array')
-        value_2 = Array(value, flip_axes=True)
-        value_2 = oklab_to_linear_srgb(value_2)
-        return reshape(Type(value_2, flip_axes=True), shape)
-    elif shape[0] == 4:
-        value_2 = Type()
-        value_2.xyz = oklab_to_linear_srgb(value.xyz)
-        value_2.w = value.w
-        return value_2
-    elif shape[0] != 3:
-        raise Exception('oklab_to_linear_srgb(): arrays must have leading dimension 3 (Lab) or 4 (LabA)')
-
-    Matrix = replace_shape_t(Type, (3, 3), 'matrix')
-
+    Matrix = replace_shape_t(type(value), (3, 3), 'matrix')
     lms = (Matrix(_OKLAB_TO_CBRT_LMS) @ value)**3
     return Matrix(_LMS_TO_SRGB) @ lms
+
+def _rgb_to_hue(value):
+    """
+    Hue in [0, 1) of an RGB color, along with the maximum and minimum channel
+    values that HSV and HSL both need.
+    """
+
+    r, g, b = value.x, value.y, value.z
+    cmax = maximum(maximum(r, g), b)
+    cmin = minimum(minimum(r, g), b)
+    delta = cmax - cmin
+    delta_safe = select(delta > 0, delta, 1)
+    h = select(cmax == r, (g - b) / delta_safe,
+        select(cmax == g, 2 + (b - r) / delta_safe,
+                          4 + (r - g) / delta_safe))
+    h = select(delta > 0, h * (1 / 6), 0)
+    return h - floor(h), cmax, cmin
+
+def _hue_to_rgb(h):
+    """Fully saturated RGB color of maximal brightness for hue ``h``"""
+
+    def channel(offset):
+        x = h + offset
+        x = x - floor(x)
+        return clip(abs(x * 6 - 3) - 1, 0, 1)
+
+    return channel(0), channel(2 / 3), channel(1 / 3)
+
+@_color_conversion
+def rgb_to_hsv(value: ArrayT) -> ArrayT:
+    """
+    Convert colors from RGB to the HSV (hue, saturation, value) color space.
+
+    All three output components lie in the interval :math:`[0, 1]` when the
+    input is an in-gamut RGB color. The hue wraps around so that ``0`` and
+    ``1`` both correspond to red. Achromatic colors (grays) have a hue of ``0``.
+
+    This function supports Dr.Jit tensors and arrays with RGB or RGBA data.
+    For tensors, the color channels must be in the trailing dimension.
+    For arrays, the color channels must be in the leading dimension.
+    Alpha channels are preserved unchanged in RGBA inputs.
+
+    HSV is conventionally defined in terms of gamma-encoded (nonlinear) sRGB,
+    but the function does not enforce this and simply transforms the values
+    it is given.
+
+    Args:
+        value (dr.ArrayBase): Dr.Jit tensor or array containing RGB colors.
+                              For tensors: shape [..., 3] for RGB or [..., 4] for RGBA.
+                              For arrays: shape [3, ...] for RGB or [4, ...] for RGBA.
+
+    Returns:
+        dr.ArrayBase: Colors converted to HSV space with same shape as input.
+                      H represents hue, S represents saturation, V represents
+                      value (the largest RGB channel).
+    """
+
+    h, cmax, cmin = _rgb_to_hue(value)
+    s = select(cmax > 0, (cmax - cmin) / select(cmax > 0, cmax, 1), 0)
+    return type(value)(h, s, cmax)
+
+@_color_conversion
+def hsv_to_rgb(value: ArrayT) -> ArrayT:
+    """
+    Convert colors from the HSV (hue, saturation, value) color space to RGB.
+
+    This function performs the inverse transformation of
+    :py:func:`dr.rgb_to_hsv() <drjit.rgb_to_hsv>`. The hue may take any
+    value, since the function wraps it around to the interval :math:`[0, 1)`.
+
+    This function supports Dr.Jit tensors and arrays with HSV or HSVA data.
+    For tensors, the color channels must be in the trailing dimension.
+    For arrays, the color channels must be in the leading dimension.
+    Alpha channels are preserved unchanged in HSVA inputs.
+
+    Args:
+        value (dr.ArrayBase): Dr.Jit tensor or array containing HSV colors.
+                              For tensors: shape [..., 3] for HSV or [..., 4] for HSVA.
+                              For arrays: shape [3, ...] for HSV or [4, ...] for HSVA.
+
+    Returns:
+        dr.ArrayBase: Colors converted to RGB space with same shape as input.
+    """
+
+    h, s, v = value.x, value.y, value.z
+    return type(value)(*(v * lerp(1, c, s) for c in _hue_to_rgb(h)))
+
+@_color_conversion
+def rgb_to_hsl(value: ArrayT) -> ArrayT:
+    """
+    Convert colors from RGB to the HSL (hue, saturation, lightness) color space.
+
+    All three output components lie in the interval :math:`[0, 1]` when the
+    input is an in-gamut RGB color. The hue wraps around so that ``0`` and
+    ``1`` both correspond to red. Achromatic colors (grays) have a hue of ``0``.
+
+    This function supports Dr.Jit tensors and arrays with RGB or RGBA data.
+    For tensors, the color channels must be in the trailing dimension.
+    For arrays, the color channels must be in the leading dimension.
+    Alpha channels are preserved unchanged in RGBA inputs.
+
+    HSL is conventionally defined in terms of gamma-encoded (nonlinear) sRGB,
+    but the function does not enforce this and simply transforms the values
+    it is given.
+
+    Args:
+        value (dr.ArrayBase): Dr.Jit tensor or array containing RGB colors.
+                              For tensors: shape [..., 3] for RGB or [..., 4] for RGBA.
+                              For arrays: shape [3, ...] for RGB or [4, ...] for RGBA.
+
+    Returns:
+        dr.ArrayBase: Colors converted to HSL space with same shape as input.
+                      H represents hue, S represents saturation, L represents
+                      lightness (the mean of the largest and smallest RGB channel).
+    """
+
+    h, cmax, cmin = _rgb_to_hue(value)
+    l = (cmax + cmin) * 0.5
+    denom = 1 - abs(cmax + cmin - 1)
+    s = select(denom > 0, (cmax - cmin) / select(denom > 0, denom, 1), 0)
+    return type(value)(h, s, l)
+
+@_color_conversion
+def hsl_to_rgb(value: ArrayT) -> ArrayT:
+    """
+    Convert colors from the HSL (hue, saturation, lightness) color space to RGB.
+
+    This function performs the inverse transformation of
+    :py:func:`dr.rgb_to_hsl() <drjit.rgb_to_hsl>`. The hue may take any
+    value, since the function wraps it around to the interval :math:`[0, 1)`.
+
+    This function supports Dr.Jit tensors and arrays with HSL or HSLA data.
+    For tensors, the color channels must be in the trailing dimension.
+    For arrays, the color channels must be in the leading dimension.
+    Alpha channels are preserved unchanged in HSLA inputs.
+
+    Args:
+        value (dr.ArrayBase): Dr.Jit tensor or array containing HSL colors.
+                              For tensors: shape [..., 3] for HSL or [..., 4] for HSLA.
+                              For arrays: shape [3, ...] for HSL or [4, ...] for HSLA.
+
+    Returns:
+        dr.ArrayBase: Colors converted to RGB space with same shape as input.
+    """
+
+    h, s, l = value.x, value.y, value.z
+    c = (1 - abs(2 * l - 1)) * s
+    return type(value)(*(fma(x - 0.5, c, l) for x in _hue_to_rgb(h)))
 
 def unit_angle(a, b):
     """

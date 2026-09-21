@@ -8,6 +8,12 @@ Changelog
 DrJit 1.6.0 (unreleased)
 ------------------------
 
+- New color space conversions :py:func:`dr.rgb_to_hsv() <rgb_to_hsv>`,
+  :py:func:`dr.hsv_to_rgb() <hsv_to_rgb>`, :py:func:`dr.rgb_to_hsl()
+  <rgb_to_hsl>`, and :py:func:`dr.hsl_to_rgb() <hsl_to_rgb>`. They follow the
+  conventions of the existing Oklab routines and accept arrays or tensors
+  with an optional alpha channel.
+
 - Reductions accept a ``where`` mask that excludes entries from the result.
   This covers :py:func:`dr.sum() <sum>`, :py:func:`dr.prod() <prod>`,
   :py:func:`dr.min() <min>`, :py:func:`dr.max() <max>`, :py:func:`dr.mean()

@@ -188,6 +188,10 @@ Miscellaneous operations
 .. autofunction:: srgb_to_linear
 .. autofunction:: linear_srgb_to_oklab
 .. autofunction:: oklab_to_linear_srgb
+.. autofunction:: rgb_to_hsv
+.. autofunction:: hsv_to_rgb
+.. autofunction:: rgb_to_hsl
+.. autofunction:: hsl_to_rgb
 .. autofunction:: reorder_threads
 
 Just-in-time compilation
