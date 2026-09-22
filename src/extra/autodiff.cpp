@@ -3670,12 +3670,7 @@ public:
 
         ADVariable *target = state[m_output_indices[0]];
 
-        if (m_inputs[0]) {
-            JitVar &source_grad = state[m_inputs[0]]->grad;
-            if (source_grad.valid())
-                target->accum(source_grad, target->size);
-        }
-
+        // Query the value gradients first, since a value may alias the target
         for (size_t i = 0; i < m_n; ++i) {
             grad_in[i] = zero.index();
 
@@ -3685,6 +3680,20 @@ public:
                     grad_in[i] = v2->grad.index();
                     n_valid++;
                 }
+            }
+        }
+
+        if (m_inputs[0]) {
+            JitVar &source_grad = state[m_inputs[0]]->grad;
+            if (source_grad.valid()) {
+                // Moving the copy instead of sharing it lets the scatter below
+                // write in place. This is safe because CustomOp::forward()
+                // passes copies when there are multiple inputs.
+                if (m_input_indices.size() > 1 && !target->grad.valid() &&
+                    source_grad.size() == target->size)
+                    target->grad = std::move(source_grad);
+                else
+                    target->accum(source_grad, target->size);
             }
         }
 
@@ -3734,9 +3743,9 @@ public:
     }
 
     void add_input(uint32_t index) {
-        add_index(m_backend, index, true);
-        // No need for extra reference counting
-        m_inputs.push_back(index);
+        // Record inputs that add_index() rejects (e.g. due to dr.suspend_grad())
+        // as zero. They aren't part of the operation, and no reference is held.
+        m_inputs.push_back(add_index(m_backend, index, true) ? index : 0);
     }
 
     void add_output(uint32_t index) {

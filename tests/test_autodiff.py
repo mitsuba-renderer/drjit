@@ -2175,3 +2175,70 @@ def test138_relative_grad(t):
     assert dr.allclose(y_replaced, dr.ones_like(y))
     dr.backward(y_replaced)
     assert dr.allclose(dr.grad(x), 2 * x / dr.square(x))
+
+@pytest.mark.parametrize("enabled", [True, False])
+@pytest.skip_on(RuntimeError, "backend does not support the requested type of atomic reduction")
+@pytest.test_arrays('is_diff,float32,shape=(4, *),-quat')
+def test139_packet_scatter_add_suspended(t, enabled):
+    # Packet scatters must ignore inputs whose gradients are suspended
+    with dr.scoped_set_flag(dr.JitFlag.PacketOps, enabled):
+        Float = dr.value_t(t)
+        UInt32 = dr.uint32_array_t(Float)
+
+        x = dr.arange(Float, 8)
+        dr.enable_grad(x)
+        x2 = x * 1
+        old = Float(x2)
+        a, b = dr.opaque(Float, 1, 2), dr.opaque(Float, 1, 2)
+        dr.enable_grad(a, b)
+        with dr.suspend_grad(x2):
+            dr.scatter_add(x2, t(a, b, a, b), dr.arange(UInt32, 2))
+        x.grad = dr.opaque(Float, 1, 8)
+        a.grad = dr.opaque(Float, 10, 2)
+        b.grad = dr.opaque(Float, 100, 2)
+        dr.enqueue(dr.ADMode.Forward, x, a, b)
+        dr.traverse(dr.ADMode.Forward, flags=dr.ADFlag.ClearNone)
+        assert dr.all(x2.grad == [10, 100] * 4)
+        assert dr.all(old.grad == 1)
+
+@pytest.mark.parametrize("enabled", [True, False])
+@pytest.skip_on(RuntimeError, "backend does not support the requested type of atomic reduction")
+@pytest.test_arrays('is_diff,float32,shape=(4, *),-quat')
+def test140_packet_scatter_add_fwd(t, enabled):
+    # Forward-mode derivatives of packet scatters that update the target in place
+    with dr.scoped_set_flag(dr.JitFlag.PacketOps, enabled):
+        Float = dr.value_t(t)
+        UInt32 = dr.uint32_array_t(Float)
+
+        # Consecutive scatters into the same target
+        x = dr.opaque(Float, 1, 100)
+        dr.enable_grad(x)
+        index = dr.arange(UInt32, 100) % 10
+        target = dr.zeros(Float, 40)
+        for i in range(4):
+            dr.scatter_add(target, t(x * (i + 1), x, x, 1), (index + i) % 10)
+        x.grad = 1
+        dr.forward_to(target)
+        assert dr.allclose(target.grad, [100, 40, 40, 0] * 10)
+
+        # The original target has another use
+        x = dr.arange(Float, 8)
+        dr.enable_grad(x)
+        x2 = x * 1
+        old = Float(x2)
+        dr.scatter_add(x2, t(1, 1, 1, 1), UInt32(0))
+        y = old * 3
+        x.grad = dr.opaque(Float, 1, 8)
+        dr.forward_from(x, flags=dr.ADFlag.ClearNone)
+        assert dr.all(old.grad == 1)
+        assert dr.all(y.grad == 3)
+        assert dr.all(x2.grad == 1)
+
+        # The scattered values alias the target
+        x = dr.arange(Float, 8)
+        dr.enable_grad(x)
+        x2 = x * 1
+        dr.scatter_add(x2, t(x2, x2, x2, x2), dr.arange(UInt32, 8) % 2)
+        x.grad = dr.opaque(Float, 1, 8)
+        dr.forward_from(x)
+        assert dr.all(x2.grad == 5)
