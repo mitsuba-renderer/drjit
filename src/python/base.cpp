@@ -1625,8 +1625,10 @@ void export_base(nb::module_ &m) {
 
     DR_MATH_UNOP(exp, ArrayOp::Exp);
     DR_MATH_UNOP(exp2, ArrayOp::Exp2);
+    DR_MATH_UNOP(expm1, ArrayOp::Expm1);
     DR_MATH_UNOP(log, ArrayOp::Log);
     DR_MATH_UNOP(log2, ArrayOp::Log2);
+    DR_MATH_UNOP(log1p, ArrayOp::Log1p);
 
     DR_MATH_UNOP(sin, ArrayOp::Sin);
     DR_MATH_UNOP(cos, ArrayOp::Cos);

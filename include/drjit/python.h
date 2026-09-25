@@ -125,8 +125,10 @@ enum class ArrayOp {
 
     Exp,
     Exp2,
+    Expm1,
     Log,
     Log2,
+    Log1p,
     Sin,
     Cos,
     Sincos,
@@ -694,8 +696,10 @@ template <typename T> void bind_float_arithmetic(ArrayBinding &b) {
     b[ArrayOp::Cbrt] = (void *) +[](const T *a, T *b) { new (b) T(cbrt(*a)); };
     b[ArrayOp::Exp] = (void *) +[](const T *a, T *b) { new (b) T(exp(*a)); };
     b[ArrayOp::Exp2] = (void *) +[](const T *a, T *b) { new (b) T(exp2(*a)); };
+    b[ArrayOp::Expm1] = (void *) +[](const T *a, T *b) { new (b) T(expm1(*a)); };
     b[ArrayOp::Log] = (void *) +[](const T *a, T *b) { new (b) T(log(*a)); };
     b[ArrayOp::Log2] = (void *) +[](const T *a, T *b) { new (b) T(log2(*a)); };
+    b[ArrayOp::Log1p] = (void *) +[](const T *a, T *b) { new (b) T(log1p(*a)); };
     b[ArrayOp::Sin] = (void *) +[](const T *a, T *b) { new (b) T(sin(*a)); };
     b[ArrayOp::Cos] = (void *) +[](const T *a, T *b) { new (b) T(cos(*a)); };
     b[ArrayOp::Sincos] = (void *) +[](const T *a, T *b, T *c) {
@@ -734,7 +738,8 @@ template <typename T> void bind_float_arithmetic(ArrayBinding &b) {
 inline void disable_float_arithmetic(ArrayBinding &b) {
     b[ArrayOp::TrueDiv] = b[ArrayOp::Sqrt] = b[ArrayOp::Rcp] =
     b[ArrayOp::Rsqrt] = b[ArrayOp::Cbrt] = b[ArrayOp::Exp] =
-    b[ArrayOp::Exp2] = b[ArrayOp::Log] = b[ArrayOp::Log2] =
+    b[ArrayOp::Exp2] = b[ArrayOp::Expm1] = b[ArrayOp::Log] =
+    b[ArrayOp::Log2] = b[ArrayOp::Log1p] =
     b[ArrayOp::Sin] = b[ArrayOp::Cos] = b[ArrayOp::Sincos] =
     b[ArrayOp::Tan] = b[ArrayOp::Asin] = b[ArrayOp::Acos] =
     b[ArrayOp::Atan] = b[ArrayOp::Sinh] = b[ArrayOp::Cosh] =

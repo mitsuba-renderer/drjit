@@ -287,8 +287,10 @@ namespace detail {
     DRJIT_DETECTOR_ARG(ldexp)
     DRJIT_DETECTOR(exp)
     DRJIT_DETECTOR(exp2)
+    DRJIT_DETECTOR(expm1)
     DRJIT_DETECTOR(log)
     DRJIT_DETECTOR(log2)
+    DRJIT_DETECTOR(log1p)
     DRJIT_DETECTOR_ARG(pow)
 
     DRJIT_DETECTOR(sinh)
@@ -687,11 +689,14 @@ template <typename Value, bool Native> std::pair<Value, Value> frexp(const Value
 #  pragma warning(pop)
 #endif
 
-template <typename Value, bool Native> Value exp(const Value &x) {
-    if constexpr (is_detected_v<detail::has_exp, Value> && Native) {
+template <typename Value, bool Native, bool ExpM1> Value exp(const Value &x) {
+    if constexpr (!ExpM1 && is_detected_v<detail::has_exp, Value> && Native) {
         return x.exp_();
+    } else if constexpr (ExpM1 && is_detected_v<detail::has_expm1, Value> && Native) {
+        return x.expm1_();
     } else if constexpr (is_half_v<Value>) {
-        return (Value) exp(float32_array_t<Value>(x));
+        using F32 = float32_array_t<Value>;
+        return (Value) exp<F32, true, ExpM1>(F32(x));
     } else {
         /* Exponential function approximation based on CEPHES
 
@@ -704,6 +709,10 @@ template <typename Value, bool Native> Value exp(const Value &x) {
            * max rel. err = 1.192e-07
              -> in ULPs   = 1
              (at x=-19.9999)
+
+           When 'ExpM1' is set, this computes exp(x)-1 like expm1() in CEPHES'
+           unity.c: for n == 0, the polynomial directly yields exp(x)-1 without
+           cancellation. Other inputs use exp(x)-1.
         */
 
         static_assert(!is_special_v<Value>,
@@ -723,6 +732,10 @@ template <typename Value, bool Native> Value exp(const Value &x) {
              = e^(g + n log(2)) */
         Value n = floor(fmadd(InvLogTwo<Scalar>, x, Scalar(0.5)));
 
+        // The double precision rational fit is valid on [-1/2, 1/2]
+        if constexpr (ExpM1 && !Single)
+            masked(n, abs(x) <= Scalar(0.5)) = Scalar(0);
+
         // -log(2), most significant bits & remaining bits
         const Scalar nlog2_hi = -Scalar(Single ? 0.693359375 : 0.693145751953125),
                      nlog2_lo = -Scalar(Single ? -2.12194440e-4 : 1.42860682030941723212e-6);
@@ -731,12 +744,14 @@ template <typename Value, bool Native> Value exp(const Value &x) {
         y = fmadd(n, Scalar(nlog2_hi), y);
         y = fmadd(n, Scalar(nlog2_lo), y);
 
-        Value z = square(y);
+        Value z = square(y), zm1;
 
         if constexpr (Single) {
             z = estrin(y, 5.0000001201e-1, 1.6666665459e-1,
                           4.1665795894e-2, 8.3334519073e-3,
                           1.3981999507e-3, 1.9875691500e-4);
+            if constexpr (ExpM1)
+                zm1 = fmadd(z, square(y), y);
             z = fmadd(z, square(y), y + Scalar(1));
         } else {
             /* Rational approximation for exponential
@@ -752,12 +767,23 @@ template <typename Value, bool Native> Value exp(const Value &x) {
                                 3.00198505138664455042e-6);
 
             z = p / (q - p);
+            if constexpr (ExpM1)
+                zm1 = z + z;
             z = z + z + Scalar(1);
         }
 
-        return select(mask_overflow, Infinity<Value>,
-                      select(mask_underflow, zeros<Value>(), ldexp(z, n)));
+        Value r = select(mask_overflow, Infinity<Value>,
+                         select(mask_underflow, zeros<Value>(), ldexp(z, n)));
+
+        if constexpr (ExpM1)
+            r = select(n == Scalar(0), zm1, r - Scalar(1));
+
+        return r;
     }
+}
+
+template <typename Value, bool Native> Value expm1(const Value &x) {
+    return exp<Value, Native, true>(x);
 }
 
 template <typename Value, bool Native> Value exp2(const Value &x) {
@@ -830,11 +856,14 @@ template <typename Value, bool Native> Value exp2(const Value &x) {
     }
 }
 
-template <typename Value, bool Native> Value log(const Value &x) {
-    if constexpr (is_detected_v<detail::has_log, Value> && Native) {
+template <typename Value, bool Native, bool Log1P> Value log(const Value &x) {
+    if constexpr (!Log1P && is_detected_v<detail::has_log, Value> && Native) {
         return x.log_();
+    } else if constexpr (Log1P && is_detected_v<detail::has_log1p, Value> && Native) {
+        return x.log1p_();
     } else if constexpr (is_half_v<Value>) {
-        return (Value) log(float32_array_t<Value>(x));
+        using F32 = float32_array_t<Value>;
+        return (Value) log<F32, true, Log1P>(F32(x));
     } else {
         /* Logarithm function approximation based on CEPHES
 
@@ -847,6 +876,10 @@ template <typename Value, bool Native> Value log(const Value &x) {
            * max rel. err = 1.19194e-07
              -> in ULPs   = 1
              (at x=0.021)
+
+           When 'Log1P' is set, this computes log(1+x) like log1p() in CEPHES'
+           unity.c: for 1/sqrt(2) <= 1+x <= sqrt(2), the polynomial runs on
+           'x' itself to avoid cancellation. Other inputs use log(1+x).
         */
 
         static_assert(!is_special_v<Value>,
@@ -855,16 +888,27 @@ template <typename Value, bool Native> Value log(const Value &x) {
         using Mask = mask_t<Value>;
         constexpr bool Single = std::is_same_v<Scalar, float>;
 
+        // Argument of the underlying logarithm
+        Value xl = x;
+        if constexpr (Log1P)
+            xl += Scalar(1);
+
         // Catch negative and NaN values
-        Mask valid_mask = x >= Scalar(0);
+        Mask valid_mask = xl >= Scalar(0);
 
         // Note: does not handle denormalized numbers on some target
-        auto [xm, e] = frexp(x);
+        auto [xm, e] = frexp(xl);
 
         Mask mask_ge_inv_sqrt2 = xm >= InvSqrtTwo<Scalar>;
 
         masked(e, mask_ge_inv_sqrt2) += Scalar(1);
         xm += detail::andnot_(xm, mask_ge_inv_sqrt2) - Scalar(1);
+
+        if constexpr (Log1P) {
+            Mask direct = xl >= InvSqrtTwo<Scalar> && xl <= SqrtTwo<Scalar>;
+            xm = select(direct, x, xm);
+            masked(e, direct) = Scalar(0);
+        }
 
         // Logarithm using log(1+x) = x - .5x**2 + x**3 P(x)
         Value y;
@@ -874,6 +918,21 @@ template <typename Value, bool Native> Value log(const Value &x) {
                            1.4249322787e-1, -1.2420140846e-1,
                            1.1676998740e-1, -1.1514610310e-1,
                            7.0376836292e-2);
+        } else if constexpr (Log1P) {
+            y = estrin(xm, 2.0039553499201281259648e1,
+                           5.7112963590585538103336e1,
+                           6.0949667980987787057556e1,
+                           2.9911919328553073277375e1,
+                           6.5787325942061044846969e0,
+                           4.9854102823193375972212e-1,
+                           4.5270000862445199635215e-5) /
+                estrin(xm, 6.0118660497603843919306e1,
+                           2.1642788614495947685003e2,
+                           3.0909872225312059774938e2,
+                           2.2176239823732856465394e2,
+                           8.3047565967967209469434e1,
+                           1.5062909083469192043167e1,
+                           1.0000000000000000000000e0);
         } else {
             /// Use a more accurate rational polynomial fit
             y = estrin(xm, 7.70838733755885391666e0,
@@ -902,11 +961,15 @@ template <typename Value, bool Native> Value log(const Value &x) {
         const Scalar n_inf(-Infinity<Scalar>),
                      p_inf( Infinity<Scalar>);
 
-        masked(r, x == p_inf) = p_inf;
-        masked(r, x == Scalar(0)) = n_inf;
+        masked(r, xl == p_inf) = p_inf;
+        masked(r, xl == Scalar(0)) = n_inf;
 
         return detail::or_(r, !valid_mask);
     }
+}
+
+template <typename Value, bool Native> Value log1p(const Value &x) {
+    return log<Value, Native, true>(x);
 }
 
 template <typename Value, bool Native> Value log2(const Value &x) {

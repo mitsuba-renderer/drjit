@@ -1749,6 +1749,42 @@
     Returns:
         float | drjit.ArrayBase: Natural exponential of the input
 
+.. topic:: expm1
+
+    Evaluate ``exp(x) - 1`` without loss of precision for small arguments.
+
+    This function evaluates the component-wise natural exponential function
+    minus one of the input scalar, array, or tensor. It avoids the cancellation
+    that affects the expression ``dr.exp(x) - 1`` when ``x`` is close to zero.
+
+    The implementation of this function is based on the CEPHES library. See the
+    section on :ref:`transcendental function approximations
+    <transcendental-accuracy>` for details regarding accuracy.
+
+    Args:
+        arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
+
+    Returns:
+        float | drjit.ArrayBase: Natural exponential of the input minus one
+
+.. topic:: log1p
+
+    Evaluate ``log(1 + x)`` without loss of precision for small arguments.
+
+    This function evaluates the component-wise natural logarithm of one plus
+    the input scalar, array, or tensor. It avoids the cancellation that affects
+    the expression ``dr.log(1 + x)`` when ``x`` is close to zero.
+
+    The implementation of this function is based on the CEPHES library. See the
+    section on :ref:`transcendental function approximations
+    <transcendental-accuracy>` for details regarding accuracy.
+
+    Args:
+        arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
+
+    Returns:
+        float | drjit.ArrayBase: Natural logarithm of one plus the input
+
 .. topic:: exp2
 
     Evaluate ``2`` raised to a given power.

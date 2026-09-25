@@ -8,6 +8,13 @@ Changelog
 DrJit 1.6.0 (unreleased)
 ------------------------
 
+- New functions :py:func:`dr.expm1() <expm1>` and :py:func:`dr.log1p()
+  <log1p>` that evaluate :math:`e^x-1` and :math:`\log(1+x)` without the
+  cancellation that affects the naive expressions for small arguments. The
+  C++ header ``drjit/math.h`` provides matching ``dr::expm1()`` and
+  ``dr::log1p()`` templates. Both follow the corresponding routines of the
+  CEPHES library.
+
 - New color space conversions :py:func:`dr.rgb_to_hsv() <rgb_to_hsv>`,
   :py:func:`dr.hsv_to_rgb() <hsv_to_rgb>`, :py:func:`dr.rgb_to_hsl()
   <rgb_to_hsl>`, and :py:func:`dr.hsl_to_rgb() <hsl_to_rgb>`. They follow the

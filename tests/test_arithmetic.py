@@ -756,3 +756,34 @@ def test_clip_int(t):
     v = t(-40, -5, -2, 0, 3, 9, 40)
     assert dr.all(dr.clip(v, -2, 9) == t(-2, -2, -2, 0, 3, 9, 9))
     assert dr.all(dr.clip(v, 9, 2) == t(2, 2, 2, 2, 2, 2, 2))
+
+
+@pytest.test_arrays('float, -float16, shape=(*)')
+def test_expm1_log1p(t):
+    import math
+    inf, nan = float('inf'), float('nan')
+    eps = 1e-6 if dr.type_v(t) == dr.VarType.Float32 else 1e-14
+
+    # Small arguments, where the naive expressions lose all significant digits
+    xs = [1e-30, -1e-30, 1e-10, -1e-10, 1e-4, -1e-4, 0.0]
+    for x in xs:
+        assert dr.allclose(dr.expm1(t(x)), math.expm1(x), rtol=eps, atol=0)
+        assert dr.allclose(dr.log1p(t(x)), math.log1p(x), rtol=eps, atol=0)
+
+    # Larger arguments that use the fallback expressions
+    xs = [-20, -3, -0.7, -0.2, 0.2, 0.4, 0.7, 3, 30]
+    for x in xs:
+        assert dr.allclose(dr.expm1(t(x)), math.expm1(x), rtol=eps*4, atol=0)
+    xs = [-0.99, -0.5, -0.2, 0.2, 0.5, 2, 100, 1e6]
+    for x in xs:
+        assert dr.allclose(dr.log1p(t(x)), math.log1p(x), rtol=eps*4, atol=0)
+
+    # Special values
+    r = dr.expm1(t(-inf, inf, nan, -1000, 1000))
+    assert r[0] == -1 and r[1] == inf and dr.isnan(r[2]) and r[3] == -1 and r[4] == inf
+    r = dr.log1p(t(-1, -2, inf, nan))
+    assert r[0] == -inf and dr.isnan(r[1]) and r[2] == inf and dr.isnan(r[3])
+
+    # Python scalars
+    assert dr.allclose(dr.expm1(1e-10), math.expm1(1e-10), rtol=1e-14, atol=0)
+    assert dr.allclose(dr.log1p(1e-10), math.log1p(1e-10), rtol=1e-14, atol=0)

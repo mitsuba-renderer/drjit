@@ -2747,6 +2747,32 @@ Index ad_var_log(Index i0) {
 
 // ==========================================================================
 
+Index ad_var_expm1(Index i0) {
+    JitVar result = JitVar::steal(jit_var_expm1(jit_index(i0)));
+
+    if (is_detached(i0)) {
+        return result.release();
+    } else {
+        JitVar w0 = result + scalar(i0, 1.0);
+        return ad_var_new("expm1", std::move(result), Arg(i0, std::move(w0)));
+    }
+}
+
+// ==========================================================================
+
+Index ad_var_log1p(Index i0) {
+    JitVar result = JitVar::steal(jit_var_log1p(jit_index(i0)));
+
+    if (is_detached(i0)) {
+        return result.release();
+    } else {
+        JitVar w0 = dr::rcp(JitVar::borrow((JitIndex) i0) + scalar(i0, 1.0));
+        return ad_var_new("log1p", std::move(result), Arg(i0, std::move(w0)));
+    }
+}
+
+// ==========================================================================
+
 Index ad_var_log2(Index i0) {
     JitVar result = JitVar::steal(jit_var_log2(jit_index(i0)));
 

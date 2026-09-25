@@ -406,8 +406,10 @@ ________________________________________
 
 .. autofunction:: log2
 .. autofunction:: log
+.. autofunction:: log1p
 .. autofunction:: exp2
 .. autofunction:: exp
+.. autofunction:: expm1
 .. autofunction:: power
 
 Other

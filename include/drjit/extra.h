@@ -58,8 +58,10 @@ struct UInt64Pair {
 // Unary arithmetic/transcendental operations
 DR_EXPORT(exp2)
 DR_EXPORT(exp)
+DR_EXPORT(expm1)
 DR_EXPORT(log2)
 DR_EXPORT(log)
+DR_EXPORT(log1p)
 DR_EXPORT(sin)
 DR_EXPORT(cos)
 DR_EXPORT(tan)

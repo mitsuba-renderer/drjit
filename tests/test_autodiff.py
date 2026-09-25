@@ -955,6 +955,8 @@ std_test('round', lambda a: dr.round(a), 1.6, 2.0, 0.0)
 std_test('trunc', lambda a: dr.trunc(a), 1.6, 1.0, 0.0)
 std_test('ceil', lambda a: dr.ceil(a), 1.6, 2.0, 0.0)
 std_test('floor', lambda a: dr.floor(a), 1.6, 1.0, 0.0)
+std_test('expm1', lambda a: dr.expm1(a), 0.5, 0.6487212707001282, 1.6487212707001282)
+std_test('log1p', lambda a: dr.log1p(a), 0.5, 0.4054651081081644, 0.6666666666666666)
 
 
 

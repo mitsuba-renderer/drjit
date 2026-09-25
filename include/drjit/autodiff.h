@@ -293,8 +293,10 @@ struct DRJIT_TRIVIAL_ABI DiffArray
 
     DiffArray exp_() const { return steal(ad_var_exp(m_index)); }
     DiffArray exp2_() const { return steal(ad_var_exp2(m_index)); }
+    DiffArray expm1_() const { return steal(ad_var_expm1(m_index)); }
     DiffArray log_() const { return steal(ad_var_log(m_index)); }
     DiffArray log2_() const { return steal(ad_var_log2(m_index)); }
+    DiffArray log1p_() const { return steal(ad_var_log1p(m_index)); }
 
     DiffArray sinh_() const { return steal(ad_var_sinh(m_index)); }
     DiffArray cosh_() const { return steal(ad_var_cosh(m_index)); }

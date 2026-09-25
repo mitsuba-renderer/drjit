@@ -349,6 +349,18 @@ Single precision
       - :math:`7.6 \cdot 10^{-6}`
       - :math:`1.4 \cdot 10^{-10}\,(0.0013\,\text{ulp})`
       - :math:`1.2 \cdot 10^{-7}\,(1\,\text{ulp})`
+    * - :math:`\text{expm1}()`
+      - :math:`-20 < x < 30`
+      - :math:`0.77 \cdot 10^{4}`
+      - :math:`0.85 \cdot 10^{6}`
+      - :math:`2.6 \cdot 10^{-8}\,(0.22\,\text{ulp})`
+      - :math:`2.5 \cdot 10^{-7}\,(2\,\text{ulp})`
+    * - :math:`\text{log1p}()`
+      - :math:`-0.99 < x < 1000`
+      - :math:`6.8 \cdot 10^{-8}`
+      - :math:`2.7 \cdot 10^{-7}`
+      - :math:`2.6 \cdot 10^{-8}\,(0.22\,\text{ulp})`
+      - :math:`1.7 \cdot 10^{-7}\,(1.4\,\text{ulp})`
     * - :math:`\text{erf}()`
       - :math:`-1 < x < 1`
       - :math:`3.2 \cdot 10^{-8}`
@@ -465,6 +477,18 @@ Double precision
       - :math:`1.9 \cdot 10^{-17}`
       - :math:`1.4 \cdot 10^{-14}`
       - :math:`2.7 \cdot 10^{-19}\,(0.0013\,\text{ulp})`
+      - :math:`2.2 \cdot 10^{-16}\,(1\,\text{ulp})`
+    * - :math:`\text{expm1}()`
+      - :math:`-20 < x < 30`
+      - :math:`4.6 \cdot 10^{-6}`
+      - :math:`2 \cdot 10^{-3}`
+      - :math:`1.9 \cdot 10^{-17}\,(0.086\,\text{ulp})`
+      - :math:`4.4 \cdot 10^{-16}\,(2\,\text{ulp})`
+    * - :math:`\text{log1p}()`
+      - :math:`-0.99 < x < 1000`
+      - :math:`1.3 \cdot 10^{-17}`
+      - :math:`8.9 \cdot 10^{-16}`
+      - :math:`7.9 \cdot 10^{-18}\,(0.035\,\text{ulp})`
       - :math:`2.2 \cdot 10^{-16}\,(1\,\text{ulp})`
     * - :math:`\text{erf}()`
       - :math:`-1 < x < 1`
