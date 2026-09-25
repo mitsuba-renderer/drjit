@@ -1131,3 +1131,43 @@ def test34_reductions_where(t):
     assert dr.count([True, True, False], where=[True, False, True]) == 1
     with pytest.raises(RuntimeError, match='length'):
         dr.sum([1, 2, 3], where=[True, False])
+
+
+@pytest.test_arrays('shape=(*), float32, jit, -diff')
+def test35_prefix_reduction_large(t):
+    # Prefix reductions over many thread blocks must be accurate and produce
+    # bitwise identical results across repeated evaluations
+    try:
+        import numpy as np
+    except:
+        pytest.skip(reason="NumPy is required")
+
+    np.random.seed(0)
+    n = 1 << 20
+    X = np.random.uniform(-1, 1, n).astype(np.float32)
+    Xt = t(X)
+
+    for block_size in (n, 70003, 1000):
+        for exclusive in (False, True):
+            for reverse in (False, True):
+                def scan():
+                    return dr.block_prefix_reduce(
+                        dr.ReduceOp.Add, Xt, block_size,
+                        exclusive=exclusive, reverse=reverse).numpy()
+
+                ref = np.empty(n, dtype=np.float64)
+                for lo in range(0, n, block_size):
+                    seg = X[lo:lo + block_size].astype(np.float64)
+                    if reverse:
+                        seg = seg[::-1]
+                    acc = np.cumsum(seg)
+                    if exclusive:
+                        acc = np.concatenate([[0.0], acc[:-1]])
+                    if reverse:
+                        acc = acc[::-1]
+                    ref[lo:lo + block_size] = acc
+
+                Y = scan()
+                assert np.max(np.abs(Y - ref)) < 1e-3 * max(1.0, np.max(np.abs(ref)))
+                for _ in range(3):
+                    assert np.array_equal(Y, scan())

@@ -1480,6 +1480,9 @@
     This operation traverses PyTrees and transforms any dynamically
     sized Dr.Jit arrays it encounters. Everything else is left as-is.
 
+    The result is deterministic on all backends: repeated evaluations produce
+    bitwise identical output, including for floating point types.
+
     Args:
         value (object): A Dr.Jit array or PyTree
 
@@ -9365,6 +9368,9 @@
     By default, the reduction is along axis ``0`` (i.e., the outermost one).
     Negative indices (e.g. ``axis=-1``) count backward from the innermost axis.
     Multiple axes can be specified as a tuple and are handled iteratively.
+
+    The result is deterministic on all backends: repeated evaluations produce
+    bitwise identical output, including for floating point types.
 
     Args:
         op (ReduceOp): The operation that should be applied along the
