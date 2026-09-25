@@ -15,6 +15,9 @@ DrJit 1.6.0 (unreleased)
   ``dr::log1p()`` templates. Both follow the corresponding routines of the
   CEPHES library.
 
+- Floating point arrays now support the modulo operator ``%`` with the
+  semantics of Python and NumPy, where the result has the sign of the divisor.
+
 - New color space conversions :py:func:`dr.rgb_to_hsv() <rgb_to_hsv>`,
   :py:func:`dr.hsv_to_rgb() <hsv_to_rgb>`, :py:func:`dr.rgb_to_hsl()
   <rgb_to_hsl>`, and :py:func:`dr.hsl_to_rgb() <hsl_to_rgb>`. They follow the

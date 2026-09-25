@@ -80,6 +80,7 @@ nb::handle array_base;
 #define Py_nb_absolute_base Py_nb_absolute
 #define Py_nb_multiply_base Py_nb_multiply
 #define Py_nb_true_divide_base Py_nb_true_divide
+#define Py_nb_remainder_base Py_nb_remainder
 
 DR_NB_UNOP(negative, ArrayOp::Neg)
 DR_NB_UNOP(absolute_base, ArrayOp::Abs)
@@ -91,9 +92,71 @@ DR_NB_BINOP(true_divide_base, ArrayOp::TrueDiv)
 DR_NB_BINOP(floor_divide, ArrayOp::FloorDiv)
 DR_NB_BINOP(lshift, ArrayOp::LShift)
 DR_NB_BINOP(rshift, ArrayOp::RShift)
-DR_NB_BINOP(remainder, ArrayOp::Mod)
+DR_NB_BINOP(remainder_base, ArrayOp::Mod)
 DR_NB_BINOP(or, ArrayOp::Or)
 DR_NB_BINOP(xor, ArrayOp::Xor)
+
+static PyObject *nb_remainder(PyObject *h0, PyObject *h1) noexcept {
+    nb::object o[2] = { nb::borrow(h0), nb::borrow(h1) };
+
+    try {
+        if (!o[0].type().is(o[1].type()))
+            promote(o, 2);
+
+        if (!is_float(supp(o[0].type())))
+            return nb_remainder_base(o[0].ptr(), o[1].ptr());
+
+        nb::object a = o[0], b = o[1], zero = nb::int_(0),
+                   trunc = array_module.attr("trunc"),
+                   copysign = array_module.attr("copysign");
+
+        auto cmp = [](nb::handle x, nb::handle y, int op) {
+            PyObject *r = PyObject_RichCompare(x.ptr(), y.ptr(), op);
+            if (!r)
+                nb::raise_python_error();
+            return nb::steal(r);
+        };
+
+        // fmod(a, b). The quotient is exact when |a| < |b|, which also
+        // covers infinite 'b' where the FMA below would produce NaN.
+        nb::object t = trunc(a / b),
+                   m = select(cmp(t, zero, Py_EQ), a, fma(-t, b, a));
+
+        // Match the sign of 'b', including the sign of zero-valued results
+        m = select(cmp(m, zero, Py_EQ), copysign(m, b),
+                   select(cmp(m, zero, Py_LT) ^ cmp(b, zero, Py_LT), m + b, m));
+
+        return m.release().ptr();
+    } catch (nb::python_error &e) {
+        e.restore();
+        nb::chain_error(PyExc_RuntimeError,
+                        "%U.__mod__(): failed (see above)!",
+                        nb::type_name(o[0].type()).ptr());
+    } catch (const std::exception &e) {
+        nb::chain_error(PyExc_RuntimeError, "%U.__mod__(): %s",
+                        nb::type_name(o[0].type()).ptr(), e.what());
+    }
+
+    return nullptr;
+}
+
+static PyObject *nb_inplace_remainder(PyObject *h0, PyObject *h1) noexcept {
+    if (!is_float(supp(nb::handle(h0).type())))
+        return nb_inplace_remainder_base(h0, h1);
+
+    PyObject *r = nb_remainder(h0, h1);
+    if (!r || r == Py_NotImplemented)
+        return r;
+
+    if (Py_TYPE(r) == Py_TYPE(h0) && h0 != r) {
+        nb::inst_replace_move(h0, r);
+        Py_INCREF(h0);
+        Py_DECREF(r);
+        return h0;
+    } else {
+        return r;
+    }
+}
 
 static PyObject *nb_power(PyObject *h0_, PyObject *h1_) noexcept {
     nb::handle h0 = h0_, h1 = h1_;

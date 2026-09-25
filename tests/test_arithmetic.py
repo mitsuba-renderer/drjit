@@ -787,3 +787,50 @@ def test_expm1_log1p(t):
     # Python scalars
     assert dr.allclose(dr.expm1(1e-10), math.expm1(1e-10), rtol=1e-14, atol=0)
     assert dr.allclose(dr.log1p(1e-10), math.log1p(1e-10), rtol=1e-14, atol=0)
+
+
+@pytest.test_arrays('float, -float16, shape=(*)')
+def test_float_mod(t):
+    import math
+    inf, nan = float('inf'), float('nan')
+
+    # Compare against Python's float modulo, including the sign of zeros
+    a = [5.5, -5.5, 5.5, -5.5, 4, -4, 0, -0.0, 1, -1, -1e-20, 5, -5, 5, -5, inf, nan, 3]
+    b = [2, 2, -2, -2, 2, -2, 3, -3, 0, 0, 1, inf, inf, -inf, -inf, 2, 2, nan]
+    r = t(a) % t(b)
+    for i in range(len(a)):
+        try:
+            ref = float(a[i]) % float(b[i])
+        except ZeroDivisionError:
+            ref = nan
+        if math.isnan(ref):
+            assert math.isnan(r[i])
+        else:
+            assert r[i] == ref
+            assert math.copysign(1, r[i]) == math.copysign(1, ref)
+
+    # Promotion, reflected and in-place variants
+    assert dr.all(t(5.5, -5.5) % 2 == t(1.5, 0.5))
+    assert dr.all(5.5 % t(2, -2) == t(1.5, -0.5))
+    x = t(5.5, -5.5)
+    x %= 2
+    assert dr.all(x == t(1.5, 0.5))
+
+    if dr.is_diff_v(t):
+        x, y = t(5.5, -5.5), t(2, -2)
+        dr.enable_grad(x, y)
+        z = x % y
+        dr.backward(z)
+        assert dr.all(z == t(1.5, -1.5))
+        assert dr.all(x.grad == t(1, 1))
+        assert dr.all(y.grad == t(-2, -2))
+
+
+@pytest.test_arrays('float32, shape=(3, *)', 'float32, is_tensor')
+def test_float_mod_nested(t):
+    if dr.is_tensor_v(t):
+        x = t([5.5, -5.5, 5.5, -5.5], shape=(2, 2)) % t([2, 2, -2, -2], shape=(2, 2))
+        assert x.shape == (2, 2) and dr.all(x.array == [1.5, 0.5, -0.5, -1.5])
+    else:
+        assert dr.all(t(5.5, -5.5, 5.5) % t(2, 2, -2) == t(1.5, 0.5, -0.5))
+        assert dr.all(t(5.5, -5.5, 5.5) % 2 == t(1.5, 0.5, 1.5))
