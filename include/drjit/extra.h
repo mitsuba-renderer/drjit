@@ -186,6 +186,11 @@ extern DRJIT_EXTRA_EXPORT uint64_t ad_var_block_reduce(ReduceOp op,
                                                        uint32_t block_size,
                                                        int symbolic);
 
+/// Differentiable version of jit_var_simd_reduce()
+extern DRJIT_EXTRA_EXPORT uint64_t ad_var_simd_reduce(ReduceOp op,
+                                                      uint64_t index,
+                                                      uint32_t *block_size);
+
 /// Tile the input array 'count' times
 extern DRJIT_EXTRA_EXPORT uint64_t ad_var_tile(uint64_t index, uint32_t count);
 

@@ -1171,3 +1171,162 @@ def test35_prefix_reduction_large(t):
                 assert np.max(np.abs(Y - ref)) < 1e-3 * max(1.0, np.max(np.abs(ref)))
                 for _ in range(3):
                     assert np.array_equal(Y, scan())
+
+
+@pytest.test_arrays('shape=(*), jit, -bool, -float64, -int8, -int16, -uint16')
+def test36_simd_reduce(t):
+    # Compare against the plain reduction kernel applied to evaluated inputs.
+    # (The two use different summation orders, hence the tolerance.)
+    Index = dr.uint32_array_t(t)
+
+    # Check that the SIMD path actually runs (support on Metal depends on the driver)
+    always_reduces = dr.type_v(t) == dr.VarType.Float32 and \
+                     dr.backend_v(t) != dr.JitBackend.Metal
+
+    for op in (dr.ReduceOp.Add, dr.ReduceOp.Mul, dr.ReduceOp.Min, dr.ReduceOp.Max):
+        for size in (1, 5, 31, 32, 33, 100, 1027):
+            x = t(dr.arange(Index, size) % 7 + 1)
+            y = x * 2
+            dr.eval(x, y)
+
+            r, rem = dr.simd_reduce(op, x * 2)
+            assert rem is None
+            if always_reduces and size > 1:
+                assert dr.width(r) < size
+            assert dr.allclose(dr.reduce(op, r), dr.reduce(op, y))
+
+            # Evaluated inputs are returned unchanged
+            r, rem = dr.simd_reduce(op, y, 4)
+            assert dr.width(r) == size and rem == 4
+
+            for block_size in (1, 2, 3, 4, 6, 32, 64, 96):
+                if size % block_size != 0:
+                    continue
+                r, rem = dr.simd_reduce(op, x * 2, block_size)
+                assert block_size % rem == 0
+                block = block_size // rem
+                assert block & (block - 1) == 0
+                assert dr.width(r) == size // block
+                if always_reduces and block_size % 2 == 0:
+                    assert rem < block_size
+                a = dr.block_reduce(op, r, rem)
+                b = dr.block_reduce(op, y, block_size, mode='evaluated')
+                assert dr.allclose(a, b)
+
+
+@pytest.test_arrays('shape=(*), jit, float32')
+def test37_simd_reduce_symbolic(t):
+    # Within symbolic loops, the operation returns the input unchanged
+    Index = dr.uint32_array_t(t)
+    x = dr.arange(t, 100) * 2
+    i = Index(0)
+
+    def body(i):
+        r, rem = dr.simd_reduce(dr.ReduceOp.Add, x, 4)
+        assert dr.width(r) == 100 and rem == 4
+        assert dr.sum(r)[0] == 9900
+        return (i + 1,)
+
+    dr.while_loop((i,), lambda i: i < 1, body)
+
+
+@pytest.test_arrays('shape=(*), jit, float32')
+def test38_simd_reduce_mask(t):
+    for size in (1, 5, 31, 32, 33, 100, 1027):
+        x = dr.arange(t, size)
+        for k in (0, 1, size // 2, size - 1, size):
+            assert dr.all(dr.simd_reduce(dr.ReduceOp.And, x < k)[0]) == (k >= size)
+            assert dr.any(dr.simd_reduce(dr.ReduceOp.Or, x < k)[0]) == (k > 0)
+
+            r, _ = dr.simd_reduce(dr.ReduceOp.Add, x * 2, where=x < k)
+            assert dr.sum(r)[0] == sum(2 * i for i in range(min(k, size)))
+
+
+@pytest.test_arrays('shape=(3, *), jit, float32')
+def test39_simd_reduce_nested(t):
+    # Size-1 components remain unchanged. A component that cannot be reduced
+    # within SIMD groups (here: an evaluated one) disables the reduction.
+    Float = dr.value_t(t)
+    always_reduces = dr.backend_v(t) != dr.JitBackend.Metal
+
+    for op in (dr.ReduceOp.Add, dr.ReduceOp.Min, dr.ReduceOp.Max):
+        for size in (1, 5, 33, 100):
+            x = dr.arange(Float, size)
+            y = dr.arange(Float, size) + 3
+            dr.eval(x, y)
+
+            v = t(x * 2, x * 3, 1)
+            r, _ = dr.simd_reduce(op, v)
+            assert dr.width(r.x) == dr.width(r.y) and dr.width(r.z) == 1
+            if always_reduces and size > 1:
+                assert dr.width(r.x) < size
+            assert dr.allclose(dr.reduce(op, r, axis=1), dr.reduce(op, v, axis=1))
+
+            v = t(x * 2, y, 1)
+            r, _ = dr.simd_reduce(op, v)
+            assert dr.width(r.x) == dr.width(r.y) == size
+
+            # PyTrees with a block size, including non-array leaves
+            if size % 4 == 0:
+                (rx, ry, n), rem = dr.simd_reduce(op, (x * 2, x * 3, 'a'), 4)
+                assert n == 'a'
+                assert dr.width(rx) == dr.width(ry) == size * rem // 4
+                assert dr.allclose(dr.block_reduce(op, rx, rem),
+                                   dr.block_reduce(op, x * 2, 4))
+                assert dr.allclose(dr.block_reduce(op, ry, rem),
+                                   dr.block_reduce(op, x * 3, 4))
+
+                (rx, ry), rem = dr.simd_reduce(op, (x * 2, y), 4)
+                assert rem == 4 and dr.width(rx) == dr.width(ry) == size
+
+    # Non-JIT arrays cannot share the block size of the JIT arrays
+    with pytest.raises(RuntimeError):
+        dr.simd_reduce(dr.ReduceOp.Add, (x, dr.scalar.ArrayXf(1, 2)))
+
+
+@pytest.test_arrays('tensor, jit, float32')
+def test40_simd_reduce_tensor(t):
+    Float = dr.array_t(t)
+
+    for cols in (1, 7, 12, 100, 128):
+        x = t(dr.arange(Float, 16 * cols), shape=(16, cols))
+        y = dr.square(x)
+        r, rem = dr.simd_reduce(dr.ReduceOp.Add, dr.square(x))
+        dr.eval(y)
+
+        assert r.shape == (16, rem)
+        block = cols // rem
+        assert block & (block - 1) == 0
+        assert dr.allclose(dr.sum(r, axis=1), dr.sum(y, axis=1))
+        assert dr.allclose(dr.sum(r), dr.sum(y))
+
+    with pytest.raises(RuntimeError, match="must divide"):
+        dr.simd_reduce(dr.ReduceOp.Add, t(dr.arange(Float, 12), shape=(2, 6)), 4)
+
+    with pytest.raises(RuntimeError) as e:
+        dr.simd_reduce(dr.ReduceOp.Add, [t(dr.arange(Float, 12), shape=(2, 6))])
+    assert "top-level" in str(e.value.__cause__)
+
+
+@pytest.test_arrays('shape=(3, *), jit, is_diff, float32')
+def test41_simd_reduce_ad(t):
+    # Compare derivatives against dr.block_reduce()
+    Float = dr.value_t(t)
+    for op in (dr.ReduceOp.Add, dr.ReduceOp.Mul, dr.ReduceOp.Max):
+        grads = []
+        for simd in (True, False):
+            x = dr.arange(Float, 128) % 5 + 1
+            dr.enable_grad(x)
+            v = t(x * 2, x * 3, dr.detach(x) * 4)
+
+            if simd:
+                r, rem = dr.simd_reduce(op, v, 32)
+                assert dr.width(r.x) == dr.width(r.y) == dr.width(r.z)
+                r = dr.block_reduce(op, r, rem)
+            else:
+                r = dr.block_reduce(op, v, 32)
+
+            dr.backward(dr.sum(r.x + r.y + r.z, axis=None))
+            grads.append(dr.grad(x))
+
+        assert dr.allclose(grads[0], grads[1])

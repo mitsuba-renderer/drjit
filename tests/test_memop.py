@@ -1715,3 +1715,14 @@ def test45_packet_scatter_fallback_merges(t, psize, packet_ops):
 
     assert scatter(prior=False) == 1
     assert scatter(prior=True) == 2
+
+
+@pytest.test_arrays('jit, float32, -diff, shape=(2, *)')
+def test46_packet_scatter_dirty_value(t):
+    # Packet scatter of values that have pending side effects
+    Float = dr.value_t(t)
+    a = dr.arange(Float, 8)
+    b = dr.zeros(Float, 8)
+    dr.scatter(b, a + 10, dr.arange(dr.uint32_array_t(Float), 8))
+    r = dr.ravel(t(a, b))
+    assert dr.all(r == Float([v for i in range(8) for v in (i, i + 10)]))

@@ -110,6 +110,7 @@ Block reductions
 .. autofunction:: block_sum
 .. autofunction:: block_prefix_reduce
 .. autofunction:: block_prefix_sum
+.. autofunction:: simd_reduce
 
 Rearranging array contents
 --------------------------

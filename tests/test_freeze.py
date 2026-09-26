@@ -4600,3 +4600,30 @@ def test122_input_init_gradients(t):
     func(d)
     assert func.n_recordings == 2
     assert dr.all(dr.grad(p) == t(1, 1, 1))
+
+
+@pytest.test_arrays("float32, jit, shape=(*)")
+@pytest.mark.parametrize("auto_opaque", [False, True])
+def test123_simd_reduce_changing_width(t, auto_opaque):
+    """
+    dr.simd_reduce() writes to an allocation whose size depends on the launch
+    size. Check that replays with a different input width size it correctly.
+    """
+
+    def func(x):
+        p, _ = dr.simd_reduce(dr.ReduceOp.Add, x * 3)
+        s = dr.sum(dr.simd_reduce(dr.ReduceOp.Add, x * 2)[0])
+        a = dr.all(dr.simd_reduce(dr.ReduceOp.And, x * 2 >= 0)[0])
+        return (s, p, a, p + s, dr.gather(t, p, dr.uint32_array_t(t)(0)))
+
+    frozen = dr.freeze(func, auto_opaque=auto_opaque)
+
+    for n in (100, 101, 130, 7):
+        x = dr.arange(t, n)
+        res = frozen(x)
+        ref = func(x)
+        for a, b in zip(res, ref):
+            assert dr.width(a) == dr.width(b)
+            assert dr.allclose(a, b)
+
+    assert frozen.n_recordings == 1

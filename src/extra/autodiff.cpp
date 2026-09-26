@@ -3877,6 +3877,22 @@ Index ad_var_block_reduce(ReduceOp op, Index index, uint32_t block_size, int sym
                                                   result)));
 }
 
+Index ad_var_simd_reduce(ReduceOp op, Index index, uint32_t *block_size) {
+    JitVar result = JitVar::steal(
+        jit_var_simd_reduce(op, jit_index(index), block_size));
+
+    if (*block_size == 1)
+        return ad_var_inc_ref(index);
+    else if (likely(is_detached(index)))
+        return result.release();
+    else
+        return ad_var_new(
+            "simd_reduce", std::move(result),
+            SpecialArg(index, new BlockReduceEdge(op, *block_size, -1,
+                                                  JitVar::borrow(jit_index(index)),
+                                                  result)));
+}
+
 // ==========================================================================
 // Debugging: GraphViz, variable listing
 // ==========================================================================

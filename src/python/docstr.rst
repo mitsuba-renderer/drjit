@@ -851,6 +851,10 @@
       cooperative warp instructions. The LLVM backend parallelizes the
       reduction via the built-in thread pool.
 
+      When the input is an unevaluated expression, the evaluation step writes
+      the full array to memory. Pre-reducing the input via
+      :py:func:`drjit.simd_reduce` can greatly reduce this memory traffic.
+
     - ``mode="symbolic"`` uses :py:func:`drjit.scatter_reduce()` to atomically
       scatter-reduce values into the output array. This strategy can be
       advantageous when the input is symbolic (making evaluation
@@ -9103,6 +9107,93 @@
 
     This is a convenience alias for :py:func:`drjit.block_reduce` with
     ``op`` set to :py:attr:`drjit.ReduceOp.Add`.
+
+.. topic:: simd_reduce
+
+    Reduce within SIMD groups.
+
+    This function reduces blocks of consecutive elements along the dynamic
+    axis of Dr.Jit arrays, nested arrays, PyTrees, and tensors. It takes an
+    unevaluated expression as input and generates code for a SIMD
+    reduction (e.g., within CUDA warps) that scatters the reduced result to a
+    correspondingly smaller array.
+
+    This operation is especially useful to reduce memory usage and improve
+    performance in reductions over large unevaluated expressions. Standard
+    reductions like :py:func:`drjit.sum` and :py:func:`drjit.block_reduce`
+    evaluate the full input array and then read it back from memory. With
+    :py:func:`drjit.simd_reduce`, only the per-block results reach memory,
+    which can reduce memory traffic by up to a factor of 32.
+
+    The function returns a tuple ``(result, block_size_rem)``, where
+    ``block_size_rem`` specifies how much of the requested block reduction
+    remains to be done. The following example shows how to combine it with a
+    full reduction.
+
+    .. code-block:: python
+
+       # Naive
+       result = dr.sum(x)
+
+       # Improved
+       tmp, _ = dr.simd_reduce(dr.ReduceOp.Add, x)
+       result = dr.sum(tmp)
+
+    Block reductions work analogously.
+
+    .. code-block:: python
+
+       # Naive
+       result = dr.block_sum(x, block_size)
+
+       # Improved
+       tmp, block_size_rem = dr.simd_reduce(dr.ReduceOp.Add, x, block_size)
+       result = dr.block_sum(tmp, block_size_rem)
+
+    The reduction is *best effort*. It reduces blocks of the largest power of
+    two that divides ``block_size`` and does not exceed the SIMD width (e.g.,
+    32 on CUDA). For example, ``block_size=96`` yields ``block_size_rem=3``
+    on CUDA. Without ``block_size``, the function reduces blocks of the SIMD
+    width (the last one may be partial) and returns ``block_size_rem=None``.
+
+    For tensors, the function reduces the trailing axis, whose length
+    ``block_size`` must divide (it defaults to this length). Tensors are not
+    supported within PyTrees.
+
+    The function returns its input unchanged when it is evaluated or literal,
+    when the backend does not support the operation or type, within symbolic
+    code, and while unevaluated thread reorderings exist. All arrays of a
+    PyTree use a shared block size, hence a single array that cannot be
+    reduced disables the reduction for the others. Arrays of size 1 are
+    ignored.
+
+    Sums and products may round slightly differently compared to the
+    standard reduction.
+
+    .. warning::
+
+       On the CUDA backend, all threads of a warp must reach this operation
+       together. This may not be the case in OptiX ray tracing kernels (e.g.,
+       following a ray tracing call), in which case the kernel raises an
+       error.
+
+    Args:
+        op (drjit.ReduceOp): The type of reduction.
+
+        value (object): A Jit-compiled Dr.Jit array, tensor, or PyTree.
+
+        block_size (int | None): The size of the blocks that the caller
+          intends to reduce. When not specified, the caller intends to reduce
+          the entire array.
+
+        where (ArrayBase | Sequence[bool] | bool): optional mask that
+          excludes entries from the reduction. Masked-out entries are
+          replaced by the identity element of the operation (e.g. ``0`` for
+          sums) and therefore do not contribute. Defaults to ``True``.
+
+    Returns:
+        tuple[object, int | None]: The partially reduced input and the
+        remaining block size.
 
 .. topic:: ArrayBase
 

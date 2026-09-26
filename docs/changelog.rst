@@ -158,6 +158,13 @@ DrJit 1.6.0 (unreleased)
   (commit `2514a0 <https://github.com/mitsuba-renderer/drjit/commit/2514a062d66cba2a277e50fc3b503cb46b502d8f>`__,
   Dr.Jit-Core commit `2e0c31 <https://github.com/mitsuba-renderer/drjit-core/commit/2e0c31f7fb5088dc04193622b78ddd422d060add>`__).
 
+- The new function :py:func:`dr.simd_reduce() <simd_reduce>` reduces blocks
+  of an unevaluated expression within SIMD groups (e.g., CUDA warps) and
+  writes the per-block results to memory. It returns the partially reduced
+  input along with the remaining block size. This is useful to perform larger
+  reductions via :py:func:`dr.sum() <sum>` or :py:func:`dr.block_reduce()
+  <block_reduce>` and can reduce memory traffic by up to a factor of 32.
+
 - New functions :py:func:`dr.expm1() <expm1>` and :py:func:`dr.log1p()
   <log1p>` that evaluate :math:`e^x-1` and :math:`\log(1+x)` without the
   cancellation that affects the naive expressions for small arguments. The
