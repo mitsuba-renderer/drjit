@@ -10,7 +10,9 @@ Currently, the following ones are officially supported:
 
 - `NumPy <https://numpy.org>`__,
 - `PyTorch <https://pytorch.org>`__,
-- `JAX <https://jax.readthedocs.io/en/latest/installation.html>`__.
+- `JAX <https://jax.readthedocs.io/en/latest/installation.html>`__,
+- `SymPy <https://www.sympy.org>`__ (symbolic computation, see :ref:`below
+  <interop_sympy>`).
 
 There isn't much to it: given an input array from another framework, simply
 pass it to the constructor of the Dr.Jit array or tensor type you wish to
@@ -102,6 +104,151 @@ larger PyTorch program:
    tensor([1.0000e+00, 8.0000e+00, 2.5600e+02, 1.3107e+05])
 
 See the documentation of :py:func:`@drjit.wrap <wrap>` for further details.
+
+.. _interop_sympy:
+
+SymPy
+-----
+
+Dr.Jit can also interoperate with `SymPy <https://www.sympy.org>`__, a
+computer algebra system. This integration works differently from the
+PyTorch/JAX/TensorFlow targets described above: rather than exchanging *data*
+at runtime, the SymPy target operates at *compile time*. It converts Dr.Jit
+types into SymPy symbols, runs the decorated function in SymPy to obtain an
+expression, and then compiles that expression into Dr.Jit code.
+
+.. code-block:: python
+
+   import sympy as sp
+   from drjit.cuda.ad import Float, Array3f
+
+   @dr.wrap(source='drjit', target='sympy')
+   def norm(v):
+       return v.norm()
+
+   result = norm(Array3f(3, 4, 0))  # Float(5.0)
+
+The key idea is that the compiled result consists of *ordinary Dr.Jit
+operations*. All of the usual Dr.Jit semantics apply: the code is traced,
+parallelized across all array elements, and—if AD-enabled types are
+used—automatically differentiable. For example, SymPy can symbolically derive
+a Newton step that Dr.Jit then evaluates for many initial values in parallel:
+
+.. code-block:: python
+
+   @dr.wrap(source='drjit', target='sympy')
+   def newton_step(x, y):
+       variables = sp.Matrix([x, y])
+       objective = (x - 1)**2 + 2*(y + 2)**2 + (x + y + 1)**2
+       gradient = sp.Matrix([sp.diff(objective, v) for v in variables])
+       hessian = sp.hessian(objective, variables)
+       step = hessian.inv() * gradient
+       return x - step[0], y - step[1]
+
+   x = Float([-2, 0, 4])
+   y = Float([3, -1, 2])
+   x, y = newton_step(x, y)
+
+   assert dr.allclose(x, 1)
+   assert dr.allclose(y, -2)
+
+Type promotion
+^^^^^^^^^^^^^^
+
+Dr.Jit array types are automatically mapped to their natural SymPy equivalents
+when they enter the decorated function:
+
+- Scalar types (:py:class:`Float <drjit.auto.ad.Float>`,
+  :py:class:`UInt32 <drjit.auto.ad.UInt32>`, …) become ``sp.Symbol(real=True)``.
+  Note that SymPy does not distinguish integer and floating-point symbols—both
+  map to the same kind of symbol. Integer-specific operations like floor
+  division and modulo will produce SymPy expressions (``floor(x/2)``,
+  ``Mod(x, 3)``) that are correctly compiled to Dr.Jit code, but SymPy
+  treats all values as real numbers.
+- Arrays (:py:class:`Array2f <drjit.auto.ad.Array2f>`,
+  :py:class:`Array3f <drjit.auto.ad.Array3f>`, :py:class:`ArrayXf
+  <drjit.auto.ad.ArrayXf>`) become ``sp.Matrix`` column vectors.
+- Matrix types (:py:class:`Matrix3f <drjit.auto.ad.Matrix3f>`,
+  :py:class:`Matrix4f <drjit.auto.ad.Matrix4f>`, ...) become square
+  ``sp.Matrix`` objects.
+- Tensor types (:py:class:`TensorXf <drjit.auto.ad.TensorXf>`) cannot be used
+  in the SymPy wrapper.
+
+The output of a sympy function is always flattened, returning nested lists
+instead of matrices.
+
+Caching
+^^^^^^^
+
+Compiled functions are cached at two levels. An in-memory cache, keyed by the
+argument type signature, avoids recompilation when the same function is called
+repeatedly with arguments of the same types. A disk cache persists compiled
+bytecode across interpreter restarts. Like Dr.Jit's kernel cache, it is stored
+in ``~/.drjit/sympy/`` on Linux and macOS and
+``%TEMP%\drjit\sympy\`` on Windows. Setting ``DRJIT_CACHE_DIR`` changes the
+location to ``<DRJIT_CACHE_DIR>/sympy/``. To clear the cache, simply delete
+that directory.
+
+Nested calls
+^^^^^^^^^^^^
+
+Functions decorated with ``@dr.wrap(source='drjit', target='sympy')`` can call
+each other. When a wrapped function is invoked during another wrapped
+function's compilation, it runs in SymPy mode and its expression is inlined
+into the outer function rather than triggering a separate compilation.
+
+Limitations
+^^^^^^^^^^^
+
+The SymPy target has several limitations to be aware of:
+
+- The decorated function must be **pure** and use only SymPy operations on its
+  arguments. Since the arguments are SymPy symbols (not Dr.Jit arrays), calling
+  Dr.Jit functions like :py:func:`dr.gather() <gather>`,
+  :py:func:`dr.scatter() <scatter>` will not work.
+
+- **No control flow on arguments.** Python ``if``/``else`` statements cannot
+  branch on SymPy symbols because they are not booleans. Use ``sp.Piecewise``
+  for conditional expressions instead.
+
+- **Expression complexity.** SymPy manipulates expressions algebraically, which
+  can become slow for large expressions. Operations like matrix inversion on
+  matrices larger than about 4×4 may produce very large expressions and take a
+  long time to compile.
+
+- **First-call overhead.** The first call to a wrapped function traces through
+  SymPy, performs CSE optimization, and compiles the result. This can take
+  noticeably longer than subsequent calls, which hit the cache.
+
+- **Unsupported functions.** Dr.Jit has no direct equivalent for every SymPy
+  construct. Examples include distributions such as ``DiracDelta``, discrete
+  objects such as ``KroneckerDelta``, Bessel and Airy functions, elliptic
+  integrals, and functions such as ``zeta`` and ``polylog``. Some of these can
+  arise during symbolic differentiation. Rewrite them in terms of supported
+  arithmetic, elementary functions, or ``sp.Piecewise`` before returning from
+  the decorated function. Any unsupported expressions that remain after SymPy
+  evaluates the result cause code generation to fail.
+
+  This includes unevaluated derivatives. For example, differentiating a
+  quantization operation involving ``floor`` leaves an ``sp.Derivative`` in
+  the expression because the operation is discontinuous. If the desired
+  derivative is zero almost everywhere, replace that term before returning:
+
+  .. code-block:: python
+
+     @dr.wrap(source='drjit', target='sympy')
+     def quantization_gradient(x):
+         quantized = sp.floor(255*x + sp.Rational(1, 2)) / 255
+         gradient = sp.diff(quantized, x)
+         gradient = gradient.replace(
+             lambda e: isinstance(e, sp.Derivative),
+             lambda e: 0
+         )
+         return gradient.doit()
+
+  This replacement treats every unresolved derivative in ``gradient`` as
+  zero. It should only be used when that convention is appropriate for the
+  application.
 
 .. _interop_caveats:
 
