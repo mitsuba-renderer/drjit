@@ -10134,3 +10134,123 @@
 
     Returns:
         int: The raw event handle as an integer
+
+.. topic:: quad_gauss_legendre
+
+    Compute the nodes and weights of a Gauss-Legendre quadrature rule (also
+    known as *Gaussian quadrature*) with the given number of evaluations.
+
+    Integration is over the interval :math:`[-1, 1]`. Gauss-Legendre
+    quadrature maximizes the order of exactly integrable polynomials and
+    achieves this up to degree :math:`2n-1`, where :math:`n` is the number of
+    function evaluations.
+
+    The method is numerically well-behaved until about :math:`n=200` and then
+    becomes progressively less accurate. Composite or adaptive integration
+    schemes are preferable for larger :math:`n`.
+
+    The nodes and weights are computed in double precision on the host and
+    then converted to the requested array type.
+
+    Args:
+        dtype (type): Desired Dr.Jit array type. The ``dtype`` must refer to a
+          dynamically sized 1D Dr.Jit floating point array, such as
+          :py:class:`drjit.scalar.ArrayXf` or :py:class:`drjit.cuda.Float`.
+
+        n (int): Desired number of evaluation points. Must be at least 1.
+
+    Returns:
+        tuple: A tuple ``(nodes, weights)`` of type ``dtype`` storing the nodes
+        and weights of the quadrature rule.
+
+.. topic:: quad_gauss_lobatto
+
+    Compute the nodes and weights of a Gauss-Lobatto quadrature rule with the
+    given number of evaluations.
+
+    Integration is over the interval :math:`[-1, 1]`. Gauss-Lobatto quadrature
+    is preferable to Gauss-Legendre quadrature whenever the endpoints of the
+    integration domain should explicitly be included. It maximizes the order of
+    exactly integrable polynomials subject to this constraint and achieves this
+    up to degree :math:`2n-3`, where :math:`n` is the number of function
+    evaluations.
+
+    The method is numerically well-behaved until about :math:`n=200` and then
+    becomes progressively less accurate. Composite or adaptive integration
+    schemes are preferable for larger :math:`n`.
+
+    The nodes and weights are computed in double precision on the host and
+    then converted to the requested array type.
+
+    Args:
+        dtype (type): Desired Dr.Jit array type. The ``dtype`` must refer to a
+          dynamically sized 1D Dr.Jit floating point array, such as
+          :py:class:`drjit.scalar.ArrayXf` or :py:class:`drjit.cuda.Float`.
+
+        n (int): Desired number of evaluation points. Must be at least 2.
+
+    Returns:
+        tuple: A tuple ``(nodes, weights)`` of type ``dtype`` storing the nodes
+        and weights of the quadrature rule.
+
+.. topic:: quad_composite_simpson
+
+    Compute the nodes and weights of a composite Simpson quadrature rule with
+    the given number of evaluations.
+
+    Integration is over the interval :math:`[-1, 1]`, which will be split into
+    :math:`(n-1) / 2` sub-intervals with overlapping endpoints. A 3-point
+    Simpson rule is applied per interval, which is exact for polynomials of
+    degree three or less.
+
+    Args:
+        dtype (type): Desired Dr.Jit array type. The ``dtype`` must refer to a
+          dynamically sized 1D Dr.Jit floating point array, such as
+          :py:class:`drjit.scalar.ArrayXf` or :py:class:`drjit.cuda.Float`.
+
+        n (int): Desired number of evaluation points. Must be an odd number
+          and at least 3.
+
+    Returns:
+        tuple: A tuple ``(nodes, weights)`` of type ``dtype`` storing the nodes
+        and weights of the quadrature rule.
+
+.. topic:: quad_composite_simpson_38
+
+    Compute the nodes and weights of a composite Simpson 3/8 quadrature rule
+    with the given number of evaluations.
+
+    Integration is over the interval :math:`[-1, 1]`, which will be split into
+    :math:`(n-1) / 3` sub-intervals with overlapping endpoints. A 4-point
+    Simpson rule is applied per interval, which is exact for polynomials of
+    degree four or less.
+
+    Args:
+        dtype (type): Desired Dr.Jit array type. The ``dtype`` must refer to a
+          dynamically sized 1D Dr.Jit floating point array, such as
+          :py:class:`drjit.scalar.ArrayXf` or :py:class:`drjit.cuda.Float`.
+
+        n (int): Desired number of evaluation points. The value ``n - 1`` must
+          be divisible by 3, and ``n`` must be at least 4.
+
+    Returns:
+        tuple: A tuple ``(nodes, weights)`` of type ``dtype`` storing the nodes
+        and weights of the quadrature rule.
+
+.. topic:: quad_chebyshev
+
+    Compute the Chebyshev nodes, i.e., the roots of the Chebyshev polynomial
+    of the first kind with the given degree.
+
+    The output array contains positions on the interval :math:`[-1, 1]` in
+    increasing order.
+
+    Args:
+        dtype (type): Desired Dr.Jit array type. The ``dtype`` must refer to a
+          dynamically sized 1D Dr.Jit floating point array, such as
+          :py:class:`drjit.scalar.ArrayXf` or :py:class:`drjit.cuda.Float`.
+
+        n (int): Desired number of points. Must be at least 1.
+
+    Returns:
+        object: The Chebyshev nodes as an array of type ``dtype``.

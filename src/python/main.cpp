@@ -46,6 +46,7 @@
 #include "coop_vec.h"
 #include "reorder.h"
 #include "quat.h"
+#include "quad.h"
 
 static int active_backend = -1;
 
@@ -102,6 +103,7 @@ NB_MODULE(_drjit_ext, m_) {
                 metal_ad = nb::module_::import_("drjit.metal.ad");
 #endif
     nb::module_ detail = m.attr("detail"),
+                quad   = m.attr("quad"),
                 scalar = nb::module_::import_("drjit.scalar");
 
     m.attr("__version__") = DRJIT_VERSION;
@@ -308,6 +310,7 @@ NB_MODULE(_drjit_ext, m_) {
     export_resample(m);
     export_reorder(m);
     export_quat(m);
+    export_quad(quad);
 
     export_scalar(scalar);
 

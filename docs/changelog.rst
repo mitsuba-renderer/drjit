@@ -295,6 +295,10 @@ DrJit 1.6.0 (unreleased)
 - :py:func:`dr.meshgrid() <meshgrid>` accepts 1D tensors and then returns
   N-D tensors consistent with the behavior of this operation in NumPy.
 
+- The new :py:mod:`drjit.quad` module and the C++ header ``drjit/quad.h``
+  provide Gauss-Legendre, Gauss-Lobatto, composite Simpson and Chebyshev
+  quadrature rules. These were previously part of Mitsuba.
+
 - Python 3.9 is no longer supported. Dr.Jit now requires Python 3.10 or newer.
 
 - Miscellaneous Dr.Jit-Core fixes and improvements.

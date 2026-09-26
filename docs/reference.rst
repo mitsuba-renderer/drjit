@@ -144,6 +144,23 @@ Other operations on tensors
 .. autofunction:: convolve
 .. autofunction:: matmul
 
+Numerical quadrature
+--------------------
+
+.. py:module:: drjit.quad
+
+The :py:mod:`drjit.quad` module computes nodes and weights of standard
+quadrature rules on the interval :math:`[-1, 1]`. All functions take the
+desired output array type as their first argument.
+
+.. autofunction:: gauss_legendre
+.. autofunction:: gauss_lobatto
+.. autofunction:: composite_simpson
+.. autofunction:: composite_simpson_38
+.. autofunction:: chebyshev
+
+.. py:currentmodule:: drjit
+
 Random number generation
 ------------------------
 

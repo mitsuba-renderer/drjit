@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import drjit
 from . import detail
+from . import quad as quad
 
 with detail.scoped_rtld_deepbind():
     try:
