@@ -2294,14 +2294,19 @@ def meshgrid(*args, indexing='xy') -> tuple: # <- proper type signature in stubs
     flattened/raveled form. Like the NumPy version, the ``indexing=='xy'`` case
     internally reorders the first two elements of ``*args``.
 
+    When the inputs are 1D *tensors* (e.g., :py:class:`drjit.auto.TensorXf`),
+    the function instead returns N-D tensors whose shape matches the
+    ``numpy.meshgrid`` output.
+
     Args:
-        *args: A sequence of 1D coordinate arrays
+        *args: A sequence of 1D coordinate arrays or tensors
 
         indexing (str): Specifies the indexing convention. Must be either set
           to ``'xy'`` (the default) or ``'ij'``.
 
     Returns:
-        tuple: A tuple of flattened coordinate arrays (one per input)
+        tuple: A tuple of flattened coordinate arrays (one per input). When
+        the inputs are tensors, the outputs are N-D tensors instead.
     '''
 
     if indexing != "ij" and indexing != "xy":
@@ -2314,9 +2319,17 @@ def meshgrid(*args, indexing='xy') -> tuple: # <- proper type signature in stubs
         return args[0]
 
     t = type(args[0])
+    tensor = is_tensor_v(t)
     for v in args:
-        if not is_array_v(v) or depth_v(v) != 1 or type(v) is not t:
-            raise Exception("meshgrid(): consistent 1D dynamic arrays expected!")
+        if not is_array_v(v) or type(v) is not t or \
+           (v.ndim if tensor else depth_v(v)) != 1:
+            raise Exception("meshgrid(): consistent 1D dynamic arrays or tensors expected!")
+
+    # Tensors are processed via their flat storage and reshaped at the end
+    if tensor:
+        tensor_t = t
+        args = tuple(v.array for v in args)
+        t = type(args[0])
 
     size = prod((len(v) for v in args))
     index = arange(uint32_array_t(t), size)
@@ -2332,6 +2345,10 @@ def meshgrid(*args, indexing='xy') -> tuple: # <- proper type signature in stubs
         index_v = index // size
         index = fma(-index_v, size, index)
         result.append(gather(t, v, index_v))
+
+    if tensor:
+        shape = tuple(len(v) for v in args)
+        result = [tensor_t(v, shape) for v in result]
 
     if indexing == "xy":
         result[0], result[1] = result[1], result[0]

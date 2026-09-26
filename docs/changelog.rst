@@ -292,6 +292,9 @@ DrJit 1.6.0 (unreleased)
   (commit `5d2abc <https://github.com/mitsuba-renderer/drjit/commit/5d2abcee91255d6ffd56a75d96e04f135447a69b>`__,
   contributed by `Matteo Santini <https://github.com/matttsss>`__).
 
+- :py:func:`dr.meshgrid() <meshgrid>` accepts 1D tensors and then returns
+  N-D tensors consistent with the behavior of this operation in NumPy.
+
 - Python 3.9 is no longer supported. Dr.Jit now requires Python 3.10 or newer.
 
 - Miscellaneous Dr.Jit-Core fixes and improvements.

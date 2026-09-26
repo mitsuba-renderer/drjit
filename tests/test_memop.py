@@ -374,6 +374,29 @@ def test16_meshgrid(t):
     a_np, b_np, c_np = np.meshgrid((1, 2), (3, 4, 5), t(5, 6), indexing='ij')
     assert dr.all(a == a_np.ravel()) and dr.all(b == b_np.ravel()) and dr.all(c == c_np.ravel())
 
+@pytest.test_arrays('int32,tensor')
+def test16_meshgrid_tensor(t):
+    np = pytest.importorskip("numpy")
+    x, y, z = t([1, 2]), t([3, 4, 5]), t([5, 6])
+
+    assert dr.all(dr.meshgrid(x) == x)
+
+    with pytest.raises(Exception, match='1D dynamic arrays or tensors'):
+        dr.meshgrid(x, t([[1, 2], [3, 4]]))
+
+    for indexing in ('xy', 'ij'):
+        a, b = dr.meshgrid(x, y, indexing=indexing)
+        a_np, b_np = np.meshgrid((1, 2), (3, 4, 5), indexing=indexing)
+        assert type(a) is t and type(b) is t
+        assert a.shape == a_np.shape and b.shape == b_np.shape
+        assert np.array_equal(a.numpy(), a_np) and np.array_equal(b.numpy(), b_np)
+
+        a, b, c = dr.meshgrid(x, y, z, indexing=indexing)
+        a_np, b_np, c_np = np.meshgrid((1, 2), (3, 4, 5), (5, 6), indexing=indexing)
+        assert a.shape == a_np.shape and b.shape == b_np.shape and c.shape == c_np.shape
+        assert np.array_equal(a.numpy(), a_np) and np.array_equal(b.numpy(), b_np) \
+            and np.array_equal(c.numpy(), c_np)
+
 @pytest.test_arrays('int32,shape=(*)')
 def test17_slice(t):
     v = t([1,2,3])
