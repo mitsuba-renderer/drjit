@@ -8,38 +8,89 @@ Changelog
 DrJit 1.6.0 (unreleased)
 ------------------------
 
-- New functions :py:func:`dr.expm1() <expm1>` and :py:func:`dr.log1p()
-  <log1p>` that evaluate :math:`e^x-1` and :math:`\log(1+x)` without the
-  cancellation that affects the naive expressions for small arguments. The
-  C++ header ``drjit/math.h`` provides matching ``dr::expm1()`` and
-  ``dr::log1p()`` templates. Both follow the corresponding routines of the
-  CEPHES library.
+- **Textures**: The implementation of the texture classes (e.g.,
+  :py:class:`Texture2f <drjit.auto.Texture2f>`) was significantly redesigned:
 
-- Floating point arrays now support the modulo operator ``%`` with the
-  semantics of Python and NumPy, where the result has the sign of the divisor.
+  - They now support anisotropic MIP-mapped filtering in 1-3 dimensions, using
+    hardware functionality or a software emulation. The operations are fully differentiable.
+    See the associated :ref:`documentation section
+    <texture_mipmap>` for more details.
+    (commit `9b7191 <https://github.com/mitsuba-renderer/drjit/commit/9b71919be451b8db9625fd06e7ae9785dc10cea1>`__,
+    Dr.Jit-Core commit `8574d4 <https://github.com/mitsuba-renderer/drjit-core/commit/8574d491f9e8657ebf19b60dd624249ab8771cc4>`__).
 
-- New color space conversions :py:func:`dr.rgb_to_hsv() <rgb_to_hsv>`,
-  :py:func:`dr.hsv_to_rgb() <hsv_to_rgb>`, :py:func:`dr.rgb_to_hsl()
-  <rgb_to_hsl>`, and :py:func:`dr.hsl_to_rgb() <hsl_to_rgb>`. They follow the
-  conventions of the existing Oklab routines and accept arrays or tensors
-  with an optional alpha channel. The header ``drjit/color.h`` provides C++
-  versions of these routines and of the Oklab conversions. They work with
-  nested arrays, packets, and custom color types with 3 or 4 channels.
+  - MIP-mapped textures can adopt a *Laplacian pyramid* basis following the
+    paper `Practical Inverse Rendering of Textured and Translucent Appearance
+    <https://doi.org/10.1145/3730855>`__ by Weier et al. This technique
+    accelerates and stabilizies optimization of problems that perform
+    filtered texture lookups. See the associated
+    :ref:`documentation section <texture_laplacian>` for more details.
+    (commit `cd0cc2 <https://github.com/mitsuba-renderer/drjit/commit/cd0cc2b343eeced20710f67a63d23e6d82a3496e>`__).
 
-- Reductions accept a ``where`` mask that excludes entries from the result.
-  This covers :py:func:`dr.sum() <sum>`, :py:func:`dr.prod() <prod>`,
-  :py:func:`dr.min() <min>`, :py:func:`dr.max() <max>`, :py:func:`dr.mean()
-  <mean>`, :py:func:`dr.var() <var>`, :py:func:`dr.std() <std>`,
-  :py:func:`dr.all() <all>`, :py:func:`dr.any() <any>`, :py:func:`dr.none()
-  <none>`, :py:func:`dr.count() <count>`, :py:func:`dr.dot() <dot>`,
-  :py:func:`dr.norm() <norm>`, :py:func:`dr.reduce() <reduce>`, the prefix
-  scans, the block reductions, and :py:func:`dr.median() <median>`.
+  - 2D 8-bit textures now support *block-compressed* data in the BC4,
+    BC5, and BC7 formats. The CUDA and Metal backends decode it in hardware on every lookup, which reduces the memory
+    footprint by a factor of 4-8 compared to plain 8-bit storage. The scalar and LLVM backends
+    decode the blocks when the texture is created and do not benefit. See the
+    :ref:`texture documentation <textures>` for details.
+    (commit `0a3063 <https://github.com/mitsuba-renderer/drjit/commit/0a3063c362f63c0245bb1cb5821f8bc612144b2b>`__,
+    Dr.Jit-Core commit `7756dc <https://github.com/mitsuba-renderer/drjit-core/commit/7756dc21f343e1549212f6dbd03ddd71432fbd31>`__).
 
-- :py:func:`dr.sort() <sort>`, :py:func:`dr.argsort() <argsort>`, and
-  :py:func:`dr.median() <median>` no longer run the radix sort for tensor axes
-  of length 256 or less. A rank-counting sort in a single kernel now handles
-  such blocks, which are hundreds of times faster than before when the tensor
-  has many rows.
+  - The internal state machine of the texture classes was redesigned. Textures
+    now migrate their data to the GPU when possible and expose their contents
+    readback expression that requires no storage.
+    The interaction with :py:func:`@dr.freeze
+    <freeze>` was improved so that these symbolic expressions are never evaluated.
+    This avoids redundant copies and roughly halves memory usage.
+    (commits `df6f7f <https://github.com/mitsuba-renderer/drjit/commit/df6f7f6030303b47e083c7f24d958b4385715a21>`__,
+    `92fbff <https://github.com/mitsuba-renderer/drjit/commit/92fbff0de5631e00614de46a16a31918cf2f798a>`__,
+    `4dd7ea <https://github.com/mitsuba-renderer/drjit/commit/4dd7ea944513003f8635eb7ea3d2e4367f0b6584>`__,
+    `64414a <https://github.com/mitsuba-renderer/drjit/commit/64414a32016a70ffe3ec8ad34af238dddd35e1b0>`__,
+    `7eef93 <https://github.com/mitsuba-renderer/drjit/commit/7eef93d8aedf0663d9c71d3b941f22e7c35891c8>`__,
+    `ee14bc <https://github.com/mitsuba-renderer/drjit/commit/ee14bcc04d35fcf9cf17d3f0882d886ec112d1f1>`__,
+    `74152c <https://github.com/mitsuba-renderer/drjit/commit/74152cff5b2c018b60ce344131bed75c8e35c180>`__,
+    `9e110e <https://github.com/mitsuba-renderer/drjit/commit/9e110e21616a19722183fa8350924c3316709467>`__,
+    Dr.Jit-Core commit `0c2f1e <https://github.com/mitsuba-renderer/drjit-core/commit/0c2f1ed8751039c18adeff24b828f023fb41da38>`__).
+
+- The frontend part of :py:func:`@dr.freeze <freeze>` frontend was redesigned.
+  Launching a previously recorded function is now significantly cheaper. Diagnostics
+  and error messages are more intuitive because they refer to user inputs by name. The
+  :ref:`documentation <freeze>` was rewritten to be more approachable.
+  (commits `628243 <https://github.com/mitsuba-renderer/drjit/commit/628243cf55df4d64cebfe8b1a76b82e30e24af7e>`__,
+  `ed08c4 <https://github.com/mitsuba-renderer/drjit/commit/ed08c46d83783c65fb56dcae93dd7c22a9ec2ce5>`__,
+  `e7dfc1 <https://github.com/mitsuba-renderer/drjit/commit/e7dfc1969501741f8ad341d947c1c4549f35a1dd>`__,
+  `84289c <https://github.com/mitsuba-renderer/drjit/commit/84289c539d5fc392a1ab2174cf41f35ce7b0c988>`__,
+  `1347be <https://github.com/mitsuba-renderer/drjit/commit/1347bed180fe8007244a37f0f878930fb81c566c>`__,
+  `983c83 <https://github.com/mitsuba-renderer/drjit/commit/983c8353f5e2b1637ac9d0edc36210d416f2c6df>`__,
+  `793aee <https://github.com/mitsuba-renderer/drjit/commit/793aee512d5f779a17e0aaae16878d0178cb4398>`__,
+  `cb645f <https://github.com/mitsuba-renderer/drjit/commit/cb645f9f917a337443f06584273132a1a56d0763>`__,
+  Dr.Jit-Core commits
+  `975529 <https://github.com/mitsuba-renderer/drjit-core/commit/975529cf6ca871da8dc1271d6a63aa9c0f04a689>`__,
+  `ab9956 <https://github.com/mitsuba-renderer/drjit-core/commit/ab995608f2e6357026c063e52616e43830765eec>`__).
+
+- The backend compilation workflow in Dr.Jit-Core was redesigned. Whereas
+  Dr.Jit-Core previously handed one giant source file containing all callables
+  to the backend, it now generates many individual compilation units and
+  compiles and caches them all in parallel. The LLVM backend switched to
+  ORCv2/JITLink and caches LZ4-compressed object standard object files
+  (ELF, COFF, Mach-O), which enables :ref:`low-level debugging and inspection
+  <inspect_kernels>`. These features require LLVM 18 or newer.
+  (Dr.Jit-Core commits
+  `f222a2 <https://github.com/mitsuba-renderer/drjit-core/commit/f222a2fef8323361c67ec960d5e33e99ea489097>`__,
+  `8c5ec9 <https://github.com/mitsuba-renderer/drjit-core/commit/8c5ec998eaeb10c4eaae9890a3a4a7c782d7b9ed>`__,
+  `e31a79 <https://github.com/mitsuba-renderer/drjit-core/commit/e31a79e934d87941975512487f6301320b328a88>`__,
+  `a5d4bb <https://github.com/mitsuba-renderer/drjit-core/commit/a5d4bbdcff1872158bed8de5bc8442dbe7ad4385>`__,
+  `5190e7 <https://github.com/mitsuba-renderer/drjit-core/commit/5190e7f06e12344d627a376b2bba7a40ebc5586f>`__,
+  commits `99f3e8 <https://github.com/mitsuba-renderer/drjit/commit/99f3e86e7e292a84685eeb83381d77d45d1c4494>`__,
+  `0c5217 <https://github.com/mitsuba-renderer/drjit/commit/0c521716fe8f02af988cbca5272c47e56cdf58b8>`__).
+
+- As a consequence of the previous change, kernels can now be debugged using LLDB or GDB on Linux and macOS. In debug
+  mode (:py:attr:`JitFlag.Debug`), the LLVM backend emits DWARF line tables
+  that map machine code to Python source lines. Native debuggers then show
+  the Python line that each thread executes inside of a kernel, and
+  breakpoints on Python lines resolve to the corresponding kernel code. See
+  the :ref:`debugging documentation <debug_kernels>` for details.
+  This feature only applies to the LLVM backend for now, but is planned for other backends in the future.
+  (Dr.Jit-Core commit `a37430 <https://github.com/mitsuba-renderer/drjit-core/commit/a374309e4a80b28fd36cd94b95bf1d78b3ac343f>`__,
+  commit `3442a7 <https://github.com/mitsuba-renderer/drjit/commit/3442a7dbaf79179f69b805f35257790d37a38f3b>`__).
 
 - New kernel history benchmarking API. Measuring kernel runtimes previously
   required changing JIT flags and then extracting fields from dictionaries,
@@ -80,48 +131,218 @@ DrJit 1.6.0 (unreleased)
      0  JIT          100000   0    1    6  hit      41 µs        -  10.6 µs  826339ae739b7c61
      1  BlockReduce  100000   1    1    -  -            -        -  19.2 µs  -
 
-  Kernel history scopes may now be nested, in which case the outer scope also
-  captures the kernels of the inner one. It is furthermore legal to use the
-  kernel history from multiple threads at once. Expensive per-launch
-  information (device timings, kernel source code) is materialized on demand.
   See the :ref:`benchmarking documentation <bench>` for details. Code using
   the old interface continues to work but raises a ``DeprecationWarning``.
+  (commit `926aad <https://github.com/mitsuba-renderer/drjit/commit/926aada92fd3e6ed686677b98c0a384ae0a15e52>`__,
+  Dr.Jit-Core commit `b0b4dc <https://github.com/mitsuba-renderer/drjit-core/commit/b0b4dc89de0b07c49233a12ba9b575c094d37f77>`__).
 
-- The texture classes (e.g., :py:class:`Texture2f <drjit.auto.Texture2f>`) now
-  support anisotropic MIP-mapped filtering in 1-3 dimensions. The
-  implementation uses hardware functionality when available or emulates it
-  according to the `Direct3D 11.3 specification
-  <https://microsoft.github.io/DirectX-Specs/d3d/archive/D3D11_3_FunctionalSpec.htm>`__,
-  which gives good agreement with actual hardware behavior. The operation is
-  fully differentiable. See the associated :ref:`documentation section
-  <texture_mipmap>` for more details.
+- Many reductions now accept a ``where`` mask that excludes entries from the result.
+  This covers :py:func:`dr.sum() <sum>`, :py:func:`dr.prod() <prod>`,
+  :py:func:`dr.min() <min>`, :py:func:`dr.max() <max>`, :py:func:`dr.mean()
+  <mean>`, :py:func:`dr.var() <var>`, :py:func:`dr.std() <std>`,
+  :py:func:`dr.all() <all>`, :py:func:`dr.any() <any>`, :py:func:`dr.none()
+  <none>`, :py:func:`dr.count() <count>`, :py:func:`dr.dot() <dot>`,
+  :py:func:`dr.norm() <norm>`, :py:func:`dr.reduce() <reduce>`, the prefix
+  scans, the block reductions, and :py:func:`dr.median() <median>`.
+  (commit `429159 <https://github.com/mitsuba-renderer/drjit/commit/42915957901f0860f28dc0dda6c0a3b727207d86>`__).
 
-- MIP-mapped textures can now adopt a *Laplacian pyramid* basis following the
-  paper `Practical Inverse Rendering of Textured and Translucent Appearance
-  <https://doi.org/10.1145/3730855>`__ by Weier et al. This feature can
-  accelerate and stabilize workflows involving gradient-based optimization of
-  textures with filtered texture lookups. See the associated
-  :ref:`documentation section <texture_laplacian>` for more details.
+- :py:func:`dr.sort() <sort>`, :py:func:`dr.argsort() <argsort>`, and
+  :py:func:`dr.median() <median>` no longer run the radix sort for tensor axes
+  of length 256 or less. A rank-counting sort in a single kernel now handles
+  such blocks, which is hundreds of times faster when the tensor
+  has many rows.
+  (commit `429159 <https://github.com/mitsuba-renderer/drjit/commit/42915957901f0860f28dc0dda6c0a3b727207d86>`__).
+
+- The CUDA implementation of :py:func:`dr.prefix_reduce() <prefix_reduce>`
+  and :py:func:`dr.cumsum() <cumsum>` is now bitwise reproducible and faster.
+  (commit `2514a0 <https://github.com/mitsuba-renderer/drjit/commit/2514a062d66cba2a277e50fc3b503cb46b502d8f>`__,
+  Dr.Jit-Core commit `2e0c31 <https://github.com/mitsuba-renderer/drjit-core/commit/2e0c31f7fb5088dc04193622b78ddd422d060add>`__).
+
+- New functions :py:func:`dr.expm1() <expm1>` and :py:func:`dr.log1p()
+  <log1p>` that evaluate :math:`e^x-1` and :math:`\log(1+x)` without the
+  cancellation that affects the naive expressions for small arguments. The
+  C++ header ``drjit/math.h`` provides matching ``dr::expm1()`` and
+  ``dr::log1p()`` templates. Both follow the corresponding routines of the
+  CEPHES library.
+  (commit `320c05 <https://github.com/mitsuba-renderer/drjit/commit/320c05d05b4439c334ed7364945ff40705a39917>`__).
+
+- Floating point arrays now support the modulo operator ``%`` with the
+  semantics of Python and NumPy, where the result has the sign of the divisor.
+  (commit `45aca1 <https://github.com/mitsuba-renderer/drjit/commit/45aca1b152b2a3f692802819a42d6d904bb15991>`__).
+
+- Added uthe color space conversion functions :py:func:`dr.rgb_to_hsv() <rgb_to_hsv>`,
+  :py:func:`dr.hsv_to_rgb() <hsv_to_rgb>`, :py:func:`dr.rgb_to_hsl()
+  <rgb_to_hsl>`, and :py:func:`dr.hsl_to_rgb() <hsl_to_rgb>`. The header ``drjit/color.h`` provides C++
+  versions of these routines and of the Oklab conversions.
+  (commits `461b36 <https://github.com/mitsuba-renderer/drjit/commit/461b3654bec7cc4d2b147d6fc9265c5ce718c103>`__,
+  `8159a8 <https://github.com/mitsuba-renderer/drjit/commit/8159a87cb21c82fdae9903bcf40e11d1d0c76598>`__).
+
+- A new function
+  :py:func:`dr.transform_decompose_qr() <transform_decompose_qr>`
+  complements :py:func:`dr.transform_decompose() <transform_decompose>`
+  by decomposing an affine transformation into separate scale, shear,
+  rotation, and translation components. Both also have C++ conterparts.
+  (commit `01ab82 <https://github.com/mitsuba-renderer/drjit/commit/01ab82f33b357f0f953f5749634236a0187cf413>`__).
+
+- Tensor slice assignment (e.g. ``t[1:3, :, 2] = value``) now broadcasts the
+  right hand side to the shape of the target region and accepts arbitrary
+  tensors. It previously only handled scalars and flat 1D arrays.
+  (commit `0120f7 <https://github.com/mitsuba-renderer/drjit/commit/0120f7b72adbd6ab7c919415e708b9e5fe880194>`__).
+
+- Zero-copy DLPack export on the Metal backend. The ``__dlpack__`` method now
+  accepts the ``max_version``, ``dl_device``, and ``copy`` arguments of the
+  DLPack protocol, and requesting ``dl_device=(8, 0)`` returns a Metal array
+  without a host copy.
+  (commit `eada35 <https://github.com/mitsuba-renderer/drjit/commit/eada35f582bcf2b478124ffa9144ce670d124e05>`__).
+
+- Enumerations and other objects that implement ``__index__`` now implicitly
+  convert to Dr.Jit arrays, which makes expressions like ``dr.select(mask,
+  Enum.A, Enum.B)`` legal.
+  (commit `de73a6 <https://github.com/mitsuba-renderer/drjit/commit/de73a6a2db3c860903899f4dbf7169d11106ea6c>`__).
+
+- Many functions gained type signatures that were previously missing, which
+  improves code completion and static type checking. The
+  ``@dr.func`` decorator now preserves the signature of the
+  decorated function.
+  (commit `4fe61b <https://github.com/mitsuba-renderer/drjit/commit/4fe61b2e1460229af27163989be26a813c1baf0e>`__).
 
 - The Python bindings now build against nanobind 3 and use its new `split mode
   <https://nanobind.readthedocs.io/en/latest/split_mode.html>`__, which
   significantly reduces the number of binary wheels that must be compiled for
   each release. Set the CMake option ``DRJIT_SPLIT_MODE=OFF`` to disable this
-  and perform a regular static build.
+  and perform a regular static build. Array types are furthermore frozen
+  after their construction, which rules out monkey-patching and speeds up
+  attribute access on Python 3.15+.
+  (commits `93575f <https://github.com/mitsuba-renderer/drjit/commit/93575f93c6adb45e9b3be6675d8cc117ca9e3a05>`__,
+  `43b0a4 <https://github.com/mitsuba-renderer/drjit/commit/43b0a48a91c0eef10c595aa26dca1773e4b2761d>`__,
+  `4262b3 <https://github.com/mitsuba-renderer/drjit/commit/4262b399cfdc12abd9f66aea6b0c786c5d47b6dd>`__,
+  `821047 <https://github.com/mitsuba-renderer/drjit/commit/8210477c305f072c79c49ab18d7cf407553ddd49>`__).
 
-- Python 3.9 is no longer supported. Dr.Jit now requires Python 3.10 or newer.
+- Python subclasses of C++ types deriving from ``drjit::TraversableBase`` can
+  now participate in reference cycles that Python's garbage collector is
+  able to collect. The C++ traversal interface was simplified along the way:
+  the ``traverse_1_cb_ro()`` and ``traverse_1_cb_rw()`` callbacks were
+  replaced by a single ``traverse_cb()`` method that receives a
+  ``TraverseVisitor``.
+  (commits `39f935 <https://github.com/mitsuba-renderer/drjit/commit/39f935c5f18cdcf2a1a9115ffe59e2dfdd39ab0f>`__,
+  `c15415 <https://github.com/mitsuba-renderer/drjit/commit/c15415ff6c919b7b255d795eaccf3d5043c74554>`__,
+  `cce946 <https://github.com/mitsuba-renderer/drjit/commit/cce946d6dc0a5ee0b4470ff2a8410e06707c5f5d>`__).
 
-- Fixed an issue where forward-mode derivative propagation through symbolic operations
-  (:py:func:`drjit.while_loop`, :py:func:`drjit.if_stmt`,
-  :py:func:`drjit.switch`) could fail with an error message when the operation
-  depended on implicit inputs.
+- Performance improvements: :py:func:`dr.sincos() <sincos>` now uses hardware
+  intrinsics on the GPU backends like :py:func:`dr.sin() <sin>` and
+  :py:func:`dr.cos() <cos>` already did. The gather reindexing optimization
+  now also covers uniform variables, texture lookups, and packet gathers. The
+  Metal backend has lower kernel launch overheads. Forward-mode
+  differentiation through a sequence of packet scatters no longer launches
+  one kernel per scatter. Dr.Jit constant-folds ``x/x`` in fast math mode.
+  (commits `e639bd <https://github.com/mitsuba-renderer/drjit/commit/e639bda8c88056d81bb91442032444922888b232>`__,
+  `5be4ff <https://github.com/mitsuba-renderer/drjit/commit/5be4ff91d156d5fe65bf3ed4bd2d3658e4ea54e5>`__,
+  Dr.Jit-Core commits
+  `3dd63d <https://github.com/mitsuba-renderer/drjit-core/commit/3dd63d6cddc6bbea8a6d895771f8ed6c526f53aa>`__,
+  `ac975a <https://github.com/mitsuba-renderer/drjit-core/commit/ac975a833d8b3904e49a3d03fa8c81a44bb8a32a>`__,
+  `79725c <https://github.com/mitsuba-renderer/drjit-core/commit/79725cf95815258f6c22048a53e87b2a29789d99>`__,
+  `55a8fc <https://github.com/mitsuba-renderer/drjit-core/commit/55a8fc8593c243b34f7b8f7474bd935d0fea8f77>`__,
+  `78065d <https://github.com/mitsuba-renderer/drjit-core/commit/78065d873ca6c34640c1adbc9e4cd43aaccd132d>`__).
 
-- Removed a number of long-deprecated aliases.
+- Ray tracing. Dr.Jit-Core can now compile custom
+  shape intersection functions for the Embree, OptiX, and Metal backends,
+  shadow rays report which surface ended the traversal, and the Metal and
+  OptiX backends support motion transforms, a time argument, instance
+  indices, and per-lane visibility masks.
+  (Dr.Jit-Core commits
+  `5b0817 <https://github.com/mitsuba-renderer/drjit-core/commit/5b0817cbb36606daab5e1cc1e9ffd5c3c25e257c>`__,
+  `dadfd5 <https://github.com/mitsuba-renderer/drjit-core/commit/dadfd5e8940abbcddc32ab374fb3680eeb8c79f6>`__,
+  `ea9f14 <https://github.com/mitsuba-renderer/drjit-core/commit/ea9f14402a4bdf1d9319931bec87429d1a879ef1>`__,
+  `c7672d <https://github.com/mitsuba-renderer/drjit-core/commit/c7672de53b83ba85bb28a2b533946f8d4a48e0e7>`__,
+  `75bb6c <https://github.com/mitsuba-renderer/drjit-core/commit/75bb6cbd815d8ed9680ea0c91efb09ed0c38a094>`__,
+  `f2d705 <https://github.com/mitsuba-renderer/drjit-core/commit/f2d7057e120b91083fc3e51d660f44cec54550ce>`__,
+  `529a4d <https://github.com/mitsuba-renderer/drjit-core/commit/529a4d9ed6c29c34fbfa57d00cb7ba84d25f467e>`__).
+
+- Fixed a series of bugs and corner cases involving symbolic control flow and
+  derivatives thereof.
+  (commits `ac73bb <https://github.com/mitsuba-renderer/drjit/commit/ac73bb77efd9dfc012154155ca22d7757326d01f>`__,
+  `ac4cfd <https://github.com/mitsuba-renderer/drjit/commit/ac4cfd6cdcd7f0f1866b66fe2bb03d1f7d8885fb>`__,
+  `7dbb98 <https://github.com/mitsuba-renderer/drjit/commit/7dbb9811a3d4cfbb5a79471cc478eaf8793a0dcb>`__,
+  `fcc66d <https://github.com/mitsuba-renderer/drjit/commit/fcc66d1345e252bd73bf251fef0c4806bbc8b973>`__,
+  `51bb70 <https://github.com/mitsuba-renderer/drjit/commit/51bb70ee0606341a9b3511dc891275feed56d1a7>`__,
+  `52d8f6 <https://github.com/mitsuba-renderer/drjit/commit/52d8f69063ab0be4b1e01da67f03ac50a4a3938c>`__,
+  `08c61a <https://github.com/mitsuba-renderer/drjit/commit/08c61a4e95d36f010967c6b0932e8fa9a1edce68>`__,
+  `e0fd0c <https://github.com/mitsuba-renderer/drjit/commit/e0fd0c7a984d2c9cabc0e61cf86a3a59fb179720>`__,
+  `1c1a40 <https://github.com/mitsuba-renderer/drjit/commit/1c1a40f5d4e4b85f5c8bdf269cfbb90410a19c3d>`__,
+  Dr.Jit-Core commits
+  `621b05 <https://github.com/mitsuba-renderer/drjit-core/commit/621b0593751edb2fc47ab3857e44cde58d0488bc>`__,
+  `c67a99 <https://github.com/mitsuba-renderer/drjit-core/commit/c67a99be0fc93ee63d057f2fc6013194b4505b2c>`__,
+  `2c1c98 <https://github.com/mitsuba-renderer/drjit-core/commit/2c1c982cbf1beba355ab485979fdf15fcb04edf9>`__,
+  `34433a <https://github.com/mitsuba-renderer/drjit-core/commit/34433aafa3bac3b6e70f574fbf09e80988ff5cc9>`__,
+  `410611 <https://github.com/mitsuba-renderer/drjit-core/commit/410611726da9f0bd750aa10ba5088a55a1222aaa>`__).
+
+- Fixed logging-related deadlocks in applications that use Dr.Jit from
+  multiple threads.
+  (commit `553c0a <https://github.com/mitsuba-renderer/drjit/commit/553c0ad12b3085cf3f2cfb59f76538c64f792f95>`__,
+  Dr.Jit-Core commit `40f935 <https://github.com/mitsuba-renderer/drjit-core/commit/40f9352893fb593048601dfc863b332ad7005546>`__).
 
 - :py:func:`dr.frob() <frob>` returns the Frobenius norm instead of its square,
   which matches the convention used by NumPy, PyTorch, MATLAB, and Eigen. This
-  also fixes :py:func:`dr.polar_decomp() <polar_decomp>`, which computed a
+  improves the reliability of :py:func:`dr.polar_decomp() <polar_decomp>`, which computed a
   wrong scale factor because of the previous behavior.
+  (commit `45b483 <https://github.com/mitsuba-renderer/drjit/commit/45b48378be25516ef7507675e4f09d7d433dd008>`__).
+
+- :py:func:`dr.binary_search() <binary_search>` accepts Dr.Jit arrays as
+  search bounds.
+  (commit `5d2abc <https://github.com/mitsuba-renderer/drjit/commit/5d2abcee91255d6ffd56a75d96e04f135447a69b>`__,
+  contributed by `Matteo Santini <https://github.com/matttsss>`__).
+
+- Python 3.9 is no longer supported. Dr.Jit now requires Python 3.10 or newer.
+
+- Miscellaneous Dr.Jit-Core fixes and improvements.
+  (Dr.Jit-Core commits
+  `b9a65b <https://github.com/mitsuba-renderer/drjit-core/commit/b9a65b2811b9cc34af0a1a5ae9cffccedd3be58b>`__,
+  `c2d28e <https://github.com/mitsuba-renderer/drjit-core/commit/c2d28e4fefb1be4397bff63b584bf6704b521c4b>`__,
+  `2f53eb <https://github.com/mitsuba-renderer/drjit-core/commit/2f53ebb97041ff2c30d25e33baf92ee322b1e340>`__,
+  `7f3943 <https://github.com/mitsuba-renderer/drjit-core/commit/7f3943605b5772bb6c10e5166289212b77c0deb5>`__,
+  `33becf <https://github.com/mitsuba-renderer/drjit-core/commit/33becf972a63fd12843c0659d82f0f20f616b030>`__,
+  `0d2c96 <https://github.com/mitsuba-renderer/drjit-core/commit/0d2c967d7739968db746ed51305aab2cb675385d>`__,
+  `092858 <https://github.com/mitsuba-renderer/drjit-core/commit/0928581aecff595ae78e65b3a71c92db3a7fe194>`__,
+  `5da22a <https://github.com/mitsuba-renderer/drjit-core/commit/5da22ae1d76b1b7bd0dc31a9dba8c4c33bf97aca>`__,
+  `b26ffb <https://github.com/mitsuba-renderer/drjit-core/commit/b26ffb0736f2b35d9044eec584263d4513ddcc94>`__,
+  `e6677f <https://github.com/mitsuba-renderer/drjit-core/commit/e6677faacaa8f7f143e0b3a482782fdcd7b789fe>`__,
+  `f5b3f7 <https://github.com/mitsuba-renderer/drjit-core/commit/f5b3f7698723f5e9857991d3615606875ad50902>`__,
+  `01645c <https://github.com/mitsuba-renderer/drjit-core/commit/01645cad65a2eb865d2f9c421734b58d93948b7a>`__,
+  `dd77a3 <https://github.com/mitsuba-renderer/drjit-core/commit/dd77a33fdb7dc67a2450dbbfcc1f7bf54829ab35>`__,
+  `7afd90 <https://github.com/mitsuba-renderer/drjit-core/commit/7afd9080e939b94e1bc0443c2d1d3a39a47e89a7>`__,
+  `be9a04 <https://github.com/mitsuba-renderer/drjit-core/commit/be9a04d4fc75f8d03bbc507b6ce921b8e907c066>`__,
+  `b25443 <https://github.com/mitsuba-renderer/drjit-core/commit/b25443792120f0fdd7b84bafb740e3db841be8ce>`__,
+  `959b4f <https://github.com/mitsuba-renderer/drjit-core/commit/959b4f525081159ef5350846fe6faac7ba9d0f7f>`__,
+  `15b269 <https://github.com/mitsuba-renderer/drjit-core/commit/15b26958a8dc5a81f93b5cbd474c71535b3738f6>`__,
+  `ab56aa <https://github.com/mitsuba-renderer/drjit-core/commit/ab56aaa279c23114306c879a04a456db4a2a9212>`__,
+  `3f7b10 <https://github.com/mitsuba-renderer/drjit-core/commit/3f7b101751238f61a931709fb5728397b964eac4>`__,
+  `d4f187 <https://github.com/mitsuba-renderer/drjit-core/commit/d4f187002d8714d73b157f269874f2823699d6b1>`__,
+  `b19a59 <https://github.com/mitsuba-renderer/drjit-core/commit/b19a591bd51b44cf3082af764f3cf5f545bf9bbe>`__).
+
+- Miscellaneous minor fixes in Dr.Jit.
+  (commits `f8fe71 <https://github.com/mitsuba-renderer/drjit/commit/f8fe719562d0ecffe66bbe5afff8a37caf87f22e>`__,
+  `bbde99 <https://github.com/mitsuba-renderer/drjit/commit/bbde99ec989ab00b718953099f568cb195d53d0e>`__,
+  `d7b635 <https://github.com/mitsuba-renderer/drjit/commit/d7b6352565cf3ff9c8813e29ced4dbaacb361fcb>`__,
+  `8f7b57 <https://github.com/mitsuba-renderer/drjit/commit/8f7b5757fa232e583f7e56610904511a78f4cd4a>`__,
+  `c41610 <https://github.com/mitsuba-renderer/drjit/commit/c416104360f7076bc14cd5f166cb1f4a536790eb>`__,
+  `3ba418 <https://github.com/mitsuba-renderer/drjit/commit/3ba4180d7fcc2dedcda706f4ce06000cd2182381>`__,
+  `2f6ea5 <https://github.com/mitsuba-renderer/drjit/commit/2f6ea54bd7689105f65965371efcb4ac930e5a0d>`__,
+  `a25997 <https://github.com/mitsuba-renderer/drjit/commit/a259973b2eadde4237607f778064b4c160a4974b>`__,
+  `dfccdd <https://github.com/mitsuba-renderer/drjit/commit/dfccdd7967547efce49fb4a929c39e4474ea73e2>`__,
+  `0a40ca <https://github.com/mitsuba-renderer/drjit/commit/0a40ca53e4c18e1b7757184808eb643e79a332e5>`__,
+  `1b8fae <https://github.com/mitsuba-renderer/drjit/commit/1b8fae0c74f696549859f339c27f72f35d840199>`__,
+  `ef545c <https://github.com/mitsuba-renderer/drjit/commit/ef545c25a54b0683d0ecf3ea57084a7aad5dc17a>`__,
+  `4e2be8 <https://github.com/mitsuba-renderer/drjit/commit/4e2be87c97cd26d5a25f884dd2227aa94a49fa63>`__,
+  `77fd69 <https://github.com/mitsuba-renderer/drjit/commit/77fd69c7c1c26135380994aa944f91cf48264029>`__,
+  `86902f <https://github.com/mitsuba-renderer/drjit/commit/86902f9faf81d430639a60c83108845b4fe8b8b2>`__,
+  `39f7fc <https://github.com/mitsuba-renderer/drjit/commit/39f7fca225c7e676f9278efe39239da441a2472d>`__,
+  `315af5 <https://github.com/mitsuba-renderer/drjit/commit/315af5ccd7a197f9b99a0b75cfdc82c4e10cd42c>`__,
+  `e3979c <https://github.com/mitsuba-renderer/drjit/commit/e3979c81e40125c8116658531e9ad3112a53e84b>`__,
+  PRs `#519 <https://github.com/mitsuba-renderer/drjit/pull/519>`__,
+  `#525 <https://github.com/mitsuba-renderer/drjit/pull/525>`__,
+  `#527 <https://github.com/mitsuba-renderer/drjit/pull/527>`__,
+  `#530 <https://github.com/mitsuba-renderer/drjit/pull/530>`__,
+  `#531 <https://github.com/mitsuba-renderer/drjit/pull/531>`__).
 
 DrJit 1.5.0 (August 7, 2026)
 ----------------------------
