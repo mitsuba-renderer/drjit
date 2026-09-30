@@ -1330,3 +1330,29 @@ def test41_simd_reduce_ad(t):
             grads.append(dr.grad(x))
 
         assert dr.allclose(grads[0], grads[1])
+
+
+@pytest.test_arrays('shape=(*), jit, float32')
+def test42_simd_mode(t):
+    # mode="simd" must match the default strategy for all axis combinations
+    m = sys.modules[t.__module__]
+    x = dr.arange(t, 96) % 7 + 1
+
+    for f in (dr.sum, dr.prod, dr.min, dr.max, dr.mean):
+        assert dr.allclose(f(x * 2, mode="simd"), f(x * 2))
+
+        v = m.Array3f(x, x * 2, 1)
+        for axis in (0, 1, None):
+            assert dr.allclose(f(v * 2, axis=axis, mode="simd"),
+                               f(v * 2, axis=axis))
+
+        tx = m.TensorXf(x, shape=(4, 24))
+        for axis in (0, 1, -1, (0, 1), None):
+            assert dr.allclose(f(tx * 2, axis=axis, mode="simd"),
+                               f(tx * 2, axis=axis))
+
+    for op in (dr.ReduceOp.Add, dr.ReduceOp.Max):
+        for block_size in (2, 12, 48):
+            assert dr.allclose(dr.block_reduce(op, x * 2, block_size, mode="simd"),
+                               dr.block_reduce(op, x * 2, block_size))
+    assert dr.allclose(dr.block_sum(x * 2, 12, mode="simd"), dr.block_sum(x * 2, 12))

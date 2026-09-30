@@ -873,6 +873,12 @@
         variations across program runs. Integer reductions and floating point
         min/max reductions are unaffected by this.
 
+    - ``mode="simd"`` first reduces the input within SIMD groups via
+      :py:func:`drjit.simd_reduce()` and then proceeds as with ``mode=None``.
+      This step only applies when the reduction includes the trailing axis of
+      a tensor, or when it reduces only the trailing dynamic axis of an array.
+      See :py:func:`drjit.simd_reduce()` for details and caveats.
+
     - ``mode=None`` (default) automatically picks a reasonable strategy
       according to the following logic:
 
@@ -9042,6 +9048,11 @@
         variations across program runs. Integer and floating point min/max
         reductions are unaffected by this.
 
+    - ``mode="simd"`` first reduces the input within SIMD groups via
+      :py:func:`drjit.simd_reduce()` and then proceeds as with
+      ``mode=None``. See :py:func:`drjit.simd_reduce()` for details and
+      caveats.
+
     - ``mode=None`` (default) automatically picks a reasonable strategy
       according to the following logic:
 
@@ -9139,6 +9150,9 @@
        tmp, _ = dr.simd_reduce(dr.ReduceOp.Add, x)
        result = dr.sum(tmp)
 
+       # Equivalent shorthand
+       result = dr.sum(x, mode="simd")
+
     Block reductions work analogously.
 
     .. code-block:: python
@@ -9149,6 +9163,12 @@
        # Improved
        tmp, block_size_rem = dr.simd_reduce(dr.ReduceOp.Add, x, block_size)
        result = dr.block_sum(tmp, block_size_rem)
+
+       # Equivalent shorthand
+       result = dr.block_sum(x, block_size, mode="simd")
+
+    The ``mode="simd"`` parameter is also available in other reductions like
+    :py:func:`drjit.reduce` and :py:func:`drjit.block_reduce`.
 
     The reduction is *best effort*. It reduces blocks of the largest power of
     two that divides ``block_size`` and does not exceed the SIMD width (e.g.,

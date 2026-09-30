@@ -164,6 +164,7 @@ DrJit 1.6.0 (unreleased)
   input along with the remaining block size. This is useful to perform larger
   reductions via :py:func:`dr.sum() <sum>` or :py:func:`dr.block_reduce()
   <block_reduce>` and can reduce memory traffic by up to a factor of 32.
+  These reductions also accept ``mode="simd"`` to combine both steps.
 
 - New functions :py:func:`dr.expm1() <expm1>` and :py:func:`dr.log1p()
   <log1p>` that evaluate :math:`e^x-1` and :math:`\log(1+x)` without the
