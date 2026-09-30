@@ -1946,8 +1946,8 @@ def sort(value: ArrayT, /, axis: int = -1, descending: bool = False) -> ArrayT:
     Args:
         value: Input array or tensor.
 
-        axis (int): Axis along which to sort. Only ``-1`` (last axis) and
-            ``0`` are currently supported for tensors.
+        axis (int): Axis along which to sort (tensors only). Negative
+            values count from the last axis.
 
         descending (bool): If ``True``, sort in descending order.
 
@@ -1979,8 +1979,8 @@ def argsort(value: ArrayBase, /, axis: int = -1, descending: bool = False) -> Ar
     Args:
         value: Input array or tensor.
 
-        axis (int): Axis along which to sort. Only ``-1`` (last axis) and
-            ``0`` are currently supported for tensors.
+        axis (int): Axis along which to sort (tensors only). Negative
+            values count from the last axis.
 
         descending (bool): If ``True``, sort in descending order.
 
