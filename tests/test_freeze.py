@@ -4627,3 +4627,27 @@ def test123_simd_reduce_changing_width(t, auto_opaque):
             assert dr.allclose(a, b)
 
     assert frozen.n_recordings == 1
+
+
+@pytest.test_arrays("float32, jit, shape=(*)")
+def test124_texture_filter_mode(t):
+    mod = sys.modules[t.__module__]
+    Texture1f = mod.Texture1f
+
+    def func(tex, pos):
+        return tex.eval(pos)
+
+    frozen = dr.freeze(func)
+
+    pos = dr.linspace(t, 0, 1, 5)
+
+    tex = Texture1f([2], 1, False, dr.FilterMode.Nearest, dr.WrapMode.Repeat)
+    tex.set_value([0, 1])
+    frozen(tex, pos)
+
+    tex = Texture1f([2], 1, False, dr.FilterMode.Linear, dr.WrapMode.Repeat)
+    tex.set_value([0, 1])
+    res = frozen(tex, pos)
+    ref = func(tex, pos)
+
+    assert dr.allclose(res, ref)

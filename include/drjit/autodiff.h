@@ -1098,7 +1098,8 @@ template <bool IncRef, typename Value>
 void collect_indices(const Value &value, vector<uint64_t> &indices,
                      TraverseRole role) {
     traverse_fn(value, (void *) &indices,
-                TraverseVisitor { role, collect_indices_fn<IncRef>, nullptr });
+                TraverseVisitor { role, collect_indices_fn<IncRef>, nullptr,
+                                 nullptr });
 }
 
 template <typename Value>
@@ -1106,7 +1107,7 @@ void update_indices(Value &value, const vector<uint64_t> &indices, size_t &pos,
                     TraverseRole role) {
     update_indices_payload payload { indices, pos };
     traverse_fn(value, (void *) &payload,
-                TraverseVisitor { role, update_indices_fn, nullptr });
+                TraverseVisitor { role, update_indices_fn, nullptr, nullptr });
 }
 
 template <typename T>

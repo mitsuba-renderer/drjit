@@ -1145,7 +1145,7 @@ template <typename T, typename... Args> auto &bind_traverse(nanobind::class_<T, 
                     return nb::cast<uint64_t>(
                         ((Payload *) p)->c(index, name, variant, domain));
                 },
-                nullptr });
+                nullptr, nullptr });
     });
 
     return cls;
