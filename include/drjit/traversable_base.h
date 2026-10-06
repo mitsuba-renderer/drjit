@@ -52,6 +52,11 @@ struct DRJIT_EXTRA_EXPORT TraversableBase : public nanobind::intrusive_base {
 #define DR_TRAVERSE_MEMBER(member)                                             \
     drjit::traverse_fn(member, payload, cb, #member);
 
+/// Report a scalar member that the object bakes into generated code
+#define DR_TRAVERSE_STATE(member)                                              \
+    drjit::detail::traverse_state(payload, cb, &member, sizeof(member),        \
+                                  #member);
+
 /**
  * \brief Macro generating the implementation of the ``traverse_cb`` method
  *

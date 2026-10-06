@@ -521,6 +521,11 @@ struct LayoutBuilder {
             },
             [&](drjit::TraversableBase *child, const char *name) {
                 visit_cpp(child, name);
+            },
+            [&](const void *value, size_t size, const char *) {
+                size_t offset = s.states.size();
+                s.states.resize(offset + size);
+                memcpy(s.states.data() + offset, value, size);
             });
 
         if (nb::dict d = traversable_dict(obj); d.is_valid()) {
@@ -797,6 +802,7 @@ bool layout_equal(const Layout &a, const Layout &b) {
         a.names.size() != b.names.size() ||
         a.opaques.size() != b.opaques.size() || a.variant != b.variant ||
         a.domains.size() != b.domains.size() ||
+        a.states.size() != b.states.size() ||
         a.cpp_types.size() != b.cpp_types.size())
         return false;
 
@@ -804,7 +810,8 @@ bool layout_equal(const Layout &a, const Layout &b) {
         memcmp(a.slots.data(), b.slots.data(), a.slots.size() * sizeof(Slot)) != 0 ||
         memcmp(a.grads.data(), b.grads.data(), a.grads.size() * sizeof(Node)) != 0 ||
         memcmp(a.literals.data(), b.literals.data(), a.literals.size() * sizeof(Literal)) != 0 ||
-        memcmp(a.shapes.data(), b.shapes.data(), a.shapes.size() * sizeof(uint32_t)) != 0)
+        memcmp(a.shapes.data(), b.shapes.data(), a.shapes.size() * sizeof(uint32_t)) != 0 ||
+        memcmp(a.states.data(), b.states.data(), a.states.size()) != 0)
         return false;
 
     for (size_t i = 0; i < a.types.size(); ++i)
@@ -940,6 +947,11 @@ std::string layout_diff(const Layout &cur, const Layout &prev) {
         if (!diff.empty())
             return "'" + cur.node_path(i) + "' (" + diff + ")";
     }
+
+    // State is not described by a node, hence it has no path
+    if (cur.states.size() != prev.states.size() ||
+        memcmp(cur.states.data(), prev.states.data(), cur.states.size()) != 0)
+        return "the scalar state of an object in the input changed";
 
     return "";
 }

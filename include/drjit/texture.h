@@ -2130,6 +2130,10 @@ public:
         if (cb.role != TraverseRole::Freeze)
             return;
 
+        // Scalars that reach the generated code through ad_tex_eval*()
+        DRJIT_MAP(DR_TRAVERSE_STATE, m_channels, m_filter_mode, m_wrap_mode,
+                  m_srgb, m_use_accel, m_level_count, m_mip_filter);
+
         // Refresh the readback views of a hardware-mutable texture so that
         // the recording observes its current contents
         sync_views();

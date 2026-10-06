@@ -185,16 +185,23 @@ inline nb::dict traversable_dict(const drjit::TraversableBase *obj) {
  * Calls ``var(index, name, variant, domain)`` for every JIT array held by
  * ``obj`` (the return value is the index that the object holds from now on,
  * see \ref drjit::TraverseVisitor) and ``child(obj, name)`` for every directly
- * held child object. This is the one place that turns the C callback interface
- * of ``traverse_cb()`` into lambdas; all drivers build on it.
+ * held child object. ``state(value, size, name)`` receives the scalar state
+ * that ``obj`` bakes into generated code, and discards it by default. This is
+ * the one place that turns the C callback interface of ``traverse_cb()`` into
+ * lambdas; all drivers build on it.
  */
-template <typename Var, typename Child>
+struct IgnoreState {
+    void operator()(const void *, size_t, const char *) const { }
+};
+
+template <typename Var, typename Child, typename State = IgnoreState>
 void for_each_member(drjit::TraversableBase *obj, drjit::TraverseRole role,
-                     Var &&var, Child &&child) {
+                     Var &&var, Child &&child, State &&state = State()) {
     struct Payload {
         Var &var;
         Child &child;
-    } p { var, child };
+        State &state;
+    } p { var, child, state };
 
     obj->traverse_cb(
         &p,
@@ -206,6 +213,9 @@ void for_each_member(drjit::TraversableBase *obj, drjit::TraverseRole role,
             },
             [](void *p, drjit::TraversableBase *child, const char *name) {
                 ((Payload *) p)->child(child, name);
+            },
+            [](void *p, const void *value, size_t size, const char *name) {
+                ((Payload *) p)->state(value, size, name);
             } });
 }
 
