@@ -336,7 +336,7 @@ struct GCTraversal {
     }
 
     int traverse(dr::TraversableBase *obj) {
-        dr::TraverseVisitor cb { dr::TraverseRole::Children, nullptr, child_cb };
+        dr::TraverseVisitor cb { dr::TraverseRole::Children, nullptr, child_cb, nullptr };
 
         work.push_back(obj);
         while (!work.empty() && !rv) {
