@@ -72,3 +72,56 @@ def test02_scatter(t, fn, packet):
     assert dr.allclose(dr.grad(target), dr.grad(target_r))
     for v, v_r in zip(vals, vals_r):
         assert dr.allclose(dr.grad(v), dr.grad(v_r))
+
+
+def test03_packet_scatter_ptr():
+    with dr.detail.scoped_rtld_deepbind():
+        pkg = pytest.importorskip("memop_ext")
+
+    result = pkg.packet_scatter_ptr()
+
+    assert list(result) == [0, 0, 0, 1, 2, 3]
+
+
+def test04_nested_packet_scatter_ptr():
+    with dr.detail.scoped_rtld_deepbind():
+        pkg = pytest.importorskip("memop_ext")
+
+    result = pkg.nested_packet_scatter_ptr()
+
+    assert list(result) == [
+        1, 5, 9, 13,
+        2, 6, 10, 14,
+        3, 7, 11, 15,
+        4, 8, 12, 16,
+    ]
+
+
+def test05_deep_nested_packet_scatter_ptr():
+    with dr.detail.scoped_rtld_deepbind():
+        pkg = pytest.importorskip("memop_ext")
+
+    result = pkg.deep_nested_packet_scatter_ptr()
+
+    assert list(result) == list(range(1, 17))
+
+
+def test06_nested_dynamic_scatter_ptr():
+    with dr.detail.scoped_rtld_deepbind():
+        pkg = pytest.importorskip("memop_ext")
+
+    result = pkg.nested_dynamic_scatter_ptr()
+
+    assert list(result) == [1, 2, 3, 4, 5, 6]
+
+
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+def test07_packet_scatter_assign(t):
+    pkg = get_pkg(t)
+    UInt32 = sys.modules[t.__module__].UInt32
+    target = dr.zeros(t, 4)
+    index = UInt32(0, 1)
+
+    result = pkg.packet_scatter_assign(target, t(10, 20), t(30, 40), index)
+
+    assert dr.allclose(result, t(10, 30, 20, 40))
