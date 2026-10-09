@@ -494,11 +494,11 @@ trees:
 
     template <typename T> void visit_jit_pairs(T &v0, T &v1) {
         if constexpr (dr::is_jit_v<T> && dr::depth_v<T> == 1) {
-            /// Do something with 'v0' and 'v1'
+            // Do something with 'v0' and 'v1'
         } else if constexpr (dr::is_traversable_v<T>) {
-            /// Recurse and try again if the object is traversable
+            // Recurse and try again if the object is traversable
             dr::traverse_2(
-                /// Extract the fields of 'v0' and 'v1'
+                // Extract the fields of 'v0' and 'v1'
                 dr::fields(v0), dr::fields(v1),
                 // .. and call the following lambda function on them
                 [&](auto &x, auto &y) { visit_jit_pairs(x, y); }
