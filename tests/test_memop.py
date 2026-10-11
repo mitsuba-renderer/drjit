@@ -279,6 +279,17 @@ def test12_unravel_vec(t, drjit_verbose, capsys):
     with pytest.raises(RuntimeError, match="not divisible"):
         dr.unravel(t, vt(1, 2, 3, 4))
 
+@pytest.test_arrays('diff, shape=(3, *), float32')
+def test12a_unravel_w_grad(t):
+    vt = dr.value_t(t)
+
+    v = vt(1, 2, 3, 4, 5, 6)
+    dr.enable_grad(v)
+
+    unraveled = dr.unravel(t, v)
+    doubled = v * 2
+    dr.backward(dr.sum(dr.ravel(unraveled)) + dr.sum(doubled))
+    assert dr.all(v.grad == 3)
 
 @pytest.test_arrays('shape=(3, *), float32', 'shape=(*, *), float32')
 def test11_reverse(t):

@@ -738,7 +738,7 @@ static nb::object unravel_recursive(nb::handle dtype,
                 nb::borrow<nb::type_object_t<ArrayBase>>(index_dtype),
                 offset, offset + strides[depth] * shape[depth], strides[depth]);
             return gather(nb::borrow<nb::type_object>(dtype), nb::borrow(value),
-                          index, nb::cast(true), ReduceMode::Permute);
+                          index, nb::cast(true), ReduceMode::Auto);
         } else {
             return value[offset];
         }
