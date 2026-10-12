@@ -443,6 +443,8 @@ void export_detail(nb::module_ &m) {
      .def("can_scatter_reduce", &can_scatter_reduce, doc_detail_can_scatter_reduce)
 
      .def("cuda_compute_capability", &jit_cuda_compute_capability)
+     .def("cuda_sync_to_stream", &jit_cuda_sync_to_stream, "stream"_a)
+     .def("cuda_wait_for_stream", &jit_cuda_wait_for_stream, "stream"_a)
 
      .def("new_scope", &jit_new_scope, "backend"_a, doc_detail_new_scope)
      .def("scope", &jit_scope, "backend"_a, doc_detail_scope)

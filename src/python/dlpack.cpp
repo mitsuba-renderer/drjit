@@ -149,7 +149,7 @@ static nb::ndarray<> dlpack(nb::handle_t<ArrayBase> h, bool force_cpu, nb::handl
                         uintptr_t stream_handle;
                         if (!nb::try_cast(stream, stream_handle))
                             nb::raise_type_error("__dlpack__(): 'stream' argument must be 'None' or of type 'int'.");
-                        jit_cuda_sync_stream(stream_handle);
+                        jit_cuda_sync_to_stream(stream_handle);
                     }
                 }
             } else {
