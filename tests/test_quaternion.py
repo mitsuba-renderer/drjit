@@ -90,3 +90,13 @@ def test10_pow(t):
     assert dr.allclose(a ** t(0.11, 0.13, 0.19, 0.21),
                        t(0.253509, 0.372162, 0.481497, 0.982482))
     assert dr.allclose(a**3, a*a*a)
+
+
+@pytest.test_arrays('quaternion')
+@pytest.mark.parametrize('op', ['exp', 'exp2', 'log', 'log2', 'sqrt', 'rsqrt'])
+def test11_positive_real(t, op):
+    func = getattr(dr, op)
+    for value in [0.25, 1, 4]:
+        q = t(value)
+        dr.make_opaque(q)
+        assert dr.allclose(func(q), t(func(value)))

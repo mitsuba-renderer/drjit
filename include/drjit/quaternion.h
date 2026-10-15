@@ -162,7 +162,7 @@ template <typename T> Quaternion<T> exp(const Quaternion<T> &q) {
 
     auto [s, c] = sincos(ri);
 
-    return { qi * (s * exp_w / ri), c * exp_w };
+    return { select(ri == 0.f, 0.f, qi * (s * exp_w / ri)), c * exp_w };
 }
 
 template <typename T> Quaternion<T> exp2(const Quaternion<T> &q) {
@@ -173,7 +173,7 @@ template <typename T> Quaternion<T> exp2(const Quaternion<T> &q) {
 
     auto [s, c] = sincos(ri * LogTwo<T>);
 
-    return { qi * (s * exp_w / ri), c * exp_w };
+    return { select(ri == 0.f, 0.f, qi * (s * exp_w / ri)), c * exp_w };
 }
 
 template <typename T> Quaternion<T> log(const Quaternion<T> &q) {
@@ -183,7 +183,8 @@ template <typename T> Quaternion<T> log(const Quaternion<T> &q) {
       acos_rq = acos(real(q) / rq),
       log_rq  = log(rq);
 
-    return { qi_n * acos_rq, log_rq };
+    return { select((squared_norm(imag(q)) == 0.f) && (real(q) > 0.f),
+                    0.f, qi_n * acos_rq), log_rq };
 }
 
 template <typename T> Quaternion<T> log2(const Quaternion<T> &q) {
@@ -193,7 +194,8 @@ template <typename T> Quaternion<T> log2(const Quaternion<T> &q) {
       acos_rq = acos(real(q) / rq),
       log_rq  = log2(rq);
 
-    return { qi_n * acos_rq * InvLogTwo<T>, log_rq };
+    return { select((squared_norm(imag(q)) == 0.f) && (real(q) > 0.f),
+                    0.f, qi_n * acos_rq * InvLogTwo<T>), log_rq };
 }
 
 
@@ -206,7 +208,8 @@ Quaternion<expr_t<T0, T1>> pow(const Quaternion<T0> &q0,
 template <typename T> Quaternion<T> sqrt(const Quaternion<T> &q) {
     T ri = norm(imag(q));
     Complex<T> cs = sqrt(Complex<T>(real(q), ri));
-    return { imag(q) * (rcp(ri) * imag(cs)), real(cs) };
+    return { select((ri == 0.f) && (real(q) >= 0.f), 0.f,
+                    imag(q) * (rcp(ri) * imag(cs))), real(cs) };
 }
 
 template <typename T> Quaternion<T> rsqrt(const Quaternion<T> &z) {
