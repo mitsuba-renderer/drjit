@@ -2244,3 +2244,31 @@ def test140_packet_scatter_add_fwd(t, enabled):
         x.grad = dr.opaque(Float, 1, 8)
         dr.forward_from(x)
         assert dr.all(x2.grad == 5)
+
+@pytest.test_arrays('is_diff,float32,shape=(*)')
+def test141_permute_gather_accumulates_grad(t):
+    # The reverse-mode derivative of a gather with ReduceMode.Permute is a
+    # plain scatter. It must accumulate into, and not overwrite, gradients
+    # that the source received through its other uses.
+    UInt32 = dr.uint32_array_t(t)
+    Array3f = sys.modules[t.__module__].Array3f
+
+    # Permutation gather, followed by another use of 'y'. The other use is
+    # created later, so its gradient reaches 'y' first during backpropagation.
+    x = dr.arange(t, 6)
+    dr.enable_grad(x)
+    y = x * 1
+    a = dr.gather(t, y, 5 - dr.arange(UInt32, 6), mode=dr.ReduceMode.Permute)
+    b = y * 2
+    dr.backward(dr.sum(a * dr.arange(t, 6)) + dr.sum(b))
+    assert dr.all(x.grad == (5 - dr.arange(t, 6)) + 2)
+
+    # Same situation via dr.unravel(), which is implemented using
+    # permutation gathers
+    x = dr.arange(t, 6)
+    dr.enable_grad(x)
+    y = x * 1
+    v = dr.unravel(Array3f, y)
+    z = y * 2
+    dr.backward(dr.sum(v.x + 10 * v.y + 100 * v.z) + dr.sum(z))
+    assert dr.all(x.grad == t(1, 10, 100, 1, 10, 100) + 2)

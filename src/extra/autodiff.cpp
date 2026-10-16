@@ -2018,6 +2018,14 @@ struct Gather : Special {
             return;
         }
 
+        // A permutation gather reads each source entry at most once, so its
+        // adjoint is conflict-free. A plain scatter is only valid while the
+        // source gradient is still zero, however: otherwise, it would
+        // overwrite contributions from other uses of the source.
+        bool overwrite = reduce_mode == ReduceMode::Permute &&
+                         (!source_grad.valid() ||
+                          jit_var_is_zero_literal(source_grad.index()));
+
         if (!source_grad.valid()) {
             VarType type = (VarType)source->type;
             source_grad = scalar(backend, type, 0.0);
@@ -2027,10 +2035,15 @@ struct Gather : Special {
             source_grad.resize(source->size);
 
         MaskGuard guard(backend, mask_stack);
-        dr::scatter_reduce(
-            reduce_mode == ReduceMode::Permute ? ReduceOp::Identity
-                                               : ReduceOp::Add,
-            source_grad, target->grad, offset, mask, reduce_mode);
+        if (overwrite)
+            dr::scatter_reduce(ReduceOp::Identity, source_grad, target->grad,
+                               offset, mask, ReduceMode::Permute);
+        else
+            dr::scatter_reduce(ReduceOp::Add, source_grad, target->grad,
+                               offset, mask,
+                               reduce_mode == ReduceMode::Permute
+                                   ? ReduceMode::NoConflicts
+                                   : reduce_mode);
     }
 
     void forward(const ADVariable *source, ADVariable *target) override {
