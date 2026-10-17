@@ -184,9 +184,10 @@ nb::object gather(nb::type_object dtype, nb::object source,
 
         nb::type_object sub_tp = nb::borrow<nb::type_object>(dtype_supp.value);
 
-        // Potentially perform a packet gather
+        // Potentially perform a packet gather. Permutations always use it,
+        // since a single AD edge enables a cheaper reverse-mode derivative.
         if ((JitBackend) m.backend != JitBackend::None && m.ndim == 2 &&
-            size != 1 && (size % 2) == 0) {
+            size != 1 && ((size % 2) == 0 || mode == ReduceMode::Permute)) {
             uint64_t source_index = source_supp.index(inst_ptr(source));
             uint32_t offset_index = (uint32_t) supp(index.type()).index(inst_ptr(index));
             uint32_t mask_index = (uint32_t) supp(active.type()).index(inst_ptr(active));
@@ -839,13 +840,13 @@ nb::object unravel(const nb::type_object_t<ArrayBase> &dtype,
     }
 
     if (is_dynamic && (order == 'A' || order == 'F') && s.ndim == 2 &&
-        s.shape[0] > 1 && ((s.shape[0]-1) & s.shape[0])==0) {
-        // Potentially use dr.gather() to benefit from new packet gather feature for power-of-two sized unravels
+        s.shape[0] > 1) {
+        // Use a packet gather
         return gather(
             dtype, flat,
             arange(nb::borrow<nb::type_object_t<ArrayBase>>(index_dtype), 0,
                    shape[1], 1),
-            nb::bool_(true));
+            nb::bool_(true), ReduceMode::Permute);
     } else {
         return unravel_recursive(dtype, flat, index_dtype, shape, strides, 0, 0,
                                  (int) ndim - index_dtype.is_valid());

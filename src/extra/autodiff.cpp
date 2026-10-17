@@ -2027,10 +2027,8 @@ struct Gather : Special {
             source_grad.resize(source->size);
 
         MaskGuard guard(backend, mask_stack);
-        dr::scatter_reduce(
-            reduce_mode == ReduceMode::Permute ? ReduceOp::Identity
-                                               : ReduceOp::Add,
-            source_grad, target->grad, offset, mask, reduce_mode);
+        dr::scatter_reduce(ReduceOp::Add, source_grad, target->grad, offset,
+                           mask, reduce_mode);
     }
 
     void forward(const ADVariable *source, ADVariable *target) override {

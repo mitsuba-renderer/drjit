@@ -2244,3 +2244,30 @@ def test140_packet_scatter_add_fwd(t, enabled):
         x.grad = dr.opaque(Float, 1, 8)
         dr.forward_from(x)
         assert dr.all(x2.grad == 5)
+
+@pytest.test_arrays('is_diff,float32,shape=(*)')
+@pytest.mark.parametrize('n', [3, 4])
+def test141_permute_gather_accumulates_grad(t, n):
+    # Reverse-mode derivatives of permutation gathers (e.g., in dr.unravel())
+    # must accumulate gradients from other uses of the same variable
+    ArrayNf = getattr(sys.modules[t.__module__], f'Array{n}f')
+    UInt32 = dr.uint32_array_t(t)
+    size = 2 * n
+
+    x = dr.arange(t, size)
+    dr.enable_grad(x)
+    y = x * 1
+    a = dr.gather(t, y, UInt32(0, 0))
+    v = dr.unravel(ArrayNf, y)
+    b = dr.gather(t, y, size - 1 - dr.arange(UInt32, size),
+                  mode=dr.ReduceMode.Permute)
+    c = y * 2
+    dr.backward(dr.sum(a) + dr.sum(dr.sum(v)) + dr.sum(b) + dr.sum(c))
+    assert dr.all(x.grad == t([6] + [4] * (size - 1)))
+
+    # Accumulate into the gradient of a leaf over two traversals
+    x = dr.arange(t, size)
+    dr.enable_grad(x)
+    dr.backward(dr.sum(dr.sum(dr.unravel(ArrayNf, x))))
+    dr.backward(dr.sum(dr.gather(t, x, UInt32(0, 0))))
+    assert dr.all(x.grad == t([3] + [1] * (size - 1)))

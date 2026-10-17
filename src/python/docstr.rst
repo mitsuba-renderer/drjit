@@ -8811,9 +8811,9 @@
     more than 1 write to each element).
 
     Giving 'Permute' as an argument to a (nominally read-only) gather
-    operation is helpful because we then know that the reverse-mode derivative
-    of this operation can be a plain scatter instead of a more costly
-    atomic scatter-add.
+    operation is helpful because its reverse-mode derivative then becomes a
+    scatter-reduction with this mode. Dr.Jit performs it using a plain scatter
+    when the target array is still zero-valued, and otherwise using atomics.
 
     Giving 'Permute' as an argument to a scatter operation is helpful
     because we then know that the forward-mode derivative does not depend
