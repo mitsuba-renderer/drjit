@@ -1084,8 +1084,29 @@ void scatter(Target &target, const Value &value, const Index &index,
         if constexpr (depth_v<Value> == depth_v<Index>) {
             value.scatter_(target, uint32_array_t<Value>(index), mask, mode);
         } else {
-            Target::template scatter_packet_<Value::Size>(
-                target, value, uint32_array_t<value_t<Value>>(index), mask, mode);
+            if constexpr (is_array_v<Target>) {
+                using TargetD = std::decay_t<Target>;
+                TargetD::template scatter_packet_<Value::Size>(
+                    target, value, uint32_array_t<value_t<Value>>(index), mask, mode);
+            } else {
+                // Use the outer static array to select the generic element-wise
+                // fallback. Nested native dynamic elements recurse through
+                // scatter_(), while JIT/AD elements require an array target.
+                using ValueD = std::decay_t<Value>;
+                constexpr bool StaticOuter = ValueD::Size != Dynamic;
+                constexpr bool NativeValue =
+                    !is_jit_v<ValueD> && !is_diff_v<ValueD>;
+                if constexpr (StaticOuter && NativeValue) {
+                    // Keep the index depth so each nested packet layer applies
+                    // its own flattening stride during recursive dispatch.
+                    ValueD::template scatter_packet_<ValueD::Size>(
+                        target, value, uint32_array_t<Index>(index),
+                        mask, mode);
+                } else {
+                    static_assert(detail::false_v<ValueD>,
+                                  "Raw-pointer packet scatter requires a statically sized non-JIT/AD value");
+                }
+            }
         }
     } else if constexpr (is_drjit_struct_v<Value>) {
         static_assert(is_drjit_struct_v<Target>,
@@ -1108,6 +1129,16 @@ void scatter(Target &target, const Value &value, const Index &index,
                 ((Value *) target)[index] = value;
         }
     }
+}
+
+// Accept pointer prvalues such as buffer.data() without changing lvalue
+// overload resolution.
+template <typename Target, typename Value, typename Index,
+          typename Mask = mask_t<Index>,
+          enable_if_t<std::is_pointer_v<Target>> = 0>
+void scatter(Target &&target, const Value &value, const Index &index,
+             const Mask &mask = true, ReduceMode mode = ReduceMode::Auto) {
+    scatter(target, value, index, mask, mode);
 }
 
 template <typename Index>
