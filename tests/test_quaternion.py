@@ -93,10 +93,63 @@ def test10_pow(t):
 
 
 @pytest.test_arrays('quaternion')
-@pytest.mark.parametrize('op', ['exp', 'exp2', 'log', 'log2', 'sqrt', 'rsqrt'])
+@pytest.mark.parametrize('op', ['exp', 'exp2', 'log', 'log2', 'sqrt', 'rsqrt', 'pow'])
 def test11_positive_real(t, op):
-    func = getattr(dr, op)
+    func = (lambda q: q ** 2.5) if op == 'pow' else getattr(dr, op)
     for value in [0.25, 1, 4]:
         q = t(value)
         dr.make_opaque(q)
         assert dr.allclose(func(q), t(func(value)))
+
+
+@pytest.test_arrays('quaternion,diff,-float16')
+@pytest.mark.parametrize('op', ['exp', 'exp2', 'log', 'log2', 'sqrt', 'rsqrt', 'pow'])
+@pytest.mark.parametrize('axis', [0, 1, 2])
+@pytest.mark.parametrize('mode', ['forward', 'backward'])
+def test12_positive_real_grad(t, op, axis, mode):
+    for value in [0.25, 1, 4]:
+        q = t(value)
+        dr.make_opaque(q)
+        dr.enable_grad(q)
+        result = q ** 2.5 if op == 'pow' else getattr(dr, op)(q)
+        derivative = {
+            'exp': math.exp(value),
+            'exp2': math.log(2) * 2 ** value,
+            'log': 1 / value,
+            'log2': 1 / (value * math.log(2)),
+            'sqrt': 0.5 / math.sqrt(value),
+            'rsqrt': -0.5 / value ** 1.5,
+            'pow': 2.5 * value ** 1.5
+        }[op]
+        expected = t(0)
+        expected[axis] = derivative
+        if mode == 'forward':
+            dr.forward(q[axis])
+            assert dr.allclose(dr.grad(result), expected)
+        else:
+            dr.backward(result[axis])
+            assert dr.allclose(dr.grad(q), expected)
+
+
+@pytest.test_arrays('quaternion,-float16')
+@pytest.mark.parametrize('op', ['exp', 'exp2', 'log', 'log2', 'sqrt', 'rsqrt', 'pow'])
+def test13_near_positive_real(t, op):
+    for value in [0.25, 1, 4]:
+        for eps in [1e-3, 1e-7, 1e-12, 1e-20]:
+            q = t(eps, -2 * eps, eps, value)
+            dr.make_opaque(q)
+            result = q ** 2.5 if op == 'pow' else getattr(dr, op)(q)
+            ri = math.sqrt(6) * eps
+            z = complex(value, ri)
+            ref = {
+                'exp': lambda z: cmath.exp(z),
+                'exp2': lambda z: 2 ** z,
+                'log': lambda z: cmath.log(z),
+                'log2': lambda z: cmath.log(z) / math.log(2),
+                'sqrt': lambda z: cmath.sqrt(z),
+                'rsqrt': lambda z: 1 / cmath.sqrt(z),
+                'pow': lambda z: z ** 2.5
+            }[op](z)
+            for axis, v in enumerate([eps, -2 * eps, eps]):
+                assert dr.allclose(result[axis], v * (ref.imag / ri), atol=0)
+            assert dr.allclose(result.w, ref.real, atol=dr.epsilon(t))
