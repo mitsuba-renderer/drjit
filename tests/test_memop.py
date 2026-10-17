@@ -1726,3 +1726,17 @@ def test46_packet_scatter_dirty_value(t):
     dr.scatter(b, a + 10, dr.arange(dr.uint32_array_t(Float), 8))
     r = dr.ravel(t(a, b))
     assert dr.all(r == Float([v for i in range(8) for v in (i, i + 10)]))
+
+
+@pytest.test_arrays('uint32,jit,shape=(*)')
+@pytest.mark.parametrize('mode', ['Auto', 'Direct', 'Local', 'Expand'])
+def test47_scatter_mixed_ops(t, mode):
+    # Each scatter is larger than the previous one, so its kernel would launch
+    # first if Dr.Jit didn't flush the pending writes of incompatible scatters
+    mode = getattr(dr.ReduceMode, mode)
+    UInt32 = dr.uint32_array_t(t)
+    x = dr.zeros(t, 4)
+    dr.scatter(x, 5, UInt32(0))
+    dr.scatter_add(x, 2, UInt32(0, 1), mode=mode)
+    dr.scatter_reduce(dr.ReduceOp.Max, x, 3, dr.arange(UInt32, 4), mode=mode)
+    assert dr.all(x == t(7, 3, 3, 3))
