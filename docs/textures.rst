@@ -301,6 +301,28 @@ evaluation will apply the nonlinear sRGB transfer function to turn
 gamma-encoded 8-bit values back into a linear scale. The CUDA and Metal
 backends perform both types of conversions in hardware.
 
+Block-compressed textures
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+2D 8-bit textures can also be created from *block-compressed* data in the BC4
+(one channel), BC5 (two channels), or BC7 (four channels) formats, which
+store each 4x4 block of texels in 8 or 16 bytes. The CUDA and Metal backends
+keep this representation and decode it in hardware on every lookup, which
+reduces the memory footprint by a factor of 4-8 compared to plain 8-bit
+storage. Other configurations decode the blocks once when the texture is
+created.
+
+.. code-block:: python
+
+   # 'blocks' is a UInt8 array holding the row-major 4x4 blocks
+   tex = Texture2f8u([height, width], channels=3, block_format=dr.BlockFormat.BC7,
+                     blocks=blocks, srgb=True)
+
+Dr.Jit does not compress textures itself, and it cannot derive a MIP pyramid
+from compressed data. A MIP-mapped texture therefore requires the blocks of
+the complete pyramid (pass the level count as ``n_levels``). Compressed
+textures are read-only and cannot be differentiated.
+
 Writing to textures
 -------------------
 

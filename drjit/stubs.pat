@@ -705,6 +705,9 @@ drjit.hashgrid.__prefix__:
     \from typing import Type, Iterable
     \from drjit import ArrayBase
 
+drjit.quad.__prefix__:
+    \from drjit import T
+
 drjit.nn.__prefix__:
     \from typing import Iterator, TypeVar
     \from drjit import SelfT, SelfCpT, ValT, ValCpT, T, PlainT, MaskT, ArrayT, ArrayBase

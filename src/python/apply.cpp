@@ -37,8 +37,10 @@ static const char *op_names[] = {
 
     "exp",
     "exp2",
+    "expm1",
     "log",
     "log2",
+    "log1p",
 
     "sin",
     "cos",

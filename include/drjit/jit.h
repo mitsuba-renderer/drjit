@@ -236,8 +236,10 @@ struct DRJIT_TRIVIAL_ABI JitArray
     JitArray rsqrt_() const { return steal(jit_var_rsqrt(m_index)); }
     JitArray exp2_() const { return steal(jit_var_exp2(m_index)); }
     JitArray exp_() const { return steal(jit_var_exp(m_index)); }
+    JitArray expm1_() const { return steal(jit_var_expm1(m_index)); }
     JitArray log2_() const { return steal(jit_var_log2(m_index)); }
     JitArray log_() const { return steal(jit_var_log(m_index)); }
+    JitArray log1p_() const { return steal(jit_var_log1p(m_index)); }
     JitArray sin_() const { return steal(jit_var_sin(m_index)); }
     JitArray cos_() const { return steal(jit_var_cos(m_index)); }
     JitArray tan_() const { return steal(jit_var_tan(m_index)); }

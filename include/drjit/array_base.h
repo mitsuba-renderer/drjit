@@ -563,8 +563,10 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT {
 
     DRJIT_IMPLEMENT_UNARY_REC(exp2, exp2(a), IsFloat)
     DRJIT_IMPLEMENT_UNARY_REC(exp, exp(a), IsFloat)
+    DRJIT_IMPLEMENT_UNARY_REC(expm1, expm1(a), IsFloat)
     DRJIT_IMPLEMENT_UNARY_REC(log2, log2(a), IsFloat)
     DRJIT_IMPLEMENT_UNARY_REC(log, log(a), IsFloat)
+    DRJIT_IMPLEMENT_UNARY_REC(log1p, log1p(a), IsFloat)
 
     DRJIT_IMPLEMENT_UNARY_REC(sinh, sinh(a), IsFloat)
     DRJIT_IMPLEMENT_UNARY_REC(cosh, cosh(a), IsFloat)

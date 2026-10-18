@@ -126,6 +126,9 @@ static nb::ndarray<> dlpack(nb::handle_t<ArrayBase> h, bool force_cpu, nb::handl
 
             value = JitVar::steal(jit_var_data(value.index(), &ptr));
 
+            if (backend == JitBackend::Metal && !force_cpu)
+                device_type = nb::device::metal::value;
+
             if (backend == JitBackend::CUDA && !force_cpu) {
                 device_type = nb::device::cuda::value;
                 device_id = jit_cuda_device_raw();
@@ -280,11 +283,39 @@ void export_dlpack(nb::module_ &) {
     nb::class_<ArrayBase> ab = nb::borrow<nb::class_<ArrayBase>>(array_base);
 
     ab.def("__dlpack__",
-           [](nb::handle_t<ArrayBase> h, nb::handle stream) {
+           [](nb::handle_t<ArrayBase> h, nb::handle stream, nb::handle,
+              nb::handle dl_device, nb::handle copy) {
                const ArraySupplement &s = supp(h.type());
-               bool force_cpu = (JitBackend) s.backend == JitBackend::Metal;
+               bool is_metal = (JitBackend) s.backend == JitBackend::Metal;
+               // Metal arrays are exported as a host copy unless the consumer
+               // explicitly asks for the device representation
+               bool force_cpu = is_metal;
+
+               if (!dl_device.is_none()) {
+                   int32_t requested = nb::cast<int32_t>(dl_device[0]);
+                   if (is_metal && requested == nb::device::metal::value)
+                       force_cpu = false;
+                   else if (requested != nb::cast<int32_t>(dlpack_device(h)[0]))
+                       throw nb::buffer_error(
+                           "__dlpack__(): the array cannot be exported to the "
+                           "requested device.");
+               }
+
+               if (force_cpu && !copy.is_none() && !nb::cast<bool>(copy))
+                   throw nb::buffer_error(
+                       "__dlpack__(): exporting a Metal array to the host "
+                       "requires a copy. Pass dl_device=(8, 0) to export the "
+                       "device representation.");
+
+               if (is_metal && !force_cpu && (VarType) s.type == VarType::Float64)
+                   throw nb::buffer_error(
+                       "__dlpack__(): Float64 Metal arrays are stored in single "
+                       "precision on the device and cannot be exported without "
+                       "a copy.");
+
                return dlpack(h, force_cpu, stream);
-           }, "stream"_a = nb::none(), doc_dlpack)
+           }, "stream"_a = nb::none(), "max_version"_a = nb::none(),
+           "dl_device"_a = nb::none(), "copy"_a = nb::none(), doc_dlpack)
       .def("__dlpack_device__",
            [](nb::handle_t<ArrayBase> h) {
                return dlpack_device(h);

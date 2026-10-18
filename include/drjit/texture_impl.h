@@ -166,6 +166,17 @@ typename Ops::Int tex_idiv_dynamic(const Ops &ops, const typename Ops::Int &m,
     return q >> s;
 }
 
+/// Depth of the MIP pyramid of a texture with the given shape, including the base
+inline uint32_t tex_mip_levels(const size_t *shape, uint32_t dim) {
+    uint32_t n_levels = 1;
+    size_t max_res = 0;
+    for (uint32_t i = 0; i < dim; ++i)
+        max_res = shape[i] > max_res ? shape[i] : max_res;
+    while ((max_res >> (n_levels - 1)) > 1)
+        n_levels++;
+    return n_levels;
+}
+
 /// Compute the depth and per-level constant table of a texture's MIP pyramid.
 /// The table is an ``int32`` buffer holding one record per level, laid out as
 ///
@@ -188,12 +199,7 @@ typename Ops::Int tex_idiv_dynamic(const Ops &ops, const typename Ops::Int &m,
 inline uint32_t tex_mip_table(std::unique_ptr<int32_t[]> &table,
                               uint32_t &texels, const size_t *shape,
                               uint32_t dim, uint32_t stride) {
-    uint32_t n_levels = 1;
-    size_t max_res = 0;
-    for (uint32_t i = 0; i < dim; ++i)
-        max_res = shape[i] > max_res ? shape[i] : max_res;
-    while ((max_res >> (n_levels - 1)) > 1)
-        n_levels++;
+    uint32_t n_levels = tex_mip_levels(shape, dim);
 
     texels = 0;
     if (n_levels == 1)

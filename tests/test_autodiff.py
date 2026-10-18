@@ -955,6 +955,8 @@ std_test('round', lambda a: dr.round(a), 1.6, 2.0, 0.0)
 std_test('trunc', lambda a: dr.trunc(a), 1.6, 1.0, 0.0)
 std_test('ceil', lambda a: dr.ceil(a), 1.6, 2.0, 0.0)
 std_test('floor', lambda a: dr.floor(a), 1.6, 1.0, 0.0)
+std_test('expm1', lambda a: dr.expm1(a), 0.5, 0.6487212707001282, 1.6487212707001282)
+std_test('log1p', lambda a: dr.log1p(a), 0.5, 0.4054651081081644, 0.6666666666666666)
 
 
 
@@ -2176,8 +2178,102 @@ def test138_relative_grad(t):
     dr.backward(y_replaced)
     assert dr.allclose(dr.grad(x), 2 * x / dr.square(x))
 
+@pytest.mark.parametrize("enabled", [True, False])
+@pytest.skip_on(RuntimeError, "backend does not support the requested type of atomic reduction")
+@pytest.test_arrays('is_diff,float32,shape=(4, *),-quat')
+def test139_packet_scatter_add_suspended(t, enabled):
+    # Packet scatters must ignore inputs whose gradients are suspended
+    with dr.scoped_set_flag(dr.JitFlag.PacketOps, enabled):
+        Float = dr.value_t(t)
+        UInt32 = dr.uint32_array_t(Float)
+
+        x = dr.arange(Float, 8)
+        dr.enable_grad(x)
+        x2 = x * 1
+        old = Float(x2)
+        a, b = dr.opaque(Float, 1, 2), dr.opaque(Float, 1, 2)
+        dr.enable_grad(a, b)
+        with dr.suspend_grad(x2):
+            dr.scatter_add(x2, t(a, b, a, b), dr.arange(UInt32, 2))
+        x.grad = dr.opaque(Float, 1, 8)
+        a.grad = dr.opaque(Float, 10, 2)
+        b.grad = dr.opaque(Float, 100, 2)
+        dr.enqueue(dr.ADMode.Forward, x, a, b)
+        dr.traverse(dr.ADMode.Forward, flags=dr.ADFlag.ClearNone)
+        assert dr.all(x2.grad == [10, 100] * 4)
+        assert dr.all(old.grad == 1)
+
+@pytest.mark.parametrize("enabled", [True, False])
+@pytest.skip_on(RuntimeError, "backend does not support the requested type of atomic reduction")
+@pytest.test_arrays('is_diff,float32,shape=(4, *),-quat')
+def test140_packet_scatter_add_fwd(t, enabled):
+    # Forward-mode derivatives of packet scatters that update the target in place
+    with dr.scoped_set_flag(dr.JitFlag.PacketOps, enabled):
+        Float = dr.value_t(t)
+        UInt32 = dr.uint32_array_t(Float)
+
+        # Consecutive scatters into the same target
+        x = dr.opaque(Float, 1, 100)
+        dr.enable_grad(x)
+        index = dr.arange(UInt32, 100) % 10
+        target = dr.zeros(Float, 40)
+        for i in range(4):
+            dr.scatter_add(target, t(x * (i + 1), x, x, 1), (index + i) % 10)
+        x.grad = 1
+        dr.forward_to(target)
+        assert dr.allclose(target.grad, [100, 40, 40, 0] * 10)
+
+        # The original target has another use
+        x = dr.arange(Float, 8)
+        dr.enable_grad(x)
+        x2 = x * 1
+        old = Float(x2)
+        dr.scatter_add(x2, t(1, 1, 1, 1), UInt32(0))
+        y = old * 3
+        x.grad = dr.opaque(Float, 1, 8)
+        dr.forward_from(x, flags=dr.ADFlag.ClearNone)
+        assert dr.all(old.grad == 1)
+        assert dr.all(y.grad == 3)
+        assert dr.all(x2.grad == 1)
+
+        # The scattered values alias the target
+        x = dr.arange(Float, 8)
+        dr.enable_grad(x)
+        x2 = x * 1
+        dr.scatter_add(x2, t(x2, x2, x2, x2), dr.arange(UInt32, 8) % 2)
+        x.grad = dr.opaque(Float, 1, 8)
+        dr.forward_from(x)
+        assert dr.all(x2.grad == 5)
+
+@pytest.test_arrays('is_diff,float32,shape=(*)')
+@pytest.mark.parametrize('n', [3, 4])
+def test141_permute_gather_accumulates_grad(t, n):
+    # Reverse-mode derivatives of permutation gathers (e.g., in dr.unravel())
+    # must accumulate gradients from other uses of the same variable
+    ArrayNf = getattr(sys.modules[t.__module__], f'Array{n}f')
+    UInt32 = dr.uint32_array_t(t)
+    size = 2 * n
+
+    x = dr.arange(t, size)
+    dr.enable_grad(x)
+    y = x * 1
+    a = dr.gather(t, y, UInt32(0, 0))
+    v = dr.unravel(ArrayNf, y)
+    b = dr.gather(t, y, size - 1 - dr.arange(UInt32, size),
+                  mode=dr.ReduceMode.Permute)
+    c = y * 2
+    dr.backward(dr.sum(a) + dr.sum(dr.sum(v)) + dr.sum(b) + dr.sum(c))
+    assert dr.all(x.grad == t([6] + [4] * (size - 1)))
+
+    # Accumulate into the gradient of a leaf over two traversals
+    x = dr.arange(t, size)
+    dr.enable_grad(x)
+    dr.backward(dr.sum(dr.sum(dr.unravel(ArrayNf, x))))
+    dr.backward(dr.sum(dr.gather(t, x, UInt32(0, 0))))
+    assert dr.all(x.grad == t([3] + [1] * (size - 1)))
+
 @pytest.test_arrays('is_diff,float,shape=(*)')
-def test139_zero_derivative_stays_attached(t):
+def test142_zero_derivative_stays_attached(t):
     # A derivative that works out to zero should still stay in the AD graph.
     # Otherwise it looks like a variable that was never attached, and
     # dr.backward() wrongly complains about its argument.

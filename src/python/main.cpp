@@ -46,17 +46,32 @@
 #include "coop_vec.h"
 #include "reorder.h"
 #include "quat.h"
+#include "quad.h"
 
 static int active_backend = -1;
 
-static void set_flag_py(JitFlag flag, bool value) {
-    if (flag == JitFlag::Debug) {
-        if (value)
+static void set_flags_py(uint32_t flags) {
+    uint32_t changed = flags ^ jit_flags();
+
+    if (changed & (uint32_t) JitFlag::Debug) {
+        if (flags & (uint32_t) JitFlag::Debug)
             enable_py_tracing();
         else
             disable_py_tracing();
     }
-    jit_set_flag(flag, value);
+
+    jit_set_flags(flags);
+}
+
+static void set_flag_py(JitFlag flag, bool value) {
+    uint32_t flags = jit_flags();
+
+    if (value)
+        flags |= (uint32_t) flag;
+    else
+        flags &= ~(uint32_t) flag;
+
+    set_flags_py(flags);
 }
 
 NB_MODULE(_drjit_ext, m_) {
@@ -88,6 +103,7 @@ NB_MODULE(_drjit_ext, m_) {
                 metal_ad = nb::module_::import_("drjit.metal.ad");
 #endif
     nb::module_ detail = m.attr("detail"),
+                quad   = m.attr("quad"),
                 scalar = nb::module_::import_("drjit.scalar");
 
     m.attr("__version__") = DRJIT_VERSION;
@@ -121,6 +137,7 @@ NB_MODULE(_drjit_ext, m_) {
         .value("ShaderExecutionReordering", JitFlag::ShaderExecutionReordering, doc_JitFlag_ShaderExecutionReordering)
         .value("KernelFreezing", JitFlag::KernelFreezing, doc_JitFlag_KernelFreezing)
         .value("FreezingScope", JitFlag::FreezingScope, doc_JitFlag_FreezingScope)
+        .value("SymbolicAll", JitFlag::SymbolicAll, doc_JitFlag_SymbolicAll)
         .value("Default", JitFlag::Default, doc_JitFlag_Default);
 
     nb::enum_<VarType>(m, "VarType", doc_VarType)
@@ -184,6 +201,12 @@ NB_MODULE(_drjit_ext, m_) {
         .value("Standard", dr::MipBasis::Standard)
         .value("Laplacian", dr::MipBasis::Laplacian);
 
+    nb::enum_<dr::BlockFormat>(m, "BlockFormat")
+        .value("Disabled", dr::BlockFormat::Disabled)
+        .value("BC4", dr::BlockFormat::BC4)
+        .value("BC5", dr::BlockFormat::BC5)
+        .value("BC7", dr::BlockFormat::BC7);
+
     m.def("has_backend", &jit_has_backend, doc_has_backend);
 
     m.def("sync_thread", &jit_sync_thread, doc_sync_thread, nb::call_guard<nb::gil_scoped_release>())
@@ -200,17 +223,18 @@ NB_MODULE(_drjit_ext, m_) {
 
     struct scoped_set_flag_py {
         JitFlag flag;
-        bool value, backup = false;
+        bool value;
+        uint32_t backup = 0;
         scoped_set_flag_py(JitFlag flag, bool value)
             : flag(flag), value(value) { }
 
         void __enter__() {
-            backup = jit_flag(flag);
+            backup = jit_flags() & (uint32_t) flag;
             set_flag_py(flag, value);
         }
 
         void __exit__(nb::handle, nb::handle, nb::handle) {
-            set_flag_py(flag, backup);
+            set_flags_py((jit_flags() & ~(uint32_t) flag) | backup);
         }
     };
 
@@ -286,6 +310,7 @@ NB_MODULE(_drjit_ext, m_) {
     export_resample(m);
     export_reorder(m);
     export_quat(m);
+    export_quad(quad);
 
     export_scalar(scalar);
 

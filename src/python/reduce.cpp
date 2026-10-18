@@ -129,6 +129,15 @@ static_assert(sizeof(reductions) == sizeof(Reduction) * (size_t) ReduceOpExt::Op
 nb::object reduce(uint32_t op, nb::handle h, nb::handle axis, nb::handle mode,
                   bool keepdims, nb::handle where);
 
+static nb::tuple simd_reduce(ReduceOp op, nb::handle h,
+                             std::optional<uint32_t> block_size,
+                             nb::handle where);
+
+static bool is_simd_mode(nb::handle mode) {
+    return nb::isinstance<nb::str>(mode) &&
+           strcmp(nb::borrow<nb::str>(mode).c_str(), "simd") == 0;
+}
+
 /// Turn a mask into an unsigned integer array of zeros and ones
 static nb::object count_promote(nb::handle h) {
     nb::object tp = reinterpret_array_t(h, VarType::UInt32);
@@ -354,6 +363,26 @@ nb::object reduce(uint32_t op, nb::handle h, nb::handle axis_, nb::handle mode,
             nb::raise("%s", axis_type_msg);
         }
 
+        // Pre-reduce within SIMD groups when the reduction includes the
+        // trailing (dynamic) axis. Nested arrays must reduce only this axis,
+        // since a reduction over components would broadcast size-1 entries.
+        if (is_simd_mode(mode)) {
+            mode = Py_None;
+            bool trailing;
+            if (s.is_tensor)
+                trailing = axis_len == -1 ||
+                           nb::cast<int>(axis[axis_len - 1]) == ndim - 1;
+            else
+                trailing = s.shape[s.ndim - 1] == DRJIT_DYNAMIC &&
+                           (s.ndim == 1 || (axis_len == 1 && red_axis == ndim - 1));
+
+            if (trailing && op < (uint32_t) ReduceOp::Count &&
+                (JitBackend) s.backend != JitBackend::None) {
+                h_masked = simd_reduce((ReduceOp) op, h, std::nullopt, Py_True)[0];
+                h = h_masked;
+            }
+        }
+
         if (s.is_tensor) {
             if (axis_len == -1) {
                 // Directly process the underlying 1D array
@@ -397,7 +426,7 @@ nb::object reduce(uint32_t op, nb::handle h, nb::handle axis_, nb::handle mode,
                     symbolic = 0;
             }
             if (symbolic == -1)
-                nb::raise("'mode' must be \'symbolic\", \"evaluated\", or None.");
+                nb::raise("'mode' must be \"symbolic\", \"evaluated\", \"simd\", or None.");
         }
 
         // 'keepdims=True' on a non-tensor is only supported when the
@@ -796,12 +825,19 @@ static nb::object block_reduce(ReduceOp op,
 
     int symbolic = -1;
     if (mode.has_value()) {
-        if (mode.value() == "symbolic")
+        if (mode.value() == "symbolic") {
             symbolic = 1;
-        else if (mode.value() == "evaluated")
+        } else if (mode.value() == "evaluated") {
             symbolic = 0;
-        else
-            nb::raise("drjit.block_reduce(): 'mode' parameter must either equal 'symbolic' or 'evaluated'!");
+        } else if (mode.value() == "simd") {
+            nb::tuple t = simd_reduce(op, h, block_size, Py_True);
+            h_masked = t[0];
+            h = h_masked;
+            block_size = nb::cast<uint32_t>(t[1]);
+        } else {
+            nb::raise("drjit.block_reduce(): 'mode' parameter must equal "
+                      "'symbolic', 'evaluated', or 'simd'!");
+        }
     }
 
     BlockReduceOp r(op, block_size, symbolic);
@@ -843,6 +879,113 @@ static nb::object block_prefix_reduce(ReduceOp op, nb::handle h,
 static nb::object block_sum(nb::handle h, uint32_t block_size,
                             std::optional<dr::string> mode, nb::handle where) {
     return block_reduce(ReduceOp::Add, h, block_size, mode, where);
+}
+
+static nb::object simd_reduce_pytree(ReduceOp op, nb::handle h,
+                                     uint32_t &block_size) {
+    struct BlockSizeOp : TraverseCallback {
+        ReduceOp op;
+        uint32_t requested, result = 0;
+
+        BlockSizeOp(ReduceOp op, uint32_t requested)
+            : op(op), requested(requested) { }
+
+        void operator()(nb::handle h) override {
+            const ArraySupplement &s = supp(h.type());
+            if ((JitBackend) s.backend == JitBackend::None)
+                nb::raise_type_error("expected a Jit-compiled array!");
+
+            // Size-1 arrays remain unchanged and don't constrain the block size
+            uint32_t index = (uint32_t) s.index(inst_ptr(h));
+            if (!index || jit_var_size(index) == 1)
+                return;
+
+            uint32_t bs = jit_var_simd_reduce_block(op, index, requested);
+            result = result ? std::min(result, bs) : bs;
+        }
+    };
+
+    struct SimdReduceOp : TransformCallback {
+        ReduceOp op;
+        uint32_t block_size;
+
+        SimdReduceOp(ReduceOp op, uint32_t block_size)
+            : op(op), block_size(block_size) { }
+
+        // Changing the size of a nested tensor would lose its shape
+        nb::handle transform_type(nb::handle tp) const override {
+            if (supp(tp).is_tensor)
+                nb::raise_type_error(
+                    "tensors are only supported as the top-level 'value' "
+                    "argument of drjit.simd_reduce()!");
+            return tp;
+        }
+
+        void operator()(nb::handle h1, nb::handle h2) override {
+            const ArraySupplement &s = supp(h1.type());
+            uint32_t bs = block_size;
+            uint64_t index = ad_var_simd_reduce(op, s.index(inst_ptr(h1)), &bs);
+            s.init_index(index, inst_ptr(h2));
+            inst_mark_ready(h2);
+            ad_var_dec_ref(index);
+        }
+    };
+
+    BlockSizeOp b(op, block_size);
+    traverse("drjit.simd_reduce", b, h);
+    block_size = b.result ? b.result : 1;
+
+    SimdReduceOp r(op, block_size);
+    return transform("drjit.simd_reduce", r, h);
+}
+
+static nb::tuple simd_reduce(ReduceOp op, nb::handle h,
+                             std::optional<uint32_t> block_size,
+                             nb::handle where) {
+    if (block_size.has_value() && block_size.value() == 0)
+        nb::raise("drjit.simd_reduce(): 'block_size' must be positive!");
+
+    nb::object h_masked = apply_where((uint32_t) op, h, where);
+    h = h_masked;
+
+    nb::handle tp = h.type();
+
+    if (is_drjit_type(tp) && supp(tp).is_tensor) {
+        const ArraySupplement &s = supp(tp);
+        dr::vector<size_t> shape = s.tensor_shape(inst_ptr(h));
+        size_t ndim = shape.size();
+
+        if (ndim == 0)
+            nb::raise("drjit.simd_reduce(): 'value' must be a tensor with at "
+                      "least one axis!");
+
+        size_t n = shape[ndim - 1];
+        uint32_t requested = block_size.value_or((uint32_t) n);
+        if (n == 0 || n > UINT32_MAX || n % requested != 0)
+            nb::raise("drjit.simd_reduce(): the block size (%u) must divide "
+                      "the length of the trailing axis (%zu)!", requested, n);
+
+        uint32_t bs = requested;
+        nb::object array = simd_reduce_pytree(
+            op, nb::steal(s.tensor_array(h.ptr())), bs);
+
+        nb::tuple_builder shape_builder(ndim);
+        for (size_t i = 0; i < ndim - 1; ++i)
+            shape_builder.put(shape[i]);
+        shape_builder.put(n / bs);
+
+        return nb::make_tuple(tp(array, shape_builder.commit()),
+                              requested / bs);
+    }
+
+    // Without a block size, the entire array is reduced
+    uint32_t bs = block_size.value_or(1u << 31);
+    nb::object result = simd_reduce_pytree(op, h, bs);
+
+    if (block_size.has_value())
+        return nb::make_tuple(result, block_size.value() / bs);
+    else
+        return nb::make_tuple(result, nb::none());
 }
 
 /// Returns the shape that ``sum(x, axis, keepdims)`` would produce for an
@@ -991,9 +1134,11 @@ void export_reduce(nb::module_ & m) {
           doc_block_prefix_reduce,
           nb::sig("def block_prefix_reduce(op: ReduceOp, value: ArrayT, block_size: int, exclusive: bool = True, reverse: bool = False, where: ArrayBase | Sequence[bool] | bool = True) -> ArrayT"))
      .def("block_reduce", &block_reduce, "op"_a, "value"_a, "block_size"_a, "mode"_a = nb::none(), "where"_a = true, doc_block_reduce,
-          nb::sig("def block_reduce(op: ReduceOp, value: T, block_size: int, mode: Literal['evaluated', 'symbolic', None] = None, where: ArrayBase | Sequence[bool] | bool = True) -> T"))
+          nb::sig("def block_reduce(op: ReduceOp, value: T, block_size: int, mode: Literal['evaluated', 'symbolic', 'simd', None] = None, where: ArrayBase | Sequence[bool] | bool = True) -> T"))
      .def("block_sum", &block_sum, "value"_a, "block_size"_a, "mode"_a = nb::none(), "where"_a = true, doc_block_sum,
-          nb::sig("def block_sum(value: T, block_size: int, mode: Literal['evaluated', 'symbolic', None] = None, where: ArrayBase | Sequence[bool] | bool = True) -> T"))
+          nb::sig("def block_sum(value: T, block_size: int, mode: Literal['evaluated', 'symbolic', 'simd', None] = None, where: ArrayBase | Sequence[bool] | bool = True) -> T"))
+     .def("simd_reduce", &simd_reduce, "op"_a, "value"_a, "block_size"_a = nb::none(), "where"_a = true, doc_simd_reduce,
+          nb::sig("def simd_reduce(op: ReduceOp, value: T, block_size: int | None = None, where: ArrayBase | Sequence[bool] | bool = True) -> tuple[T, int | None]"))
      .def("compress", &compress, doc_compress)
      .def("cumsum", [](nb::handle value, nb::handle axis, bool reverse, nb::handle where) {
              return prefix_reduce(ReduceOp::Add, value, axis, false, reverse, where);

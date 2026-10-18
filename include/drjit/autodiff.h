@@ -293,8 +293,10 @@ struct DRJIT_TRIVIAL_ABI DiffArray
 
     DiffArray exp_() const { return steal(ad_var_exp(m_index)); }
     DiffArray exp2_() const { return steal(ad_var_exp2(m_index)); }
+    DiffArray expm1_() const { return steal(ad_var_expm1(m_index)); }
     DiffArray log_() const { return steal(ad_var_log(m_index)); }
     DiffArray log2_() const { return steal(ad_var_log2(m_index)); }
+    DiffArray log1p_() const { return steal(ad_var_log1p(m_index)); }
 
     DiffArray sinh_() const { return steal(ad_var_sinh(m_index)); }
     DiffArray cosh_() const { return steal(ad_var_cosh(m_index)); }
@@ -1096,7 +1098,8 @@ template <bool IncRef, typename Value>
 void collect_indices(const Value &value, vector<uint64_t> &indices,
                      TraverseRole role) {
     traverse_fn(value, (void *) &indices,
-                TraverseVisitor { role, collect_indices_fn<IncRef>, nullptr });
+                TraverseVisitor { role, collect_indices_fn<IncRef>, nullptr,
+                                 nullptr });
 }
 
 template <typename Value>
@@ -1104,7 +1107,7 @@ void update_indices(Value &value, const vector<uint64_t> &indices, size_t &pos,
                     TraverseRole role) {
     update_indices_payload payload { indices, pos };
     traverse_fn(value, (void *) &payload,
-                TraverseVisitor { role, update_indices_fn, nullptr });
+                TraverseVisitor { role, update_indices_fn, nullptr, nullptr });
 }
 
 template <typename T>

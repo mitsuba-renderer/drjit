@@ -110,6 +110,7 @@ Block reductions
 .. autofunction:: block_sum
 .. autofunction:: block_prefix_reduce
 .. autofunction:: block_prefix_sum
+.. autofunction:: simd_reduce
 
 Rearranging array contents
 --------------------------
@@ -143,6 +144,23 @@ Other operations on tensors
 .. autofunction:: resample
 .. autofunction:: convolve
 .. autofunction:: matmul
+
+Numerical quadrature
+--------------------
+
+.. py:module:: drjit.quad
+
+The :py:mod:`drjit.quad` module computes nodes and weights of standard
+quadrature rules on the interval :math:`[-1, 1]`. All functions take the
+desired output array type as their first argument.
+
+.. autofunction:: gauss_legendre
+.. autofunction:: gauss_lobatto
+.. autofunction:: composite_simpson
+.. autofunction:: composite_simpson_38
+.. autofunction:: chebyshev
+
+.. py:currentmodule:: drjit
 
 Random number generation
 ------------------------
@@ -188,6 +206,10 @@ Miscellaneous operations
 .. autofunction:: srgb_to_linear
 .. autofunction:: linear_srgb_to_oklab
 .. autofunction:: oklab_to_linear_srgb
+.. autofunction:: rgb_to_hsv
+.. autofunction:: hsv_to_rgb
+.. autofunction:: rgb_to_hsl
+.. autofunction:: hsl_to_rgb
 .. autofunction:: reorder_threads
 
 Just-in-time compilation
@@ -354,6 +376,7 @@ Operations for vectors and matrices
 .. autofunction:: quat_to_euler
 .. autofunction:: euler_to_quat
 .. autofunction:: transform_decompose
+.. autofunction:: transform_decompose_qr
 .. autofunction:: transform_compose
 .. autofunction:: unit_angle
 .. autofunction:: quat_apply
@@ -401,8 +424,10 @@ ________________________________________
 
 .. autofunction:: log2
 .. autofunction:: log
+.. autofunction:: log1p
 .. autofunction:: exp2
 .. autofunction:: exp
+.. autofunction:: expm1
 .. autofunction:: power
 
 Other
@@ -699,6 +724,7 @@ enumerations provided here
 .. autoenum:: FilterMode
 .. autoenum:: MipFilter
 .. autoenum:: MipBasis
+.. autoenum:: BlockFormat
 
 Low-level bits
 --------------

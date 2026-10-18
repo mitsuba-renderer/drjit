@@ -58,8 +58,10 @@ struct UInt64Pair {
 // Unary arithmetic/transcendental operations
 DR_EXPORT(exp2)
 DR_EXPORT(exp)
+DR_EXPORT(expm1)
 DR_EXPORT(log2)
 DR_EXPORT(log)
+DR_EXPORT(log1p)
 DR_EXPORT(sin)
 DR_EXPORT(cos)
 DR_EXPORT(tan)
@@ -183,6 +185,11 @@ extern DRJIT_EXTRA_EXPORT uint64_t ad_var_block_reduce(ReduceOp op,
                                                        uint64_t index,
                                                        uint32_t block_size,
                                                        int symbolic);
+
+/// Differentiable version of jit_var_simd_reduce()
+extern DRJIT_EXTRA_EXPORT uint64_t ad_var_simd_reduce(ReduceOp op,
+                                                      uint64_t index,
+                                                      uint32_t *block_size);
 
 /// Tile the input array 'count' times
 extern DRJIT_EXTRA_EXPORT uint64_t ad_var_tile(uint64_t index, uint32_t count);
@@ -440,6 +447,21 @@ ad_tex_readback(VarType storage_type, uint32_t dimension,
 extern DRJIT_EXTRA_EXPORT uint64_t
 ad_tex_repack(uint64_t source, uint32_t n_pixels, uint32_t dst_channels,
               uint32_t src_channels);
+
+/**
+ * \brief Decode block-compressed texture data on the host
+ *
+ * Expands the row-major 4x4 blocks in ``blocks`` (``ceil(width/4) *
+ * ceil(height/4)`` of them) of a BC4 (1 channel), BC5 (2 channels), or BC7
+ * (4 channels) image into ``width * height`` row-major 8-bit texels with the
+ * format's channel count. This is the software fallback for backends
+ * without hardware texture units.
+ *
+ * \param block_format  4, 5, or 7 (see \ref drjit::BlockFormat)
+ */
+extern DRJIT_EXTRA_EXPORT void
+ad_tex_bc_decode(int block_format, uint32_t width, uint32_t height,
+                 const uint8_t *blocks, uint8_t *out);
 
 extern DRJIT_EXTRA_EXPORT void ad_enqueue(drjit::ADMode, uint64_t);
 extern DRJIT_EXTRA_EXPORT void ad_traverse(drjit::ADMode, uint32_t);

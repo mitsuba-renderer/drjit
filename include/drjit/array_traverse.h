@@ -89,7 +89,10 @@ enum class TraverseRole : uint32_t {
     Call,
 
     /// Inputs and outputs of a frozen function (``dr.freeze()``)
-    Freeze
+    Freeze,
+
+    /// Recursive traversal (e.g., for garbage collection)
+    Children
 };
 
 /**
@@ -102,15 +105,20 @@ enum class TraverseRole : uint32_t {
  * return a borrowed index. This means a callback that callbacks creates a new
  * variable must keep it alive until the traversal has returns.
  * When the array is a class pointer array, ``variant`` and ``domain`` identify
- * its ``CallSupport``, otherwise both are "".
+ * its ``CallSupport``, otherwise both are "". A null ``var`` callback skips
+ * the arrays, which leaves a traversal of the child objects alone.
  *
  * ``child`` receives each directly held child object (a member deriving from
  * \ref TraversableBase, whether held by value, pointer, or smart pointer). A
  * null ``child`` callback requests a deep traversal that descends into every
  * child object in place.
  *
- * Both callbacks receive the ``name`` of the member that the array or child
- * object was reached through, which \ref DR_TRAVERSE_CB obtains by
+ * ``state`` receives scalar state that the object bakes into generated code. A
+ * frozen function compares it bytewise, hence the reported bytes must be free
+ * of padding. A null ``state`` callback requests no state.
+ *
+ * The callbacks receive the ``name`` of the member that the array, child
+ * object or scalar was reached through, which \ref DR_TRAVERSE_CB obtains by
  * stringifying its arguments. It is a compile-time string that the callback
  * may store without copying it, or an empty string when the traversal does not
  * name its members. A member expanding into several arrays or child objects
@@ -122,6 +130,8 @@ struct TraverseVisitor {
     uint64_t (*var)(void *payload, uint64_t index, const char *name,
                     const char *variant, const char *domain);
     void (*child)(void *payload, TraversableBase *obj, const char *name);
+    void (*state)(void *payload, const void *value, size_t size,
+                  const char *name);
 };
 
 namespace detail {
@@ -210,6 +220,14 @@ namespace detail {
             cb.child(payload, obj, name);
         else
             obj->traverse_cb(payload, cb);
+    }
+
+    /// Report scalar state to ``cb.state``, if the callback requests any
+    inline void traverse_state(void *payload, const TraverseVisitor &cb,
+                               const void *value, size_t size,
+                               const char *name) {
+        if (cb.state)
+            cb.state(payload, value, size, name);
     }
 
     template <typename T>
@@ -306,6 +324,9 @@ void traverse_fn(Value_ &&value, void *payload, const TraverseVisitor &cb,
     DRJIT_MARK_USED(name);
 
     if constexpr (is_jit_v<ValueNC> && depth_v<ValueNC> == 1) {
+        if (!cb.var)
+            return;
+
         uint64_t index = value.index_combined(), index_new;
         if constexpr (ValueNC::IsClass)
             index_new = cb.var(payload, index, name,
@@ -325,6 +346,10 @@ void traverse_fn(Value_ &&value, void *payload, const TraverseVisitor &cb,
             traverse_fn(x, payload, cb, name);
         });
     } else if constexpr (is_dynamic_traversable_v<ValueNC>) {
+        // The entries are arrays
+        if (!cb.var)
+            return;
+
         for (size_t i = 0; i < value.size(); ++i) {
             traverse_1(drjit::tie(value.entry(i)), [payload, &cb, name](auto &x) {
                 traverse_fn(x, payload, cb, name);

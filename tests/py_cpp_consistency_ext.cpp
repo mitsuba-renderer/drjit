@@ -32,6 +32,12 @@ Matrix4 transform_compose(Matrix3 m, Quaternion q, Array tr) {
     return dr::transform_compose<Matrix4>(m, q, tr);
 }
 
+template <typename Matrix4, typename Quaternion, typename Array>
+std::tuple<Array, Array, Quaternion, Array> transform_decompose_qr(Matrix4 m) {
+    auto [s, h, q, t] = dr::transform_decompose_qr(m);
+    return std::make_tuple(s, h, q, t);
+}
+
 template <typename UInt32>
 std::pair<uint32_t, uint32_t> divisor_constants(uint32_t d) {
     dr::divisor<uint32_t> div(d);
@@ -68,6 +74,7 @@ template <JitBackend Backend> void bind(nb::module_ &m) {
     m.def("tile", &tile<Float>);
     m.def("repeat", &repeat<Float>);
     m.def("transform_decompose", &transform_decompose<Matrix4f, Matrix3f, Quaternion4f, Array3f>);
+    m.def("transform_decompose_qr", &transform_decompose_qr<Matrix4f, Quaternion4f, Array3f>);
     m.def("transform_compose", &transform_compose<Matrix4f, Matrix3f, Quaternion4f, Array3f>);
     m.def("translate", &translate<Matrix4f, Array3f>);
 
@@ -80,6 +87,11 @@ template <JitBackend Backend> void bind(nb::module_ &m) {
 }
 
 NB_MODULE(py_cpp_consistency_ext, m) {
+    m.def("transform_decompose", &transform_decompose<dr::Matrix<float, 4>,
+          dr::Matrix<float, 3>, dr::Quaternion<float>, dr::Array<float, 3>>);
+    m.def("transform_decompose_qr", &transform_decompose_qr<dr::Matrix<float, 4>,
+          dr::Quaternion<float>, dr::Array<float, 3>>);
+
 #if defined(DRJIT_ENABLE_LLVM)
     nb::module_ llvm = m.def_submodule("llvm");
     bind<JitBackend::LLVM>(llvm);

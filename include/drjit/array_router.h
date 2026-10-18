@@ -1308,10 +1308,12 @@ template <typename T1, typename T2, bool = true> expr_t<T1, T2> atan2(const T1 &
 
 template <typename T, bool = true> std::pair<T, T> frexp(const T &a);
 template <typename T1, typename T2, bool = true> expr_t<T1, T2> ldexp(const T1 &a, const T2 &b);
-template <typename T, bool = true> T exp(const T &a);
+template <typename T, bool = true, bool = false> T exp(const T &a);
 template <typename T, bool = true> T exp2(const T &a);
-template <typename T, bool = true> T log(const T &a);
+template <typename T, bool = true> T expm1(const T &a);
+template <typename T, bool = true, bool = false> T log(const T &a);
 template <typename T, bool = true> T log2(const T &a);
+template <typename T, bool = true> T log1p(const T &a);
 template <typename T1, typename T2> expr_t<T1, T2> pow(const T1 &a, const T2 &b);
 
 template <typename T, bool = true> T sinh(const T &a);

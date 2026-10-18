@@ -212,7 +212,9 @@ Evaluated mode can also be enabled globally by disabling the flags
 :py:attr:`dr.JitFlag.SymbolicLoops <drjit.JitFlag.SymbolicLoops>` and
 :py:attr:`dr.JitFlag.SymbolicConditionals <drjit.JitFlag.SymbolicConditionals>`
 via :py:func:`dr.set_flag() <set_flag>` or :py:func:`dr.scoped_set_flag()
-<scoped_set_flag>`.
+<scoped_set_flag>`. The flag :py:attr:`dr.JitFlag.SymbolicAll
+<drjit.JitFlag.SymbolicAll>` combines these two with
+:py:attr:`dr.JitFlag.SymbolicCalls <drjit.JitFlag.SymbolicCalls>`.
 
 .. _sym-eval:
 

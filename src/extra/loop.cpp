@@ -116,18 +116,20 @@ static bool ad_loop_symbolic(JitBackend backend, const char *name,
             int rv = jit_var_loop_end(loop.index(), loop_cond.index(),
                                       indices2.data(), record_guard.checkpoint);
 
-            indices1.release();
             if (rv) {
-                /* Final iteration: hand off plain JIT indices. The downstream
-                   LoopOp construction in ad_loop() detects loop-invariant
-                   variables and re-attaches AD itself, so we keep the existing
-                   AD=0 convention here to avoid double-tracking. */
-                for (uint32_t i : indices2)
-                    indices1.push_back_steal(i);
+                /* Final iteration: hand off the loop outputs together with
+                   the AD indices produced by the body. ad_loop() compares
+                   them against the inputs to detect loop-invariant variables
+                   and re-attaches AD to the remaining ones. */
+                for (size_t i = 0; i < indices2.size(); ++i) {
+                    jit_var_dec_ref((uint32_t) indices1[i]);
+                    indices1[i] = ((indices1[i] >> 32) << 32) | indices2[i];
+                }
             } else {
                 /* Re-record requested. Recombine the saved AD indices with the
                    re-initialized JIT inputs so the next body invocation sees
                    AD-tracked state, just like the initial setup did. */
+                indices1.release();
                 for (size_t i = 0; i < indices2.size(); ++i) {
                     if (ad_state[i])
                         ad_var_inc_ref(uint64_t(ad_state[i]) << 32);
@@ -555,11 +557,11 @@ public:
            const index64_vector &state,
            const dr::vector<uint32_t> &implicit_in,
            const dr::vector<bool> &invariant_mask,
-           long long max_iterations)
+           size_t size, long long max_iterations)
         : m_backend(backend), m_name(name), m_payload(payload),
           m_read_cb(read_cb), m_write_cb(write_cb), m_cond_cb(cond_cb),
           m_body_cb(body_cb), m_delete_cb(delete_cb), m_diff_count(0),
-          m_max_iterations(max_iterations), m_reset(false) {
+          m_size(size), m_max_iterations(max_iterations), m_reset(false) {
         m_name_op = "Loop: " + m_name;
 
         m_inputs.reserve(state.size());
@@ -638,6 +640,15 @@ public:
 
     uint64_t combine(uint32_t ad_index, uint32_t jit_index = 0) {
         return (((uint64_t) ad_index) << 32) + jit_index;
+    }
+
+    /// Broadcast a scalar loop input to the width of the primal loop
+    uint32_t widen(uint32_t index) const {
+        if (jit_var_size(index) != 1 || m_size == 1) {
+            jit_var_inc_ref(index);
+            return index;
+        }
+        return jit_var_resize(index, m_size);
     }
 
     const char *name() const override { return m_name_op.c_str(); }
@@ -880,7 +891,7 @@ public:
 
         m_state.release();
         for (const Input &i : m_inputs)
-            m_state.push_back_borrow(i.index);
+            m_state.push_back_steal(widen(i.index));
 
         uint32_t index = 0;
         for (const Input &in : m_inputs) {
@@ -968,8 +979,14 @@ public:
         size_t N = m_inputs.size();
 
         m_state2.release();
-        for (size_t i = 0; i < N; ++i)
-            m_state2.push_back_borrow(m_state[i]);
+
+        // Always hand invariants to the callbacks by their original index.
+        // The Python variable tracker pins the first index it sees and
+        // rejects a later width change (placeholder -> in.index).
+        for (size_t i = 0; i < N; ++i) {
+            const Input &in = m_inputs[i];
+            m_state2.push_back_borrow(in.is_invariant ? in.index : m_state[i]);
+        }
         m_write_cb(m_payload, m_state2, m_reset);
         m_reset = false;
         m_state2.release();
@@ -1020,6 +1037,9 @@ public:
         m_state2.release();
         m_read_cb(m_payload, m_state2);
         for (size_t i = 0; i < N; ++i) {
+            // Leave invariants untouched so that the loop eliminates them
+            if (m_inputs[i].is_invariant)
+                continue;
             uint32_t new_jit = (uint32_t) m_state2[i];
             jit_var_inc_ref(new_jit);
             jit_var_dec_ref((uint32_t) m_state[i]);
@@ -1176,9 +1196,13 @@ public:
             if (in.has_grad_out) {
                 grad = ad_grad(combine(m_output_indices[in.grad_out_offset]));
             } else {
+                // Match the width of the AD wrapper that receives this seed
+                // during replay. Invariants keep their original width there.
                 uint64_t zero = 0;
+                size_t size = in.is_invariant ? jit_var_size(in.index)
+                                              : loop_size;
                 grad = jit_var_literal(m_backend, jit_var_type(in.index),
-                                       &zero, loop_size);
+                                       &zero, size);
             }
             m_state.push_back_steal(grad);
         }
@@ -1252,6 +1276,8 @@ private:
     size_t m_diff_count;
     // Offset of implicit indices in m_input_indices
     size_t m_implicit_in_offset;
+    /// Width of the primal loop (size of its outputs)
+    size_t m_size;
     long long m_max_iterations;
     bool m_reset;
 };
@@ -1305,28 +1331,33 @@ bool ad_loop(JitBackend backend, int symbolic, int compress,
         read_cb(payload, indices_in);
         dr::detail::ad_index32_vector implicit_in, implicit_out;
 
-        bool needs_ad;
-        {
-            needs_ad = ad_loop_symbolic(backend, name, payload, read_cb,
-                                        write_cb, cond_cb, body_cb, indices_in,
-                                        implicit_in, implicit_out);
-        }
-        needs_ad &= ad;
+        bool needs_ad = ad_loop_symbolic(backend, name, payload, read_cb,
+                                         write_cb, cond_cb, body_cb, indices_in,
+                                         implicit_in, implicit_out);
 
-        if (needs_ad && ad_grad_suspended()) {
-            // Maintain differentiability of unchanged variables
+        if (needs_ad && (!ad || ad_grad_suspended())) {
+            /* No LoopOp will be created. Detach the outputs from the AD
+               nodes recorded inside the loop body. Outputs whose value is
+               unchanged keep the AD index of the corresponding input. */
             bool rewrite = false;
             index64_vector indices_out;
 
             read_cb(payload, indices_out);
             for (size_t i = 0; i < indices_out.size(); ++i) {
-                if ((uint32_t) indices_in[i] == (uint32_t) indices_out[i] &&
-                    indices_in[i] != indices_out[i]) {
-                    ad_var_inc_ref(indices_in[i]);
-                    jit_var_dec_ref((uint32_t) indices_out[i]);
-                    indices_out[i] = indices_in[i];
-                    rewrite = true;
+                uint64_t in = indices_in[i], out = indices_out[i];
+                if (in == out)
+                    continue;
+
+                uint64_t index;
+                if ((uint32_t) in == (uint32_t) out) {
+                    index = ad_var_inc_ref(in);
+                } else {
+                    index = (uint32_t) out;
+                    jit_var_inc_ref((uint32_t) index);
                 }
+                ad_var_dec_ref(out);
+                indices_out[i] = index;
+                rewrite = true;
             }
             if (rewrite)
                 write_cb(payload, indices_out, false);
@@ -1334,16 +1365,21 @@ bool ad_loop(JitBackend backend, int symbolic, int compress,
             index64_vector indices_out;
             read_cb(payload, indices_out);
 
-            // Detect loop-invariant state variables (same JIT index pre/post)
+            // Detect loop-invariant state variables (same JIT index pre/post).
+            // The remaining outputs were widened to the size of the loop.
             dr::vector<bool> invariant_mask(indices_out.size(), false);
-            for (size_t i = 0; i < indices_out.size(); ++i)
+            size_t size = 1;
+            for (size_t i = 0; i < indices_out.size(); ++i) {
                 invariant_mask[i] =
                     (uint32_t) indices_in[i] == (uint32_t) indices_out[i];
+                if (!invariant_mask[i])
+                    size = std::max(size, jit_var_size((uint32_t) indices_out[i]));
+            }
 
             nanobind::ref<LoopOp> op =
                 new LoopOp(backend, name, payload, read_cb, write_cb,
                            cond_cb, body_cb, delete_cb, indices_in,
-                           implicit_in, invariant_mask, max_iterations);
+                           implicit_in, invariant_mask, size, max_iterations);
 
             for (size_t i = 0; i < indices_out.size(); ++i) {
                 VarType vt = jit_var_type((uint32_t) indices_out[i]);
@@ -1351,19 +1387,15 @@ bool ad_loop(JitBackend backend, int symbolic, int compress,
                     vt != VarType::Float64)
                     continue;
 
-                if (invariant_mask[i]) {
-                    // Keep unchanged variables out of the AD system
-                    if (indices_in[i] != indices_out[i]) {
-                        ad_var_inc_ref(indices_in[i]);
-                        jit_var_dec_ref((uint32_t) indices_out[i]);
-                        indices_out[i] = indices_in[i];
-                    }
-                } else {
-                    uint64_t index = ad_var_new((uint32_t) indices_out[i]);
-                    jit_var_dec_ref((uint32_t) indices_out[i]);
-                    indices_out[i] = index;
-                    op->add_output(index, i);
-                }
+                // Keep variables whose value and derivative are both
+                // unchanged out of the AD system.
+                if (indices_in[i] == indices_out[i])
+                    continue;
+
+                uint64_t index = ad_var_new((uint32_t) indices_out[i]);
+                ad_var_dec_ref(indices_out[i]);
+                indices_out[i] = index;
+                op->add_output(index, i);
             }
 
             if (ad_custom_op(op.get())) {

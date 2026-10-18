@@ -20,7 +20,7 @@ NAMESPACE_BEGIN(detail)
 template <typename StateD, size_t... Is, typename State, typename Cond,
           typename Body>
 StateD while_loop_impl(std::index_sequence<Is...>, State &&state_, Cond &&cond,
-                       Body &&body, const char *name) {
+                       Body &&body, const char *name, long long max_iterations) {
     using namespace std; // for ADL lookup to drjit::get<I> or std::get<I>
 
     using Mask = std::decay_t<decltype(cond(get<Is>(state_)...))>;
@@ -28,6 +28,7 @@ StateD while_loop_impl(std::index_sequence<Is...>, State &&state_, Cond &&cond,
     if constexpr (std::is_same_v<Mask, bool>) {
         // This is a simple scalar loop
         DRJIT_MARK_USED(name);
+        DRJIT_MARK_USED(max_iterations);
         StateD state(std::forward<State>(state_));
         while (cond(get<Is>(state)...))
             body(get<Is>(state)...);
@@ -36,6 +37,7 @@ StateD while_loop_impl(std::index_sequence<Is...>, State &&state_, Cond &&cond,
     } else if constexpr (is_array_v<Mask> && !is_jit_v<Mask>) {
         // This is a packet-based vectorized loop
         DRJIT_MARK_USED(name);
+        DRJIT_MARK_USED(max_iterations);
         StateD state(std::forward<State>(state_));
         Mask active = true;
 
@@ -86,8 +88,9 @@ StateD while_loop_impl(std::index_sequence<Is...>, State &&state_, Cond &&cond,
             new Payload{ std::forward<State>(state_), std::forward<Cond>(cond),
                          std::forward<Body>(body), Mask() });
 
-        bool all_done = ad_loop(Mask::Backend, -1, -1, 0, name, payload.get(), read_cb,
-                                write_cb, cond_cb, body_cb, delete_cb, true);
+        bool all_done = ad_loop(Mask::Backend, -1, -1, max_iterations, name,
+                                payload.get(), read_cb, write_cb, cond_cb,
+                                body_cb, delete_cb, true);
 
         StateD state = std::move(payload->state);
 
@@ -100,14 +103,28 @@ StateD while_loop_impl(std::index_sequence<Is...>, State &&state_, Cond &&cond,
 
 NAMESPACE_END(detail)
 
+/**
+ * Symbolic/evaluated loop over a tuple of state variables
+ *
+ * See `cflow.rst` and `cpp.rst` for details.
+ *
+ * The ``max_iterations`` hint selects the reverse-mode differentiation strategy
+ * (see `autodiff.rst` for details). The default ``0`` disables reverse-mode
+ * differentiation of the loop.
+ *
+ * The body may be called again during derivative propagation , after the
+ * calling function has returned. It must therefore not capture surrounding
+ * stack variables by reference.
+ */
 template <typename State, typename Cond, typename Body>
 std::decay_t<State> while_loop(State &&state, Cond &&cond, Body &&body,
-                               const char *name = nullptr) {
+                               const char *name = nullptr,
+                               long long max_iterations = 0) {
     using StateD = std::decay_t<State>;
     return detail::while_loop_impl<StateD>(
         std::make_index_sequence<std::tuple_size<StateD>::value>(),
         std::forward<State>(state), std::forward<Cond>(cond),
-        std::forward<Body>(body), name);
+        std::forward<Body>(body), name, max_iterations);
 }
 
 NAMESPACE_END(drjit)

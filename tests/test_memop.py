@@ -374,6 +374,29 @@ def test16_meshgrid(t):
     a_np, b_np, c_np = np.meshgrid((1, 2), (3, 4, 5), t(5, 6), indexing='ij')
     assert dr.all(a == a_np.ravel()) and dr.all(b == b_np.ravel()) and dr.all(c == c_np.ravel())
 
+@pytest.test_arrays('int32,tensor')
+def test16_meshgrid_tensor(t):
+    np = pytest.importorskip("numpy")
+    x, y, z = t([1, 2]), t([3, 4, 5]), t([5, 6])
+
+    assert dr.all(dr.meshgrid(x) == x)
+
+    with pytest.raises(Exception, match='1D dynamic arrays or tensors'):
+        dr.meshgrid(x, t([[1, 2], [3, 4]]))
+
+    for indexing in ('xy', 'ij'):
+        a, b = dr.meshgrid(x, y, indexing=indexing)
+        a_np, b_np = np.meshgrid((1, 2), (3, 4, 5), indexing=indexing)
+        assert type(a) is t and type(b) is t
+        assert a.shape == a_np.shape and b.shape == b_np.shape
+        assert np.array_equal(a.numpy(), a_np) and np.array_equal(b.numpy(), b_np)
+
+        a, b, c = dr.meshgrid(x, y, z, indexing=indexing)
+        a_np, b_np, c_np = np.meshgrid((1, 2), (3, 4, 5), (5, 6), indexing=indexing)
+        assert a.shape == a_np.shape and b.shape == b_np.shape and c.shape == c_np.shape
+        assert np.array_equal(a.numpy(), a_np) and np.array_equal(b.numpy(), b_np) \
+            and np.array_equal(c.numpy(), c_np)
+
 @pytest.test_arrays('int32,shape=(*)')
 def test17_slice(t):
     v = t([1,2,3])
@@ -1692,3 +1715,28 @@ def test45_packet_scatter_fallback_merges(t, psize, packet_ops):
 
     assert scatter(prior=False) == 1
     assert scatter(prior=True) == 2
+
+
+@pytest.test_arrays('jit, float32, -diff, shape=(2, *)')
+def test46_packet_scatter_dirty_value(t):
+    # Packet scatter of values that have pending side effects
+    Float = dr.value_t(t)
+    a = dr.arange(Float, 8)
+    b = dr.zeros(Float, 8)
+    dr.scatter(b, a + 10, dr.arange(dr.uint32_array_t(Float), 8))
+    r = dr.ravel(t(a, b))
+    assert dr.all(r == Float([v for i in range(8) for v in (i, i + 10)]))
+
+
+@pytest.test_arrays('uint32,jit,shape=(*)')
+@pytest.mark.parametrize('mode', ['Auto', 'Direct', 'Local', 'Expand'])
+def test47_scatter_mixed_ops(t, mode):
+    # Each scatter is larger than the previous one, so its kernel would launch
+    # first if Dr.Jit didn't flush the pending writes of incompatible scatters
+    mode = getattr(dr.ReduceMode, mode)
+    UInt32 = dr.uint32_array_t(t)
+    x = dr.zeros(t, 4)
+    dr.scatter(x, 5, UInt32(0))
+    dr.scatter_add(x, 2, UInt32(0, 1), mode=mode)
+    dr.scatter_reduce(dr.ReduceOp.Max, x, 3, dr.arange(UInt32, 4), mode=mode)
+    assert dr.all(x == t(7, 3, 3, 3))

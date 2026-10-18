@@ -44,6 +44,9 @@ struct LayoutVerifier {
     /// Cursor into ``s.nodes`` that advances in lockstep with the input
     uint32_t cur = 0;
 
+    /// Cursor into ``s.states``, which the traversed objects fill in order
+    size_t state_pos = 0;
+
     LayoutVerifier(const Layout &s, VerifierScratch &scratch,
                    SlotBindings &bindings)
         : s(s), scratch(scratch), bindings(bindings) { }
@@ -199,6 +202,12 @@ struct LayoutVerifier {
                 if (cur >= n.next)
                     mismatch(node, "the number of members changed");
                 visit_cpp(child);
+            },
+            [&](const void *value, size_t size, const char *) {
+                if (state_pos + size > s.states.size() ||
+                    memcmp(s.states.data() + state_pos, value, size) != 0)
+                    mismatch(node, "the scalar state changed");
+                state_pos += size;
             });
 
         if (nb::dict d = traversable_dict(obj); d.is_valid()) {
@@ -385,6 +394,10 @@ bool verify_layout(const Layout &s, nb::handle root,
         v.visit_registry();
         if (v.cur != s.nodes.size())
             mismatch(v.cur, "the input has fewer entries than the recording");
+        if (v.state_pos != s.states.size())
+            mismatch(Mismatch::NoNode,
+                     "an object of the input reports less scalar state than "
+                     "the recording");
 
         // Flush queued evaluations and pending side effects before replay
         {

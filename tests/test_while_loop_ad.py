@@ -777,3 +777,121 @@ def test46_fwd_partial_seed_multiple_implicit(t, mode, seed):
 
     dr.forward_from(x if seed == 'x' else y)
     dr.assert_allclose(dr.grad(acc), 12 if seed == 'x' else 8)
+
+
+@pytest.mark.parametrize('variant', ['fwd', 'bwd', 'bwd_general'])
+@pytest.mark.parametrize('scale', [False, True])
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+def test47_scalar_state_call_implicit(t, variant, scale):
+    # Scalar loop state, wide condition, and a symbolic call that gathers from
+    # a grad-enabled array. The call mask keeps the body output scalar, so the
+    # reverse pass must widen the loop inputs before accumulating gradients.
+    UInt = dr.uint32_array_t(t)
+
+    buf = t(0.25, 0.5, 0.75)
+    c = t(2)
+    dr.enable_grad(buf, c)
+
+    def f0(i): return dr.gather(t, buf, i)
+    def f1(i): return dr.gather(t, buf, i) * 2
+
+    def body(i, acc):
+        v = dr.switch(i % 2, [f0, f1], i)
+        if scale:
+            v *= c
+        return i + 1, acc + v
+
+    n = UInt(2, 3, 1, 0)
+    i, acc = dr.while_loop(
+        (UInt(0), t(0)), lambda i, acc: i < n, body, mode='symbolic',
+        max_iterations=4 if variant == 'bwd_general' else -1)
+
+    s = 2 if scale else 1
+    if variant == 'fwd':
+        dr.forward_from(buf)
+        dr.assert_allclose(dr.grad(acc), [3*s, 4*s, 1*s, 0])
+    else:
+        dr.backward_from(dr.sum(acc))
+        dr.assert_allclose(dr.grad(buf), [3*s, 4*s, 1*s])
+        if scale:
+            dr.assert_allclose(dr.grad(c), 3.5)
+
+
+@pytest.mark.parametrize('width', [1, 2, 5])
+@pytest.mark.parametrize('enable_unused_grad', [False, True])
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+def test48_general_bwd_unused_invariant_width(t, width, enable_unused_grad):
+    """Reverse-mode trajectory replay with a float state variable that the
+    body passes through and whose width differs from that of the loop."""
+    UInt = dr.uint32_array_t(t)
+    x, scale, captured = t([1, 2, 3, 4]), t(2), t(3)
+    unused = t([7 + i for i in range(width)])
+    dr.enable_grad(x, scale, captured)
+    if enable_unused_grad:
+        dr.enable_grad(unused)
+
+    _, value, _, _, passenger = dr.while_loop(
+        (UInt(0), t(1), x, scale, unused),
+        lambda i, *_: i < UInt([0, 1, 2, 2]),
+        lambda i, v, x, scale, unused:
+            (i + 1, v * x * scale * captured, x, scale, unused),
+        mode='symbolic', max_iterations=2)
+
+    dr.backward(dr.sum(value))
+    dr.assert_allclose(value, [1, 12, 324, 576])
+    dr.assert_allclose(dr.grad(x), [0, 6, 216, 288])
+    dr.assert_allclose(dr.grad(scale), 906)
+    dr.assert_allclose(dr.grad(captured), 604)
+    dr.assert_allclose(passenger, unused)
+    dr.assert_allclose(dr.grad(unused), 0)
+
+
+@pytest.mark.parametrize('variant', ['fwd', 'bwd', 'bwd_general'])
+@pytest.mark.parametrize('width', [1, 2])
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+def test49_invariant_value_changing_grad(t, variant, width):
+    # Loop state whose value never changes but whose derivative does must
+    # still be differentiable. Here, 'acc' accumulates a term with value zero
+    # and gradient 'x * i'. Since 'acc + 0' folds back to the loop input, its
+    # JIT index is the same before and after the loop, and the AD layer used
+    # to treat it as an invariant, dropping the dependence on 'x'.
+    UInt = dr.uint32_array_t(t)
+
+    x = t([1] * width)
+    dr.enable_grad(x)
+
+    def body(i, acc):
+        return i + 1, acc + dr.replace_grad(t(0), x * t(i))
+
+    i, acc = dr.while_loop(
+        (UInt(0), t(0)), lambda i, acc: i < 3, body, mode='symbolic',
+        max_iterations=4 if variant == 'bwd_general' else -1)
+
+    if variant == 'fwd':
+        dr.forward_from(x)
+        dr.assert_allclose(dr.grad(acc), [3] * width)
+    else:
+        dr.backward_from(dr.sum(acc))
+        dr.assert_allclose(dr.grad(x), [3] * width)
+
+
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+def test50_suspended_loop_detaches_body_grad(t):
+    # A body that re-enables gradients inside a suspended loop must not
+    # leak AD nodes of the recorded body into the loop outputs
+    UInt = dr.uint32_array_t(t)
+    x = t([1, 1])
+    dr.enable_grad(x)
+
+    with dr.suspend_grad():
+        def body(i, acc, acc2):
+            with dr.resume_grad():
+                return i + 1, acc + x, acc2 + dr.replace_grad(t(0), x)
+
+        i, acc, acc2 = dr.while_loop(
+            (UInt(0), t(0), t(0)), lambda i, a, b: i < 3, body,
+            mode='symbolic', max_iterations=-1)
+
+    assert not dr.grad_enabled(acc)
+    assert not dr.grad_enabled(acc2)
+    dr.assert_allclose(acc, [3, 3])

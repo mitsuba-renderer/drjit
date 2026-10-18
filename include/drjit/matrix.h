@@ -67,7 +67,7 @@ struct Matrix : StaticArrayImpl<Array<Value_, Size_>, Size_, false,
     template <typename T, enable_if_t<!is_matrix_v<T> && depth_v<T> != Base::Depth> = 0>
     DRJIT_INLINE Matrix(T&& v) : Base(zeros<Value_>()) {
         for (size_t i = 0; i < Size; ++i)
-            entry(i, i) = v;
+            entry(i, i) = Value_(v);
     }
 
     /// Initialize the matrix from a list of rows
@@ -220,7 +220,7 @@ Value frob(const Matrix<Value, Size> &m) {
     Array<Value, Size> result = square(m.entry(0));
     for (size_t i = 1; i < Size; ++i)
         result = fmadd(m.entry(i), m.entry(i), result);
-    return sum(result);
+    return sqrt(sum(result));
 }
 
 template <typename Value, size_t Size>

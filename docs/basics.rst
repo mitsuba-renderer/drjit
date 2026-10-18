@@ -152,7 +152,8 @@ The library implements common transcendental functions:
   combined evaluation.
 - :py:func:`dr.erf() <erf>`, :py:func:`dr.erfinv() <erfinv>`: Error function.
 - :py:func:`dr.exp() <exp>`, :py:func:`dr.log() <log>`, :py:func:`dr.exp2()
-  <exp2>`, :py:func:`dr.log2() <log2>`: Exponentials and logarithms.
+  <exp2>`, :py:func:`dr.log2() <log2>`, :py:func:`dr.expm1() <expm1>`,
+  :py:func:`dr.log1p() <log1p>`: Exponentials and logarithms.
 - :py:func:`dr.power() <power>`: Power function.
 - :py:func:`dr.lgamma() <lgamma>`: Gamma function.
 

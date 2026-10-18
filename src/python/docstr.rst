@@ -851,6 +851,10 @@
       cooperative warp instructions. The LLVM backend parallelizes the
       reduction via the built-in thread pool.
 
+      When the input is an unevaluated expression, the evaluation step writes
+      the full array to memory. Pre-reducing the input via
+      :py:func:`drjit.simd_reduce` can greatly reduce this memory traffic.
+
     - ``mode="symbolic"`` uses :py:func:`drjit.scatter_reduce()` to atomically
       scatter-reduce values into the output array. This strategy can be
       advantageous when the input is symbolic (making evaluation
@@ -868,6 +872,12 @@
         with the scheduling-dependent execution order, this can lead to small
         variations across program runs. Integer reductions and floating point
         min/max reductions are unaffected by this.
+
+    - ``mode="simd"`` first reduces the input within SIMD groups via
+      :py:func:`drjit.simd_reduce()` and then proceeds as with ``mode=None``.
+      This step only applies when the reduction includes the trailing axis of
+      a tensor, or when it reduces only the trailing dynamic axis of an array.
+      See :py:func:`drjit.simd_reduce()` for details and caveats.
 
     - ``mode=None`` (default) automatically picks a reasonable strategy
       according to the following logic:
@@ -1480,6 +1490,9 @@
     This operation traverses PyTrees and transforms any dynamically
     sized Dr.Jit arrays it encounters. Everything else is left as-is.
 
+    The result is deterministic on all backends: repeated evaluations produce
+    bitwise identical output, including for floating point types.
+
     Args:
         value (object): A Dr.Jit array or PyTree
 
@@ -1748,6 +1761,42 @@
 
     Returns:
         float | drjit.ArrayBase: Natural exponential of the input
+
+.. topic:: expm1
+
+    Evaluate ``exp(x) - 1`` without loss of precision for small arguments.
+
+    This function evaluates the component-wise natural exponential function
+    minus one of the input scalar, array, or tensor. It avoids the cancellation
+    that affects the expression ``dr.exp(x) - 1`` when ``x`` is close to zero.
+
+    The implementation of this function is based on the CEPHES library. See the
+    section on :ref:`transcendental function approximations
+    <transcendental-accuracy>` for details regarding accuracy.
+
+    Args:
+        arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
+
+    Returns:
+        float | drjit.ArrayBase: Natural exponential of the input minus one
+
+.. topic:: log1p
+
+    Evaluate ``log(1 + x)`` without loss of precision for small arguments.
+
+    This function evaluates the component-wise natural logarithm of one plus
+    the input scalar, array, or tensor. It avoids the cancellation that affects
+    the expression ``dr.log(1 + x)`` when ``x`` is close to zero.
+
+    The implementation of this function is based on the CEPHES library. See the
+    section on :ref:`transcendental function approximations
+    <transcendental-accuracy>` for details regarding accuracy.
+
+    Args:
+        arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
+
+    Returns:
+        float | drjit.ArrayBase: Natural logarithm of one plus the input
 
 .. topic:: exp2
 
@@ -6488,6 +6537,25 @@
     User code may query this flag to conditionally optimize kernels for frozen
     function recording, such as re-seeding the sampler, used for rendering.
 
+.. topic:: JitFlag_SymbolicAll
+
+    A combined flag that refers to the three types of symbolic control flow:
+
+    - :py:attr:`drjit.JitFlag.SymbolicLoops`,
+    - :py:attr:`drjit.JitFlag.SymbolicCalls`, and
+    - :py:attr:`drjit.JitFlag.SymbolicConditionals`.
+
+    Disabling it switches loops, calls, and conditionals to *evaluated mode*,
+    which is less efficient but permits stepping through a program in a
+    debugger and printing intermediate results.
+
+    .. code-block:: python
+
+       dr.set_flag(dr.JitFlag.SymbolicAll, False)
+
+    Querying this flag via :py:func:`drjit.flag()` returns ``True`` only when
+    all three of the above flags are set.
+
 .. topic:: JitFlag_Default
 
     The default set of optimization flags consisting of
@@ -7190,6 +7258,37 @@
     defaults and behaviors as in the shape-based constructor. This overload
     infers the shape and channel count from the tensor and does not accept
     ``writable``.
+
+.. topic:: Texture_init_blocks
+
+    Create a 2D texture from block-compressed (BC4, BC5, or BC7) 8-bit data
+
+    The texture keeps the compressed representation: on the CUDA and Metal
+    backends (with ``use_accel`` set), the hardware texture units decode the
+    blocks on every lookup, which reduces the memory footprint by a factor of
+    4-8 compared to plain 8-bit storage. Other configurations decode the
+    blocks once on the host and then behave like an ordinary 8-bit texture.
+
+    ``blocks`` holds the row-major 4x4 blocks of the base level, followed by
+    those of the ``n_levels - 1`` coarser MIP levels (each level covers
+    ``ceil(w/4) * ceil(h/4)`` blocks of 8 bytes for BC4 and 16 bytes
+    otherwise). The pyramid cannot be derived from compressed data, so a
+    texture with a ``mip_filter`` must provide the complete chain, and a
+    texture without one exactly one level.
+
+    The ``channels`` parameter gives the logical channel count: 1 for BC4, 2
+    for BC5, and 3 or 4 for BC7 (whose alpha channel is then ignored). The
+    ``srgb`` flag is only available for BC7 textures.
+
+    Such a texture is read-only: :py:func:`set_value()`,
+    :py:func:`set_tensor()`, :py:func:`update_inplace()`, and
+    :py:func:`write()` raise an exception. The remaining parameters match the
+    shape-based constructor.
+
+.. topic:: Texture_block_format
+
+    Return the block compression of the texel storage
+    (:py:attr:`drjit.BlockFormat.Disabled` if uncompressed)
 
 .. topic:: Texture_set_value
 
@@ -8712,9 +8811,9 @@
     more than 1 write to each element).
 
     Giving 'Permute' as an argument to a (nominally read-only) gather
-    operation is helpful because we then know that the reverse-mode derivative
-    of this operation can be a plain scatter instead of a more costly
-    atomic scatter-add.
+    operation is helpful because its reverse-mode derivative then becomes a
+    scatter-reduction with this mode. Dr.Jit performs it using a plain scatter
+    when the target array is still zero-valued, and otherwise using atomics.
 
     Giving 'Permute' as an argument to a scatter operation is helpful
     because we then know that the forward-mode derivative does not depend
@@ -8949,6 +9048,11 @@
         variations across program runs. Integer and floating point min/max
         reductions are unaffected by this.
 
+    - ``mode="simd"`` first reduces the input within SIMD groups via
+      :py:func:`drjit.simd_reduce()` and then proceeds as with
+      ``mode=None``. See :py:func:`drjit.simd_reduce()` for details and
+      caveats.
+
     - ``mode=None`` (default) automatically picks a reasonable strategy
       according to the following logic:
 
@@ -9014,6 +9118,102 @@
 
     This is a convenience alias for :py:func:`drjit.block_reduce` with
     ``op`` set to :py:attr:`drjit.ReduceOp.Add`.
+
+.. topic:: simd_reduce
+
+    Reduce within SIMD groups.
+
+    This function reduces blocks of consecutive elements along the dynamic
+    axis of Dr.Jit arrays, nested arrays, PyTrees, and tensors. It takes an
+    unevaluated expression as input and generates code for a SIMD
+    reduction (e.g., within CUDA warps) that scatters the reduced result to a
+    correspondingly smaller array.
+
+    This operation is especially useful to reduce memory usage and improve
+    performance in reductions over large unevaluated expressions. Standard
+    reductions like :py:func:`drjit.sum` and :py:func:`drjit.block_reduce`
+    evaluate the full input array and then read it back from memory. With
+    :py:func:`drjit.simd_reduce`, only the per-block results reach memory,
+    which can reduce memory traffic by up to a factor of 32.
+
+    The function returns a tuple ``(result, block_size_rem)``, where
+    ``block_size_rem`` specifies how much of the requested block reduction
+    remains to be done. The following example shows how to combine it with a
+    full reduction.
+
+    .. code-block:: python
+
+       # Naive
+       result = dr.sum(x)
+
+       # Improved
+       tmp, _ = dr.simd_reduce(dr.ReduceOp.Add, x)
+       result = dr.sum(tmp)
+
+       # Equivalent shorthand
+       result = dr.sum(x, mode="simd")
+
+    Block reductions work analogously.
+
+    .. code-block:: python
+
+       # Naive
+       result = dr.block_sum(x, block_size)
+
+       # Improved
+       tmp, block_size_rem = dr.simd_reduce(dr.ReduceOp.Add, x, block_size)
+       result = dr.block_sum(tmp, block_size_rem)
+
+       # Equivalent shorthand
+       result = dr.block_sum(x, block_size, mode="simd")
+
+    The ``mode="simd"`` parameter is also available in other reductions like
+    :py:func:`drjit.reduce` and :py:func:`drjit.block_reduce`.
+
+    The reduction is *best effort*. It reduces blocks of the largest power of
+    two that divides ``block_size`` and does not exceed the SIMD width (e.g.,
+    32 on CUDA). For example, ``block_size=96`` yields ``block_size_rem=3``
+    on CUDA. Without ``block_size``, the function reduces blocks of the SIMD
+    width (the last one may be partial) and returns ``block_size_rem=None``.
+
+    For tensors, the function reduces the trailing axis, whose length
+    ``block_size`` must divide (it defaults to this length). Tensors are not
+    supported within PyTrees.
+
+    The function returns its input unchanged when it is evaluated or literal,
+    when the backend does not support the operation or type, within symbolic
+    code, and while unevaluated thread reorderings exist. All arrays of a
+    PyTree use a shared block size, hence a single array that cannot be
+    reduced disables the reduction for the others. Arrays of size 1 are
+    ignored.
+
+    Sums and products may round slightly differently compared to the
+    standard reduction.
+
+    .. warning::
+
+       On the CUDA backend, all threads of a warp must reach this operation
+       together. This may not be the case in OptiX ray tracing kernels (e.g.,
+       following a ray tracing call), in which case the kernel raises an
+       error.
+
+    Args:
+        op (drjit.ReduceOp): The type of reduction.
+
+        value (object): A Jit-compiled Dr.Jit array, tensor, or PyTree.
+
+        block_size (int | None): The size of the blocks that the caller
+          intends to reduce. When not specified, the caller intends to reduce
+          the entire array.
+
+        where (ArrayBase | Sequence[bool] | bool): optional mask that
+          excludes entries from the reduction. Masked-out entries are
+          replaced by the identity element of the operation (e.g. ``0`` for
+          sums) and therefore do not contribute. Defaults to ``True``.
+
+    Returns:
+        tuple[object, int | None]: The partially reduced input and the
+        remaining block size.
 
 .. topic:: ArrayBase
 
@@ -9279,6 +9479,9 @@
     By default, the reduction is along axis ``0`` (i.e., the outermost one).
     Negative indices (e.g. ``axis=-1``) count backward from the innermost axis.
     Multiple axes can be specified as a tuple and are handled iteratively.
+
+    The result is deterministic on all backends: repeated evaluations produce
+    bitwise identical output, including for floating point types.
 
     Args:
         op (ReduceOp): The operation that should be applied along the
@@ -10042,3 +10245,123 @@
 
     Returns:
         int: The raw event handle as an integer
+
+.. topic:: quad_gauss_legendre
+
+    Compute the nodes and weights of a Gauss-Legendre quadrature rule (also
+    known as *Gaussian quadrature*) with the given number of evaluations.
+
+    Integration is over the interval :math:`[-1, 1]`. Gauss-Legendre
+    quadrature maximizes the order of exactly integrable polynomials and
+    achieves this up to degree :math:`2n-1`, where :math:`n` is the number of
+    function evaluations.
+
+    The method is numerically well-behaved until about :math:`n=200` and then
+    becomes progressively less accurate. Composite or adaptive integration
+    schemes are preferable for larger :math:`n`.
+
+    The nodes and weights are computed in double precision on the host and
+    then converted to the requested array type.
+
+    Args:
+        dtype (type): Desired Dr.Jit array type. The ``dtype`` must refer to a
+          dynamically sized 1D Dr.Jit floating point array, such as
+          :py:class:`drjit.scalar.ArrayXf` or :py:class:`drjit.cuda.Float`.
+
+        n (int): Desired number of evaluation points. Must be at least 1.
+
+    Returns:
+        tuple: A tuple ``(nodes, weights)`` of type ``dtype`` storing the nodes
+        and weights of the quadrature rule.
+
+.. topic:: quad_gauss_lobatto
+
+    Compute the nodes and weights of a Gauss-Lobatto quadrature rule with the
+    given number of evaluations.
+
+    Integration is over the interval :math:`[-1, 1]`. Gauss-Lobatto quadrature
+    is preferable to Gauss-Legendre quadrature whenever the endpoints of the
+    integration domain should explicitly be included. It maximizes the order of
+    exactly integrable polynomials subject to this constraint and achieves this
+    up to degree :math:`2n-3`, where :math:`n` is the number of function
+    evaluations.
+
+    The method is numerically well-behaved until about :math:`n=200` and then
+    becomes progressively less accurate. Composite or adaptive integration
+    schemes are preferable for larger :math:`n`.
+
+    The nodes and weights are computed in double precision on the host and
+    then converted to the requested array type.
+
+    Args:
+        dtype (type): Desired Dr.Jit array type. The ``dtype`` must refer to a
+          dynamically sized 1D Dr.Jit floating point array, such as
+          :py:class:`drjit.scalar.ArrayXf` or :py:class:`drjit.cuda.Float`.
+
+        n (int): Desired number of evaluation points. Must be at least 2.
+
+    Returns:
+        tuple: A tuple ``(nodes, weights)`` of type ``dtype`` storing the nodes
+        and weights of the quadrature rule.
+
+.. topic:: quad_composite_simpson
+
+    Compute the nodes and weights of a composite Simpson quadrature rule with
+    the given number of evaluations.
+
+    Integration is over the interval :math:`[-1, 1]`, which will be split into
+    :math:`(n-1) / 2` sub-intervals with overlapping endpoints. A 3-point
+    Simpson rule is applied per interval, which is exact for polynomials of
+    degree three or less.
+
+    Args:
+        dtype (type): Desired Dr.Jit array type. The ``dtype`` must refer to a
+          dynamically sized 1D Dr.Jit floating point array, such as
+          :py:class:`drjit.scalar.ArrayXf` or :py:class:`drjit.cuda.Float`.
+
+        n (int): Desired number of evaluation points. Must be an odd number
+          and at least 3.
+
+    Returns:
+        tuple: A tuple ``(nodes, weights)`` of type ``dtype`` storing the nodes
+        and weights of the quadrature rule.
+
+.. topic:: quad_composite_simpson_38
+
+    Compute the nodes and weights of a composite Simpson 3/8 quadrature rule
+    with the given number of evaluations.
+
+    Integration is over the interval :math:`[-1, 1]`, which will be split into
+    :math:`(n-1) / 3` sub-intervals with overlapping endpoints. A 4-point
+    Simpson rule is applied per interval, which is exact for polynomials of
+    degree four or less.
+
+    Args:
+        dtype (type): Desired Dr.Jit array type. The ``dtype`` must refer to a
+          dynamically sized 1D Dr.Jit floating point array, such as
+          :py:class:`drjit.scalar.ArrayXf` or :py:class:`drjit.cuda.Float`.
+
+        n (int): Desired number of evaluation points. The value ``n - 1`` must
+          be divisible by 3, and ``n`` must be at least 4.
+
+    Returns:
+        tuple: A tuple ``(nodes, weights)`` of type ``dtype`` storing the nodes
+        and weights of the quadrature rule.
+
+.. topic:: quad_chebyshev
+
+    Compute the Chebyshev nodes, i.e., the roots of the Chebyshev polynomial
+    of the first kind with the given degree.
+
+    The output array contains positions on the interval :math:`[-1, 1]` in
+    increasing order.
+
+    Args:
+        dtype (type): Desired Dr.Jit array type. The ``dtype`` must refer to a
+          dynamically sized 1D Dr.Jit floating point array, such as
+          :py:class:`drjit.scalar.ArrayXf` or :py:class:`drjit.cuda.Float`.
+
+        n (int): Desired number of points. Must be at least 1.
+
+    Returns:
+        object: The Chebyshev nodes as an array of type ``dtype``.

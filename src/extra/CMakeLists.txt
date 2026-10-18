@@ -10,6 +10,7 @@ add_library(
   cond.cpp
   resample.cpp
   texture.cpp
+  bc.cpp
 )
 
 if (NOT MSVC)
@@ -28,6 +29,7 @@ target_link_libraries(drjit-extra PRIVATE drjit drjit-core nanothread)
 target_include_directories(drjit-extra PRIVATE
   ../../ext/drjit-core/ext/robin_map/include
   ../../ext/nanobind/include
+  ../../ext/bcdec
 )
 
 if (DRJIT_ENABLE_LLVM)

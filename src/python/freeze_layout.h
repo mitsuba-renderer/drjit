@@ -72,6 +72,7 @@
     - ``names``: dictionary keys and field names
     - ``shapes``: tensor shapes
     - ``opaques``: opaque Python values (anything that is not traversed)
+    - ``states``: scalar state that objects bake into generated code
     - ``cpp_types``: the dynamic C++ types of objects
 
     Finally, the layout is compared to cached recordings via ``layout_equal()``.
@@ -387,6 +388,9 @@ struct Layout {
     /// Opaque values captured by equality
     drjit::vector<nb::object> opaques;
 
+    /// Scalar state reported by the objects in the input, captured bytewise
+    drjit::vector<uint8_t> states;
+
     /// Dynamic C++ types of the objects in the input
     drjit::vector<const std::type_info *> cpp_types;
 
@@ -697,15 +701,18 @@ extern void registry_pointers(const Layout &s, drjit::vector<void *> &pointers);
 /// Run the traversal callback of a C++ object and return the number of
 /// reported members. ``on_var(index, name, variant, domain)`` returns an
 /// owning replacement index (kept alive until the walk returns) or zero.
-template <typename Var, typename Child>
+/// ``on_state`` receives the scalar state of the object, which is described by
+/// ``Layout::states`` rather than by a node and hence is not a member.
+template <typename Var, typename Child, typename State = IgnoreState>
 uint32_t traverse_members(drjit::TraversableBase *obj, Var &&on_var,
-                          Child &&on_child) {
+                          Child &&on_child, State &&on_state = State()) {
     struct Payload {
         Var &on_var;
         Child &on_child;
+        State &on_state;
         drjit::detail::index64_vector owned;
         uint32_t count;
-    } p { on_var, on_child, {}, 0 };
+    } p { on_var, on_child, on_state, {}, 0 };
 
     for_each_member(
         obj, drjit::TraverseRole::Freeze,
@@ -723,6 +730,9 @@ uint32_t traverse_members(drjit::TraversableBase *obj, Var &&on_var,
         [&p](drjit::TraversableBase *child, const char *name) {
             p.count++;
             p.on_child(child, name);
+        },
+        [&p](const void *value, size_t size, const char *name) {
+            p.on_state(value, size, name);
         });
 
     return p.count;

@@ -51,7 +51,7 @@ add_drjit_test(py_cpp_consistency_ext py_cpp_consistency_ext.cpp)
 add_drjit_test(local_ext local_ext.cpp)
 add_drjit_test(memop_ext memop_ext.cpp)
 
-file(GLOB TEST_FILES RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} "*.py")
+file(GLOB TEST_FILES RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} "*.py" "data/*")
 
 foreach (FNAME IN ITEMS ${TEST_FILES})
   configure_file(${FNAME} ${FNAME} COPYONLY)

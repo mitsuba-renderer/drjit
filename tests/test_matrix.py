@@ -101,7 +101,7 @@ def test11_diag_trace(t):
 @pytest.test_arrays('matrix,shape=(4, 4, *)', 'matrix,shape=(4, 4)')
 def test12_frob(t):
     m = t(*range(1, 17))
-    assert dr.frob(m) == 1496
+    assert dr.allclose(dr.frob(m), 1496 ** 0.5)
 
 
 @pytest.test_arrays('matrix,shape=(4, 4, *)', 'matrix,shape=(4, 4)')
