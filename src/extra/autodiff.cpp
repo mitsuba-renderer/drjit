@@ -1111,12 +1111,16 @@ DRJIT_NOINLINE Index ad_var_new_impl(const char *label, JitVar &&result,
     }
 
     EdgeIndex edge_index = 0;
+    bool has_diff_input = false;
 
     for (size_t i = 0; i < N; ++i) {
         ADIndex source = args[i].ad_index;
 
         if (!source)
             continue;
+
+        // At least one operand is attached to the AD graph
+        has_diff_input = true;
 
         if constexpr (!std::is_same_v<ArgType, SpecialArg>) {
             if (jit_var_is_zero_literal(args[i].weight.index())) {
@@ -1146,10 +1150,16 @@ DRJIT_NOINLINE Index ad_var_new_impl(const char *label, JitVar &&result,
         v_source->next_fwd = edge_index_new;
     }
 
+    /* An operation can have differentiable operands and still end up without
+       any edges, namely when every weight turned out to be a zero literal.
+       Keep the variable in that case: a derivative of zero is not the same
+       thing as not being tracked. Dropping it would make the result look like
+       a variable that was never attached to the AD graph, and drjit.backward()
+       would then wrongly report that its argument does not depend on the
+       input being differentiated. */
     if constexpr (N > 0) {
-        if (!edge_index) {
-            // All edges were pruned, don't create the node after all
-            ad_trace("ad_var_new(a%u): all edges pruned, removing variable.", ad_index);
+        if (!edge_index && !has_diff_input) {
+            ad_trace("ad_var_new(a%u): no differentiable input, removing variable.", ad_index);
             ad_free(ad_index, var);
             return result.release();
         }
