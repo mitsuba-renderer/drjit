@@ -846,19 +846,22 @@ public:
      * On a texture without a MIP pyramid, the lookup degrades to a regular
      * non-filtered \ref eval().
      */
-    template <typename Output>
+    template <typename Output,
+              typename Gradient = replace_value_t<Output, position_for<Output>>>
     Output eval_filtered(const position_for<Output> &pos,
                          const position_for<Output> &ddx,
                          const position_for<Output> &ddy,
-                         mask_for<Output> active = true) const {
-        if (m_level_count <= 1)
+                         mask_for<Output> active = true,
+                         Gradient *out_grad = nullptr) const {
+        if (m_level_count <= 1 && !out_grad)
             return eval<Output>(pos, active);
+        size_t n_grad = out_grad ? m_channels * Dimension : 0;
 
         if constexpr (is_jit_v<Storage_>) {
             using Value = value_t<Output>;
 
             Output out = alloc_output<Output>();
-            uint64_t *o = (uint64_t *) alloca(sizeof(uint64_t) * m_channels);
+            uint64_t *o = (uint64_t *) alloca(sizeof(uint64_t) * (m_channels + n_grad));
 
             // ``ddx``/``ddy`` are detached filtering metadata, hence plain
             // JIT indices suffice
@@ -874,21 +877,28 @@ public:
                 (int) m_use_accel, value_index(), combined_index(m_mip),
                 m_mip_table.index(), m_level_count, (int) m_mip_filter, m_max_aniso,
                 resolution_indices().data(), idiv_indices().data(),
-                pos_indices(pos).data(), ddx_i, ddy_i, active.index(), o);
+                pos_indices(pos).data(), ddx_i, ddy_i, active.index(), o,
+                out_grad ? o + m_channels : nullptr);
 
             for (size_t ch = 0; ch < m_channels; ++ch)
                 out.set_entry(ch, steal_value<Value>(o[ch]));
+            for (size_t i = 0; i < n_grad; ++i)
+                out_grad->entry(i / Dimension).set_entry(
+                    i % Dimension, steal_value<Value>(o[m_channels + i]));
             return out;
         } else {
             using Value = value_t<Output>;
             Output out = alloc_output<Output>();
-            Value *res_mem = (Value *) alloca(sizeof(Value) * m_channels);
-            detail::tex_scratch<Value> res(res_mem, m_channels);
+            Value *res_mem = (Value *) alloca(sizeof(Value) * (m_channels + n_grad));
+            detail::tex_scratch<Value> res(res_mem, m_channels + n_grad);
             detail::tex_eval_filtered(scalar_ops<Value>(active), pos.data(),
                                       ddx.data(), ddy.data(), m_level_count,
-                                      m_mip_filter, m_max_aniso, res.data());
+                                      m_mip_filter, m_max_aniso, res.data(),
+                                      out_grad ? res.data() + m_channels : nullptr);
             for (size_t ch = 0; ch < m_channels; ++ch)
                 out.set_entry(ch, res[ch]);
+            for (size_t i = 0; i < n_grad; ++i)
+                out_grad->entry(i / Dimension).set_entry(i % Dimension, res[m_channels + i]);
             return out;
         }
     }
@@ -1162,6 +1172,28 @@ public:
         Hessian out_hessian = alloc_output<Hessian>();
         eval_cubic_deriv(pos, active, out_value, out_gradient, &out_hessian);
         return { out_value, out_gradient, out_hessian };
+    }
+
+    /// Per-channel value and positional gradient returned by \ref eval_filtered_grad()
+    template <typename Output> using FilteredGrad = CubicGrad<Output>;
+
+    /**
+     * \brief Evaluate an anisotropically filtered lookup and its positional
+     * gradient
+     *
+     * Returns the value of \ref eval_filtered() and its derivative w.r.t. \c
+     * pos (holding \c ddx and \c ddy fixed), computed in software since
+     * texture units provide no derivatives. Differentiable w.r.t. the texture
+     * data.
+     */
+    template <typename Output>
+    FilteredGrad<Output> eval_filtered_grad(const position_for<Output> &pos,
+                                            const position_for<Output> &ddx,
+                                            const position_for<Output> &ddy,
+                                            mask_for<Output> active = true) const {
+        FilteredGrad<Output> out{ Output{}, alloc_output<decltype(out.gradient)>() };
+        out.value = eval_filtered<Output>(pos, ddx, ddy, active, &out.gradient);
+        return out;
     }
 
     /// Apply the configured texture wrapping mode to an integer position

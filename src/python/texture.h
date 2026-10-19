@@ -39,6 +39,14 @@
                 "ddx: drjit.AnyArray, ddy: drjit.AnyArray, "                   \
                 "active: drjit.AnyArray | bool = True) -> drjit.AnyArray"),    \
         doc_Texture_eval_filtered)
+#define def_tex_eval_filtered_grad(T)                                          \
+    def("eval_filtered_grad", &tex_eval_filtered_grad<T, Dimension, Tex>,      \
+        "pos"_a, "ddx"_a, "ddy"_a, "active"_a = nb::none(),                    \
+        nb::sig("def eval_filtered_grad(self, pos: drjit.AnyArray, "           \
+                "ddx: drjit.AnyArray, ddy: drjit.AnyArray, "                   \
+                "active: drjit.AnyArray | bool = True) -> "                    \
+                "tuple[drjit.AnyArray, list[drjit.AnyArray]]"),                \
+        doc_Texture_eval_filtered_grad)
 #define def_tex_write(T)                                                       \
     def("write", &tex_write<T, Dimension, Tex>, "pos"_a, "value"_a,            \
         "active"_a.sig("Bool(True)") = nb::none(), doc_Texture_write)
@@ -78,6 +86,14 @@ static dr::mask_t<T> mask_or_true(const std::optional<dr::mask_t<T>> &active) {
     return active.has_value() ? active.value() : dr::mask_t<T>(true);
 }
 
+/// Pack a ``CubicGrad`` / ``FilteredGrad`` result into ``(value, [grad_0, ...])``
+template <typename Grad> static nb::object grad_to_tuple(const Grad &res) {
+    nb::list_builder gradient(res.gradient.size());
+    for (size_t ch = 0; ch < res.gradient.size(); ++ch)
+        gradient.put(res.gradient.entry(ch));
+    return nb::make_tuple(nb::cast(res.value), gradient.commit());
+}
+
 template <typename T, size_t Dimension, typename Tex>
 static nb::object tex_eval(const Tex &texture,
                            const dr::Array<T, Dimension> &pos,
@@ -106,6 +122,18 @@ static nb::object tex_eval_filtered(const Tex &texture,
     dr::mask_t<T> active = mask_or_true<T>(active_);
     DR_TEX_DISPATCH(texture, nb::cast(texture.template eval_filtered<Output>(
                                  pos, ddx, ddy, active)));
+}
+
+template <typename T, size_t Dimension, typename Tex>
+static nb::object tex_eval_filtered_grad(const Tex &texture,
+                                         const dr::Array<T, Dimension> &pos,
+                                         const dr::Array<T, Dimension> &ddx,
+                                         const dr::Array<T, Dimension> &ddy,
+                                         const std::optional<dr::mask_t<T>> &active_) {
+    dr::mask_t<T> active = mask_or_true<T>(active_);
+    DR_TEX_DISPATCH(texture,
+                    grad_to_tuple(texture.template eval_filtered_grad<Output>(
+                        pos, ddx, ddy, active)));
 }
 
 template <typename T, size_t Dimension, typename Tex>
@@ -148,15 +176,8 @@ static nb::object tex_eval_cubic_grad(const Tex &texture,
                                       const dr::Array<T, Dimension> &pos,
                                       const std::optional<dr::mask_t<T>> &active_) {
     dr::mask_t<T> active = mask_or_true<T>(active_);
-    size_t channels = texture.shape()[Dimension];
-    auto build = [&](auto &&res) {
-        nb::list_builder gradient(channels);
-        for (size_t ch = 0; ch < channels; ++ch)
-            gradient.put(res.gradient.entry(ch));
-        return nb::make_tuple(nb::cast(res.value), gradient.commit());
-    };
     DR_TEX_DISPATCH(
-        texture, build(texture.template eval_cubic_grad<Output>(pos, active)));
+        texture, grad_to_tuple(texture.template eval_cubic_grad<Output>(pos, active)));
 }
 
 template <typename T, size_t Dimension, typename Tex>
@@ -319,6 +340,8 @@ void bind_texture(nb::module_ &m, const char *name) {
         .def_tex_eval_lod(Float64)
         .def_tex_eval_filtered(Float32)
         .def_tex_eval_filtered(Float64)
+        .def_tex_eval_filtered_grad(Float32)
+        .def_tex_eval_filtered_grad(Float64)
         .def_tex_write(Float32)
         .def_tex_write(Float64)
         .def_tex_eval_fetch(Float32)
@@ -375,6 +398,7 @@ void bind_texture_all(nb::module_ &m) {
 #undef def_tex_eval
 #undef def_tex_eval_lod
 #undef def_tex_eval_filtered
+#undef def_tex_eval_filtered_grad
 #undef def_tex_write
 #undef def_tex_eval_fetch
 #undef def_tex_eval_cubic

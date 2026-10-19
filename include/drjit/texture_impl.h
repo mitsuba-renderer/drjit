@@ -339,10 +339,14 @@ void tex_cubic_weights_hessian(const Ops &ops, const typename Ops::Float &alpha,
 
 /// Nearest / (multi-)linear interpolation at the \c dim query coordinates.
 /// ``scratch`` is scratch space for \c channels_out values (unused when nearest).
+/// When \c grad is non-null, it additionally receives the positional gradient,
+/// i.e. the derivative of ``out[ch]`` w.r.t. ``pos[k]`` in ``grad[ch*dim+k]``
+/// (zero when nearest).
 template <typename Ops>
 void tex_eval(const Ops &ops, const typename Ops::Float *pos,
               typename Ops::Float *out,
-              typename Ops::Float *scratch) {
+              typename Ops::Float *scratch,
+              typename Ops::Float *grad = nullptr) {
     using Float = typename Ops::Float;
     using Int   = typename Ops::Int;
     uint32_t dim = ops.dim, channels_out = ops.channels_out;
@@ -356,6 +360,10 @@ void tex_eval(const Ops &ops, const typename Ops::Float *pos,
                                      : fmadd(pos[k], ops.res_f(k), ops.lit(-0.5)));
         pos_i[k] = floor2int<Int>(pos_f[k]);
     }
+
+    if (grad)
+        for (uint32_t i = 0; i < channels_out * dim; ++i)
+            grad[i] = ops.lit(0.0);
 
     if (nearest) {
         Int coord[MaxDim];
@@ -385,7 +393,23 @@ void tex_eval(const Ops &ops, const typename Ops::Float *pos,
         ops.gather(tex_index(ops, coord), scratch);
         for (uint32_t ch = 0; ch < channels_out; ++ch)
             out[ch] = fmadd(scratch[ch], weight, out[ch]);
+
+        // Gradient weights: the factor ``w[m][bit]`` becomes its derivative
+        if (grad) {
+            for (uint32_t m = 0; m < dim; ++m) {
+                Float g = ops.lit(((corner >> m) & 1) ? 1.0 : -1.0);
+                for (uint32_t k = 0; k < dim; ++k)
+                    if (k != m)
+                        g = g * w[k][(corner >> k) & 1];
+                for (uint32_t ch = 0; ch < channels_out; ++ch)
+                    grad[ch * dim + m] = fmadd(scratch[ch], g, grad[ch * dim + m]);
+            }
+        }
     }
+
+    if (grad)
+        for (uint32_t i = 0; i < channels_out * dim; ++i)
+            grad[i] = grad[i] * ops.res_f(i % dim);
 }
 
 /// MIP level binding state embedded in an ``Ops`` object as a field named
@@ -486,13 +510,17 @@ template <typename Ops> struct TexMipSample {
 
     /// Variant of \ref eval() with an explicit level blend weight
     void eval(const typename Ops::Float *pos, const typename Ops::Float &frac_,
-              typename Ops::Float *out, typename Ops::Float *scratch) const {
+              typename Ops::Float *out, typename Ops::Float *scratch,
+              typename Ops::Float *grad = nullptr) const {
         uint32_t ch = o0.channels_out;
-        tex_eval(o0, pos, out, scratch + ch);
+        tex_eval(o0, pos, out, scratch + ch, grad);
         if (linear) {
-            tex_eval(o1, pos, scratch, scratch + ch);
+            typename Ops::Float *grad1 = grad ? scratch + 2 * ch : nullptr;
+            tex_eval(o1, pos, scratch, scratch + ch, grad1);
             for (uint32_t c = 0; c < ch; ++c)
                 out[c] = fmadd(scratch[c] - out[c], frac_, out[c]);
+            for (uint32_t i = 0; grad && i < ch * o0.dim; ++i)
+                grad[i] = fmadd(grad1[i] - grad[i], frac_, grad[i]);
         }
     }
 };
@@ -524,18 +552,25 @@ void tex_eval_lod(const Ops &ops, const typename Ops::Float *pos,
 /// The result averages ``N`` MIP-mapped taps distributed along the major
 /// ellipse axis. The footprint, LOD, and tap count follow the reference
 /// algorithm of the Direct3D 11.3 (section 7.18.11). ``max_aniso == 1``
-/// collapses the scheme to an ordinary trilinear lookup.
+/// collapses the scheme to an ordinary trilinear lookup. When \c grad is
+/// non-null, it also receives the positional gradient (see \ref tex_eval()).
 template <typename Ops>
 void tex_eval_filtered(const Ops &ops, const typename Ops::Float *pos,
                        const typename Ops::Float *ddx,
                        const typename Ops::Float *ddy, uint32_t n_levels,
                        MipFilter mip_filter, uint32_t max_aniso,
-                       typename Ops::Float *out) {
+                       typename Ops::Float *out,
+                       typename Ops::Float *grad = nullptr) {
     using Float = typename Ops::Float;
     using Int   = typename Ops::Int;
     using Mask  = typename Ops::Mask;
 
-    uint32_t dim = ops.dim, ch = ops.channels_out;
+    uint32_t dim = ops.dim, ch = ops.channels_out * (grad ? dim + 1 : 1);
+    if (n_levels <= 1) {
+        Float *scratch_mem = (Float *) alloca(sizeof(Float) * ops.channels_out);
+        tex_scratch<Float> scratch(scratch_mem, ops.channels_out);
+        return tex_eval(ops, pos, out, scratch.data(), grad);
+    }
 
     // Texel-scaled footprint axes and their Gram matrix. The footprint is the
     // image of the unit circle under the matrix ``[dx dy]``.
@@ -612,13 +647,15 @@ void tex_eval_filtered(const Ops &ops, const typename Ops::Float *pos,
                 p[k] = fmadd(step_uv[k], t, pos_v[k]);
 
             Float *tap = scratch + 2 * ch;
-            sample.eval(p, frac, tap, scratch);
+            sample.eval(p, frac, tap, scratch,
+                        ch > ops.channels_out ? tap + ops.channels_out : nullptr);
             for (uint32_t c = 0; c < ch; ++c)
                 state[c] = state[c] + select(m, tap[c], ops.lit(0.0));
         });
 
     for (uint32_t c = 0; c < ch; ++c)
-        out[c] = state[c] * inv_n;
+        (c < ops.channels_out ? out[c] : grad[c - ops.channels_out]) =
+            state[c] * inv_n;
 }
 
 /// Cubic B-spline interpolation by direct evaluation of the basis functions.

@@ -876,7 +876,7 @@ void ad_tex_eval_filtered(VarType query_type, uint32_t dim,
                           const uint32_t *res_idx, const uint32_t *idiv_idx,
                           const uint64_t *pos_idx, const uint32_t *ddx_idx,
                           const uint32_t *ddy_idx, uint32_t active_idx,
-                          uint64_t *out_idx) {
+                          uint64_t *out_idx, uint64_t *out_grad) {
     Float pos[MaxDim], ddx[MaxDim], ddy[MaxDim];
     JitOps ops = tex_setup(query_type, dim, channels_stored, channels_out,
                            filter_mode, wrap_mode, srgb, value, res_idx,
@@ -889,13 +889,15 @@ void ad_tex_eval_filtered(VarType query_type, uint32_t dim,
         ddy[k] = Float::borrow(ddy_idx[k]);
     }
 
-    Float *result_mem  = (Float *) alloca(sizeof(Float) * channels_out);
+    uint32_t n_out = channels_out * (out_grad ? dim + 1 : 1);
+    Float *result_mem  = (Float *) alloca(sizeof(Float) * n_out);
     Float *scratch_mem = (Float *) alloca(sizeof(Float) * channels_out);
-    tex_scratch<Float> result(result_mem, channels_out),
+    tex_scratch<Float> result(result_mem, n_out),
                        scratch(scratch_mem, channels_out);
+    Float *grad_out = out_grad ? result.data() + channels_out : nullptr;
 
     if (n_levels > 1) {
-        bool accel = handle != nullptr && use_accel,
+        bool accel = handle != nullptr && use_accel && !out_grad,
              grad  = any_grad(value, pos_idx, dim) ||
                      any_grad(mip_value, nullptr, 0);
 
@@ -909,7 +911,7 @@ void ad_tex_eval_filtered(VarType query_type, uint32_t dim,
             // hardware texture lookups are used.
             dr::detail::tex_eval_filtered(ops, pos, ddx, ddy, n_levels,
                                           (dr::MipFilter) mip_filter,
-                                          max_aniso, result.data());
+                                          max_aniso, result.data(), grad_out);
             if (accel) {
                 tex_eval_grad_accel(handle, channels_stored, channels_out,
                                     query_type, dim, pos, ddx, ddy, ops.active,
@@ -919,11 +921,13 @@ void ad_tex_eval_filtered(VarType query_type, uint32_t dim,
             }
         }
     } else {
-        dr::detail::tex_eval(ops, pos, result.data(), scratch.data());
+        dr::detail::tex_eval(ops, pos, result.data(), scratch.data(), grad_out);
     }
 
     for (uint32_t ch = 0; ch < channels_out; ++ch)
         out_idx[ch] = result[ch].release();
+    for (uint32_t i = 0; i < n_out - channels_out; ++i)
+        out_grad[i] = grad_out[i].release();
 }
 
 void ad_tex_fetch(VarType query_type, uint32_t dim, uint32_t channels_stored,

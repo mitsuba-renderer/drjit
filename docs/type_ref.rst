@@ -412,6 +412,7 @@ Textures
    .. automethod:: eval
    .. automethod:: eval_lod
    .. automethod:: eval_filtered
+   .. automethod:: eval_filtered_grad
    .. automethod:: eval_fetch
    .. automethod:: eval_cubic
    .. automethod:: eval_cubic_grad
@@ -447,6 +448,7 @@ Textures
    .. automethod:: eval
    .. automethod:: eval_lod
    .. automethod:: eval_filtered
+   .. automethod:: eval_filtered_grad
    .. automethod:: eval_fetch
    .. automethod:: eval_cubic
    .. automethod:: eval_cubic_grad
@@ -482,6 +484,7 @@ Textures
    .. automethod:: eval
    .. automethod:: eval_lod
    .. automethod:: eval_filtered
+   .. automethod:: eval_filtered_grad
    .. automethod:: eval_fetch
    .. automethod:: eval_cubic
    .. automethod:: eval_cubic_grad
@@ -517,6 +520,7 @@ Textures
    .. automethod:: eval
    .. automethod:: eval_lod
    .. automethod:: eval_filtered
+   .. automethod:: eval_filtered_grad
    .. automethod:: eval_fetch
    .. automethod:: eval_cubic
    .. automethod:: eval_cubic_grad
@@ -552,6 +556,7 @@ Textures
    .. automethod:: eval
    .. automethod:: eval_lod
    .. automethod:: eval_filtered
+   .. automethod:: eval_filtered_grad
    .. automethod:: eval_fetch
    .. automethod:: eval_cubic
    .. automethod:: eval_cubic_grad
@@ -587,6 +592,7 @@ Textures
    .. automethod:: eval
    .. automethod:: eval_lod
    .. automethod:: eval_filtered
+   .. automethod:: eval_filtered_grad
    .. automethod:: eval_fetch
    .. automethod:: eval_cubic
    .. automethod:: eval_cubic_grad
@@ -622,6 +628,7 @@ Textures
    .. automethod:: eval
    .. automethod:: eval_lod
    .. automethod:: eval_filtered
+   .. automethod:: eval_filtered_grad
    .. automethod:: eval_fetch
    .. automethod:: eval_cubic
    .. automethod:: eval_cubic_grad
@@ -657,6 +664,7 @@ Textures
    .. automethod:: eval
    .. automethod:: eval_lod
    .. automethod:: eval_filtered
+   .. automethod:: eval_filtered_grad
    .. automethod:: eval_fetch
    .. automethod:: eval_cubic
    .. automethod:: eval_cubic_grad
@@ -692,6 +700,7 @@ Textures
    .. automethod:: eval
    .. automethod:: eval_lod
    .. automethod:: eval_filtered
+   .. automethod:: eval_filtered_grad
    .. automethod:: eval_fetch
    .. automethod:: eval_cubic
    .. automethod:: eval_cubic_grad
@@ -727,6 +736,7 @@ Textures
    .. automethod:: eval
    .. automethod:: eval_lod
    .. automethod:: eval_filtered
+   .. automethod:: eval_filtered_grad
    .. automethod:: eval_fetch
    .. automethod:: eval_cubic
    .. automethod:: eval_cubic_grad
@@ -762,6 +772,7 @@ Textures
    .. automethod:: eval
    .. automethod:: eval_lod
    .. automethod:: eval_filtered
+   .. automethod:: eval_filtered_grad
    .. automethod:: eval_fetch
    .. automethod:: eval_cubic
    .. automethod:: eval_cubic_grad
@@ -797,6 +808,7 @@ Textures
    .. automethod:: eval
    .. automethod:: eval_lod
    .. automethod:: eval_filtered
+   .. automethod:: eval_filtered_grad
    .. automethod:: eval_fetch
    .. automethod:: eval_cubic
    .. automethod:: eval_cubic_grad

@@ -1612,9 +1612,17 @@ def test43_mip_scalar():
     assert tex.mip_levels() == 3
     assert dr.allclose(tex.eval_lod(Array2f(0.25, 0.25), 1.0)[0], l1[0])
     assert dr.allclose(tex.eval_lod(Array2f(-0.75, 1.25), 1.0)[0], l1[0])
-    got = tex.eval_filtered(Array2f(0.4, 0.45), Array2f(0.5, 0),
-                            Array2f(0, 0.25))
-    assert dr.all(dr.isfinite(got[0]))
+
+    # eval_filtered_grad() matches eval_filtered() and its finite differences
+    p, ddx, ddy = Array2f(0.4, 0.45), Array2f(0.5, 0), Array2f(0, 0.375)
+    eps = 1e-3
+    for cur in (tex, Texture2f(tex.tensor(), wrap_mode=dr.WrapMode.Repeat)):
+        value, grad = cur.eval_filtered_grad(p, ddx, ddy)
+        assert dr.allclose(value[0], cur.eval_filtered(p, ddx, ddy)[0])
+        for k, dp in enumerate((Array2f(eps, 0), Array2f(0, eps))):
+            fd = (cur.eval_filtered(p + dp, ddx, ddy)[0] -
+                  cur.eval_filtered(p - dp, ddx, ddy)[0]) / (2 * eps)
+            assert dr.allclose(grad[0][k], fd, atol=1e-3)
 
 
 @pytest.test_arrays("is_diff, float32, shape=(*)")
@@ -2388,3 +2396,45 @@ def test65_bc_errors(t):
             tex.update_inplace()
         with pytest.raises(RuntimeError, match='read-only'):
             tex.write(mod.Array2u(0, 0), [mod.Float(0)] * 4)
+
+
+@pytest.test_arrays("is_diff, float32, shape=(*)")
+def test66_eval_filtered_grad(t):
+    # eval_filtered_grad() returns eval_filtered() and its derivative with
+    # respect to the query position, holding the footprint fixed. The lanes
+    # cover a base-level tap, a level blend, and four anisotropic taps.
+    mod = sys.modules[t.__module__]
+    TexType, TensorXf, Array2f = mod.Texture2f, mod.TensorXf, mod.Array2f
+
+    pos = Array2f(t(0.31, 0.05, 0.48), t(0.4, 0.93, 0.71))
+    ddx = Array2f(t(0.01, 0.09, 0.4), t(0, 0, 0.2))
+    ddy = Array2f(t(0, 0, -0.04), t(0.01, 0.09, 0.08))
+    tens = TensorXf(t(_test_grid(512, seed=6)), shape=(16, 16, 2))
+
+    for mip_filter in (dr.MipFilter.Nearest, dr.MipFilter.Disabled,
+                       dr.MipFilter.Linear):
+        args = dict(wrap_mode=dr.WrapMode.Repeat, mip_filter=mip_filter,
+                    max_aniso=4)
+        tex = TexType(tens, use_accel=False, **args)
+        value, grad = tex.eval_filtered_grad(pos, ddx, ddy)
+        assert dr.allclose(value, tex.eval_filtered(pos, ddx, ddy))
+        for k in range(2):
+            p = Array2f(pos)
+            dr.enable_grad(p)
+            ref = tex.eval_filtered(p, ddx, ddy)
+            dr.forward_from(p[k])
+            for ch in range(2):
+                assert dr.allclose(grad[ch][k], dr.grad(ref[ch]), atol=1e-4)
+
+        tex_hw = TexType(tens, use_accel=True, **args)
+        value_hw, grad_hw = tex_hw.eval_filtered_grad(pos, ddx, ddy)
+        assert dr.allclose(value_hw, value) and dr.allclose(grad_hw, grad)
+
+    # Adjoint test <J^T w, d> = <w, J d> for the derivative w.r.t. the texels
+    dr.enable_grad(tens)
+    _, grad = TexType(tens, use_accel=False, **args).eval_filtered_grad(pos, ddx, ddy)
+    dr.backward(dr.sum(grad[0].x - grad[1].y))
+    d = TensorXf(t(_test_grid(512, seed=7)), shape=(16, 16, 2))
+    _, grad_d = TexType(d, use_accel=False, **args).eval_filtered_grad(pos, ddx, ddy)
+    assert dr.allclose(dr.sum(dr.grad(tens).array * d.array),
+                       dr.sum(grad_d[0].x - grad_d[1].y))
