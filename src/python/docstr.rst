@@ -7481,6 +7481,15 @@
     On a texture without a MIP pyramid, the lookup degrades to a regular
     non-filtered :py:func:`eval()`.
 
+.. topic:: Texture_eval_filtered_grad
+
+    Evaluate an anisotropically filtered lookup and its positional gradient
+
+    Returns the value of :py:func:`eval_filtered()` and its derivative w.r.t.
+    ``pos`` (holding ``ddx`` and ``ddy`` fixed), computed in software since
+    texture units provide no derivatives. Differentiable w.r.t. the texture
+    data.
+
 .. topic:: Texture_mip_filter
 
     Return the MIP level selection mode of filtered lookups

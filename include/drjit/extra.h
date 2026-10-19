@@ -351,6 +351,10 @@ ad_tex_eval_lod(VarType query_type, uint32_t dimension, uint32_t channels_stored
  *                   of the query coordinate. Like ``lod`` above, they are
  *                   filtering metadata passed without an AD component.
  * \param ddy        Same as ``ddx``, for the second screen dimension.
+ * \param out_grad   When non-null, receives ``channels_out * dim`` indices of
+ *                   the positional gradient (``out_grad[ch * dim + m]`` =
+ *                   d/dx_m) with ``ddx``/``ddy`` held fixed. The lookup then
+ *                   bypasses the texture units, which compute no derivatives.
  */
 extern DRJIT_EXTRA_EXPORT void
 ad_tex_eval_filtered(VarType query_type, uint32_t dimension,
@@ -361,7 +365,7 @@ ad_tex_eval_filtered(VarType query_type, uint32_t dimension,
                      uint32_t max_aniso, const uint32_t *res,
                      const uint32_t *idiv, const uint64_t *pos,
                      const uint32_t *ddx, const uint32_t *ddy, uint32_t active,
-                     uint64_t *out);
+                     uint64_t *out, uint64_t *out_grad);
 
 /**
  * \brief Fetch the ``2^dim`` corner texels of a linear lookup (no interpolation)

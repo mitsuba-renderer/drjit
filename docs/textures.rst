@@ -123,6 +123,17 @@ Both methods are differentiable with respect to the query position and texture
 data, which includes derivative propagation through the MIP pyramid
 construction.
 
+Some applications, such as bump mapping, need the derivative of a filtered
+lookup with respect to the query position as part of the primal computation.
+:py:func:`.eval_filtered_grad() <drjit.auto.Texture2f.eval_filtered_grad>`
+returns it along with the value of :py:func:`.eval_filtered()
+<drjit.auto.Texture2f.eval_filtered>` while holding the pixel footprint fixed.
+This gradient remains differentiable with respect to the texture data.
+
+.. code-block:: python
+
+   value, grad = tex.eval_filtered_grad(pos, ddx, ddy)
+
 .. _texture_laplacian:
 
 Laplacian basis
