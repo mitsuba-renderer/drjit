@@ -4651,3 +4651,21 @@ def test124_texture_filter_mode(t):
     ref = func(tex, pos)
 
     assert dr.allclose(res, ref)
+
+
+@pytest.test_arrays("float32, jit, -is_diff, shape=(*)")
+def test125_null_child_pointer_position(t):
+    pkg = get_custom_type_pkg(t)
+
+    @dr.freeze
+    def func(nested):
+        if (c0 := nested.child(0)) is not None:
+            return c0.value() + c0.base_value()
+        c1 = nested.child(1)
+        return c1.value() - c1.base_value()
+
+    v, bv = dr.arange(t, 4) + 10, dr.arange(t, 4) + 1
+    a = pkg.CustomA(v, bv)
+    assert dr.all(func(pkg.Nested(a, None)) == v + bv)
+    assert dr.all(func(pkg.Nested(None, a)) == v - bv)
+    assert func.n_recordings == 2

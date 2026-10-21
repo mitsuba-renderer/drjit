@@ -154,7 +154,8 @@ template <JitBackend Backend> void bind(nb::module_ &m) {
     drjit::bind_traverse(a);
 
     auto nested = nb::class_<Nested, Object>(m, "Nested")
-                      .def(nb::init<nb::ref<Object>, nb::ref<Object>>())
+                      .def(nb::init<nb::ref<Object>, nb::ref<Object>>(),
+                           "a"_a.none(), "b"_a.none())
                       .def("child", &Nested::child);
 
     drjit::bind_traverse(nested);

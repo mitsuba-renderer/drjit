@@ -125,6 +125,7 @@ NB_MODULE(_drjit_ext, m_) {
         .value("CompressLoops", JitFlag::CompressLoops, doc_JitFlag_CompressLoops)
         .value("SymbolicCalls", JitFlag::SymbolicCalls, doc_JitFlag_SymbolicCalls)
         .value("OptimizeCalls", JitFlag::OptimizeCalls, doc_JitFlag_OptimizeCalls)
+        .value("CallDeduplication", JitFlag::CallDeduplication, doc_JitFlag_CallDeduplication)
         .value("PacketOps", JitFlag::PacketOps, doc_JitFlag_PacketOps)
         .value("ForceOptiX", JitFlag::ForceOptiX, doc_JitFlag_ForceOptiX)
         .value("PrintIR", JitFlag::PrintIR, doc_JitFlag_PrintIR)
@@ -268,6 +269,9 @@ NB_MODULE(_drjit_ext, m_) {
                 o->set_self_py(po);
             }), doc_intrusive_base);
     ib.freeze();
+
+    drjit::detail::set_py_is_derived(
+        [](const void *p) noexcept { return nb::inst_python_derived((PyObject *) p); });
 
     jit_init_async(backends);
 

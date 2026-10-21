@@ -18,6 +18,7 @@
 NAMESPACE_BEGIN(drjit)
 
 NAMESPACE_BEGIN(detail)
+DRJIT_EXTRA_EXPORT void set_py_is_derived(bool (*cb)(const void *) noexcept);
 NAMESPACE_END(detail)
 
 #if defined(_MSC_VER)
