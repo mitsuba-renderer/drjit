@@ -131,11 +131,12 @@ template <typename Float> struct A : Base<Float> {
     }
 
 
-    uint32_t scalar_property;
+    uint32_t scalar_property = 0;
     Float value, extra_value;
     Float opaque = dr::opaque<Float>(1.f);
+    nb::ref<Base<Float>> children[2];
 
-    DR_TRAVERSE_CB(Base<Float>, value, opaque)
+    DR_TRAVERSE_CB(Base<Float>, value, opaque, children, scalar_property)
 };
 
 template <typename Float> struct B : Base<Float> {
@@ -271,7 +272,11 @@ void bind(nb::module_ &m) {
         .def_rw("opaque", &AT::opaque)
         .def_rw("value", &AT::value)
         .def_rw("extra_value", &AT::extra_value)
-        .def_rw("scalar_property", &AT::scalar_property);
+        .def_rw("scalar_property", &AT::scalar_property)
+        .def("set_children", [](AT &s, nb::ref<BaseT> c0, nb::ref<BaseT> c1) {
+            s.children[0] = std::move(c0); s.children[1] = std::move(c1);
+        }, "c0"_a.none(), "c1"_a.none())
+        .def("child", [](const AT &s, size_t i) { return s.children[i]; });
     bind_traverse(a_cls);
 
     auto b_cls = nb::class_<BT, BaseT>(m, "B")

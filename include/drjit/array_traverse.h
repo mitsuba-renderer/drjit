@@ -115,7 +115,10 @@ enum class TraverseRole : uint32_t {
  *
  * ``state`` receives scalar state that the object bakes into generated code. A
  * frozen function compares it bytewise, hence the reported bytes must be free
- * of padding. A null ``state`` callback requests no state.
+ * of padding. Symbolic calls also rely on it to reuse a traced callable across
+ * instances (\ref JitFlag::CallDeduplication). An object whose generated code
+ * depends on the size of an array (e.g. via ``width()``) must therefore report
+ * that size as state. A null ``state`` callback requests no state.
  *
  * The callbacks receive the ``name`` of the member that the array, child
  * object or scalar was reached through, which \ref DR_TRAVERSE_CB obtains by
@@ -358,25 +361,30 @@ void traverse_fn(Value_ &&value, void *payload, const TraverseVisitor &cb,
     } else if constexpr (std::is_array_v<Value>) {
         for (size_t i = 0; i < std::extent_v<Value>; ++i)
             traverse_fn(value[i], payload, cb, name);
-    } else if constexpr (std::is_pointer_v<ValueNC> &&
-                         detail::is_traversable_object_v<Pointee>) {
-        if (value)
-            detail::traverse_child(const_cast<Pointee *>(value), payload, cb,
-                                    name);
-    } else if constexpr (std::is_pointer_v<ValueNC> &&
-                         is_traversable_v<Pointee>) {
-        if (value)
-            traverse_fn(*value, payload, cb, name);
-    } else if constexpr (is_detected_v<detail::det_begin, Value> &&
-                         is_detected_v<detail::det_end, Value>) {
-        for (auto &elem : value)
-            traverse_fn(elem, payload, cb, name);
-    } else if constexpr (is_detected_v<detail::det_get, Value>) {
-        auto *tmp = value.get();
-        traverse_fn(tmp, payload, cb, name);
     } else if constexpr (detail::is_traversable_object_v<ValueNC>) {
         detail::traverse_child(const_cast<ValueNC *>(&value), payload, cb,
                                 name);
+    } else if constexpr (std::is_pointer_v<ValueNC> &&
+                         (detail::is_traversable_object_v<Pointee> ||
+                          is_traversable_v<Pointee>)) {
+        bool non_null = value != nullptr;
+        detail::traverse_state(payload, cb, &non_null, sizeof(non_null), name);
+        if (non_null)
+            traverse_fn(*value, payload, cb, name);
+    } else if constexpr (is_detected_v<detail::det_begin, Value> &&
+                         is_detected_v<detail::det_end, Value>) {
+        size_t count = 0;
+        for (auto &elem : value) {
+            traverse_fn(elem, payload, cb, name);
+            count++;
+        }
+        detail::traverse_state(payload, cb, &count, sizeof(count), name);
+    } else if constexpr (is_detected_v<detail::det_get, Value>) {
+        auto *tmp = value.get();
+        traverse_fn(tmp, payload, cb, name);
+    } else if constexpr (std::is_arithmetic_v<ValueNC> ||
+                         std::is_enum_v<ValueNC>) {
+        detail::traverse_state(payload, cb, &value, sizeof(ValueNC), name);
     }
 }
 

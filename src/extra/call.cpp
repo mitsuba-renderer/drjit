@@ -14,8 +14,10 @@
 
 #include <drjit/autodiff.h>
 #include <drjit/custom.h>
+#include <drjit/traversable_base.h>
 #include <algorithm>
 #include <string>
+#include <typeinfo>
 #include "common.h"
 
 namespace dr = drjit;
@@ -185,6 +187,64 @@ static void ad_call_getter(JitBackend backend, const char *variant,
     }
 }
 
+namespace {
+bool (*py_is_derived)(const void *) noexcept = nullptr;
+
+struct CallTraversePayload {
+    vector<uint64_t> vars;
+    std::string state;
+    vector<const dr::TraversableBase *> visited;
+
+    void add_state(const void *data, size_t size) {
+        state.append((const char *) data, size);
+    }
+    void visit(dr::TraversableBase *obj, const char *name);
+};
+
+const dr::TraverseVisitor call_visitor = {
+    dr::TraverseRole::Freeze,
+    [](void *p, uint64_t index, const char *name, const char *, const char *) {
+        auto *payload = (CallTraversePayload *) p;
+        payload->add_state(&name, sizeof(name));
+        payload->vars.push_back(index);
+        return index;
+    },
+    [](void *p, dr::TraversableBase *child, const char *name) {
+        ((CallTraversePayload *) p)->visit(child, name);
+    },
+    [](void *p, const void *value, size_t size, const char *name) {
+        auto *payload = (CallTraversePayload *) p;
+        payload->add_state(&name, sizeof(name));
+        payload->add_state(value, size);
+    }
+};
+
+void CallTraversePayload::visit(dr::TraversableBase *obj, const char *name) {
+    add_state(&name, sizeof(name));
+    const std::type_info *ti = &typeid(*obj);
+    add_state(&ti, sizeof(ti));
+    if (const void *py = obj->self_py(); py && py_is_derived(py))
+        add_state(&py, sizeof(py));
+
+    auto it = std::find(visited.begin(), visited.end(), obj);
+    bool seen = it != visited.end();
+    uint32_t idx = seen ? (uint32_t) (it - visited.begin()) : UINT32_MAX;
+    add_state(&idx, sizeof(idx));
+    if (!seen) {
+        visited.push_back(obj);
+        obj->traverse_cb(this, call_visitor);
+    }
+}
+} // namespace
+
+NAMESPACE_BEGIN(drjit)
+NAMESPACE_BEGIN(detail)
+void set_py_is_derived(bool (*cb)(const void *) noexcept) {
+    py_is_derived = cb;
+}
+NAMESPACE_END(detail)
+NAMESPACE_END(drjit)
+
 // Strategy 2: perform indirection symbolically by tracing all callables
 static void ad_call_symbolic(JitBackend backend, const char *variant,
                              const char *domain, const char *name, size_t size,
@@ -230,10 +290,16 @@ static void ad_call_symbolic(JitBackend backend, const char *variant,
         if (!guard_2.is_valid())
             return;
 
+        // Reuse traced callables across instances with identical traversable
+        // state (see jit_call_trace_check_instance()), unless AD is involved
+        CallTraversePayload trav;
+        bool dedup = domain && jit_flag(JitFlag::CallDeduplication);
+
         // Wrap input arguments to clearly expose them as inputs of the vcall
         for (size_t i = 0; i < args.size(); ++i) {
             uint32_t wrapped = jit_var_call_input((uint32_t) args[i]);
             args3.push_back_steal(wrapped);
+            dedup &= (args[i] >> 32) == 0;
 
             if (args[i] >> 32)
                 args2.push_back_steal(ad_var_new(wrapped));
@@ -258,6 +324,25 @@ static void ad_call_symbolic(JitBackend backend, const char *variant,
                     ptr = (void *) (uintptr_t) i;
                 }
 
+                uint32_t inst_idx = (uint32_t) callable_count_final;
+                if (dedup) {
+                    trav.vars.clear();
+                    trav.state.clear();
+                    trav.visited.clear();
+                    trav.visit((dr::TraversableBase *) ptr, "");
+                    int32_t rep_inst = jit_call_trace_check_instance(
+                        inst_idx, (uint32_t) trav.vars.size(), trav.vars.data(),
+                        trav.state.size(), trav.state.data());
+                    if (rep_inst >= 0) {
+                        inst_id[inst_idx] = (uint32_t) i + 1;
+                        size_t n_out = rv_ad.size();
+                        for (size_t j = 0; j < n_out; ++j)
+                            rv3.push_back_borrow(rv3[(size_t) rep_inst * n_out + j]);
+                        checkpoints[++callable_count_final] = checkpoints[inst_idx];
+                        continue;
+                    }
+                }
+
                 // Populate 'rv2' with function return values. This may raise
                 // an exception, in which case everything should be properly
                 // cleaned up in this function's scope
@@ -278,13 +363,20 @@ static void ad_call_symbolic(JitBackend backend, const char *variant,
                     rv_ad.resize(rv2.size(), false);
                 }
 
+                bool has_inst_grad = false;
                 for (size_t j = 0; j < rv2.size(); ++j) {
                     uint64_t index2 = rv2[j];
-                    rv_ad[j] |= (index2 >> 32) != 0;
+                    bool has_g = (index2 >> 32) != 0;
+                    rv_ad[j] |= has_g;
+                    has_inst_grad |= has_g;
                     rv3.push_back_borrow((uint32_t) index2);
                 }
 
                 checkpoints[++callable_count_final] = guard_2.checkpoint_and_rewind();
+                if (dedup && !has_inst_grad &&
+                    checkpoints[callable_count_final] == checkpoints[inst_idx])
+                    jit_call_trace_record_rep(inst_idx, (uint32_t) rv2.size(),
+                                              rv3.data() + inst_idx * rv2.size());
             }
         }
 

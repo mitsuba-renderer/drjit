@@ -6249,6 +6249,35 @@
     also controls the behavior of the functions :py:func:`drjit.switch` and
     :py:func:`drjit.dispatch`.
 
+.. topic:: JitFlag_CallDeduplication
+
+    Trace symbolic function calls on instance arrays only once per group of
+    instances with identical state.
+
+    When tracing a symbolic call, Dr.Jit traverses each instance (via the
+    ``traverse_cb`` callback of C++ objects) to collect its type, variables,
+    child objects, and scalar state. Instances that match a previously traced
+    instance reuse its traced (and compiled) callable with their own variables
+    substituted. This can greatly reduce tracing and compilation time for
+    scenes containing many similar objects.
+
+    Reuse requires that the traced code is fully determined by the traversed
+    state. Objects must therefore report all scalars that influence the
+    generated code, including array sizes that are baked into it. Callables
+    containing nested calls, side effects, or derivatives, or that convert a
+    pointer to an object other than the instance itself into an array, are
+    always traced individually. Instances of Python subclasses are never
+    deduplicated.
+
+    One known limitation: an evaluated array captured from outside the
+    instance (e.g., via a closure) that is also a member of the instance being
+    traced is indistinguishable from that member, and gets replaced with the
+    corresponding member of the other instances that reuse the trace. Disable
+    this flag if this affects your code.
+
+    The flag is enabled by default and only meaningful in combination with
+    :py:attr:`SymbolicCalls`.
+
 .. topic:: JitFlag_SymbolicLoops
 
     Dr.Jit provides two main ways of compiling loops involving Dr.Jit arrays.
@@ -6567,6 +6596,7 @@
     - :py:attr:`drjit.JitFlag.OptimizeLoops`,
     - :py:attr:`drjit.JitFlag.SymbolicCalls`,
     - :py:attr:`drjit.JitFlag.OptimizeCalls`,
+    - :py:attr:`drjit.JitFlag.CallDeduplication`,
     - :py:attr:`drjit.JitFlag.SymbolicConditionals`,
     - :py:attr:`drjit.JitFlag.ReuseIndices`, and
     - :py:attr:`drjit.JitFlag.ScatterReduceLocal`.

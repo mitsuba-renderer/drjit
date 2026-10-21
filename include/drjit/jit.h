@@ -395,13 +395,14 @@ struct DRJIT_TRIVIAL_ABI JitArray
 
     template <typename T, enable_if_t<!std::is_void_v<T> && std::is_convertible_v<T, Value>> = 0>
     static JitArray full_(T value, size_t size) {
-        ActualValue av;
-        if constexpr (!IsClass)
-            av = (ActualValue) value;
-        else
-            av = jit_registry_id(value);
-
-        return steal(jit_var_literal(Backend, Type, &av, size, false));
+        // Class pointers go through jit_var_class(), which maps the 'self'
+        // instance of a symbolic call to its symbolic variable
+        if constexpr (IsClass) {
+            return steal(jit_var_resize(JitArray(value).index(), size));
+        } else {
+            ActualValue av = (ActualValue) value;
+            return steal(jit_var_literal(Backend, Type, &av, size, false));
+        }
     }
 
     template <typename T, enable_if_t<!std::is_void_v<T> && std::is_convertible_v<T, Value>> = 0>

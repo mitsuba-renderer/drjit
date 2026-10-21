@@ -1104,3 +1104,194 @@ def test23_dispatch_partial_registry_bwd(t, symbolic):
     assert dr.all(a2.value.grad == t(0))
     assert dr.all(b2.value.grad == t(2))
     assert dr.all(b3.value.grad == t(0))
+
+
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+def test24_cross_scope_literal_dedup(t, drjit_verbose, capsys):
+    pkg = get_pkg(t)
+    backend = dr.backend_v(t)
+    A, B, BasePtr = pkg.A, pkg.B, pkg.BasePtr
+
+    def make(cls, val, opq=1.0):
+        dr.detail.new_scope(backend)
+        inst = cls()
+        inst.value = t(val)
+        inst.opaque = dr.opaque(t, opq)
+        return inst
+
+    # Instances constructed in distinct LVN scopes (as in parallel scene loading)
+    # get distinct variable IDs for identical non-pointer literals.
+    instances = [make(A, v, float(i + 1)) for i, v in enumerate([5.0, 5.0, 5.0, 7.0])]
+    traced = 0
+
+    def fn(self, x):
+        nonlocal traced
+        traced += 1
+        return self.opaque * x + self.value
+
+    with dr.scoped_set_flag(dr.JitFlag.SymbolicCalls, True):
+        out = dr.dispatch(BasePtr(*instances), fn, t(10, 20, 30, 40))
+
+    assert traced == 2
+    assert dr.all(out == t(15, 45, 95, 167))
+    del instances, out
+
+    # Uniform scalar literal outputs across distinct scopes should still devirtualize
+    a, b = make(A, 42.0), make(B, 42.0)
+    capsys.readouterr()
+    with dr.scoped_set_flag(dr.JitFlag.SymbolicCalls, True), \
+         dr.scoped_set_flag(dr.JitFlag.OptimizeCalls, True):
+        out_devirt = dr.dispatch(BasePtr(a, b), lambda self: self.value)
+
+    transcript = capsys.readouterr().out
+    assert '1 output (1 devirtualized)' in transcript and '(optimized away)' in transcript
+    assert dr.all(out_devirt == t(42, 42))
+
+
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+def test25_null_child_array(t):
+    pkg = get_pkg(t)
+    A, BasePtr = pkg.A, pkg.BasePtr
+
+    def make_a(opq, c0=None, c1=None):
+        inst = A()
+        inst.opaque = dr.opaque(t, opq)
+        inst.set_children(c0, c1)
+        return inst
+
+    # Null child pointer position inside a C++ array must disambiguate
+    # [child, None] vs. [None, child], while still deduplicating matching layouts.
+    c1, c2 = make_a(2.0), make_a(3.0)
+    a1, a2, a3 = make_a(10.0, c1, None), make_a(20.0, None, c1), make_a(30.0, c2, None)
+    traced = 0
+
+    def fn_child(self, x):
+        nonlocal traced
+        traced += 1
+        if (c0 := self.child(0)) is not None:
+            return self.opaque + c0.opaque * x
+        if (c1_ := self.child(1)) is not None:
+            return self.opaque - c1_.opaque * x
+        return self.opaque
+
+    with dr.scoped_set_flag(dr.JitFlag.SymbolicCalls, True):
+        out = dr.dispatch(BasePtr(a1, a2, a3), fn_child, t(5, 5, 5))
+
+    # 5 live A instances (c1, c2, a1, a2, a3) collapse into 3 representatives
+    assert traced == 3 and dr.all(out == t(20, 10, 45))
+
+
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+def test26_multithreaded_dedup(t):
+    from concurrent.futures import ThreadPoolExecutor
+
+    pkg = get_pkg(t)
+    A, BasePtr = pkg.A, pkg.BasePtr
+
+    def make_a(i):
+        inst = A()
+        inst.opaque = dr.opaque(t, float(i + 1))
+        inst.value = t(float(i % 2))
+        return inst
+
+    pool = [make_a(i) for i in range(16)]
+    dr.sync_thread()
+
+    def worker(tid):
+        rot = tid % 16
+        ptrs = BasePtr(*(pool[rot:] + pool[:rot]))
+        x = dr.arange(t, 16) + float(tid)
+        with dr.scoped_set_flag(dr.JitFlag.SymbolicCalls, True):
+            y = dr.dispatch(ptrs, lambda s, v: s.opaque * v + s.value, x)
+        idx = (dr.arange(dr.uint32_array_t(t), 16) + tid) % 16
+        ref = t(idx + 1) * x + t(idx % 2)
+        assert dr.all(y == ref)
+
+    with ThreadPoolExecutor(max_workers=4) as ex:
+        list(ex.map(worker, range(8)))
+
+
+def dispatch_counted(ptrs, fn, *args):
+    """Symbolically dispatch ``fn`` and return the output and number of traces"""
+    traced = 0
+
+    def wrapper(self, *args):
+        nonlocal traced
+        traced += 1
+        return fn(self, *args)
+
+    with dr.scoped_set_flag(dr.JitFlag.SymbolicCalls, True):
+        out = dr.dispatch(ptrs, wrapper, *args)
+    return out, traced
+
+
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+def test27_dedup_nested_call_capture(t):
+    # The callables of a nested call capture a member of the enclosing
+    # instance, which cannot be remapped. Each instance must be traced.
+    pkg = get_pkg(t)
+    A, BasePtr = pkg.A, pkg.BasePtr
+    a = [A() for _ in range(3)]
+    for i, inst in enumerate(a):
+        inst.value = dr.opaque(t, float(i + 1))
+
+    def fn(self, x):
+        v = self.value
+        return dr.dispatch(BasePtr(a[0]), lambda _, y: y + v, x)
+
+    out, traced = dispatch_counted(BasePtr(*a), fn, t(0, 0, 0))
+    assert traced == 3 and dr.all(out == t(1, 2, 3))
+
+
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+def test28_dedup_child_pointer(t):
+    # Converting a child object into a pointer array bakes its registry ID.
+    # The childless c1/c2 still share a trace, while a1/a2 can't.
+    pkg = get_pkg(t)
+    A, BasePtr = pkg.A, pkg.BasePtr
+    c1, c2, a1, a2 = A(), A(), A(), A()
+    a1.set_children(c1, None)
+    a2.set_children(c2, None)
+
+    out, traced = dispatch_counted(BasePtr(a1, a2),
+                                   lambda self: BasePtr(self.child(0)))
+    assert traced == 3 and dr.all(out == BasePtr(c1, c2))
+
+    # Returning a pointer to the instance itself does not prevent reuse
+    out, traced = dispatch_counted(BasePtr(a1, a2), lambda self: BasePtr(self))
+    assert traced == 2 and dr.all(out == BasePtr(a1, a2))
+
+
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+def test29_dedup_scalar_state(t):
+    # Scalars reported by the traversal distinguish otherwise identical instances
+    pkg = get_pkg(t)
+    A, BasePtr = pkg.A, pkg.BasePtr
+    a = [A() for _ in range(4)]
+    for i, inst in enumerate(a):
+        inst.scalar_property = i % 2
+
+    out, traced = dispatch_counted(
+        BasePtr(*a), lambda self, x: x + self.scalar_property, t(1, 1, 1, 1))
+    assert traced == 2 and dr.all(out == t(1, 2, 1, 2))
+
+
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+def test30_dedup_flag(t):
+    # Array sizes are not part of the traversal state. Code that depends on
+    # them requires the object to report them, or disabling deduplication.
+    pkg = get_pkg(t)
+    A, BasePtr = pkg.A, pkg.BasePtr
+    a1, a2 = A(), A()
+    a1.value = dr.opaque(t, 0, 3)
+    a2.value = dr.opaque(t, 0, 5)
+
+    def fn(self):
+        return self.opaque * dr.width(self.value)
+
+    out, traced = dispatch_counted(BasePtr(a1, a2), fn)
+    assert traced == 1
+
+    with dr.scoped_set_flag(dr.JitFlag.CallDeduplication, False):
+        out, traced = dispatch_counted(BasePtr(a1, a2), fn)
+    assert traced == 2 and dr.all(out == t(3, 5))
