@@ -756,16 +756,18 @@ def test22b_tile_repeat_validation(t):
 
 @pytest.test_arrays('jit,tensor,float32')
 def test22c_roll(t):
+    """Roll a tensor by positive and negative shifts, testing wrapping behavior."""
     x = t([1, 2, 3, 4])
     assert dr.all(dr.roll(x, 1).array == [4, 1, 2, 3])
     assert dr.all(dr.roll(x, -1).array == [2, 3, 4, 1])
     assert dr.all(dr.roll(x, 6, axis=0).array == [3, 4, 1, 2])
-    # A shift by a multiple of the size returns the input unchanged.
     assert dr.roll(x, 4) is x
 
 
 @pytest.test_arrays('jit,float32,shape=(*)')
 def test22c_roll_array(t):
+    """Roll a flat JIT variable along its single axis, including accumulated
+    shifts, the identity case and out-of-bounds axis."""
     x = t(1, 2, 3, 4)
     assert dr.all(dr.roll(x, 1) == [4, 1, 2, 3])
     assert dr.all(dr.roll(x, -1, axis=0) == [2, 3, 4, 1])
@@ -779,7 +781,7 @@ def test22c_roll_array(t):
 
 @pytest.test_arrays('jit,float32,shape=(2, *)')
 def test22c_roll_nested_pytree(t):
-    # Nested arrays and PyTrees are rolled leaf-wise along the dynamic axis.
+    """Nested arrays and PyTrees are rolled leaf-wise along the dynamic axis."""
     x = t([1, 2, 3], [4, 5, 6])
     y = dr.roll(x, 1)
     assert type(y) is t
@@ -793,6 +795,8 @@ def test22c_roll_nested_pytree(t):
 
 @pytest.test_arrays('jit,tensor,float32')
 def test22c_roll_axes(t):
+    """Roll a 2D tensor flattened (axis=None), along single and multiple
+    axes, with accumulating shifts, an empty axis, and a 0-dim tensor."""
     x = t([[1, 2, 3], [4, 5, 6]])
 
     # axis=None flattens and restores the shape, matching NumPy.
@@ -816,6 +820,7 @@ def test22c_roll_axes(t):
 
 @pytest.test_arrays('jit,tensor,float32')
 def test22c_roll_validation(t):
+    """Out-of-bounds axes and mismatched shift/axis lengths raise errors."""
     x = t([[1, 2, 3], [4, 5, 6]])
 
     with pytest.raises(RuntimeError, match='axis 2 is out of bounds'):
@@ -828,6 +833,7 @@ def test22c_roll_validation(t):
 
 @pytest.test_arrays('jit,tensor,float32,is_diff')
 def test22c_roll_ad(t):
+    """Gradients propagate through roll in reverse and forward mode."""
     x = t([[1, 2, 3], [4, 5, 6]])
     dr.enable_grad(x)
     y = dr.roll(x, 1, axis=1)
