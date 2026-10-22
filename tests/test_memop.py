@@ -760,13 +760,35 @@ def test22c_roll(t):
     assert dr.all(dr.roll(x, 1).array == [4, 1, 2, 3])
     assert dr.all(dr.roll(x, -1).array == [2, 3, 4, 1])
     assert dr.all(dr.roll(x, 6, axis=0).array == [3, 4, 1, 2])
+    # A shift by a multiple of the size returns the input unchanged.
+    assert dr.roll(x, 4) is x
 
-    # A shift by a multiple of the size returns a new tensor, so that
-    # in-place updates of the result leave the input untouched.
-    y = dr.roll(x, 4)
-    assert y is not x and dr.all(y.array == [1, 2, 3, 4])
-    y += 1
-    assert dr.all(x.array == [1, 2, 3, 4])
+
+@pytest.test_arrays('jit,float32,shape=(*)')
+def test22c_roll_array(t):
+    x = t(1, 2, 3, 4)
+    assert dr.all(dr.roll(x, 1) == [4, 1, 2, 3])
+    assert dr.all(dr.roll(x, -1, axis=0) == [2, 3, 4, 1])
+    assert dr.all(dr.roll(x, (1, 1), axis=-1) == [3, 4, 1, 2])
+    # A shift by a multiple of the size returns the input unchanged.
+    assert dr.roll(x, 4) is x
+
+    with pytest.raises(RuntimeError, match='axis 1 is out of bounds'):
+        dr.roll(x, 1, axis=1)
+
+
+@pytest.test_arrays('jit,float32,shape=(2, *)')
+def test22c_roll_nested_pytree(t):
+    # Nested arrays and PyTrees are rolled leaf-wise along the dynamic axis.
+    x = t([1, 2, 3], [4, 5, 6])
+    y = dr.roll(x, 1)
+    assert type(y) is t
+    assert dr.all(y[0] == [3, 1, 2]) and dr.all(y[1] == [6, 4, 5])
+
+    a = x[0]
+    y = dr.roll({'a': a, 'b': [a, 7]}, -1)
+    assert dr.all(y['a'] == [2, 3, 1])
+    assert dr.all(y['b'][0] == [2, 3, 1]) and y['b'][1] == 7
 
 
 @pytest.test_arrays('jit,tensor,float32')
@@ -796,8 +818,6 @@ def test22c_roll_axes(t):
 def test22c_roll_validation(t):
     x = t([[1, 2, 3], [4, 5, 6]])
 
-    with pytest.raises(TypeError, match='expected a tensor input'):
-        dr.roll(x.array, 1)
     with pytest.raises(RuntimeError, match='axis 2 is out of bounds'):
         dr.roll(x, 1, axis=(0, 2))
     with pytest.raises(RuntimeError, match='axis -1 is out of bounds'):
