@@ -754,6 +754,98 @@ def test22b_tile_repeat_validation(t):
     assert dr.is_tensor_v(r['x']) and r['x'].shape == (2, 6)
 
 
+@pytest.test_arrays('jit,tensor,float32')
+def test22c_roll(t):
+    """Roll a tensor by positive and negative shifts, testing wrapping behavior."""
+    x = t([1, 2, 3, 4])
+    assert dr.all(dr.roll(x, 1).array == [4, 1, 2, 3])
+    assert dr.all(dr.roll(x, -1).array == [2, 3, 4, 1])
+    assert dr.all(dr.roll(x, 6, axis=0).array == [3, 4, 1, 2])
+    assert dr.roll(x, 4) is x
+
+
+@pytest.test_arrays('jit,float32,shape=(*)')
+def test22c_roll_array(t):
+    """Roll a flat JIT variable along its single axis, including accumulated
+    shifts, the identity case and out-of-bounds axis."""
+    x = t(1, 2, 3, 4)
+    assert dr.all(dr.roll(x, 1) == [4, 1, 2, 3])
+    assert dr.all(dr.roll(x, -1, axis=0) == [2, 3, 4, 1])
+    assert dr.all(dr.roll(x, (1, 1), axis=-1) == [3, 4, 1, 2])
+    # A shift by a multiple of the size returns the input unchanged.
+    assert dr.roll(x, 4) is x
+
+    with pytest.raises(RuntimeError, match='axis 1 is out of bounds'):
+        dr.roll(x, 1, axis=1)
+
+
+@pytest.test_arrays('jit,float32,shape=(2, *)')
+def test22c_roll_nested_pytree(t):
+    """Nested arrays and PyTrees are rolled leaf-wise along the dynamic axis."""
+    x = t([1, 2, 3], [4, 5, 6])
+    y = dr.roll(x, 1)
+    assert type(y) is t
+    assert dr.all(y[0] == [3, 1, 2]) and dr.all(y[1] == [6, 4, 5])
+
+    a = x[0]
+    y = dr.roll({'a': a, 'b': [a, 7]}, -1)
+    assert dr.all(y['a'] == [2, 3, 1])
+    assert dr.all(y['b'][0] == [2, 3, 1]) and y['b'][1] == 7
+
+
+@pytest.test_arrays('jit,tensor,float32')
+def test22c_roll_axes(t):
+    """Roll a 2D tensor flattened (axis=None), along single and multiple
+    axes, with accumulating shifts, an empty axis, and a 0-dim tensor."""
+    x = t([[1, 2, 3], [4, 5, 6]])
+
+    # axis=None flattens and restores the shape, matching NumPy.
+    y = dr.roll(x, 1)
+    assert y.shape == (2, 3)
+    assert dr.all(y.array == [6, 1, 2, 3, 4, 5])
+    assert dr.all(dr.roll(x, (1, 1)).array == [5, 6, 1, 2, 3, 4])
+
+    assert dr.all(dr.roll(x, 1, axis=0).array == [4, 5, 6, 1, 2, 3])
+    assert dr.all(dr.roll(x, -1, axis=-1).array == [2, 3, 1, 5, 6, 4])
+
+    # Per-axis shifts, and a broadcast axis that accumulates the shifts.
+    assert dr.all(dr.roll(x, (1, 1), axis=(0, 1)).array == [6, 4, 5, 3, 1, 2])
+    assert dr.all(dr.roll(x, (1, 1), axis=1).array == [2, 3, 1, 5, 6, 4])
+
+    # Tensors with an empty axis and 0-dimensional tensors.
+    e = dr.roll(dr.zeros(t, (0, 3)), 1, axis=1)
+    assert e.shape == (0, 3)
+    assert dr.roll(t(5), 3).shape == ()
+
+
+@pytest.test_arrays('jit,tensor,float32')
+def test22c_roll_validation(t):
+    """Out-of-bounds axes and mismatched shift/axis lengths raise errors."""
+    x = t([[1, 2, 3], [4, 5, 6]])
+
+    with pytest.raises(RuntimeError, match='axis 2 is out of bounds'):
+        dr.roll(x, 1, axis=(0, 2))
+    with pytest.raises(RuntimeError, match='axis -1 is out of bounds'):
+        dr.roll(x, 1, axis=-3)
+    with pytest.raises(RuntimeError, match='same length'):
+        dr.roll(x, (1, 2, 3), axis=(0, 1))
+
+
+@pytest.test_arrays('jit,tensor,float32,is_diff')
+def test22c_roll_ad(t):
+    """Gradients propagate through roll in reverse and forward mode."""
+    x = t([[1, 2, 3], [4, 5, 6]])
+    dr.enable_grad(x)
+    y = dr.roll(x, 1, axis=1)
+    dr.backward(y * t([[1, 2, 3], [4, 5, 6]]))
+    assert dr.all(dr.grad(x).array == [2, 3, 1, 5, 6, 4])
+
+    x = t([1, 2, 3])
+    dr.enable_grad(x)
+    dr.set_grad(x, t([1, 2, 3]))
+    assert dr.all(dr.forward_to(dr.roll(x, 1)).array == [3, 1, 2])
+
+
 @pytest.test_arrays('shape=(*),-bool,-int8')
 def test23_block_sum(t):
     x = t(1, 2, 3, 4, 5, 6)
