@@ -137,6 +137,7 @@ Rearranging array contents
 .. autofunction:: reshape
 .. autofunction:: tile
 .. autofunction:: repeat
+.. autofunction:: roll
 
 Other operations on tensors
 ---------------------------

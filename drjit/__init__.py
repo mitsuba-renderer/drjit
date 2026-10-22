@@ -3913,6 +3913,90 @@ def repeat(value: T,
     return _map_arrays(value, lambda leaf: _repeat_leaf(leaf, repeats, axis))
 
 
+def roll(value: ArrayT, /, shift: Union[int, Tuple[int, ...]],
+         axis: Union[int, Tuple[int, ...], None] = None) -> ArrayT:
+    """
+    Cyclically shift the elements of a tensor along one or more axes.
+
+    Elements that are shifted beyond the last position re-enter at the first
+    one, following the semantics of ``numpy.roll()``. For example, given the
+    tensor ``a = TensorXf([[1, 2, 3], [4, 5, 6]])``:
+
+    - ``roll(a, 1, axis=1)`` produces ``[[3, 1, 2], [6, 4, 5]]``
+    - ``roll(a, 1)`` produces ``[[6, 1, 2], [3, 4, 5]]``
+
+    When ``axis`` is ``None`` (the default), the tensor is flattened before
+    shifting and then restored to its original shape. When ``shift`` and
+    ``axis`` are tuples, each entry of ``shift`` applies to the matching entry
+    of ``axis``. An integer ``shift`` or ``axis`` is broadcast to the length of
+    the other tuple, and shifts along the same axis accumulate. Negative shifts
+    move elements toward the front, and negative axis values count backwards
+    from the last dimension.
+
+    Args:
+        value: Input tensor.
+
+        shift (int | tuple[int, ...]): Number of positions by which elements
+            are shifted.
+
+        axis (int | tuple[int, ...] | None): The axis or axes along which
+            elements are shifted. If ``None``, the tensor is flattened first.
+
+    Returns:
+        object: A tensor with the same type and shape as ``value``.
+    """
+    if not is_tensor_v(value):
+        raise TypeError(
+            f"drjit.roll(): expected a tensor input "
+            f"(got {type(value).__module__}.{type(value).__qualname__}).")
+
+    shape = value.shape
+    ndim = len(shape)
+    shift = (shift,) if isinstance(shift, int) else tuple(shift)
+
+    if axis is None:
+        # The flattened tensor has a single axis that holds all elements
+        roll_shape = (prod(shape),)
+        total = [sum(shift)]
+    else:
+        roll_shape = shape
+        axis = (axis,) if isinstance(axis, int) else tuple(axis)
+        if len(shift) == 1:
+            shift = shift * len(axis)
+        elif len(axis) == 1:
+            axis = axis * len(shift)
+        if len(shift) != len(axis):
+            raise RuntimeError(
+                f"drjit.roll(): 'shift' and 'axis' must have the same length "
+                f"(got {len(shift)} and {len(axis)}).")
+
+        # Shifts along the same axis accumulate (based on NumPy)
+        total = [0] * ndim
+        for s, a in zip(shift, axis):
+            if a < 0:
+                a += ndim
+            if a < 0 or a >= ndim:
+                raise RuntimeError(
+                    f"drjit.roll(): axis {a} is out of bounds "
+                    f"for a {ndim}-dimensional tensor.")
+            total[a] += s
+
+    # Output position ``p`` reads from input position ``(p - s) mod n``
+    remap = [None] * len(roll_shape)
+    for i, n in enumerate(roll_shape):
+        s = total[i] % n if n > 0 else 0
+        if s != 0:
+            remap[i] = lambda p, n=n, s=s: select(p >= s, p - s, p + (n - s))
+
+    # A new tensor even without movement, so that in-place updates of the
+    # result leave the input unchanged
+    if all(r is None for r in remap):
+        return type(value)(value.array, shape)
+
+    arr = value.array
+    return type(value)(_gather_remap(arr, roll_shape, roll_shape, remap), shape)
+
+
 def rng(seed: Union[ArrayBase, int] = 0, method='philox4x32', symbolic: bool = False) -> drjit.random.Generator:
     '''
     Return a seeded random number generator.

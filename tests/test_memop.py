@@ -754,6 +754,72 @@ def test22b_tile_repeat_validation(t):
     assert dr.is_tensor_v(r['x']) and r['x'].shape == (2, 6)
 
 
+@pytest.test_arrays('jit,tensor,float32')
+def test22c_roll(t):
+    x = t([1, 2, 3, 4])
+    assert dr.all(dr.roll(x, 1).array == [4, 1, 2, 3])
+    assert dr.all(dr.roll(x, -1).array == [2, 3, 4, 1])
+    assert dr.all(dr.roll(x, 6, axis=0).array == [3, 4, 1, 2])
+
+    # A shift by a multiple of the size returns a new tensor, so that
+    # in-place updates of the result leave the input untouched.
+    y = dr.roll(x, 4)
+    assert y is not x and dr.all(y.array == [1, 2, 3, 4])
+    y += 1
+    assert dr.all(x.array == [1, 2, 3, 4])
+
+
+@pytest.test_arrays('jit,tensor,float32')
+def test22c_roll_axes(t):
+    x = t([[1, 2, 3], [4, 5, 6]])
+
+    # axis=None flattens and restores the shape, matching NumPy.
+    y = dr.roll(x, 1)
+    assert y.shape == (2, 3)
+    assert dr.all(y.array == [6, 1, 2, 3, 4, 5])
+    assert dr.all(dr.roll(x, (1, 1)).array == [5, 6, 1, 2, 3, 4])
+
+    assert dr.all(dr.roll(x, 1, axis=0).array == [4, 5, 6, 1, 2, 3])
+    assert dr.all(dr.roll(x, -1, axis=-1).array == [2, 3, 1, 5, 6, 4])
+
+    # Per-axis shifts, and a broadcast axis that accumulates the shifts.
+    assert dr.all(dr.roll(x, (1, 1), axis=(0, 1)).array == [6, 4, 5, 3, 1, 2])
+    assert dr.all(dr.roll(x, (1, 1), axis=1).array == [2, 3, 1, 5, 6, 4])
+
+    # Tensors with an empty axis and 0-dimensional tensors.
+    e = dr.roll(dr.zeros(t, (0, 3)), 1, axis=1)
+    assert e.shape == (0, 3)
+    assert dr.roll(t(5), 3).shape == ()
+
+
+@pytest.test_arrays('jit,tensor,float32')
+def test22c_roll_validation(t):
+    x = t([[1, 2, 3], [4, 5, 6]])
+
+    with pytest.raises(TypeError, match='expected a tensor input'):
+        dr.roll(x.array, 1)
+    with pytest.raises(RuntimeError, match='axis 2 is out of bounds'):
+        dr.roll(x, 1, axis=(0, 2))
+    with pytest.raises(RuntimeError, match='axis -1 is out of bounds'):
+        dr.roll(x, 1, axis=-3)
+    with pytest.raises(RuntimeError, match='same length'):
+        dr.roll(x, (1, 2, 3), axis=(0, 1))
+
+
+@pytest.test_arrays('jit,tensor,float32,is_diff')
+def test22c_roll_ad(t):
+    x = t([[1, 2, 3], [4, 5, 6]])
+    dr.enable_grad(x)
+    y = dr.roll(x, 1, axis=1)
+    dr.backward(y * t([[1, 2, 3], [4, 5, 6]]))
+    assert dr.all(dr.grad(x).array == [2, 3, 1, 5, 6, 4])
+
+    x = t([1, 2, 3])
+    dr.enable_grad(x)
+    dr.set_grad(x, t([1, 2, 3]))
+    assert dr.all(dr.forward_to(dr.roll(x, 1)).array == [3, 1, 2])
+
+
 @pytest.test_arrays('shape=(*),-bool,-int8')
 def test23_block_sum(t):
     x = t(1, 2, 3, 4, 5, 6)
