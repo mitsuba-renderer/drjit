@@ -2138,10 +2138,14 @@ public:
         // the recording observes its current contents
         sync_views();
 
-        // Only traverse symbolic readback expression if they carry gradients
+        // Only traverse symbolic readback expression if they carry gradients.
+        // In the Laplacian basis, m_padded_tensor is an evaluated buffer rather
+        // than a readback view, and ad_tex_eval*() gathers from it whenever
+        // query positions carry gradients.
         bool traverse_tensors = true;
         if constexpr (HasGPUTexture && IsDiff)
-            traverse_tensors = !m_handle || grad_enabled(m_tensor.array()) ||
+            traverse_tensors = !m_handle || m_mip_basis == MipBasis::Laplacian ||
+                               grad_enabled(m_tensor.array()) ||
                                grad_enabled(m_padded_tensor.array());
         else if constexpr (HasGPUTexture)
             traverse_tensors = !m_handle;

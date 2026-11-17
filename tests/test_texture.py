@@ -2388,3 +2388,45 @@ def test65_bc_errors(t):
             tex.update_inplace()
         with pytest.raises(RuntimeError, match='read-only'):
             tex.write(mod.Array2u(0, 0), [mod.Float(0)] * 4)
+
+
+@pytest.mark.parametrize("ch", [1, 3])
+@pytest.test_arrays("is_diff, float32, shape=(*)")
+def test66_laplacian_detached_grad_frozen(t, ch):
+    # In the Laplacian basis on GPU backends, m_padded_tensor holds an
+    # evaluated buffer rather than a symbolic readback view. When a symbolic
+    # call inside @dr.freeze differentiates a filtered lookup with respect to
+    # the query position while the texture itself is detached, ad_tex_eval*()
+    # gathers from m_padded_tensor, so Texture::traverse_cb() must include it.
+    mod = sys.modules[t.__module__]
+    TexType = getattr(mod, 'Texture2f')
+    TensorXf = getattr(mod, 'TensorXf')
+    Array2f = getattr(mod, 'Array2f')
+    UInt32 = getattr(mod, 'UInt32')
+
+    tens = TensorXf(t(_test_grid(16 * ch, seed=14)), shape=(4, 4, ch))
+    tex = TexType(tens, use_accel=True, mip_filter=dr.MipFilter.Linear,
+                  mip_basis=dr.MipBasis.Laplacian)
+    ddx, ddy = Array2f(0.25, 0), Array2f(0, 0.25)
+
+    def lookup(p):
+        return dr.sum(tex.eval_filtered(p, ddx, ddy))
+
+    @dr.freeze(state_fn=lambda p: tex)
+    def step(p):
+        out = dr.switch(dr.zeros(UInt32, 2), [lookup], p, mode='symbolic')
+        dr.backward(out)
+        return dr.detach(out), dr.grad(p)
+
+    for u in (0.3, 0.45):
+        p = Array2f(t(u, u + 0.1), t(0.4, 0.6))
+        dr.enable_grad(p)
+        out, grad_p = step(p)
+
+        p_ref = Array2f(t(u, u + 0.1), t(0.4, 0.6))
+        dr.enable_grad(p_ref)
+        out_ref = lookup(p_ref)
+        dr.backward(out_ref)
+        assert dr.allclose(out, dr.detach(out_ref))
+        assert dr.allclose(grad_p, dr.grad(p_ref))
+    assert step.n_recordings == 1
