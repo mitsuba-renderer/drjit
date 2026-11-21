@@ -423,6 +423,10 @@ struct ADVariable {
     }
 };
 
+// drjit-core defines a different global 'State' (src/internal.h). Internal
+// linkage keeps the two apart when both are linked into one image (ODR).
+namespace {
+
 /// Represents the global state of the AD system
 struct State {
     /// Lock protecting the state data structure
@@ -486,6 +490,8 @@ struct State {
         return &variables[index];
     }
 };
+
+} // anonymous namespace
 
 // Special edge (scatter, gather, scatter_reduce, block_sum, etc.)
 struct Special {
