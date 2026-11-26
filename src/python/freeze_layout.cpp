@@ -44,6 +44,8 @@ void registry_pointers(const Layout &s, drjit::vector<void *> &pointers) {
     for (const std::string &domain : s.domains) {
         uint32_t bound =
             jit_registry_id_bound(s.variant.c_str(), domain.c_str());
+        if (bound == 0)
+            continue;
         size_t offset = pointers.size();
         pointers.resize(offset + bound, nullptr);
         jit_registry_get_pointers(s.variant.c_str(), domain.c_str(),

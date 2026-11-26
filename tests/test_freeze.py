@@ -4651,3 +4651,21 @@ def test124_texture_filter_mode(t):
     ref = func(tex, pos)
 
     assert dr.allclose(res, ref)
+
+
+@pytest.test_arrays("float32, jit, -is_diff, shape=(*)")
+def test125_empty_registry_domain(t):
+    pkg = get_pkg(t)
+    if pkg is None:
+        pytest.skip("call_ext backend unavailable")
+    dr.detail.clear_registry()
+
+    @dr.freeze
+    def func(pointers, values):
+        return values + 1
+
+    pointers = dr.zeros(pkg.BasePtr, 3)
+    values = t(1, 2, 3)
+    assert dr.allclose(func(pointers, values), t(2, 3, 4))
+    assert dr.allclose(func(pointers, values), t(2, 3, 4))
+    assert func.n_recordings == 1
